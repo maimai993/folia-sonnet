@@ -55,6 +55,7 @@ const Word: React.FC<{
 }> = ({ word, config, currentTime, theme, isChaotic, layoutVariants, bodyVariants, glowVariants, baseColor, activeColor, isChorus }) => {
     const [status, setStatus] = useState<"waiting" | "active" | "passed">("waiting");
     const rippleScale = useMemo(() => 1.5 + Math.random() * 2, []);
+    const duration = Math.max(word.endTime - word.startTime, 0.1);
 
     useMotionValueEvent(currentTime, "change", (latest: number) => {
         const PRE_LOOKAHEAD = 0.15;
@@ -79,7 +80,8 @@ const Word: React.FC<{
             custom={{
                 config,
                 activeColor,
-                baseColor
+                baseColor,
+                duration
             }}
             variants={layoutVariants}
             initial="waiting"
@@ -91,19 +93,34 @@ const Word: React.FC<{
             }}
         >
             {/* Glow Layer - Handles Text Shadow - Absolute Position */}
-            <motion.span
-                variants={glowVariants}
-                custom={{ config, activeColor, baseColor }}
-                className="absolute inset-0 select-none pointer-events-none"
+            <span
+                className="absolute inset-0 select-none pointer-events-none block"
                 aria-hidden="true"
             >
-                {word.text}
-            </motion.span>
+                {!isCJK(word.text) && word.text.length > 1 ? (
+                    word.text.split('').map((char, index) => (
+                        <motion.span
+                            key={index}
+                            variants={glowVariants}
+                            custom={{ config, activeColor, baseColor, duration, index, total: word.text.length }}
+                        >
+                            {char}
+                        </motion.span>
+                    ))
+                ) : (
+                    <motion.span
+                        variants={glowVariants}
+                        custom={{ config, activeColor, baseColor, duration }}
+                    >
+                        {word.text}
+                    </motion.span>
+                )}
+            </span>
 
             {/* Body Layer - Handles Color and Blur - Relative Position */}
             <motion.span
                 variants={bodyVariants}
-                custom={{ config, activeColor, baseColor }}
+                custom={{ config, activeColor, baseColor, duration }}
                 className="relative z-10 block"
             >
                 {word.text}
@@ -114,7 +131,7 @@ const Word: React.FC<{
                 {isChorus && status === 'active' && (
                     <motion.span
                         key="ripple"
-                        className="absolute inset-0 rounded-full border-1 pointer-events-none z-0"
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[150%] aspect-square rounded-full border-1 pointer-events-none z-0"
                         style={{ borderColor: activeColor, filter: "blur(1px)" }}
                         initial={{ scale: 0.2, opacity: 0.8 }}
                         animate={{ scale: rippleScale, opacity: 0 }}
@@ -266,11 +283,11 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
             filter: "blur(10px)",
             transition: { duration: 0.4 }
         }),
-        active: ({ activeColor }: any) => ({
+        active: ({ activeColor, duration }: any) => ({
             color: activeColor,
             filter: "none",
             transition: {
-                color: { duration: 0.2 },
+                color: { duration: duration || 0.2, ease: "linear" },
                 filter: { type: "tween", duration: 0.2 }
             },
             transitionEnd: {
@@ -293,17 +310,37 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
             color: "transparent",
             textShadow: "none",
         },
-        active: ({ activeColor }: any) => ({
-            color: "transparent",
-            textShadow: `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
-            transition: {
-                duration: 0.2
+        active: ({ activeColor, duration, index, total }: any) => {
+            if (total !== undefined && total > 1) {
+                const singleDuration = duration / total;
+                return {
+                    color: "transparent",
+                    textShadow: [
+                        "none",
+                        `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
+                        "none"
+                    ],
+                    transition: {
+                        duration: singleDuration * 6, // stretch the fade over a few letters
+                        times: [0, 0.3, 1], // peak early, then fade
+                        delay: singleDuration * index,
+                        ease: "easeInOut"
+                    }
+                };
             }
-        }),
+            return {
+                color: "transparent",
+                textShadow: `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
+                transition: {
+                    duration: duration || 0.2,
+                    ease: "easeOut"
+                }
+            };
+        },
         passed: {
             color: "transparent",
             textShadow: "none",
-            transition: { duration: 0.5 }
+            transition: { duration: 0.9, ease: "easeIn" }
         }
     };
 

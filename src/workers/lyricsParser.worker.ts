@@ -182,6 +182,7 @@ const parseLRC = (lrcString: string, translationString: string = ''): LyricData 
 
 // --- YRC Parser ---
 const parseYRC = (yrcString: string, translationString: string = ''): LyricData => {
+    console.log('[yrcParser] Verbatim lyrics found, Prioritized');
     const lines: Line[] = [];
 
     const parseTranslation = (str: string) => {
