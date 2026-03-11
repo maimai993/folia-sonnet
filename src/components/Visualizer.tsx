@@ -334,17 +334,22 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
             }
             return {
                 color: "transparent",
-                textShadow: `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
+                textShadow: [
+                    "none",
+                    `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
+                    `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
+                ],
                 transition: {
-                    duration: duration || 0.1,
-                    ease: "easeOut"
+                    duration: (duration || 0.1), // stretch the fade over the word duration
+                    times: [0, 0.9, 1], // peak early, then fade
+                    ease: "easeInOut"
                 }
             };
         },
         passed: {
             color: "transparent",
             textShadow: "none",
-            transition: { duration: 0.2, ease: "easeOut" }
+            transition: { duration: 0.9, ease: "easeOut" }
         }
     };
 

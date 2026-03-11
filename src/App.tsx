@@ -1412,6 +1412,8 @@ export default function App() {
                 // 3. Auto-Match & Load Local Lyrics & Cover
                 if (currentLocalData) {
                     const { updatedLocalSong, matchedSongResult } = await handleLocalSongMatch(currentLocalData);
+                    
+                    if (currentSongRef.current !== song.id) return;
 
                     // Update localData reference
                     currentLocalData = updatedLocalSong;
@@ -1446,6 +1448,7 @@ export default function App() {
                                 // Fetch and cache cover
                                 const response = await fetch(currentLocalData.matchedCoverUrl, { mode: 'cors' });
                                 const coverBlob = await response.blob();
+                                if (currentSongRef.current !== song.id) return;
                                 await saveToCache(`cover_local_${currentLocalData.id}`, coverBlob);
                                 setCachedCoverUrl(URL.createObjectURL(coverBlob));
                             }
@@ -1473,6 +1476,7 @@ export default function App() {
                 // Theme
                 try {
                     const cachedTheme = await getFromCache<Theme>(`theme_${song.id}`);
+                    if (currentSongRef.current !== song.id) return;
                     if (cachedTheme) {
                         setTheme(cachedTheme);
                         setBgMode('ai');
@@ -1503,6 +1507,7 @@ export default function App() {
 
         // 2. Load Cached Cover (Visual Feedback)
         const cachedCoverBlob = await getFromCache<Blob>(`cover_${song.id}`);
+        if (currentSongRef.current !== song.id) return;
         if (cachedCoverBlob) {
             setCachedCoverUrl(URL.createObjectURL(cachedCoverBlob));
         } else if (prefetched?.coverUrl) {
@@ -1515,6 +1520,7 @@ export default function App() {
         try {
             // Check IndexedDB Audio Cache first
             const cachedAudioBlob = await getFromCache<Blob>(`audio_${song.id}`);
+            if (currentSongRef.current !== song.id) return;
             if (cachedAudioBlob) {
                 console.log("[App] Playing from IndexedDB Cache");
                 audioBlobUrl = URL.createObjectURL(cachedAudioBlob);
@@ -1528,6 +1534,7 @@ export default function App() {
                 // Fetch URL from API
                 console.log(`[App] Fetching audio URL from API (quality: ${audioQuality})`);
                 const urlRes = await neteaseApi.getSongUrl(song.id, audioQuality);
+                if (currentSongRef.current !== song.id) return;
                 let url = urlRes.data?.[0]?.url;
                 if (!url) {
                     console.warn("[App] Song URL is empty, likely unavailable");
@@ -1552,6 +1559,7 @@ export default function App() {
         // 4. Fetch Lyrics (Prefetch Cache vs IndexedDB vs Network)
         try {
             const cachedLyrics = await getFromCache<LyricData>(`lyric_${song.id}`);
+            if (currentSongRef.current !== song.id) return;
             if (cachedLyrics) {
                 setLyrics(cachedLyrics);
                 setIsLyricsLoading(false); // Cached lyrics ready immediately
@@ -1615,6 +1623,7 @@ export default function App() {
                 }
 
                 if (parsedLyrics) {
+                    if (currentSongRef.current !== song.id) return;
                     // 1. Render immediately without chorus info to unblock UI
                     // But keep isLyricsLoading TRUE until chorus is done
                     setLyrics(parsedLyrics);
@@ -1693,6 +1702,7 @@ export default function App() {
         // 5. Handle Theme
         try {
             const cachedTheme = await getFromCache<Theme>(`theme_${song.id}`);
+            if (currentSongRef.current !== song.id) return;
             if (cachedTheme) {
                 setTheme(cachedTheme);
                 setBgMode('ai');
