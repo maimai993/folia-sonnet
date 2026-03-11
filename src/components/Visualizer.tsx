@@ -262,7 +262,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
             }
         }),
         passed: ({ config, baseColor }: any) => ({
-            opacity: theme.animationIntensity === 'chaotic' ? 0.6 : 0.4,
+            opacity: theme.animationIntensity === 'chaotic' ? 0.9 : 0.82,
             scale: config.scale || 1,
             x: config.x,
             y: config.y,
@@ -298,7 +298,10 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
         passed: ({ baseColor }: any) => ({
             color: baseColor,
             filter: "blur(0px)",
-            transition: { duration: 0.5 },
+            transition: {
+                color: { duration: 1.5, ease: "easeInOut" },
+                filter: { duration: 0.4 }
+            },
             transitionEnd: {
                 filter: "none"
             }
@@ -341,7 +344,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
         passed: {
             color: "transparent",
             textShadow: "none",
-            transition: { duration: 0.9, ease: "easeIn" }
+            transition: { duration: 2.5, ease: "easeInOut" }
         }
     };
 
