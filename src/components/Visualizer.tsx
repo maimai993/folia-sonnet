@@ -299,8 +299,8 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
             color: baseColor,
             filter: "blur(0px)",
             transition: {
-                color: { duration: 1.5, ease: "easeInOut" },
-                filter: { duration: 0.4 }
+                color: { duration: 0.8, ease: "easeInOut" },
+                filter: { duration: 0.5 }
             },
             transitionEnd: {
                 filter: "none"
@@ -336,7 +336,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
                 color: "transparent",
                 textShadow: `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
                 transition: {
-                    duration: duration || 0.2,
+                    duration: duration || 0.1,
                     ease: "easeOut"
                 }
             };
@@ -344,7 +344,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
         passed: {
             color: "transparent",
             textShadow: "none",
-            transition: { duration: 1.8, ease: "easeInOut" }
+            transition: { duration: 0.2, ease: "easeOut" }
         }
     };
 
