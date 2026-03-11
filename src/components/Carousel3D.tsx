@@ -170,20 +170,30 @@ const Carousel3D: React.FC<Carousel3DProps> = ({ items, onSelect, isLoading = fa
 
     // Keyboard Handling
     useEffect(() => {
+        let lastTime = 0;
+        const THROTTLE_MS = 100;
+
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-            if (e.key === 'ArrowLeft') {
+            
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
                 e.preventDefault();
-                if (focusedIndex > 0) setFocusedIndex(prev => prev - 1);
-            } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                if (focusedIndex < items.length - 1) setFocusedIndex(prev => prev + 1);
+                
+                const now = Date.now();
+                if (now - lastTime < THROTTLE_MS) return;
+                lastTime = now;
+
+                if (e.key === 'ArrowLeft') {
+                    setFocusedIndex(prev => prev > 0 ? prev - 1 : prev);
+                } else if (e.key === 'ArrowRight') {
+                    setFocusedIndex(prev => prev < items.length - 1 ? prev + 1 : prev);
+                }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [focusedIndex, items.length]);
+    }, [items.length]);
 
     return (
         <div className="w-full h-full flex flex-col justify-center relative">
