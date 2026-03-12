@@ -1475,18 +1475,29 @@ export default function App() {
 
                 // Theme
                 try {
-                    const cachedTheme = await getFromCache<Theme>(`theme_${song.id}`);
+                    const cachedDualTheme = await getFromCache<DualTheme>(`dual_theme_${song.id}`);
                     if (currentSongRef.current !== song.id) return;
-                    if (cachedTheme) {
-                        setTheme(cachedTheme);
+                    if (cachedDualTheme) {
+                        const selectedTheme = isDaylight ? cachedDualTheme.light : cachedDualTheme.dark;
+                        setTheme(selectedTheme);
+                        setAiTheme(cachedDualTheme);
                         setBgMode('ai');
                     } else {
-                        // Default theme for local songs if no AI theme generated yet
-                        setTheme(prev => ({
-                            ...prev,
-                            wordColors: [],
-                            lyricsIcons: []
-                        }));
+                        // Try legacy single theme cache
+                        const legacyTheme = await getFromCache<Theme>(`theme_${song.id}`);
+                        if (currentSongRef.current !== song.id) return;
+                        if (legacyTheme) {
+                            setTheme(legacyTheme);
+                            setBgMode('ai');
+                        } else {
+                            // Default theme for local songs if no AI theme generated yet
+                            setTheme(prev => ({
+                                ...prev,
+                                wordColors: [],
+                                lyricsIcons: []
+                            }));
+                            setAiTheme(null);
+                        }
                     }
                 } catch (e) {
                     console.warn("Theme load error", e);
@@ -1701,17 +1712,28 @@ export default function App() {
 
         // 5. Handle Theme
         try {
-            const cachedTheme = await getFromCache<Theme>(`theme_${song.id}`);
+            const cachedDualTheme = await getFromCache<DualTheme>(`dual_theme_${song.id}`);
             if (currentSongRef.current !== song.id) return;
-            if (cachedTheme) {
-                setTheme(cachedTheme);
+            if (cachedDualTheme) {
+                const selectedTheme = isDaylight ? cachedDualTheme.light : cachedDualTheme.dark;
+                setTheme(selectedTheme);
+                setAiTheme(cachedDualTheme);
                 setBgMode('ai');
             } else {
-                setTheme(prev => ({
-                    ...prev,
-                    wordColors: [],
-                    lyricsIcons: []
-                }));
+                // Try legacy single theme
+                const legacyTheme = await getFromCache<Theme>(`theme_${song.id}`);
+                if (currentSongRef.current !== song.id) return;
+                if (legacyTheme) {
+                    setTheme(legacyTheme);
+                    setBgMode('ai');
+                } else {
+                    setTheme(prev => ({
+                        ...prev,
+                        wordColors: [],
+                        lyricsIcons: []
+                    }));
+                    setAiTheme(null);
+                }
             }
         } catch (e) {
             console.warn("Theme load error", e);
