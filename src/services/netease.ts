@@ -221,4 +221,17 @@ export const neteaseApi = {
     }
     return res;
   },
+
+  // --- Radio ---
+  getPersonalFm: async () => {
+    return fetchWithCreds(`/personal_fm?timestamp=${Date.now()}`);
+  },
+
+  getDailyRecommendPlaylists: async () => {
+    return fetchWithCreds(`/recommend/resource?timestamp=${Date.now()}`);
+  },
+
+  fmTrash: async (songId: number) => {
+    return fetchWithCreds(`/fm_trash?id=${songId}&timestamp=${Date.now()}`);
+  },
 };

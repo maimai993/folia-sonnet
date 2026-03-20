@@ -16,7 +16,7 @@ import Carousel3D from './Carousel3D';
 
 
 interface HomeProps {
-    onPlaySong: (song: SongResult, playlistCtx?: SongResult[]) => void;
+    onPlaySong: (song: SongResult, playlistCtx?: SongResult[], isFmCall?: boolean) => void;
     onQueueAddAndPlay: (song: SongResult) => void;
     onBackToPlayer: () => void;
     onRefreshUser: () => void;
@@ -31,12 +31,14 @@ interface HomeProps {
     localSongs: LocalSong[];
     onRefreshLocalSongs: () => void;
     onPlayLocalSong: (song: LocalSong, queue?: LocalSong[]) => void;
-    viewTab: 'playlist' | 'local' | 'albums' | 'navidrome';
-    setViewTab: (tab: 'playlist' | 'local' | 'albums' | 'navidrome') => void;
+    viewTab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio';
+    setViewTab: (tab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio') => void;
     focusedPlaylistIndex?: number;
     setFocusedPlaylistIndex?: (index: number) => void;
     focusedFavoriteAlbumIndex?: number;
     setFocusedFavoriteAlbumIndex?: (index: number) => void;
+    focusedRadioIndex?: number;
+    setFocusedRadioIndex?: (index: number) => void;
     localMusicState: {
         activeRow: 0 | 1;
         selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; } | null;
@@ -131,6 +133,8 @@ const Home: React.FC<HomeProps> = ({
     setFocusedPlaylistIndex,
     focusedFavoriteAlbumIndex = 0,
     setFocusedFavoriteAlbumIndex,
+    focusedRadioIndex = 0,
+    setFocusedRadioIndex,
     localMusicState,
     setLocalMusicState,
     onMatchSong,
@@ -249,6 +253,55 @@ const Home: React.FC<HomeProps> = ({
             console.error("Failed to fetch favorite albums", e);
         } finally {
             setLoadingAlbums(false);
+        }
+    };
+
+    // Radio State
+    const [radioItems, setRadioItems] = useState<any[]>([]);
+    const [loadingRadio, setLoadingRadio] = useState(false);
+    const [radioLoaded, setRadioLoaded] = useState(false);
+
+    useEffect(() => {
+        if (viewTab === 'radio' && !radioLoaded && user) {
+            fetchRadioData();
+        }
+    }, [viewTab, user, radioLoaded]);
+
+    const fetchRadioData = async () => {
+        setLoadingRadio(true);
+        try {
+            const fmRes = await neteaseApi.getPersonalFm();
+            let fmCoverUrl = '';
+            if (fmRes.data && fmRes.data.length > 0) {
+                fmCoverUrl = fmRes.data[0].album?.picUrl || fmRes.data[0].al?.picUrl || '';
+            }
+
+            const fmItem = {
+                id: 'personal_fm',
+                name: '私人FM',
+                coverUrl: fmCoverUrl,
+                description: 'Personal FM',
+                isFm: true,
+            };
+
+            const recRes = await neteaseApi.getDailyRecommendPlaylists();
+            let recItems: any[] = [];
+            if (recRes.recommend) {
+                recItems = recRes.recommend.slice(0, 30).map((r: any) => ({
+                    id: r.id,
+                    name: r.name,
+                    coverUrl: r.picUrl,
+                    trackCount: r.trackCount,
+                    description: r.creator?.nickname || '每日推荐'
+                }));
+            }
+            
+            setRadioItems([fmItem, ...recItems]);
+            setRadioLoaded(true);
+        } catch (e) {
+            console.error("Failed to fetch radio data", e);
+        } finally {
+            setLoadingRadio(false);
         }
     };
 
@@ -410,23 +463,29 @@ const Home: React.FC<HomeProps> = ({
                             <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1">
                                 {user && (
                                     <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
-                                        <div className={`grid ${navidromeEnabled ? 'grid-cols-4' : 'grid-cols-3 transition-all duration-300'}`}>
+                                        <div className={`grid ${navidromeEnabled ? 'grid-cols-5' : 'grid-cols-4 transition-all duration-300'}`}>
                                             <div
                                                 className="absolute top-1 bottom-1 rounded-full bg-white shadow-sm transition-all duration-300 ease-spring"
                                                 style={{
                                                     left: viewTab === 'playlist' ? '4px'
-                                                        : viewTab === 'albums' ? (navidromeEnabled ? 'calc(25% + 1px)' : 'calc(33.333% + 1px)')
-                                                            : viewTab === 'local' ? (navidromeEnabled ? 'calc(50%)' : 'calc(66.666% - 1px)')
-                                                                : 'calc(75% - 1px)',
-                                                    width: navidromeEnabled ? 'calc(25% - 2px)' : 'calc(33.333% - 2px)'
+                                                        : viewTab === 'radio' ? (navidromeEnabled ? 'calc(20% + 1px)' : 'calc(25% + 1px)')
+                                                        : viewTab === 'albums' ? (navidromeEnabled ? 'calc(40% + 1px)' : 'calc(50% + 1px)')
+                                                            : viewTab === 'local' ? (navidromeEnabled ? 'calc(60%)' : 'calc(75% - 1px)')
+                                                                : 'calc(80% - 1px)',
+                                                    width: navidromeEnabled ? 'calc(20% - 2px)' : 'calc(25% - 2px)'
                                                 }}
                                             />
                                             <button
                                                 onClick={() => setViewTab('playlist')}
-                                                className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'playlist' ? activeTabBg : navPillInactiveText
-                                                    }`}
+                                                className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'playlist' ? activeTabBg : navPillInactiveText}`}
                                             >
                                                 {t('home.playlists')}
+                                            </button>
+                                            <button
+                                                onClick={() => setViewTab('radio')}
+                                                className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'radio' ? activeTabBg : navPillInactiveText}`}
+                                            >
+                                                {t('home.radio') || '电台'}
                                             </button>
                                             <button
                                                 onClick={() => setViewTab('albums')}
@@ -548,6 +607,40 @@ const Home: React.FC<HomeProps> = ({
                                                 emptyMessage={t('home.loadingLibrary')}
                                                 initialFocusedIndex={focusedPlaylistIndex}
                                                 onFocusedIndexChange={setFocusedPlaylistIndex}
+                                                isDaylight={isDaylight}
+                                            />
+                                        </motion.div>
+                                    ) : viewTab === 'radio' ? (
+                                        <motion.div
+                                            key="radio"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="w-full h-full flex-1"
+                                        >
+                                            <Carousel3D
+                                                items={radioItems}
+                                                onSelect={async (item) => {
+                                                    if (item.id === 'personal_fm') {
+                                                        const fmRes = await neteaseApi.getPersonalFm();
+                                                        if (fmRes.data && fmRes.data.length > 0) {
+                                                            onPlaySong(fmRes.data[0], fmRes.data, true);
+                                                        }
+                                                    } else {
+                                                        onSelectPlaylist({
+                                                            id: item.id,
+                                                            name: item.name,
+                                                            coverImgUrl: item.coverUrl,
+                                                            creator: { nickname: item.description },
+                                                            trackCount: item.trackCount
+                                                        } as any);
+                                                    }
+                                                }}
+                                                isLoading={loadingRadio}
+                                                emptyMessage={t('home.loadingLibrary')}
+                                                initialFocusedIndex={focusedRadioIndex}
+                                                onFocusedIndexChange={setFocusedRadioIndex}
                                                 isDaylight={isDaylight}
                                             />
                                         </motion.div>

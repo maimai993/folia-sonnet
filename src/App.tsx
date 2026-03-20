@@ -125,6 +125,7 @@ export default function App() {
     const [duration, setDuration] = useState(0);
     const [currentLineIndex, setCurrentLineIndex] = useState(-1);
     const [loopMode, setLoopMode] = useState<'off' | 'all' | 'one'>('off');
+    const [isFmMode, setIsFmMode] = useState(false);
     const [useCoverColorBg, setUseCoverColorBg] = useState(() => {
         const saved = localStorage.getItem('use_cover_color_bg');
         return saved !== null ? saved === 'true' : false;
@@ -249,9 +250,10 @@ export default function App() {
     const localFileBlobsRef = useRef<Map<string, string>>(new Map()); // id -> blob URL
 
     // Navigation Persistence State (Lifted from Home/LocalMusicView)
-    const [homeViewTab, setHomeViewTab] = useState<'playlist' | 'local' | 'albums' | 'navidrome'>('playlist');
+    const [homeViewTab, setHomeViewTab] = useState<'playlist' | 'local' | 'albums' | 'navidrome' | 'radio'>('playlist');
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [focusedFavoriteAlbumIndex, setFocusedFavoriteAlbumIndex] = useState(0);
+    const [focusedRadioIndex, setFocusedRadioIndex] = useState(0);
     const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
     const [localMusicState, setLocalMusicState] = useState<{
         activeRow: 0 | 1;
@@ -1335,8 +1337,14 @@ export default function App() {
         }
     };
 
-    const playSong = async (song: SongResult, queue: SongResult[] = []) => {
-        console.log("[App] playSong initiated:", song.name, song.id);
+    const playSong = async (song: SongResult, queue: SongResult[] = [], isFmCall: boolean = false) => {
+        console.log("[App] playSong initiated:", song.name, song.id, "isFm:", isFmCall);
+        setIsFmMode(isFmCall);
+        if (isFmCall && !isFmMode) {
+            // Only auto-open panel when first entering FM mode
+            setPanelTab('queue');
+            setIsPanelOpen(true);
+        }
 
         // Enable autoplay for user-initiated song changes
         shouldAutoPlay.current = true;
@@ -1796,13 +1804,29 @@ export default function App() {
         }
 
         // Play this song, updating the queue state
-        playSong(song, newQueue);
+        playSong(song, newQueue, false);
     };
 
-    const handleNextTrack = useCallback(() => {
+    const handleNextTrack = useCallback(async () => {
         if (!currentSong || playQueue.length === 0) return;
 
         const currentIndex = playQueue.findIndex(s => s.id === currentSong.id);
+        
+        // --- FM Mode Auto-fetch ---
+        if (isFmMode && currentIndex >= playQueue.length - 2) {
+            try {
+                const fmRes = await neteaseApi.getPersonalFm();
+                if (fmRes.data && fmRes.data.length > 0) {
+                    const newQueue = [...playQueue, ...fmRes.data];
+                    setPlayQueue(newQueue);
+                    playSong(newQueue[currentIndex + 1], newQueue, true);
+                    return;
+                }
+            } catch(e) {
+                console.error("Failed to fetch FM tracks", e);
+            }
+        }
+
         let nextIndex = -1;
 
         if (currentIndex >= 0 && currentIndex < playQueue.length - 1) {
@@ -1813,11 +1837,11 @@ export default function App() {
         }
 
         if (nextIndex >= 0) {
-            playSong(playQueue[nextIndex], playQueue);
+            playSong(playQueue[nextIndex], playQueue, isFmMode);
         } else {
             setPlayerState(PlayerState.IDLE);
         }
-    }, [currentSong, playQueue, loopMode]);
+    }, [currentSong, playQueue, loopMode, isFmMode]);
 
     const handlePrevTrack = useCallback(() => {
         if (!currentSong || playQueue.length === 0) return;
@@ -1832,9 +1856,19 @@ export default function App() {
         }
 
         if (prevIndex >= 0) {
-            playSong(playQueue[prevIndex], playQueue);
+            playSong(playQueue[prevIndex], playQueue, isFmMode);
         }
-    }, [currentSong, playQueue, loopMode]);
+    }, [currentSong, playQueue, loopMode, isFmMode]);
+
+    const handleFmTrash = async () => {
+        if (currentSong && isFmMode) {
+            try {
+                await neteaseApi.fmTrash(currentSong.id);
+            } catch(e) {}
+            // Skip immediately
+            handleNextTrack();
+        }
+    };
 
     const shuffleQueue = useCallback(() => {
         if (!playQueue || playQueue.length <= 1) return;
@@ -2387,6 +2421,8 @@ export default function App() {
                             setFocusedPlaylistIndex={setFocusedPlaylistIndex}
                             focusedFavoriteAlbumIndex={focusedFavoriteAlbumIndex}
                             setFocusedFavoriteAlbumIndex={setFocusedFavoriteAlbumIndex}
+                            focusedRadioIndex={focusedRadioIndex}
+                            setFocusedRadioIndex={setFocusedRadioIndex}
                             localMusicState={localMusicState}
                             setLocalMusicState={setLocalMusicState}
                             staticMode={staticMode}
@@ -2476,7 +2512,7 @@ export default function App() {
                         albumId={selectedAlbumId}
                         onBack={() => handleAlbumSelect(null)}
                         onPlaySong={(song, ctx) => {
-                            playSong(song, ctx);
+                            playSong(song, ctx, false);
                             // We don't need to close AlbumView here explicitly if we rely on currentView check?
                             // But keeping it open in state allows returning to it.
                             // So we don't call handleAlbumSelect(null) here?
@@ -2484,7 +2520,7 @@ export default function App() {
                             // Wait, previous code:
                             /* 
                             onPlaySong={(song, ctx) => {
-                                playSong(song, ctx);
+                                playSong(song, ctx, false);
                                 handleAlbumSelect(null);
                             }}
                             */
@@ -2515,7 +2551,7 @@ export default function App() {
                             // So I will keep passing `handleAlbumSelect(null)`.
                         }}
                         onPlayAll={(songs) => {
-                            playSong(songs[0], songs);
+                            playSong(songs[0], songs, false);
                         }}
                         onSelectArtist={handleArtistSelect}
                         theme={theme}
@@ -2531,19 +2567,19 @@ export default function App() {
                         artistId={selectedArtistId}
                         onBack={() => handleArtistSelect(null)}
                         onPlaySong={(song, ctx) => {
-                            playSong(song, ctx);
+                            playSong(song, ctx, false);
                             // Keep consistency with AlbumView behavior in original code?
                             // Original code for Artist:
                             /*
                              onPlaySong={(song, ctx) => {
-                                playSong(song, ctx);
+                                playSong(song, ctx, false);
                                 handleArtistSelect(null);
                              }}
                             */
                             // Wait, lookup lines 1965-1970 in original:
                             /*
                              onPlaySong={(song, ctx) => {
-                                 playSong(song, ctx);
+                                 playSong(song, ctx, false);
                                  // Do we close artist view? 
                                  // Keep consistency with AlbumView
                                  handleArtistSelect(null);
@@ -2654,6 +2690,12 @@ export default function App() {
                         onToggleDaylight={() => handleToggleDaylight(!isDaylight)}
                         onMatchOnline={handleManualMatchOnline}
                         onUpdateLocalLyrics={handleUpdateLocalLyrics}
+                        isFmMode={isFmMode}
+                        onFmTrash={handleFmTrash}
+                        onNextTrack={handleNextTrack}
+                        onPrevTrack={handlePrevTrack}
+                        playerState={playerState}
+                        onTogglePlay={togglePlay}
                     />
                 )
             }

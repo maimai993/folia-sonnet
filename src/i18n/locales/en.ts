@@ -121,7 +121,8 @@ export default {
     "playlists": "Playlists",
     "albums": "Albums",
     "allAlbums": "All",
-    "popular": "Popular"
+    "popular": "Popular",
+    "radio": "Radio"
   },
   "animation": {
     "calm": "calm",

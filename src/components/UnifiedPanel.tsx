@@ -1,13 +1,14 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio } from 'lucide-react';
+import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { SongResult, Theme } from '../types';
+import { SongResult, Theme, PlayerState } from '../types';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
 import QueueTab from './panelTab/QueueTab';
 import AccountTab from './panelTab/AccountTab';
 import LocalTab from './panelTab/LocalTab';
+import FmTab from './panelTab/FmTab';
 
 export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local';
 
@@ -58,6 +59,13 @@ interface UnifiedPanelProps {
     // Local Tab Props
     onMatchOnline: () => void;
     onUpdateLocalLyrics: (content: string, isTranslation: boolean) => void;
+    // FM Mode Props
+    isFmMode: boolean;
+    onFmTrash: () => void;
+    onNextTrack: () => void;
+    onPrevTrack: () => void;
+    playerState: PlayerState;
+    onTogglePlay: () => void;
 }
 
 const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
@@ -101,7 +109,13 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     isDaylight,
     onToggleDaylight,
     onMatchOnline,
-    onUpdateLocalLyrics
+    onUpdateLocalLyrics,
+    isFmMode,
+    onFmTrash,
+    onNextTrack,
+    onPrevTrack,
+    playerState,
+    onTogglePlay
 }) => {
     const { t } = useTranslation();
 
@@ -110,7 +124,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const tabs = [
         { id: 'cover' as PanelTab, label: t('panel.cover'), icon: Disc },
         { id: 'controls' as PanelTab, label: t('panel.controls'), icon: SlidersHorizontal },
-        { id: 'queue' as PanelTab, label: t('panel.playlist'), icon: ListMusic },
+        isFmMode 
+            ? { id: 'queue' as PanelTab, label: t('home.radio') || '私人FM', icon: Radio }
+            : { id: 'queue' as PanelTab, label: t('panel.playlist'), icon: ListMusic },
         { id: 'account' as PanelTab, label: t('panel.account'), icon: UserIcon },
     ];
 
@@ -219,14 +235,28 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                         />
                                     )}
                                     {currentTab === 'queue' && (
-                                        <QueueTab
-                                            playQueue={playQueue}
-                                            currentSong={currentSong}
-                                            onPlaySong={onPlaySong}
-                                            queueScrollRef={queueScrollRef}
-                                            shouldScrollToCurrent={isOpen && currentTab === 'queue'}
-                                            onShuffle={onShuffle}
-                                        />
+                                        isFmMode ? (
+                                            <FmTab
+                                                playerState={playerState}
+                                                onTogglePlay={onTogglePlay}
+                                                onNextTrack={onNextTrack}
+                                                onPrevTrack={onPrevTrack}
+                                                onTrash={onFmTrash}
+                                                onLike={onLike}
+                                                isLiked={isLiked}
+                                                isDaylight={isDaylight}
+                                                primaryColor={theme.primaryColor}
+                                            />
+                                        ) : (
+                                            <QueueTab
+                                                playQueue={playQueue}
+                                                currentSong={currentSong}
+                                                onPlaySong={onPlaySong}
+                                                queueScrollRef={queueScrollRef}
+                                                shouldScrollToCurrent={isOpen && currentTab === 'queue'}
+                                                onShuffle={onShuffle}
+                                            />
+                                        )
                                     )}
                                     {currentTab === 'account' && (
                                         <AccountTab
