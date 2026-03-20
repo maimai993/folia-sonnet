@@ -249,6 +249,15 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             song.useOnlineLyrics = false;
             song.useOnlineCover = false;
             song.useOnlineMetadata = false;
+
+            // Clear all matched data to restore original local state
+            delete song.matchedSongId;
+            delete song.matchedArtists;
+            delete song.matchedAlbumId;
+            delete song.matchedAlbumName;
+            delete song.matchedLyrics;
+            delete song.matchedCoverUrl;
+
             await saveLocalSong(song);
             // Clear cached online cover so embedded cover is used
             await removeFromCache(`cover_local_${song.id}`);

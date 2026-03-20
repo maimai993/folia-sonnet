@@ -92,53 +92,62 @@ export async function importFolder(): Promise<LocalSong[]> {
         const dirHandle = await window.showDirectoryPicker();
         const importedSongs: LocalSong[] = [];
 
-        const entries: any[] = [];
-        // @ts-ignore
-        for await (const entry of dirHandle.values()) {
-            entries.push(entry);
+        const entries: { handle: FileSystemFileHandle, folderName: string, relativePath: string }[] = [];
+
+        async function traverseDirectory(handle: FileSystemDirectoryHandle, currentPath: string) {
+            // @ts-ignore
+            for await (const entry of handle.values()) {
+                if (entry.kind === 'file') {
+                    entries.push({
+                        handle: entry as FileSystemFileHandle,
+                        folderName: currentPath,
+                        relativePath: `${currentPath}/${entry.name}`
+                    });
+                } else if (entry.kind === 'directory') {
+                    await traverseDirectory(entry as FileSystemDirectoryHandle, `${currentPath}/${entry.name}`);
+                }
+            }
         }
+
+        await traverseDirectory(dirHandle, dirHandle.name);
 
         const lrcMap = new Map<string, FileSystemFileHandle>();
         const tlrcMap = new Map<string, FileSystemFileHandle>();
 
         // First pass: Index lyric files
         for (const entry of entries) {
-            if (entry.kind === 'file') {
-                const name = entry.name;
-                if (name.toLowerCase().endsWith('.t.lrc')) {
-                    const baseName = name.slice(0, -6);
-                    lrcMap.set(baseName + '.t', entry as FileSystemFileHandle); // Store as .t specific or just separate map?
-                    // actually let's use tlrcMap
-                    tlrcMap.set(baseName, entry as FileSystemFileHandle);
-                } else if (name.toLowerCase().endsWith('.lrc')) {
-                    const baseName = name.slice(0, -4);
-                    lrcMap.set(baseName, entry as FileSystemFileHandle);
-                }
+            const name = entry.handle.name;
+            const fullPath = entry.relativePath;
+            if (name.toLowerCase().endsWith('.t.lrc')) {
+                const baseName = fullPath.slice(0, -6);
+                tlrcMap.set(baseName, entry.handle);
+            } else if (name.toLowerCase().endsWith('.lrc')) {
+                const baseName = fullPath.slice(0, -4);
+                lrcMap.set(baseName, entry.handle);
             }
         }
 
         // Second pass: Process audio files
         for (const entry of entries) {
-            if (entry.kind === 'file') {
-                // @ts-ignore
-                const file = await entry.getFile();
+            const fileHandle = entry.handle;
+            const file = await fileHandle.getFile();
 
-                // Check if it's an audio file
-                if (!file.type.startsWith('audio/')) {
-                    continue;
-                }
+            // Check if it's an audio file
+            if (!file.type.startsWith('audio/')) {
+                continue;
+            }
 
-                const metadata = extractMetadataFromFilename(file.name);
-                const duration = await getAudioDuration(file);
+            const metadata = extractMetadataFromFilename(file.name);
+            const duration = await getAudioDuration(file);
 
-                // Check for local lyrics
-                // Filename without extension
-                const baseName = file.name.substring(0, file.name.lastIndexOf('.'));
+            // Check for local lyrics using the relative path (to prevent cross-folder collisions)
+            const lastDotIndex = entry.relativePath.lastIndexOf('.');
+            const baseName = lastDotIndex !== -1 ? entry.relativePath.substring(0, lastDotIndex) : entry.relativePath;
 
-                let localLyricsContent: string | undefined;
-                let localTranslationLyricsContent: string | undefined;
+            let localLyricsContent: string | undefined;
+            let localTranslationLyricsContent: string | undefined;
 
-                if (lrcMap.has(baseName)) {
+            if (lrcMap.has(baseName)) {
                     try {
                         const lrcFileHandle = lrcMap.get(baseName)!;
                         // @ts-ignore
@@ -187,7 +196,7 @@ export async function importFolder(): Promise<LocalSong[]> {
                 const localSong: LocalSong = {
                     id: songId,
                     fileName: file.name,
-                    filePath: file.name, // Store filename
+                    filePath: entry.relativePath, // Store full relative path
                     duration,
                     fileSize: file.size,
                     mimeType: file.type,
@@ -205,7 +214,7 @@ export async function importFolder(): Promise<LocalSong[]> {
                     embeddedCover: embeddedMetadata.cover,
 
                     hasManualLyricSelection: false,
-                    folderName: dirHandle.name,
+                    folderName: entry.folderName, // Used for nested grouping
 
                     // Local Lyrics
                     hasLocalLyrics: !!localLyricsContent,
@@ -215,10 +224,8 @@ export async function importFolder(): Promise<LocalSong[]> {
                 };
 
                 // Store fileHandle in memory (cannot persist to IndexedDB)
-                // @ts-ignore - FileSystemFileHandle type may not be in all TypeScript definitions
-                fileHandleMap.set(songId, entry as FileSystemFileHandle);
-                // @ts-ignore
-                localSong.fileHandle = entry as FileSystemFileHandle;
+                fileHandleMap.set(songId, fileHandle);
+                localSong.fileHandle = fileHandle;
 
                 try {
                     await saveLocalSong(localSong);
@@ -229,7 +236,6 @@ export async function importFolder(): Promise<LocalSong[]> {
                     // Remove fileHandle from memory since we couldn't save
                     fileHandleMap.delete(songId);
                 }
-            }
         }
 
         return importedSongs;
@@ -439,7 +445,7 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
 }
 
 // Resync folder: Delete old songs by ID, then prompt for new import
-export async function resyncFolder(oldSongIds: string[]): Promise<LocalSong[] | null> {
+export async function resyncFolder(folderName: string): Promise<LocalSong[] | null> {
     // First, prompt user to select the folder again to get fresh handles
     const importedSongs = await importFolder();
 
@@ -449,29 +455,29 @@ export async function resyncFolder(oldSongIds: string[]): Promise<LocalSong[] | 
         return null;
     }
 
-    // User confirmed - delete old songs by their IDs
-    // This happens AFTER import so new songs have different IDs
-    // and won't be affected by the deletion
-    await deleteSongsByIds(oldSongIds);
+    // User confirmed - delete old songs by their folder name prefix
+    await deleteFolderSongs(folderName);
 
     return importedSongs;
 }
 
-// Delete all songs from a specific folder
+// Delete all songs from a specific folder (and its nested children)
 export async function deleteFolderSongs(folderName: string): Promise<void> {
     const { getLocalSongs } = await import('./db');
 
     // Get all local songs
     const allSongs = await getLocalSongs();
 
-    // Filter songs that belong to this folder
-    const songsToDelete = allSongs.filter(song => song.folderName === folderName);
+    // Filter songs that belong to this folder OR are nested under it
+    const songsToDelete = allSongs.filter(song => 
+        song.folderName === folderName || (song.folderName && song.folderName.startsWith(`${folderName}/`))
+    );
 
     // Delete each song
     for (const song of songsToDelete) {
         await deleteLocalSong(song.id);
     }
 
-    console.log(`[LocalMusic] Deleted ${songsToDelete.length} songs from folder: ${folderName}`);
+    console.log(`[LocalMusic] Deleted ${songsToDelete.length} songs from folder tree: ${folderName}`);
 }
 

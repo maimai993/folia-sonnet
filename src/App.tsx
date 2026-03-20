@@ -2426,6 +2426,10 @@ export default function App() {
                                                         picUrl: coverUrl
                                                     };
                                                 }
+                                            } else {
+                                                if (updatedCurrentSong.al) {
+                                                    updatedCurrentSong.al.picUrl = undefined;
+                                                }
                                             }
 
                                             setCurrentSong(updatedCurrentSong);
@@ -2449,6 +2453,8 @@ export default function App() {
                                             // Update lyrics if available
                                             if (updatedSong.matchedLyrics) {
                                                 setLyrics(updatedSong.matchedLyrics);
+                                            } else {
+                                                setLyrics(null);
                                             }
                                         }
                                     }

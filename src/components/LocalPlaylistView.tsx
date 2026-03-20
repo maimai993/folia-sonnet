@@ -15,6 +15,7 @@ interface LocalPlaylistViewProps {
     onBack: () => void;
     onPlaySong: (song: LocalSong, queue?: LocalSong[]) => void;
     isFolderView?: boolean;
+    allSongs?: LocalSong[];
     onResync?: () => void;
     onDelete?: () => void;
     onMatchSong?: (song: LocalSong) => void;
@@ -24,7 +25,7 @@ interface LocalPlaylistViewProps {
     onUpdateCover?: () => void;
 }
 
-const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, groupId, onBack, onPlaySong, isFolderView = false, onResync, onDelete, onMatchSong, onRefresh, theme, isDaylight, onUpdateCover }) => {
+const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, groupId, onBack, onPlaySong, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, theme, isDaylight, onUpdateCover }) => {
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBg = isDaylight ? 'bg-white/60 backdrop-blur-md border border-white/20 shadow-xl' : 'bg-black/40 backdrop-blur-md border border-white/10';
     const panelBg = isDaylight ? 'bg-white/40 shadow-xl border border-white/20' : 'bg-black/20';
@@ -59,6 +60,15 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
     const songsWithCovers = useMemo(() => {
         return songs.filter(s => s.embeddedCover || s.matchedCoverUrl);
     }, [songs]);
+
+    // Calculate total songs to delete (including nested folders)
+    const songsToDeleteCount = useMemo(() => {
+        if (!isFolderView || !allSongs) return songs.length;
+        
+        return allSongs.filter(song => 
+            song.folderName === title || (song.folderName && song.folderName.startsWith(`${title}/`))
+        ).length;
+    }, [allSongs, title, isFolderView, songs.length]);
 
     const handleCoverSelect = (songId: string) => {
         if (!groupId) return;
@@ -327,7 +337,7 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                 <DeleteFolderConfirmModal
                     isOpen={showDeleteModal}
                     folderName={title}
-                    songCount={songs.length}
+                    songCount={songsToDeleteCount}
                     onConfirm={onDelete}
                     onCancel={() => setShowDeleteModal(false)}
                     isDaylight={isDaylight}

@@ -194,12 +194,9 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         if (!selectedGroup || selectedGroup.type !== 'folder') return;
 
         try {
-            // Collect IDs of old songs BEFORE any operations
-            const oldSongIds = selectedGroup.songs.map(song => song.id);
-
-            // Import fresh songs from the folder
-            // Pass old song IDs so they can be deleted AFTER import
-            const importedSongs = await resyncFolder(oldSongIds);
+            // Re-import the selected folder and its nested children
+            // Pass the folder name so we delete the whole tree on success
+            const importedSongs = await resyncFolder(selectedGroup.name);
 
             // If user cancelled, do nothing and keep existing folder intact
             if (importedSongs === null) {
@@ -278,6 +275,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 }}
                 onPlaySong={onPlaySong}
                 isFolderView={selectedGroup.type === 'folder'}
+                allSongs={localSongs}
                 onResync={selectedGroup.type === 'folder' ? handleResyncFolder : undefined}
                 onDelete={selectedGroup.type === 'folder' ? handleDeleteFolder : undefined}
                 onMatchSong={onMatchSong}

@@ -64,6 +64,50 @@ interface HomeProps {
     onSetThemePreset: (preset: 'midnight' | 'daylight') => void;
     isDaylight: boolean;
 }
+const SearchResultCover: React.FC<{ track: UnifiedSong }> = ({ track }) => {
+    const [src, setSrc] = useState<string | undefined>(undefined);
+
+    useEffect(() => {
+        let objectUrl: string | undefined;
+
+        if (track.isLocal && track.localData) {
+            const ls = track.localData;
+            if (ls.useOnlineCover !== false && ls.matchedCoverUrl) {
+                setSrc(ls.matchedCoverUrl.replace('http:', 'https:'));
+            } else if (ls.embeddedCover) {
+                objectUrl = URL.createObjectURL(ls.embeddedCover);
+                setSrc(objectUrl);
+            } else {
+                setSrc(undefined);
+            }
+        } else {
+            const remoteUrl = track.al?.picUrl || track.album?.picUrl;
+            if (remoteUrl) {
+                setSrc(remoteUrl.replace('http:', 'https:'));
+            } else {
+                setSrc(undefined);
+            }
+        }
+
+        return () => {
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [track]);
+
+    if (!src) {
+        return <div className="w-full h-full flex items-center justify-center"><Disc size={20} className="opacity-20" /></div>;
+    }
+
+    return (
+        <img
+            src={src}
+            className="w-full h-full object-cover"
+            loading="lazy"
+        />
+    );
+};
 
 const Home: React.FC<HomeProps> = ({
     onPlaySong,
@@ -428,7 +472,7 @@ const Home: React.FC<HomeProps> = ({
                                     )}
                                     <input
                                         type="text"
-                                        placeholder={t('home.searchDatabase')}
+                                        placeholder={viewTab === 'local' ? t('home.searchLocal') : t('home.searchDatabase')}
                                         value={searchQuery}
                                         onChange={e => setSearchQuery(e.target.value)}
 
@@ -610,15 +654,7 @@ const Home: React.FC<HomeProps> = ({
                                                     className={`flex items-center gap-4 p-4 rounded-xl ${resultItemBg} cursor-pointer group transition-colors border border-transparent hover:border-white/10`}
                                                 >
                                                     <div className="w-12 h-12 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0 shadow-lg relative">
-                                                        {(track.al?.picUrl || track.album?.picUrl) ? (
-                                                            <img
-                                                                src={(track.al?.picUrl || track.album?.picUrl || '').replace('http:', 'https:')}
-                                                                className="w-full h-full object-cover"
-                                                                loading="lazy"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-full h-full flex items-center justify-center"><Disc size={20} className="opacity-20" /></div>
-                                                        )}
+                                                        <SearchResultCover track={track as UnifiedSong} />
                                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                                             <Disc size={20} />
                                                         </div>
