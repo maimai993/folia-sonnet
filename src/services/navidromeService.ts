@@ -9,6 +9,8 @@ import {
     LyricsResponse,
     Search3Response,
     NavidromeSong,
+    LyricsBySongIdResponse,
+    StructuredLyric,
 } from '../types/navidrome';
 import md5 from 'blueimp-md5';
 
@@ -208,6 +210,22 @@ export const navidromeApi = {
             }
         } catch (e) {
             console.error('[Navidrome] getLyrics failed:', e);
+        }
+        return null;
+    },
+
+    // Get lyrics by song ID (OpenSubsonic)
+    getLyricsBySongId: async (
+        config: NavidromeConfig,
+        id: string
+    ): Promise<StructuredLyric[] | null> => {
+        try {
+            const res = await fetchSubsonic<LyricsBySongIdResponse>(config, 'getLyricsBySongId', { id });
+            if (res['subsonic-response'].status === 'ok' && res['subsonic-response'].lyricsList?.structuredLyrics) {
+                return res['subsonic-response'].lyricsList.structuredLyrics;
+            }
+        } catch (e) {
+            console.error('[Navidrome] getLyricsBySongId failed:', e);
         }
         return null;
     },

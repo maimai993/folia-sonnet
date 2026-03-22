@@ -63,7 +63,7 @@ const GeometricBackground: React.FC<GeometricBackgroundProps> = React.memo(({ th
   const useBandScale = (val: MotionValue<number> | undefined) => {
     // Fallback to main audioPower if band is missing
     const source = val || audioPower;
-    const spring = useSpring(source, { stiffness: 300, damping: 30 });
+    const spring = useSpring(source, { stiffness: 300, damping: 30 }) as unknown as MotionValue<number>;
     return useTransform(spring, [10, 200], [0.95, 1.45]);
   };
 

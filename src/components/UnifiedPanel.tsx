@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio } from 'lucide-react';
+import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio, Cloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme, PlayerState } from '../types';
 import CoverTab from './panelTab/CoverTab';
@@ -9,8 +9,9 @@ import QueueTab from './panelTab/QueueTab';
 import AccountTab from './panelTab/AccountTab';
 import LocalTab from './panelTab/LocalTab';
 import FmTab from './panelTab/FmTab';
+import NaviTab from './panelTab/NaviTab';
 
-export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local';
+export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi';
 
 interface UnifiedPanelProps {
     isOpen: boolean;
@@ -119,7 +120,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 }) => {
     const { t } = useTranslation();
 
-    const isLocal = currentSong && ((currentSong as any).isLocal || currentSong.id < 0);
+    const isNavidrome = currentSong && (currentSong as any).isNavidrome === true;
+    const isLocal = currentSong && ((currentSong as any).isLocal === true || (currentSong.id < 0 && !isNavidrome));
 
     const tabs = [
         { id: 'cover' as PanelTab, label: t('panel.cover'), icon: Disc },
@@ -132,6 +134,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
     if (isLocal) {
         tabs.splice(1, 0, { id: 'local' as PanelTab, label: t('localMusic.folder'), icon: FileAudio });
+    } else if (isNavidrome) {
+        tabs.splice(1, 0, { id: 'navi' as PanelTab, label: 'Navidrome', icon: Cloud });
     }
 
     // Theme Helper
@@ -280,6 +284,14 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             currentSong={currentSong}
                                             onMatchOnline={onMatchOnline}
                                             onUpdateLocalLyrics={onUpdateLocalLyrics}
+                                            isDaylight={isDaylight}
+                                        />
+                                    )}
+                                    {currentTab === 'navi' && isNavidrome && (
+                                        <NaviTab
+                                            currentSong={currentSong as any}
+                                            hasLyrics={hasLyrics}
+                                            onMatchOnline={onMatchOnline}
                                             isDaylight={isDaylight}
                                         />
                                     )}

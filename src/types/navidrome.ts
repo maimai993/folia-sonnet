@@ -113,6 +113,25 @@ export interface Search3Response {
     };
 }
 
+export interface StructuredLyricLine {
+    start: number;
+    value: string;
+}
+
+export interface StructuredLyric {
+    displayArtist: string;
+    displayTitle: string;
+    lang: string;
+    line: StructuredLyricLine[];
+    synced: boolean;
+}
+
+export interface LyricsBySongIdResponse {
+    lyricsList?: {
+        structuredLyrics?: StructuredLyric[];
+    };
+}
+
 // Extended SongResult for Navidrome songs
 export interface NavidromeSong extends SongResult {
     isNavidrome: true;
@@ -130,6 +149,10 @@ export interface NavidromeSong extends SongResult {
     matchedSongId?: number;
     matchedLyrics?: LyricData;
     hasManualLyricSelection?: boolean;
+    useOnlineLyrics?: boolean;
+    useOnlineCover?: boolean;
+    useOnlineMetadata?: boolean;
+    noAutoMatch?: boolean;
 }
 
 // Type guard for NavidromeSong

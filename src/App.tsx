@@ -17,6 +17,7 @@ import AlbumView from './components/AlbumView';
 import ArtistView from './components/ArtistView';
 import UnifiedPanel from './components/UnifiedPanel';
 import LyricMatchModal from './components/LyricMatchModal';
+import NaviLyricMatchModal, { NavidromeMatchData } from './components/NaviLyricMatchModal';
 import { LyricData, Theme, DualTheme, PlayerState, SongResult, NeteaseUser, NeteasePlaylist, LocalSong, UnifiedSong } from './types';
 import { NavidromeSong } from './types/navidrome';
 import { neteaseApi } from './services/netease';
@@ -107,7 +108,7 @@ export default function App() {
     // UI State
     const [statusMsg, setStatusMsg] = useState<{ type: 'error' | 'success' | 'info', text: string; } | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
-    const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local'>('cover');
+    const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi'>('cover');
     const [isGeneratingTheme, setIsGeneratingTheme] = useState(false);
 
     const [bgMode, setBgMode] = useState<'default' | 'ai'>('ai');
@@ -1181,17 +1182,65 @@ export default function App() {
             const navidromeId = navidromeSong.navidromeData.id;
             const streamUrl = navidromeApi.getStreamUrl(config, navidromeId);
 
-            // Try to get lyrics from Navidrome first
+            // Fetch match data if available
+            const matchData = await getFromCache<NavidromeMatchData>(`navidrome_match_${navidromeId}`);
+
             let lyrics: LyricData | null = null;
-            const artistName = navidromeSong.ar?.[0]?.name || navidromeSong.artists?.[0]?.name || '';
-            const lyricsFromNavidrome = await navidromeApi.getLyrics(config, artistName, navidromeSong.name);
-            if (lyricsFromNavidrome) {
-                lyrics = parseLRC(lyricsFromNavidrome, '');
-                console.log('[App] Using Navidrome lyrics');
+            let coverUrl: string | undefined;
+
+            if (matchData) {
+                if (matchData.useOnlineLyrics && matchData.matchedLyrics) {
+                    lyrics = matchData.matchedLyrics;
+                    console.log('[App] Using manually matched OpenSubsonic online lyrics');
+                }
+                if (matchData.useOnlineCover && matchData.matchedCoverUrl) {
+                    coverUrl = matchData.matchedCoverUrl;
+                }
             }
 
-            // If no lyrics from Navidrome, try Netease
+            // Try to get lyrics from Navidrome first
+            const artistName = navidromeSong.ar?.[0]?.name || navidromeSong.artists?.[0]?.name || '';
+            
+            // 1. Try OpenSubsonic structured lyrics (getLyricsBySongId)
             if (!lyrics) {
+                try {
+                const structuredLyrics = await navidromeApi.getLyricsBySongId(config, navidromeId);
+                if (structuredLyrics && structuredLyrics.length > 0) {
+                    const firstStruct = structuredLyrics[0];
+                    if (firstStruct.line && firstStruct.line.length > 0) {
+                        let lrcContent = '';
+                        firstStruct.line.forEach(l => {
+                            const totalMs = l.start || 0;
+                            const minutes = Math.floor(totalMs / 60000);
+                            const seconds = Math.floor((totalMs % 60000) / 1000);
+                            const ms = totalMs % 1000;
+                            const mm = minutes.toString().padStart(2, '0');
+                            const ss = seconds.toString().padStart(2, '0');
+                            const xx = Math.floor(ms / 10).toString().padStart(2, '0');
+                            lrcContent += `[${mm}:${ss}.${xx}]${l.value || ''}\n`;
+                        });
+                        lyrics = parseLRC(lrcContent, '');
+                        console.log('[App] Using OpenSubsonic structured lyrics');
+                    }
+                }
+            } catch (e) {
+                console.warn('[App] Failed to fetch OpenSubsonic structured lyrics:', e);
+            }
+
+            // 2. Fallback to standard Subsonic lyrics
+            if (!lyrics) {
+                const lyricsFromNavidrome = await navidromeApi.getLyrics(config, artistName, navidromeSong.name);
+                if (lyricsFromNavidrome) {
+                    lyrics = parseLRC(lyricsFromNavidrome, '');
+                    console.log('[App] Using standard Navidrome lyrics');
+                }
+            }
+            }
+
+            // If no lyrics from Navidrome, try Netease (Auto Match)
+            let isAutoMatched = false;
+            let autoMatchedLyrics: LyricData | null = null;
+            if (!lyrics && !matchData?.noAutoMatch) {
                 try {
                     const artistName = navidromeSong.artists?.[0]?.name || navidromeSong.ar?.[0]?.name || '';
                     const searchQuery = `${navidromeSong.name} ${artistName}`.trim();
@@ -1206,6 +1255,8 @@ export default function App() {
 
                         if (mainLrc) {
                             lyrics = parseLRC(mainLrc, tlyric);
+                            autoMatchedLyrics = lyrics;
+                            isAutoMatched = true;
                             console.log('[App] Using Netease lyrics for Navidrome song');
                         }
                     }
@@ -1214,21 +1265,26 @@ export default function App() {
                 }
             }
 
-            // Use previously matched lyrics if available
-            if (!lyrics && navidromeSong.matchedLyrics) {
-                lyrics = navidromeSong.matchedLyrics;
-                console.log('[App] Using cached matched lyrics');
+            // Attach match properties for NaviTab logic
+            if (isAutoMatched) {
+                (navidromeSong as any).matchedLyrics = autoMatchedLyrics;
+                (navidromeSong as any).useOnlineLyrics = true;
+            } else {
+                (navidromeSong as any).matchedLyrics = matchData?.matchedLyrics;
+                (navidromeSong as any).useOnlineLyrics = matchData?.useOnlineLyrics;
             }
 
             // Get cover art URL
-            const coverUrl = navidromeSong.album?.picUrl || navidromeSong.al?.picUrl ||
-                navidromeApi.getCoverArtUrl(config, navidromeId);
+            if (!coverUrl) {
+                coverUrl = navidromeSong.album?.picUrl || navidromeSong.al?.picUrl ||
+                    navidromeApi.getCoverArtUrl(config, navidromeId);
+            }
 
             // Create unified song for playback
             const unifiedSong: SongResult = {
                 id: navidromeSong.id,
-                name: navidromeSong.name,
-                artists: navidromeSong.artists || navidromeSong.ar || [],
+                name: (matchData?.useOnlineMetadata && matchData?.matchedAlbumName) ? matchData.matchedAlbumName : navidromeSong.name,
+                artists: (matchData?.useOnlineMetadata && matchData?.matchedArtists) ? [{id: 0, name: matchData.matchedArtists}] : (navidromeSong.artists || navidromeSong.ar || []),
                 album: navidromeSong.album || (navidromeSong.al ? {
                     id: navidromeSong.al.id,
                     name: navidromeSong.al.name,
@@ -2297,8 +2353,15 @@ export default function App() {
     };
 
     const [showLyricMatchModal, setShowLyricMatchModal] = useState(false);
+    const [showNaviLyricMatchModal, setShowNaviLyricMatchModal] = useState(false);
 
     const handleManualMatchOnline = () => {
+        setIsPanelOpen(false);
+        if (currentSong && (currentSong as any).isNavidrome) {
+            setShowNaviLyricMatchModal(true);
+            return;
+        }
+
         if (!currentSong || !((currentSong as any).isLocal || currentSong.id < 0)) return;
         const localData = (currentSong as any).localData as LocalSong;
         if (!localData) return;
@@ -2316,6 +2379,14 @@ export default function App() {
         const found = updatedList.find(s => s.id === localData.id);
         if (found) {
             onPlayLocalSong(found, localSongs);
+            setStatusMsg({ type: 'success', text: 'Match successful' });
+        }
+    };
+
+    const handleNaviLyricMatchComplete = async () => {
+        setShowNaviLyricMatchModal(false);
+        if (currentSong && (currentSong as any).isNavidrome) {
+            onPlayNavidromeSong((currentSong as any).navidromeData, playQueue);
             setStatusMsg({ type: 'success', text: 'Match successful' });
         }
     };
@@ -2701,11 +2772,20 @@ export default function App() {
             }
 
             {/* --- LYRIC MATCH MODAL (Player View) --- */}
-            {showLyricMatchModal && currentSong && ((currentSong as any).isLocal || currentSong.id < 0) && (currentSong as any).localData && (
+            {showLyricMatchModal && currentSong && !((currentSong as any).isNavidrome) && ((currentSong as any).isLocal || currentSong.id < 0) && (currentSong as any).localData && (
                 <LyricMatchModal
                     song={(currentSong as any).localData as LocalSong}
                     onClose={() => setShowLyricMatchModal(false)}
                     onMatch={handleLyricMatchComplete}
+                    isDaylight={isDaylight}
+                />
+            )}
+
+            {showNaviLyricMatchModal && currentSong && (currentSong as any).isNavidrome && (
+                <NaviLyricMatchModal
+                    song={(currentSong as any).navidromeData}
+                    onClose={() => setShowNaviLyricMatchModal(false)}
+                    onMatch={handleNaviLyricMatchComplete}
                     isDaylight={isDaylight}
                 />
             )}
