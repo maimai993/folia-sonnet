@@ -18,6 +18,7 @@ export default {
     "generatingTheme": "AI is dreaming up a theme...",
     "themeApplied": "Applied theme: {{themeName}}",
     "themeGenerationFailed": "Theme generation failed.",
+    "missingApiKey": "Please configure your AI API Key in Settings",
     "playbackError": "Playback Error",
     "loadingSong": "Loading song URL...",
     "cacheCleared": "Cache cleared",
@@ -165,7 +166,14 @@ export default {
     "themePresetsMidnight": "Midnight",
     "themePresetsDaylight": "Daylight",
     "clearAll": "Clear All",
-    "confirmClearAll": "Are you sure you want to clear all cache?"
+    "confirmClearAll": "Are you sure you want to clear all cache?",
+    "electronSettings": "Desktop App Settings",
+    "aiProvider": "AI Provider",
+    "geminiApiKey": "Gemini API Key",
+    "openaiApiKey": "OpenAI API Key",
+    "openaiApiUrl": "OpenAI API URL",
+    "geminiApiKeyDesc": "Netease API backend runs locally.",
+    "save": "Save"
   },
   "localMusic": {
     "foldersAndPlaylists": "Folders & Playlists",

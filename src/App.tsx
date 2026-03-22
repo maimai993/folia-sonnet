@@ -2162,9 +2162,14 @@ export default function App() {
             }
             // Save as last used AI theme
             saveToCache('last_dual_theme', dualTheme);
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setStatusMsg({ type: 'error', text: t('status.themeGenerationFailed') });
+            const errMsg = err.message || '';
+            if (errMsg.includes('not configured')) {
+                setStatusMsg({ type: 'error', text: t('status.missingApiKey') || 'Please configure AI API Key in Settings' });
+            } else {
+                setStatusMsg({ type: 'error', text: t('status.themeGenerationFailed') });
+            }
         } finally {
             setIsGeneratingTheme(false);
         }

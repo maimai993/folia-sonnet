@@ -1,18 +1,56 @@
 {
-  "name": "folia",
+  "name": "folia-major",
+  "productName": "Folia",
+  "description": "Lyrics Reimagine",
+  "author": "chthollyphile",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "AGPL-3.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:electron": "cross-env ELECTRON_DEV=true concurrently -k \"vite\" \"wait-on tcp:3000 && electron .\"",
+    "build:electron": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && electron-builder"
+  },
+  "build": {
+    "appId": "top.izuna.foliamajor",
+    "productName": "Folia",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png"
+    }
   },
   "dependencies": {
-    "@google/genai": "^1.30.0",
+    "@google/genai": "^1.46.0",
+    "@neteasecloudmusicapienhanced/api": "^4.30.3",
     "blueimp-md5": "^2.19.0",
     "buffer": "^6.0.3",
+    "electron-store": "^11.0.2",
     "framer-motion": "^12.35.2",
     "i18next": "^25.6.3",
     "i18next-browser-languagedetector": "^8.2.0",
@@ -29,10 +67,15 @@
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.1.4",
     "autoprefixer": "^10.4.22",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.0.3",
+    "electron-builder": "^26.8.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.17",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite-plugin-pwa": "^1.2.0",
+    "wait-on": "^9.0.4"
   }
 }

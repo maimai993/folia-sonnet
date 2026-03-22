@@ -1,0 +1,60 @@
+name: Build and Release Electron App
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 1.0.1). Leave empty to use package.json version.'
+        required: false
+        type: string
+      release_notes:
+        description: 'Release notes (Markdown supported)'
+        required: false
+        type: string
+
+permissions:
+  contents: write # Required to upload artifacts and publish releases
+
+jobs:
+  release:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Update package.json version
+        if: github.event.inputs.version != ''
+        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
+
+      - name: Generate Release Notes file
+        if: github.event.inputs.release_notes != ''
+        shell: bash
+        run: |
+          mkdir -p build
+          echo "${{ github.event.inputs.release_notes }}" > build/release-notes.md
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Web App for Electron
+        env:
+          ELECTRON_DEV: "false"
+          ELECTRON: "true"
+        run: npx vite build
+
+      - name: Package and Publish Electron Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --publish always

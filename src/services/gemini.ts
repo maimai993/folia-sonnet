@@ -2,6 +2,11 @@ import { DualTheme } from "../types";
 
 export const generateThemeFromLyrics = async (lyricsText: string): Promise<DualTheme> => {
   try {
+    // Check if running in Electron environment
+    if ((window as any).electron && typeof (window as any).electron.generateTheme === 'function') {
+      return await (window as any).electron.generateTheme(lyricsText);
+    }
+
     const provider = import.meta.env.VITE_AI_PROVIDER;
     const endpoint = provider === 'openai' ? '/api/generate-theme_openai' : '/api/generate-theme';
 
