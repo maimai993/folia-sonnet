@@ -1,11 +1,21 @@
 import { NeteaseUser, NeteasePlaylist, SongResult } from "../types";
 
 // Robustly check for environment variable, falling back if undefined
-const getApiBase = () => {
+let API_BASE: string | null = null;
+const getApiBase = async () => {
+  if (API_BASE) return API_BASE;
+
+  if ((window as any).electron && typeof (window as any).electron.getNeteasePort === 'function') {
+    const port = await (window as any).electron.getNeteasePort();
+    API_BASE = `http://localhost:${port}`;
+    return API_BASE;
+  }
+
   try {
     const env = (import.meta as any).env;
     if (env && env.VITE_NETEASE_API_BASE) {
-      return env.VITE_NETEASE_API_BASE;
+      API_BASE = env.VITE_NETEASE_API_BASE;
+      return API_BASE;
     } else {
       throw new Error("VITE_NETEASE_API_BASE is not defined. Please set it in your environment variables.");
     }
@@ -14,10 +24,9 @@ const getApiBase = () => {
   }
 };
 
-const API_BASE = getApiBase();
-
 const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
-  const url = `${API_BASE}${endpoint}`;
+  const base = await getApiBase();
+  const url = `${base}${endpoint}`;
   // Ensure we send credentials to persist session (cookies)
   const defaultOptions: RequestInit = {
     ...options,

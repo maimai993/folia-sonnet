@@ -46,6 +46,39 @@ const HelpModal: React.FC<HelpModalProps> = ({
     const [mediaCount, setMediaCount] = useState(0);
     const [isCleaning, setIsCleaning] = useState<string | null>(null);
 
+    // Electron Settings State
+    const [isElectron, setIsElectron] = useState(false);
+    const [electronSettings, setElectronSettings] = useState({ 
+        GEMINI_API_KEY: '',
+        OPENAI_API_KEY: '',
+        OPENAI_API_URL: '',
+        AI_PROVIDER: 'gemini' 
+    });
+    const [electronSaveStatus, setElectronSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+    useEffect(() => {
+        if ((window as any).electron) {
+            setIsElectron(true);
+            (window as any).electron.getSettings().then((settings: any) => {
+                if (settings) {
+                    setElectronSettings(prev => ({ ...prev, ...settings }));
+                }
+            });
+        }
+    }, []);
+
+    const saveElectronSettings = async () => {
+        if ((window as any).electron) {
+            setElectronSaveStatus('saving');
+            await (window as any).electron.saveSettings('GEMINI_API_KEY', electronSettings.GEMINI_API_KEY);
+            await (window as any).electron.saveSettings('OPENAI_API_KEY', electronSettings.OPENAI_API_KEY);
+            await (window as any).electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
+            await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
+            setElectronSaveStatus('saved');
+            setTimeout(() => setElectronSaveStatus('idle'), 2000);
+        }
+    };
+
     // Navidrome Settings State
     const [navidromeEnabled, setNavidromeEnabledState] = useState(false);
     const [navidromeUrl, setNavidromeUrl] = useState('');
@@ -513,6 +546,108 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     )}
                                 </div>
                             </section>
+
+                            {/* Electron Settings */}
+                            {isElectron && (
+                                <section>
+                                    <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+                                        <Command size={14} /> {t('options.electronSettings') || "Desktop App Settings"}
+                                    </h3>
+                                    <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-4">
+                                        <div className="space-y-4">
+                                            {/* AI Provider selector */}
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('options.aiProvider') || "AI Provider"}
+                                                </label>
+                                                <div className="flex bg-white/5 rounded-lg border border-white/10 p-1">
+                                                    <button
+                                                        onClick={() => setElectronSettings({ ...electronSettings, AI_PROVIDER: 'gemini' })}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                                            electronSettings.AI_PROVIDER !== 'openai' ? 'bg-white/10 text-white shadow-sm' : 'opacity-50 hover:opacity-100'
+                                                        }`}
+                                                    >
+                                                        Gemini
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setElectronSettings({ ...electronSettings, AI_PROVIDER: 'openai' })}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                                            electronSettings.AI_PROVIDER === 'openai' ? 'bg-white/10 text-white shadow-sm' : 'opacity-50 hover:opacity-100'
+                                                        }`}
+                                                    >
+                                                        OpenAI
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {electronSettings.AI_PROVIDER !== 'openai' ? (
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                        {t('options.geminiApiKey') || "Gemini API Key"}
+                                                    </label>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="password"
+                                                            value={electronSettings.GEMINI_API_KEY || ''}
+                                                            onChange={(e) => setElectronSettings({ ...electronSettings, GEMINI_API_KEY: e.target.value })}
+                                                            placeholder="AI Theme Generation Key"
+                                                            className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors"
+                                                            style={{ color: 'var(--text-primary)' }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                            {t('options.openaiApiUrl') || "OpenAI API URL"}
+                                                        </label>
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={electronSettings.OPENAI_API_URL || ''}
+                                                                onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_URL: e.target.value })}
+                                                                placeholder="https://api.openai.com/v1/chat/completions"
+                                                                className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors"
+                                                                style={{ color: 'var(--text-primary)' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                            {t('options.openaiApiKey') || "OpenAI API Key"}
+                                                        </label>
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="password"
+                                                                value={electronSettings.OPENAI_API_KEY || ''}
+                                                                onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_KEY: e.target.value })}
+                                                                placeholder="sk-..."
+                                                                className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors"
+                                                                style={{ color: 'var(--text-primary)' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            <div className="flex justify-between items-center pt-2">
+                                                <div className="text-[10px] opacity-40 mt-1" style={{ color: 'var(--text-secondary)' }}>
+                                                    {t('options.geminiApiKeyDesc') || "Netease API backend runs locally."}
+                                                </div>
+                                                <button
+                                                    onClick={saveElectronSettings}
+                                                    disabled={electronSaveStatus === 'saving'}
+                                                    className="px-4 py-2 bg-white/10 hover:bg-white/15 rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                                                    style={{ color: 'var(--text-primary)' }}
+                                                >
+                                                    {electronSaveStatus === 'saved' ? <Check size={16} className="text-green-400" /> : (t('options.save') || "Save")}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+                            )}
 
                             {/* Static Mode */}
                             <section>

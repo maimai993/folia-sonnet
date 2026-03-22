@@ -18,6 +18,7 @@ export default {
     "generatingTheme": "少女祈祷中...",
     "themeApplied": "已应用主题: {{themeName}}",
     "themeGenerationFailed": "主题生成失败。",
+    "missingApiKey": "请在设置中配置你的 AI API 密钥",
     "playbackError": "播放出错",
     "loadingSong": "正在获取歌曲链接...",
     "cacheCleared": "缓存已清除",
@@ -165,7 +166,14 @@ export default {
     "themePresetsMidnight": "午夜墨染",
     "themePresetsDaylight": "日光素白",
     "clearAll": "全部清空",
-    "confirmClearAll": "确定要清空所有缓存吗？"
+    "confirmClearAll": "确定要清空所有缓存吗？",
+    "electronSettings": "桌面端专属设置",
+    "aiProvider": "AI 供应商",
+    "geminiApiKey": "Gemini 密钥",
+    "openaiApiKey": "OpenAI 密钥",
+    "openaiApiUrl": "OpenAI 代理链接",
+    "geminiApiKeyDesc": "网易云 API 服务本地运行中",
+    "save": "保存"
   },
   "localMusic": {
     "foldersAndPlaylists": "本地文件夹",
