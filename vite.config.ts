@@ -4,6 +4,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'child_process';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -91,7 +92,8 @@ export default defineConfig(async ({ mode }) => {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       '__COMMIT_HASH__': JSON.stringify(commitHash + commitSuffix),
-      '__GIT_BRANCH__': JSON.stringify(gitBranch)
+      '__GIT_BRANCH__': JSON.stringify(gitBranch),
+      '__APP_VERSION__': JSON.stringify(JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version)
     },
     resolve: {
       alias: {

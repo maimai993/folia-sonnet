@@ -48,7 +48,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
 
     // Electron Settings State
     const [isElectron, setIsElectron] = useState(false);
-    const [electronSettings, setElectronSettings] = useState({ 
+    const [electronSettings, setElectronSettings] = useState({
         GEMINI_API_KEY: '',
         OPENAI_API_KEY: '',
         OPENAI_API_URL: '',
@@ -275,7 +275,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     {t('help.madeBy') || "Made by"} <a href="https://github.com/chthollyphile/folia-major" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors underline decoration-white/30 hover:decoration-white">chthollyphile</a>
                                 </p>
                                 <p className="text-xs font-mono opacity-30" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('help.version') || "Version"}: folia-major - {__GIT_BRANCH__} - {__COMMIT_HASH__}
+                                    folia-major v{__APP_VERSION__} - {__GIT_BRANCH__} - {__COMMIT_HASH__}
                                 </p>
                                 {theme?.provider && (
                                     <p className="text-xs font-mono opacity-30 mb-2" style={{ color: 'var(--text-secondary)' }}>
@@ -565,17 +565,15 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                 <div className="flex bg-white/5 rounded-lg border border-white/10 p-1">
                                                     <button
                                                         onClick={() => setElectronSettings({ ...electronSettings, AI_PROVIDER: 'gemini' })}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                                                            electronSettings.AI_PROVIDER !== 'openai' ? 'bg-white/10 text-white shadow-sm' : 'opacity-50 hover:opacity-100'
-                                                        }`}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${electronSettings.AI_PROVIDER !== 'openai' ? 'bg-white/10 text-white shadow-sm' : 'opacity-50 hover:opacity-100'
+                                                            }`}
                                                     >
                                                         Gemini
                                                     </button>
                                                     <button
                                                         onClick={() => setElectronSettings({ ...electronSettings, AI_PROVIDER: 'openai' })}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                                                            electronSettings.AI_PROVIDER === 'openai' ? 'bg-white/10 text-white shadow-sm' : 'opacity-50 hover:opacity-100'
-                                                        }`}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${electronSettings.AI_PROVIDER === 'openai' ? 'bg-white/10 text-white shadow-sm' : 'opacity-50 hover:opacity-100'
+                                                            }`}
                                                     >
                                                         OpenAI
                                                     </button>

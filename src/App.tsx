@@ -189,17 +189,25 @@ export default function App() {
         // If we have a dual AI theme cached, switch to the appropriate variant
         if (aiTheme) {
             const selectedTheme = isLight ? aiTheme.light : aiTheme.dark;
-            if (bgMode === 'default') {
-                // In default mode, use AI colors + default background
-                const baseTheme = isLight ? DAYLIGHT_THEME : DEFAULT_THEME;
-                setTheme({
-                    ...selectedTheme,
-                    backgroundColor: baseTheme.backgroundColor,
-                });
-            } else {
-                // In AI mode, use full AI theme
-                setTheme(selectedTheme);
-            }
+            setTheme(prev => {
+                if (bgMode === 'default') {
+                    // In default mode, use AI colors + default background
+                    const baseTheme = isLight ? DAYLIGHT_THEME : DEFAULT_THEME;
+                    return {
+                        ...selectedTheme,
+                        backgroundColor: baseTheme.backgroundColor,
+                        wordColors: prev.wordColors,
+                        lyricsIcons: prev.lyricsIcons
+                    };
+                } else {
+                    // In AI mode, use full AI theme
+                    return {
+                        ...selectedTheme,
+                        wordColors: prev.wordColors,
+                        lyricsIcons: prev.lyricsIcons
+                    };
+                }
+            });
         } else {
             // No AI theme, just switch default themes
             setTheme(isLight ? DAYLIGHT_THEME : DEFAULT_THEME);
@@ -1200,41 +1208,41 @@ export default function App() {
 
             // Try to get lyrics from Navidrome first
             const artistName = navidromeSong.ar?.[0]?.name || navidromeSong.artists?.[0]?.name || '';
-            
+
             // 1. Try OpenSubsonic structured lyrics (getLyricsBySongId)
             if (!lyrics) {
                 try {
-                const structuredLyrics = await navidromeApi.getLyricsBySongId(config, navidromeId);
-                if (structuredLyrics && structuredLyrics.length > 0) {
-                    const firstStruct = structuredLyrics[0];
-                    if (firstStruct.line && firstStruct.line.length > 0) {
-                        let lrcContent = '';
-                        firstStruct.line.forEach(l => {
-                            const totalMs = l.start || 0;
-                            const minutes = Math.floor(totalMs / 60000);
-                            const seconds = Math.floor((totalMs % 60000) / 1000);
-                            const ms = totalMs % 1000;
-                            const mm = minutes.toString().padStart(2, '0');
-                            const ss = seconds.toString().padStart(2, '0');
-                            const xx = Math.floor(ms / 10).toString().padStart(2, '0');
-                            lrcContent += `[${mm}:${ss}.${xx}]${l.value || ''}\n`;
-                        });
-                        lyrics = parseLRC(lrcContent, '');
-                        console.log('[App] Using OpenSubsonic structured lyrics');
+                    const structuredLyrics = await navidromeApi.getLyricsBySongId(config, navidromeId);
+                    if (structuredLyrics && structuredLyrics.length > 0) {
+                        const firstStruct = structuredLyrics[0];
+                        if (firstStruct.line && firstStruct.line.length > 0) {
+                            let lrcContent = '';
+                            firstStruct.line.forEach(l => {
+                                const totalMs = l.start || 0;
+                                const minutes = Math.floor(totalMs / 60000);
+                                const seconds = Math.floor((totalMs % 60000) / 1000);
+                                const ms = totalMs % 1000;
+                                const mm = minutes.toString().padStart(2, '0');
+                                const ss = seconds.toString().padStart(2, '0');
+                                const xx = Math.floor(ms / 10).toString().padStart(2, '0');
+                                lrcContent += `[${mm}:${ss}.${xx}]${l.value || ''}\n`;
+                            });
+                            lyrics = parseLRC(lrcContent, '');
+                            console.log('[App] Using OpenSubsonic structured lyrics');
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[App] Failed to fetch OpenSubsonic structured lyrics:', e);
+                }
+
+                // 2. Fallback to standard Subsonic lyrics
+                if (!lyrics) {
+                    const lyricsFromNavidrome = await navidromeApi.getLyrics(config, artistName, navidromeSong.name);
+                    if (lyricsFromNavidrome) {
+                        lyrics = parseLRC(lyricsFromNavidrome, '');
+                        console.log('[App] Using standard Navidrome lyrics');
                     }
                 }
-            } catch (e) {
-                console.warn('[App] Failed to fetch OpenSubsonic structured lyrics:', e);
-            }
-
-            // 2. Fallback to standard Subsonic lyrics
-            if (!lyrics) {
-                const lyricsFromNavidrome = await navidromeApi.getLyrics(config, artistName, navidromeSong.name);
-                if (lyricsFromNavidrome) {
-                    lyrics = parseLRC(lyricsFromNavidrome, '');
-                    console.log('[App] Using standard Navidrome lyrics');
-                }
-            }
             }
 
             // If no lyrics from Navidrome, try Netease (Auto Match)
@@ -1284,7 +1292,7 @@ export default function App() {
             const unifiedSong: SongResult = {
                 id: navidromeSong.id,
                 name: (matchData?.useOnlineMetadata && matchData?.matchedAlbumName) ? matchData.matchedAlbumName : navidromeSong.name,
-                artists: (matchData?.useOnlineMetadata && matchData?.matchedArtists) ? [{id: 0, name: matchData.matchedArtists}] : (navidromeSong.artists || navidromeSong.ar || []),
+                artists: (matchData?.useOnlineMetadata && matchData?.matchedArtists) ? [{ id: 0, name: matchData.matchedArtists }] : (navidromeSong.artists || navidromeSong.ar || []),
                 album: navidromeSong.album || (navidromeSong.al ? {
                     id: navidromeSong.al.id,
                     name: navidromeSong.al.name,
@@ -1475,7 +1483,7 @@ export default function App() {
                 // 3. Auto-Match & Load Local Lyrics & Cover
                 if (currentLocalData) {
                     const { updatedLocalSong, matchedSongResult } = await handleLocalSongMatch(currentLocalData);
-                    
+
                     if (currentSongRef.current !== song.id) return;
 
                     // Update localData reference
@@ -1559,7 +1567,6 @@ export default function App() {
                                 wordColors: [],
                                 lyricsIcons: []
                             }));
-                            setAiTheme(null);
                         }
                     }
                 } catch (e) {
@@ -1795,7 +1802,6 @@ export default function App() {
                         wordColors: [],
                         lyricsIcons: []
                     }));
-                    setAiTheme(null);
                 }
             }
         } catch (e) {
@@ -1867,7 +1873,7 @@ export default function App() {
         if (!currentSong || playQueue.length === 0) return;
 
         const currentIndex = playQueue.findIndex(s => s.id === currentSong.id);
-        
+
         // --- FM Mode Auto-fetch ---
         if (isFmMode && currentIndex >= playQueue.length - 2) {
             try {
@@ -1878,7 +1884,7 @@ export default function App() {
                     playSong(newQueue[currentIndex + 1], newQueue, true);
                     return;
                 }
-            } catch(e) {
+            } catch (e) {
                 console.error("Failed to fetch FM tracks", e);
             }
         }
@@ -1920,7 +1926,7 @@ export default function App() {
         if (currentSong && isFmMode) {
             try {
                 await neteaseApi.fmTrash(currentSong.id);
-            } catch(e) {}
+            } catch (e) { }
             // Skip immediately
             handleNextTrack();
         }
@@ -2197,10 +2203,12 @@ export default function App() {
             const baseTheme = isDaylight ? DAYLIGHT_THEME : DEFAULT_THEME;
             if (aiTheme) {
                 const selectedAiTheme = isDaylight ? aiTheme.light : aiTheme.dark;
-                setTheme({
+                setTheme(prev => ({
                     ...selectedAiTheme,
                     backgroundColor: baseTheme.backgroundColor,
-                });
+                    wordColors: prev.wordColors,
+                    lyricsIcons: prev.lyricsIcons
+                }));
             } else {
                 setTheme(baseTheme);
             }
@@ -2208,7 +2216,11 @@ export default function App() {
             // When switching to AI mode, restore the full AI theme
             if (aiTheme) {
                 const selectedAiTheme = isDaylight ? aiTheme.light : aiTheme.dark;
-                setTheme(selectedAiTheme);
+                setTheme(prev => ({
+                    ...selectedAiTheme,
+                    wordColors: prev.wordColors,
+                    lyricsIcons: prev.lyricsIcons
+                }));
             }
             // If no AI theme stored, keep current theme (which might already be AI)
         }
