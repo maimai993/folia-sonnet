@@ -112,6 +112,8 @@ ipcMain.handle('get-netease-port', () => {
 ipcMain.handle('generate-theme', async (event, lyricsText) => {
   try {
     const provider = store.get('AI_PROVIDER') || 'gemini';
+    const useSystemProxy = store.get('USE_SYSTEM_PROXY_FOR_AI') || false;
+    const customFetch = useSystemProxy ? require('electron').net.fetch : fetch;
     const snippet = lyricsText.slice(0, 2000);
 
     const promptText = `Analyze the mood of these lyrics and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.\n\n` +
@@ -143,7 +145,7 @@ ipcMain.handle('generate-theme', async (event, lyricsText) => {
            throw new Error("OPENAI_API_KEY is not configured in settings");
         }
 
-        const response = await fetch(apiUrl, {
+        const response = await customFetch(apiUrl, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -183,7 +185,10 @@ ipcMain.handle('generate-theme', async (event, lyricsText) => {
         if (!apiKey) {
             throw new Error("GEMINI_API_KEY is not configured in settings");
         }
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ 
+            apiKey,
+            httpOptions: { fetch: customFetch }
+        });
         const response = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
             contents: promptText,

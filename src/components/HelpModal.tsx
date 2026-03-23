@@ -52,7 +52,8 @@ const HelpModal: React.FC<HelpModalProps> = ({
         GEMINI_API_KEY: '',
         OPENAI_API_KEY: '',
         OPENAI_API_URL: '',
-        AI_PROVIDER: 'gemini' 
+        AI_PROVIDER: 'gemini',
+        USE_SYSTEM_PROXY_FOR_AI: false
     });
     const [electronSaveStatus, setElectronSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
@@ -74,6 +75,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
             await (window as any).electron.saveSettings('OPENAI_API_KEY', electronSettings.OPENAI_API_KEY);
             await (window as any).electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
             await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
+            await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
             setElectronSaveStatus('saved');
             setTimeout(() => setElectronSaveStatus('idle'), 2000);
         }
@@ -631,7 +633,25 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                 </>
                                             )}
 
-                                            <div className="flex justify-between items-center pt-2">
+                                            <div className="flex items-center justify-between pt-3 pb-1">
+                                                <div className="space-y-1">
+                                                    <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                        {t('options.useSystemProxyAI') || "Use System Proxy for AI"}
+                                                    </label>
+                                                    <div className="text-[10px] opacity-40 max-w-[200px]" style={{ color: 'var(--text-secondary)' }}>
+                                                        {t('options.useSystemProxyAIDesc') || "Route strictly AI requests through system proxy."}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setElectronSettings({ ...electronSettings, USE_SYSTEM_PROXY_FOR_AI: !electronSettings.USE_SYSTEM_PROXY_FOR_AI })}
+                                                    className={`w-12 h-6 rounded-full p-1 transition-colors ${!electronSettings.USE_SYSTEM_PROXY_FOR_AI ? 'bg-white/10' : ''}`}
+                                                    style={{ backgroundColor: electronSettings.USE_SYSTEM_PROXY_FOR_AI ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                                >
+                                                    <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${electronSettings.USE_SYSTEM_PROXY_FOR_AI ? 'translate-x-6' : 'translate-x-0'}`} />
+                                                </button>
+                                            </div>
+
+                                            <div className="flex justify-between items-center pt-3 border-t border-white/10">
                                                 <div className="text-[10px] opacity-40 mt-1" style={{ color: 'var(--text-secondary)' }}>
                                                     {t('options.geminiApiKeyDesc') || "Netease API backend runs locally."}
                                                 </div>

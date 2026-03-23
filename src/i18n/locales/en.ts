@@ -169,6 +169,8 @@ export default {
     "confirmClearAll": "Are you sure you want to clear all cache?",
     "electronSettings": "Desktop App Settings",
     "aiProvider": "AI Provider",
+    "useSystemProxyAI": "Use System Proxy for AI",
+    "useSystemProxyAIDesc": "Route strictly AI requests through system proxy.",
     "geminiApiKey": "Gemini API Key",
     "openaiApiKey": "OpenAI API Key",
     "openaiApiUrl": "OpenAI API URL",

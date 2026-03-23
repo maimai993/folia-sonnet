@@ -169,6 +169,8 @@ export default {
     "confirmClearAll": "确定要清空所有缓存吗？",
     "electronSettings": "桌面端专属设置",
     "aiProvider": "AI 供应商",
+    "useSystemProxyAI": "为AI使用系统代理",
+    "useSystemProxyAIDesc": "仅将AI相关的网络请求通过系统代理路由。",
     "geminiApiKey": "Gemini 密钥",
     "openaiApiKey": "OpenAI 密钥",
     "openaiApiUrl": "OpenAI 代理链接",
