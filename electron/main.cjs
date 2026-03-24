@@ -2,12 +2,34 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const Store = require('electron-store').default || require('electron-store');
 const { GoogleGenAI, Type } = require('@google/genai');
+const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
+const isAppImageRuntime =
+  process.platform === 'linux' &&
+  (Boolean(process.env.APPIMAGE) || Boolean(process.env.APPDIR) || useLinuxGraphicsDebugMode);
+const linuxGraphicsMode =
+  process.platform !== 'linux'
+    ? 'system'
+    : (process.env.FOLIA_LINUX_GRAPHICS_MODE || (isAppImageRuntime ? 'swiftshader' : 'system'));
 
 // Fix for Arch Linux / Wayland & Vulkan compatibility issues
 if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('disable-vulkan');
+  app.commandLine.appendSwitch('disable-features', 'Vulkan');
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
-  app.commandLine.appendSwitch('disable-vulkan'); // Wayland is often incompatible with Vulkan
-  app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
+
+  if (linuxGraphicsMode === 'software') {
+    // Hard fallback: safest, but usually slower.
+    app.disableHardwareAcceleration();
+  } else if (linuxGraphicsMode === 'swiftshader') {
+    // AppImage is the only runtime showing broken blur/opacity plus GPU crashes.
+    // Prefer software GL here so Chromium keeps its compositor pipeline
+    // without relying on the host Vulkan / GPU stack.
+    app.commandLine.appendSwitch('use-gl', 'angle');
+    app.commandLine.appendSwitch('use-angle', 'swiftshader');
+    app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+  } else {
+    app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
+  }
 }
 
 const store = new Store();

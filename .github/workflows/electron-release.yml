@@ -82,16 +82,66 @@ jobs:
           echo "${{ github.event.inputs.release_notes }}" > build/release-notes.md
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Web App for Electron
         env:
-          ELECTRON_DEV: "false"
           ELECTRON: "true"
-        run: npx vite build
+        run: npm run build
 
       - name: Package and Publish Electron Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npx electron-builder --publish always
+
+  publish-aur:
+    name: Publish AUR package
+    needs: [check-version, release]
+    if: needs.check-version.outputs.changed == 'true' && secrets.AUR_SSH_PRIVATE_KEY != '' && secrets.AUR_REPO_SSH_URL != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Prepare AUR metadata
+        run: ./packaging/aur/folia-major-bin/update.sh
+
+      - name: Set up SSH key
+        shell: bash
+        run: |
+          install -dm700 ~/.ssh
+          printf '%s\n' "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            IdentitiesOnly yes
+          EOF
+
+      - name: Push package to AUR
+        shell: bash
+        env:
+          AUR_REPO_SSH_URL: ${{ secrets.AUR_REPO_SSH_URL }}
+        run: |
+          git clone "${AUR_REPO_SSH_URL}" aur-repo
+          cp packaging/aur/folia-major-bin/PKGBUILD aur-repo/PKGBUILD
+          cp packaging/aur/folia-major-bin/.SRCINFO aur-repo/.SRCINFO
+          cp packaging/aur/folia-major-bin/folia-major.desktop aur-repo/folia-major.desktop
+          cd aur-repo
+          if git diff --quiet -- PKGBUILD .SRCINFO folia-major.desktop; then
+            echo "No AUR changes to publish"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO folia-major.desktop
+          git commit -m "Update to v$(jq -r .version ../package.json)"
+          git push
