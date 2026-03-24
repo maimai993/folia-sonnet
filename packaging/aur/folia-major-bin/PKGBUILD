@@ -19,15 +19,16 @@ conflicts=('folia-major')
 source=(
   "https://github.com/chthollyphile/folia-major/releases/download/v${pkgver}/folia-major-${pkgver}-linux-x64.tar.gz"
   'folia-major.desktop'
+  'folia-major.png'
 )
 sha256sums=(
   'SKIP'
   '9dc6f7f25e6dc214cf8798e9df4d01829e2a832899313cc346e97c8db0e4c9ec'
+  'cffe4a4fe5608706e2522de3b4cd8cc174357a9310493f107553794831312054'
 )
 
 package() {
   local appdir
-  local icon_source
 
   appdir="$(dirname "$(find "${srcdir}" -type f -name 'folia-major' -perm -u+x | head -n1)")"
   if [[ -z "${appdir}" ]]; then
@@ -43,9 +44,5 @@ package() {
 
   install -Dm644 "${srcdir}/folia-major.desktop" \
     "${pkgdir}/usr/share/applications/folia-major.desktop"
-
-  icon_source="$(find "${appdir}" -type f \( -iname 'icon.png' -o -path '*/icons/*256x256*.png' -o -path '*/icons/*512x512*.png' \) | head -n1)"
-  if [[ -n "${icon_source}" ]]; then
-    install -Dm644 "${icon_source}" "${pkgdir}/usr/share/pixmaps/folia-major.png"
-  fi
+  install -Dm644 "${srcdir}/folia-major.png" "${pkgdir}/usr/share/pixmaps/folia-major.png"
 }

@@ -33,6 +33,20 @@
       "electron/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "linux/icon.png"
+      },
+      {
+        "from": "packaging/linux/folia-major.desktop",
+        "to": "linux/folia-major.desktop"
+      },
+      {
+        "from": "packaging/linux/README-LINUX.txt",
+        "to": "linux/README-LINUX.txt"
+      }
+    ],
     "mac": {
       "target": [
         "dmg"
