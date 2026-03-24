@@ -98,7 +98,7 @@ jobs:
   publish-aur:
     name: Publish AUR package
     needs: [check-version, release]
-    if: needs.check-version.outputs.changed == 'true' && secrets.AUR_SSH_PRIVATE_KEY != '' && secrets.AUR_REPO_SSH_URL != ''
+    if: needs.check-version.outputs.changed == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -110,10 +110,26 @@ jobs:
         with:
           node-version: 24
 
+      - name: Check AUR secrets
+        id: aur-secrets
+        shell: bash
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          AUR_REPO_SSH_URL: ${{ secrets.AUR_REPO_SSH_URL }}
+        run: |
+          if [[ -z "${AUR_SSH_PRIVATE_KEY}" || -z "${AUR_REPO_SSH_URL}" ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "AUR secrets are not configured; skipping AUR publish."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Prepare AUR metadata
+        if: steps.aur-secrets.outputs.configured == 'true'
         run: ./packaging/aur/folia-major-bin/update.sh
 
       - name: Set up SSH key
+        if: steps.aur-secrets.outputs.configured == 'true'
         shell: bash
         run: |
           install -dm700 ~/.ssh
@@ -127,6 +143,7 @@ jobs:
           EOF
 
       - name: Push package to AUR
+        if: steps.aur-secrets.outputs.configured == 'true'
         shell: bash
         env:
           AUR_REPO_SSH_URL: ${{ secrets.AUR_REPO_SSH_URL }}
