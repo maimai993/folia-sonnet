@@ -1,7 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const Store = require('electron-store').default || require('electron-store');
-const { GoogleGenAI, Type } = require('@google/genai');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
 const isAppImageRuntime =
   process.platform === 'linux' &&
@@ -33,6 +32,129 @@ if (process.platform === 'linux') {
 }
 
 const store = new Store();
+
+async function ensureSystemProxySession() {
+  const ses = session.defaultSession;
+  await ses.setProxy({ mode: 'system' });
+  await ses.forceReloadProxyConfig();
+  await ses.closeAllConnections();
+  return ses;
+}
+
+async function fetchWithOptionalSystemProxy(url, options, useSystemProxy) {
+  if (!useSystemProxy) {
+    return fetch(url, options);
+  }
+
+  const ses = await ensureSystemProxySession();
+  const proxy = await ses.resolveProxy(typeof url === 'string' ? url : url.url);
+  console.log('[AI Proxy] resolved proxy for request:', proxy);
+  return ses.fetch(url, options);
+}
+
+function getGeminiResponseSchema() {
+  return {
+    type: 'OBJECT',
+    properties: {
+      light: {
+        type: 'OBJECT',
+        description: 'Theme optimized for light/daylight mode',
+        properties: {
+          name: { type: 'STRING', description: 'A creative name for this light theme' },
+          backgroundColor: { type: 'STRING', description: 'Hex code for light background (whites, creams, pastels)' },
+          primaryColor: { type: 'STRING', description: 'Hex code for main text (dark color for contrast)' },
+          accentColor: { type: 'STRING', description: 'Hex code for highlighted text/effects' },
+          secondaryColor: { type: 'STRING', description: 'Hex code for secondary elements (must contrast with light bg)' },
+          wordColors: {
+            type: 'ARRAY',
+            description: 'List of exact emotional words from lyrics and their specific colors',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                word: { type: 'STRING' },
+                color: { type: 'STRING' },
+              },
+              required: ['word', 'color'],
+            },
+          },
+          lyricsIcons: {
+            type: 'ARRAY',
+            description: 'List of Lucide icon names related to lyrics',
+            items: { type: 'STRING' }
+          },
+        },
+        required: ['name', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor'],
+      },
+      dark: {
+        type: 'OBJECT',
+        description: 'Theme optimized for dark/midnight mode',
+        properties: {
+          name: { type: 'STRING', description: 'A creative name for this dark theme' },
+          backgroundColor: { type: 'STRING', description: 'Hex code for dark background (deep colors)' },
+          primaryColor: { type: 'STRING', description: 'Hex code for main text (light color for contrast)' },
+          accentColor: { type: 'STRING', description: 'Hex code for highlighted text/effects' },
+          secondaryColor: { type: 'STRING', description: 'Hex code for secondary elements (must contrast with dark bg)' },
+          wordColors: {
+            type: 'ARRAY',
+            description: 'List of exact emotional words from lyrics and their specific colors',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                word: { type: 'STRING' },
+                color: { type: 'STRING' },
+              },
+              required: ['word', 'color'],
+            },
+          },
+          lyricsIcons: {
+            type: 'ARRAY',
+            description: 'List of Lucide icon names related to lyrics',
+            items: { type: 'STRING' }
+          },
+        },
+        required: ['name', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor'],
+      },
+    },
+    required: ['light', 'dark'],
+  };
+}
+
+async function generateGeminiTheme({ apiKey, promptText, customFetch }) {
+  const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
+  const response = await customFetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: promptText }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: getGeminiResponseSchema(),
+      }
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API error: ${response.status} ${response.statusText}${errText ? ` - ${errText}` : ''}`);
+  }
+
+  const data = await response.json();
+  const jsonText = data?.candidates?.[0]?.content?.parts?.find((part) => typeof part?.text === 'string')?.text;
+  if (!jsonText) {
+    throw new Error('Failed to generate theme JSON');
+  }
+
+  return JSON.parse(jsonText);
+}
 
 // Provide Netease API unblock parameter as requested
 process.env.ENABLE_GENERAL_UNBLOCK = 'false';
@@ -135,7 +257,7 @@ ipcMain.handle('generate-theme', async (event, lyricsText) => {
   try {
     const provider = store.get('AI_PROVIDER') || 'gemini';
     const useSystemProxy = store.get('USE_SYSTEM_PROXY_FOR_AI') || false;
-    const customFetch = useSystemProxy ? require('electron').net.fetch : fetch;
+    const customFetch = (url, options) => fetchWithOptionalSystemProxy(url, options, useSystemProxy);
     const snippet = lyricsText.slice(0, 2000);
 
     const promptText = `Analyze the mood of these lyrics and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.\n\n` +
@@ -207,85 +329,11 @@ ipcMain.handle('generate-theme', async (event, lyricsText) => {
         if (!apiKey) {
             throw new Error("GEMINI_API_KEY is not configured in settings");
         }
-        const ai = new GoogleGenAI({ 
+        dualTheme = await generateGeminiTheme({
             apiKey,
-            httpOptions: { fetch: customFetch }
+            promptText,
+            customFetch
         });
-        const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: promptText,
-            config: {
-                responseMimeType: "application/json",
-                 responseSchema: {
-                  type: Type.OBJECT,
-                  properties: {
-                    light: {
-                      type: Type.OBJECT,
-                      description: "Theme optimized for light/daylight mode",
-                      properties: {
-                        name: { type: Type.STRING, description: "A creative name for this light theme" },
-                        backgroundColor: { type: Type.STRING, description: "Hex code for light background (whites, creams, pastels)" },
-                        primaryColor: { type: Type.STRING, description: "Hex code for main text (dark color for contrast)" },
-                        accentColor: { type: Type.STRING, description: "Hex code for highlighted text/effects" },
-                        secondaryColor: { type: Type.STRING, description: "Hex code for secondary elements (must contrast with light bg)" },
-                        wordColors: {
-                          type: Type.ARRAY,
-                          description: "List of exact emotional words from lyrics and their specific colors",
-                          items: {
-                            type: Type.OBJECT,
-                            properties: {
-                              word: { type: Type.STRING },
-                              color: { type: Type.STRING },
-                            },
-                            required: ["word", "color"],
-                          },
-                        },
-                        lyricsIcons: {
-                          type: Type.ARRAY,
-                          description: "List of Lucide icon names related to lyrics",
-                          items: { type: Type.STRING }
-                        },
-                      },
-                      required: ["name", "backgroundColor", "primaryColor", "accentColor", "secondaryColor"],
-                    },
-                    dark: {
-                      type: Type.OBJECT,
-                      description: "Theme optimized for dark/midnight mode",
-                      properties: {
-                        name: { type: Type.STRING, description: "A creative name for this dark theme" },
-                        backgroundColor: { type: Type.STRING, description: "Hex code for dark background (deep colors)" },
-                        primaryColor: { type: Type.STRING, description: "Hex code for main text (light color for contrast)" },
-                        accentColor: { type: Type.STRING, description: "Hex code for highlighted text/effects" },
-                        secondaryColor: { type: Type.STRING, description: "Hex code for secondary elements (must contrast with dark bg)" },
-                        wordColors: {
-                          type: Type.ARRAY,
-                          description: "List of exact emotional words from lyrics and their specific colors",
-                          items: {
-                            type: Type.OBJECT,
-                            properties: {
-                              word: { type: Type.STRING },
-                              color: { type: Type.STRING },
-                            },
-                            required: ["word", "color"],
-                          },
-                        },
-                        lyricsIcons: {
-                          type: Type.ARRAY,
-                          description: "List of Lucide icon names related to lyrics",
-                          items: { type: Type.STRING }
-                        },
-                      },
-                      required: ["name", "backgroundColor", "primaryColor", "accentColor", "secondaryColor"],
-                    },
-                  },
-                  required: ["light", "dark"],
-                }
-            }
-        });
-
-        const jsonText = response.text;
-        if (!jsonText) throw new Error("Failed to generate theme JSON");
-        dualTheme = JSON.parse(jsonText);
 
         dualTheme.light.provider = 'Google Gemini (Local)';
         dualTheme.dark.provider = 'Google Gemini (Local)';
@@ -298,6 +346,6 @@ ipcMain.handle('generate-theme', async (event, lyricsText) => {
     return dualTheme;
   } catch (e) {
     console.error(e);
-    throw new Error(e.message);
+    throw new Error(e instanceof Error ? e.message : String(e));
   }
 });
