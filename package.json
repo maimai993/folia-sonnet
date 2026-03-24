@@ -2,7 +2,10 @@
   "name": "folia-major",
   "productName": "Folia",
   "description": "Lyrics Reimagine",
-  "author": "chthollyphile",
+  "author": {
+    "name": "chthollyphile",
+    "email": "chthollyphile@users.noreply.github.com"
+  },
   "private": true,
   "version": "0.1.4",
   "license": "AGPL-3.0",
@@ -49,6 +52,10 @@
         "deb",
         "rpm"
       ],
+      "publish": {
+        "provider": "github",
+        "publishAutoUpdate": false
+      },
       "icon": "build/icon.png",
       "category": "AudioVideo",
       "executableName": "folia-major"
