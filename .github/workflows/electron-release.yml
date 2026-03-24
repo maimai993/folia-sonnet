@@ -14,6 +14,11 @@ on:
         description: 'Release notes (Markdown supported)'
         required: false
         type: string
+      publish_aur_only:
+        description: 'Skip desktop builds and only publish the AUR package'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write # Required to upload artifacts and publish releases
@@ -54,7 +59,7 @@ jobs:
   release:
     name: Build on ${{ matrix.os }}
     needs: check-version
-    if: needs.check-version.outputs.changed == 'true'
+    if: needs.check-version.outputs.changed == 'true' && github.event.inputs.publish_aur_only != 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -97,7 +102,7 @@ jobs:
 
   publish-aur:
     name: Publish AUR package
-    needs: [check-version, release]
+    needs: check-version
     if: needs.check-version.outputs.changed == 'true'
     runs-on: ubuntu-latest
 
