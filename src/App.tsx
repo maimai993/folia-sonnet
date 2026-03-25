@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { parseLRC } from './utils/lrcParser';
 import { parseYRC } from './utils/yrcParser';
+import { detectChorusLines } from './utils/chorusDetector';
 import { saveSessionData, getSessionData, getFromCache, saveToCache, getLocalSongs } from './services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from './services/coverCache';
 import { getAudioFromLocalSong } from './services/localMusicService';
@@ -29,6 +30,7 @@ import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
 
 // Default Theme
+// 午夜墨染
 const DEFAULT_THEME: Theme = {
     name: "Midnight Default",
     backgroundColor: "#09090b", // zinc-950
@@ -39,6 +41,7 @@ const DEFAULT_THEME: Theme = {
     animationIntensity: "normal"
 };
 
+// 日光素白
 const DAYLIGHT_THEME: Theme = {
     name: "Daylight Default",
     backgroundColor: "#f5f5f4", // stone-100 (Pearl White-ish)
@@ -85,7 +88,6 @@ export default function App() {
     // Removed isDragging and sliderValue as they are handled by ProgressBar component
 
     // Audio Analysis State
-    // Audio Analysis State
     const audioPower = useMotionValue(0);
     const audioBands = {
         bass: useMotionValue(0),
@@ -105,6 +107,8 @@ export default function App() {
     const queueScrollRef = useRef<HTMLDivElement>(null);
     const shouldAutoPlay = useRef(false);
     const currentSongRef = useRef<number | null>(null);
+    const volumePreviewFrameRef = useRef<number | null>(null);
+    const pendingVolumePreviewRef = useRef<number | null>(null);
     const [isLyricsLoading, setIsLyricsLoading] = useState(false);
 
     // Local Music State
@@ -129,6 +133,10 @@ export default function App() {
         focusedAlbumIndex: 0
     });
 
+    // Preferences and Theme
+    // Manages user preferences for audio quality, theme settings, 
+    // and related actions like toggling cover color backgrounds and static mode,
+    // as well as setting daylight mode preference
     const {
         audioQuality,
         setAudioQuality,
@@ -142,8 +150,31 @@ export default function App() {
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
+        volume,
+        isMuted,
+        handleSetVolume,
+        handleToggleMute,
     } = useAppPreferences(setStatusMsg);
 
+    const handlePreviewVolume = useCallback((val: number) => {
+        pendingVolumePreviewRef.current = val;
+
+        if (volumePreviewFrameRef.current !== null) {
+            return;
+        }
+
+        volumePreviewFrameRef.current = requestAnimationFrame(() => {
+            volumePreviewFrameRef.current = null;
+            const nextVolume = pendingVolumePreviewRef.current;
+            if (audioRef.current && nextVolume !== null) {
+                audioRef.current.volume = nextVolume;
+            }
+        });
+    }, []);
+
+    // Theme Controller
+    // manages current theme, daylight mode, and related actions like generating AI themes 
+    // and restoring cached themes for songs
     const {
         theme,
         setTheme,
@@ -164,6 +195,8 @@ export default function App() {
         t,
     });
 
+    // Navigation and Library Hooks
+    // manages current view, selected items, and navigation functions across the app
     const {
         currentView,
         selectedPlaylist,
@@ -176,6 +209,8 @@ export default function App() {
         handleArtistSelect,
     } = useAppNavigation();
 
+    // Netease Library Hook
+    // manages user data, playlists, liked songs, and related actions
     const {
         user,
         playlists,
@@ -208,6 +243,9 @@ export default function App() {
     useEffect(() => {
         return () => {
             if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+            if (volumePreviewFrameRef.current !== null) {
+                cancelAnimationFrame(volumePreviewFrameRef.current);
+            }
         };
     }, []);
 
@@ -307,6 +345,9 @@ export default function App() {
                                 });
                             }
                         } else {
+                            // TODO: NEED INVESTIGATION, meow~
+                            // This case happens when try to restore a navidrome song, it fails to find the song from server or local storage.
+                            // dosen't cause any critical issue, just can't restore the last played song's audio and lyrics, but it will show a warning toast in screen every time open the app, which is annoying! need to investigate why it happens and how to fix it.
                             console.warn("[restoreSession] Could not find local song in library");
                             setStatusMsg({
                                 type: 'info',
@@ -355,6 +396,11 @@ export default function App() {
                             }
 
                             // Chorus Detection
+                            // Find the most repeated lines (after trimming) and mark them as chorus lines, assign a random effect for each unique chorus line text
+                            // Not the best way to determine if a line is a chorus, better than nothing, 
+                            // since the real chourus detection requires very heavy audio analysis or ML model, 
+                            // which btw is not impossible to implement, but it will introduce a lot overhead, the uesr will have to wait for
+                            // a long time before see any lyrics if we do that. Not really worth it.
                             if (parsed && !lyricRes.pureMusic && !lyricRes.lrc?.pureMusic && mainLrc) {
                                 const chorusLines = detectChorusLines(mainLrc);
                                 if (chorusLines.size > 0) {
@@ -579,6 +625,8 @@ export default function App() {
             }
 
             // Try to get lyrics from Navidrome first
+            // The navidrome API doesn't support lyric with translation, or synced lyrics, making it hard for us to provide a good lyric display experience.
+            // In best senario, we can implement a middleware to provide Folia's cached-lyric file directly from user's navidrome server, but that requires users to self-host an additional service, which is not ideal for user experience. So for now, we will just try to fetch the standard lyrics from navidrome, and if the lyrics is in LRC format and has time tags, we will parse it and display it as synced lyrics, otherwise we will just display it as unsynced plain text lyrics. It's not perfect, but it's better than nothing. We will also provide an option for users to manually match lyrics from Netease if they want better lyric experience, and we will save the matched lyrics in cache for future use.
             const artistName = navidromeSong.ar?.[0]?.name || navidromeSong.artists?.[0]?.name || '';
 
             // 1. Try OpenSubsonic structured lyrics (getLyricsBySongId)
@@ -608,6 +656,10 @@ export default function App() {
                 }
 
                 // 2. Fallback to standard Subsonic lyrics
+                // This breaks the visualizer, maybe better just don't support it if the lyrics is not in structured format.
+                // 看到这里你会发现注释大部分都是英文写的，这是因为 Linux 下的输入法不太好用，而且对于 LLM 来说英文更节省token,大概是这样，反正你能看懂就好。
+                // 题外话，不用 Windows 并非因为 Linux 更好用（虽然我个人确实更喜欢 Linux），而是因为在开发的早期，Windows下的LFN,以及目录反斜杠等问题导致
+                // 本来就不太可靠的大型语言模型 agent 经常发生错误编辑，破坏掉整个代码库，你能想象吗？
                 if (!lyrics) {
                     const lyricsFromNavidrome = await navidromeApi.getLyrics(config, artistName, navidromeSong.name);
                     if (lyricsFromNavidrome) {
@@ -725,6 +777,11 @@ export default function App() {
     }, [statusMsg]);
 
     // Audio Analyzer Setup
+    // TODO: LOW PRIORITY::
+    // Currently if a song contains rapidly changing audio, the analyzer can't keep up and causes a weird frame-skip-like effect on the gemotries(they seem to be static, like too slow to keep up), but this dosen't causes real visual stutter or audio issues, just the GeometricBackground is not responsive to the audio changes.
+    // Very likely caused by
+    //             analyser.smoothingTimeConstant = 0.6;
+    // What do you think? Lowering the smoothingTimeConstant can make the analyzer more responsive, but it will also make it more jittery and less smooth, which might not look good for the visualizer. It's a trade-off between responsiveness and visual quality. We can experiment with different values to find a good balance. Maybe we can even make it dynamic based on the song's audio characteristics, but that might be overkill for now.
     const setupAudioAnalyzer = () => {
         if (!audioRef.current || sourceRef.current) return;
         try {
@@ -1109,6 +1166,14 @@ export default function App() {
             invalidateAndRefetch(currentId, newQueue, audioQuality);
         }
     }, [playQueue, currentSong, t, audioQuality]);
+
+    // Volume & Mute Sync
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = volume;
+            audioRef.current.muted = isMuted;
+        }
+    }, [volume, isMuted]);
 
     // Media Session API Integration
     useEffect(() => {
@@ -1775,7 +1840,6 @@ export default function App() {
                         onSeek={(time) => {
                             if (audioRef.current) {
                                 audioRef.current.currentTime = time;
-                                // Auto-play when seeking (e.g. from timeline lyric dots)
                                 if (audioRef.current.paused) {
                                     audioRef.current.play();
                                     setPlayerState(PlayerState.PLAYING);
@@ -1845,6 +1909,11 @@ export default function App() {
                         onPrevTrack={handlePrevTrack}
                         playerState={playerState}
                         onTogglePlay={togglePlay}
+                        volume={volume}
+                        isMuted={isMuted}
+                        onVolumePreview={handlePreviewVolume}
+                        onVolumeChange={handleSetVolume}
+                        onToggleMute={handleToggleMute}
                     />
                 )
             }

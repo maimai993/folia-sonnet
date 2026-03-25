@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 
 type StatusSetter = Dispatch<SetStateAction<{ type: 'error' | 'success' | 'info', text: string; } | null>>;
 type AudioQuality = 'exhigh' | 'lossless' | 'hires';
@@ -21,6 +21,11 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         return saved ? parseFloat(saved) : 0.75;
     });
     const [isDaylight, setIsDaylight] = useState(() => getStoredBoolean('default_theme_daylight', false));
+    const [volume, setVolume] = useState(() => {
+        const saved = localStorage.getItem('player_volume');
+        return saved !== null ? parseFloat(saved) : 1.0;
+    });
+    const [isMuted, setIsMuted] = useState(() => getStoredBoolean('player_is_muted', false));
 
     useEffect(() => {
         localStorage.setItem('default_audio_quality', audioQuality);
@@ -72,6 +77,17 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         localStorage.setItem('default_theme_daylight', String(enabled));
     };
 
+    const handleSetVolume = useCallback((val: number) => {
+        setVolume(val);
+        localStorage.setItem('player_volume', String(val));
+    }, []);
+
+    const handleToggleMute = () => {
+        const next = !isMuted;
+        setIsMuted(next);
+        localStorage.setItem('player_is_muted', String(next));
+    };
+
     return {
         audioQuality,
         setAudioQuality,
@@ -85,5 +101,9 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
+        volume,
+        isMuted,
+        handleSetVolume,
+        handleToggleMute,
     };
 }
