@@ -81,7 +81,7 @@ async function getAudioDuration(file: File): Promise<number> {
 
 
 // Import folder using File System Access API (if supported)
-export async function importFolder(): Promise<LocalSong[]> {
+export async function importFolder(expectedRootName?: string): Promise<LocalSong[]> {
     // Check if File System Access API is supported
     if (!('showDirectoryPicker' in window)) {
         throw new Error('File System Access API not supported in this browser');
@@ -91,6 +91,29 @@ export async function importFolder(): Promise<LocalSong[]> {
         // @ts-ignore - showDirectoryPicker is not in all TypeScript definitions
         const dirHandle = await window.showDirectoryPicker();
         const importedSongs: LocalSong[] = [];
+        
+        let rootFolderName = expectedRootName || dirHandle.name;
+
+        // If it's a new import (no expectedRootName), ensure the root folder name is unique
+        if (!expectedRootName) {
+            const { getLocalSongs } = await import('./db');
+            const allSongs = await getLocalSongs();
+            
+            // Collect existing root folder names (the part before the first '/')
+            const existingRootFolders = new Set(
+                allSongs
+                    .map(s => s.folderName)
+                    .filter(Boolean)
+                    .map(name => name!.split('/')[0])
+            );
+
+            let originalRootName = rootFolderName;
+            let counter = 1;
+            while (existingRootFolders.has(rootFolderName)) {
+                counter++;
+                rootFolderName = `${originalRootName} (${counter})`;
+            }
+        }
 
         const entries: { handle: FileSystemFileHandle, folderName: string, relativePath: string }[] = [];
 
@@ -109,7 +132,7 @@ export async function importFolder(): Promise<LocalSong[]> {
             }
         }
 
-        await traverseDirectory(dirHandle, dirHandle.name);
+        await traverseDirectory(dirHandle, rootFolderName);
 
         const lrcMap = new Map<string, FileSystemFileHandle>();
         const tlrcMap = new Map<string, FileSystemFileHandle>();
@@ -446,8 +469,17 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
 
 // Resync folder: Delete old songs by ID, then prompt for new import
 export async function resyncFolder(folderName: string): Promise<LocalSong[] | null> {
-    // First, prompt user to select the folder again to get fresh handles
-    const importedSongs = await importFolder();
+    const { getLocalSongs } = await import('./db');
+    
+    // Identify old songs to delete before import
+    const allSongs = await getLocalSongs();
+    const oldSongsToDelete = allSongs.filter(song => 
+        song.folderName === folderName || (song.folderName && song.folderName.startsWith(`${folderName}/`))
+    );
+
+    // Prompt user to select the folder again to get fresh handles
+    // Pass folderName so it overwrites instead of creating a duplicated name like "Music (2)"
+    const importedSongs = await importFolder(folderName);
 
     // If user cancelled (empty array), return null to indicate cancellation
     // Don't delete anything
@@ -455,8 +487,12 @@ export async function resyncFolder(folderName: string): Promise<LocalSong[] | nu
         return null;
     }
 
-    // User confirmed - delete old songs by their folder name prefix
-    await deleteFolderSongs(folderName);
+    // User confirmed - delete old songs by their specific IDs
+    for (const song of oldSongsToDelete) {
+        await deleteLocalSong(song.id);
+    }
+    
+    console.log(`[LocalMusic] Deleted ${oldSongsToDelete.length} old songs from folder tree: ${folderName}`);
 
     return importedSongs;
 }
