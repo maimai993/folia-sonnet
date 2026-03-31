@@ -32,6 +32,7 @@ if (process.platform === 'linux') {
 }
 
 const store = new Store();
+let mainWindow = null;
 
 async function ensureSystemProxySession() {
   const ses = session.defaultSession;
@@ -41,16 +42,17 @@ async function ensureSystemProxySession() {
   return ses;
 }
 
-function isTrustedRendererOrigin(origin) {
-  return origin === 'file://' ||
-    origin === 'file:///' ||
-    origin.startsWith('file://') ||
-    origin.startsWith('http://localhost:3000') ||
-    origin.startsWith('http://127.0.0.1:3000');
-}
-
 function isFileSystemPermission(permission) {
   return permission === 'fileSystem' || permission === 'filesystem';
+}
+
+function isTrustedMainWindowContents(webContents) {
+  return Boolean(
+    mainWindow &&
+    !mainWindow.isDestroyed() &&
+    webContents &&
+    webContents.id === mainWindow.webContents.id
+  );
 }
 
 function setupFileSystemAccessPermissionHandlers() {
@@ -61,8 +63,7 @@ function setupFileSystemAccessPermissionHandlers() {
       return false;
     }
 
-    const origin = requestingOrigin || details?.requestingUrl || webContents?.getURL() || '';
-    if (!isTrustedRendererOrigin(origin)) {
+    if (!isTrustedMainWindowContents(webContents)) {
       return false;
     }
 
@@ -74,8 +75,7 @@ function setupFileSystemAccessPermissionHandlers() {
       return callback(false);
     }
 
-    const origin = details?.requestingUrl || webContents?.getURL() || '';
-    if (!isTrustedRendererOrigin(origin)) {
+    if (!isTrustedMainWindowContents(webContents)) {
       return callback(false);
     }
 
@@ -260,6 +260,15 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  mainWindow = win;
+  win.on('closed', () => {
+    if (mainWindow === win) {
+      mainWindow = null;
+    }
+  });
+
+  return win;
 }
 
 app.whenReady().then(async () => {
