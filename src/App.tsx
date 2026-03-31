@@ -325,13 +325,13 @@ export default function App() {
                                 if (source === 'online' && songToRestore.matchedLyrics) {
                                     setLyrics(songToRestore.matchedLyrics);
                                 } else if (source === 'embedded' && songToRestore.embeddedLyricsContent) {
-                                    setLyrics(parseLRC(songToRestore.embeddedLyricsContent, ''));
+                                    setLyrics(parseLRC(songToRestore.embeddedLyricsContent, songToRestore.embeddedTranslationLyricsContent || ''));
                                 } else if (source === 'local' && songToRestore.localLyricsContent) {
                                     setLyrics(parseLRC(songToRestore.localLyricsContent, songToRestore.localTranslationLyricsContent || ''));
                                 } else if (songToRestore.hasLocalLyrics && songToRestore.localLyricsContent) {
                                     setLyrics(parseLRC(songToRestore.localLyricsContent, songToRestore.localTranslationLyricsContent || ''));
                                 } else if (songToRestore.hasEmbeddedLyrics && songToRestore.embeddedLyricsContent) {
-                                    setLyrics(parseLRC(songToRestore.embeddedLyricsContent, ''));
+                                    setLyrics(parseLRC(songToRestore.embeddedLyricsContent, songToRestore.embeddedTranslationLyricsContent || ''));
                                 } else if (songToRestore.matchedLyrics) {
                                     setLyrics(songToRestore.matchedLyrics);
                                 }
@@ -504,6 +504,47 @@ export default function App() {
         return { updatedLocalSong, matchedSongResult };
     };
 
+    const resolveLocalMetadataUI = (localData: LocalSong, matchedSong: SongResult | null) => {
+        let embeddedCoverUrl: string | null = null;
+        if (localData.embeddedCover) {
+            embeddedCoverUrl = URL.createObjectURL(localData.embeddedCover);
+        }
+
+        const preferOnlineCover = localData.useOnlineCover === true;
+        const preferOnlineMetadata = localData.useOnlineMetadata === true;
+
+        const coverUrl = preferOnlineCover
+            ? (localData.matchedCoverUrl || embeddedCoverUrl || null)
+            : (embeddedCoverUrl || localData.matchedCoverUrl || null);
+
+        let lyrics: LyricData | null = null;
+        const source = localData.lyricsSource;
+        if (source === 'online' && localData.matchedLyrics) {
+            lyrics = localData.matchedLyrics;
+        } else if (source === 'embedded' && localData.embeddedLyricsContent) {
+            lyrics = parseLRC(localData.embeddedLyricsContent, localData.embeddedTranslationLyricsContent || '');
+        } else if (source === 'local' && localData.localLyricsContent) {
+            lyrics = parseLRC(localData.localLyricsContent, localData.localTranslationLyricsContent || '');
+        } else if (!source) {
+            if (localData.hasLocalLyrics && localData.localLyricsContent) {
+                lyrics = parseLRC(localData.localLyricsContent, localData.localTranslationLyricsContent || '');
+            } else if (localData.hasEmbeddedLyrics && localData.embeddedLyricsContent) {
+                lyrics = parseLRC(localData.embeddedLyricsContent, localData.embeddedTranslationLyricsContent || '');
+            } else if (localData.matchedLyrics) {
+                lyrics = localData.matchedLyrics;
+            }
+        }
+
+        const unifiedSong = buildUnifiedLocalSong({
+            localSong: localData,
+            matchedSong,
+            coverUrl,
+            preferOnlineMetadata,
+        });
+
+        return { lyrics, coverUrl, unifiedSong };
+    };
+
     const onPlayLocalSong = async (localSong: LocalSong, queue: LocalSong[] = []) => {
         // Get audio blob from fileHandle first
         const blobUrl = await getAudioFromLocalSong(localSong);
@@ -515,96 +556,63 @@ export default function App() {
             return;
         }
 
-        // Auto-match lyrics and cover if not already matched
-        const { updatedLocalSong, matchedSongResult } = await handleLocalSongMatch(localSong);
+        // --- Instant Playback with currently available local metadata ---
+        const initialMeta = resolveLocalMetadataUI(localSong, null);
 
-        // Create Blob URL for embedded cover if available
-        let embeddedCoverUrl: string | null = null;
-        if (updatedLocalSong.embeddedCover) {
-            embeddedCoverUrl = URL.createObjectURL(updatedLocalSong.embeddedCover);
-        }
-
-        // Use updated data, respecting user's online data preferences
-        // If user explicitly chose to use online data (useOnline* flags), override default priority
-        const preferOnlineCover = updatedLocalSong.useOnlineCover === true;
-        const preferOnlineLyrics = updatedLocalSong.lyricsSource === 'online';
-        const preferOnlineMetadata = updatedLocalSong.useOnlineMetadata === true;
-
-        // Cover priority: default is Embedded > Online, but useOnlineCover reverses it
-        const coverUrl = preferOnlineCover
-            ? (updatedLocalSong.matchedCoverUrl || embeddedCoverUrl || null)
-            : (embeddedCoverUrl || updatedLocalSong.matchedCoverUrl || null);
-        const matchedSong = matchedSongResult;
-
-        // Lyrics priority: uses lyricsSource if set, otherwise default local > embedded > online
-        let lyrics: LyricData | null = null;
-        const source = updatedLocalSong.lyricsSource;
-        if (source === 'online' && updatedLocalSong.matchedLyrics) {
-            lyrics = updatedLocalSong.matchedLyrics;
-            console.log('[App] Using online matched lyrics (user preference)');
-        } else if (source === 'embedded' && updatedLocalSong.embeddedLyricsContent) {
-            lyrics = parseLRC(updatedLocalSong.embeddedLyricsContent, '');
-            console.log('[App] Using embedded lyrics (user preference)');
-        } else if (source === 'local' && updatedLocalSong.localLyricsContent) {
-            lyrics = parseLRC(updatedLocalSong.localLyricsContent, updatedLocalSong.localTranslationLyricsContent || '');
-            console.log('[App] Using local lyrics file (user preference)');
-        } else if (!source) {
-            // Default priority: local > embedded > online
-            if (updatedLocalSong.hasLocalLyrics && updatedLocalSong.localLyricsContent) {
-                lyrics = parseLRC(updatedLocalSong.localLyricsContent, updatedLocalSong.localTranslationLyricsContent || '');
-                console.log('[App] Using local lyrics file (default)');
-            } else if (updatedLocalSong.hasEmbeddedLyrics && updatedLocalSong.embeddedLyricsContent) {
-                lyrics = parseLRC(updatedLocalSong.embeddedLyricsContent, '');
-                console.log('[App] Using embedded lyrics (default)');
-            } else if (updatedLocalSong.matchedLyrics) {
-                lyrics = updatedLocalSong.matchedLyrics;
-                console.log('[App] Using online matched lyrics (default fallback)');
-            }
-        }
-
-        const unifiedSong = buildUnifiedLocalSong({
-            localSong: updatedLocalSong,
-            matchedSong,
-            coverUrl,
-            preferOnlineMetadata,
-        });
-
-        // Store blob URL reference
-        if (blobUrlRef.current) {
-            URL.revokeObjectURL(blobUrlRef.current);
-        }
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = blobUrl;
 
-        // Enable autoplay
         shouldAutoPlay.current = true;
-        currentSongRef.current = unifiedSong.id;
+        currentSongRef.current = initialMeta.unifiedSong.id;
 
-        // Set UI state
-        setLyrics(lyrics);
+        setLyrics(initialMeta.lyrics);
         setCurrentLineIndex(-1);
-        currentTime.set(0); // Reset currentTime to prevent stale playback position
-        setCurrentSong(unifiedSong);
-        // Cache cover if available
-        setCachedCoverUrl(await loadCachedOrFetchCover(`cover_local_${updatedLocalSong.id}`, coverUrl));
+        currentTime.set(0);
+        setCurrentSong(initialMeta.unifiedSong);
         setAudioSrc(blobUrl);
-        setIsLyricsLoading(false);
+
+        if (initialMeta.coverUrl) {
+            loadCachedOrFetchCover(`cover_local_${localSong.id}`, initialMeta.coverUrl).then(res => {
+                if (currentSongRef.current === initialMeta.unifiedSong.id) setCachedCoverUrl(res);
+            });
+        } else {
+            setCachedCoverUrl(null);
+        }
+
+        setIsLyricsLoading(true); // Assuming we might fetch more metadata online
 
         // Set queue
         if (queue.length > 0) {
-            const finalQueue = buildLocalQueue(queue, unifiedSong);
+            const finalQueue = buildLocalQueue(queue, initialMeta.unifiedSong);
             setPlayQueue(finalQueue);
             saveToCache('last_queue', finalQueue);
         } else {
-            setPlayQueue([unifiedSong]);
-            saveToCache('last_queue', [unifiedSong]);
+            setPlayQueue([initialMeta.unifiedSong]);
+            saveToCache('last_queue', [initialMeta.unifiedSong]);
         }
-
-        saveToCache('last_song', unifiedSong);
-
-        // Navigate to player
+        saveToCache('last_song', initialMeta.unifiedSong);
         navigateToPlayer();
         setPlayerState(PlayerState.IDLE);
         setStatusMsg({ type: 'success', text: '本地音乐已加载' });
+
+        // --- Background Auto-Match ---
+        handleLocalSongMatch(localSong).then(({ updatedLocalSong, matchedSongResult }) => {
+            if (currentSongRef.current !== initialMeta.unifiedSong.id) return; // User skipped track
+            
+            const updatedMeta = resolveLocalMetadataUI(updatedLocalSong, matchedSongResult);
+            
+            setCurrentSong(updatedMeta.unifiedSong);
+            setLyrics(updatedMeta.lyrics);
+            setIsLyricsLoading(false);
+
+            if (updatedMeta.coverUrl && updatedMeta.coverUrl !== initialMeta.coverUrl) {
+                loadCachedOrFetchCover(`cover_local_${updatedLocalSong.id}`, updatedMeta.coverUrl).then(res => {
+                    if (currentSongRef.current === updatedMeta.unifiedSong.id) setCachedCoverUrl(res);
+                });
+            } else if (!updatedMeta.coverUrl) {
+                setCachedCoverUrl(null);
+            }
+        });
     };
 
     // --- Navidrome Playback ---
@@ -903,64 +911,50 @@ export default function App() {
                 blobUrlRef.current = blobUrl;
                 setAudioSrc(blobUrl);
 
-                // 3. Auto-Match & Load Local Lyrics & Cover
+                // 3. Instant Local Metadata + Background Auto-Match
                 if (currentLocalData) {
-                    const { updatedLocalSong, matchedSongResult } = await handleLocalSongMatch(currentLocalData);
-
-                    if (currentSongRef.current !== song.id) return;
-
-                    // Update localData reference
-                    currentLocalData = updatedLocalSong;
-
-                    // Update SongResult metadata if match found
-                    if (matchedSongResult) {
-                        const updatedSong = { ...song };
-                        updatedSong.name = matchedSongResult.name;
-                        updatedSong.artists = matchedSongResult.artists || matchedSongResult.ar || updatedSong.artists;
-                        updatedSong.album = matchedSongResult.album || (matchedSongResult.al ? {
-                            id: matchedSongResult.al.id,
-                            name: matchedSongResult.al.name,
-                            picUrl: matchedSongResult.al.picUrl
-                        } : updatedSong.album);
-                        updatedSong.ar = matchedSongResult.ar || updatedSong.ar;
-                        updatedSong.al = matchedSongResult.al || updatedSong.al;
-                        (updatedSong as any).localData = updatedLocalSong;
-
-                        setCurrentSong(updatedSong);
-                        // Update in queue as well? Ideally yes, but might be complex to find index.
-                        // For now, updating currentSong is enough for player view.
-                    }
-
-                    // Cover
-                    if (currentLocalData.matchedCoverUrl) {
-                        const resolvedCoverUrl = await loadCachedOrFetchCover(`cover_local_${currentLocalData.id}`, currentLocalData.matchedCoverUrl);
-                        if (currentSongRef.current !== song.id) return;
-                        setCachedCoverUrl(resolvedCoverUrl);
+                    const initialMeta = resolveLocalMetadataUI(currentLocalData, null);
+                    setCurrentSong(initialMeta.unifiedSong);
+                    
+                    if (initialMeta.coverUrl) {
+                        loadCachedOrFetchCover(`cover_local_${currentLocalData.id}`, initialMeta.coverUrl).then(res => {
+                            if (currentSongRef.current === song.id) setCachedCoverUrl(res);
+                        });
                     } else {
                         setCachedCoverUrl(null);
                     }
-
-                    // Lyrics - use lyricsSource priority chain
-                    const lyricsSource = currentLocalData.lyricsSource;
-                    if (lyricsSource === 'online' && currentLocalData.matchedLyrics) {
-                        setLyrics(currentLocalData.matchedLyrics);
-                    } else if (lyricsSource === 'embedded' && currentLocalData.embeddedLyricsContent) {
-                        setLyrics(parseLRC(currentLocalData.embeddedLyricsContent, ''));
-                    } else if (lyricsSource === 'local' && currentLocalData.localLyricsContent) {
-                        setLyrics(parseLRC(currentLocalData.localLyricsContent, currentLocalData.localTranslationLyricsContent || ''));
-                    } else if (currentLocalData.hasLocalLyrics && currentLocalData.localLyricsContent) {
-                        const parsed = parseLRC(currentLocalData.localLyricsContent, currentLocalData.localTranslationLyricsContent || "");
-                        setLyrics(parsed);
-                    } else if (currentLocalData.hasEmbeddedLyrics && currentLocalData.embeddedLyricsContent) {
-                        setLyrics(parseLRC(currentLocalData.embeddedLyricsContent, ''));
-                    } else if (currentLocalData.matchedLyrics) {
-                        setLyrics(currentLocalData.matchedLyrics);
+                    
+                    setLyrics(initialMeta.lyrics);
+                    
+                    const needsLyricsMatch = !currentLocalData.hasLocalLyrics && !currentLocalData.hasEmbeddedLyrics && !currentLocalData.matchedLyrics;
+                    const needsCoverMatch = !currentLocalData.embeddedCover && !currentLocalData.matchedCoverUrl;
+                    if ((needsLyricsMatch || needsCoverMatch) && !currentLocalData.noAutoMatch) {
+                        setIsLyricsLoading(true);
                     } else {
-                        setLyrics(null);
+                        setIsLyricsLoading(false);
                     }
-                }
 
-                setIsLyricsLoading(false);
+                    // Background match
+                    handleLocalSongMatch(currentLocalData).then(({ updatedLocalSong, matchedSongResult }) => {
+                        if (currentSongRef.current !== song.id) return;
+
+                        const updatedMeta = resolveLocalMetadataUI(updatedLocalSong, matchedSongResult);
+                        
+                        setCurrentSong(updatedMeta.unifiedSong);
+                        setLyrics(updatedMeta.lyrics);
+                        setIsLyricsLoading(false);
+
+                        if (updatedMeta.coverUrl && updatedMeta.coverUrl !== initialMeta.coverUrl) {
+                            loadCachedOrFetchCover(`cover_local_${updatedLocalSong.id}`, updatedMeta.coverUrl).then(res => {
+                                if (currentSongRef.current === updatedMeta.unifiedSong.id) setCachedCoverUrl(res);
+                            });
+                        } else if (!updatedMeta.coverUrl) {
+                            if (currentSongRef.current === updatedMeta.unifiedSong.id) setCachedCoverUrl(null);
+                        }
+                    });
+                } else {
+                    setIsLyricsLoading(false);
+                }
 
                 // Theme
                 try {
@@ -1567,7 +1561,7 @@ export default function App() {
             if (source === 'local' && updatedLocalSong.localLyricsContent) {
                 newLyrics = parseLRC(updatedLocalSong.localLyricsContent, updatedLocalSong.localTranslationLyricsContent || '');
             } else if (source === 'embedded' && updatedLocalSong.embeddedLyricsContent) {
-                newLyrics = parseLRC(updatedLocalSong.embeddedLyricsContent, '');
+                newLyrics = parseLRC(updatedLocalSong.embeddedLyricsContent, updatedLocalSong.embeddedTranslationLyricsContent || '');
             } else if (source === 'online' && updatedLocalSong.matchedLyrics) {
                 newLyrics = updatedLocalSong.matchedLyrics;
             }

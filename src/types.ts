@@ -153,6 +153,8 @@ export interface LocalSong {
   // Embedded Lyrics (from file tags: ID3 USLT, Vorbis LYRICS, etc.)
   hasEmbeddedLyrics?: boolean;
   embeddedLyricsContent?: string;
+  hasEmbeddedTranslationLyrics?: boolean;
+  embeddedTranslationLyricsContent?: string;
 }
 
 // Extend SongResult to support local files

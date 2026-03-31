@@ -2,18 +2,24 @@ import { LocalSong, SongResult, UnifiedSong } from '../types';
 import { NavidromeSong } from '../types/navidrome';
 
 export const getLocalSongId = (localSong: LocalSong): number => {
-    const numericPart = parseInt(localSong.id.replace(/\D/g, ''), 10);
-    if (!isNaN(numericPart) && numericPart > 0) {
-        return -Math.abs(numericPart);
-    }
-
-    let hash = 0;
+    // Generate a reliable 52-bit hash from the string ID to avoid parsing long digits and losing precision or colliding.
+    // DJB2 style hash into two parts to create a safe integer
+    let h1 = 0x811c9dc5;
+    let h2 = 0x811c9dc5;
+    
     for (let i = 0; i < localSong.id.length; i++) {
         const char = localSong.id.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
+        h1 ^= char;
+        h1 = Math.imul(h1, 0x01000193);
+        h2 ^= char;
+        h2 = Math.imul(h2, 0x10a9055);
     }
-    return -Math.abs(Math.abs(hash));
+    
+    // Combine into a 53-bit safe positive integer, then make it negative
+    const high = (h1 & 0x1FFFFF) * 0x100000000;
+    const low = (h2 >>> 0);
+    const combined = high + low;
+    return combined === 0 ? -1 : -combined;
 };
 
 export function buildUnifiedLocalSong({
@@ -104,11 +110,6 @@ export function buildLocalQueue(queue: LocalSong[], currentSong?: UnifiedSong): 
         if (song.id === currentSong.id) {
             return currentSong;
         }
-
-        if (song.name === currentSong.name && song.duration === currentSong.duration) {
-            return currentSong;
-        }
-
         return song;
     });
 }

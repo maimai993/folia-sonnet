@@ -212,6 +212,7 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
                     cover?: Blob;
                     bitrate?: number;
                     lyrics?: string;
+                    translationLyrics?: string;
                     replayGain?: number;
                 } = {};
 
@@ -232,13 +233,41 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
                             console.log(`[LocalMusic DEBUG] ${file.name} native[${format}] lyrics tags:`, lyricTags);
                         }
                     }
+                    // Extract original and translation from multiple USLT tags
+                    let originalLyric: string | undefined;
+                    let translationLyric: string | undefined;
+
+                    if (parsed.common.lyrics && parsed.common.lyrics.length > 0) {
+                        // If there's only one, treat it as original
+                        if (parsed.common.lyrics.length === 1) {
+                            originalLyric = parsed.common.lyrics[0].text;
+                        } else {
+                            // Find 'chi' or 'zho' or other translation keywords
+                            const chiLyric = parsed.common.lyrics.find(l => 
+                                l.language?.toLowerCase() === 'chi' || 
+                                l.language?.toLowerCase() === 'zho' || 
+                                l.descriptor?.toLowerCase().includes('translation')
+                            );
+                            
+                            if (chiLyric) {
+                                translationLyric = chiLyric.text;
+                                originalLyric = parsed.common.lyrics.find(l => l !== chiLyric)?.text;
+                            } else {
+                                // Default to first for original, second for translation
+                                originalLyric = parsed.common.lyrics[0].text;
+                                translationLyric = parsed.common.lyrics[1].text;
+                            }
+                        }
+                    }
+
                     embeddedMetadata = {
                         title: parsed.common.title,
                         artist: parsed.common.artist,
                         album: parsed.common.album,
                         cover: parsed.common.picture?.[0] ? new Blob([parsed.common.picture[0].data as any], { type: parsed.common.picture[0].format }) : undefined,
                         bitrate: parsed.format.bitrate,
-                        lyrics: parsed.common.lyrics?.[0]?.text, // Extract embedded lyrics text (ILyricsTag.text)
+                        lyrics: originalLyric,
+                        translationLyrics: translationLyric,
                         replayGain: parsed.format.trackGain
                     };
                 } catch (e) {
@@ -276,6 +305,8 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
                     localTranslationLyricsContent,
                     hasEmbeddedLyrics: !!embeddedMetadata.lyrics,
                     embeddedLyricsContent: embeddedMetadata.lyrics,
+                    hasEmbeddedTranslationLyrics: !!embeddedMetadata.translationLyrics,
+                    embeddedTranslationLyricsContent: embeddedMetadata.translationLyrics,
                     replayGain: embeddedMetadata.replayGain
                 };
 
