@@ -2,8 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Repeat, Repeat1, Settings2, CheckCircle2, AlertCircle, Sparkles, X } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { parseLRC } from './utils/lrcParser';
-import { parseYRC } from './utils/yrcParser';
+import { LyricParserFactory } from './utils/lyrics/LyricParserFactory';
 import { detectChorusLines } from './utils/chorusDetector';
 import { saveSessionData, getSessionData, getFromCache, saveToCache, getLocalSongs } from './services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from './services/coverCache';
@@ -325,13 +324,13 @@ export default function App() {
                                 if (source === 'online' && songToRestore.matchedLyrics) {
                                     setLyrics(songToRestore.matchedLyrics);
                                 } else if (source === 'embedded' && songToRestore.embeddedLyricsContent) {
-                                    setLyrics(parseLRC(songToRestore.embeddedLyricsContent, songToRestore.embeddedTranslationLyricsContent || ''));
+                                    setLyrics(await LyricParserFactory.parse({ type: 'embedded', textContent: songToRestore.embeddedLyricsContent, translationContent: songToRestore.embeddedTranslationLyricsContent }));
                                 } else if (source === 'local' && songToRestore.localLyricsContent) {
-                                    setLyrics(parseLRC(songToRestore.localLyricsContent, songToRestore.localTranslationLyricsContent || ''));
+                                    setLyrics(await LyricParserFactory.parse({ type: 'local', lrcContent: songToRestore.localLyricsContent, tLrcContent: songToRestore.localTranslationLyricsContent }));
                                 } else if (songToRestore.hasLocalLyrics && songToRestore.localLyricsContent) {
-                                    setLyrics(parseLRC(songToRestore.localLyricsContent, songToRestore.localTranslationLyricsContent || ''));
+                                    setLyrics(await LyricParserFactory.parse({ type: 'local', lrcContent: songToRestore.localLyricsContent, tLrcContent: songToRestore.localTranslationLyricsContent }));
                                 } else if (songToRestore.hasEmbeddedLyrics && songToRestore.embeddedLyricsContent) {
-                                    setLyrics(parseLRC(songToRestore.embeddedLyricsContent, songToRestore.embeddedTranslationLyricsContent || ''));
+                                    setLyrics(await LyricParserFactory.parse({ type: 'embedded', textContent: songToRestore.embeddedLyricsContent, translationContent: songToRestore.embeddedTranslationLyricsContent }));
                                 } else if (songToRestore.matchedLyrics) {
                                     setLyrics(songToRestore.matchedLyrics);
                                 }
@@ -394,12 +393,10 @@ export default function App() {
                             // For standard LRC, use tlyric.
                             const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
 
-                            let parsed: LyricData | null = null;
-                            if (yrcLrc) {
-                                parsed = parseYRC(yrcLrc, transLrc);
-                            } else if (mainLrc) {
-                                parsed = parseLRC(mainLrc, transLrc);
-                            }
+                            let parsed: LyricData | null = await LyricParserFactory.parse({
+                                type: 'netease',
+                                ...lyricRes
+                            });
 
                             // Chorus Detection
                             // Find the most repeated lines (after trimming) and mark them as chorus lines, assign a random effect for each unique chorus line text
@@ -504,7 +501,7 @@ export default function App() {
         return { updatedLocalSong, matchedSongResult };
     };
 
-    const resolveLocalMetadataUI = (localData: LocalSong, matchedSong: SongResult | null) => {
+    const resolveLocalMetadataUI = async (localData: LocalSong, matchedSong: SongResult | null) => {
         let embeddedCoverUrl: string | null = null;
         if (localData.embeddedCover) {
             embeddedCoverUrl = URL.createObjectURL(localData.embeddedCover);
@@ -522,14 +519,14 @@ export default function App() {
         if (source === 'online' && localData.matchedLyrics) {
             lyrics = localData.matchedLyrics;
         } else if (source === 'embedded' && localData.embeddedLyricsContent) {
-            lyrics = parseLRC(localData.embeddedLyricsContent, localData.embeddedTranslationLyricsContent || '');
+            lyrics = await LyricParserFactory.parse({ type: 'embedded', textContent: localData.embeddedLyricsContent, translationContent: localData.embeddedTranslationLyricsContent });
         } else if (source === 'local' && localData.localLyricsContent) {
-            lyrics = parseLRC(localData.localLyricsContent, localData.localTranslationLyricsContent || '');
+            lyrics = await LyricParserFactory.parse({ type: 'local', lrcContent: localData.localLyricsContent, tLrcContent: localData.localTranslationLyricsContent });
         } else if (!source) {
             if (localData.hasLocalLyrics && localData.localLyricsContent) {
-                lyrics = parseLRC(localData.localLyricsContent, localData.localTranslationLyricsContent || '');
+                lyrics = await LyricParserFactory.parse({ type: 'local', lrcContent: localData.localLyricsContent, tLrcContent: localData.localTranslationLyricsContent });
             } else if (localData.hasEmbeddedLyrics && localData.embeddedLyricsContent) {
-                lyrics = parseLRC(localData.embeddedLyricsContent, localData.embeddedTranslationLyricsContent || '');
+                lyrics = await LyricParserFactory.parse({ type: 'embedded', textContent: localData.embeddedLyricsContent, translationContent: localData.embeddedTranslationLyricsContent });
             } else if (localData.matchedLyrics) {
                 lyrics = localData.matchedLyrics;
             }
@@ -557,7 +554,7 @@ export default function App() {
         }
 
         // --- Instant Playback with currently available local metadata ---
-        const initialMeta = resolveLocalMetadataUI(localSong, null);
+        const initialMeta = await resolveLocalMetadataUI(localSong, null);
 
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = blobUrl;
@@ -596,10 +593,10 @@ export default function App() {
         setStatusMsg({ type: 'success', text: '本地音乐已加载' });
 
         // --- Background Auto-Match ---
-        handleLocalSongMatch(localSong).then(({ updatedLocalSong, matchedSongResult }) => {
+        handleLocalSongMatch(localSong).then(async ({ updatedLocalSong, matchedSongResult }) => {
             if (currentSongRef.current !== initialMeta.unifiedSong.id) return; // User skipped track
             
-            const updatedMeta = resolveLocalMetadataUI(updatedLocalSong, matchedSongResult);
+            const updatedMeta = await resolveLocalMetadataUI(updatedLocalSong, matchedSongResult);
             
             setCurrentSong(updatedMeta.unifiedSong);
             setLyrics(updatedMeta.lyrics);
@@ -659,18 +656,7 @@ export default function App() {
                     if (structuredLyrics && structuredLyrics.length > 0) {
                         const firstStruct = structuredLyrics[0];
                         if (firstStruct.line && firstStruct.line.length > 0) {
-                            let lrcContent = '';
-                            firstStruct.line.forEach(l => {
-                                const totalMs = l.start || 0;
-                                const minutes = Math.floor(totalMs / 60000);
-                                const seconds = Math.floor((totalMs % 60000) / 1000);
-                                const ms = totalMs % 1000;
-                                const mm = minutes.toString().padStart(2, '0');
-                                const ss = seconds.toString().padStart(2, '0');
-                                const xx = Math.floor(ms / 10).toString().padStart(2, '0');
-                                lrcContent += `[${mm}:${ss}.${xx}]${l.value || ''}\n`;
-                            });
-                            lyrics = parseLRC(lrcContent, '');
+                            lyrics = await LyricParserFactory.parse({ type: 'navidrome', structuredLyrics: firstStruct.line });
                             console.log('[App] Using OpenSubsonic structured lyrics');
                         }
                     }
@@ -686,7 +672,7 @@ export default function App() {
                 if (!lyrics) {
                     const lyricsFromNavidrome = await navidromeApi.getLyrics(config, artistName, navidromeSong.name);
                     if (lyricsFromNavidrome) {
-                        lyrics = parseLRC(lyricsFromNavidrome, '');
+                        lyrics = await LyricParserFactory.parse({ type: 'navidrome', plainLyrics: lyricsFromNavidrome });
                         console.log('[App] Using standard Navidrome lyrics');
                     }
                 }
@@ -705,11 +691,9 @@ export default function App() {
                         const matchedSong = searchRes.result.songs[0];
                         const lyricRes = await neteaseApi.getLyric(matchedSong.id);
 
-                        const mainLrc = lyricRes.lrc?.lyric;
-                        const tlyric = lyricRes.tlyric?.lyric || "";
-
-                        if (mainLrc) {
-                            lyrics = parseLRC(mainLrc, tlyric);
+                        lyrics = await LyricParserFactory.parse({ type: 'netease', ...lyricRes });
+                        
+                        if (lyrics) {
                             autoMatchedLyrics = lyrics;
                             isAutoMatched = true;
                             console.log('[App] Using Netease lyrics for Navidrome song');
@@ -913,7 +897,7 @@ export default function App() {
 
                 // 3. Instant Local Metadata + Background Auto-Match
                 if (currentLocalData) {
-                    const initialMeta = resolveLocalMetadataUI(currentLocalData, null);
+                    const initialMeta = await resolveLocalMetadataUI(currentLocalData, null);
                     setCurrentSong(initialMeta.unifiedSong);
                     
                     if (initialMeta.coverUrl) {
@@ -935,10 +919,10 @@ export default function App() {
                     }
 
                     // Background match
-                    handleLocalSongMatch(currentLocalData).then(({ updatedLocalSong, matchedSongResult }) => {
+                    handleLocalSongMatch(currentLocalData).then(async ({ updatedLocalSong, matchedSongResult }) => {
                         if (currentSongRef.current !== song.id) return;
 
-                        const updatedMeta = resolveLocalMetadataUI(updatedLocalSong, matchedSongResult);
+                        const updatedMeta = await resolveLocalMetadataUI(updatedLocalSong, matchedSongResult);
                         
                         setCurrentSong(updatedMeta.unifiedSong);
                         setLyrics(updatedMeta.lyrics);
@@ -1559,9 +1543,9 @@ export default function App() {
             // Parse and apply lyrics from the selected source
             let newLyrics: LyricData | null = null;
             if (source === 'local' && updatedLocalSong.localLyricsContent) {
-                newLyrics = parseLRC(updatedLocalSong.localLyricsContent, updatedLocalSong.localTranslationLyricsContent || '');
+                newLyrics = await LyricParserFactory.parse({ type: 'local', lrcContent: updatedLocalSong.localLyricsContent, tLrcContent: updatedLocalSong.localTranslationLyricsContent });
             } else if (source === 'embedded' && updatedLocalSong.embeddedLyricsContent) {
-                newLyrics = parseLRC(updatedLocalSong.embeddedLyricsContent, updatedLocalSong.embeddedTranslationLyricsContent || '');
+                newLyrics = await LyricParserFactory.parse({ type: 'embedded', textContent: updatedLocalSong.embeddedLyricsContent, translationContent: updatedLocalSong.embeddedTranslationLyricsContent });
             } else if (source === 'online' && updatedLocalSong.matchedLyrics) {
                 newLyrics = updatedLocalSong.matchedLyrics;
             }

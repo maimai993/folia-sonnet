@@ -1,7 +1,7 @@
 import { LyricData } from '../types';
 import { getFromCache, saveToCache } from './db';
 import { neteaseApi } from './netease';
-import { PrefetchedSongData, isUrlValid, parseLyricsAsync } from './prefetchService';
+import { PrefetchedSongData, isUrlValid } from './prefetchService';
 import { detectChorusLines } from '../utils/chorusDetector';
 
 const CHORUS_EFFECTS: Array<'bars' | 'circles' | 'beams'> = ['bars', 'circles', 'beams'];
@@ -109,12 +109,10 @@ export async function loadOnlineSongLyrics(
     const tlyric = lyricRes.tlyric?.lyric || '';
     const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
 
-    let parsedLyrics: LyricData | null = null;
-    if (yrcLrc) {
-        parsedLyrics = await parseLyricsAsync('yrc', yrcLrc, transLrc);
-    } else if (mainLrc) {
-        parsedLyrics = await parseLyricsAsync('lrc', mainLrc, transLrc);
-    }
+    let parsedLyrics: LyricData | null = await (await import('../utils/lyrics/LyricParserFactory')).LyricParserFactory.parse({
+        type: 'netease',
+        ...lyricRes
+    });
 
     if (!isCurrent()) return;
 
