@@ -4,7 +4,7 @@ import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle } fro
 import { neteaseApi } from '../services/netease';
 import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong } from '../types';
 import { NavidromeSong } from '../types/navidrome';
-import { isNavidromeEnabled } from '../services/navidromeService';
+import { isNavidromeEnabled, getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import PlaylistView from './PlaylistView';
 import LocalMusicView from './LocalMusicView';
 import NavidromeMusicView from './NavidromeMusicView';
@@ -82,6 +82,9 @@ const SearchResultCover: React.FC<{ track: UnifiedSong }> = ({ track }) => {
             } else {
                 setSrc(undefined);
             }
+        } else if (track.isNavidrome) {
+            const remoteUrl = track.al?.picUrl || track.album?.picUrl;
+            setSrc(remoteUrl);
         } else {
             const remoteUrl = track.al?.picUrl || track.album?.picUrl;
             if (remoteUrl) {
@@ -389,8 +392,28 @@ const Home: React.FC<HomeProps> = ({
                         localData: ls
                     };
                 });
-                
                 setSearchResults(unifiedResults);
+            } else if (viewTab === 'navidrome') {
+                const config = getNavidromeConfig();
+                if (config) {
+                    const res = await navidromeApi.search(config, query, 0, 0, 30);
+                    if (res && res.song) {
+                        const naviResults: UnifiedSong[] = res.song.map(s => {
+                            const ns = navidromeApi.toNavidromeSong(config, s);
+                            return {
+                                ...ns,
+                                ar: ns.artists,
+                                al: ns.album,
+                                dt: ns.duration
+                            } as UnifiedSong;
+                        });
+                        setSearchResults(naviResults);
+                    } else {
+                        setSearchResults([]);
+                    }
+                } else {
+                    setSearchResults([]);
+                }
             } else {
                 const res = await neteaseApi.cloudSearch(query);
                 if (res.result && res.result.songs) {
@@ -531,7 +554,7 @@ const Home: React.FC<HomeProps> = ({
                                     )}
                                     <input
                                         type="text"
-                                        placeholder={viewTab === 'local' ? t('home.searchLocal') : t('home.searchDatabase')}
+                                        placeholder={viewTab === 'local' ? t('home.searchLocal') : viewTab === 'navidrome' ? t('home.searchNavidrome') : t('home.searchDatabase')}
                                         value={searchQuery}
                                         onChange={e => setSearchQuery(e.target.value)}
 
@@ -738,6 +761,10 @@ const Home: React.FC<HomeProps> = ({
                                                         const unifiedTrack = track as UnifiedSong;
                                                         if (unifiedTrack.isLocal && unifiedTrack.localData) {
                                                             onPlayLocalSong(unifiedTrack.localData);
+                                                        } else if (unifiedTrack.isNavidrome && unifiedTrack.navidromeData) {
+                                                            if (onPlayNavidromeSong) {
+                                                                onPlayNavidromeSong(unifiedTrack as NavidromeSong);
+                                                            }
                                                         } else {
                                                             onQueueAddAndPlay(track);
                                                         }

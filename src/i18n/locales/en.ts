@@ -113,6 +113,7 @@ export default {
     "loading": "Loading...",
     "searchDatabase": "SEARCH DATABASE...",
     "searchLocal": "Search local songs...",
+    "searchNavidrome": "Search navidrome",
     "login": "Login",
     "welcomeBack": "Welcome Back",
     "pleaseLogin": "Please login to access your library",

@@ -3,6 +3,8 @@ import { LyricAdapter } from '../LyricAdapter';
 import { RawNavidromeLyric } from '../types';
 import { parseLyricsAsync } from '../workerClient';
 
+// It's possible for Navidrome to provide embedded lyrics, but we need to reimplement the lyric fetching logic to get them directly from files, not the API (the API messed up the formatting and made it impossible to parse them correctly). 
+// maybe do this later, since not much people use Navidrome and the API is still usable, just not ideal.
 export class NavidromeLyricAdapter implements LyricAdapter<RawNavidromeLyric> {
     async parse(source: RawNavidromeLyric): Promise<LyricData | null> {
         if (source.structuredLyrics && source.structuredLyrics.length > 0) {

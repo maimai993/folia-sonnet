@@ -157,10 +157,12 @@ export interface LocalSong {
   embeddedTranslationLyricsContent?: string;
 }
 
-// Extend SongResult to support local files
+// Extend SongResult to support local files and Navidrome files
 export interface UnifiedSong extends SongResult {
   isLocal?: boolean;
   localData?: LocalSong;
+  isNavidrome?: boolean;
+  navidromeData?: any;
 }
 
 // Audio Analysis Types
