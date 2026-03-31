@@ -41,6 +41,48 @@ async function ensureSystemProxySession() {
   return ses;
 }
 
+function isTrustedRendererOrigin(origin) {
+  return origin === 'file://' ||
+    origin === 'file:///' ||
+    origin.startsWith('file://') ||
+    origin.startsWith('http://localhost:3000') ||
+    origin.startsWith('http://127.0.0.1:3000');
+}
+
+function isFileSystemPermission(permission) {
+  return permission === 'fileSystem' || permission === 'filesystem';
+}
+
+function setupFileSystemAccessPermissionHandlers() {
+  const ses = session.defaultSession;
+
+  ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    if (!isFileSystemPermission(permission)) {
+      return false;
+    }
+
+    const origin = requestingOrigin || details?.requestingUrl || webContents?.getURL() || '';
+    if (!isTrustedRendererOrigin(origin)) {
+      return false;
+    }
+
+    return true;
+  });
+
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (!isFileSystemPermission(permission)) {
+      return callback(false);
+    }
+
+    const origin = details?.requestingUrl || webContents?.getURL() || '';
+    if (!isTrustedRendererOrigin(origin)) {
+      return callback(false);
+    }
+
+    callback(true);
+  });
+}
+
 async function fetchWithOptionalSystemProxy(url, options, useSystemProxy) {
   if (!useSystemProxy) {
     return fetch(url, options);
@@ -221,6 +263,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  setupFileSystemAccessPermissionHandlers();
   await startApi();
   createWindow();
 
