@@ -313,6 +313,10 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
                     lyrics?: string;
                     translationLyrics?: string;
                     replayGain?: number;
+                    replayGainTrackGain?: number;
+                    replayGainTrackPeak?: number;
+                    replayGainAlbumGain?: number;
+                    replayGainAlbumPeak?: number;
                 } = {};
 
                 try {
@@ -388,6 +392,24 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
                         }
                     }
 
+                    const replayGainTrackTag = parsed.common.replaygain_track_gain;
+                    const replayGainTrackPeakTag = parsed.common.replaygain_track_peak;
+                    const replayGainAlbumTag = parsed.common.replaygain_album_gain;
+                    const replayGainAlbumPeakTag = parsed.common.replaygain_album_peak;
+
+                    const replayGainTrackDb = typeof replayGainTrackTag?.dB === 'number'
+                        ? replayGainTrackTag.dB
+                        : parsed.format.trackGain;
+                    const replayGainTrackPeak = typeof replayGainTrackPeakTag?.ratio === 'number'
+                        ? replayGainTrackPeakTag.ratio
+                        : parsed.format.trackPeakLevel;
+                    const replayGainAlbumDb = typeof replayGainAlbumTag?.dB === 'number'
+                        ? replayGainAlbumTag.dB
+                        : parsed.format.albumGain;
+                    const replayGainAlbumPeak = typeof replayGainAlbumPeakTag?.ratio === 'number'
+                        ? replayGainAlbumPeakTag.ratio
+                        : undefined;
+
                     embeddedMetadata = {
                         title: parsed.common.title,
                         artist: parsed.common.artist,
@@ -396,7 +418,11 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
                         bitrate: parsed.format.bitrate,
                         lyrics: originalLyric,
                         translationLyrics: translationLyric,
-                        replayGain: parsed.format.trackGain
+                        replayGain: replayGainTrackDb,
+                        replayGainTrackGain: replayGainTrackDb,
+                        replayGainTrackPeak,
+                        replayGainAlbumGain: replayGainAlbumDb,
+                        replayGainAlbumPeak
                     };
                 } catch (e) {
                     console.warn(`[LocalMusic] Failed to parse metadata for ${file.name}:`, e);
@@ -435,7 +461,11 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
                     embeddedLyricsContent: embeddedMetadata.lyrics,
                     hasEmbeddedTranslationLyrics: !!embeddedMetadata.translationLyrics,
                     embeddedTranslationLyricsContent: embeddedMetadata.translationLyrics,
-                    replayGain: embeddedMetadata.replayGain
+                    replayGain: embeddedMetadata.replayGain,
+                    replayGainTrackGain: embeddedMetadata.replayGainTrackGain,
+                    replayGainTrackPeak: embeddedMetadata.replayGainTrackPeak,
+                    replayGainAlbumGain: embeddedMetadata.replayGainAlbumGain,
+                    replayGainAlbumPeak: embeddedMetadata.replayGainAlbumPeak
                 };
 
                 // Store fileHandle in memory

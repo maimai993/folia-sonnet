@@ -127,6 +127,10 @@ export interface LocalSong {
   embeddedAlbum?: string;
   embeddedCover?: Blob; // Stored as Blob in IndexedDB
   replayGain?: number; // ReplayGain track gain in dB
+  replayGainTrackGain?: number; // ReplayGain track gain in dB
+  replayGainTrackPeak?: number; // ReplayGain track peak ratio
+  replayGainAlbumGain?: number; // ReplayGain album gain in dB
+  replayGainAlbumPeak?: number; // ReplayGain album peak ratio
 
   // Lyrics matching result
   matchedSongId?: number; // Netease song ID
@@ -164,6 +168,8 @@ export interface UnifiedSong extends SongResult {
   isNavidrome?: boolean;
   navidromeData?: any;
 }
+
+export type ReplayGainMode = 'off' | 'track' | 'album';
 
 // Audio Analysis Types
 import { MotionValue } from 'framer-motion';

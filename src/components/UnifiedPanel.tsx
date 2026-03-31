@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio, Cloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { SongResult, Theme, PlayerState } from '../types';
+import { SongResult, Theme, PlayerState, ReplayGainMode } from '../types';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
 import QueueTab from './panelTab/QueueTab';
@@ -61,6 +61,8 @@ interface UnifiedPanelProps {
     onMatchOnline: () => void;
     onUpdateLocalLyrics: (content: string, isTranslation: boolean) => void;
     onChangeLyricsSource: (source: 'local' | 'embedded' | 'online') => void;
+    replayGainMode: ReplayGainMode;
+    onChangeReplayGainMode: (mode: ReplayGainMode) => void;
     // FM Mode Props
     isFmMode: boolean;
     onFmTrash: () => void;
@@ -118,6 +120,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     onMatchOnline,
     onUpdateLocalLyrics,
     onChangeLyricsSource,
+    replayGainMode,
+    onChangeReplayGainMode,
     isFmMode,
     onFmTrash,
     onNextTrack,
@@ -302,6 +306,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             onMatchOnline={onMatchOnline}
                                             onUpdateLocalLyrics={onUpdateLocalLyrics}
                                             onChangeLyricsSource={onChangeLyricsSource}
+                                            replayGainMode={replayGainMode}
+                                            onChangeReplayGainMode={onChangeReplayGainMode}
                                             isDaylight={isDaylight}
                                         />
                                     )}

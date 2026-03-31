@@ -1,6 +1,6 @@
 import React, { useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { UnifiedSong, LocalSong } from '../../types';
+import { UnifiedSong, ReplayGainMode } from '../../types';
 import { FileAudio, RefreshCw, FileText, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -9,6 +9,8 @@ interface LocalTabProps {
     onMatchOnline: () => void;
     onUpdateLocalLyrics: (content: string, isTranslation: boolean) => void;
     onChangeLyricsSource: (source: 'local' | 'embedded' | 'online') => void;
+    replayGainMode: ReplayGainMode;
+    onChangeReplayGainMode: (mode: ReplayGainMode) => void;
     isDaylight: boolean;
 }
 
@@ -20,7 +22,15 @@ const formatBytes = (bytes: number) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-const LocalTab: React.FC<LocalTabProps> = ({ currentSong, onMatchOnline, onUpdateLocalLyrics, onChangeLyricsSource, isDaylight }) => {
+const LocalTab: React.FC<LocalTabProps> = ({
+    currentSong,
+    onMatchOnline,
+    onUpdateLocalLyrics,
+    onChangeLyricsSource,
+    replayGainMode,
+    onChangeReplayGainMode,
+    isDaylight
+}) => {
     const { t } = useTranslation();
     const lrcInputRef = useRef<HTMLInputElement>(null);
 
@@ -79,6 +89,28 @@ const LocalTab: React.FC<LocalTabProps> = ({ currentSong, onMatchOnline, onUpdat
     // Style helpers
     const tabActiveBg = isDaylight ? 'bg-blue-500/15 text-blue-600' : 'bg-blue-500/20 text-blue-300';
     const tabInactiveBg = isDaylight ? 'bg-black/5 text-zinc-500 hover:bg-black/10' : 'bg-white/5 text-zinc-400 hover:bg-white/10';
+    const replayGainModes: { key: ReplayGainMode; label: string; }[] = [
+        { key: 'off', label: t('localMusic.replayGainOff') },
+        { key: 'track', label: t('localMusic.replayGainTrack') },
+        { key: 'album', label: t('localMusic.replayGainAlbum') }
+    ];
+    const lyricsStatus = useMemo(() => {
+        const states: string[] = [];
+        if (localData.hasLocalLyrics) states.push(t('localMusic.statusLocal'));
+        if (localData.hasEmbeddedLyrics) states.push(t('localMusic.statusEmbedded'));
+        if ((localData.matchedLyrics?.lines?.length ?? 0) > 0) states.push(t('localMusic.statusOnline'));
+        return states.length > 0 ? states.join(' / ') : t('localMusic.statusNone');
+    }, [localData, t]);
+    const replayGainSummary = useMemo(() => {
+        const parts: string[] = [];
+        if (typeof localData.replayGainTrackGain === 'number') {
+            parts.push(`T ${localData.replayGainTrackGain > 0 ? '+' : ''}${localData.replayGainTrackGain.toFixed(1)} dB`);
+        }
+        if (typeof localData.replayGainAlbumGain === 'number') {
+            parts.push(`A ${localData.replayGainAlbumGain > 0 ? '+' : ''}${localData.replayGainAlbumGain.toFixed(1)} dB`);
+        }
+        return parts.length > 0 ? parts.join(' / ') : t('localMusic.replayGainUnavailable');
+    }, [localData, t]);
 
     return (
         <motion.div
@@ -105,11 +137,36 @@ const LocalTab: React.FC<LocalTabProps> = ({ currentSong, onMatchOnline, onUpdat
                         </span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="opacity-60">{t('localMusic.path')}</span>
-                        <span className="font-mono text-xs opacity-80 truncate max-w-[150px]" title={localData.filePath}>
-                            {localData.folderName}/{localData.fileName}
+                        <span className="opacity-60">{t('localMusic.lyrics')}</span>
+                        <span className="text-xs opacity-80 truncate max-w-[150px]" title={lyricsStatus}>
+                            {lyricsStatus}
                         </span>
                     </div>
+                </div>
+            </div>
+
+            {/* ReplayGain */}
+            <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold opacity-50 uppercase tracking-wider">
+                        音频增益
+                    </h3>
+                    <span className="text-[11px] opacity-60 text-right">
+                        {replayGainSummary}
+                    </span>
+                </div>
+                <div className="flex gap-1.5">
+                    {replayGainModes.map((mode) => (
+                        <button
+                            key={mode.key}
+                            onClick={() => onChangeReplayGainMode(mode.key)}
+                            className={`flex-1 text-xs py-1.5 px-2 rounded-lg font-medium transition-all ${
+                                replayGainMode === mode.key ? tabActiveBg : tabInactiveBg
+                            }`}
+                        >
+                            {mode.label}
+                        </button>
+                    ))}
                 </div>
             </div>
 

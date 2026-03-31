@@ -19,7 +19,7 @@ import ArtistView from './components/ArtistView';
 import UnifiedPanel from './components/UnifiedPanel';
 import LyricMatchModal from './components/LyricMatchModal';
 import NaviLyricMatchModal, { NavidromeMatchData } from './components/NaviLyricMatchModal';
-import { LyricData, Theme, PlayerState, SongResult, LocalSong } from './types';
+import { LyricData, Theme, PlayerState, SongResult, LocalSong, ReplayGainMode } from './types';
 import { NavidromeSong } from './types/navidrome';
 import { neteaseApi } from './services/netease';
 import { navidromeApi, getNavidromeConfig } from './services/navidromeService';
@@ -56,6 +56,12 @@ const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+};
+
+const replayGainModeLabels: Record<ReplayGainMode, string> = {
+    off: 'ReplayGain 已关闭',
+    track: 'ReplayGain: 单曲模式',
+    album: 'ReplayGain: 专辑模式'
 };
 
 export default function App() {
@@ -113,6 +119,10 @@ export default function App() {
 
     // Local Music State
     const [localSongs, setLocalSongs] = useState<LocalSong[]>([]);
+    const [replayGainMode, setReplayGainMode] = useState<ReplayGainMode>(() => {
+        const saved = localStorage.getItem('local_replaygain_mode');
+        return saved === 'track' || saved === 'album' ? saved : 'off';
+    });
     const localFileBlobsRef = useRef<Map<string, string>>(new Map()); // id -> blob URL
 
     // Navigation Persistence State (Lifted from Home/LocalMusicView)
@@ -1182,17 +1192,47 @@ export default function App() {
         }
     }, [volume, isMuted]);
 
+    useEffect(() => {
+        localStorage.setItem('local_replaygain_mode', replayGainMode);
+    }, [replayGainMode]);
+
     // ReplayGain Effect
     useEffect(() => {
         if (!currentSong || !gainNodeRef.current || !audioContextRef.current) return;
         
         let replayGainDb = 0;
+        let replayGainPeak: number | undefined;
         if ((currentSong as any).isLocal && (currentSong as any).localData) {
-            const localData = (currentSong as any).localData;
-            replayGainDb = typeof localData.replayGain === 'number' ? localData.replayGain : 0;
+            const localData = (currentSong as any).localData as LocalSong;
+
+            if (replayGainMode === 'track') {
+                replayGainDb = typeof localData.replayGainTrackGain === 'number'
+                    ? localData.replayGainTrackGain
+                    : (typeof localData.replayGain === 'number' ? localData.replayGain : 0);
+                replayGainPeak = localData.replayGainTrackPeak;
+            } else if (replayGainMode === 'album') {
+                replayGainDb = typeof localData.replayGainAlbumGain === 'number'
+                    ? localData.replayGainAlbumGain
+                    : (typeof localData.replayGainTrackGain === 'number'
+                        ? localData.replayGainTrackGain
+                        : (typeof localData.replayGain === 'number' ? localData.replayGain : 0));
+                replayGainPeak = localData.replayGainAlbumPeak ?? localData.replayGainTrackPeak;
+            }
         }
 
-        const linearGain = Math.pow(10, replayGainDb / 20);
+        let effectiveReplayGainDb = replayGainDb;
+        if (
+            replayGainMode !== 'off' &&
+            typeof replayGainPeak === 'number' &&
+            replayGainPeak > 0 &&
+            replayGainPeak <= 1 &&
+            replayGainDb > 0
+        ) {
+            const clipSafeGainDb = -20 * Math.log10(replayGainPeak);
+            effectiveReplayGainDb = Math.min(replayGainDb, clipSafeGainDb);
+        }
+
+        const linearGain = Math.pow(10, effectiveReplayGainDb / 20);
         
         try {
             gainNodeRef.current.gain.setTargetAtTime(
@@ -1200,11 +1240,11 @@ export default function App() {
                 audioContextRef.current.currentTime, 
                 0.1
             );
-            console.log(`[AudioContext] ReplayGain set to ${replayGainDb}dB (Linear: ${linearGain.toFixed(2)})`);
+            console.log(`[AudioContext] ReplayGain mode=${replayGainMode} gain=${effectiveReplayGainDb}dB (raw=${replayGainDb}dB, peak=${replayGainPeak ?? 'n/a'}, linear=${linearGain.toFixed(2)})`);
         } catch (e) {
             console.warn('[AudioContext] Failed to apply ReplayGain', e);
         }
-    }, [currentSong]);
+    }, [currentSong, replayGainMode]);
 
     // Media Session API Integration
     useEffect(() => {
@@ -1565,6 +1605,11 @@ export default function App() {
             console.error("Failed to save lyrics source", e);
             setStatusMsg({ type: 'error', text: 'Failed to save lyrics source' });
         }
+    };
+
+    const handleChangeReplayGainMode = (mode: ReplayGainMode) => {
+        setReplayGainMode(mode);
+        setStatusMsg({ type: 'info', text: replayGainModeLabels[mode] });
     };
 
     const [showLyricMatchModal, setShowLyricMatchModal] = useState(false);
@@ -1976,6 +2021,8 @@ export default function App() {
                         onMatchOnline={handleManualMatchOnline}
                         onUpdateLocalLyrics={handleUpdateLocalLyrics}
                         onChangeLyricsSource={handleChangeLyricsSource}
+                        replayGainMode={replayGainMode}
+                        onChangeReplayGainMode={handleChangeReplayGainMode}
                         isFmMode={isFmMode}
                         onFmTrash={handleFmTrash}
                         onNextTrack={handleNextTrack}
