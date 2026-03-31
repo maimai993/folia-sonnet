@@ -572,3 +572,12 @@ export const getDirHandles = async (): Promise<Record<string, FileSystemDirector
   return (await getFromCache<Record<string, FileSystemDirectoryHandle>>('local_dir_handles')) || {};
 };
 
+export const deleteDirHandle = async (rootFolderName: string): Promise<void> => {
+  const handles = await getDirHandles();
+  if (!(rootFolderName in handles)) {
+    return;
+  }
+
+  delete handles[rootFolderName];
+  await saveDirHandles(handles);
+};

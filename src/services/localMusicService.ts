@@ -1,5 +1,5 @@
 import { LocalSong, LyricData } from '../types';
-import { saveLocalSong, deleteLocalSong as dbDeleteLocalSong, saveDirHandles, getDirHandles } from './db';
+import { saveLocalSong, deleteLocalSong as dbDeleteLocalSong, saveDirHandles, getDirHandles, deleteDirHandle, getLocalSongs } from './db';
 import { neteaseApi } from './netease';
 import { parseLRC } from '../utils/lrcParser';
 import { parseYRC } from '../utils/yrcParser';
@@ -27,8 +27,7 @@ interface LyricCandidate {
     hasTimeline: boolean;
 }
 
-// In-memory storage for FileSystemFileHandle (cannot be persisted to IndexedDB)
-// Maps song ID to FileSystemFileHandle
+// In-memory storage for hot-path access. Persistent recovery uses directory handles from IndexedDB.
 const fileHandleMap = new Map<string, FileSystemFileHandle>();
 
 // Generate UUID for local songs
@@ -321,20 +320,12 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
 
                 try {
                     const parsed = await parseBlob(file);
-                    // DEBUG: dump lyrics-related fields
-                    console.log(`[LocalMusic DEBUG] ${file.name} parsed.common keys:`, Object.keys(parsed.common));
-                    console.log(`[LocalMusic DEBUG] ${file.name} parsed.common.lyrics:`, parsed.common.lyrics);
-                    console.log(`[LocalMusic DEBUG] ${file.name} parsed.native keys:`, Object.keys(parsed.native || {}));
-                    // Check native tags for lyrics in different formats
                     for (const [format, tags] of Object.entries(parsed.native || {})) {
                         const lyricTags = (tags as any[]).filter((t: any) => 
                             t.id?.toLowerCase().includes('lyric') || 
                             t.id?.toLowerCase().includes('uslt') ||
                             t.id?.toLowerCase().includes('sylt')
                         );
-                        if (lyricTags.length > 0) {
-                            console.log(`[LocalMusic DEBUG] ${file.name} native[${format}] lyrics tags:`, lyricTags);
-                        }
                     }
                     // Extract original and translation from multiple USLT/LYRICS tags
                     let originalLyric: string | undefined;
@@ -646,6 +637,80 @@ export async function deleteLocalSong(id: string): Promise<void> {
     await dbDeleteLocalSong(id);
 }
 
+function getRootFolderName(song: LocalSong): string | null {
+    const pathLike = song.filePath || song.folderName;
+    if (!pathLike) return null;
+
+    const [rootFolderName] = pathLike.split('/');
+    return rootFolderName || null;
+}
+
+async function resolveFileHandleFromDirHandle(
+    dirHandle: FileSystemDirectoryHandle,
+    relativePathFromRoot: string
+): Promise<FileSystemFileHandle | null> {
+    const pathSegments = relativePathFromRoot.split('/').filter(Boolean);
+    if (pathSegments.length === 0) {
+        return null;
+    }
+
+    const fileName = pathSegments[pathSegments.length - 1];
+    const directorySegments = pathSegments.slice(0, -1);
+
+    let currentDir = dirHandle;
+    for (const segment of directorySegments) {
+        currentDir = await currentDir.getDirectoryHandle(segment);
+    }
+
+    return await currentDir.getFileHandle(fileName);
+}
+
+async function recoverFileHandleFromPersistedDirectory(song: LocalSong): Promise<FileSystemFileHandle | null> {
+    const rootFolderName = getRootFolderName(song);
+    if (!rootFolderName || !song.filePath) {
+        return null;
+    }
+
+    const dirHandles = await getDirHandles();
+    const rootDirHandle = dirHandles[rootFolderName];
+    if (!rootDirHandle) {
+        return null;
+    }
+
+    const permission = await rootDirHandle.queryPermission({ mode: 'read' });
+    if (permission !== 'granted') {
+        return null;
+    }
+
+    const relativePathFromRoot = song.filePath.startsWith(`${rootFolderName}/`)
+        ? song.filePath.slice(rootFolderName.length + 1)
+        : song.filePath;
+
+    try {
+        const recoveredHandle = await resolveFileHandleFromDirHandle(rootDirHandle, relativePathFromRoot);
+        fileHandleMap.set(song.id, recoveredHandle);
+        song.fileHandle = recoveredHandle;
+        await saveLocalSong(song);
+        return recoveredHandle;
+    } catch (error) {
+        console.warn(`[LocalMusic] Failed to recover file handle for ${song.filePath}:`, error);
+        return null;
+    }
+}
+
+async function cleanupDirHandleIfUnused(rootFolderName: string): Promise<void> {
+    const allSongs = await getLocalSongs();
+    const stillUsed = allSongs.some(song => {
+        const songRoot = getRootFolderName(song);
+        return songRoot === rootFolderName;
+    });
+
+    if (!stillUsed) {
+        await deleteDirHandle(rootFolderName);
+        console.log(`[LocalMusic] Removed persisted directory handle for ${rootFolderName}`);
+    }
+}
+
 // Get audio blob from local song using fileHandle
 // Returns blob URL if fileHandle exists, null otherwise
 export async function getAudioFromLocalSong(song: LocalSong): Promise<string | null> {
@@ -665,14 +730,24 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
             return URL.createObjectURL(file);
         } catch (error) {
             console.error('[LocalMusic] Failed to get file from handle:', error);
-            // File may have been moved or deleted
+            // File may have been moved or the stored handle may have become stale.
             fileHandleMap.delete(song.id);
-            return null;
         }
     }
 
-    // No fileHandle available - file may have been moved or deleted
-    console.warn(`[LocalMusic] No fileHandle for song ${song.id}. File must be re-imported.`);
+    const recoveredHandle = await recoverFileHandleFromPersistedDirectory(song);
+    if (recoveredHandle) {
+        try {
+            const file = await recoveredHandle.getFile();
+            return URL.createObjectURL(file);
+        } catch (error) {
+            console.error('[LocalMusic] Failed to get file from recovered directory handle:', error);
+            fileHandleMap.delete(song.id);
+        }
+    }
+
+    // No accessible handle available - permission may need to be restored or the file moved.
+    console.warn(`[LocalMusic] No accessible handle for song ${song.id}. Permission restore or re-import is required.`);
     return null;
 }
 
@@ -691,8 +766,6 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
 
 // Resync folder: Delete old songs by ID, then prompt for new import
 export async function resyncFolder(folderName: string): Promise<LocalSong[] | null> {
-    const { getLocalSongs } = await import('./db');
-    
     // Identify old songs to delete before import
     const allSongs = await getLocalSongs();
     const oldSongsToDelete = allSongs.filter(song => 
@@ -721,8 +794,6 @@ export async function resyncFolder(folderName: string): Promise<LocalSong[] | nu
 
 // Delete all songs from a specific folder (and its nested children)
 export async function deleteFolderSongs(folderName: string): Promise<void> {
-    const { getLocalSongs } = await import('./db');
-
     // Get all local songs
     const allSongs = await getLocalSongs();
 
@@ -735,6 +806,9 @@ export async function deleteFolderSongs(folderName: string): Promise<void> {
     for (const song of songsToDelete) {
         await deleteLocalSong(song.id);
     }
+
+    const rootFolderName = folderName.split('/')[0];
+    await cleanupDirHandleIfUnused(rootFolderName);
 
     console.log(`[LocalMusic] Deleted ${songsToDelete.length} songs from folder tree: ${folderName}`);
 }
