@@ -15,6 +15,7 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('disable-vulkan');
   app.commandLine.appendSwitch('disable-features', 'Vulkan');
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+  app.commandLine.appendSwitch('log-level', '3');
 
   if (linuxGraphicsMode === 'software') {
     // Hard fallback: safest, but usually slower.
@@ -46,6 +47,10 @@ function isFileSystemPermission(permission) {
   return permission === 'fileSystem' || permission === 'filesystem';
 }
 
+function isAllowedMainWindowPermission(permission) {
+  return isFileSystemPermission(permission) || permission === 'unknown';
+}
+
 function isTrustedMainWindowContents(webContents) {
   return Boolean(
     mainWindow &&
@@ -55,15 +60,51 @@ function isTrustedMainWindowContents(webContents) {
   );
 }
 
+function getMainWindowUrl() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return '';
+  }
+
+  return mainWindow.webContents.getURL() || '';
+}
+
+function normalizeOrigin(value) {
+  if (!value) {
+    return '';
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return '';
+  }
+}
+
+function isTrustedMainWindowRequest(webContents, requestingOrigin, details) {
+  if (isTrustedMainWindowContents(webContents)) {
+    return true;
+  }
+
+  const mainWindowUrl = getMainWindowUrl();
+  const mainWindowOrigin = normalizeOrigin(mainWindowUrl);
+  const requestOrigin = normalizeOrigin(requestingOrigin);
+  const requestUrlOrigin = normalizeOrigin(details?.requestingUrl);
+
+  if (!mainWindowOrigin) {
+    return false;
+  }
+
+  return requestOrigin === mainWindowOrigin || requestUrlOrigin === mainWindowOrigin;
+}
+
 function setupFileSystemAccessPermissionHandlers() {
   const ses = session.defaultSession;
 
   ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-    if (!isFileSystemPermission(permission)) {
-      return false;
-    }
+    const trustedMainWindow = isTrustedMainWindowRequest(webContents, requestingOrigin, details);
+    const allowedPermission = isAllowedMainWindowPermission(permission);
 
-    if (!isTrustedMainWindowContents(webContents)) {
+    if (!trustedMainWindow || !allowedPermission) {
       return false;
     }
 
@@ -71,11 +112,10 @@ function setupFileSystemAccessPermissionHandlers() {
   });
 
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    if (!isFileSystemPermission(permission)) {
-      return callback(false);
-    }
+    const trustedMainWindow = isTrustedMainWindowRequest(webContents, details?.requestingUrl, details);
+    const allowedPermission = isAllowedMainWindowPermission(permission);
 
-    if (!isTrustedMainWindowContents(webContents)) {
+    if (!trustedMainWindow || !allowedPermission) {
       return callback(false);
     }
 
@@ -249,7 +289,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false // Disable for local app
+      webSecurity: true // Disable for local app
     }
   });
 

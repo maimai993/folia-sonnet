@@ -196,7 +196,12 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     const handleFolderImport = async () => {
         setIsImporting(true);
         try {
-            await importFolder();
+            const importedSongs = await importFolder();
+            if (importedSongs.length === 0) {
+                console.warn('[LocalMusic] Folder import returned no songs');
+                alert('未导入任何本地音频文件。请查看控制台中的 [LocalMusic] 日志以确认是取消选择、权限拦截，还是目录中没有可识别音频。');
+                return;
+            }
             onRefresh();
         } catch (error) {
             console.error('Failed to import folder:', error);

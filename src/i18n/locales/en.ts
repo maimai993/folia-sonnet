@@ -240,7 +240,8 @@ export default {
     "noSelection": "Select a song on the left",
     "save": "Save",
     "permissionNeeded": "Restore Folder Access",
-    "grantPermission": "Restore"
+    "grantPermission": "Restore",
+    "chooseCover": "Choose Cover Image",
   },
   "navidrome": {
     "title": "Navi",

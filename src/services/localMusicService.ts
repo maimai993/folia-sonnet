@@ -189,7 +189,7 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
         // @ts-ignore - showDirectoryPicker is not in all TypeScript definitions
         const dirHandle = await window.showDirectoryPicker();
         const importedSongs: LocalSong[] = [];
-        
+
         let rootFolderName = expectedRootName || dirHandle.name;
 
         // If it's a new import (no expectedRootName), ensure the root folder name is unique

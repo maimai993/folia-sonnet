@@ -240,7 +240,8 @@ export default {
     "noSelection": "请在左侧选择一首歌曲",
     "save": "保存",
     "permissionNeeded": "需要恢复本地音乐访问权限",
-    "grantPermission": "点击恢复"
+    "grantPermission": "点击恢复",
+    "chooseCover": "选择封面图片",
   },
   "navidrome": {
     "title": "Navi",
