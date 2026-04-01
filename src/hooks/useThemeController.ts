@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { generateThemeFromLyrics } from '../services/gemini';
 import { saveToCache } from '../services/db';
 import { DualTheme, LyricData, SongResult, Theme } from '../types';
@@ -21,10 +21,18 @@ export function useThemeController({
     setStatusMsg: StatusSetter;
     t: (key: string, options?: Record<string, unknown>) => string;
 }) {
-    const [theme, setTheme] = useState<Theme>(defaultTheme);
+    const getBaseTheme = () => (isDaylight ? daylightTheme : defaultTheme);
+
+    const [theme, setTheme] = useState<Theme>(() => getBaseTheme());
     const [aiTheme, setAiTheme] = useState<DualTheme | null>(null);
-    const [bgMode, setBgMode] = useState<'default' | 'ai'>('ai');
+    const [bgMode, setBgMode] = useState<'default' | 'ai'>('default');
     const [isGeneratingTheme, setIsGeneratingTheme] = useState(false);
+
+    useEffect(() => {
+        if (!aiTheme && bgMode === 'default') {
+            setTheme(getBaseTheme());
+        }
+    }, [aiTheme, bgMode, isDaylight, daylightTheme, defaultTheme]);
 
     const handleToggleDaylight = (isLight: boolean) => {
         setDaylightPreference(isLight);
@@ -84,7 +92,7 @@ export function useThemeController({
     };
 
     const handleResetTheme = () => {
-        setTheme(isDaylight ? daylightTheme : defaultTheme);
+        setTheme(getBaseTheme());
         setAiTheme(null);
         setBgMode('default');
     };
@@ -103,16 +111,18 @@ export function useThemeController({
     };
 
     const applyLegacyTheme = (legacyTheme: Theme) => {
+        setAiTheme(null);
         setTheme(legacyTheme);
         setBgMode('ai');
     };
 
     const applyThemeFallback = () => {
-        setTheme(prev => ({
-            ...prev,
+        setAiTheme(null);
+        setTheme({
+            ...getBaseTheme(),
             wordColors: [],
             lyricsIcons: []
-        }));
+        });
         setBgMode('default');
     };
 

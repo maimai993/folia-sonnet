@@ -50,7 +50,7 @@ const DAYLIGHT_THEME: Theme = {
     backgroundColor: "#f5f5f4", // stone-100 (Pearl White-ish)
     primaryColor: "#1c1917", // stone-900
     accentColor: "#ea580c", // orange-600
-    secondaryColor: "#78716c", // stone-500
+    secondaryColor: "#44403c", // stone-700
     fontStyle: "sans",
     animationIntensity: "normal"
 };
@@ -1790,6 +1790,7 @@ export default function App() {
                     seed={currentSong?.id}
                     staticMode={staticMode}
                     backgroundOpacity={backgroundOpacity}
+                    onBack={navigateToHome}
                 />
             </div>
 
