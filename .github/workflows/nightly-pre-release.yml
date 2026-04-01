@@ -108,7 +108,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          gh release delete nightly --cleanup-tag --yes >/dev/null 2>&1 || true
+          gh release delete nightly --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes >/dev/null 2>&1 || true
           gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/nightly" >/dev/null 2>&1 || true
 
       - name: Publish nightly pre-release
@@ -127,6 +127,7 @@ jobs:
 
           gh release create nightly \
             "${files[@]}" \
+            --repo "${GITHUB_REPOSITORY}" \
             --title "Nightly Build (${published_at})" \
             --notes-file release-notes.txt \
             --target "${GITHUB_SHA}" \
