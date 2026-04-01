@@ -2,20 +2,26 @@ import { useEffect, useState } from 'react';
 import { NeteasePlaylist } from '../types';
 
 type ViewState = 'home' | 'player';
+const LAST_APP_VIEW_KEY = 'last_app_view';
 
 export function useAppNavigation() {
-    const [currentView, setCurrentView] = useState<ViewState>('home');
+    const [currentView, setCurrentView] = useState<ViewState>(() => {
+        return localStorage.getItem(LAST_APP_VIEW_KEY) === 'player' ? 'player' : 'home';
+    });
     const [selectedPlaylist, setSelectedPlaylist] = useState<NeteasePlaylist | null>(null);
     const [selectedAlbumId, setSelectedAlbumId] = useState<number | null>(null);
     const [selectedArtistId, setSelectedArtistId] = useState<number | null>(null);
 
     useEffect(() => {
-        window.history.replaceState({ view: 'home' }, '', '');
+        const initialView = localStorage.getItem(LAST_APP_VIEW_KEY) === 'player' ? 'player' : 'home';
+        window.history.replaceState({ view: initialView }, '', initialView === 'player' ? '#player' : '');
+        setCurrentView(initialView);
 
         const handlePopState = (event: PopStateEvent) => {
             const state = event.state;
 
             if (!state || state.view === 'home') {
+                localStorage.setItem(LAST_APP_VIEW_KEY, 'home');
                 setCurrentView('home');
                 setSelectedPlaylist(null);
                 setSelectedAlbumId(null);
@@ -24,6 +30,7 @@ export function useAppNavigation() {
             }
 
             if (state.view === 'player') {
+                localStorage.setItem(LAST_APP_VIEW_KEY, 'player');
                 setCurrentView('player');
                 setSelectedPlaylist(null);
                 setSelectedAlbumId(null);
@@ -32,6 +39,7 @@ export function useAppNavigation() {
             }
 
             if (state.view === 'playlist') {
+                localStorage.setItem(LAST_APP_VIEW_KEY, 'home');
                 setCurrentView('home');
                 setSelectedAlbumId(null);
                 setSelectedArtistId(null);
@@ -39,6 +47,7 @@ export function useAppNavigation() {
             }
 
             if (state.view === 'album') {
+                localStorage.setItem(LAST_APP_VIEW_KEY, 'home');
                 if (state.id) {
                     setSelectedAlbumId(state.id);
                     setCurrentView('home');
@@ -51,6 +60,7 @@ export function useAppNavigation() {
             }
 
             if (state.view === 'artist') {
+                localStorage.setItem(LAST_APP_VIEW_KEY, 'home');
                 if (state.id) {
                     setSelectedArtistId(state.id);
                     setCurrentView('home');
@@ -67,6 +77,7 @@ export function useAppNavigation() {
 
     const navigateToPlayer = () => {
         if (currentView !== 'player') {
+            localStorage.setItem(LAST_APP_VIEW_KEY, 'player');
             window.history.pushState({ view: 'player' }, '', '#player');
             setCurrentView('player');
         }
@@ -74,6 +85,7 @@ export function useAppNavigation() {
 
     const navigateToHome = () => {
         if (currentView !== 'home' || selectedPlaylist || selectedAlbumId) {
+            localStorage.setItem(LAST_APP_VIEW_KEY, 'home');
             window.history.back();
         }
     };

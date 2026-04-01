@@ -31,6 +31,7 @@ import { useThemeController } from './hooks/useThemeController';
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
 const LOCAL_PREWARM_DELAY_MS = 1000;
+const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 
 // Default Theme
 // 午夜墨染
@@ -130,7 +131,12 @@ export default function App() {
     const localFileBlobsRef = useRef<Map<string, string>>(new Map()); // id -> blob URL
 
     // Navigation Persistence State (Lifted from Home/LocalMusicView)
-    const [homeViewTab, setHomeViewTab] = useState<'playlist' | 'local' | 'albums' | 'navidrome' | 'radio'>('playlist');
+    const [homeViewTab, setHomeViewTab] = useState<'playlist' | 'local' | 'albums' | 'navidrome' | 'radio'>(() => {
+        const savedTab = localStorage.getItem(LAST_HOME_VIEW_TAB_KEY);
+        return savedTab === 'playlist' || savedTab === 'local' || savedTab === 'albums' || savedTab === 'navidrome' || savedTab === 'radio'
+            ? savedTab
+            : 'playlist';
+    });
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [focusedFavoriteAlbumIndex, setFocusedFavoriteAlbumIndex] = useState(0);
     const [focusedRadioIndex, setFocusedRadioIndex] = useState(0);
@@ -251,6 +257,11 @@ export default function App() {
     useEffect(() => {
         restoreSession();
         loadLocalSongs();
+    }, []);
+
+    const handleSetHomeViewTab = useCallback((tab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio') => {
+        localStorage.setItem(LAST_HOME_VIEW_TAB_KEY, tab);
+        setHomeViewTab(tab);
     }, []);
 
     useEffect(() => {
@@ -1822,7 +1833,7 @@ export default function App() {
                                                 onPlayLocalSong={onPlayLocalSong}
                                                 onAddLocalSongToQueue={handleLocalQueueAdd}
                                                 viewTab={homeViewTab}
-                            setViewTab={setHomeViewTab}
+                            setViewTab={handleSetHomeViewTab}
                             focusedPlaylistIndex={focusedPlaylistIndex}
                             setFocusedPlaylistIndex={setFocusedPlaylistIndex}
                             focusedFavoriteAlbumIndex={focusedFavoriteAlbumIndex}

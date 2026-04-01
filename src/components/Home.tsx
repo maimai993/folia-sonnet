@@ -244,12 +244,6 @@ const Home: React.FC<HomeProps> = ({
         }
     }, [viewTab, user, albumsLoaded]);
 
-    useEffect(() => {
-        if (!hasNeteaseLogin && isNeteaseTab) {
-            setViewTab(navidromeEnabled ? 'navidrome' : 'local');
-        }
-    }, [hasNeteaseLogin, isNeteaseTab, navidromeEnabled, setViewTab]);
-
     const fetchFavoriteAlbums = async () => {
         setLoadingAlbums(true);
         try {
@@ -596,24 +590,21 @@ const Home: React.FC<HomeProps> = ({
                                             }}
                                         />
                                         <button
-                                            onClick={() => hasNeteaseLogin ? setViewTab('playlist') : initLogin()}
+                                            onClick={() => setViewTab('playlist')}
                                             className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'playlist' ? activeTabBg : navPillInactiveText}`}
-                                            title={hasNeteaseLogin ? undefined : t('home.connectAccount')}
                                         >
                                             {t('home.playlists')}
                                         </button>
                                         <button
-                                            onClick={() => hasNeteaseLogin ? setViewTab('radio') : initLogin()}
+                                            onClick={() => setViewTab('radio')}
                                             className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'radio' ? activeTabBg : navPillInactiveText}`}
-                                            title={hasNeteaseLogin ? undefined : t('home.connectAccount')}
                                         >
                                             {t('home.radio') || '电台'}
                                         </button>
                                         <button
-                                            onClick={() => hasNeteaseLogin ? setViewTab('albums') : initLogin()}
+                                            onClick={() => setViewTab('albums')}
                                             className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'albums' ? activeTabBg : navPillInactiveText
                                                 }`}
-                                            title={hasNeteaseLogin ? undefined : t('home.connectAccount')}
                                         >
                                             {t('home.albums') || '专辑'}
                                         </button>
