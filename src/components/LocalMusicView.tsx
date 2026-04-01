@@ -28,6 +28,17 @@ interface LocalMusicViewProps {
     isDaylight: boolean;
 }
 
+const getGroupCover = (songs: LocalSong[]) => {
+    const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    const preferredSong = sortedSongs.find(song => song.embeddedCover || song.matchedCoverUrl);
+
+    if (preferredSong?.embeddedCover) {
+        return URL.createObjectURL(preferredSong.embeddedCover);
+    }
+
+    return preferredSong?.matchedCoverUrl;
+};
+
 const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     localSongs,
     onRefresh,
@@ -151,17 +162,6 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             }
         });
 
-        const getGroupCover = (songs: LocalSong[]) => {
-            const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
-            const preferredSong = sortedSongs.find(song => song.embeddedCover || song.matchedCoverUrl);
-
-            if (preferredSong?.embeddedCover) {
-                return URL.createObjectURL(preferredSong.embeddedCover);
-            }
-
-            return preferredSong?.matchedCoverUrl;
-        };
-
         // Sort folders alphabetically
         const folderList = Object.entries(folders).map(([name, songs]) => ({
             id: `folder-${name}`,
@@ -211,7 +211,19 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         if (!selectedGroup) return null;
 
         const sourceGroups = selectedGroup.type === 'folder' ? groups.folders : groups.albums;
-        return sourceGroups.find(group => group.id === selectedGroup.id) || selectedGroup;
+        const matchedGroup = sourceGroups.find(group =>
+            (selectedGroup.id && group.id === selectedGroup.id) ||
+            group.name === selectedGroup.name
+        );
+
+        if (matchedGroup) {
+            return matchedGroup;
+        }
+
+        return {
+            ...selectedGroup,
+            coverUrl: selectedGroup.coverUrl || getGroupCover(selectedGroup.songs)
+        };
     }, [groups.albums, groups.folders, selectedGroup]);
 
     const handleFolderImport = async () => {
