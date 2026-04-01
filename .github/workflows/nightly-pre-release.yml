@@ -82,6 +82,7 @@ jobs:
           name: release-${{ matrix.os }}
           path: release/**
           if-no-files-found: error
+          retention-days: 7
 
   publish:
     name: Publish nightly pre-release
