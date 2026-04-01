@@ -566,6 +566,23 @@ export const deleteLocalSong = async (id: string): Promise<void> => {
   }
 };
 
+export const deleteLocalSongs = async (ids: string[]): Promise<void> => {
+  if (ids.length === 0) return;
+
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([LOCAL_MUSIC_STORE], 'readwrite');
+      const store = tx.objectStore(LOCAL_MUSIC_STORE);
+      ids.forEach(id => store.delete(id));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.error("Failed to delete local songs", e);
+  }
+};
+
 export const clearAllData = async (): Promise<void> => {
   try {
     return new Promise((resolve, reject) => {

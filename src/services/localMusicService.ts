@@ -1,5 +1,5 @@
 import { LocalSong, LyricData, LocalLibrarySnapshot, LocalLibrarySnapshotFile, LocalLibrarySnapshotNode } from '../types';
-import { saveLocalSong, saveLocalSongs, deleteLocalSong as dbDeleteLocalSong, saveDirHandles, getDirHandles, deleteDirHandle, getLocalSongs, getLocalLibrarySnapshot, saveLocalLibrarySnapshot, deleteLocalLibrarySnapshot } from './db';
+import { saveLocalSong, saveLocalSongs, deleteLocalSong as dbDeleteLocalSong, deleteLocalSongs as dbDeleteLocalSongs, saveDirHandles, getDirHandles, deleteDirHandle, getLocalSongs, getLocalLibrarySnapshot, saveLocalLibrarySnapshot, deleteLocalLibrarySnapshot } from './db';
 import { neteaseApi } from './netease';
 import { parseLRC } from '../utils/lrcParser';
 import { parseYRC } from '../utils/yrcParser';
@@ -1286,9 +1286,11 @@ export async function getAudioFromFile(file: File): Promise<string> {
 
 // Delete songs by their specific IDs
 export async function deleteSongsByIds(songIds: string[]): Promise<void> {
-    for (const id of songIds) {
-        await deleteLocalSong(id);
-    }
+    songIds.forEach(id => {
+        fileHandleMap.delete(id);
+        embeddedCoverRequestMap.delete(id);
+    });
+    await dbDeleteLocalSongs(songIds);
     console.log(`[LocalMusic] Deleted ${songIds.length} songs by ID`);
 }
 
@@ -1314,10 +1316,12 @@ export async function deleteFolderSongs(folderName: string): Promise<void> {
         song.folderName === folderName || (song.folderName && song.folderName.startsWith(`${folderName}/`))
     );
 
-    // Delete each song
-    for (const song of songsToDelete) {
-        await deleteLocalSong(song.id);
-    }
+    const songIdsToDelete = songsToDelete.map(song => song.id);
+    songIdsToDelete.forEach(id => {
+        fileHandleMap.delete(id);
+        embeddedCoverRequestMap.delete(id);
+    });
+    await dbDeleteLocalSongs(songIdsToDelete);
 
     const rootFolderName = folderName.split('/')[0];
     await cleanupDirHandleIfUnused(rootFolderName);

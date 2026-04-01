@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { Play, ChevronLeft, Disc, Loader2, Folder, RefreshCw, Trash2, Plus } from 'lucide-react';
+import { Play, ChevronLeft, Folder, RefreshCw, Trash2, Plus } from 'lucide-react';
 import { LocalSong } from '../types';
 import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence } from 'framer-motion';
-import { formatSongName } from '../utils/songNameFormatter';
+import { motion } from 'framer-motion';
 import DeleteFolderConfirmModal from './DeleteFolderConfirmModal';
 
 interface LocalPlaylistViewProps {
@@ -23,6 +22,72 @@ interface LocalPlaylistViewProps {
     isDaylight: boolean;
 }
 
+const TRACK_ROW_HEIGHT = 68;
+const TRACK_OVERSCAN = 8;
+
+interface LocalPlaylistRowProps {
+    song: LocalSong;
+    index: number;
+    songs: LocalSong[];
+    onPlaySong: (song: LocalSong, queue?: LocalSong[]) => void;
+    onAddToQueue?: (song: LocalSong) => void;
+    t: ReturnType<typeof useTranslation>['t'];
+}
+
+const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQueue, t }: LocalPlaylistRowProps) => {
+    const formatDuration = (ms: number) => {
+        const minutes = Math.floor(ms / 60000);
+        const seconds = ((ms % 60000) / 1000).toFixed(0);
+        return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
+    };
+
+    return (
+        <div
+            onClick={() => onPlaySong(song, songs)}
+            className="group flex h-[68px] items-center py-3 px-2 rounded-xl hover:bg-white/5 cursor-pointer transition-colors"
+        >
+            <div className="w-8 md:w-10 text-center text-sm font-medium opacity-30 group-hover:opacity-100" style={{ color: 'var(--text-secondary)' }}>
+                {index + 1}
+            </div>
+
+            <div className="flex-1 min-w-0 pl-3 md:pl-4">
+                <div className="text-sm font-medium opacity-90 group-hover:opacity-100" style={{ color: 'var(--text-primary)' }}>
+                    {song.title || song.fileName}
+                </div>
+                <div className="text-xs truncate opacity-40 group-hover:opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                    {song.matchedArtists || song.artist || t('localMusic.unknownArtist')}
+                    {song.matchedAlbumName && (
+                        <>
+                            <span className="mx-1.5">•</span>
+                            {song.matchedAlbumName}
+                        </>
+                    )}
+                </div>
+            </div>
+
+            <div className="w-12 md:w-16 text-right text-xs font-medium opacity-30 group-hover:opacity-80" style={{ color: 'var(--text-secondary)' }}>
+                {formatDuration(song.duration)}
+            </div>
+
+            {onAddToQueue && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onAddToQueue(song);
+                    }}
+                    className="p-2 ml-2 rounded-full hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Add to Queue"
+                    style={{ color: 'var(--text-secondary)' }}
+                >
+                    <Plus size={14} />
+                </button>
+            )}
+        </div>
+    );
+});
+
+LocalPlaylistRow.displayName = 'LocalPlaylistRow';
+
 const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, onBack, onPlaySong, onAddToQueue, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, theme, isDaylight }) => {
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBg = isDaylight ? 'bg-white/60 backdrop-blur-md border border-white/20 shadow-xl' : 'bg-black/40 backdrop-blur-md border border-white/10';
@@ -31,26 +96,14 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
 
     const { t } = useTranslation();
 
-    // Scroll Ref
     const containerRef = useRef<HTMLDivElement>(null);
+    const trackListRef = useRef<HTMLDivElement>(null);
 
     // State for delete confirmation modal
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [isResyncing, setIsResyncing] = useState(false);
-
-    const formatDuration = (ms: number) => {
-        const minutes = Math.floor(ms / 60000);
-        const seconds = ((ms % 60000) / 1000).toFixed(0);
-        return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
-    };
-
-    const formatBytes = (bytes: number) => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
+    const [listHeight, setListHeight] = useState(0);
+    const [scrollTop, setScrollTop] = useState(0);
 
     // Calculate total songs to delete (including nested folders)
     const songsToDeleteCount = useMemo(() => {
@@ -60,6 +113,54 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
             song.folderName === title || (song.folderName && song.folderName.startsWith(`${title}/`))
         ).length;
     }, [allSongs, title, isFolderView, songs.length]);
+
+    useEffect(() => {
+        const node = trackListRef.current;
+        if (!node) return;
+
+        const updateListHeight = () => {
+            setListHeight(node.clientHeight);
+        };
+
+        updateListHeight();
+
+        const resizeObserver = new ResizeObserver(updateListHeight);
+        resizeObserver.observe(node);
+
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    useEffect(() => {
+        const node = trackListRef.current;
+        if (!node) return;
+
+        node.scrollTop = 0;
+        setScrollTop(0);
+    }, [title, songs]);
+
+    const totalHeight = songs.length * TRACK_ROW_HEIGHT;
+    const visibleRange = useMemo(() => {
+        if (songs.length === 0) {
+            return { startIndex: 0, endIndex: -1 };
+        }
+
+        const viewportHeight = listHeight || 600;
+        const startIndex = Math.max(0, Math.floor(scrollTop / TRACK_ROW_HEIGHT) - TRACK_OVERSCAN);
+        const endIndex = Math.min(
+            songs.length - 1,
+            Math.ceil((scrollTop + viewportHeight) / TRACK_ROW_HEIGHT) + TRACK_OVERSCAN
+        );
+
+        return { startIndex, endIndex };
+    }, [listHeight, scrollTop, songs.length]);
+
+    const visibleSongs = useMemo(() => {
+        if (visibleRange.endIndex < visibleRange.startIndex) {
+            return [];
+        }
+
+        return songs.slice(visibleRange.startIndex, visibleRange.endIndex + 1);
+    }, [songs, visibleRange.endIndex, visibleRange.startIndex]);
 
     return (
         <motion.div
@@ -156,9 +257,9 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
 
                 {/* Right Panel: Tracks */}
                 <div
-                    className="flex-1 md:h-full md:overflow-y-auto custom-scrollbar"
+                    className="flex-1 md:h-full min-h-0 flex flex-col"
                 >
-                    <div className="p-4 md:p-8 pb-32 md:pb-8">
+                    <div className="p-4 md:p-8 pb-4 md:pb-8 flex-1 min-h-0 flex flex-col">
                         {/* Desktop Sticky Header */}
                         <div className="hidden md:flex sticky top-0 bg-transparent backdrop-blur-md z-10 border-b border-white/5 pb-2 mb-2 text-xs font-medium uppercase tracking-wide opacity-30" style={{ color: 'var(--text-secondary)' }}>
                             <div className="w-10 text-center">#</div>
@@ -166,50 +267,37 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                             <div className="w-16 text-right">{t('playlist.headerTime')}</div>
                         </div>
 
-                        {songs.map((song, idx) => (
-                            <div
-                                key={song.id}
-                                onClick={() => onPlaySong(song, songs)}
-                                className="group flex items-center py-3 px-2 rounded-xl hover:bg-white/5 cursor-pointer transition-colors"
-                            >
-                                <div className="w-8 md:w-10 text-center text-sm font-medium opacity-30 group-hover:opacity-100" style={{ color: 'var(--text-secondary)' }}>
-                                    {idx + 1}
-                                </div>
-
-                                <div className="flex-1 min-w-0 pl-3 md:pl-4">
-                                    <div className="text-sm font-medium opacity-90 group-hover:opacity-100" style={{ color: 'var(--text-primary)' }}>
-                                        {song.title || song.fileName}
-                                    </div>
-                                    <div className="text-xs truncate opacity-40 group-hover:opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                                        {song.matchedArtists || song.artist || t('localMusic.unknownArtist')}
-                                        {song.matchedAlbumName && (
-                                            <>
-                                                <span className="mx-1.5">•</span>
-                                                {song.matchedAlbumName}
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="w-12 md:w-16 text-right text-xs font-medium opacity-30 group-hover:opacity-80" style={{ color: 'var(--text-secondary)' }}>
-                                    {formatDuration(song.duration)}
-                                </div>
-
-                                {onAddToQueue && (
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onAddToQueue(song);
-                                        }}
-                                        className="p-2 ml-2 rounded-full hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all"
-                                        title="Add to Queue"
-                                        style={{ color: 'var(--text-secondary)' }}
-                                    >
-                                        <Plus size={14} />
-                                    </button>
-                                )}
+                        <div
+                            ref={trackListRef}
+                            className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pb-28 md:pb-0"
+                            onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+                        >
+                            <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
+                                {visibleSongs.map((song, offset) => {
+                                    const actualIndex = visibleRange.startIndex + offset;
+                                    return (
+                                        <div
+                                            key={song.id}
+                                            style={{
+                                                position: 'absolute',
+                                                top: actualIndex * TRACK_ROW_HEIGHT,
+                                                left: 0,
+                                                right: 0
+                                            }}
+                                        >
+                                            <LocalPlaylistRow
+                                                song={song}
+                                                index={actualIndex}
+                                                songs={songs}
+                                                onPlaySong={onPlaySong}
+                                                onAddToQueue={onAddToQueue}
+                                                t={t}
+                                            />
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        ))}
+                        </div>
                     </div>
                 </div>
 
