@@ -13,6 +13,7 @@ interface LocalMusicViewProps {
     localSongs: LocalSong[];
     onRefresh: () => void;
     onPlaySong: (song: LocalSong, queue?: LocalSong[]) => void;
+    onAddToQueue?: (song: LocalSong) => void;
     onPlaylistVisibilityChange?: (isOpen: boolean) => void;
     activeRow: 0 | 1;
     setActiveRow: (row: 0 | 1) => void;
@@ -31,6 +32,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     localSongs,
     onRefresh,
     onPlaySong,
+    onAddToQueue,
     onPlaylistVisibilityChange,
     activeRow,
     setActiveRow,
@@ -326,6 +328,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                     onPlaylistVisibilityChange?.(false);
                 }}
                 onPlaySong={onPlaySong}
+                onAddToQueue={onAddToQueue}
                 isFolderView={resolvedSelectedGroup.type === 'folder'}
                 allSongs={localSongs}
                 onResync={resolvedSelectedGroup.type === 'folder' ? handleResyncFolder : undefined}

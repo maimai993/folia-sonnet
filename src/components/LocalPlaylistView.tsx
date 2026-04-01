@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { Play, ChevronLeft, Disc, Loader2, Folder, RefreshCw, Trash2, Pencil } from 'lucide-react';
-import { LocalSong, SongResult } from '../types';
+import { Play, ChevronLeft, Disc, Loader2, Folder, RefreshCw, Trash2, Plus } from 'lucide-react';
+import { LocalSong } from '../types';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatSongName } from '../utils/songNameFormatter';
 import DeleteFolderConfirmModal from './DeleteFolderConfirmModal';
-import LyricMatchModal from './LyricMatchModal';
 
 interface LocalPlaylistViewProps {
     title: string;
@@ -13,6 +12,7 @@ interface LocalPlaylistViewProps {
     songs: LocalSong[];
     onBack: () => void;
     onPlaySong: (song: LocalSong, queue?: LocalSong[]) => void;
+    onAddToQueue?: (song: LocalSong) => void;
     isFolderView?: boolean;
     allSongs?: LocalSong[];
     onResync?: () => void;
@@ -23,7 +23,7 @@ interface LocalPlaylistViewProps {
     isDaylight: boolean;
 }
 
-const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, onBack, onPlaySong, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, theme, isDaylight }) => {
+const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, onBack, onPlaySong, onAddToQueue, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, theme, isDaylight }) => {
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBg = isDaylight ? 'bg-white/60 backdrop-blur-md border border-white/20 shadow-xl' : 'bg-black/40 backdrop-blur-md border border-white/10';
     const panelBg = isDaylight ? 'bg-white/40 shadow-xl border border-white/20' : 'bg-black/20';
@@ -37,7 +37,6 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
     // State for delete confirmation modal
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [isResyncing, setIsResyncing] = useState(false);
-    const [matchingSong, setMatchingSong] = useState<LocalSong | null>(null);
 
     const formatDuration = (ms: number) => {
         const minutes = Math.floor(ms / 60000);
@@ -170,7 +169,7 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                         {songs.map((song, idx) => (
                             <div
                                 key={song.id}
-                                onClick={() => onPlaySong(song)}
+                                onClick={() => onPlaySong(song, songs)}
                                 className="group flex items-center py-3 px-2 rounded-xl hover:bg-white/5 cursor-pointer transition-colors"
                             >
                                 <div className="w-8 md:w-10 text-center text-sm font-medium opacity-30 group-hover:opacity-100" style={{ color: 'var(--text-secondary)' }}>
@@ -196,17 +195,17 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                                     {formatDuration(song.duration)}
                                 </div>
 
-                                {onMatchSong && (
+                                {onAddToQueue && (
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setMatchingSong(song);
+                                            onAddToQueue(song);
                                         }}
                                         className="p-2 ml-2 rounded-full hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all"
-                                        title="Match Metadata"
+                                        title="Add to Queue"
                                         style={{ color: 'var(--text-secondary)' }}
                                     >
-                                        <Pencil size={14} />
+                                        <Plus size={14} />
                                     </button>
                                 )}
                             </div>
@@ -223,19 +222,6 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                     songCount={songsToDeleteCount}
                     onConfirm={onDelete}
                     onCancel={() => setShowDeleteModal(false)}
-                    isDaylight={isDaylight}
-                />
-            )}
-
-            {/* Lyric Match Modal */}
-            {matchingSong && onMatchSong && (
-                <LyricMatchModal
-                    song={matchingSong}
-                    onClose={() => setMatchingSong(null)}
-                    onMatch={() => {
-                        setMatchingSong(null);
-                        if (onRefresh) onRefresh(); // Refresh list to show new metadata
-                    }}
                     isDaylight={isDaylight}
                 />
             )}

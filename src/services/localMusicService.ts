@@ -1239,6 +1239,7 @@ export async function ensureLocalSongEmbeddedCover(song: LocalSong): Promise<Loc
                     embeddedCover: metadata.cover,
                     fileHandle
                 };
+                Object.assign(song, updatedSong);
                 await saveLocalSong(updatedSong);
                 return updatedSong;
             } catch (error) {
@@ -1262,6 +1263,7 @@ export async function ensureLocalSongEmbeddedCover(song: LocalSong): Promise<Loc
                         embeddedCover: metadata.cover,
                         fileHandle: recoveredHandle
                     };
+                    Object.assign(song, updatedSong);
                     await saveLocalSong(updatedSong);
                     return updatedSong;
                 } catch (recoveryError) {

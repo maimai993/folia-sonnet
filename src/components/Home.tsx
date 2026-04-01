@@ -32,6 +32,7 @@ interface HomeProps {
     localSongs: LocalSong[];
     onRefreshLocalSongs: () => void;
     onPlayLocalSong: (song: LocalSong, queue?: LocalSong[]) => void;
+    onAddLocalSongToQueue?: (song: LocalSong) => void;
     viewTab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio';
     setViewTab: (tab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio') => void;
     focusedPlaylistIndex?: number;
@@ -131,6 +132,7 @@ const Home: React.FC<HomeProps> = ({
     localSongs,
     onRefreshLocalSongs,
     onPlayLocalSong,
+    onAddLocalSongToQueue,
     viewTab,
     setViewTab,
     focusedPlaylistIndex = 0,
@@ -778,6 +780,7 @@ const Home: React.FC<HomeProps> = ({
                                                 localSongs={localSongs}
                                                 onRefresh={onRefreshLocalSongs}
                                                 onPlaySong={onPlayLocalSong}
+                                                onAddToQueue={onAddLocalSongToQueue}
                                                 onPlaylistVisibilityChange={setIsLocalPlaylistOpen}
                                                 activeRow={localMusicState.activeRow}
                                                 setActiveRow={(row) => setLocalMusicState(prev => ({ ...prev, activeRow: row }))}

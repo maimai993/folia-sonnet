@@ -29,6 +29,7 @@ import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
+const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
 
 // Default Theme
 // 午夜墨染
@@ -562,6 +563,59 @@ export default function App() {
         return { lyrics, coverUrl, unifiedSong };
     };
 
+    const handleLocalQueueAdd = async (localSong: LocalSong) => {
+        const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
+        const { unifiedSong } = await resolveLocalMetadataUI(preparedLocalSong, null);
+        const exists = playQueue.some(song => song.id === unifiedSong.id);
+        const nextQueue = exists ? playQueue : [...playQueue, unifiedSong];
+
+        setPlayQueue(nextQueue);
+        saveToCache('last_queue', nextQueue);
+        setStatusMsg({ type: 'success', text: '已添加到播放队列' });
+    };
+
+    const prewarmLocalSongMetadata = async (localSong: LocalSong) => {
+        const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
+        Object.assign(localSong, preparedLocalSong);
+
+        const needsLyricsMatch = !localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics && !localSong.matchedLyrics;
+        const needsCoverMatch = !localSong.embeddedCover && !localSong.matchedCoverUrl;
+
+        if ((needsLyricsMatch || needsCoverMatch) && !localSong.noAutoMatch) {
+            try {
+                const { matchLyrics } = await import('./services/localMusicService');
+                await matchLyrics(localSong);
+            } catch (error) {
+                console.warn('[LocalPrewarm] Failed to prewarm local song metadata:', error);
+            }
+        }
+    };
+
+    const prewarmNearbyLocalSongs = (currentSong: LocalSong, queue: LocalSong[] = []) => {
+        if (queue.length === 0) {
+            return;
+        }
+
+        const currentIndex = queue.findIndex(song => song.id === currentSong.id);
+        if (currentIndex === -1) {
+            return;
+        }
+
+        const nearbySongs = LOCAL_PREWARM_OFFSETS
+            .map(offset => queue[currentIndex + offset])
+            .filter((song): song is LocalSong => Boolean(song));
+
+        if (nearbySongs.length === 0) {
+            return;
+        }
+
+        void (async () => {
+            for (const nearbySong of nearbySongs) {
+                await prewarmLocalSongMetadata(nearbySong);
+            }
+        })();
+    };
+
     const onPlayLocalSong = async (localSong: LocalSong, queue: LocalSong[] = []) => {
         // Get audio blob from fileHandle first
         const blobUrl = await getAudioFromLocalSong(localSong);
@@ -611,6 +665,7 @@ export default function App() {
         navigateToPlayer();
         setPlayerState(PlayerState.IDLE);
         setStatusMsg({ type: 'success', text: '本地音乐已加载' });
+        prewarmNearbyLocalSongs(preparedLocalSong, queue);
 
         // --- Background Auto-Match ---
         handleLocalSongMatch(preparedLocalSong).then(async ({ updatedLocalSong, matchedSongResult }) => {
@@ -920,6 +975,10 @@ export default function App() {
                     currentLocalData = await ensureLocalSongEmbeddedCover(currentLocalData);
                     const initialMeta = await resolveLocalMetadataUI(currentLocalData, null);
                     setCurrentSong(initialMeta.unifiedSong);
+                    const localQueueContext = playQueue
+                        .map(queuedSong => queuedSong.localData)
+                        .filter((queuedSong): queuedSong is LocalSong => Boolean(queuedSong));
+                    prewarmNearbyLocalSongs(currentLocalData, localQueueContext);
                     
                     if (initialMeta.coverUrl) {
                         loadCachedOrFetchCover(`cover_local_${currentLocalData.id}`, initialMeta.coverUrl).then(res => {
@@ -1754,10 +1813,11 @@ export default function App() {
                             onSelectPlaylist={handlePlaylistSelect}
                             onSelectAlbum={handleAlbumSelect}
                             onSelectArtist={handleArtistSelect}
-                            localSongs={localSongs}
-                            onRefreshLocalSongs={onRefreshLocalSongs}
-                            onPlayLocalSong={onPlayLocalSong}
-                            viewTab={homeViewTab}
+                                                localSongs={localSongs}
+                                                onRefreshLocalSongs={onRefreshLocalSongs}
+                                                onPlayLocalSong={onPlayLocalSong}
+                                                onAddLocalSongToQueue={handleLocalQueueAdd}
+                                                viewTab={homeViewTab}
                             setViewTab={setHomeViewTab}
                             focusedPlaylistIndex={focusedPlaylistIndex}
                             setFocusedPlaylistIndex={setFocusedPlaylistIndex}
