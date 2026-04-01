@@ -1339,7 +1339,10 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
 
 // Resync folder: refresh an imported folder in place using the persisted root handle
 export async function resyncFolder(folderName: string): Promise<LocalSong[] | null> {
-    const importedSongs = await importFolder(folderName);
+    // Only root imports have persisted directory handles. Derived child folders
+    // should resync through their imported root folder handle.
+    const rootFolderName = folderName.split('/')[0] || folderName;
+    const importedSongs = await importFolder(rootFolderName);
 
     // If user cancelled (empty array), return null to indicate cancellation
     if (importedSongs.length === 0) {
