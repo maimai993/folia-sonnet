@@ -35,6 +35,29 @@ if (process.platform === 'linux') {
 const store = new Store();
 let mainWindow = null;
 
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    focusMainWindow();
+  });
+}
+
 async function ensureSystemProxySession() {
   const ses = session.defaultSession;
   await ses.setProxy({ mode: 'system' });
@@ -315,10 +338,13 @@ app.whenReady().then(async () => {
   setupFileSystemAccessPermissionHandlers();
   await startApi();
   createWindow();
+  focusMainWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
+    } else {
+      focusMainWindow();
     }
   });
 });
