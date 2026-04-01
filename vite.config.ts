@@ -58,6 +58,9 @@ export default defineConfig(async ({ mode }) => {
 
   return {
     base: process.env.ELECTRON === 'true' ? './' : '/',
+    worker: {
+      format: 'es'
+    },
     server: {
       port: 3000,
       host: '0.0.0.0',

@@ -53,7 +53,34 @@ export function useNeteaseLibrary({
     const [likedSongIds, setLikedSongIds] = useState<Set<number>>(new Set());
     const [isSyncing, setIsSyncing] = useState(false);
     const [cacheSize, setCacheSize] = useState<string>('0 B');
+    const [isUserDataReady, setIsUserDataReady] = useState(false);
     const lastCheckTimeRef = useRef<number>(0);
+
+    const clearAuthState = useCallback(async () => {
+        localStorage.removeItem('netease_cookie');
+        setUser(null);
+        setPlaylists([]);
+        setLikedSongIds(new Set());
+
+        try {
+            const db = await openDB();
+            const tx = db.transaction(['user_cache', 'api_cache'], 'readwrite');
+            const userStore = tx.objectStore('user_cache');
+            const legacyStore = tx.objectStore('api_cache');
+
+            ['user_profile', 'user_playlists', 'user_liked_songs'].forEach((key) => {
+                userStore.delete(key);
+                legacyStore.delete(key);
+            });
+
+            await new Promise<void>((resolve, reject) => {
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        } catch (error) {
+            console.warn('Failed to clear auth cache', error);
+        }
+    }, []);
 
     const updateCacheSize = useCallback(async () => {
         const size = await getCacheUsage();
@@ -88,32 +115,38 @@ export function useNeteaseLibrary({
 
                 return true;
             }
+
+            await clearAuthState();
         } catch (error) {
             console.log('Not logged in or offline');
         }
         return false;
-    }, []);
+    }, [clearAuthState]);
 
     const loadUserData = useCallback(async () => {
-        const cachedUser = await getFromCache<NeteaseUser>('user_profile');
-        const cachedPlaylists = await getFromCache<NeteasePlaylist[]>('user_playlists');
-        const cachedLikedSongs = await getFromCache<number[]>('user_liked_songs');
+        try {
+            const cachedUser = await getFromCache<NeteaseUser>('user_profile');
+            const cachedPlaylists = await getFromCache<NeteasePlaylist[]>('user_playlists');
+            const cachedLikedSongs = await getFromCache<number[]>('user_liked_songs');
 
-        if (cachedUser) {
-            setUser(cachedUser);
-            if (cachedPlaylists) {
-                setPlaylists(cachedPlaylists);
-            } else {
-                refreshUserData(cachedUser.userId);
+            if (cachedUser) {
+                setUser(cachedUser);
+                if (cachedPlaylists) {
+                    setPlaylists(cachedPlaylists);
+                } else {
+                    refreshUserData(cachedUser.userId);
+                }
+
+                if (cachedLikedSongs) {
+                    setLikedSongIds(new Set(cachedLikedSongs));
+                }
+                return;
             }
 
-            if (cachedLikedSongs) {
-                setLikedSongIds(new Set(cachedLikedSongs));
-            }
-            return;
+            await refreshUserData();
+        } finally {
+            setIsUserDataReady(true);
         }
-
-        refreshUserData();
     }, [refreshUserData]);
 
     const checkAndUpdatePlaylists = useCallback(async () => {
@@ -251,13 +284,15 @@ export function useNeteaseLibrary({
     }, [refreshUserData, setStatusMsg, t, updateCacheSize, user]);
 
     const handleLogout = useCallback(async () => {
-        localStorage.removeItem('netease_cookie');
-        await clearCache();
-        setUser(null);
-        setPlaylists([]);
-        setLikedSongIds(new Set());
+        try {
+            await neteaseApi.logout();
+        } catch (error) {
+            console.warn('Failed to notify logout endpoint', error);
+        }
+
+        await clearAuthState();
         setStatusMsg({ type: 'info', text: t('status.loggedOut') });
-    }, [setStatusMsg, t]);
+    }, [clearAuthState, setStatusMsg, t]);
 
     useEffect(() => {
         loadUserData();
@@ -278,6 +313,7 @@ export function useNeteaseLibrary({
         playlists,
         likedSongIds,
         isSyncing,
+        isUserDataReady,
         cacheSize,
         refreshUserData,
         updateCacheSize,

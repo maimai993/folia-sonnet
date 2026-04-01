@@ -112,6 +112,8 @@ export interface LocalSong {
   fileHandle?: FileSystemFileHandle; // For re-accessing the file (not persisted, stored in memory)
   duration: number; // milliseconds
   fileSize: number; // bytes
+  fileLastModified?: number; // milliseconds since epoch
+  fileSignature?: string; // Lightweight file identity for incremental scans
   mimeType: string;
   bitrate?: number; // bps
   addedAt: number; // timestamp
@@ -159,6 +161,29 @@ export interface LocalSong {
   embeddedLyricsContent?: string;
   hasEmbeddedTranslationLyrics?: boolean;
   embeddedTranslationLyricsContent?: string;
+}
+
+export interface LocalLibrarySnapshotFile {
+  name: string;
+  relativePath: string;
+  kind: 'audio' | 'lyric' | 'translationLyric' | 'other';
+  size: number;
+  lastModified: number;
+  signature: string;
+}
+
+export interface LocalLibrarySnapshotNode {
+  name: string;
+  relativePath: string;
+  hash: string;
+  files: LocalLibrarySnapshotFile[];
+  children: LocalLibrarySnapshotNode[];
+}
+
+export interface LocalLibrarySnapshot {
+  rootFolderName: string;
+  scannedAt: number;
+  tree: LocalLibrarySnapshotNode;
 }
 
 // Extend SongResult to support local files and Navidrome files

@@ -4,7 +4,7 @@ import { FolderOpen, Music, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
 import { LocalSong } from '../types';
-import { importFolder, matchLyrics, deleteLocalSong, resyncFolder, deleteFolderSongs } from '../services/localMusicService';
+import { importFolder, matchLyrics, deleteLocalSong, resyncFolder, deleteFolderSongs, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 import LyricMatchModal from './LyricMatchModal';
 import LocalPlaylistView from './LocalPlaylistView';
 import Carousel3D from './Carousel3D';
@@ -13,11 +13,12 @@ interface LocalMusicViewProps {
     localSongs: LocalSong[];
     onRefresh: () => void;
     onPlaySong: (song: LocalSong, queue?: LocalSong[]) => void;
+    onAddToQueue?: (song: LocalSong) => void;
     onPlaylistVisibilityChange?: (isOpen: boolean) => void;
     activeRow: 0 | 1;
     setActiveRow: (row: 0 | 1) => void;
-    selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; id?: string; } | null;
-    setSelectedGroup: (group: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; id?: string; } | null) => void;
+    selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; id?: string; isVirtual?: boolean; } | null;
+    setSelectedGroup: (group: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; id?: string; isVirtual?: boolean; } | null) => void;
     onMatchSong?: (song: LocalSong) => void;
     focusedFolderIndex?: number;
     setFocusedFolderIndex?: (index: number) => void;
@@ -31,6 +32,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     localSongs,
     onRefresh,
     onPlaySong,
+    onAddToQueue,
     onPlaylistVisibilityChange,
     activeRow,
     setActiveRow,
@@ -45,8 +47,11 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     isDaylight
 }) => {
     const { t } = useTranslation();
+    const allSongsLabel = t('localMusic.allSongs');
+    const resolvedAllSongsLabel = allSongsLabel === 'localMusic.allSongs' ? '全部歌曲' : allSongsLabel;
 
     const [isImporting, setIsImporting] = useState(false);
+    const [isScanInProgress, setIsScanInProgress] = useState(false);
     const [matchingLyricsFor, setMatchingLyricsFor] = useState<string | null>(null);
     const [showMatchModal, setShowMatchModal] = useState(false);
     const [selectedSong, setSelectedSong] = useState<LocalSong | null>(null);
@@ -74,6 +79,18 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         checkPermissions();
     }, [localSongs]);
 
+    useEffect(() => {
+        const handleScanProgress = (event: Event) => {
+            const customEvent = event as CustomEvent<{
+                active: boolean;
+            }>;
+            setIsScanInProgress(customEvent.detail.active);
+        };
+
+        window.addEventListener(LOCAL_MUSIC_SCAN_PROGRESS_EVENT, handleScanProgress as EventListener);
+        return () => window.removeEventListener(LOCAL_MUSIC_SCAN_PROGRESS_EVENT, handleScanProgress as EventListener);
+    }, []);
+
     const handleRestorePermissions = async () => {
         try {
             const { getDirHandles } = await import('../services/db');
@@ -93,8 +110,6 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     // Navigation State (Lifted to Parent)
     // const [activeRow, setActiveRow] = useState<0 | 1>(0); 
     // const [selectedGroup, setSelectedGroup] = useState<{ type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; } | null>(null);
-
-    const [coverVersion, setCoverVersion] = useState(0);
 
     // Grouping Logic
     const groups = useMemo(() => {
@@ -136,29 +151,15 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             }
         });
 
-        // Helper to determine best cover for a group
-        const getGroupCover = (groupType: 'folder' | 'album', groupName: string, songs: LocalSong[]) => {
-            const prefKey = `local_cover_pref_${groupType}_${groupName}`;
-            const prefId = localStorage.getItem(prefKey);
+        const getGroupCover = (songs: LocalSong[]) => {
+            const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+            const preferredSong = sortedSongs.find(song => song.embeddedCover || song.matchedCoverUrl);
 
-            // 1. User Preference
-            if (prefId) {
-                const prefSong = songs.find(s => s.id === prefId);
-                if (prefSong) {
-                    if (prefSong.embeddedCover) return URL.createObjectURL(prefSong.embeddedCover);
-                    if (prefSong.matchedCoverUrl) return prefSong.matchedCoverUrl;
-                }
+            if (preferredSong?.embeddedCover) {
+                return URL.createObjectURL(preferredSong.embeddedCover);
             }
 
-            // 2. Embedded Cover (First found)
-            const embedded = songs.find(s => s.embeddedCover);
-            if (embedded?.embeddedCover) {
-                return URL.createObjectURL(embedded.embeddedCover);
-            }
-
-            // 3. Matched Cover (First found)
-            const matched = songs.find(s => s.matchedCoverUrl);
-            return matched?.matchedCoverUrl;
+            return preferredSong?.matchedCoverUrl;
         };
 
         // Sort folders alphabetically
@@ -167,10 +168,23 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             name,
             songs,
             type: 'folder' as const,
-            coverUrl: getGroupCover('folder', name, songs),
+            coverUrl: getGroupCover(songs),
             trackCount: songs.length,
             description: t('localMusic.folder')
         })).sort((a, b) => a.name.localeCompare(b.name));
+
+        if (localSongs.length > 0) {
+            folderList.unshift({
+                id: 'folder-__all-songs__',
+                name: resolvedAllSongsLabel,
+                songs: localSongs,
+                type: 'folder' as const,
+                coverUrl: getGroupCover(localSongs),
+                trackCount: localSongs.length,
+                description: t('localMusic.folder'),
+                isVirtual: true
+            });
+        }
 
         // Sort albums
         const albumList = Object.entries(albums).map(([key, songs]) => {
@@ -183,7 +197,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 name,
                 songs,
                 type: 'album' as const,
-                coverUrl: getGroupCover('album', key, songs),
+                coverUrl: getGroupCover(songs),
                 trackCount: songs.length,
                 description: songs[0]?.artist || t('localMusic.unknownArtist'),
                 albumId: representative.matchedAlbumId
@@ -191,15 +205,25 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         }).sort((a, b) => a.name.localeCompare(b.name));
 
         return { folders: folderList, albums: albumList };
-    }, [localSongs, coverVersion, t]);
+    }, [localSongs, resolvedAllSongsLabel, t]);
+
+    const resolvedSelectedGroup = useMemo(() => {
+        if (!selectedGroup) return null;
+
+        const sourceGroups = selectedGroup.type === 'folder' ? groups.folders : groups.albums;
+        return sourceGroups.find(group => group.id === selectedGroup.id) || selectedGroup;
+    }, [groups.albums, groups.folders, selectedGroup]);
 
     const handleFolderImport = async () => {
+        if (isScanInProgress) {
+            return;
+        }
+
         setIsImporting(true);
         try {
             const importedSongs = await importFolder();
             if (importedSongs.length === 0) {
-                console.warn('[LocalMusic] Folder import returned no songs');
-                alert('未导入任何本地音频文件。请查看控制台中的 [LocalMusic] 日志以确认是取消选择、权限拦截，还是目录中没有可识别音频。');
+                console.log('[LocalMusic] Folder import cancelled or no audio files found; skipping notification.');
                 return;
             }
             onRefresh();
@@ -210,6 +234,8 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             setIsImporting(false);
         }
     };
+
+    const importButtonDisabled = isImporting || isScanInProgress;
 
     const handleMatchLyrics = async (song: LocalSong) => {
         setMatchingLyricsFor(song.id);
@@ -236,7 +262,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
 
     // Folder management handlers
     const handleResyncFolder = async () => {
-        if (!selectedGroup || selectedGroup.type !== 'folder') return;
+        if (!selectedGroup || selectedGroup.type !== 'folder' || selectedGroup.isVirtual) return;
 
         try {
             // Re-import the selected folder and its nested children
@@ -255,8 +281,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 console.log(`[LocalMusic] Successfully re-imported ${importedSongs.length} songs`);
             }
 
-            onRefresh(); // Refresh the UI to show updated songs
-            setSelectedGroup(null); // Close the playlist view
+            onRefresh(); // Refresh the UI to show updated songs while keeping the current playlist view open
         } catch (error) {
             console.error('Failed to resync folder:', error);
             alert(t('localMusic.resyncFailed'));
@@ -265,7 +290,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
 
 
     const handleDeleteFolder = async () => {
-        if (!selectedGroup || selectedGroup.type !== 'folder') return;
+        if (!selectedGroup || selectedGroup.type !== 'folder' || selectedGroup.isVirtual) return;
 
         try {
             await deleteFolderSongs(selectedGroup.name);
@@ -304,57 +329,29 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
 
     // Notify parent when playlist view opens/closes
     React.useEffect(() => {
-        onPlaylistVisibilityChange?.(selectedGroup !== null);
-    }, [selectedGroup, onPlaylistVisibilityChange]);
+        onPlaylistVisibilityChange?.(resolvedSelectedGroup !== null);
+    }, [resolvedSelectedGroup, onPlaylistVisibilityChange]);
 
-    if (selectedGroup) {
+    if (resolvedSelectedGroup) {
         return (
             <LocalPlaylistView
-                title={selectedGroup.name}
-                coverUrl={selectedGroup.coverUrl}
-                songs={selectedGroup.songs}
-                groupId={selectedGroup.id}
+                title={resolvedSelectedGroup.name}
+                coverUrl={resolvedSelectedGroup.coverUrl}
+                songs={resolvedSelectedGroup.songs}
                 onBack={() => {
                     setSelectedGroup(null);
                     onPlaylistVisibilityChange?.(false);
                 }}
                 onPlaySong={onPlaySong}
-                isFolderView={selectedGroup.type === 'folder'}
+                onAddToQueue={onAddToQueue}
+                isFolderView={resolvedSelectedGroup.type === 'folder'}
                 allSongs={localSongs}
-                onResync={selectedGroup.type === 'folder' ? handleResyncFolder : undefined}
-                onDelete={selectedGroup.type === 'folder' ? handleDeleteFolder : undefined}
+                onResync={resolvedSelectedGroup.type === 'folder' && !resolvedSelectedGroup.isVirtual ? handleResyncFolder : undefined}
+                onDelete={resolvedSelectedGroup.type === 'folder' && !resolvedSelectedGroup.isVirtual ? handleDeleteFolder : undefined}
                 onMatchSong={onMatchSong}
                 onRefresh={onRefresh}
                 theme={theme}
                 isDaylight={isDaylight}
-                onUpdateCover={() => {
-                    setCoverVersion(v => v + 1);
-                    // Also update the selectedGroup's coverUrl immediately
-                    // so the LocalPlaylistView displays the new cover without a page refresh
-                    if (selectedGroup) {
-                        const groupType = selectedGroup.type;
-                        const groupName = selectedGroup.type === 'folder'
-                            ? selectedGroup.name
-                            : selectedGroup.id?.substring(6) || selectedGroup.name; // album-{key} -> key
-                        const prefKey = `local_cover_pref_${groupType}_${groupName}`;
-                        const prefId = localStorage.getItem(prefKey);
-
-                        if (prefId) {
-                            const prefSong = selectedGroup.songs.find(s => s.id === prefId);
-                            if (prefSong) {
-                                let newCoverUrl: string | undefined;
-                                if (prefSong.embeddedCover) {
-                                    newCoverUrl = URL.createObjectURL(prefSong.embeddedCover);
-                                } else if (prefSong.matchedCoverUrl) {
-                                    newCoverUrl = prefSong.matchedCoverUrl;
-                                }
-                                if (newCoverUrl) {
-                                    setSelectedGroup({ ...selectedGroup, coverUrl: newCoverUrl });
-                                }
-                            }
-                        }
-                    }
-                }}
             />
         );
     }
@@ -391,13 +388,17 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                         <p className="text-lg">{t('localMusic.noLocalMusic')}</p>
                         <button
                             onClick={handleFolderImport}
-                            disabled={isImporting}
-                            className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-sm mt-4 flex items-center gap-2"
+                            disabled={importButtonDisabled}
+                            className={`px-6 py-3 rounded-lg transition-colors text-sm mt-4 flex items-center gap-2 ${
+                                importButtonDisabled
+                                    ? 'bg-white/5 text-white/50 cursor-not-allowed'
+                                    : 'bg-white/10 hover:bg-white/20'
+                            }`}
                         >
-                            {isImporting ? (
+                            {isImporting || isScanInProgress ? (
                                 <>
                                     <Loader2 size={16} className="animate-spin" />
-                                    {t('localMusic.importing')}
+                                    {isScanInProgress ? '扫描中' : t('localMusic.importing')}
                                 </>
                             ) : (
                                 <>
@@ -427,11 +428,15 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                                         {/* Import Button */}
                                         <button
                                             onClick={handleFolderImport}
-                                            className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-                                            disabled={isImporting}
-                                            title="Import Folder"
+                                            className={`p-1.5 rounded-full transition-colors ${
+                                                importButtonDisabled
+                                                    ? 'bg-white/5 text-white/45 cursor-not-allowed'
+                                                    : 'bg-white/10 hover:bg-white/20'
+                                            }`}
+                                            disabled={importButtonDisabled}
+                                            title={isScanInProgress ? '正在扫描媒体库' : 'Import Folder'}
                                         >
-                                            {isImporting ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
+                                            {importButtonDisabled ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
                                         </button>
 
                                         <span className="opacity-30">/</span>

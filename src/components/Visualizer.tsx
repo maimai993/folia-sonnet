@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { ChevronLeft } from 'lucide-react';
 import { Line, Theme, Word as WordType, AudioBands } from '../types';
 import GeometricBackground from './GeometricBackground';
 import FluidBackground from './FluidBackground';
@@ -18,6 +19,7 @@ interface VisualizerProps {
     useCoverColorBg?: boolean;
     seed?: string | number; // Added seed for geometric bg
     backgroundOpacity?: number;
+    onBack?: () => void;
 }
 
 interface WordLayoutConfig {
@@ -145,8 +147,9 @@ const Word: React.FC<{
     );
 };
 
-const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ currentTime, currentLineIndex, lines, theme, audioPower, audioBands, showText = true, coverUrl, useCoverColorBg = false, seed, staticMode = false, backgroundOpacity = 0.75 }) => {
+const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ currentTime, currentLineIndex, lines, theme, audioPower, audioBands, showText = true, coverUrl, useCoverColorBg = false, seed, staticMode = false, backgroundOpacity = 0.75, onBack }) => {
     const { t } = useTranslation();
+    const [showBackButton, setShowBackButton] = useState(false);
 
     // Read current time directly from MotionValue (no state, no re-renders)
     const currentTimeValue = currentTime.get();
@@ -357,7 +360,40 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
         <div
             className={`w-full h-full flex flex-col items-center justify-center overflow-hidden relative ${fontFamily} transition-colors duration-1000`}
             style={{ backgroundColor: 'transparent' }} // Main bg transparent to show fluid
+            onMouseMove={(event) => {
+                const nearBackArea = event.clientX <= 120 && event.clientY <= 120;
+                if (nearBackArea !== showBackButton) {
+                    setShowBackButton(nearBackArea);
+                }
+            }}
+            onMouseLeave={() => {
+                if (showBackButton) {
+                    setShowBackButton(false);
+                }
+            }}
         >
+            {onBack && (
+                <motion.button
+                    type="button"
+                    aria-label={t('ui.backToHome')}
+                    initial={false}
+                    animate={{
+                        opacity: showBackButton ? 1 : 0,
+                        scale: showBackButton ? 1 : 0.92,
+                        x: showBackButton ? 0 : -6,
+                    }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onBack();
+                    }}
+                    className="absolute top-6 left-6 z-30 h-10 w-10 rounded-full flex items-center justify-center transition-colors backdrop-blur-md bg-black/20 hover:bg-white/10 text-white/60 pointer-events-auto"
+                    style={{ pointerEvents: showBackButton ? 'auto' : 'none' }}
+                >
+                    <ChevronLeft size={20} />
+                </motion.button>
+            )}
+
             <AnimatePresence>
                 {useCoverColorBg && !staticMode && (
                     <motion.div

@@ -6,7 +6,7 @@ import { LyricParserFactory } from './utils/lyrics/LyricParserFactory';
 import { detectChorusLines } from './utils/chorusDetector';
 import { saveSessionData, getSessionData, getFromCache, saveToCache, getLocalSongs } from './services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from './services/coverCache';
-import { getAudioFromLocalSong } from './services/localMusicService';
+import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from './services/localMusicService';
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from './services/onlinePlayback';
 import { buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong } from './services/playbackAdapters';
 import { getPrefetchedData, prefetchNearbySongs, invalidateAndRefetch } from './services/prefetchService';
@@ -28,6 +28,11 @@ import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
 
+const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
+const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
+const LOCAL_PREWARM_DELAY_MS = 1000;
+const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
+
 // Default Theme
 // 午夜墨染
 const DEFAULT_THEME: Theme = {
@@ -46,7 +51,7 @@ const DAYLIGHT_THEME: Theme = {
     backgroundColor: "#f5f5f4", // stone-100 (Pearl White-ish)
     primaryColor: "#1c1917", // stone-900
     accentColor: "#ea580c", // orange-600
-    secondaryColor: "#78716c", // stone-500
+    secondaryColor: "#44403c", // stone-700
     fontStyle: "sans",
     animationIntensity: "normal"
 };
@@ -126,14 +131,19 @@ export default function App() {
     const localFileBlobsRef = useRef<Map<string, string>>(new Map()); // id -> blob URL
 
     // Navigation Persistence State (Lifted from Home/LocalMusicView)
-    const [homeViewTab, setHomeViewTab] = useState<'playlist' | 'local' | 'albums' | 'navidrome' | 'radio'>('playlist');
+    const [homeViewTab, setHomeViewTab] = useState<'playlist' | 'local' | 'albums' | 'navidrome' | 'radio'>(() => {
+        const savedTab = localStorage.getItem(LAST_HOME_VIEW_TAB_KEY);
+        return savedTab === 'playlist' || savedTab === 'local' || savedTab === 'albums' || savedTab === 'navidrome' || savedTab === 'radio'
+            ? savedTab
+            : 'playlist';
+    });
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [focusedFavoriteAlbumIndex, setFocusedFavoriteAlbumIndex] = useState(0);
     const [focusedRadioIndex, setFocusedRadioIndex] = useState(0);
     const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
     const [localMusicState, setLocalMusicState] = useState<{
         activeRow: 0 | 1;
-        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; } | null;
+        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; isVirtual?: boolean; } | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
     }>({
@@ -249,6 +259,20 @@ export default function App() {
         loadLocalSongs();
     }, []);
 
+    const handleSetHomeViewTab = useCallback((tab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio') => {
+        localStorage.setItem(LAST_HOME_VIEW_TAB_KEY, tab);
+        setHomeViewTab(tab);
+    }, []);
+
+    useEffect(() => {
+        const handleLocalMusicUpdated = () => {
+            loadLocalSongs();
+        };
+
+        window.addEventListener(LOCAL_MUSIC_UPDATED_EVENT, handleLocalMusicUpdated);
+        return () => window.removeEventListener(LOCAL_MUSIC_UPDATED_EVENT, handleLocalMusicUpdated);
+    }, []);
+
     // Revoke blob URLs on unmount to prevent leaks
     useEffect(() => {
         return () => {
@@ -324,6 +348,7 @@ export default function App() {
                             // Try to get audio from the file handle
                             const blobUrl = await getAudioFromLocalSong(songToRestore);
                             if (blobUrl) {
+                                songToRestore = await ensureLocalSongEmbeddedCover(songToRestore);
                                 if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
                                 blobUrlRef.current = blobUrl;
                                 setAudioSrc(blobUrl);
@@ -474,30 +499,28 @@ export default function App() {
             setStatusMsg({ type: 'info', text: '正在匹配歌词和封面...' });
             try {
                 const { matchLyrics } = await import('./services/localMusicService');
-                const matchedLyrics = await matchLyrics(localSong);
+                await matchLyrics(localSong);
 
-                if (matchedLyrics) {
-                    // Reload local song to get updated data from DB
-                    const updatedSongs = await getLocalSongs();
-                    const found = updatedSongs.find(s => s.id === localSong.id);
+                // Reload local song to pick up cover-only or metadata-only matches as well.
+                const updatedSongs = await getLocalSongs();
+                const found = updatedSongs.find(s => s.id === localSong.id);
 
-                    if (found) {
-                        updatedLocalSong = found;
+                if (found) {
+                    updatedLocalSong = found;
 
-                        // Get full matched song details for UI
-                        if (found.matchedSongId) {
-                            try {
-                                const searchRes = await neteaseApi.cloudSearch(
-                                    localSong.artist
-                                        ? `${localSong.artist} ${localSong.title}`
-                                        : localSong.title || localSong.fileName
-                                );
-                                if (searchRes.result?.songs) {
-                                    matchedSongResult = searchRes.result.songs.find(s => s.id === found.matchedSongId) || searchRes.result.songs[0];
-                                }
-                            } catch (e) {
-                                console.warn('Failed to get matched song details:', e);
+                    // Get full matched song details for UI
+                    if (found.matchedSongId) {
+                        try {
+                            const searchRes = await neteaseApi.cloudSearch(
+                                localSong.artist
+                                    ? `${localSong.artist} ${localSong.title}`
+                                    : localSong.title || localSong.fileName
+                            );
+                            if (searchRes.result?.songs) {
+                                matchedSongResult = searchRes.result.songs.find(s => s.id === found.matchedSongId) || searchRes.result.songs[0];
                             }
+                        } catch (e) {
+                            console.warn('Failed to get matched song details:', e);
                         }
                     }
                 }
@@ -552,6 +575,61 @@ export default function App() {
         return { lyrics, coverUrl, unifiedSong };
     };
 
+    const handleLocalQueueAdd = async (localSong: LocalSong) => {
+        const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
+        const { unifiedSong } = await resolveLocalMetadataUI(preparedLocalSong, null);
+        const exists = playQueue.some(song => song.id === unifiedSong.id);
+        const nextQueue = exists ? playQueue : [...playQueue, unifiedSong];
+
+        setPlayQueue(nextQueue);
+        saveToCache('last_queue', nextQueue);
+        setStatusMsg({ type: 'success', text: '已添加到播放队列' });
+    };
+
+    const prewarmLocalSongMetadata = async (localSong: LocalSong) => {
+        const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
+        Object.assign(localSong, preparedLocalSong);
+
+        const needsLyricsMatch = !localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics && !localSong.matchedLyrics;
+        const needsCoverMatch = !localSong.embeddedCover && !localSong.matchedCoverUrl;
+
+        if ((needsLyricsMatch || needsCoverMatch) && !localSong.noAutoMatch) {
+            try {
+                const { matchLyrics } = await import('./services/localMusicService');
+                await matchLyrics(localSong);
+            } catch (error) {
+                console.warn('[LocalPrewarm] Failed to prewarm local song metadata:', error);
+            }
+        }
+    };
+
+    const prewarmNearbyLocalSongs = (currentSong: LocalSong, queue: LocalSong[] = []) => {
+        if (queue.length === 0) {
+            return;
+        }
+
+        const currentIndex = queue.findIndex(song => song.id === currentSong.id);
+        if (currentIndex === -1) {
+            return;
+        }
+
+        const nearbySongs = LOCAL_PREWARM_OFFSETS
+            .map(offset => queue[currentIndex + offset])
+            .filter((song): song is LocalSong => Boolean(song));
+
+        if (nearbySongs.length === 0) {
+            return;
+        }
+
+        window.setTimeout(() => {
+            void (async () => {
+                for (const nearbySong of nearbySongs) {
+                    await prewarmLocalSongMetadata(nearbySong);
+                }
+            })();
+        }, LOCAL_PREWARM_DELAY_MS);
+    };
+
     const onPlayLocalSong = async (localSong: LocalSong, queue: LocalSong[] = []) => {
         // Get audio blob from fileHandle first
         const blobUrl = await getAudioFromLocalSong(localSong);
@@ -563,8 +641,8 @@ export default function App() {
             return;
         }
 
-        // --- Instant Playback with currently available local metadata ---
-        const initialMeta = await resolveLocalMetadataUI(localSong, null);
+        const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
+        const initialMeta = await resolveLocalMetadataUI(preparedLocalSong, null);
 
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = blobUrl;
@@ -579,7 +657,7 @@ export default function App() {
         setAudioSrc(blobUrl);
 
         if (initialMeta.coverUrl) {
-            loadCachedOrFetchCover(`cover_local_${localSong.id}`, initialMeta.coverUrl).then(res => {
+            loadCachedOrFetchCover(`cover_local_${preparedLocalSong.id}`, initialMeta.coverUrl).then(res => {
                 if (currentSongRef.current === initialMeta.unifiedSong.id) setCachedCoverUrl(res);
             });
         } else {
@@ -601,9 +679,10 @@ export default function App() {
         navigateToPlayer();
         setPlayerState(PlayerState.IDLE);
         setStatusMsg({ type: 'success', text: '本地音乐已加载' });
+        prewarmNearbyLocalSongs(preparedLocalSong, queue);
 
         // --- Background Auto-Match ---
-        handleLocalSongMatch(localSong).then(async ({ updatedLocalSong, matchedSongResult }) => {
+        handleLocalSongMatch(preparedLocalSong).then(async ({ updatedLocalSong, matchedSongResult }) => {
             if (currentSongRef.current !== initialMeta.unifiedSong.id) return; // User skipped track
             
             const updatedMeta = await resolveLocalMetadataUI(updatedLocalSong, matchedSongResult);
@@ -907,8 +986,13 @@ export default function App() {
 
                 // 3. Instant Local Metadata + Background Auto-Match
                 if (currentLocalData) {
+                    currentLocalData = await ensureLocalSongEmbeddedCover(currentLocalData);
                     const initialMeta = await resolveLocalMetadataUI(currentLocalData, null);
                     setCurrentSong(initialMeta.unifiedSong);
+                    const localQueueContext = playQueue
+                        .map(queuedSong => queuedSong.localData)
+                        .filter((queuedSong): queuedSong is LocalSong => Boolean(queuedSong));
+                    prewarmNearbyLocalSongs(currentLocalData, localQueueContext);
                     
                     if (initialMeta.coverUrl) {
                         loadCachedOrFetchCover(`cover_local_${currentLocalData.id}`, initialMeta.coverUrl).then(res => {
@@ -1717,6 +1801,7 @@ export default function App() {
                     seed={currentSong?.id}
                     staticMode={staticMode}
                     backgroundOpacity={backgroundOpacity}
+                    onBack={navigateToHome}
                 />
             </div>
 
@@ -1743,11 +1828,12 @@ export default function App() {
                             onSelectPlaylist={handlePlaylistSelect}
                             onSelectAlbum={handleAlbumSelect}
                             onSelectArtist={handleArtistSelect}
-                            localSongs={localSongs}
-                            onRefreshLocalSongs={onRefreshLocalSongs}
-                            onPlayLocalSong={onPlayLocalSong}
-                            viewTab={homeViewTab}
-                            setViewTab={setHomeViewTab}
+                                                localSongs={localSongs}
+                                                onRefreshLocalSongs={onRefreshLocalSongs}
+                                                onPlayLocalSong={onPlayLocalSong}
+                                                onAddLocalSongToQueue={handleLocalQueueAdd}
+                                                viewTab={homeViewTab}
+                            setViewTab={handleSetHomeViewTab}
                             focusedPlaylistIndex={focusedPlaylistIndex}
                             setFocusedPlaylistIndex={setFocusedPlaylistIndex}
                             focusedFavoriteAlbumIndex={focusedFavoriteAlbumIndex}

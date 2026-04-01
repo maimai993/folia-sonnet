@@ -68,6 +68,10 @@ const toHttps = (url?: string) => {
 
 export const neteaseApi = {
   // --- Login ---
+  logout: async () => {
+    return fetchWithCreds(`/logout`);
+  },
+
   getQrKey: async () => {
     return fetchWithCreds(`/login/qr/key`);
   },

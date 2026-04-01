@@ -1,5 +1,5 @@
 
-import { LyricData, Theme, NeteaseUser, NeteasePlaylist, SongResult, LocalSong } from "../types";
+import { LyricData, Theme, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, LocalLibrarySnapshot } from "../types";
 
 const DB_NAME = 'KineticPlayerDB';
 const DB_VERSION = 5; // Incremented version to ensure local_music store is created
@@ -103,6 +103,11 @@ const openDB = (): Promise<IDBDatabase> => {
 };
 
 export { openDB };
+
+const sanitizeLocalSongForStorage = (song: LocalSong): LocalSong => {
+  const { fileHandle, ...persistedSong } = song;
+  return persistedSong;
+};
 
 export const saveSessionData = async (key: keyof SessionData, value: any): Promise<void> => {
   try {
@@ -499,15 +504,34 @@ export const clearCacheByCategory = async (category: 'playlist' | 'lyrics' | 'co
 export const saveLocalSong = async (song: LocalSong): Promise<void> => {
   try {
     const db = await openDB();
+    const persistedSong = sanitizeLocalSongForStorage(song);
     return new Promise((resolve, reject) => {
       const tx = db.transaction([LOCAL_MUSIC_STORE], 'readwrite');
       const store = tx.objectStore(LOCAL_MUSIC_STORE);
-      store.put(song);
+      store.put(persistedSong);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
   } catch (e) {
     console.error("Failed to save local song", e);
+  }
+};
+
+export const saveLocalSongs = async (songs: LocalSong[]): Promise<void> => {
+  if (songs.length === 0) return;
+
+  try {
+    const db = await openDB();
+    const persistedSongs = songs.map(sanitizeLocalSongForStorage);
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([LOCAL_MUSIC_STORE], 'readwrite');
+      const store = tx.objectStore(LOCAL_MUSIC_STORE);
+      persistedSongs.forEach(song => store.put(song));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.error("Failed to save local songs", e);
   }
 };
 
@@ -539,6 +563,23 @@ export const deleteLocalSong = async (id: string): Promise<void> => {
     });
   } catch (e) {
     console.error("Failed to delete local song", e);
+  }
+};
+
+export const deleteLocalSongs = async (ids: string[]): Promise<void> => {
+  if (ids.length === 0) return;
+
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([LOCAL_MUSIC_STORE], 'readwrite');
+      const store = tx.objectStore(LOCAL_MUSIC_STORE);
+      ids.forEach(id => store.delete(id));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.error("Failed to delete local songs", e);
   }
 };
 
@@ -580,4 +621,29 @@ export const deleteDirHandle = async (rootFolderName: string): Promise<void> => 
 
   delete handles[rootFolderName];
   await saveDirHandles(handles);
+};
+
+const getLocalSnapshotCacheKey = (rootFolderName: string) => `local_snapshot_${rootFolderName}`;
+
+export const saveLocalLibrarySnapshot = async (snapshot: LocalLibrarySnapshot): Promise<void> => {
+  await saveToCache(getLocalSnapshotCacheKey(snapshot.rootFolderName), snapshot);
+};
+
+export const getLocalLibrarySnapshot = async (rootFolderName: string): Promise<LocalLibrarySnapshot | null> => {
+  return await getFromCache<LocalLibrarySnapshot>(getLocalSnapshotCacheKey(rootFolderName));
+};
+
+export const deleteLocalLibrarySnapshot = async (rootFolderName: string): Promise<void> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([METADATA_CACHE_STORE], 'readwrite');
+      const store = tx.objectStore(METADATA_CACHE_STORE);
+      store.delete(getLocalSnapshotCacheKey(rootFolderName));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.error("Failed to delete local library snapshot", e);
+  }
 };

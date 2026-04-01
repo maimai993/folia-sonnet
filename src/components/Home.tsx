@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle } from 'lucide-react';
+import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
 import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong } from '../types';
 import { NavidromeSong } from '../types/navidrome';
 import { isNavidromeEnabled, getNavidromeConfig, navidromeApi } from '../services/navidromeService';
+import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 import PlaylistView from './PlaylistView';
 import LocalMusicView from './LocalMusicView';
 import NavidromeMusicView from './NavidromeMusicView';
@@ -31,6 +32,7 @@ interface HomeProps {
     localSongs: LocalSong[];
     onRefreshLocalSongs: () => void;
     onPlayLocalSong: (song: LocalSong, queue?: LocalSong[]) => void;
+    onAddLocalSongToQueue?: (song: LocalSong) => void;
     viewTab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio';
     setViewTab: (tab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio') => void;
     focusedPlaylistIndex?: number;
@@ -41,13 +43,13 @@ interface HomeProps {
     setFocusedRadioIndex?: (index: number) => void;
     localMusicState: {
         activeRow: 0 | 1;
-        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; } | null;
+        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; isVirtual?: boolean; } | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
     };
     setLocalMusicState: React.Dispatch<React.SetStateAction<{
         activeRow: 0 | 1;
-        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; } | null;
+        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; isVirtual?: boolean; } | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
     }>>;
@@ -130,6 +132,7 @@ const Home: React.FC<HomeProps> = ({
     localSongs,
     onRefreshLocalSongs,
     onPlayLocalSong,
+    onAddLocalSongToQueue,
     viewTab,
     setViewTab,
     focusedPlaylistIndex = 0,
@@ -156,6 +159,8 @@ const Home: React.FC<HomeProps> = ({
     isDaylight
 }) => {
     const { t } = useTranslation();
+    const hasNeteaseLogin = Boolean(user);
+    const isNeteaseTab = viewTab === 'playlist' || viewTab === 'albums' || viewTab === 'radio';
     // const isDaylight = theme.name === 'Daylight Default'; // Deprecated, passed as prop
 
     // Style Variants
@@ -173,6 +178,16 @@ const Home: React.FC<HomeProps> = ({
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [navidromeEnabled, setNavidromeEnabled] = useState(isNavidromeEnabled());
+    const [scanProgress, setScanProgress] = useState<{
+        active: boolean;
+        folderName: string;
+        totalSongs: number;
+        completedSongs: number;
+    } | null>(null);
+    const [scanDetailsExpanded, setScanDetailsExpanded] = useState(false);
+    const scanProgressPercent = scanProgress?.totalSongs
+        ? Math.min(100, Math.round((scanProgress.completedSongs / scanProgress.totalSongs) * 100))
+        : 0;
 
     const handleToggleNavidrome = (enabled: boolean) => {
         setNavidromeEnabled(enabled);
@@ -357,7 +372,7 @@ const Home: React.FC<HomeProps> = ({
     const handleSearch = async (e?: React.FormEvent) => {
         e?.preventDefault();
         const query = searchQuery.trim();
-        if (!query) return;
+        if (!query || (!hasNeteaseLogin && isNeteaseTab)) return;
 
         setIsSearching(true);
         setSearchResults(null); // Clear previous results while loading
@@ -436,6 +451,24 @@ const Home: React.FC<HomeProps> = ({
         };
     }, []);
 
+    useEffect(() => {
+        const handleScanProgress = (event: Event) => {
+            const customEvent = event as CustomEvent<{
+                active: boolean;
+                folderName: string;
+                totalSongs: number;
+                completedSongs: number;
+            }>;
+            setScanProgress(customEvent.detail);
+            if (!customEvent.detail.active) {
+                setScanDetailsExpanded(false);
+            }
+        };
+
+        window.addEventListener(LOCAL_MUSIC_SCAN_PROGRESS_EVENT, handleScanProgress as EventListener);
+        return () => window.removeEventListener(LOCAL_MUSIC_SCAN_PROGRESS_EVENT, handleScanProgress as EventListener);
+    }, []);
+
     return (
         <AnimatePresence>
             {selectedPlaylist ? (
@@ -480,62 +513,119 @@ const Home: React.FC<HomeProps> = ({
                                 >
                                     <HelpCircle size={20} style={{ color: 'var(--text-primary)' }} />
                                 </button>
+                                {scanProgress?.active && (
+                                    <div
+                                        className="relative ml-3"
+                                        onMouseEnter={() => setScanDetailsExpanded(true)}
+                                        onMouseLeave={() => setScanDetailsExpanded(false)}
+                                    >
+                                        <button
+                                            onClick={() => setScanDetailsExpanded(prev => !prev)}
+                                            className="relative rounded-full p-px transition-all"
+                                            style={{
+                                                background: `conic-gradient(from -90deg, ${isDaylight ? (theme?.accentColor || 'rgba(17,24,39,0.92)') : 'rgba(255,255,255,0.98)'} 0deg ${scanProgressPercent * 3.6}deg, ${isDaylight ? 'rgba(24,24,27,0.16)' : 'rgba(255,255,255,0.14)'} ${scanProgressPercent * 3.6}deg 360deg)`,
+                                                borderRadius: '999px'
+                                            }}
+                                            title="查看扫描进度"
+                                        >
+                                            <div
+                                                className={`relative flex items-center justify-center min-w-[56px] h-7 px-2.5 rounded-full backdrop-blur-md ${
+                                                    isDaylight ? 'bg-white/95 text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-zinc-950/92 text-zinc-100'
+                                                }`}
+                                            >
+                                                <span className="relative z-10 text-[10px] font-semibold tabular-nums leading-none">
+                                                    {scanProgressPercent}%
+                                                </span>
+                                            </div>
+                                        </button>
+                                        <AnimatePresence>
+                                            {scanDetailsExpanded && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: -6 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, y: -6 }}
+                                                    className={`absolute left-0 top-full mt-2 w-72 p-4 rounded-2xl border backdrop-blur-xl shadow-xl ${
+                                                        isDaylight ? 'bg-white/85 border-black/10 text-zinc-800' : 'bg-black/60 border-white/10 text-zinc-100'
+                                                    }`}
+                                                >
+                                                    <div className="text-sm font-semibold truncate">
+                                                        正在扫描 {scanProgress.folderName}
+                                                    </div>
+                                                    <div className={`text-xs mt-1 ${isDaylight ? 'text-zinc-600' : 'text-zinc-300/70'}`}>
+                                                        正在后台提取元数据与封面，媒体库较大时会持续一段时间。
+                                                    </div>
+                                                    <div className="mt-3 flex items-center justify-between text-xs font-mono">
+                                                        <span>进度</span>
+                                                        <span>{Math.min(scanProgress.completedSongs, scanProgress.totalSongs)} / {scanProgress.totalSongs}</span>
+                                                    </div>
+                                                    <div className={`mt-2 w-full h-2 rounded-full overflow-hidden ${isDaylight ? 'bg-black/10' : 'bg-white/10'}`}>
+                                                        <div
+                                                            className="h-full rounded-full transition-[width] duration-300 ease-out"
+                                                            style={{
+                                                                width: `${scanProgress.totalSongs > 0 ? (scanProgress.completedSongs / scanProgress.totalSongs) * 100 : 0}%`,
+                                                                backgroundColor: theme?.accentColor || 'var(--text-primary)'
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Center: Tab Switcher */}
                             <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1">
-                                {user && (
-                                    <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
-                                        <div className={`grid ${navidromeEnabled ? 'grid-cols-5' : 'grid-cols-4 transition-all duration-300'}`}>
-                                            <div
-                                                className="absolute top-1 bottom-1 rounded-full bg-white shadow-sm transition-all duration-300 ease-spring"
-                                                style={{
-                                                    left: viewTab === 'playlist' ? '4px'
-                                                        : viewTab === 'radio' ? (navidromeEnabled ? 'calc(20% + 1px)' : 'calc(25% + 1px)')
-                                                        : viewTab === 'albums' ? (navidromeEnabled ? 'calc(40% + 1px)' : 'calc(50% + 1px)')
-                                                            : viewTab === 'local' ? (navidromeEnabled ? 'calc(60%)' : 'calc(75% - 1px)')
-                                                                : 'calc(80% - 1px)',
-                                                    width: navidromeEnabled ? 'calc(20% - 2px)' : 'calc(25% - 2px)'
-                                                }}
-                                            />
+                                <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
+                                    <div className={`grid ${navidromeEnabled ? 'grid-cols-5' : 'grid-cols-4 transition-all duration-300'}`}>
+                                        <div
+                                            className="absolute top-1 bottom-1 rounded-full bg-white shadow-sm transition-all duration-300 ease-spring"
+                                            style={{
+                                                left: viewTab === 'playlist' ? '4px'
+                                                    : viewTab === 'radio' ? (navidromeEnabled ? 'calc(20% + 1px)' : 'calc(25% + 1px)')
+                                                    : viewTab === 'albums' ? (navidromeEnabled ? 'calc(40% + 1px)' : 'calc(50% + 1px)')
+                                                        : viewTab === 'local' ? (navidromeEnabled ? 'calc(60%)' : 'calc(75% - 1px)')
+                                                            : 'calc(80% - 1px)',
+                                                width: navidromeEnabled ? 'calc(20% - 2px)' : 'calc(25% - 2px)'
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => setViewTab('playlist')}
+                                            className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'playlist' ? activeTabBg : navPillInactiveText}`}
+                                        >
+                                            {t('home.playlists')}
+                                        </button>
+                                        <button
+                                            onClick={() => setViewTab('radio')}
+                                            className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'radio' ? activeTabBg : navPillInactiveText}`}
+                                        >
+                                            {t('home.radio') || '电台'}
+                                        </button>
+                                        <button
+                                            onClick={() => setViewTab('albums')}
+                                            className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'albums' ? activeTabBg : navPillInactiveText
+                                                }`}
+                                        >
+                                            {t('home.albums') || '专辑'}
+                                        </button>
+                                        <button
+                                            onClick={() => setViewTab('local')}
+                                            className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'local' ? activeTabBg : navPillInactiveText
+                                                }`}
+                                        >
+                                            {t('localMusic.folder')}
+                                        </button>
+                                        {navidromeEnabled && (
                                             <button
-                                                onClick={() => setViewTab('playlist')}
-                                                className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'playlist' ? activeTabBg : navPillInactiveText}`}
-                                            >
-                                                {t('home.playlists')}
-                                            </button>
-                                            <button
-                                                onClick={() => setViewTab('radio')}
-                                                className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'radio' ? activeTabBg : navPillInactiveText}`}
-                                            >
-                                                {t('home.radio') || '电台'}
-                                            </button>
-                                            <button
-                                                onClick={() => setViewTab('albums')}
-                                                className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'albums' ? activeTabBg : navPillInactiveText
+                                                onClick={() => setViewTab('navidrome')}
+                                                className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'navidrome' ? activeTabBg : navPillInactiveText
                                                     }`}
                                             >
-                                                {t('home.albums') || '专辑'}
+                                                {t('navidrome.title') || 'Navidrome'}
                                             </button>
-                                            <button
-                                                onClick={() => setViewTab('local')}
-                                                className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'local' ? activeTabBg : navPillInactiveText
-                                                    }`}
-                                            >
-                                                {t('localMusic.folder')}
-                                            </button>
-                                            {navidromeEnabled && (
-                                                <button
-                                                    onClick={() => setViewTab('navidrome')}
-                                                    className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'navidrome' ? activeTabBg : navPillInactiveText
-                                                        }`}
-                                                >
-                                                    {t('navidrome.title') || 'Navidrome'}
-                                                </button>
-                                            )}
-                                        </div>
+                                        )}
                                     </div>
-                                )}
+                                </div>
                             </div>
 
                             {/* Right: Search Bar */}
@@ -557,8 +647,9 @@ const Home: React.FC<HomeProps> = ({
                                         placeholder={viewTab === 'local' ? t('home.searchLocal') : viewTab === 'navidrome' ? t('home.searchNavidrome') : t('home.searchDatabase')}
                                         value={searchQuery}
                                         onChange={e => setSearchQuery(e.target.value)}
+                                        disabled={!hasNeteaseLogin && isNeteaseTab}
 
-                                        className={`w-full ${inputBg} border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-white/20 transition-all placeholder:text-current placeholder:opacity-40`}
+                                        className={`w-full ${inputBg} border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-white/20 transition-all placeholder:text-current placeholder:opacity-40 disabled:opacity-40 disabled:cursor-not-allowed`}
                                         style={{ color: 'var(--text-primary)' }}
                                     />
                                 </form>
@@ -568,13 +659,13 @@ const Home: React.FC<HomeProps> = ({
 
                     {/* Main Content Area */}
                     <div className="flex-1 flex flex-col items-center justify-center relative">
-                        {!user ? (
+                        {!hasNeteaseLogin && isNeteaseTab ? (
                             <div className="flex flex-col items-center justify-center space-y-6">
                                 <div className={`w-24 h-24 rounded-3xl ${cardBg} border border-white/10 flex items-center justify-center backdrop-blur-md`}>
                                     <User size={40} className="opacity-20" />
                                 </div>
                                 <h2 className="text-3xl font-bold opacity-80">{t('home.welcomeBack')}</h2>
-                                <p className="opacity-40 text-sm">{t('home.pleaseLogin')}</p>
+                                <p className="opacity-40 text-sm">{t('home.loginPrompt')}</p>
                                 <button
                                     onClick={initLogin}
                                     className="px-8 py-3 bg-white text-black rounded-full font-bold text-sm hover:scale-105 transition-transform"
@@ -680,6 +771,7 @@ const Home: React.FC<HomeProps> = ({
                                                 localSongs={localSongs}
                                                 onRefresh={onRefreshLocalSongs}
                                                 onPlaySong={onPlayLocalSong}
+                                                onAddToQueue={onAddLocalSongToQueue}
                                                 onPlaylistVisibilityChange={setIsLocalPlaylistOpen}
                                                 activeRow={localMusicState.activeRow}
                                                 setActiveRow={(row) => setLocalMusicState(prev => ({ ...prev, activeRow: row }))}
