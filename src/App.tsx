@@ -6,7 +6,7 @@ import { LyricParserFactory } from './utils/lyrics/LyricParserFactory';
 import { detectChorusLines } from './utils/chorusDetector';
 import { saveSessionData, getSessionData, getFromCache, saveToCache, getLocalSongs } from './services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from './services/coverCache';
-import { getAudioFromLocalSong } from './services/localMusicService';
+import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from './services/localMusicService';
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from './services/onlinePlayback';
 import { buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong } from './services/playbackAdapters';
 import { getPrefetchedData, prefetchNearbySongs, invalidateAndRefetch } from './services/prefetchService';
@@ -335,6 +335,7 @@ export default function App() {
                             // Try to get audio from the file handle
                             const blobUrl = await getAudioFromLocalSong(songToRestore);
                             if (blobUrl) {
+                                songToRestore = await ensureLocalSongEmbeddedCover(songToRestore);
                                 if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
                                 blobUrlRef.current = blobUrl;
                                 setAudioSrc(blobUrl);
@@ -485,30 +486,28 @@ export default function App() {
             setStatusMsg({ type: 'info', text: '正在匹配歌词和封面...' });
             try {
                 const { matchLyrics } = await import('./services/localMusicService');
-                const matchedLyrics = await matchLyrics(localSong);
+                await matchLyrics(localSong);
 
-                if (matchedLyrics) {
-                    // Reload local song to get updated data from DB
-                    const updatedSongs = await getLocalSongs();
-                    const found = updatedSongs.find(s => s.id === localSong.id);
+                // Reload local song to pick up cover-only or metadata-only matches as well.
+                const updatedSongs = await getLocalSongs();
+                const found = updatedSongs.find(s => s.id === localSong.id);
 
-                    if (found) {
-                        updatedLocalSong = found;
+                if (found) {
+                    updatedLocalSong = found;
 
-                        // Get full matched song details for UI
-                        if (found.matchedSongId) {
-                            try {
-                                const searchRes = await neteaseApi.cloudSearch(
-                                    localSong.artist
-                                        ? `${localSong.artist} ${localSong.title}`
-                                        : localSong.title || localSong.fileName
-                                );
-                                if (searchRes.result?.songs) {
-                                    matchedSongResult = searchRes.result.songs.find(s => s.id === found.matchedSongId) || searchRes.result.songs[0];
-                                }
-                            } catch (e) {
-                                console.warn('Failed to get matched song details:', e);
+                    // Get full matched song details for UI
+                    if (found.matchedSongId) {
+                        try {
+                            const searchRes = await neteaseApi.cloudSearch(
+                                localSong.artist
+                                    ? `${localSong.artist} ${localSong.title}`
+                                    : localSong.title || localSong.fileName
+                            );
+                            if (searchRes.result?.songs) {
+                                matchedSongResult = searchRes.result.songs.find(s => s.id === found.matchedSongId) || searchRes.result.songs[0];
                             }
+                        } catch (e) {
+                            console.warn('Failed to get matched song details:', e);
                         }
                     }
                 }
@@ -574,8 +573,8 @@ export default function App() {
             return;
         }
 
-        // --- Instant Playback with currently available local metadata ---
-        const initialMeta = await resolveLocalMetadataUI(localSong, null);
+        const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
+        const initialMeta = await resolveLocalMetadataUI(preparedLocalSong, null);
 
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = blobUrl;
@@ -590,7 +589,7 @@ export default function App() {
         setAudioSrc(blobUrl);
 
         if (initialMeta.coverUrl) {
-            loadCachedOrFetchCover(`cover_local_${localSong.id}`, initialMeta.coverUrl).then(res => {
+            loadCachedOrFetchCover(`cover_local_${preparedLocalSong.id}`, initialMeta.coverUrl).then(res => {
                 if (currentSongRef.current === initialMeta.unifiedSong.id) setCachedCoverUrl(res);
             });
         } else {
@@ -614,7 +613,7 @@ export default function App() {
         setStatusMsg({ type: 'success', text: '本地音乐已加载' });
 
         // --- Background Auto-Match ---
-        handleLocalSongMatch(localSong).then(async ({ updatedLocalSong, matchedSongResult }) => {
+        handleLocalSongMatch(preparedLocalSong).then(async ({ updatedLocalSong, matchedSongResult }) => {
             if (currentSongRef.current !== initialMeta.unifiedSong.id) return; // User skipped track
             
             const updatedMeta = await resolveLocalMetadataUI(updatedLocalSong, matchedSongResult);
@@ -918,6 +917,7 @@ export default function App() {
 
                 // 3. Instant Local Metadata + Background Auto-Match
                 if (currentLocalData) {
+                    currentLocalData = await ensureLocalSongEmbeddedCover(currentLocalData);
                     const initialMeta = await resolveLocalMetadataUI(currentLocalData, null);
                     setCurrentSong(initialMeta.unifiedSong);
                     

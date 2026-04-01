@@ -40,6 +40,7 @@ interface ImportDiffPlan {
 
 // In-memory storage for hot-path access. Persistent recovery uses directory handles from IndexedDB.
 const fileHandleMap = new Map<string, FileSystemFileHandle>();
+const embeddedCoverRequestMap = new Map<string, Promise<LocalSong>>();
 const AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i;
 const IMPORT_CONCURRENCY = 6;
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
@@ -47,6 +48,7 @@ export const LOCAL_MUSIC_SCAN_PROGRESS_EVENT = 'folia-local-music-scan-progress'
 const HYDRATION_BATCH_SIZE = 25;
 const HYDRATION_REFRESH_EVERY = 100;
 const SNAPSHOT_HASH_SEED = 2166136261;
+const REIMPORT_HANDLE_MISSING_ERROR = 'Missing persisted directory handle for reimport';
 
 interface LocalMusicScanProgressDetail {
     active: boolean;
@@ -69,6 +71,35 @@ function notifyLocalMusicUpdated() {
 
 function notifyLocalMusicScanProgress(detail: LocalMusicScanProgressDetail) {
     window.dispatchEvent(new CustomEvent(LOCAL_MUSIC_SCAN_PROGRESS_EVENT, { detail }));
+}
+
+async function getImportDirectoryHandle(expectedRootName?: string): Promise<FileSystemDirectoryHandle | null> {
+    if (expectedRootName) {
+        const dirHandles = await getDirHandles();
+        const persistedHandle = dirHandles[expectedRootName];
+
+        if (!persistedHandle) {
+            throw new Error(REIMPORT_HANDLE_MISSING_ERROR);
+        }
+
+        let permission = await persistedHandle.queryPermission({ mode: 'read' });
+        if (permission !== 'granted') {
+            permission = await persistedHandle.requestPermission({ mode: 'read' });
+        }
+
+        if (permission !== 'granted') {
+            return null;
+        }
+
+        return persistedHandle;
+    }
+
+    if (!('showDirectoryPicker' in window)) {
+        throw new Error('File System Access API not supported in this browser');
+    }
+
+    // @ts-ignore - showDirectoryPicker is not in all TypeScript definitions
+    return await window.showDirectoryPicker();
 }
 
 // Generate UUID for local songs
@@ -767,14 +798,11 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
 
 // Import folder using File System Access API (if supported)
 export async function importFolder(expectedRootName?: string): Promise<LocalSong[]> {
-    // Check if File System Access API is supported
-    if (!('showDirectoryPicker' in window)) {
-        throw new Error('File System Access API not supported in this browser');
-    }
-
     try {
-        // @ts-ignore - showDirectoryPicker is not in all TypeScript definitions
-        const dirHandle = await window.showDirectoryPicker();
+        const dirHandle = await getImportDirectoryHandle(expectedRootName);
+        if (!dirHandle) {
+            return [];
+        }
         const importStartedAt = performance.now();
 
         let rootFolderName = expectedRootName || dirHandle.name;
@@ -1126,6 +1154,21 @@ async function recoverFileHandleFromPersistedDirectory(song: LocalSong): Promise
     }
 }
 
+async function getAccessibleFileHandle(song: LocalSong): Promise<FileSystemFileHandle | null> {
+    let fileHandle = fileHandleMap.get(song.id);
+
+    if (!fileHandle && song.fileHandle) {
+        fileHandle = song.fileHandle;
+        fileHandleMap.set(song.id, fileHandle);
+    }
+
+    if (fileHandle) {
+        return fileHandle;
+    }
+
+    return await recoverFileHandleFromPersistedDirectory(song);
+}
+
 async function cleanupDirHandleIfUnused(rootFolderName: string): Promise<void> {
     const allSongs = await getLocalSongs();
     const stillUsed = allSongs.some(song => {
@@ -1143,16 +1186,8 @@ async function cleanupDirHandleIfUnused(rootFolderName: string): Promise<void> {
 // Get audio blob from local song using fileHandle
 // Returns blob URL if fileHandle exists, null otherwise
 export async function getAudioFromLocalSong(song: LocalSong): Promise<string | null> {
-    // Try to get fileHandle from memory first
-    let fileHandle = fileHandleMap.get(song.id);
+    const fileHandle = await getAccessibleFileHandle(song);
 
-    // If not in memory, try to use the one stored in song object (if available)
-    if (!fileHandle && song.fileHandle) {
-        fileHandle = song.fileHandle;
-        fileHandleMap.set(song.id, fileHandle);
-    }
-
-    // If fileHandle exists, use it
     if (fileHandle) {
         try {
             const file = await fileHandle.getFile();
@@ -1180,6 +1215,68 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
     return null;
 }
 
+export async function ensureLocalSongEmbeddedCover(song: LocalSong): Promise<LocalSong> {
+    if (song.embeddedCover) {
+        return song;
+    }
+
+    if (!embeddedCoverRequestMap.has(song.id)) {
+        embeddedCoverRequestMap.set(song.id, (async () => {
+            const fileHandle = await getAccessibleFileHandle(song);
+            if (!fileHandle) {
+                return song;
+            }
+
+            try {
+                const file = await fileHandle.getFile();
+                const metadata = await extractEmbeddedMetadata(file, true);
+                if (!metadata.cover) {
+                    return song;
+                }
+
+                const updatedSong: LocalSong = {
+                    ...song,
+                    embeddedCover: metadata.cover,
+                    fileHandle
+                };
+                await saveLocalSong(updatedSong);
+                return updatedSong;
+            } catch (error) {
+                console.warn(`[LocalMusic] Failed to ensure embedded cover for ${song.fileName}:`, error);
+                fileHandleMap.delete(song.id);
+
+                try {
+                    const recoveredHandle = await recoverFileHandleFromPersistedDirectory(song);
+                    if (!recoveredHandle) {
+                        return song;
+                    }
+
+                    const file = await recoveredHandle.getFile();
+                    const metadata = await extractEmbeddedMetadata(file, true);
+                    if (!metadata.cover) {
+                        return song;
+                    }
+
+                    const updatedSong: LocalSong = {
+                        ...song,
+                        embeddedCover: metadata.cover,
+                        fileHandle: recoveredHandle
+                    };
+                    await saveLocalSong(updatedSong);
+                    return updatedSong;
+                } catch (recoveryError) {
+                    console.warn(`[LocalMusic] Failed to recover embedded cover for ${song.fileName}:`, recoveryError);
+                    return song;
+                }
+            } finally {
+                embeddedCoverRequestMap.delete(song.id);
+            }
+        })());
+    }
+
+    return await embeddedCoverRequestMap.get(song.id)!;
+}
+
 // Get audio blob from File object (for file input imports)
 export async function getAudioFromFile(file: File): Promise<string> {
     return URL.createObjectURL(file);
@@ -1193,10 +1290,8 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
     console.log(`[LocalMusic] Deleted ${songIds.length} songs by ID`);
 }
 
-// Resync folder: Delete old songs by ID, then prompt for new import
+// Resync folder: refresh an imported folder in place using the persisted root handle
 export async function resyncFolder(folderName: string): Promise<LocalSong[] | null> {
-    // Prompt user to select the folder again to get fresh handles
-    // Pass folderName so the existing root uses incremental scan instead of creating a duplicate root.
     const importedSongs = await importFolder(folderName);
 
     // If user cancelled (empty array), return null to indicate cancellation

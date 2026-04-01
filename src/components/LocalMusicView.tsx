@@ -264,8 +264,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 console.log(`[LocalMusic] Successfully re-imported ${importedSongs.length} songs`);
             }
 
-            onRefresh(); // Refresh the UI to show updated songs
-            setSelectedGroup(null); // Close the playlist view
+            onRefresh(); // Refresh the UI to show updated songs while keeping the current playlist view open
         } catch (error) {
             console.error('Failed to resync folder:', error);
             alert(t('localMusic.resyncFailed'));
