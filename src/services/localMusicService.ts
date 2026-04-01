@@ -691,7 +691,8 @@ async function populateRepresentativeCovers(songs: LocalSong[]): Promise<void> {
             return;
         }
 
-        for (const song of groupSongs) {
+        const sortedSongs = [...groupSongs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+        for (const song of sortedSongs) {
             const cover = await tryLoadCover(song);
             if (cover) {
                 song.embeddedCover = cover;
@@ -718,12 +719,46 @@ async function populateRepresentativeCoversInBackground(rootFolderName: string, 
     }
 }
 
+function getPriorityRepresentativeCoverCandidateIds(songs: LocalSong[]): Set<string> {
+    const candidateIds = new Set<string>();
+    const folderGroups = new Map<string, LocalSong[]>();
+    const albumGroups = new Map<string, LocalSong[]>();
+
+    songs.forEach(song => {
+        const folderKey = song.folderName || '';
+        const folderSongs = folderGroups.get(folderKey) || [];
+        folderSongs.push(song);
+        folderGroups.set(folderKey, folderSongs);
+
+        const albumKey = getImportedAlbumKey(song);
+        if (albumKey) {
+            const albumSongs = albumGroups.get(albumKey) || [];
+            albumSongs.push(song);
+            albumGroups.set(albumKey, albumSongs);
+        }
+    });
+
+    const collectGroupCandidate = (groupSongs: LocalSong[]) => {
+        const sortedSongs = [...groupSongs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+        const existingPreferredSong = sortedSongs.find(song => song.embeddedCover || song.matchedCoverUrl);
+        if (!existingPreferredSong && sortedSongs[0]) {
+            candidateIds.add(sortedSongs[0].id);
+        }
+    };
+
+    folderGroups.forEach(collectGroupCandidate);
+    albumGroups.forEach(collectGroupCandidate);
+
+    return candidateIds;
+}
+
 async function hydrateImportedSongsInBackground(rootFolderName: string, songs: LocalSong[]) {
     const hydrationStartedAt = performance.now();
     const pendingBatch: LocalSong[] = [];
     let savedCount = 0;
     let nextIndex = 0;
     let flushInFlight: Promise<void> | null = null;
+    const priorityCoverCandidateIds = getPriorityRepresentativeCoverCandidateIds(songs);
 
     notifyLocalMusicScanProgress({
         active: true,
@@ -770,10 +805,18 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
                 return;
             }
 
-            const hydratedSong = await hydrateSongMetadata(songs[currentIndex]);
+            let hydratedSong = await hydrateSongMetadata(songs[currentIndex]);
+            let resolvedCover = false;
+
+            if (priorityCoverCandidateIds.has(hydratedSong.id)) {
+                priorityCoverCandidateIds.delete(hydratedSong.id);
+                hydratedSong = await ensureLocalSongEmbeddedCover(hydratedSong);
+                resolvedCover = !!hydratedSong.embeddedCover;
+            }
+
             pendingBatch.push(hydratedSong);
 
-            if (pendingBatch.length >= HYDRATION_BATCH_SIZE && !flushInFlight) {
+            if ((pendingBatch.length >= HYDRATION_BATCH_SIZE || resolvedCover) && !flushInFlight) {
                 void flushBatch();
             }
         }

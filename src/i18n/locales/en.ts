@@ -185,6 +185,7 @@ export default {
     "unknownAlbum": "Unknown Album",
     "unknownArtist": "Unknown Artist",
     "folder": "Folder",
+    "allSongs": "All Songs",
     "importFolder": "Import Folder",
     "importing": "Importing...",
     "noLocalMusic": "No local music imported yet",

@@ -43,13 +43,13 @@ interface HomeProps {
     setFocusedRadioIndex?: (index: number) => void;
     localMusicState: {
         activeRow: 0 | 1;
-        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; } | null;
+        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; isVirtual?: boolean; } | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
     };
     setLocalMusicState: React.Dispatch<React.SetStateAction<{
         activeRow: 0 | 1;
-        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; } | null;
+        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; isVirtual?: boolean; } | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
     }>>;

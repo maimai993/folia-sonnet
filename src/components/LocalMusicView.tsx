@@ -17,8 +17,8 @@ interface LocalMusicViewProps {
     onPlaylistVisibilityChange?: (isOpen: boolean) => void;
     activeRow: 0 | 1;
     setActiveRow: (row: 0 | 1) => void;
-    selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; id?: string; } | null;
-    setSelectedGroup: (group: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; id?: string; } | null) => void;
+    selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; id?: string; isVirtual?: boolean; } | null;
+    setSelectedGroup: (group: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; id?: string; isVirtual?: boolean; } | null) => void;
     onMatchSong?: (song: LocalSong) => void;
     focusedFolderIndex?: number;
     setFocusedFolderIndex?: (index: number) => void;
@@ -47,6 +47,8 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     isDaylight
 }) => {
     const { t } = useTranslation();
+    const allSongsLabel = t('localMusic.allSongs');
+    const resolvedAllSongsLabel = allSongsLabel === 'localMusic.allSongs' ? '全部歌曲' : allSongsLabel;
 
     const [isImporting, setIsImporting] = useState(false);
     const [isScanInProgress, setIsScanInProgress] = useState(false);
@@ -171,6 +173,19 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             description: t('localMusic.folder')
         })).sort((a, b) => a.name.localeCompare(b.name));
 
+        if (localSongs.length > 0) {
+            folderList.unshift({
+                id: 'folder-__all-songs__',
+                name: resolvedAllSongsLabel,
+                songs: localSongs,
+                type: 'folder' as const,
+                coverUrl: getGroupCover(localSongs),
+                trackCount: localSongs.length,
+                description: t('localMusic.folder'),
+                isVirtual: true
+            });
+        }
+
         // Sort albums
         const albumList = Object.entries(albums).map(([key, songs]) => {
             // Try to find a song with matched info to get the best metadata
@@ -190,7 +205,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         }).sort((a, b) => a.name.localeCompare(b.name));
 
         return { folders: folderList, albums: albumList };
-    }, [localSongs, t]);
+    }, [localSongs, resolvedAllSongsLabel, t]);
 
     const resolvedSelectedGroup = useMemo(() => {
         if (!selectedGroup) return null;
@@ -247,7 +262,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
 
     // Folder management handlers
     const handleResyncFolder = async () => {
-        if (!selectedGroup || selectedGroup.type !== 'folder') return;
+        if (!selectedGroup || selectedGroup.type !== 'folder' || selectedGroup.isVirtual) return;
 
         try {
             // Re-import the selected folder and its nested children
@@ -275,7 +290,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
 
 
     const handleDeleteFolder = async () => {
-        if (!selectedGroup || selectedGroup.type !== 'folder') return;
+        if (!selectedGroup || selectedGroup.type !== 'folder' || selectedGroup.isVirtual) return;
 
         try {
             await deleteFolderSongs(selectedGroup.name);
@@ -331,8 +346,8 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 onAddToQueue={onAddToQueue}
                 isFolderView={resolvedSelectedGroup.type === 'folder'}
                 allSongs={localSongs}
-                onResync={resolvedSelectedGroup.type === 'folder' ? handleResyncFolder : undefined}
-                onDelete={resolvedSelectedGroup.type === 'folder' ? handleDeleteFolder : undefined}
+                onResync={resolvedSelectedGroup.type === 'folder' && !resolvedSelectedGroup.isVirtual ? handleResyncFolder : undefined}
+                onDelete={resolvedSelectedGroup.type === 'folder' && !resolvedSelectedGroup.isVirtual ? handleDeleteFolder : undefined}
                 onMatchSong={onMatchSong}
                 onRefresh={onRefresh}
                 theme={theme}

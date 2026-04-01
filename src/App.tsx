@@ -137,7 +137,7 @@ export default function App() {
     const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
     const [localMusicState, setLocalMusicState] = useState<{
         activeRow: 0 | 1;
-        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; } | null;
+        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; isVirtual?: boolean; } | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
     }>({
