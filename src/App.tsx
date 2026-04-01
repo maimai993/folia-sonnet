@@ -28,6 +28,8 @@ import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
 
+const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
+
 // Default Theme
 // 午夜墨染
 const DEFAULT_THEME: Theme = {
@@ -247,6 +249,15 @@ export default function App() {
     useEffect(() => {
         restoreSession();
         loadLocalSongs();
+    }, []);
+
+    useEffect(() => {
+        const handleLocalMusicUpdated = () => {
+            loadLocalSongs();
+        };
+
+        window.addEventListener(LOCAL_MUSIC_UPDATED_EVENT, handleLocalMusicUpdated);
+        return () => window.removeEventListener(LOCAL_MUSIC_UPDATED_EVENT, handleLocalMusicUpdated);
     }, []);
 
     // Revoke blob URLs on unmount to prevent leaks
