@@ -80,7 +80,15 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: release-${{ matrix.os }}
-          path: release/**
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.blockmap
+            release/latest*.yml
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
           if-no-files-found: error
           retention-days: 7
 
