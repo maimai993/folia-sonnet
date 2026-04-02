@@ -38,6 +38,24 @@ export interface DualTheme {
   dark: Theme;
 }
 
+export type VisualizerMode = 'classic' | 'cadenza';
+
+export interface CadenzaTuning {
+  fontScale: number;
+  widthRatio: number;
+  motionAmount: number;
+  glowIntensity: number;
+  beamIntensity: number;
+}
+
+export const DEFAULT_CADENZA_TUNING: CadenzaTuning = {
+  fontScale: 1.12,
+  widthRatio: 0.72,
+  motionAmount: 1,
+  glowIntensity: 1,
+  beamIntensity: 0,
+};
+
 export enum PlayerState {
   IDLE = 'IDLE',
   PLAYING = 'PLAYING',

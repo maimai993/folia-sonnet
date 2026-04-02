@@ -7,7 +7,7 @@
     "email": "chthollyphile@users.noreply.github.com"
   },
   "private": true,
-  "version": "0.1.12",
+  "version": "0.2.0",
   "license": "AGPL-3.0",
   "type": "module",
   "main": "electron/main.cjs",
@@ -76,6 +76,7 @@
     }
   },
   "dependencies": {
+    "@chenglou/pretext": "^0.0.4",
     "@google/genai": "^1.46.0",
     "@neteasecloudmusicapienhanced/api": "^4.30.3",
     "blueimp-md5": "^2.19.0",

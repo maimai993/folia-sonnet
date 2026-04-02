@@ -49,6 +49,16 @@ export default {
     "findByFilename": "Find by filename →",
     "searching": "Searching...",
     "animationIntensity": "Intensity",
+    "visualizer": "Visualizer",
+    "visualizerWorkbench": "Visualizer Lab",
+    "visualizerTemporary": "Temporary Workbench",
+    "visualizerMode": "Mode",
+    "visualizerClassic": "Luminous",
+    "visualizerCadenze": "Mindscape",
+    "cadenzeTuning": "Mindscape Tuning",
+    "resetVisualizerTuning": "Reset Visualizer Tuning",
+    "livePreview": "Live preview",
+    "cadenzeOnly": "Mindscape only",
     "background": "Background",
     "default": "Default",
     "aiTheme": "AI Theme",
@@ -59,11 +69,18 @@ export default {
     "foundMatches": "Found {{count}} matches",
     "waitingForMusic": "",
     "options": "Options",
-    "volume": "Volume"
+    "volume": "Volume",
+    "cadenze": {
+      "fontScale": "Font Scale",
+      "widthRatio": "Line Width",
+      "motionAmount": "Motion",
+      "glowIntensity": "Glow"
+    }
   },
   "panel": {
     "cover": "Cover",
     "controls": "Controls",
+    "visualizer": "Visual",
     "playlist": "Playlist",
     "account": "Account"
   },
@@ -163,6 +180,8 @@ export default {
     "enableStaticModeDesc": "Disable geometric backgrounds.",
     "enableStaticModeDescSub": "Suitable for background playback.",
     "visualSettings": "Visual Settings",
+    "lyricsRenderer": "Lyrics Renderer",
+    "lyricsRendererDesc": "Choose the lyrics rendering mode used on the playback page.",
     "backgroundOpacity": "Background Opacity",
     "themePresets": "Theme Presets",
     "themePresetsMidnight": "Midnight",

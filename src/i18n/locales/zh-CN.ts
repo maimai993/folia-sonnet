@@ -49,6 +49,16 @@ export default {
     "findByFilename": "按文件名查找 →",
     "searching": "搜索中...",
     "animationIntensity": "动画强度",
+    "visualizer": "视觉器",
+    "visualizerWorkbench": "视觉实验台",
+    "visualizerTemporary": "临时工作台",
+    "visualizerMode": "模式",
+    "visualizerClassic": "流光",
+    "visualizerCadenze": "心象",
+    "cadenzeTuning": "心象参数",
+    "resetVisualizerTuning": "重置视觉参数",
+    "livePreview": "实时预览",
+    "cadenzeOnly": "仅心象",
     "background": "背景",
     "default": "默认",
     "aiTheme": "AI主题",
@@ -59,11 +69,18 @@ export default {
     "foundMatches": "找到 {{count}} 个匹配项",
     "waitingForMusic": "",
     "options": "选项",
-    "volume": "音量"
+    "volume": "音量",
+    "cadenze": {
+      "fontScale": "字体比例",
+      "widthRatio": "行宽",
+      "motionAmount": "动势",
+      "glowIntensity": "辉光"
+    }
   },
   "panel": {
     "cover": "封面",
     "controls": "控制",
+    "visualizer": "视觉",
     "playlist": "播放列表",
     "account": "账户"
   },
@@ -163,6 +180,8 @@ export default {
     "enableStaticModeDesc": "禁用几何背景以节省资源。",
     "enableStaticModeDescSub": "适合后台播放（保留时间轴歌词更新）。",
     "visualSettings": "视觉设置",
+    "lyricsRenderer": "歌词渲染",
+    "lyricsRendererDesc": "选择播放页使用的歌词渲染模式。",
     "backgroundOpacity": "背景透明度",
     "themePresets": "主题预设",
     "themePresetsMidnight": "午夜墨染",

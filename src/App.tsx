@@ -11,6 +11,7 @@ import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from './services/onli
 import { buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong } from './services/playbackAdapters';
 import { getPrefetchedData, prefetchNearbySongs, invalidateAndRefetch } from './services/prefetchService';
 import Visualizer from './components/Visualizer';
+import VisualizerCadenza from './components/VisualizerCadenza';
 import ProgressBar from './components/ProgressBar';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
 import Home from './components/Home';
@@ -165,11 +166,16 @@ export default function App() {
         enableMediaCache,
         backgroundOpacity,
         isDaylight,
+        visualizerMode,
+        cadenzaTuning,
         handleToggleCoverColorBg,
         handleToggleStaticMode,
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
+        handleSetVisualizerMode,
+        handleSetCadenzaTuning,
+        handleResetCadenzaTuning,
         volume,
         isMuted,
         handleSetVolume,
@@ -1791,21 +1797,40 @@ export default function App() {
                 className="absolute inset-0 z-0"
                 onClick={handleContainerClick}
             >
-                <Visualizer
-                    currentTime={currentTime}
-                    currentLineIndex={currentLineIndex}
-                    lines={lyrics?.lines || []}
-                    theme={{ ...theme, backgroundColor: String(appStyle['--bg-color']) }} // Pass effective bg color
-                    audioPower={audioPower}
-                    audioBands={audioBands}
-                    coverUrl={getCoverUrl()}
-                    showText={currentView === 'player'}
-                    useCoverColorBg={useCoverColorBg}
-                    seed={currentSong?.id}
-                    staticMode={staticMode}
-                    backgroundOpacity={backgroundOpacity}
-                    onBack={navigateToHome}
-                />
+                {visualizerMode === 'cadenza' ? (
+                    <VisualizerCadenza
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={lyrics?.lines || []}
+                        theme={{ ...theme, backgroundColor: String(appStyle['--bg-color']) }}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        coverUrl={getCoverUrl()}
+                        showText={currentView === 'player'}
+                        useCoverColorBg={useCoverColorBg}
+                        seed={currentSong?.id}
+                        staticMode={staticMode}
+                        backgroundOpacity={backgroundOpacity}
+                        cadenzaTuning={cadenzaTuning}
+                        onBack={navigateToHome}
+                    />
+                ) : (
+                    <Visualizer
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={lyrics?.lines || []}
+                        theme={{ ...theme, backgroundColor: String(appStyle['--bg-color']) }}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        coverUrl={getCoverUrl()}
+                        showText={currentView === 'player'}
+                        useCoverColorBg={useCoverColorBg}
+                        seed={currentSong?.id}
+                        staticMode={staticMode}
+                        backgroundOpacity={backgroundOpacity}
+                        onBack={navigateToHome}
+                    />
+                )}
             </div>
 
             {/* --- HOME VIEW (Overlay) --- */}
@@ -1854,6 +1879,8 @@ export default function App() {
                             backgroundOpacity={backgroundOpacity}
                             setBackgroundOpacity={handleSetBackgroundOpacity}
                             onSetThemePreset={handleSetThemePreset}
+                            visualizerMode={visualizerMode}
+                            onVisualizerModeChange={handleSetVisualizerMode}
                             onMatchSong={async (song) => {
                                 await loadLocalSongs();
 
