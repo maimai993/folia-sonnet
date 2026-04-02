@@ -684,34 +684,115 @@ const buildWordPlacements = (
     isInterlude: boolean,
 ) => {
     const totalHeight = Math.max(lineData.length, 1) * lineHeight;
-    const baseSpread = { x: 0, y: 0, rotate: 0, margin: animationIntensity === 'calm' ? 4 : 6 };
+    const baseMargin = animationIntensity === 'calm' ? 4 : 6;
+    const baseScale = animationIntensity === 'chaotic'
+        ? 1.02
+        : animationIntensity === 'calm'
+            ? 1
+            : 1.01;
     const emphasisMap = buildEmphasisMap(lineData, isInterlude);
     const heroWordIndex = [...emphasisMap.entries()]
         .sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
     const placements: WordPlacement[] = [];
     const occupiedRects: Array<{ left: number; top: number; right: number; bottom: number; }> = [];
+    const occupiedBands = new Map<number, number[]>();
+    const occupiedMarks: number[] = [];
+    let occupiedQueryStamp = 0;
+    const collisionBandSize = Math.max(24, Math.round(lineHeight * 0.9));
 
-    const intersects = (left: number, top: number, right: number, bottom: number) =>
-        occupiedRects.some(rect => !(right < rect.left || left > rect.right || bottom < rect.top || top > rect.bottom));
-    const getOverlapArea = (left: number, top: number, right: number, bottom: number) =>
-        occupiedRects.reduce((sum, rect) => {
-            const overlapWidth = Math.max(0, Math.min(right, rect.right) - Math.max(left, rect.left));
-            const overlapHeight = Math.max(0, Math.min(bottom, rect.bottom) - Math.max(top, rect.top));
-            return sum + overlapWidth * overlapHeight;
-        }, 0);
+    const getBandIndex = (value: number) => Math.floor(value / collisionBandSize);
+    const registerOccupiedRect = (rect: { left: number; top: number; right: number; bottom: number; }) => {
+        const rectIndex = occupiedRects.length;
+        occupiedRects.push(rect);
+
+        const startBand = getBandIndex(rect.top);
+        const endBand = getBandIndex(rect.bottom);
+        for (let band = startBand; band <= endBand; band++) {
+            const bucket = occupiedBands.get(band);
+            if (bucket) {
+                bucket.push(rectIndex);
+            } else {
+                occupiedBands.set(band, [rectIndex]);
+            }
+        }
+    };
+    const evaluateCollisionRect = (left: number, top: number, right: number, bottom: number) => {
+        if (occupiedRects.length === 0) {
+            return {
+                intersects: false,
+                overlapArea: 0,
+            };
+        }
+
+        occupiedQueryStamp += 1;
+        const stamp = occupiedQueryStamp;
+        const startBand = getBandIndex(top);
+        const endBand = getBandIndex(bottom);
+        let intersects = false;
+        let overlapArea = 0;
+
+        for (let band = startBand; band <= endBand; band++) {
+            const bucket = occupiedBands.get(band);
+            if (!bucket) continue;
+
+            for (let bucketIndex = 0; bucketIndex < bucket.length; bucketIndex++) {
+                const rectIndex = bucket[bucketIndex]!;
+                if (occupiedMarks[rectIndex] === stamp) {
+                    continue;
+                }
+                occupiedMarks[rectIndex] = stamp;
+
+                const rect = occupiedRects[rectIndex]!;
+                const overlapWidth = Math.max(0, Math.min(right, rect.right) - Math.max(left, rect.left));
+                const overlapHeight = Math.max(0, Math.min(bottom, rect.bottom) - Math.max(top, rect.top));
+                if (overlapWidth <= 0 || overlapHeight <= 0) {
+                    continue;
+                }
+
+                intersects = true;
+                overlapArea += overlapWidth * overlapHeight;
+            }
+        }
+
+        return {
+            intersects,
+            overlapArea,
+        };
+    };
+    const pushPlacementRect = (left: number, top: number, width: number, height: number, padding: number) => {
+        registerOccupiedRect({
+            left: left - padding,
+            top: top - height - padding,
+            right: left + width + padding,
+            bottom: top + padding,
+        });
+    };
     const placementPlans = lineData.flatMap((lineView, lineIndex) => {
         const lineLeft = -lineView.line.width / 2;
         const baselineY = -totalHeight / 2 + fontPx + lineIndex * lineHeight;
 
-        return lineView.fragments.map((fragment, fragmentIndex) => ({
-            fragment,
-            lineIndex,
-            fragmentIndex,
-            baseX: lineLeft + fragment.startX,
-            baseY: baselineY,
-            emphasis: emphasisMap.get(fragment.wordIndex) ?? 1,
-        }));
+        return lineView.fragments.map((fragment, fragmentIndex) => {
+            const emphasis = emphasisMap.get(fragment.wordIndex) ?? 1;
+            const width = Math.max(fragment.endX - fragment.startX, fontPx * 0.18);
+            const scale = emphasis > 1 ? baseScale * emphasis : baseScale;
+            const height = fontPx * scale * 0.95;
+
+            return {
+                fragment,
+                lineIndex,
+                fragmentIndex,
+                baseX: lineLeft + fragment.startX,
+                baseY: baselineY,
+                emphasis,
+                width,
+                height,
+                scale,
+                collisionWidth: width * scale * (emphasis > 1 ? 1.48 : 1.26),
+                collisionHeight: height * (emphasis > 1 ? 1.36 : 1.24),
+                padding: baseMargin + (emphasis > 1 ? 10 : 2),
+            };
+        });
     }).sort((a, b) => {
         const emphasisDelta = b.emphasis - a.emphasis;
         if (Math.abs(emphasisDelta) > 0.001) {
@@ -722,29 +803,32 @@ const buildWordPlacements = (
         }
         return a.fragment.startX - b.fragment.startX;
     });
+    const primaryPlanByWordIndex = new Map<number, (typeof placementPlans)[number]>();
+    placementPlans.forEach(plan => {
+        if (!primaryPlanByWordIndex.has(plan.fragment.wordIndex)) {
+            primaryPlanByWordIndex.set(plan.fragment.wordIndex, plan);
+        }
+    });
+    const heroPlan = heroWordIndex === null ? null : primaryPlanByWordIndex.get(heroWordIndex) ?? null;
+    const heroMetrics = heroPlan
+        ? {
+            centerX: (heroPlan.width * heroPlan.scale) / 2,
+            centerY: -heroPlan.height * 0.46,
+            width: heroPlan.width * heroPlan.scale,
+        }
+        : null;
 
     placementPlans.forEach(plan => {
-        const { fragment, lineIndex, fragmentIndex, emphasis } = plan;
+        const { fragment, lineIndex, fragmentIndex, emphasis, width, height, scale, collisionWidth, collisionHeight, padding } = plan;
         const wordSeed = seed + fragment.wordIndex * 17 + lineIndex * 31 + fragmentIndex * 13;
         const random = (offset: number) => {
             const x = Math.sin(wordSeed + offset) * 10000;
             return x - Math.floor(x);
         };
-        const width = Math.max(fragment.endX - fragment.startX, fontPx * 0.18);
-        const baseScale = animationIntensity === 'chaotic'
-            ? 1.02
-            : animationIntensity === 'calm'
-                ? 1
-                : 1.01;
-        const scaledEmphasis = emphasis > 1 ? baseScale * emphasis : baseScale;
-        const collisionWidth = width * scaledEmphasis * (emphasis > 1 ? 1.48 : 1.26);
-        const height = fontPx * scaledEmphasis * 0.95;
-        const collisionHeight = height * (emphasis > 1 ? 1.36 : 1.24);
         const rotate = 0;
         const passedRotate = (random(3) - 0.5) * (animationIntensity === 'chaotic' ? 20 : 12);
         const entryOffsetX = 0;
         const entryOffsetY = 0;
-        const padding = baseSpread.margin + (emphasis > 1 ? 10 : 2);
         const step = Math.max(10, Math.round(fontPx * 0.14));
         const maxRadius = emphasis > 1
             ? Math.max(20, lineHeight * 0.5)
@@ -752,31 +836,24 @@ const buildWordPlacements = (
         let preferredX = emphasis > 1 ? -width / 2 : plan.baseX;
         let preferredY = emphasis > 1 ? 0 : plan.baseY;
 
-        if (!isInterlude && emphasis <= 1 && heroWordIndex !== null) {
-            const heroPlacement = placementPlans.find(candidate => candidate.fragment.wordIndex === heroWordIndex);
-            if (heroPlacement) {
-                const heroScale = heroPlacement.emphasis > 1 ? baseScale * heroPlacement.emphasis : baseScale;
-                const heroWidth = Math.max(heroPlacement.fragment.endX - heroPlacement.fragment.startX, fontPx * 0.18) * heroScale;
-                const heroHeight = fontPx * heroScale * 0.95;
-                const heroCenterX = heroWidth / 2;
-                const heroCenterY = -heroHeight * 0.46;
-                const wordCenterX = preferredX + width / 2;
-                const wordCenterY = preferredY - height * 0.46;
-                let dx = wordCenterX - heroCenterX;
-                let dy = wordCenterY - heroCenterY;
-                const distance = Math.hypot(dx, dy);
-                if (distance < 1) {
-                    dx = preferredX >= 0 ? 1 : -1;
-                    dy = lineIndex % 2 === 0 ? -0.65 : 0.65;
-                }
-                const minHeroSeparation = heroWidth * 0.34 + width * 0.52 + padding * 2;
-                if (distance < minHeroSeparation) {
-                    const ux = dx / Math.max(Math.hypot(dx, dy), 1);
-                    const uy = dy / Math.max(Math.hypot(dx, dy), 1);
-                    const push = minHeroSeparation - distance;
-                    preferredX += ux * push;
-                    preferredY += uy * push * 0.92;
-                }
+        if (!isInterlude && emphasis <= 1 && heroMetrics) {
+            const wordCenterX = preferredX + width / 2;
+            const wordCenterY = preferredY - height * 0.46;
+            let dx = wordCenterX - heroMetrics.centerX;
+            let dy = wordCenterY - heroMetrics.centerY;
+            const distance = Math.hypot(dx, dy);
+            if (distance < 1) {
+                dx = preferredX >= 0 ? 1 : -1;
+                dy = lineIndex % 2 === 0 ? -0.65 : 0.65;
+            }
+            const minHeroSeparation = heroMetrics.width * 0.34 + width * 0.52 + padding * 2;
+            if (distance < minHeroSeparation) {
+                const normalizedDistance = Math.max(Math.hypot(dx, dy), 1);
+                const ux = dx / normalizedDistance;
+                const uy = dy / normalizedDistance;
+                const push = minHeroSeparation - distance;
+                preferredX += ux * push;
+                preferredY += uy * push * 0.92;
             }
         }
 
@@ -792,11 +869,11 @@ const buildWordPlacements = (
             y: preferredY,
             score: Number.POSITIVE_INFINITY,
         };
+        const baseAngle = heroMetrics && emphasis <= 1
+            ? Math.atan2(preferredY, preferredX + width / 2)
+            : 0;
 
         for (let radius = 0; radius <= maxRadius && !found; radius += step) {
-            const baseAngle = heroWordIndex !== null && emphasis <= 1
-                ? Math.atan2(preferredY, preferredX + width / 2)
-                : 0;
             const sampleCount = radius === 0
                 ? 1
                 : emphasis > 1
@@ -826,9 +903,9 @@ const buildWordPlacements = (
                     continue;
                 }
 
-                const overlapArea = getOverlapArea(left, top, right, bottom);
+                const collision = evaluateCollisionRect(left, top, right, bottom);
                 const travel = Math.hypot(dx, dy);
-                const score = overlapArea * 2.2 + travel;
+                const score = collision.overlapArea * 2.2 + travel;
                 if (score < bestFallback.score) {
                     bestFallback = {
                         x: preferredX + dx,
@@ -837,10 +914,10 @@ const buildWordPlacements = (
                     };
                 }
 
-                if (withinBounds && !intersects(left, top, right, bottom)) {
+                if (!collision.intersects) {
                     chosenX = preferredX + dx;
                     chosenY = preferredY + dy;
-                    occupiedRects.push({ left, top, right, bottom });
+                    pushPlacementRect(chosenX, chosenY, collisionWidth, collisionHeight, padding);
                     found = true;
                     break;
                 }
@@ -850,14 +927,7 @@ const buildWordPlacements = (
         if (!found) {
             chosenX = bestFallback.x;
             chosenY = bestFallback.y;
-            const left = chosenX - padding;
-            const top = chosenY - collisionHeight - padding;
-            occupiedRects.push({
-                left,
-                top,
-                right: left + collisionWidth + padding * 2,
-                bottom: top + collisionHeight + padding * 2,
-            });
+            pushPlacementRect(chosenX, chosenY, collisionWidth, collisionHeight, padding);
         }
 
         const outwardX = chosenX + width / 2;
@@ -886,7 +956,7 @@ const buildWordPlacements = (
             width,
             height,
             rotate,
-            scale: scaledEmphasis,
+            scale,
             passedRotate,
             passedDriftX,
             passedDriftY,
