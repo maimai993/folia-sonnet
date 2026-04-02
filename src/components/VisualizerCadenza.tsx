@@ -195,6 +195,7 @@ const easeInOutQuad = (value: number) => {
         ? 2 * normalized * normalized
         : 1 - Math.pow(-2 * normalized + 2, 2) / 2;
 };
+const ACTIVE_PULSE_FREQUENCY = 10;
 
 const isCJK = (text: string) => /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/.test(text);
 
@@ -1234,7 +1235,7 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
                 const progress = getWordProgress(time, placement.word);
                 const passedAlpha = theme.animationIntensity === 'chaotic' ? 0.9 : 0.82;
                 const pulse = status === 'active'
-                    ? 1 + Math.sin(time * 16 + placement.word.startTime * 5) * 0.04 * tuning.motionAmount
+                    ? 1 + Math.sin(time * ACTIVE_PULSE_FREQUENCY + placement.word.startTime * 5) * 0.04 * tuning.motionAmount
                     : 1;
                 const passedDriftProgress = getClassicPassedDrift(time, placement.word);
                 const targetScale = status === 'waiting'
