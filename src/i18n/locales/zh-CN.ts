@@ -49,6 +49,16 @@ export default {
     "findByFilename": "按文件名查找 →",
     "searching": "搜索中...",
     "animationIntensity": "动画强度",
+    "visualizer": "视觉器",
+    "visualizerWorkbench": "视觉实验台",
+    "visualizerTemporary": "临时工作台",
+    "visualizerMode": "模式",
+    "visualizerClassic": "经典",
+    "visualizerCadenze": "Cadenze",
+    "cadenzeTuning": "Cadenze 参数",
+    "resetVisualizerTuning": "重置视觉参数",
+    "livePreview": "实时预览",
+    "cadenzeOnly": "仅 Cadenze",
     "background": "背景",
     "default": "默认",
     "aiTheme": "AI主题",
@@ -59,11 +69,19 @@ export default {
     "foundMatches": "找到 {{count}} 个匹配项",
     "waitingForMusic": "",
     "options": "选项",
-    "volume": "音量"
+    "volume": "音量",
+    "cadenze": {
+      "fontScale": "字体比例",
+      "widthRatio": "行宽",
+      "motionAmount": "动势",
+      "glowIntensity": "辉光",
+      "beamIntensity": "光束"
+    }
   },
   "panel": {
     "cover": "封面",
     "controls": "控制",
+    "visualizer": "视觉",
     "playlist": "播放列表",
     "account": "账户"
   },

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { DEFAULT_CADENZE_TUNING, type CadenzeTuning, type VisualizerMode } from '../types';
 
 type StatusSetter = Dispatch<SetStateAction<{ type: 'error' | 'success' | 'info', text: string; } | null>>;
 type AudioQuality = 'exhigh' | 'lossless' | 'hires';
@@ -6,6 +7,21 @@ type AudioQuality = 'exhigh' | 'lossless' | 'hires';
 const getStoredBoolean = (key: string, fallback: boolean) => {
     const saved = localStorage.getItem(key);
     return saved !== null ? saved === 'true' : fallback;
+};
+
+const readStoredCadenzeTuning = (): CadenzeTuning => {
+    const saved = localStorage.getItem('cadenze_tuning');
+    if (!saved) return DEFAULT_CADENZE_TUNING;
+
+    try {
+        const parsed = JSON.parse(saved) as Partial<CadenzeTuning>;
+        return {
+            ...DEFAULT_CADENZE_TUNING,
+            ...parsed,
+        };
+    } catch {
+        return DEFAULT_CADENZE_TUNING;
+    }
 };
 
 export function useAppPreferences(setStatusMsg: StatusSetter) {
@@ -21,6 +37,11 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         return saved ? parseFloat(saved) : 0.75;
     });
     const [isDaylight, setIsDaylight] = useState(() => getStoredBoolean('default_theme_daylight', false));
+    const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>(() => {
+        const saved = localStorage.getItem('visualizer_mode');
+        return saved === 'cadenze' ? 'cadenze' : 'classic';
+    });
+    const [cadenzeTuning, setCadenzeTuning] = useState<CadenzeTuning>(readStoredCadenzeTuning);
     const [volume, setVolume] = useState(() => {
         const saved = localStorage.getItem('player_volume');
         return saved !== null ? parseFloat(saved) : 1.0;
@@ -77,6 +98,32 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         localStorage.setItem('default_theme_daylight', String(enabled));
     };
 
+    const handleSetVisualizerMode = (mode: VisualizerMode) => {
+        setVisualizerMode(mode);
+        localStorage.setItem('visualizer_mode', mode);
+        setStatusMsg({
+            type: 'info',
+            text: mode === 'cadenze' ? 'Cadenze 实验视觉已开启' : '已切换到经典视觉'
+        });
+    };
+
+    const handleSetCadenzeTuning = useCallback((patch: Partial<CadenzeTuning>) => {
+        setCadenzeTuning(prev => {
+            const next = { ...prev, ...patch };
+            localStorage.setItem('cadenze_tuning', JSON.stringify(next));
+            return next;
+        });
+    }, []);
+
+    const handleResetCadenzeTuning = () => {
+        setCadenzeTuning(DEFAULT_CADENZE_TUNING);
+        localStorage.setItem('cadenze_tuning', JSON.stringify(DEFAULT_CADENZE_TUNING));
+        setStatusMsg({
+            type: 'info',
+            text: 'Cadenze 参数已重置'
+        });
+    };
+
     const handleSetVolume = useCallback((val: number) => {
         setVolume(val);
         localStorage.setItem('player_volume', String(val));
@@ -96,11 +143,16 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         enableMediaCache,
         backgroundOpacity,
         isDaylight,
+        visualizerMode,
+        cadenzeTuning,
         handleToggleCoverColorBg,
         handleToggleStaticMode,
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
+        handleSetVisualizerMode,
+        handleSetCadenzeTuning,
+        handleResetCadenzeTuning,
         volume,
         isMuted,
         handleSetVolume,

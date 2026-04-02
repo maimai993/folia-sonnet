@@ -1,17 +1,18 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio, Cloud } from 'lucide-react';
+import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio, Cloud, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { SongResult, Theme, PlayerState, ReplayGainMode } from '../types';
+import { SongResult, Theme, PlayerState, ReplayGainMode, type CadenzeTuning, type VisualizerMode } from '../types';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
+import VisualizerTab from './panelTab/VisualizerTab';
 import QueueTab from './panelTab/QueueTab';
 import AccountTab from './panelTab/AccountTab';
 import LocalTab from './panelTab/LocalTab';
 import FmTab from './panelTab/FmTab';
 import NaviTab from './panelTab/NaviTab';
 
-export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi';
+export type PanelTab = 'cover' | 'controls' | 'visualizer' | 'queue' | 'account' | 'local' | 'navi';
 
 interface UnifiedPanelProps {
     isOpen: boolean;
@@ -57,6 +58,11 @@ interface UnifiedPanelProps {
     onToggleCoverColorBg: (enable: boolean) => void;
     isDaylight: boolean;
     onToggleDaylight: () => void;
+    visualizerMode: VisualizerMode;
+    onVisualizerModeChange: (mode: VisualizerMode) => void;
+    cadenzeTuning: CadenzeTuning;
+    onCadenzeTuningChange: (patch: Partial<CadenzeTuning>) => void;
+    onResetCadenzeTuning: () => void;
     // Local Tab Props
     onMatchOnline: () => void;
     onUpdateLocalLyrics: (content: string, isTranslation: boolean) => void;
@@ -117,6 +123,11 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     onToggleCoverColorBg,
     isDaylight,
     onToggleDaylight,
+    visualizerMode,
+    onVisualizerModeChange,
+    cadenzeTuning,
+    onCadenzeTuningChange,
+    onResetCadenzeTuning,
     onMatchOnline,
     onUpdateLocalLyrics,
     onChangeLyricsSource,
@@ -142,6 +153,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const tabs = [
         { id: 'cover' as PanelTab, label: t('panel.cover'), icon: Disc },
         { id: 'controls' as PanelTab, label: t('panel.controls'), icon: SlidersHorizontal },
+        { id: 'visualizer' as PanelTab, label: t('panel.visualizer'), icon: Sparkles },
         isFmMode 
             ? { id: 'queue' as PanelTab, label: t('home.radio') || '私人FM', icon: Radio }
             : { id: 'queue' as PanelTab, label: t('panel.playlist'), icon: ListMusic },
@@ -257,6 +269,17 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             onVolumePreview={onVolumePreview}
                                             onVolumeChange={onVolumeChange}
                                             onToggleMute={onToggleMute}
+                                        />
+                                    )}
+                                    {currentTab === 'visualizer' && (
+                                        <VisualizerTab
+                                            theme={theme}
+                                            isDaylight={isDaylight}
+                                            visualizerMode={visualizerMode}
+                                            onVisualizerModeChange={onVisualizerModeChange}
+                                            cadenzeTuning={cadenzeTuning}
+                                            onCadenzeTuningChange={onCadenzeTuningChange}
+                                            onResetCadenzeTuning={onResetCadenzeTuning}
                                         />
                                     )}
                                     {currentTab === 'queue' && (

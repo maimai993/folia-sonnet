@@ -11,6 +11,7 @@ import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from './services/onli
 import { buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong } from './services/playbackAdapters';
 import { getPrefetchedData, prefetchNearbySongs, invalidateAndRefetch } from './services/prefetchService';
 import Visualizer from './components/Visualizer';
+import VisualizerCadenze from './components/VisualizerCadenze';
 import ProgressBar from './components/ProgressBar';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
 import Home from './components/Home';
@@ -165,11 +166,16 @@ export default function App() {
         enableMediaCache,
         backgroundOpacity,
         isDaylight,
+        visualizerMode,
+        cadenzeTuning,
         handleToggleCoverColorBg,
         handleToggleStaticMode,
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
+        handleSetVisualizerMode,
+        handleSetCadenzeTuning,
+        handleResetCadenzeTuning,
         volume,
         isMuted,
         handleSetVolume,
@@ -1791,21 +1797,40 @@ export default function App() {
                 className="absolute inset-0 z-0"
                 onClick={handleContainerClick}
             >
-                <Visualizer
-                    currentTime={currentTime}
-                    currentLineIndex={currentLineIndex}
-                    lines={lyrics?.lines || []}
-                    theme={{ ...theme, backgroundColor: String(appStyle['--bg-color']) }} // Pass effective bg color
-                    audioPower={audioPower}
-                    audioBands={audioBands}
-                    coverUrl={getCoverUrl()}
-                    showText={currentView === 'player'}
-                    useCoverColorBg={useCoverColorBg}
-                    seed={currentSong?.id}
-                    staticMode={staticMode}
-                    backgroundOpacity={backgroundOpacity}
-                    onBack={navigateToHome}
-                />
+                {visualizerMode === 'cadenze' ? (
+                    <VisualizerCadenze
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={lyrics?.lines || []}
+                        theme={{ ...theme, backgroundColor: String(appStyle['--bg-color']) }}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        coverUrl={getCoverUrl()}
+                        showText={currentView === 'player'}
+                        useCoverColorBg={useCoverColorBg}
+                        seed={currentSong?.id}
+                        staticMode={staticMode}
+                        backgroundOpacity={backgroundOpacity}
+                        cadenzeTuning={cadenzeTuning}
+                        onBack={navigateToHome}
+                    />
+                ) : (
+                    <Visualizer
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={lyrics?.lines || []}
+                        theme={{ ...theme, backgroundColor: String(appStyle['--bg-color']) }}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        coverUrl={getCoverUrl()}
+                        showText={currentView === 'player'}
+                        useCoverColorBg={useCoverColorBg}
+                        seed={currentSong?.id}
+                        staticMode={staticMode}
+                        backgroundOpacity={backgroundOpacity}
+                        onBack={navigateToHome}
+                    />
+                )}
             </div>
 
             {/* --- HOME VIEW (Overlay) --- */}
@@ -2107,6 +2132,11 @@ export default function App() {
                         onToggleCoverColorBg={handleToggleCoverColorBg}
                         isDaylight={isDaylight}
                         onToggleDaylight={() => handleToggleDaylight(!isDaylight)}
+                        visualizerMode={visualizerMode}
+                        onVisualizerModeChange={handleSetVisualizerMode}
+                        cadenzeTuning={cadenzeTuning}
+                        onCadenzeTuningChange={handleSetCadenzeTuning}
+                        onResetCadenzeTuning={handleResetCadenzeTuning}
                         onMatchOnline={handleManualMatchOnline}
                         onUpdateLocalLyrics={handleUpdateLocalLyrics}
                         onChangeLyricsSource={handleChangeLyricsSource}

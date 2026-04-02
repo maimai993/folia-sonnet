@@ -76,6 +76,7 @@
     }
   },
   "dependencies": {
+    "@chenglou/pretext": "^0.0.4",
     "@google/genai": "^1.46.0",
     "@neteasecloudmusicapienhanced/api": "^4.30.3",
     "blueimp-md5": "^2.19.0",

@@ -49,6 +49,16 @@ export default {
     "findByFilename": "Find by filename →",
     "searching": "Searching...",
     "animationIntensity": "Intensity",
+    "visualizer": "Visualizer",
+    "visualizerWorkbench": "Visualizer Lab",
+    "visualizerTemporary": "Temporary Workbench",
+    "visualizerMode": "Mode",
+    "visualizerClassic": "Classic",
+    "visualizerCadenze": "Cadenze",
+    "cadenzeTuning": "Cadenze Tuning",
+    "resetVisualizerTuning": "Reset Visualizer Tuning",
+    "livePreview": "Live preview",
+    "cadenzeOnly": "Cadenze only",
     "background": "Background",
     "default": "Default",
     "aiTheme": "AI Theme",
@@ -59,11 +69,19 @@ export default {
     "foundMatches": "Found {{count}} matches",
     "waitingForMusic": "",
     "options": "Options",
-    "volume": "Volume"
+    "volume": "Volume",
+    "cadenze": {
+      "fontScale": "Font Scale",
+      "widthRatio": "Line Width",
+      "motionAmount": "Motion",
+      "glowIntensity": "Glow",
+      "beamIntensity": "Beam"
+    }
   },
   "panel": {
     "cover": "Cover",
     "controls": "Controls",
+    "visualizer": "Visual",
     "playlist": "Playlist",
     "account": "Account"
   },
