@@ -38,9 +38,9 @@ export interface DualTheme {
   dark: Theme;
 }
 
-export type VisualizerMode = 'classic' | 'cadenze';
+export type VisualizerMode = 'classic' | 'cadenza';
 
-export interface CadenzeTuning {
+export interface CadenzaTuning {
   fontScale: number;
   widthRatio: number;
   motionAmount: number;
@@ -48,12 +48,12 @@ export interface CadenzeTuning {
   beamIntensity: number;
 }
 
-export const DEFAULT_CADENZE_TUNING: CadenzeTuning = {
-  fontScale: 1,
+export const DEFAULT_CADENZA_TUNING: CadenzaTuning = {
+  fontScale: 1.12,
   widthRatio: 0.72,
   motionAmount: 1,
   glowIntensity: 1,
-  beamIntensity: 1,
+  beamIntensity: 0,
 };
 
 export enum PlayerState {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { DEFAULT_CADENZE_TUNING, type CadenzeTuning, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, type CadenzaTuning, type VisualizerMode } from '../types';
 
 type StatusSetter = Dispatch<SetStateAction<{ type: 'error' | 'success' | 'info', text: string; } | null>>;
 type AudioQuality = 'exhigh' | 'lossless' | 'hires';
@@ -9,18 +9,19 @@ const getStoredBoolean = (key: string, fallback: boolean) => {
     return saved !== null ? saved === 'true' : fallback;
 };
 
-const readStoredCadenzeTuning = (): CadenzeTuning => {
-    const saved = localStorage.getItem('cadenze_tuning');
-    if (!saved) return DEFAULT_CADENZE_TUNING;
+const readStoredCadenzaTuning = (): CadenzaTuning => {
+    const saved = localStorage.getItem('cadenza_tuning') ?? localStorage.getItem('cadenze_tuning');
+    if (!saved) return DEFAULT_CADENZA_TUNING;
 
     try {
-        const parsed = JSON.parse(saved) as Partial<CadenzeTuning>;
+        const parsed = JSON.parse(saved) as Partial<CadenzaTuning>;
         return {
-            ...DEFAULT_CADENZE_TUNING,
+            ...DEFAULT_CADENZA_TUNING,
             ...parsed,
+            beamIntensity: 0,
         };
     } catch {
-        return DEFAULT_CADENZE_TUNING;
+        return DEFAULT_CADENZA_TUNING;
     }
 };
 
@@ -39,9 +40,9 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
     const [isDaylight, setIsDaylight] = useState(() => getStoredBoolean('default_theme_daylight', false));
     const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>(() => {
         const saved = localStorage.getItem('visualizer_mode');
-        return saved === 'cadenze' ? 'cadenze' : 'classic';
+        return saved === 'cadenza' || saved === 'cadenze' ? 'cadenza' : 'classic';
     });
-    const [cadenzeTuning, setCadenzeTuning] = useState<CadenzeTuning>(readStoredCadenzeTuning);
+    const [cadenzaTuning, setCadenzaTuning] = useState<CadenzaTuning>(readStoredCadenzaTuning);
     const [volume, setVolume] = useState(() => {
         const saved = localStorage.getItem('player_volume');
         return saved !== null ? parseFloat(saved) : 1.0;
@@ -103,24 +104,24 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         localStorage.setItem('visualizer_mode', mode);
         setStatusMsg({
             type: 'info',
-            text: mode === 'cadenze' ? 'Cadenze 实验视觉已开启' : '已切换到经典视觉'
+            text: mode === 'cadenza' ? '已切换到心象歌词' : '已切换到流光歌词'
         });
     };
 
-    const handleSetCadenzeTuning = useCallback((patch: Partial<CadenzeTuning>) => {
-        setCadenzeTuning(prev => {
-            const next = { ...prev, ...patch };
-            localStorage.setItem('cadenze_tuning', JSON.stringify(next));
+    const handleSetCadenzaTuning = useCallback((patch: Partial<CadenzaTuning>) => {
+        setCadenzaTuning(prev => {
+            const next = { ...prev, ...patch, beamIntensity: 0 };
+            localStorage.setItem('cadenza_tuning', JSON.stringify(next));
             return next;
         });
     }, []);
 
-    const handleResetCadenzeTuning = () => {
-        setCadenzeTuning(DEFAULT_CADENZE_TUNING);
-        localStorage.setItem('cadenze_tuning', JSON.stringify(DEFAULT_CADENZE_TUNING));
+    const handleResetCadenzaTuning = () => {
+        setCadenzaTuning(DEFAULT_CADENZA_TUNING);
+        localStorage.setItem('cadenza_tuning', JSON.stringify(DEFAULT_CADENZA_TUNING));
         setStatusMsg({
             type: 'info',
-            text: 'Cadenze 参数已重置'
+            text: '心象参数已重置'
         });
     };
 
@@ -144,15 +145,15 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         backgroundOpacity,
         isDaylight,
         visualizerMode,
-        cadenzeTuning,
+        cadenzaTuning,
         handleToggleCoverColorBg,
         handleToggleStaticMode,
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
         handleSetVisualizerMode,
-        handleSetCadenzeTuning,
-        handleResetCadenzeTuning,
+        handleSetCadenzaTuning,
+        handleResetCadenzaTuning,
         volume,
         isMuted,
         handleSetVolume,

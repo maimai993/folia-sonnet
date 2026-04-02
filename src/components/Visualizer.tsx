@@ -224,7 +224,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
 
             const baseSpread = isChaotic ? 60 : isCalm ? 0 : 20;
             const baseRotate = isChaotic ? 30 : isCalm ? 0 : 5;
-
+            // visualizer config
             return {
                 id: `${w.text}-${i}-${seed}`,
                 x: (random(1) - 0.5) * baseSpread * 2,
@@ -253,7 +253,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
         }),
         active: ({ config }: any) => ({
             opacity: 1,
-            scale: isNaN(config.scale) ? 1.5 : config.scale * 1.3,
+            scale: isNaN(config.scale) ? 1.5 : config.scale * 1.4,
             x: config.x,
             y: config.y,
             rotate: config.rotate,

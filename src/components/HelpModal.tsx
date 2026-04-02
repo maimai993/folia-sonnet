@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../services/db';
-import { Theme } from '../types';
+import { Theme, type VisualizerMode } from '../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../services/navidromeService';
 import { NavidromeConfig } from '../types/navidrome';
 
@@ -18,6 +18,8 @@ interface HelpModalProps {
     onSetThemePreset?: (preset: 'midnight' | 'daylight') => void;
     isDaylight: boolean;
     onToggleNavidrome?: (enabled: boolean) => void;
+    visualizerMode?: VisualizerMode;
+    onVisualizerModeChange?: (mode: VisualizerMode) => void;
 }
 
 const HelpModal: React.FC<HelpModalProps> = ({
@@ -31,7 +33,9 @@ const HelpModal: React.FC<HelpModalProps> = ({
     setBackgroundOpacity,
     onSetThemePreset,
     isDaylight,
-    onToggleNavidrome
+    onToggleNavidrome,
+    visualizerMode = 'classic',
+    onVisualizerModeChange,
 }) => {
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<'help' | 'options'>('help');
@@ -323,6 +327,43 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             >
                                                 <div className="w-6 h-6 rounded-full bg-[#f5f5f4] border border-zinc-300 shadow-sm" />
                                                 <span className="text-xs opacity-80 text-zinc-800">{t('options.themePresetsDaylight') || "Daylight"}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+                                        <div className="space-y-1">
+                                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                {t('options.lyricsRenderer') || "Lyrics Renderer"}
+                                            </div>
+                                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                                {t('options.lyricsRendererDesc') || "Choose the lyrics rendering mode used on the playback page."}
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                onClick={() => onVisualizerModeChange?.('classic')}
+                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
+                                                style={{
+                                                    borderColor: visualizerMode === 'classic' ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
+                                                    backgroundColor: visualizerMode === 'classic' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
+                                                }}
+                                            >
+                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('ui.visualizerClassic')}
+                                                </span>
+                                            </button>
+                                            <button
+                                                onClick={() => onVisualizerModeChange?.('cadenza')}
+                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
+                                                style={{
+                                                    borderColor: visualizerMode === 'cadenza' ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
+                                                    backgroundColor: visualizerMode === 'cadenza' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
+                                                }}
+                                            >
+                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('ui.visualizerCadenze')}
+                                                </span>
                                             </button>
                                         </div>
                                     </div>

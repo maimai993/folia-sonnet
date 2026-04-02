@@ -53,12 +53,12 @@ export default {
     "visualizerWorkbench": "Visualizer Lab",
     "visualizerTemporary": "Temporary Workbench",
     "visualizerMode": "Mode",
-    "visualizerClassic": "Classic",
-    "visualizerCadenze": "Cadenze",
-    "cadenzeTuning": "Cadenze Tuning",
+    "visualizerClassic": "Luminous",
+    "visualizerCadenze": "Mindscape",
+    "cadenzeTuning": "Mindscape Tuning",
     "resetVisualizerTuning": "Reset Visualizer Tuning",
     "livePreview": "Live preview",
-    "cadenzeOnly": "Cadenze only",
+    "cadenzeOnly": "Mindscape only",
     "background": "Background",
     "default": "Default",
     "aiTheme": "AI Theme",
@@ -74,8 +74,7 @@ export default {
       "fontScale": "Font Scale",
       "widthRatio": "Line Width",
       "motionAmount": "Motion",
-      "glowIntensity": "Glow",
-      "beamIntensity": "Beam"
+      "glowIntensity": "Glow"
     }
   },
   "panel": {
@@ -181,6 +180,8 @@ export default {
     "enableStaticModeDesc": "Disable geometric backgrounds.",
     "enableStaticModeDescSub": "Suitable for background playback.",
     "visualSettings": "Visual Settings",
+    "lyricsRenderer": "Lyrics Renderer",
+    "lyricsRendererDesc": "Choose the lyrics rendering mode used on the playback page.",
     "backgroundOpacity": "Background Opacity",
     "themePresets": "Theme Presets",
     "themePresetsMidnight": "Midnight",

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong } from '../types';
+import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, type VisualizerMode } from '../types';
 import { NavidromeSong } from '../types/navidrome';
 import { isNavidromeEnabled, getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
@@ -67,6 +67,8 @@ interface HomeProps {
     setBackgroundOpacity: (opacity: number) => void;
     onSetThemePreset: (preset: 'midnight' | 'daylight') => void;
     isDaylight: boolean;
+    visualizerMode: VisualizerMode;
+    onVisualizerModeChange: (mode: VisualizerMode) => void;
 }
 const SearchResultCover: React.FC<{ track: UnifiedSong }> = ({ track }) => {
     const [src, setSrc] = useState<string | undefined>(undefined);
@@ -156,7 +158,9 @@ const Home: React.FC<HomeProps> = ({
     backgroundOpacity,
     setBackgroundOpacity,
     onSetThemePreset,
-    isDaylight
+    isDaylight,
+    visualizerMode,
+    onVisualizerModeChange,
 }) => {
     const { t } = useTranslation();
     const hasNeteaseLogin = Boolean(user);
@@ -972,6 +976,8 @@ const Home: React.FC<HomeProps> = ({
                                 onSetThemePreset={onSetThemePreset}
                                 isDaylight={isDaylight}
                                 onToggleNavidrome={handleToggleNavidrome}
+                                visualizerMode={visualizerMode}
+                                onVisualizerModeChange={onVisualizerModeChange}
                             />
                         )
                     }
