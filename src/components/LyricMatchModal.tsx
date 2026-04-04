@@ -8,6 +8,7 @@ import { parseYRC } from '../utils/yrcParser';
 import { detectChorusLines } from '../utils/chorusDetector';
 import { saveLocalSong, removeFromCache, saveToCache } from '../services/db';
 import { formatSongName } from '../utils/songNameFormatter';
+import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 
 interface LyricMatchModalProps {
     song: LocalSong;
@@ -162,6 +163,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             const mainLrc = lyricRes.lrc?.lyric;
             const ytlrc = lyricRes.ytlrc?.lyric || lyricRes.lrc?.ytlrc?.lyric;
             const tlyric = lyricRes.tlyric?.lyric || "";
+            const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
 
             const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
 
@@ -173,7 +175,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             }
 
             // Chorus detection
-            if (parsedLyrics && !lyricRes.pureMusic && !lyricRes.lrc?.pureMusic && mainLrc) {
+            if (parsedLyrics && !isPureMusic && mainLrc) {
                 const chorusLines = detectChorusLines(mainLrc);
                 if (chorusLines.size > 0) {
                     const effectMap = new Map<string, 'bars' | 'circles' | 'beams'>();
@@ -196,6 +198,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
 
             // Always save the matched song ID for reference
             song.matchedSongId = selectedResult.id;
+            song.matchedIsPureMusic = isPureMusic;
 
             // Save lyrics if online is selected
             if (lyricsSource === 'online') {

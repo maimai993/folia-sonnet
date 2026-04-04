@@ -101,6 +101,7 @@ export interface SongResult {
   artists: Artist[];
   album: Album;
   duration: number; // milliseconds usually from API
+  isPureMusic?: boolean;
   // Netease API raw fields
   al?: {
     id: number;
@@ -158,6 +159,7 @@ export interface LocalSong {
   matchedAlbumId?: number; // Netease album ID
   matchedAlbumName?: string; // Netease album name
   matchedLyrics?: LyricData;
+  matchedIsPureMusic?: boolean;
   matchedCoverUrl?: string; // Cover image URL from matched song
   hasManualLyricSelection?: boolean;
   folderName?: string; // Name of the folder if imported via folder import

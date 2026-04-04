@@ -8,6 +8,7 @@
 import { SongResult, LyricData } from '../types';
 import { neteaseApi } from './netease';
 import { getFromCache, saveToCache } from './db';
+import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 
 // Prefetch configuration
 const PREFETCH_COUNT_NEXT = 2;  // Prefetch 2 songs ahead
@@ -90,7 +91,7 @@ const prefetchSong = async (
 
     // Check if already prefetched with valid URL
     const existing = prefetchCache.get(songId);
-    if (existing && existing.audioUrl && isUrlValid(existing.audioUrlFetchedAt) && existing.lyrics) {
+    if (existing && existing.audioUrl && isUrlValid(existing.audioUrlFetchedAt) && (existing.lyrics || existing.lyricRaw?.isPureMusic)) {
         console.log(`[Prefetch] Already cached: ${song.name}`);
         return;
     }
@@ -147,7 +148,7 @@ const prefetchSong = async (
                 const ytlrc = lyricRes.ytlrc?.lyric || lyricRes.lrc?.ytlrc?.lyric || null;
                 const tlyric = lyricRes.tlyric?.lyric || "";
                 const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
-                const isPureMusic = lyricRes.pureMusic || lyricRes.lrc?.pureMusic || false;
+                const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
 
                 data.lyricRaw = { mainLrc, yrcLrc, transLrc, isPureMusic };
 

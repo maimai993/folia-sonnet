@@ -5,6 +5,7 @@ import { parseLRC } from '../utils/lrcParser';
 import { parseYRC } from '../utils/yrcParser';
 import { detectChorusLines } from '../utils/chorusDetector';
 import { parseEmbeddedMetadataAsync, type EmbeddedMetadataResult } from '../utils/localMetadataWorkerClient';
+import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
 
@@ -686,6 +687,7 @@ async function buildImportedSong(
         replayGainAlbumGain: embeddedMetadata.replayGainAlbumGain,
         replayGainAlbumPeak: embeddedMetadata.replayGainAlbumPeak,
         matchedLyrics: existingSong?.matchedLyrics,
+        matchedIsPureMusic: existingSong?.matchedIsPureMusic,
         matchedSongId: existingSong?.matchedSongId,
         matchedArtists: existingSong?.matchedArtists,
         matchedAlbumId: existingSong?.matchedAlbumId,
@@ -1192,6 +1194,7 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
         const mainLrc = lyricRes.lrc?.lyric;
         const ytlrc = lyricRes.ytlrc?.lyric || lyricRes.lrc?.ytlrc?.lyric;
         const tlyric = lyricRes.tlyric?.lyric || "";
+        const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
 
         const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
 
@@ -1203,7 +1206,7 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
         }
 
         // Add chorus detection
-        if (parsedLyrics && !lyricRes.pureMusic && !lyricRes.lrc?.pureMusic && mainLrc) {
+        if (parsedLyrics && !isPureMusic && mainLrc) {
             const chorusLines = detectChorusLines(mainLrc);
             if (chorusLines.size > 0) {
                 const effectMap = new Map<string, 'bars' | 'circles' | 'beams'>();
@@ -1231,7 +1234,20 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
             song.matchedAlbumId = matchedSong.al?.id || matchedSong.album?.id;
             song.matchedAlbumName = matchedSong.al?.name || matchedSong.album?.name;
             song.matchedLyrics = parsedLyrics;
+            song.matchedIsPureMusic = isPureMusic;
             // Get cover URL from matched song
+            const coverUrl = matchedSong.al?.picUrl || matchedSong.album?.picUrl;
+            if (coverUrl) {
+                song.matchedCoverUrl = coverUrl.replace('http:', 'https:');
+            }
+            await saveLocalSong(song);
+        } else if (isPureMusic) {
+            song.matchedSongId = matchedSong.id;
+            song.matchedArtists = matchedSong.ar?.map(a => a.name).join(', ');
+            song.matchedAlbumId = matchedSong.al?.id || matchedSong.album?.id;
+            song.matchedAlbumName = matchedSong.al?.name || matchedSong.album?.name;
+            song.matchedLyrics = undefined;
+            song.matchedIsPureMusic = true;
             const coverUrl = matchedSong.al?.picUrl || matchedSong.album?.picUrl;
             if (coverUrl) {
                 song.matchedCoverUrl = coverUrl.replace('http:', 'https:');

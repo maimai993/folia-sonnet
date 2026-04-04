@@ -1,10 +1,13 @@
 import { DualTheme } from "../types";
 
-export const generateThemeFromLyrics = async (lyricsText: string): Promise<DualTheme> => {
+export const generateThemeFromLyrics = async (
+  lyricsText: string,
+  options?: { isPureMusic?: boolean; songTitle?: string }
+): Promise<DualTheme> => {
   try {
     // Check if running in Electron environment
     if ((window as any).electron && typeof (window as any).electron.generateTheme === 'function') {
-      return await (window as any).electron.generateTheme(lyricsText);
+      return await (window as any).electron.generateTheme(lyricsText, options);
     }
 
     const provider = import.meta.env.VITE_AI_PROVIDER;
@@ -15,7 +18,7 @@ export const generateThemeFromLyrics = async (lyricsText: string): Promise<DualT
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ lyricsText }),
+      body: JSON.stringify({ lyricsText, ...options }),
     });
 
     if (!response.ok) {

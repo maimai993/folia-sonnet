@@ -3,6 +3,7 @@ import { getFromCache, saveToCache } from './db';
 import { neteaseApi } from './netease';
 import { PrefetchedSongData, isUrlValid } from './prefetchService';
 import { detectChorusLines } from '../utils/chorusDetector';
+import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 
 const CHORUS_EFFECTS: Array<'bars' | 'circles' | 'beams'> = ['bars', 'circles', 'beams'];
 
@@ -65,20 +66,32 @@ export async function loadOnlineSongLyrics(
     callbacks: {
         isCurrent: () => boolean;
         onLyrics: (lyrics: LyricData | null) => void;
+        onPureMusicChange?: (isPureMusic: boolean) => void;
         onDone: () => void;
     }
 ): Promise<void> {
-    const { isCurrent, onLyrics, onDone } = callbacks;
+    const { isCurrent, onLyrics, onPureMusicChange, onDone } = callbacks;
 
     const cachedLyrics = await getFromCache<LyricData>(`lyric_${songId}`);
     if (!isCurrent()) return;
     if (cachedLyrics) {
+        const cachedText = cachedLyrics.lines.map(line => line.fullText).join('\n');
+        onPureMusicChange?.(isPureMusicLyricText(cachedText));
         onLyrics(cachedLyrics);
         onDone();
         return;
     }
 
+    if (prefetched?.lyricRaw?.isPureMusic && !prefetched.lyrics) {
+        onPureMusicChange?.(true);
+        onLyrics(null);
+        onDone();
+        return;
+    }
+
     if (prefetched?.lyrics) {
+        const prefetchedText = prefetched.lyrics.lines.map(line => line.fullText).join('\n');
+        onPureMusicChange?.(prefetched.lyricRaw?.isPureMusic || isPureMusicLyricText(prefetchedText) || isPureMusicLyricText(prefetched.lyricRaw?.mainLrc));
         onLyrics(prefetched.lyrics);
 
         if (prefetched.lyricRaw?.mainLrc && !prefetched.lyricRaw.isPureMusic) {
@@ -108,6 +121,7 @@ export async function loadOnlineSongLyrics(
     const ytlrc = lyricRes.ytlrc?.lyric || lyricRes.lrc?.ytlrc?.lyric;
     const tlyric = lyricRes.tlyric?.lyric || '';
     const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
+    const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
 
     let parsedLyrics: LyricData | null = await (await import('../utils/lyrics/LyricParserFactory')).LyricParserFactory.parse({
         type: 'netease',
@@ -115,6 +129,7 @@ export async function loadOnlineSongLyrics(
     });
 
     if (!isCurrent()) return;
+    onPureMusicChange?.(isPureMusic);
 
     if (!parsedLyrics) {
         onLyrics(null);
@@ -124,7 +139,6 @@ export async function loadOnlineSongLyrics(
 
     onLyrics(parsedLyrics);
 
-    const isPureMusic = lyricRes.pureMusic || lyricRes.lrc?.pureMusic;
     if (!isPureMusic && mainLrc) {
         setTimeout(() => {
             if (!isCurrent()) return;

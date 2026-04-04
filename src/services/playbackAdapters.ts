@@ -33,6 +33,9 @@ export function buildUnifiedLocalSong({
     coverUrl: string | null;
     preferOnlineMetadata: boolean;
 }): UnifiedSong {
+    const useMatchedLyrics =
+        localSong.lyricsSource === 'online'
+        || (!localSong.lyricsSource && !localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics);
     const displayTitle = localSong.embeddedTitle || localSong.title || localSong.fileName;
     const displayArtist = preferOnlineMetadata
         ? (localSong.matchedArtists || localSong.embeddedArtist || localSong.artist)
@@ -47,6 +50,7 @@ export function buildUnifiedLocalSong({
         artists: displayArtist ? [{ id: 0, name: displayArtist }] : [],
         album: displayAlbum ? { id: 0, name: displayAlbum } : { id: 0, name: '' },
         duration: localSong.duration,
+        isPureMusic: useMatchedLyrics ? localSong.matchedIsPureMusic : false,
         ar: displayArtist ? [{ id: 0, name: displayArtist }] : [],
         al: displayAlbum ? {
             id: 0,
@@ -89,18 +93,25 @@ export function buildUnifiedLocalSong({
 }
 
 export function buildLocalQueue(queue: LocalSong[], currentSong?: UnifiedSong): UnifiedSong[] {
-    const convertedQueue = queue.map(song => ({
-        id: getLocalSongId(song),
-        name: song.title || song.fileName,
-        artists: song.artist ? [{ id: 0, name: song.artist }] : [],
-        album: song.album ? { id: 0, name: song.album } : { id: 0, name: '' },
-        duration: song.duration,
-        ar: song.artist ? [{ id: 0, name: song.artist }] : [],
-        al: song.album ? { id: 0, name: song.album, picUrl: song.matchedCoverUrl } : undefined,
-        dt: song.duration,
-        isLocal: true,
-        localData: song
-    } as UnifiedSong));
+    const convertedQueue = queue.map(song => {
+        const useMatchedLyrics =
+            song.lyricsSource === 'online'
+            || (!song.lyricsSource && !song.hasLocalLyrics && !song.hasEmbeddedLyrics);
+
+        return {
+            id: getLocalSongId(song),
+            name: song.title || song.fileName,
+            artists: song.artist ? [{ id: 0, name: song.artist }] : [],
+            album: song.album ? { id: 0, name: song.album } : { id: 0, name: '' },
+            duration: song.duration,
+            isPureMusic: useMatchedLyrics ? song.matchedIsPureMusic : false,
+            ar: song.artist ? [{ id: 0, name: song.artist }] : [],
+            al: song.album ? { id: 0, name: song.album, picUrl: song.matchedCoverUrl } : undefined,
+            dt: song.duration,
+            isLocal: true,
+            localData: song
+        } as UnifiedSong;
+    });
 
     if (!currentSong) {
         return convertedQueue;
@@ -135,6 +146,7 @@ export function buildUnifiedNavidromeSong(
             picUrl: navidromeSong.al.picUrl
         } : { id: 0, name: '' }),
         duration: navidromeSong.duration || navidromeSong.dt || 0,
+        isPureMusic: navidromeSong.lyricsSource === 'online' ? navidromeSong.matchedIsPureMusic : false,
         ar: navidromeSong.ar || [],
         al: options?.coverUrl
             ? { ...(navidromeSong.al || { id: 0, name: '' }), picUrl: options.coverUrl }
@@ -152,6 +164,7 @@ export function buildNavidromeQueue(queue: NavidromeSong[], currentSong?: SongRe
         artists: song.artists || song.ar || [],
         album: song.album || (song.al ? { id: song.al.id, name: song.al.name, picUrl: song.al.picUrl } : { id: 0, name: '' }),
         duration: song.duration || song.dt || 0,
+        isPureMusic: song.lyricsSource === 'online' ? song.matchedIsPureMusic : false,
         ar: song.ar || [],
         al: song.al,
         dt: song.dt,

@@ -172,7 +172,7 @@ function getGeminiResponseSchema() {
           secondaryColor: { type: 'STRING', description: 'Hex code for secondary elements (must contrast with light bg)' },
           wordColors: {
             type: 'ARRAY',
-            description: 'List of exact emotional words from lyrics and their specific colors',
+            description: 'List of exact emotional words or phrases from the source text and their specific colors',
             items: {
               type: 'OBJECT',
               properties: {
@@ -184,7 +184,7 @@ function getGeminiResponseSchema() {
           },
           lyricsIcons: {
             type: 'ARRAY',
-            description: 'List of Lucide icon names related to lyrics',
+            description: 'List of Lucide icon names related to the source text',
             items: { type: 'STRING' }
           },
         },
@@ -201,7 +201,7 @@ function getGeminiResponseSchema() {
           secondaryColor: { type: 'STRING', description: 'Hex code for secondary elements (must contrast with dark bg)' },
           wordColors: {
             type: 'ARRAY',
-            description: 'List of exact emotional words from lyrics and their specific colors',
+            description: 'List of exact emotional words or phrases from the source text and their specific colors',
             items: {
               type: 'OBJECT',
               properties: {
@@ -213,7 +213,7 @@ function getGeminiResponseSchema() {
           },
           lyricsIcons: {
             type: 'ARRAY',
-            description: 'List of Lucide icon names related to lyrics',
+            description: 'List of Lucide icon names related to the source text',
             items: { type: 'STRING' }
           },
         },
@@ -371,31 +371,39 @@ ipcMain.handle('get-netease-port', () => {
 });
 
 // Integrate AI logic locally into Electron
-ipcMain.handle('generate-theme', async (event, lyricsText) => {
+ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
   try {
+    const { isPureMusic = false, songTitle } = options;
     const provider = store.get('AI_PROVIDER') || 'gemini';
     const useSystemProxy = store.get('USE_SYSTEM_PROXY_FOR_AI') || false;
     const customFetch = (url, options) => fetchWithOptionalSystemProxy(url, options, useSystemProxy);
     const snippet = lyricsText.slice(0, 2000);
 
-    const promptText = `Analyze the mood of these lyrics and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.\n\n` +
+    const promptText = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.\n\n` +
       `DUAL THEME REQUIREMENTS:\n` +
       `1. Generate TWO complete themes: one optimized for LIGHT/DAYLIGHT mode, one for DARK/MIDNIGHT mode.\n` +
-      `2. Both themes should capture the SAME emotional essence of the lyrics, but with appropriate color palettes for their respective modes.\n` +
+      `2. Both themes should capture the SAME emotional essence of the source text, but with appropriate color palettes for their respective modes.\n` +
       `3. The theme names should reflect both the mood AND the mode.\n\n` +
+      `SOURCE MODE:\n` +
+      `1. If 'Pure instrumental' is yes, the source text below is the song title of a pure instrumental track, not lyrics.\n` +
+      `2. If 'Pure instrumental' is no, the source text below is a lyrics snippet.\n` +
+      `3. Base your mood inference only on the provided source text.\n\n` +
       `LIGHT THEME RULES:\n- Use LIGHT backgrounds.\n- Ensure text/icons are dark enough for contrast.\n- 'accentColor' must be visible.\n\n` +
       `DARK THEME RULES:\n- Use DARK backgrounds.\n- Ensure text/icons are light enough for contrast.\n\n` +
       `SHARED RULES:\n` +
       `1. 'secondaryColor': MUST have sufficient contrast against 'backgroundColor'.\n` +
-      `2. 'wordColors' and 'lyricsIcons' should be the SAME for both themes.\n\n` +
+      `2. 'wordColors' and 'lyricsIcons' should be the SAME for both themes (they represent the source text's meaning).\n\n` +
       `IMPORTANT for 'wordColors':\n` +
-      `1. Identify 5-10 key emotional words or phrases from the lyrics.\n` +
-      `2. Assign a specific color to each word.\n` +
-      `3. CRITICAL: The 'word' field MUST match the EXACT text in the lyrics snippet (case-insensitive).\n\n` +
+      `1. Identify 5-10 key emotional words or phrases from the source text.\n` +
+      `2. If the source text is a very short pure-instrumental title, you may return fewer entries.\n` +
+      `3. Assign a specific color to each word.\n` +
+      `4. CRITICAL: The 'word' field MUST match the EXACT text in the source snippet (case-insensitive). If the pure-instrumental title is very short, using the exact full title as a phrase is allowed.\n\n` +
       `IMPORTANT for 'lyricsIcons':\n` +
-      `1. Identify 3-5 visual concepts/objects mentioned in or relevant to the lyrics.\n` +
+      `1. Identify 3-5 visual concepts/objects mentioned in or strongly implied by the source text.\n` +
       `2. Return them as valid Lucide React icon names (PascalCase).\n\n` +
-      `Lyrics snippet:\n${snippet}`;
+      `Pure instrumental: ${isPureMusic ? 'yes' : 'no'}\n` +
+      `${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}` +
+      `Source snippet:\n${snippet}`;
 
     let dualTheme = null;
 

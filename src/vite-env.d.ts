@@ -9,7 +9,7 @@ declare global {
     electron?: {
       getSettings: () => Promise<any>;
       saveSettings: (key: string, value: any) => Promise<any>;
-      generateTheme: (lyricsText: string) => Promise<any>;
+      generateTheme: (lyricsText: string, options?: { isPureMusic?: boolean; songTitle?: string }) => Promise<any>;
       getNeteasePort: () => Promise<number>;
     };
   }

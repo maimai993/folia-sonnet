@@ -32,6 +32,7 @@ interface UnifiedPanelProps {
     onGenerateAITheme: () => void;
     isGeneratingTheme: boolean;
     hasLyrics: boolean;
+    canGenerateAITheme: boolean;
     theme: Theme;
     onThemeChange: (theme: Theme) => void;
     bgMode: 'default' | 'ai';
@@ -94,6 +95,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     onGenerateAITheme,
     isGeneratingTheme,
     hasLyrics,
+    canGenerateAITheme,
     theme,
     onThemeChange,
     bgMode,
@@ -240,7 +242,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             isLiked={isLiked}
                                             onGenerateAITheme={onGenerateAITheme}
                                             isGeneratingTheme={isGeneratingTheme}
-                                            hasLyrics={hasLyrics}
+                                            canGenerateAITheme={canGenerateAITheme}
                                             theme={theme}
                                             onThemeChange={onThemeChange}
                                             bgMode={bgMode}

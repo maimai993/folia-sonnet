@@ -11,7 +11,7 @@ interface ControlsTabProps {
     isLiked: boolean;
     onGenerateAITheme: () => void;
     isGeneratingTheme: boolean;
-    hasLyrics: boolean;
+    canGenerateAITheme: boolean;
     theme: Theme;
     onThemeChange: (theme: Theme) => void;
     bgMode: 'default' | 'ai';
@@ -37,7 +37,7 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     isLiked,
     onGenerateAITheme,
     isGeneratingTheme,
-    hasLyrics,
+    canGenerateAITheme,
     theme,
     onThemeChange,
     bgMode,
@@ -114,7 +114,7 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
 
                 <button
                     onClick={onGenerateAITheme}
-                    disabled={isGeneratingTheme || !hasLyrics}
+                    disabled={isGeneratingTheme || !canGenerateAITheme}
                     className={`h-12 rounded-xl flex items-center justify-center transition-colors
                         ${isGeneratingTheme ? 'bg-blue-500/20 text-blue-300' : buttonBg}`}
                 >

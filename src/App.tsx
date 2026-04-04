@@ -28,6 +28,7 @@ import { useAppNavigation } from './hooks/useAppNavigation';
 import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
+import { hasNeteasePureMusicFlag, isPureMusicLyricText } from './utils/lyrics/pureMusic';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
@@ -425,6 +426,8 @@ export default function App() {
                         // Try cache first for lyrics (cloud songs only)
                         const cachedLyrics = await getFromCache<LyricData>(`lyric_${lastSong.id}`);
                         if (cachedLyrics) {
+                            const cachedText = cachedLyrics.lines.map(line => line.fullText).join('\n');
+                            setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, isPureMusic: isPureMusicLyricText(cachedText) } : prev);
                             setLyrics(cachedLyrics);
                         } else {
                             const lyricRes = await neteaseApi.getLyric(lastSong.id);
@@ -432,6 +435,7 @@ export default function App() {
                             const mainLrc = lyricRes.lrc?.lyric;
                             const ytlrc = lyricRes.ytlrc?.lyric || lyricRes.lrc?.ytlrc?.lyric;
                             const tlyric = lyricRes.tlyric?.lyric || "";
+                            const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
 
                             // Use ytlrc for YRC if available, otherwise fallback to tlyric.
                             // For standard LRC, use tlyric.
@@ -448,7 +452,7 @@ export default function App() {
                             // since the real chourus detection requires very heavy audio analysis or ML model, 
                             // which btw is not impossible to implement, but it will introduce a lot overhead, the uesr will have to wait for
                             // a long time before see any lyrics if we do that. Not really worth it.
-                            if (parsed && !lyricRes.pureMusic && !lyricRes.lrc?.pureMusic && mainLrc) {
+                            if (parsed && !isPureMusic && mainLrc) {
                                 const chorusLines = detectChorusLines(mainLrc);
                                 if (chorusLines.size > 0) {
                                     // Assign a stable random effect for each unique chorus line text
@@ -470,6 +474,7 @@ export default function App() {
                                 }
                             }
 
+                            setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, isPureMusic } : prev);
                             setLyrics(parsed);
                         }
                     }
@@ -788,10 +793,12 @@ export default function App() {
                     if (searchRes.result?.songs?.length > 0) {
                         const matchedSong = searchRes.result.songs[0];
                         const lyricRes = await neteaseApi.getLyric(matchedSong.id);
+                        const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(lyricRes.lrc?.lyric);
 
                         lyrics = await LyricParserFactory.parse({ type: 'netease', ...lyricRes });
+                        (navidromeSong as any).matchedIsPureMusic = isPureMusic;
                         
-                        if (lyrics) {
+                        if (lyrics || isPureMusic) {
                             autoMatchedLyrics = lyrics;
                             isAutoMatched = true;
                             console.log('[App] Using Netease lyrics for Navidrome song');
@@ -809,6 +816,7 @@ export default function App() {
                 (navidromeSong as any).lyricsSource = 'online';
             } else {
                 (navidromeSong as any).matchedLyrics = matchData?.matchedLyrics;
+                (navidromeSong as any).matchedIsPureMusic = matchData?.matchedIsPureMusic;
                 (navidromeSong as any).useOnlineLyrics = matchData?.useOnlineLyrics;
                 (navidromeSong as any).lyricsSource = matchData?.lyricsSource;
             }
@@ -1102,6 +1110,9 @@ export default function App() {
             await loadOnlineSongLyrics(song.id, prefetched, {
                 isCurrent: () => currentSongRef.current === song.id,
                 onLyrics: (resolvedLyrics) => setLyrics(resolvedLyrics),
+                onPureMusicChange: (isPureMusic) => {
+                    setCurrentSong(prev => prev?.id === song.id ? { ...prev, isPureMusic } : prev);
+                },
                 onDone: () => setIsLyricsLoading(false),
             });
         } catch (e) {
@@ -1757,6 +1768,7 @@ export default function App() {
         backgroundColor: 'var(--bg-color)',
         color: 'var(--text-primary)'
     } as React.CSSProperties;
+    const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
 
     return (
         <div
@@ -2111,6 +2123,7 @@ export default function App() {
                         onGenerateAITheme={() => generateAITheme(lyrics, currentSong)}
                         isGeneratingTheme={isGeneratingTheme}
                         hasLyrics={!!lyrics}
+                        canGenerateAITheme={canGenerateAITheme}
                         theme={theme}
                         onThemeChange={setTheme}
                         bgMode={bgMode}

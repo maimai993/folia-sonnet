@@ -9,10 +9,12 @@ import { parseYRC } from '../utils/yrcParser';
 import { detectChorusLines } from '../utils/chorusDetector';
 import { saveToCache, getFromCache, removeFromCache } from '../services/db';
 import { formatSongName } from '../utils/songNameFormatter';
+import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 
 export interface NavidromeMatchData {
     matchedSongId?: number;
     matchedLyrics?: LyricData;
+    matchedIsPureMusic?: boolean;
     matchedCoverUrl?: string;
     matchedArtists?: string;
     matchedAlbumId?: number;
@@ -122,13 +124,14 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
             const lyricRes = await neteaseApi.getLyric(selectedResult.id);
             const mainLrc = lyricRes.yrc?.lyric || lyricRes.lrc?.yrc?.lyric || lyricRes.lrc?.lyric;
             const transLrc = lyricRes.ytlrc?.lyric || lyricRes.tlyric?.lyric || "";
+            const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
 
             let parsedLyrics: LyricData | null = null;
             if (mainLrc) {
                 parsedLyrics = lyricRes.yrc?.lyric ? parseYRC(mainLrc, transLrc) : parseLRC(mainLrc, transLrc);
             }
 
-            if (parsedLyrics && mainLrc) {
+            if (parsedLyrics && mainLrc && !isPureMusic) {
                 const chorusLines = detectChorusLines(mainLrc);
                 if (chorusLines.size > 0) {
                     const effectMap = new Map<string, 'bars' | 'circles' | 'beams'>();
@@ -149,6 +152,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
             const matchData: NavidromeMatchData = {
                 matchedSongId: selectedResult.id,
                 matchedLyrics: parsedLyrics || undefined,
+                matchedIsPureMusic: isPureMusic,
                 useOnlineLyrics: lyricsSource === 'online',
                 lyricsSource,
                 hasManualLyricSelection: true

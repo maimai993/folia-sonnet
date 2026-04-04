@@ -148,6 +148,7 @@ export interface NavidromeSong extends SongResult {
     // For lyrics matching (similar to local songs)
     matchedSongId?: number;
     matchedLyrics?: LyricData;
+    matchedIsPureMusic?: boolean;
     hasManualLyricSelection?: boolean;
     lyricsSource?: 'navi' | 'online';
     useOnlineCover?: boolean;

@@ -3,6 +3,7 @@ import { generateThemeFromLyrics } from '../services/gemini';
 import { saveToCache } from '../services/db';
 import { DualTheme, LyricData, SongResult, Theme } from '../types';
 import { getCachedThemeState, getLastDualTheme } from '../services/themeCache';
+import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 
 type StatusSetter = Dispatch<SetStateAction<{ type: 'error' | 'success' | 'info', text: string; } | null>>;
 
@@ -164,13 +165,25 @@ export function useThemeController({
     };
 
     const generateAITheme = async (lyrics: LyricData | null, currentSong: SongResult | null) => {
-        if (!lyrics || isGeneratingTheme) return;
+        if (isGeneratingTheme) return;
 
         setIsGeneratingTheme(true);
         setStatusMsg({ type: 'info', text: t('status.generatingTheme') });
         try {
-            const allText = lyrics.lines.map(line => line.fullText).join('\n');
-            const dualTheme = await generateThemeFromLyrics(allText);
+            const allText = lyrics?.lines.map(line => line.fullText).join('\n').trim() || '';
+            const songTitle = currentSong?.name?.trim() || lyrics?.title?.trim() || '';
+            const isPureMusic = Boolean(currentSong?.isPureMusic) || isPureMusicLyricText(allText);
+            const promptText = (isPureMusic ? songTitle : allText) || allText;
+
+            if (!promptText) {
+                setStatusMsg({ type: 'error', text: t('status.themeGenerationFailed') });
+                return;
+            }
+
+            const dualTheme = await generateThemeFromLyrics(promptText, {
+                isPureMusic,
+                songTitle: songTitle || undefined,
+            });
             const selectedTheme = isDaylight ? dualTheme.light : dualTheme.dark;
 
             setTheme(selectedTheme);
