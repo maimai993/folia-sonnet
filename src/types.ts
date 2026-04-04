@@ -145,7 +145,7 @@ export interface LocalSong {
   embeddedTitle?: string;
   embeddedArtist?: string;
   embeddedAlbum?: string;
-  embeddedCover?: Blob; // Stored as Blob in IndexedDB
+  embeddedCover?: Blob; // Preferred local cover blob (folder cover or embedded art), stored in IndexedDB
   replayGain?: number; // ReplayGain track gain in dB
   replayGainTrackGain?: number; // ReplayGain track gain in dB
   replayGainTrackPeak?: number; // ReplayGain track peak ratio
@@ -168,7 +168,7 @@ export interface LocalSong {
   useOnlineCover?: boolean;     // Prefer online cover over embedded cover
   useOnlineMetadata?: boolean;  // Prefer online artist/album over embedded tags
 
-  // Local Lyrics (.lrc files)
+  // Local Lyrics (.lrc / .vtt files)
   hasLocalLyrics?: boolean;
   localLyricsContent?: string;
   hasLocalTranslationLyrics?: boolean;
@@ -184,7 +184,7 @@ export interface LocalSong {
 export interface LocalLibrarySnapshotFile {
   name: string;
   relativePath: string;
-  kind: 'audio' | 'lyric' | 'translationLyric' | 'other';
+  kind: 'audio' | 'lyric' | 'translationLyric' | 'cover' | 'other';
   size: number;
   lastModified: number;
   signature: string;

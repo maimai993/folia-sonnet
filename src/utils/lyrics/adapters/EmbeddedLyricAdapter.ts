@@ -3,6 +3,7 @@ import { LyricAdapter } from '../LyricAdapter';
 import { RawEmbeddedLyric } from '../types';
 import { parseLyricsAsync } from '../workerClient';
 import { splitCombinedTimeline } from '../timelineSplitter';
+import { detectTimedLyricFormat } from '../formatDetection';
 
 export class EmbeddedLyricAdapter implements LyricAdapter<RawEmbeddedLyric> {
     async parse(source: RawEmbeddedLyric): Promise<LyricData | null> {
@@ -47,6 +48,6 @@ export class EmbeddedLyricAdapter implements LyricAdapter<RawEmbeddedLyric> {
 
         if (!mainLrc) return null;
 
-        return await parseLyricsAsync('lrc', mainLrc, transLrc);
+        return await parseLyricsAsync(detectTimedLyricFormat(mainLrc), mainLrc, transLrc);
     }
 }

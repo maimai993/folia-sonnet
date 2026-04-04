@@ -3,6 +3,7 @@ import { LyricAdapter } from '../LyricAdapter';
 import { RawLocalFileLyric } from '../types';
 import { parseLyricsAsync } from '../workerClient';
 import { splitCombinedTimeline } from '../timelineSplitter';
+import { detectTimedLyricFormat } from '../formatDetection';
 
 export class LocalFileLyricAdapter implements LyricAdapter<RawLocalFileLyric> {
     async parse(source: RawLocalFileLyric): Promise<LyricData | null> {
@@ -17,6 +18,6 @@ export class LocalFileLyricAdapter implements LyricAdapter<RawLocalFileLyric> {
             transLrc = trans;
         }
 
-        return await parseLyricsAsync('lrc', mainLrc, transLrc);
+        return await parseLyricsAsync(detectTimedLyricFormat(mainLrc), mainLrc, transLrc);
     }
 }

@@ -178,7 +178,7 @@ src/
 | :--- | :--- |
 | `services/netease.ts` | Netease API wrapper used by search, playlists, albums, artists, lyrics, FM, and login. |
 | `services/navidromeService.ts` | Subsonic/Navidrome client, config persistence, auth params, album/search/stream/lyrics helpers. |
-| `services/localMusicService.ts` | Local library import/resync/delete pipeline, embedded metadata parsing, `.lrc` pairing, cover hydration, file-handle recovery, local lyric matching, and scan progress events. |
+| `services/localMusicService.ts` | Local library import/resync/delete pipeline, `.lrc` / `.vtt` pairing, folder-cover preference, embedded metadata parsing, cover hydration, file-handle recovery, local lyric matching, and scan progress events. |
 
 ### Playback and Cache Services
 
@@ -203,11 +203,11 @@ The lyric system is now layered instead of being only `lrcParser.ts` + `yrcParse
 | `utils/lyrics/LyricAdapter.ts` | Shared adapter contract. |
 | `utils/lyrics/types.ts` | Raw lyric input types used by the factory/adapters. |
 | `utils/lyrics/adapters/NeteaseLyricAdapter.ts` | Parses Netease lyric payloads. |
-| `utils/lyrics/adapters/LocalFileLyricAdapter.ts` | Parses external `.lrc` / `.t.lrc` pairs. |
+| `utils/lyrics/adapters/LocalFileLyricAdapter.ts` | Parses external `.lrc` / `.vtt` lyric pairs, including translated variants. |
 | `utils/lyrics/adapters/EmbeddedLyricAdapter.ts` | Parses embedded tag lyrics extracted from audio metadata. |
 | `utils/lyrics/adapters/NavidromeLyricAdapter.ts` | Parses Navidrome/OpenSubsonic lyric payloads. |
 | `utils/lyrics/workerClient.ts` | Frontend client for lyric parsing worker. |
-| `workers/lyricsParser.worker.ts` | Off-main-thread LRC/YRC parsing worker. |
+| `workers/lyricsParser.worker.ts` | Off-main-thread LRC/YRC/VTT parsing worker. |
 | `utils/lrcParser.ts` / `utils/yrcParser.ts` | Standalone lyric parsers kept as reusable low-level implementations. |
 | `utils/lyrics/timelineSplitter.ts` | Splits combined lyric/translation timelines when needed. |
 | `utils/chorusDetector.ts` | Detects repeated chorus lines and marks visual effects. |
