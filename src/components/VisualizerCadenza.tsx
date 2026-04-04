@@ -48,6 +48,10 @@ interface WordFragment {
     fragmentStartInWord: number;
     fragmentEndInWord: number;
     wordGraphemeCount: number;
+    fragmentIndexInWord: number;
+    fragmentCountInWord: number;
+    isPrimaryFragment: boolean;
+    isSplitAcrossLines: boolean;
 }
 
 interface WordPlacement {
@@ -649,36 +653,69 @@ const buildLineFragments = (
     graphemes: string[],
     layout: ReturnType<typeof layoutWithLines>,
     ranges: WordRange[],
-) => layout.lines.map(line => {
-    const lineStart = cursorToGlobalOffset(line.start, segmentMetas);
-    const lineEnd = cursorToGlobalOffset(line.end, segmentMetas);
+) => {
+    const lineViews = layout.lines.map(line => {
+        const lineStart = cursorToGlobalOffset(line.start, segmentMetas);
+        const lineEnd = cursorToGlobalOffset(line.end, segmentMetas);
 
-    const fragments = ranges.flatMap(range => {
-        if (range.end <= lineStart || range.start >= lineEnd) {
-            return [];
-        }
+        const fragments = ranges.flatMap(range => {
+            if (range.end <= lineStart || range.start >= lineEnd) {
+                return [];
+            }
 
-        const fragmentStart = Math.max(range.start, lineStart);
-        const fragmentEnd = Math.min(range.end, lineEnd);
-        return [{
-            wordIndex: range.wordIndex,
-            lineIndex: 0,
-            word: range.word,
-            text: graphemes.slice(fragmentStart, fragmentEnd).join(''),
-            color: range.color,
-            startX: widthBetweenOffsets(prepared, segmentMetas, lineStart, fragmentStart),
-            endX: widthBetweenOffsets(prepared, segmentMetas, lineStart, fragmentEnd),
-            fragmentStartInWord: fragmentStart - range.start,
-            fragmentEndInWord: fragmentEnd - range.start,
-            wordGraphemeCount: Math.max(range.end - range.start, 1),
-        }];
+            const fragmentStart = Math.max(range.start, lineStart);
+            const fragmentEnd = Math.min(range.end, lineEnd);
+            return [{
+                wordIndex: range.wordIndex,
+                lineIndex: 0,
+                word: range.word,
+                text: graphemes.slice(fragmentStart, fragmentEnd).join(''),
+                color: range.color,
+                startX: widthBetweenOffsets(prepared, segmentMetas, lineStart, fragmentStart),
+                endX: widthBetweenOffsets(prepared, segmentMetas, lineStart, fragmentEnd),
+                fragmentStartInWord: fragmentStart - range.start,
+                fragmentEndInWord: fragmentEnd - range.start,
+                wordGraphemeCount: Math.max(range.end - range.start, 1),
+                fragmentIndexInWord: 0,
+                fragmentCountInWord: 1,
+                isPrimaryFragment: true,
+                isSplitAcrossLines: false,
+            }];
+        });
+
+        return { line, lineStart, lineEnd, fragments };
     });
 
-    return { line, lineStart, lineEnd, fragments };
-}).map((lineView, lineIndex) => ({
-    ...lineView,
-    fragments: lineView.fragments.map(fragment => ({ ...fragment, lineIndex })),
-}));
+    const fragmentCountByWord = new Map<number, number>();
+    lineViews.forEach(lineView => {
+        lineView.fragments.forEach(fragment => {
+            fragmentCountByWord.set(
+                fragment.wordIndex,
+                (fragmentCountByWord.get(fragment.wordIndex) ?? 0) + 1,
+            );
+        });
+    });
+
+    const seenFragmentsByWord = new Map<number, number>();
+
+    return lineViews.map((lineView, lineIndex) => ({
+        ...lineView,
+        fragments: lineView.fragments.map(fragment => {
+            const fragmentCountInWord = fragmentCountByWord.get(fragment.wordIndex) ?? 1;
+            const fragmentIndexInWord = seenFragmentsByWord.get(fragment.wordIndex) ?? 0;
+            seenFragmentsByWord.set(fragment.wordIndex, fragmentIndexInWord + 1);
+
+            return {
+                ...fragment,
+                lineIndex,
+                fragmentIndexInWord,
+                fragmentCountInWord,
+                isPrimaryFragment: fragmentIndexInWord === 0,
+                isSplitAcrossLines: fragmentCountInWord > 1,
+            };
+        }),
+    }));
+};
 
 const buildEmphasisMap = (
     lineData: Array<{
@@ -695,21 +732,19 @@ const buildEmphasisMap = (
         return emphasisMap;
     }
 
-    const fragmentByWord = new Map<number, WordFragment>();
-    lineData.forEach(lineView => {
-        lineView.fragments.forEach(fragment => {
-            if (!fragmentByWord.has(fragment.wordIndex)) {
-                fragmentByWord.set(fragment.wordIndex, fragment);
-            }
-        });
-    });
+    const primaryFragments = lineData
+        .flatMap(lineView => lineView.fragments)
+        .filter(fragment => fragment.isPrimaryFragment);
 
-    const candidates = [...fragmentByWord.values()]
-        .filter(fragment => fragment.text.trim().length > 0)
+    // A lyric word can be split across wrapped layout lines (for example "no-no" -> "no-" + "no").
+    // Those fragments must not all inherit the same centered hero placement, or they stack on top
+    // of one another. Only consider intact primary fragments as emphasis candidates.
+    const candidates = primaryFragments
+        .filter(fragment => !fragment.isSplitAcrossLines && fragment.text.trim().length > 0)
         .map(fragment => {
-            const graphemeCount = Math.max(fragment.wordGraphemeCount, splitGraphemes(fragment.text).length, 1);
-            const semanticWeight = isCJK(fragment.text) ? 0.18 : Math.min(graphemeCount * 0.08, 0.36);
-            const centerBias = 1 - Math.abs(fragment.wordIndex - (fragmentByWord.size - 1) / 2) / Math.max(fragmentByWord.size, 1);
+            const graphemeCount = Math.max(fragment.wordGraphemeCount, splitGraphemes(fragment.word.text).length, 1);
+            const semanticWeight = isCJK(fragment.word.text) ? 0.18 : Math.min(graphemeCount * 0.08, 0.36);
+            const centerBias = 1 - Math.abs(fragment.wordIndex - (primaryFragments.length - 1) / 2) / Math.max(primaryFragments.length, 1);
             return {
                 fragment,
                 score: semanticWeight + centerBias * 0.18,
@@ -1003,7 +1038,7 @@ const buildWordPlacements = (
         const passedDriftY = outwardUnitY * driftAmount * 0.72 + (random(8) - 0.5) * 2;
 
         placements.push({
-            id: `${fragment.word.text}-${fragment.wordIndex}-${lineIndex}-${fragmentIndex}`,
+            id: `${fragment.word.text}-${fragment.wordIndex}-${lineIndex}-${fragmentIndex}-${fragment.fragmentIndexInWord}`,
             wordIndex: fragment.wordIndex,
             word: fragment.word,
             text: fragment.text,
