@@ -107,6 +107,13 @@ interface PreparedState {
     placements: WordPlacement[];
 }
 
+interface PreparedStateCacheContext {
+    showText: boolean;
+    viewport: { width: number; height: number; };
+    theme: Theme;
+    tuning: Pick<CadenzaTuning, 'fontScale' | 'widthRatio'>;
+}
+
 const createOverlayWordNodes = (): OverlayWordNodes => {
     const outer = document.createElement('div');
     outer.className = 'absolute left-0 top-0';
@@ -433,6 +440,56 @@ const chooseFontPx = (width: number, line: Line) => {
 };
 
 const buildCanvasFont = (theme: Theme, fontPx: number) => `700 ${fontPx}px ${fontFamilyByStyle[theme.fontStyle]}`;
+
+const buildPreparedState = (
+    line: Line,
+    context: PreparedStateCacheContext,
+) => {
+    const { showText, viewport, theme, tuning } = context;
+
+    if (!showText || viewport.width <= 0 || viewport.height <= 0) {
+        return null;
+    }
+
+    const fontPx = clamp(chooseFontPx(viewport.width, line) * tuning.fontScale, 24, 132);
+    const font = buildCanvasFont(theme, fontPx);
+    const prepared = prepareWithSegments(line.fullText, font);
+    const text = prepared.segments.join('');
+    const { segmentMetas, graphemes } = buildSegmentMetas(prepared);
+    const lineHeight = Math.round(fontPx * (isCJK(text) ? 1.22 : 1.1));
+    const availableWidth = Math.max(viewport.width - 48, 120);
+    const minWidth = Math.min(220, availableWidth);
+    const wrapCompression = graphemes.length > 12
+        ? clamp(0.92 - (graphemes.length - 12) * 0.018, 0.62, 0.92)
+        : 0.92;
+    const compactWidthRatio = tuning.widthRatio * wrapCompression;
+    const maxWidth = clamp(Math.min(viewport.width * compactWidthRatio, 820), minWidth, availableWidth);
+    const layout = layoutWithLines(prepared, maxWidth, lineHeight);
+    const ranges = findWordRanges(line, graphemes, theme);
+    const lineFragments = buildLineFragments(prepared, segmentMetas, graphemes, layout, ranges);
+    const placements = buildWordPlacements(
+        lineFragments,
+        fontPx,
+        lineHeight,
+        maxWidth,
+        theme.animationIntensity,
+        line.startTime * 1000,
+        line.fullText === '......',
+    );
+
+    return {
+        prepared,
+        text,
+        font,
+        fontPx,
+        lineHeight,
+        maxWidth,
+        layout,
+        segmentMetas,
+        graphemes,
+        placements,
+    };
+};
 
 const getActiveColor = (wordText: string, theme: Theme) => {
     if (!theme.wordColors || theme.wordColors.length === 0) {
@@ -1153,6 +1210,8 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
     const overlayNodesRef = useRef<Map<string, OverlayWordNodes>>(new Map());
     const textCanvasRef = useRef<HTMLCanvasElement>(null);
     const animatedPlacementRef = useRef<Map<string, AnimatedPlacementState>>(new Map());
+    const preparedStateCacheRef = useRef<Map<string, PreparedState>>(new Map());
+    const preparedStateCacheContextKeyRef = useRef<string>('');
     const lastFrameTimeRef = useRef<number | null>(null);
 
     const currentTimeValue = currentTime.get();
@@ -1170,6 +1229,69 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
 
     const nextLines = lines.slice(currentLineIndex + 1, currentLineIndex + 3);
     const tuning = cadenzaTuning;
+
+    const preparedStateContext = useMemo<PreparedStateCacheContext>(() => ({
+        showText,
+        viewport,
+        theme,
+        tuning: {
+            fontScale: tuning.fontScale,
+            widthRatio: tuning.widthRatio,
+        },
+    }), [showText, theme, tuning.fontScale, tuning.widthRatio, viewport]);
+
+    const preparedStateContextKey = useMemo(() => {
+        const wordColorSignature = (theme.wordColors ?? [])
+            .map(entry => `${entry.word}:${entry.color}`)
+            .join('||');
+
+        return [
+            showText ? '1' : '0',
+            viewport.width,
+            viewport.height,
+            theme.fontStyle,
+            theme.animationIntensity,
+            tuning.fontScale,
+            tuning.widthRatio,
+            wordColorSignature,
+        ].join('|');
+    }, [
+        showText,
+        theme.animationIntensity,
+        theme.fontStyle,
+        theme.wordColors,
+        tuning.fontScale,
+        tuning.widthRatio,
+        viewport.height,
+        viewport.width,
+    ]);
+
+    if (preparedStateCacheContextKeyRef.current !== preparedStateContextKey) {
+        preparedStateCacheRef.current.clear();
+        preparedStateCacheContextKeyRef.current = preparedStateContextKey;
+    }
+
+    const getPreparedStateCacheKey = (line: Line) => [
+        line.startTime,
+        line.endTime,
+        line.fullText,
+        line.words.length,
+    ].join('|');
+
+    const getUpcomingLine = () => {
+        if (activeLine) {
+            return lines[currentLineIndex + 1] ?? null;
+        }
+
+        for (const line of lines) {
+            if (line.startTime > currentTimeValue) {
+                return line;
+            }
+        }
+
+        return null;
+    };
+    const upcomingLine = getUpcomingLine();
 
     useEffect(() => {
         const element = containerRef.current;
@@ -1189,49 +1311,33 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
     }, []);
 
     const preparedState = useMemo<PreparedState | null>(() => {
+        const getOrPrepareState = (line: Line | null) => {
+            if (!line) {
+                return null;
+            }
+
+            const cacheKey = getPreparedStateCacheKey(line);
+            const cached = preparedStateCacheRef.current.get(cacheKey);
+            if (cached) {
+                return cached;
+            }
+
+            const nextState = buildPreparedState(line, preparedStateContext);
+            if (nextState) {
+                preparedStateCacheRef.current.set(cacheKey, nextState);
+            }
+            return nextState;
+        };
+
         if (!activeLine || !showText || viewport.width <= 0 || viewport.height <= 0) {
+            getOrPrepareState(upcomingLine);
             return null;
         }
 
-        const fontPx = clamp(chooseFontPx(viewport.width, activeLine) * tuning.fontScale, 24, 132);
-        const font = buildCanvasFont(theme, fontPx);
-        const prepared = prepareWithSegments(activeLine.fullText, font);
-        const text = prepared.segments.join('');
-        const { segmentMetas, graphemes } = buildSegmentMetas(prepared);
-        const lineHeight = Math.round(fontPx * (isCJK(text) ? 1.22 : 1.1));
-        const availableWidth = Math.max(viewport.width - 48, 120);
-        const minWidth = Math.min(220, availableWidth);
-        const wrapCompression = graphemes.length > 12
-            ? clamp(0.92 - (graphemes.length - 12) * 0.018, 0.62, 0.92)
-            : 0.92;
-        const compactWidthRatio = tuning.widthRatio * wrapCompression;
-        const maxWidth = clamp(Math.min(viewport.width * compactWidthRatio, 820), minWidth, availableWidth);
-        const layout = layoutWithLines(prepared, maxWidth, lineHeight);
-        const ranges = findWordRanges(activeLine, graphemes, theme);
-        const lineFragments = buildLineFragments(prepared, segmentMetas, graphemes, layout, ranges);
-        const placements = buildWordPlacements(
-            lineFragments,
-            fontPx,
-            lineHeight,
-            maxWidth,
-            theme.animationIntensity,
-            activeLine.startTime * 1000,
-            activeLine.fullText === '......',
-        );
-
-        return {
-            prepared,
-            text,
-            font,
-            fontPx,
-            lineHeight,
-            maxWidth,
-            layout,
-            segmentMetas,
-            graphemes,
-            placements,
-        };
-    }, [activeLine, showText, theme, tuning.fontScale, tuning.widthRatio, viewport.height, viewport.width]);
+        const currentState = getOrPrepareState(activeLine);
+        getOrPrepareState(upcomingLine);
+        return currentState;
+    }, [activeLine, preparedStateContext, upcomingLine, showText, viewport.height, viewport.width]);
 
     useEffect(() => {
         const textCanvas = textCanvasRef.current;
