@@ -356,6 +356,32 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
         }
     };
 
+    const lyricContainerFloat = useMemo(() => {
+        const configByIntensity = {
+            calm: { distance: 10, duration: 8.5 },
+            normal: { distance: 14, duration: 7 },
+            chaotic: { distance: 18, duration: 5.8 }
+        } as const;
+
+        const { distance, duration } = configByIntensity[theme.animationIntensity];
+
+        return {
+            animate: staticMode
+                ? { y: 0, scale: 1 }
+                : {
+                    y: [0, -distance, 0, distance * 0.45, 0],
+                    scale: [1, 1.01, 1, 0.995, 1]
+                },
+            transition: staticMode
+                ? { duration: 0 }
+                : {
+                    duration,
+                    repeat: Infinity,
+                    ease: "easeInOut" as const
+                }
+        };
+    }, [theme.animationIntensity, staticMode]);
+
     return (
         <div
             className={`w-full h-full flex flex-col items-center justify-center overflow-hidden relative ${fontFamily} transition-colors duration-1000`}
@@ -421,7 +447,11 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
             )}
 
             {/* Main Container */}
-            <div className="relative z-10 w-full h-[70vh] flex items-center justify-center p-8 pointer-events-none">
+            <motion.div
+                className="relative z-10 w-full h-[70vh] flex items-center justify-center p-8 pointer-events-none will-change-transform"
+                animate={lyricContainerFloat.animate}
+                transition={lyricContainerFloat.transition}
+            >
                 <AnimatePresence mode='popLayout'>
                     {showText && activeLine && (
                         <motion.div
@@ -487,7 +517,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </div>
+            </motion.div>
 
             {/* Subtitles (Future lines OR Translation) */}
             <AnimatePresence>
