@@ -376,7 +376,7 @@ const Home: React.FC<HomeProps> = ({
     const handleSearch = async (e?: React.FormEvent) => {
         e?.preventDefault();
         const query = searchQuery.trim();
-        if (!query || (!hasNeteaseLogin && isNeteaseTab)) return;
+        if (!query) return;
 
         setIsSearching(true);
         setSearchResults(null); // Clear previous results while loading
@@ -651,9 +651,8 @@ const Home: React.FC<HomeProps> = ({
                                         placeholder={viewTab === 'local' ? t('home.searchLocal') : viewTab === 'navidrome' ? t('home.searchNavidrome') : t('home.searchDatabase')}
                                         value={searchQuery}
                                         onChange={e => setSearchQuery(e.target.value)}
-                                        disabled={!hasNeteaseLogin && isNeteaseTab}
 
-                                        className={`w-full ${inputBg} border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-white/20 transition-all placeholder:text-current placeholder:opacity-40 disabled:opacity-40 disabled:cursor-not-allowed`}
+                                        className={`w-full ${inputBg} border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-white/20 transition-all placeholder:text-current placeholder:opacity-40`}
                                         style={{ color: 'var(--text-primary)' }}
                                     />
                                 </form>
@@ -668,8 +667,8 @@ const Home: React.FC<HomeProps> = ({
                                 <div className={`w-24 h-24 rounded-3xl ${cardBg} border border-white/10 flex items-center justify-center backdrop-blur-md`}>
                                     <User size={40} className="opacity-20" />
                                 </div>
-                                <h2 className="text-3xl font-bold opacity-80">{t('home.welcomeBack')}</h2>
-                                <p className="opacity-40 text-sm">{t('home.loginPrompt')}</p>
+                                <h2 className="text-3xl font-bold opacity-80 text-center">{t('home.guestTitle')}</h2>
+                                <p className="opacity-40 text-sm text-center max-w-md leading-6">{t('home.guestPrompt')}</p>
                                 <button
                                     onClick={initLogin}
                                     className="px-8 py-3 bg-white text-black rounded-full font-bold text-sm hover:scale-105 transition-transform"

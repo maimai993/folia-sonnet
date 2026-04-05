@@ -133,6 +133,8 @@ export default {
     "searchNavidrome": "Search navidrome",
     "login": "Login",
     "welcomeBack": "Welcome Back",
+    "guestTitle": "Try searching a few songs first",
+    "guestPrompt": "Sign in with Netease to access your playlists, saved albums, and radio.",
     "pleaseLogin": "Please login to access your library",
     "connectAccount": "Connect Netease Account",
     "loadingLibrary": "Loading Library...",
