@@ -21,7 +21,7 @@ import UnifiedPanel from './components/UnifiedPanel';
 import LyricMatchModal from './components/LyricMatchModal';
 import NaviLyricMatchModal, { NavidromeMatchData } from './components/NaviLyricMatchModal';
 import { LyricData, Theme, PlayerState, SongResult, LocalSong, ReplayGainMode } from './types';
-import { NavidromeSong } from './types/navidrome';
+import { NavidromeSong, NavidromeConfig, StructuredLyric } from './types/navidrome';
 import { neteaseApi } from './services/netease';
 import { navidromeApi, getNavidromeConfig } from './services/navidromeService';
 import { useAppNavigation } from './hooks/useAppNavigation';
@@ -29,6 +29,7 @@ import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
 import { hasNeteasePureMusicFlag, isPureMusicLyricText } from './utils/lyrics/pureMusic';
+import { detectTimedLyricFormat } from './utils/lyrics/formatDetection';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
@@ -69,6 +70,99 @@ const replayGainModeLabels: Record<ReplayGainMode, string> = {
     off: 'ReplayGain 已关闭',
     track: 'ReplayGain: 单曲模式',
     album: 'ReplayGain: 专辑模式'
+};
+
+const hasRenderableLyrics = (lyricData: LyricData | null | undefined): lyricData is LyricData => {
+    if (!lyricData?.lines?.length) {
+        return false;
+    }
+
+    return lyricData.lines.some(line =>
+        line.fullText.trim().length > 0 || (line.translation?.trim().length ?? 0) > 0
+    );
+};
+
+const isNavidromePlaybackSong = (song: SongResult | null | undefined): song is NavidromeSong => {
+    return Boolean(song && (song as any).isNavidrome === true);
+};
+
+const isLocalPlaybackSong = (
+    song: SongResult | null | undefined
+): song is SongResult & { isLocal: true; localData: LocalSong } => {
+    return Boolean(
+        song &&
+        !isNavidromePlaybackSong(song) &&
+        (((song as any).isLocal === true) || Boolean((song as any).localData))
+    );
+};
+
+const hasEnhancedStructuredLines = (item: StructuredLyric): boolean => {
+    return item.line?.some(line => detectTimedLyricFormat(line.value) === 'enhanced-lrc') ?? false;
+};
+
+const selectPreferredStructuredLyric = (items: StructuredLyric[] | null | undefined): StructuredLyric | null => {
+    if (!items?.length) {
+        return null;
+    }
+
+    const nonEmptyItems = items.filter(item => item.line?.some(line => (line.value || '').trim().length > 0));
+    if (nonEmptyItems.length === 0) {
+        return null;
+    }
+
+    return nonEmptyItems.find(hasEnhancedStructuredLines)
+        || nonEmptyItems.find(item => item.synced)
+        || nonEmptyItems[0];
+};
+
+const resolvePreferredNavidromeLyrics = async (
+    navidromeSong: Pick<NavidromeSong, 'cachedStructuredLyrics' | 'cachedPlainLyrics'>
+): Promise<LyricData | null> => {
+    const structuredLyrics = navidromeSong.cachedStructuredLyrics?.filter(line => (line.value || '').trim().length > 0);
+
+    if (structuredLyrics && structuredLyrics.length > 0) {
+        const parsedStructuredLyrics = await LyricParserFactory.parse({ type: 'navidrome', structuredLyrics });
+        if (hasRenderableLyrics(parsedStructuredLyrics)) {
+            return parsedStructuredLyrics;
+        }
+    }
+
+    const plainLyrics = navidromeSong.cachedPlainLyrics?.trim();
+    if (plainLyrics) {
+        const parsedPlainLyrics = await LyricParserFactory.parse({ type: 'navidrome', plainLyrics });
+        if (hasRenderableLyrics(parsedPlainLyrics)) {
+            return parsedPlainLyrics;
+        }
+    }
+
+    return null;
+};
+
+const hydrateNavidromeLyricPayload = async (config: NavidromeConfig, navidromeSong: NavidromeSong): Promise<void> => {
+    const navidromeId = navidromeSong.navidromeData?.id;
+    if (!navidromeId) {
+        return;
+    }
+
+    if (!navidromeSong.cachedStructuredLyrics?.length) {
+        try {
+            const structuredLyrics = await navidromeApi.getLyricsBySongId(config, navidromeId);
+            const preferredStructuredLyrics = selectPreferredStructuredLyric(structuredLyrics);
+
+            if (preferredStructuredLyrics?.line?.length) {
+                navidromeSong.cachedStructuredLyrics = preferredStructuredLyrics.line;
+            }
+            if (!preferredStructuredLyrics?.line?.length && !navidromeSong.cachedPlainLyrics) {
+                const artistName = navidromeSong.ar?.[0]?.name || navidromeSong.artists?.[0]?.name || '';
+                const plainLyrics = await navidromeApi.getLyrics(config, artistName, navidromeSong.name);
+                if (plainLyrics?.trim()) {
+                    navidromeSong.cachedPlainLyrics = plainLyrics;
+                }
+            }
+        } catch (e) {
+            console.warn('[App] Failed to fetch Navidrome lyrics:', e);
+        }
+    }
 };
 
 export default function App() {
@@ -326,9 +420,39 @@ export default function App() {
                 // Load resources silently (without auto-playing)
                 try {
                     // Check if this is a local song
-                    const isLocalSong = (lastSong as any).isLocal || lastSong.id < 0;
+                    const isNavidromeSong = isNavidromePlaybackSong(lastSong);
+                    const isLocalSong = isLocalPlaybackSong(lastSong);
 
-                    if (isLocalSong) {
+                    if (isNavidromeSong) {
+                        const navidromeSongToRestore = (lastSong as any).navidromeData as NavidromeSong | undefined;
+                        const config = getNavidromeConfig();
+                        const navidromeId = navidromeSongToRestore?.navidromeData?.id;
+
+                        if (navidromeSongToRestore && config && navidromeId) {
+                            setAudioSrc(navidromeApi.getStreamUrl(config, navidromeId));
+                            const restoredCoverUrl = lastSong.al?.picUrl || lastSong.album?.picUrl || navidromeSongToRestore.navidromeData.coverArtUrl;
+                            if (restoredCoverUrl) {
+                                setCachedCoverUrl(restoredCoverUrl);
+                            }
+
+                            if (navidromeSongToRestore.lyricsSource === 'online' && navidromeSongToRestore.matchedLyrics) {
+                                setLyrics(navidromeSongToRestore.matchedLyrics);
+                            } else {
+                                await hydrateNavidromeLyricPayload(config, navidromeSongToRestore);
+                                const restoredLyrics = await resolvePreferredNavidromeLyrics(navidromeSongToRestore);
+                                if (hasRenderableLyrics(restoredLyrics)) {
+                                    navidromeSongToRestore.lyricsSource = 'navi';
+                                }
+                                setLyrics(restoredLyrics);
+                            }
+
+                            const restoredSong = { ...(lastSong as any), navidromeData: navidromeSongToRestore } as SongResult;
+                            setCurrentSong(restoredSong);
+                            saveToCache('last_song', restoredSong);
+                        } else {
+                            console.warn('[restoreSession] Navidrome song could not be restored');
+                        }
+                    } else if (isLocalSong) {
                         // For local songs, we need to try to restore from localSongs list
                         // FileSystemFileHandle cannot be serialized to IndexedDB
                         console.log("[restoreSession] Detected local song, attempting to restore from file handles...");
@@ -747,37 +871,11 @@ export default function App() {
                 }
             }
 
-            // Try to get lyrics from Navidrome first
-            // The navidrome API doesn't support lyric with translation, or synced lyrics, making it hard for us to provide a good lyric display experience.
-            // In best senario, we can implement a middleware to provide Folia's cached-lyric file directly from user's navidrome server, but that requires users to self-host an additional service, which is not ideal for user experience. So for now, we will just try to fetch the standard lyrics from navidrome, and if the lyrics is in LRC format and has time tags, we will parse it and display it as synced lyrics, otherwise we will just display it as unsynced plain text lyrics. It's not perfect, but it's better than nothing. We will also provide an option for users to manually match lyrics from Netease if they want better lyric experience, and we will save the matched lyrics in cache for future use.
-            const artistName = navidromeSong.ar?.[0]?.name || navidromeSong.artists?.[0]?.name || '';
-
-            // 1. Try OpenSubsonic structured lyrics (getLyricsBySongId)
             if (!lyrics) {
-                try {
-                    const structuredLyrics = await navidromeApi.getLyricsBySongId(config, navidromeId);
-                    if (structuredLyrics && structuredLyrics.length > 0) {
-                        const firstStruct = structuredLyrics[0];
-                        if (firstStruct.line && firstStruct.line.length > 0) {
-                            lyrics = await LyricParserFactory.parse({ type: 'navidrome', structuredLyrics: firstStruct.line });
-                            console.log('[App] Using OpenSubsonic structured lyrics');
-                        }
-                    }
-                } catch (e) {
-                    console.warn('[App] Failed to fetch OpenSubsonic structured lyrics:', e);
-                }
-
-                // 2. Fallback to standard Subsonic lyrics
-                // This breaks the visualizer, maybe better just don't support it if the lyrics is not in structured format.
-                // 看到这里你会发现注释大部分都是英文写的，这是因为 Linux 下的输入法不太好用，而且对于 LLM 来说英文更节省token,大概是这样，反正你能看懂就好。
-                // 题外话，不用 Windows 并非因为 Linux 更好用（虽然我个人确实更喜欢 Linux），而是因为在开发的早期，Windows下的LFN,以及目录反斜杠等问题导致
-                // 本来就不太可靠的大型语言模型 agent 经常发生错误编辑，破坏掉整个代码库，你能想象吗？
-                if (!lyrics) {
-                    const lyricsFromNavidrome = await navidromeApi.getLyrics(config, artistName, navidromeSong.name);
-                    if (lyricsFromNavidrome) {
-                        lyrics = await LyricParserFactory.parse({ type: 'navidrome', plainLyrics: lyricsFromNavidrome });
-                        console.log('[App] Using standard Navidrome lyrics');
-                    }
+                await hydrateNavidromeLyricPayload(config, navidromeSong);
+                lyrics = await resolvePreferredNavidromeLyrics(navidromeSong);
+                if (hasRenderableLyrics(lyrics)) {
+                    console.log('[App] Using embedded Navidrome lyrics');
                 }
             }
 
@@ -818,7 +916,10 @@ export default function App() {
                 (navidromeSong as any).matchedLyrics = matchData?.matchedLyrics;
                 (navidromeSong as any).matchedIsPureMusic = matchData?.matchedIsPureMusic;
                 (navidromeSong as any).useOnlineLyrics = matchData?.useOnlineLyrics;
-                (navidromeSong as any).lyricsSource = matchData?.lyricsSource;
+                (navidromeSong as any).lyricsSource =
+                    matchData?.lyricsSource === 'online'
+                        ? 'online'
+                        : (hasRenderableLyrics(lyrics) ? 'navi' : matchData?.lyricsSource);
             }
 
             // Get cover art URL
@@ -970,8 +1071,7 @@ export default function App() {
         setStatusMsg({ type: 'info', text: t('status.loadingSong') });
 
         // Check if it is a local song
-        // We check for isLocal flag OR negative ID (legacy check)
-        const isLocal = (song as any).isLocal || song.id < 0;
+        const isLocal = isLocalPlaybackSong(song);
 
         if (isLocal) {
             console.log("[App] Playing Local Song");
@@ -1007,7 +1107,7 @@ export default function App() {
                     const initialMeta = await resolveLocalMetadataUI(currentLocalData, null);
                     setCurrentSong(initialMeta.unifiedSong);
                     const localQueueContext = playQueue
-                        .map(queuedSong => queuedSong.localData)
+                        .map(queuedSong => (queuedSong as any).localData as LocalSong | undefined)
                         .filter((queuedSong): queuedSong is LocalSong => Boolean(queuedSong));
                     prewarmNearbyLocalSongs(currentLocalData, localQueueContext);
                     
@@ -1610,8 +1710,8 @@ export default function App() {
         if (!currentSong) return;
 
         // Check if local song
-        if ((currentSong as any).isLocal || currentSong.id < 0) {
-            setStatusMsg({ type: 'info', text: '本地音乐无法添加到"我喜欢的音乐"' });
+        if (isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
+            setStatusMsg({ type: 'info', text: '仅网易云歌曲支持添加到"我喜欢的音乐"' });
             return;
         }
 
@@ -1641,7 +1741,7 @@ export default function App() {
     };
 
     const handleUpdateLocalLyrics = async (content: string, isTranslation: boolean) => {
-        if (!currentSong || !((currentSong as any).isLocal || currentSong.id < 0)) return;
+        if (!isLocalPlaybackSong(currentSong)) return;
 
         const localData = (currentSong as any).localData as LocalSong;
         if (!localData) return;
@@ -1671,7 +1771,7 @@ export default function App() {
     };
 
     const handleChangeLyricsSource = async (source: 'local' | 'embedded' | 'online') => {
-        if (!currentSong || !((currentSong as any).isLocal || currentSong.id < 0)) return;
+        if (!isLocalPlaybackSong(currentSong)) return;
 
         const localData = (currentSong as any).localData as LocalSong;
         if (!localData) return;
@@ -1726,7 +1826,7 @@ export default function App() {
             return;
         }
 
-        if (!currentSong || !((currentSong as any).isLocal || currentSong.id < 0)) return;
+        if (!isLocalPlaybackSong(currentSong)) return;
         const localData = (currentSong as any).localData as LocalSong;
         if (!localData) return;
         setShowLyricMatchModal(true);
@@ -1734,7 +1834,7 @@ export default function App() {
 
     const handleLyricMatchComplete = async () => {
         setShowLyricMatchModal(false);
-        if (!currentSong || !((currentSong as any).isLocal || currentSong.id < 0)) return;
+        if (!isLocalPlaybackSong(currentSong)) return;
         const localData = (currentSong as any).localData as LocalSong;
         if (!localData) return;
 
@@ -1750,7 +1850,10 @@ export default function App() {
     const handleNaviLyricMatchComplete = async () => {
         setShowNaviLyricMatchModal(false);
         if (currentSong && (currentSong as any).isNavidrome) {
-            onPlayNavidromeSong((currentSong as any).navidromeData, playQueue);
+            const navidromeQueue = playQueue
+                .map(song => (song as any).navidromeData as NavidromeSong | undefined)
+                .filter((song): song is NavidromeSong => Boolean(song?.isNavidrome));
+            onPlayNavidromeSong((currentSong as any).navidromeData, navidromeQueue);
             setStatusMsg({ type: 'success', text: 'Match successful' });
         }
     };
@@ -1897,7 +2000,7 @@ export default function App() {
                                 await loadLocalSongs();
 
                                 // If the matched song is currently playing, update the cover
-                                if (currentSong && ((currentSong as any).isLocal || currentSong.id < 0)) {
+                                if (isLocalPlaybackSong(currentSong)) {
                                     const currentLocalData = (currentSong as any).localData as LocalSong | undefined;
                                     if (currentLocalData && currentLocalData.id === song.id) {
                                         // Reload the song from DB to get updated metadata
@@ -2168,7 +2271,7 @@ export default function App() {
             }
 
             {/* --- LYRIC MATCH MODAL (Player View) --- */}
-            {showLyricMatchModal && currentSong && !((currentSong as any).isNavidrome) && ((currentSong as any).isLocal || currentSong.id < 0) && (currentSong as any).localData && (
+            {showLyricMatchModal && currentSong && isLocalPlaybackSong(currentSong) && currentSong.localData && (
                 <LyricMatchModal
                     song={(currentSong as any).localData as LocalSong}
                     onClose={() => setShowLyricMatchModal(false)}

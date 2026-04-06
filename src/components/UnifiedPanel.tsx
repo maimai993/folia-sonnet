@@ -139,7 +139,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const { t } = useTranslation();
 
     const isNavidrome = currentSong && (currentSong as any).isNavidrome === true;
-    const isLocal = currentSong && ((currentSong as any).isLocal === true || (currentSong.id < 0 && !isNavidrome));
+    const isLocal = currentSong && !isNavidrome && (((currentSong as any).isLocal === true) || Boolean((currentSong as any).localData));
 
     const tabs = [
         { id: 'cover' as PanelTab, label: t('panel.cover'), icon: Disc },

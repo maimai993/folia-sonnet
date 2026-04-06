@@ -35,7 +35,7 @@ const NaviTab: React.FC<NaviTabProps> = ({ currentSong, hasLyrics, onMatchOnline
     // If it's a Navidrome song, we don't have matchedLyrics stored IN the song object natively by App.tsx unless we attach it.
     // Let's attach 'useOnlineLyrics', 'hasMatchedLyrics' in App.tsx when we build the Navidrome song, or use a new prop.
     // Let's assume currentSong has useOnlineLyrics attached, or we simply check:
-    const matchedLyrics = currentSong.matchedLyrics || navidromeData?.matchedLyrics;
+    const matchedLyrics = currentSong.matchedLyrics || (navidromeData as any)?.matchedLyrics;
     const songLyricsSource = (currentSong as any).lyricsSource ?? (navidromeData as any)?.lyricsSource;
     const hasMatchedLyrics = (matchedLyrics?.lines?.length ?? 0) > 0;
     const isOnline = hasMatchedLyrics && songLyricsSource === 'online';

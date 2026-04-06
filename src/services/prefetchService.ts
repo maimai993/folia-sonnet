@@ -81,9 +81,9 @@ const prefetchSong = async (
 ): Promise<void> => {
     if (signal.aborted) return;
 
-    // Skip if local song
-    if ((song as any).isLocal || song.id < 0) {
-        console.log(`[Prefetch] Skipping local song: ${song.name}`);
+    // Prefetch currently only supports Netease songs.
+    if ((song as any).isLocal || (song as any).localData || (song as any).isNavidrome) {
+        console.log(`[Prefetch] Skipping non-Netease song: ${song.name}`);
         return;
     }
 

@@ -72,6 +72,19 @@ function normalizeLyricCandidateText(text: string): string {
         .trim();
 }
 
+function hasEnhancedWordTimeline(text: string): boolean {
+    return /<\d{2}:\d{2}[.:]\d{2,3}>/.test(text)
+        || /(?:^|\n)\s*\[\d{2}:\d{2}[.:]\d{2,3}\][^\[\]\n]+(?:\[\d{2}:\d{2}[.:]\d{2,3}\][^\[\]\n]*)+/m.test(text);
+}
+
+function chooseBestLyricCandidate(candidates: LyricCandidate[]): LyricCandidate | undefined {
+    if (candidates.length === 0) {
+        return undefined;
+    }
+
+    return candidates.find(candidate => hasEnhancedWordTimeline(candidate.text)) || candidates[0];
+}
+
 function isTranslationLyricTag(tag: ParsedLyricTag): boolean {
     const language = tag.language?.toLowerCase();
     const descriptor = tag.descriptor?.toLowerCase() || '';
@@ -168,17 +181,16 @@ async function extractEmbeddedMetadata(file: File, includeCover = false): Promis
     if (lyricCandidates.length > 0) {
         const withTimeline = lyricCandidates.filter(c => c.hasTimeline);
         const source = withTimeline.length > 0 ? withTimeline : lyricCandidates;
+        const translationCandidates = source.filter(c => c.isTranslation);
+        const originalCandidates = source.filter(c => !c.isTranslation);
 
-        const translation = source.find(c => c.isTranslation);
-        if (translation) {
-            translationLyric = translation.text;
-            originalLyric = source.find(c => !c.isTranslation)?.text || source[0].text;
-        } else {
-            originalLyric = source[0].text;
-            if (source.length > 1) {
-                translationLyric = source[1].text;
-            }
-        }
+        const bestOriginal = chooseBestLyricCandidate(originalCandidates) || chooseBestLyricCandidate(source);
+        const bestTranslation = chooseBestLyricCandidate(
+            translationCandidates.filter(candidate => candidate.text !== bestOriginal?.text)
+        );
+
+        originalLyric = bestOriginal?.text;
+        translationLyric = bestTranslation?.text;
     }
 
     const replayGainTrackTag = parsed.common.replaygain_track_gain;

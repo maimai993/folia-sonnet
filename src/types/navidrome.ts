@@ -154,6 +154,8 @@ export interface NavidromeSong extends SongResult {
     useOnlineCover?: boolean;
     useOnlineMetadata?: boolean;
     noAutoMatch?: boolean;
+    cachedStructuredLyrics?: StructuredLyricLine[];
+    cachedPlainLyrics?: string;
 }
 
 // Type guard for NavidromeSong
