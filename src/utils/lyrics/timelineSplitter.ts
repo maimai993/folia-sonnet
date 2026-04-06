@@ -1,20 +1,37 @@
 export function splitCombinedTimeline(rawText: string): { main: string, trans: string } {
     if (!rawText) return { main: '', trans: '' };
-    
-    // [00:00.00] or [00:00:00] or [00:00.000] regex
+
     const timeRegex = /\[(\d{2}):(\d{2})[.:](\d{2,3})\]/g;
+    const enhancedAngleRegex = /<\d{2}:\d{2}[.:]\d{2,3}>/;
+    const enhancedBracketRegex = /^\s*\[\d{2}:\d{2}[.:]\d{2,3}\][^\[\]\n]+(?:\[\d{2}:\d{2}[.:]\d{2,3}\][^\[\]\n]*)+$/;
     const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
 
-    const extracted: Array<{ timestamp: string, text: string }> = [];
+    const extracted: Array<{
+        raw: string,
+        timestamp: string,
+        startTimestamp: string,
+        isEnhancedLike: boolean,
+    }> = [];
 
     for (const line of lines) {
         const matches = [...line.matchAll(timeRegex)];
         if (matches.length > 0) {
             const tagsRaw = matches.map(m => m[0]).join('');
-            const text = line.replace(timeRegex, '').trim();
-            extracted.push({ timestamp: tagsRaw, text });
+            const startTimestamp = matches[0][0];
+
+            extracted.push({
+                raw: line,
+                timestamp: tagsRaw,
+                startTimestamp,
+                isEnhancedLike: enhancedAngleRegex.test(line) || enhancedBracketRegex.test(line)
+            });
         } else {
-            extracted.push({ timestamp: '', text: line });
+            extracted.push({
+                raw: line,
+                timestamp: '',
+                startTimestamp: '',
+                isEnhancedLike: false
+            });
         }
     }
 
@@ -24,24 +41,26 @@ export function splitCombinedTimeline(rawText: string): { main: string, trans: s
     
     for (let i = 0; i < extracted.length; i++) {
         const current = extracted[i];
-        
-        // If we are at the end, just push and break
+
         if (i === extracted.length - 1) {
-            mainLines.push(current.timestamp + current.text);
+            mainLines.push(current.raw);
             break;
         }
 
-        // Compare with the next line
         const next = extracted[i + 1];
-        
-        // Note: We only split if timestamps exist and match exactly
-        if (current.timestamp !== '' && current.timestamp === next.timestamp) {
-            mainLines.push(current.timestamp + current.text);
-            transLines.push(next.timestamp + next.text);
+        const isExactPair = current.timestamp !== '' && current.timestamp === next.timestamp;
+        const isEnhancedPair =
+            current.startTimestamp !== '' &&
+            current.startTimestamp === next.startTimestamp &&
+            (current.isEnhancedLike || next.isEnhancedLike);
+
+        if (isExactPair || isEnhancedPair) {
+            mainLines.push(current.raw);
+            transLines.push(next.raw);
             isCombined = true;
-            i++; // Skip next line because we already handled it as trans
+            i++;
         } else {
-            mainLines.push(current.timestamp + current.text);
+            mainLines.push(current.raw);
         }
     }
 

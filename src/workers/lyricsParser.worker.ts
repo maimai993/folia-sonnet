@@ -4,7 +4,7 @@
  * Offloads LRC and YRC parsing from the main thread.
  * 
  * Message API:
- * Request: { type: 'parse', format: 'lrc' | 'yrc' | 'vtt', content: string, translation?: string, requestId?: string }
+ * Request: { type: 'parse', format: 'lrc' | 'enhanced-lrc' | 'yrc' | 'vtt', content: string, translation?: string, requestId?: string }
  * Response: { type: 'result', data: LyricData, requestId?: string } | { type: 'error', message: string, requestId?: string }
  */
 
@@ -36,6 +36,36 @@ interface TimedTextEntry {
     endTime?: number;
     text: string;
 }
+
+interface DraftWord {
+    text: string;
+    startTime: number;
+    endTime?: number;
+}
+
+interface DraftLine {
+    words: DraftWord[];
+    startTime: number;
+    endTime?: number;
+    fullText: string;
+}
+
+interface TimestampMarker {
+    time: number;
+    index: number;
+    endIndex: number;
+}
+
+interface LrcMetadata {
+    title?: string;
+    artist?: string;
+}
+
+const GLOBAL_LRC_TIME_REGEX = /\[(\d{2}):(\d{2})[.:](\d{2,3})\]/g;
+const GLOBAL_ANGLE_TIME_REGEX = /<(\d{2}):(\d{2})[.:](\d{2,3})>/g;
+const LRC_LINE_TIME_REGEX = /^\[(\d{2}):(\d{2})[.:](\d{2,3})\]/;
+const LEADING_LRC_TAGS_REGEX = /^((?:\[(?:\d{2}):(?:\d{2})[.:](?:\d{2,3})\])+)(.*)$/;
+const LRC_METADATA_REGEX = /^\[(ti|ar):([^\]]*)\]$/i;
 
 const buildTimedWords = (text: string, startTime: number, endTime: number): Word[] => {
     const duration = Math.max(endTime - startTime, 0.1);
@@ -145,28 +175,171 @@ const findClosestTranslation = (entries: TimedTextEntry[], startTime: number): s
     return candidates[0]?.text;
 };
 
+const parseTimestamp = (minute: string, second: string, fraction: string): number => {
+    const min = parseInt(minute, 10);
+    const sec = parseInt(second, 10);
+    const ms = parseFloat(`0.${fraction}`);
+    return min * 60 + sec + ms;
+};
+
+const collectTimestampMarkers = (content: string, pattern: RegExp): TimestampMarker[] => {
+    const regex = new RegExp(pattern.source, 'g');
+
+    return Array.from(content.matchAll(regex)).map(match => {
+        const index = match.index ?? 0;
+        return {
+            time: parseTimestamp(match[1], match[2], match[3]),
+            index,
+            endIndex: index + match[0].length
+        };
+    });
+};
+
+const parseMetadataLine = (line: string, metadata: LrcMetadata): boolean => {
+    const match = line.match(LRC_METADATA_REGEX);
+    if (!match) {
+        return false;
+    }
+
+    const key = match[1].toLowerCase();
+    const value = match[2].trim();
+
+    if (key === 'ti' && value) {
+        metadata.title = value;
+    } else if (key === 'ar' && value) {
+        metadata.artist = value;
+    }
+
+    return true;
+};
+
+const buildPreciseLineDraft = (content: string, markers: TimestampMarker[]): DraftLine | null => {
+    if (markers.length < 2) {
+        return null;
+    }
+
+    const words: DraftWord[] = [];
+    let fullText = '';
+
+    for (let i = 0; i < markers.length - 1; i += 1) {
+        const current = markers[i];
+        const next = markers[i + 1];
+        const segment = content.slice(current.endIndex, next.index).replace(/\r/g, '');
+
+        fullText += segment;
+
+        if (!segment.trim()) {
+            continue;
+        }
+
+        words.push({
+            text: segment,
+            startTime: current.time,
+            endTime: next.time
+        });
+    }
+
+    const trailingText = content.slice(markers[markers.length - 1].endIndex).replace(/\r/g, '');
+    fullText += trailingText;
+
+    if (trailingText.trim()) {
+        words.push({
+            text: trailingText,
+            startTime: markers[markers.length - 1].time
+        });
+    }
+
+    if (!fullText.trim()) {
+        return null;
+    }
+
+    return {
+        words,
+        startTime: words[0]?.startTime ?? markers[0].time,
+        endTime: words[words.length - 1]?.endTime,
+        fullText
+    };
+};
+
+const parseSimpleTimedTextEntry = (line: string): TimedTextEntry | null => {
+    const match = line.match(LEADING_LRC_TAGS_REGEX);
+    if (!match) {
+        return null;
+    }
+
+    const firstTag = match[1].match(LRC_LINE_TIME_REGEX);
+    if (!firstTag) {
+        return null;
+    }
+
+    const text = match[2].trim();
+    if (!text) {
+        return null;
+    }
+
+    return {
+        startTime: parseTimestamp(firstTag[1], firstTag[2], firstTag[3]),
+        text
+    };
+};
+
+const parseTimedTextEntries = (content: string): TimedTextEntry[] => {
+    const metadata: LrcMetadata = {};
+
+    return content
+        .replace(/^\uFEFF/, '')
+        .split(/\r?\n/)
+        .map(rawLine => {
+            const line = rawLine.trim();
+            if (!line) {
+                return null;
+            }
+
+            if (parseMetadataLine(line, metadata)) {
+                return null;
+            }
+
+            const lineTagMatch = line.match(LRC_LINE_TIME_REGEX);
+            const body = lineTagMatch ? line.slice(lineTagMatch[0].length) : line;
+
+            const angleDraft = buildPreciseLineDraft(body, collectTimestampMarkers(body, GLOBAL_ANGLE_TIME_REGEX));
+            if (angleDraft) {
+                return {
+                    startTime: angleDraft.startTime,
+                    endTime: angleDraft.endTime,
+                    text: angleDraft.fullText
+                };
+            }
+
+            const bracketDraft = buildPreciseLineDraft(line, collectTimestampMarkers(line, GLOBAL_LRC_TIME_REGEX));
+            if (bracketDraft) {
+                return {
+                    startTime: bracketDraft.startTime,
+                    endTime: bracketDraft.endTime,
+                    text: bracketDraft.fullText
+                };
+            }
+
+            return parseSimpleTimedTextEntry(line);
+        })
+        .filter((entry): entry is TimedTextEntry => entry !== null && entry.text.length > 0)
+        .sort((a, b) => a.startTime - b.startTime);
+};
+
 // --- LRC Parser ---
-const parseLRC = (lrcString: string, translationString: string = ''): LyricData => {
+export const parseLRC = (lrcString: string, translationString: string = ''): LyricData => {
     const lines: Line[] = [];
-    const timeRegex = /\[(\d{2}):(\d{2})[.:](\d{2,3})\]/;
 
     const parseRaw = (str: string) => {
-        return str.split('\n').map(line => {
-            const match = timeRegex.exec(line);
-            if (!match) return null;
-
-            const min = parseInt(match[1], 10);
-            const sec = parseInt(match[2], 10);
-            const ms = parseFloat(`0.${match[3]}`);
-            const startTime = min * 60 + sec + ms;
-            const text = line.replace(timeRegex, '').trim();
-
-            return { startTime, text };
-        }).filter((entry): entry is { startTime: number, text: string } => entry !== null && entry.text.length > 0);
+        return str
+            .replace(/^\uFEFF/, '')
+            .split(/\r?\n/)
+            .map(line => parseSimpleTimedTextEntry(line))
+            .filter((entry): entry is { startTime: number, text: string } => entry !== null && entry.text.length > 0);
     };
 
     const rawEntries = parseRaw(lrcString);
-    const transEntries = parseRaw(translationString);
+    const transEntries = parseTimedTextEntries(translationString);
 
     rawEntries.sort((a, b) => a.startTime - b.startTime);
 
@@ -201,28 +374,11 @@ const parseLRC = (lrcString: string, translationString: string = ''): LyricData 
 };
 
 // --- YRC Parser ---
-const parseYRC = (yrcString: string, translationString: string = ''): LyricData => {
+export const parseYRC = (yrcString: string, translationString: string = ''): LyricData => {
     console.log('[yrcParser] Verbatim lyrics found, Prioritized');
     const lines: Line[] = [];
-
-    const parseTranslation = (str: string) => {
-        const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
-        return str.split('\n').map(line => {
-            const match = timeRegex.exec(line);
-            if (!match) return null;
-
-            const min = parseInt(match[1], 10);
-            const sec = parseInt(match[2], 10);
-            const ms = parseFloat(`0.${match[3]}`);
-            const startTime = min * 60 + sec + ms;
-            const text = line.replace(timeRegex, '').trim();
-
-            return { startTime, text };
-        }).filter((entry): entry is { startTime: number, text: string } => entry !== null && entry.text.length > 0);
-    };
-
-    const translationEntries = parseTranslation(translationString);
-    const rawLines = yrcString.split('\n');
+    const translationEntries = parseTimedTextEntries(translationString);
+    const rawLines = yrcString.replace(/^\uFEFF/, '').split(/\r?\n/);
 
     for (const rawLine of rawLines) {
         const lineMatch = rawLine.match(/^\[(\d+),(\d+)\](.*)/);
@@ -339,7 +495,7 @@ const parseVTTEntries = (vttString: string): TimedTextEntry[] => {
     return entries.sort((a, b) => a.startTime - b.startTime);
 };
 
-const parseVTT = (vttString: string, translationString: string = ''): LyricData => {
+export const parseVTT = (vttString: string, translationString: string = ''): LyricData => {
     const entries = parseVTTEntries(vttString);
     const translationEntries = parseVTTEntries(translationString);
     const lines: Line[] = [];
@@ -363,26 +519,111 @@ const parseVTT = (vttString: string, translationString: string = ''): LyricData 
     return { lines: attachInterludes(lines) };
 };
 
-// --- Worker Message Handler ---
-self.onmessage = (e: MessageEvent) => {
-    const { type, format, content, translation, requestId } = e.data;
+// --- Enhanced LRC Parser ---
+export const parseEnhancedLRC = (lrcString: string, translationString: string = ''): LyricData => {
+    const metadata: LrcMetadata = {};
+    const drafts: DraftLine[] = [];
+    const translationEntries = parseTimedTextEntries(translationString);
+    const rawLines = lrcString.replace(/^\uFEFF/, '').split(/\r?\n/);
 
-    if (type !== 'parse') {
-        self.postMessage({ type: 'error', message: 'Unknown message type', requestId });
-        return;
-    }
-
-    try {
-        let result: LyricData;
-        if (format === 'yrc') {
-            result = parseYRC(content, translation || '');
-        } else if (format === 'vtt') {
-            result = parseVTT(content, translation || '');
-        } else {
-            result = parseLRC(content, translation || '');
+    for (const rawLine of rawLines) {
+        const line = rawLine.trim();
+        if (!line) {
+            continue;
         }
-        self.postMessage({ type: 'result', data: result, requestId });
-    } catch (err) {
-        self.postMessage({ type: 'error', message: String(err), requestId });
+
+        if (parseMetadataLine(line, metadata)) {
+            continue;
+        }
+
+        const lineTagMatch = line.match(LRC_LINE_TIME_REGEX);
+        const body = lineTagMatch ? line.slice(lineTagMatch[0].length) : line;
+
+        const angleDraft = buildPreciseLineDraft(body, collectTimestampMarkers(body, GLOBAL_ANGLE_TIME_REGEX));
+        if (angleDraft) {
+            drafts.push(angleDraft);
+            continue;
+        }
+
+        const bracketDraft = buildPreciseLineDraft(line, collectTimestampMarkers(line, GLOBAL_LRC_TIME_REGEX));
+        if (bracketDraft) {
+            drafts.push(bracketDraft);
+            continue;
+        }
+
+        const simpleEntry = parseSimpleTimedTextEntry(line);
+        if (simpleEntry) {
+            drafts.push({
+                words: [],
+                startTime: simpleEntry.startTime,
+                fullText: simpleEntry.text
+            });
+        }
     }
+
+    drafts.sort((a, b) => a.startTime - b.startTime);
+
+    const lines: Line[] = drafts.map((draft, index) => {
+        const nextStart = drafts[index + 1]?.startTime;
+        let lineEndTime = Math.max(draft.endTime ?? nextStart ?? (draft.startTime + 5), draft.startTime + 0.001);
+
+        const words: Word[] = draft.words.length > 0
+            ? draft.words.map((word, wordIndex) => {
+                const nextWordStart = draft.words[wordIndex + 1]?.startTime;
+                const fallbackEnd = nextWordStart ?? lineEndTime;
+                const endTime = Math.max(word.endTime ?? fallbackEnd, word.startTime + 0.001);
+                return {
+                    text: word.text,
+                    startTime: word.startTime,
+                    endTime
+                };
+            })
+            : buildTimedWords(draft.fullText, draft.startTime, lineEndTime);
+
+        if (words.length > 0) {
+            lineEndTime = Math.max(lineEndTime, words[words.length - 1].endTime);
+        }
+
+        return {
+            words,
+            startTime: draft.startTime,
+            endTime: lineEndTime,
+            fullText: draft.fullText,
+            translation: findClosestTranslation(translationEntries, draft.startTime)
+        };
+    });
+
+    return {
+        lines: attachInterludes(lines),
+        title: metadata.title,
+        artist: metadata.artist
+    };
 };
+
+// --- Worker Message Handler ---
+if (typeof self !== 'undefined') {
+    self.onmessage = (e: MessageEvent) => {
+        const { type, format, content, translation, requestId } = e.data;
+
+        if (type !== 'parse') {
+            self.postMessage({ type: 'error', message: 'Unknown message type', requestId });
+            return;
+        }
+
+        try {
+            let result: LyricData;
+            if (format === 'yrc') {
+                result = parseYRC(content, translation || '');
+            } else if (format === 'enhanced-lrc') {
+                result = parseEnhancedLRC(content, translation || '');
+            } else if (format === 'vtt') {
+                result = parseVTT(content, translation || '');
+            } else {
+                result = parseLRC(content, translation || '');
+            }
+            self.postMessage({ type: 'result', data: result, requestId });
+        } catch (err) {
+            self.postMessage({ type: 'error', message: String(err), requestId });
+        }
+    };
+}

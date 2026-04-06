@@ -29,7 +29,7 @@ export const initLyricsWorker = (): Worker => {
 };
 
 export const parseLyricsAsync = (
-    format: 'lrc' | 'yrc' | 'vtt',
+    format: 'lrc' | 'enhanced-lrc' | 'yrc' | 'vtt',
     content: string,
     translation?: string
 ): Promise<LyricData | null> => {
