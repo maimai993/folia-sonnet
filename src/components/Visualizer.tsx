@@ -179,6 +179,7 @@ const Word: React.FC<{
             style={{
                 marginRight: config.marginRight,
                 alignSelf: config.alignSelf,
+                lineHeight: 1.22,
             }}
         >
             {/* Glow Layer - Handles Text Shadow - Absolute Position */}
