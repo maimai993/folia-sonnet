@@ -19,7 +19,12 @@ export interface RawLocalFileLyric {
 
 export interface RawNeteaseLyric {
     type: 'netease';
-    lrc?: { lyric?: string; pureMusic?: boolean };
+    lrc?: {
+        lyric?: string;
+        pureMusic?: boolean;
+        yrc?: { lyric?: string; pureMusic?: boolean };
+        ytlrc?: { lyric?: string; pureMusic?: boolean };
+    };
     yrc?: { lyric?: string; pureMusic?: boolean };
     ytlrc?: { lyric?: string; pureMusic?: boolean };
     tlyric?: { lyric?: string; pureMusic?: boolean };

@@ -3,7 +3,6 @@ import { Play, Pause, Repeat, Repeat1, Settings2, CheckCircle2, AlertCircle, Spa
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { LyricParserFactory } from './utils/lyrics/LyricParserFactory';
-import { detectChorusLines } from './utils/chorusDetector';
 import { saveSessionData, getSessionData, getFromCache, getFromCacheWithMigration, saveToCache, getLocalSongs } from './services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from './services/coverCache';
 import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from './services/localMusicService';
@@ -29,10 +28,11 @@ import { useAppNavigation } from './hooks/useAppNavigation';
 import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
-import { hasNeteasePureMusicFlag, isPureMusicLyricText } from './utils/lyrics/pureMusic';
+import { isPureMusicLyricText } from './utils/lyrics/pureMusic';
 import { detectTimedLyricFormat } from './utils/lyrics/formatDetection';
 import { ensureLyricDataRenderHints, getLineRenderHints, migrateLyricDataRenderHints } from './utils/lyrics/renderHints';
 import { migrateMatchedLyricsCarrierRenderHints } from './utils/lyrics/storageMigration';
+import { processNeteaseLyrics } from './utils/lyrics/neteaseProcessing';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
@@ -652,51 +652,13 @@ export default function App() {
                             setLyrics(cachedLyrics);
                         } else {
                             const lyricRes = await neteaseApi.getLyric(lastSong.id);
-                            const yrcLrc = lyricRes.yrc?.lyric || lyricRes.lrc?.yrc?.lyric;
-                            const mainLrc = lyricRes.lrc?.lyric;
-                            const ytlrc = lyricRes.ytlrc?.lyric || lyricRes.lrc?.ytlrc?.lyric;
-                            const tlyric = lyricRes.tlyric?.lyric || "";
-                            const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
-
-                            // Use ytlrc for YRC if available, otherwise fallback to tlyric.
-                            // For standard LRC, use tlyric.
-                            const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
-
-                            let parsed: LyricData | null = await LyricParserFactory.parse({
+                            const processed = await processNeteaseLyrics({
                                 type: 'netease',
                                 ...lyricRes
                             });
 
-                            // Chorus Detection
-                            // Find the most repeated lines (after trimming) and mark them as chorus lines, assign a random effect for each unique chorus line text
-                            // Not the best way to determine if a line is a chorus, better than nothing, 
-                            // since the real chourus detection requires very heavy audio analysis or ML model, 
-                            // which btw is not impossible to implement, but it will introduce a lot overhead, the uesr will have to wait for
-                            // a long time before see any lyrics if we do that. Not really worth it.
-                            if (parsed && !isPureMusic && mainLrc) {
-                                const chorusLines = detectChorusLines(mainLrc);
-                                if (chorusLines.size > 0) {
-                                    // Assign a stable random effect for each unique chorus line text
-                                    const effectMap = new Map<string, 'bars' | 'circles' | 'beams'>();
-                                    const effects: ('bars' | 'circles' | 'beams')[] = ['bars', 'circles', 'beams'];
-
-                                    chorusLines.forEach(text => {
-                                        const randomEffect = effects[Math.floor(Math.random() * effects.length)];
-                                        effectMap.set(text, randomEffect);
-                                    });
-
-                                    parsed.lines.forEach(line => {
-                                        const text = line.fullText.trim();
-                                        if (chorusLines.has(text)) {
-                                            line.isChorus = true;
-                                            line.chorusEffect = effectMap.get(text);
-                                        }
-                                    });
-                                }
-                            }
-
-                            setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, isPureMusic } : prev);
-                            setLyrics(parsed);
+                            setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, isPureMusic: processed.isPureMusic } : prev);
+                            setLyrics(processed.lyrics);
                         }
                     }
                 } catch (e) {
@@ -991,12 +953,15 @@ export default function App() {
                     if (searchRes.result?.songs?.length > 0) {
                         const matchedSong = searchRes.result.songs[0];
                         const lyricRes = await neteaseApi.getLyric(matchedSong.id);
-                        const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(lyricRes.lrc?.lyric);
+                        const processed = await processNeteaseLyrics({
+                            type: 'netease',
+                            ...lyricRes
+                        });
 
-                        lyrics = await LyricParserFactory.parse({ type: 'netease', ...lyricRes });
-                        (navidromeSong as any).matchedIsPureMusic = isPureMusic;
+                        lyrics = processed.lyrics;
+                        (navidromeSong as any).matchedIsPureMusic = processed.isPureMusic;
                         
-                        if (lyrics || isPureMusic) {
+                        if (lyrics || processed.isPureMusic) {
                             autoMatchedLyrics = lyrics;
                             isAutoMatched = true;
                             console.log('[App] Using Netease lyrics for Navidrome song');

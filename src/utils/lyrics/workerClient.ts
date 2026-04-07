@@ -1,4 +1,5 @@
 import { LyricData } from '../../types';
+import type { LyricParseFormat } from './parserCore';
 
 let lyricsWorker: Worker | null = null;
 let workerRequestId = 0;
@@ -29,7 +30,7 @@ export const initLyricsWorker = (): Worker => {
 };
 
 export const parseLyricsAsync = (
-    format: 'lrc' | 'enhanced-lrc' | 'yrc' | 'vtt',
+    format: LyricParseFormat,
     content: string,
     translation?: string
 ): Promise<LyricData | null> => {

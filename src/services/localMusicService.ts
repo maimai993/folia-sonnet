@@ -1,11 +1,8 @@
 import { LocalSong, LyricData, LocalLibrarySnapshot, LocalLibrarySnapshotFile, LocalLibrarySnapshotNode } from '../types';
 import { saveLocalSong, saveLocalSongs, deleteLocalSong as dbDeleteLocalSong, deleteLocalSongs as dbDeleteLocalSongs, saveDirHandles, getDirHandles, deleteDirHandle, getLocalSongs, getLocalLibrarySnapshot, saveLocalLibrarySnapshot, deleteLocalLibrarySnapshot } from './db';
 import { neteaseApi } from './netease';
-import { parseLRC } from '../utils/lrcParser';
-import { parseYRC } from '../utils/yrcParser';
-import { detectChorusLines } from '../utils/chorusDetector';
 import { parseEmbeddedMetadataAsync, type EmbeddedMetadataResult } from '../utils/localMetadataWorkerClient';
-import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
+import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
 
@@ -1190,72 +1187,25 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
 
         // Fetch lyrics (only when NO local lyrics)
         const lyricRes = await neteaseApi.getLyric(matchedSong.id);
-        const yrcLrc = lyricRes.yrc?.lyric || lyricRes.lrc?.yrc?.lyric;
-        const mainLrc = lyricRes.lrc?.lyric;
-        const ytlrc = lyricRes.ytlrc?.lyric || lyricRes.lrc?.ytlrc?.lyric;
-        const tlyric = lyricRes.tlyric?.lyric || "";
-        const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
+        const processed = await processNeteaseLyrics({
+            type: 'netease',
+            ...lyricRes
+        });
 
-        const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
+        song.matchedSongId = matchedSong.id;
+        song.matchedArtists = matchedSong.ar?.map(a => a.name).join(', ');
+        song.matchedAlbumId = matchedSong.al?.id || matchedSong.album?.id;
+        song.matchedAlbumName = matchedSong.al?.name || matchedSong.album?.name;
+        song.matchedLyrics = processed.lyrics || undefined;
+        song.matchedIsPureMusic = processed.isPureMusic;
 
-        let parsedLyrics: LyricData | null = null;
-        if (yrcLrc) {
-            parsedLyrics = parseYRC(yrcLrc, transLrc);
-        } else if (mainLrc) {
-            parsedLyrics = parseLRC(mainLrc, transLrc);
+        const coverUrl = matchedSong.al?.picUrl || matchedSong.album?.picUrl;
+        if (coverUrl) {
+            song.matchedCoverUrl = coverUrl.replace('http:', 'https:');
         }
 
-        // Add chorus detection
-        if (parsedLyrics && !isPureMusic && mainLrc) {
-            const chorusLines = detectChorusLines(mainLrc);
-            if (chorusLines.size > 0) {
-                const effectMap = new Map<string, 'bars' | 'circles' | 'beams'>();
-                const effects: ('bars' | 'circles' | 'beams')[] = ['bars', 'circles', 'beams'];
-
-                chorusLines.forEach(text => {
-                    const randomEffect = effects[Math.floor(Math.random() * effects.length)];
-                    effectMap.set(text, randomEffect);
-                });
-
-                parsedLyrics.lines.forEach(line => {
-                    const text = line.fullText.trim();
-                    if (chorusLines.has(text)) {
-                        line.isChorus = true;
-                        line.chorusEffect = effectMap.get(text);
-                    }
-                });
-            }
-        }
-
-        if (parsedLyrics) {
-            // Update local song with matched info
-            song.matchedSongId = matchedSong.id;
-            song.matchedArtists = matchedSong.ar?.map(a => a.name).join(', ');
-            song.matchedAlbumId = matchedSong.al?.id || matchedSong.album?.id;
-            song.matchedAlbumName = matchedSong.al?.name || matchedSong.album?.name;
-            song.matchedLyrics = parsedLyrics;
-            song.matchedIsPureMusic = isPureMusic;
-            // Get cover URL from matched song
-            const coverUrl = matchedSong.al?.picUrl || matchedSong.album?.picUrl;
-            if (coverUrl) {
-                song.matchedCoverUrl = coverUrl.replace('http:', 'https:');
-            }
-            await saveLocalSong(song);
-        } else if (isPureMusic) {
-            song.matchedSongId = matchedSong.id;
-            song.matchedArtists = matchedSong.ar?.map(a => a.name).join(', ');
-            song.matchedAlbumId = matchedSong.al?.id || matchedSong.album?.id;
-            song.matchedAlbumName = matchedSong.al?.name || matchedSong.album?.name;
-            song.matchedLyrics = undefined;
-            song.matchedIsPureMusic = true;
-            const coverUrl = matchedSong.al?.picUrl || matchedSong.album?.picUrl;
-            if (coverUrl) {
-                song.matchedCoverUrl = coverUrl.replace('http:', 'https:');
-            }
-            await saveLocalSong(song);
-        }
-
-        return parsedLyrics;
+        await saveLocalSong(song);
+        return processed.lyrics;
     } catch (error) {
         console.error('[LocalMusic] Failed to match lyrics:', error);
         return null;

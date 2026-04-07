@@ -7,9 +7,9 @@
 
 import { SongResult, LyricData } from '../types';
 import { neteaseApi } from './netease';
-import { getFromCache, getFromCacheWithMigration, saveToCache } from './db';
-import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
+import { getFromCache, getFromCacheWithMigration } from './db';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
+import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 
 // Prefetch configuration
 const PREFETCH_COUNT_NEXT = 2;  // Prefetch 2 songs ahead
@@ -36,8 +36,6 @@ const prefetchCache = new Map<number, PrefetchedSongData>();
 
 // Track current prefetch operation to cancel on queue change
 let currentPrefetchAbortController: AbortController | null = null;
-
-import { LyricParserFactory } from '../utils/lyrics/LyricParserFactory';
 /**
  * Check if a prefetched URL is still valid (not expired)
  */
@@ -144,19 +142,17 @@ const prefetchSong = async (
                 data.lyrics = cachedLyrics;
             } else if (!signal.aborted) {
                 const lyricRes = await neteaseApi.getLyric(songId);
-                const mainLrc = lyricRes.lrc?.lyric || null;
-                const yrcLrc = lyricRes.yrc?.lyric || lyricRes.lrc?.yrc?.lyric || null;
-                const ytlrc = lyricRes.ytlrc?.lyric || lyricRes.lrc?.ytlrc?.lyric || null;
-                const tlyric = lyricRes.tlyric?.lyric || "";
-                const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
-                const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
-
-                data.lyricRaw = { mainLrc, yrcLrc, transLrc, isPureMusic };
-
-                data.lyrics = await LyricParserFactory.parse({
+                const processed = await processNeteaseLyrics({
                     type: 'netease',
                     ...lyricRes
                 });
+                data.lyricRaw = {
+                    mainLrc: processed.mainLrc,
+                    yrcLrc: processed.yrcLrc,
+                    transLrc: processed.transLrc,
+                    isPureMusic: processed.isPureMusic
+                };
+                data.lyrics = processed.lyrics;
 
                 if (data.lyrics) {
                     console.log(`[Prefetch] Parsed lyrics for: ${song.name}`);

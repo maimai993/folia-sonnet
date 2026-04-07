@@ -194,23 +194,26 @@ src/
 
 ## 6. Lyrics and Parsing Stack
 
-The lyric system is now layered instead of being only `lrcParser.ts` + `yrcParser.ts`.
-现在歌词解析不再只是两个 parser，而是分成“适配器 + 工厂 + worker + 特定来源”四层：
+The lyric system now has a single parser core, with worker/factory/helpers layered around it.
+现在歌词解析以单一 parser core 为真源，worker、factory 和特定来源 helper 都只是入口层：
 
 | File | Responsibility |
 | :--- | :--- |
+| `utils/lyrics/parserCore.ts` | Single source of truth for LRC / enhanced LRC / YRC / VTT parsing, metadata extraction, translation alignment, interludes, and render hints. |
 | `utils/lyrics/LyricParserFactory.ts` | Central entry. Dispatches by source type: `netease`, `local`, `embedded`, `navidrome`. |
 | `utils/lyrics/LyricAdapter.ts` | Shared adapter contract. |
 | `utils/lyrics/types.ts` | Raw lyric input types used by the factory/adapters. |
+| `utils/lyrics/neteaseProcessing.ts` | Shared Netease lyric normalization flow: payload extraction, pure-music detection, parsing, and chorus decoration. |
 | `utils/lyrics/adapters/NeteaseLyricAdapter.ts` | Parses Netease lyric payloads. |
 | `utils/lyrics/adapters/LocalFileLyricAdapter.ts` | Parses external `.lrc` / `.vtt` lyric pairs, including translated variants. |
 | `utils/lyrics/adapters/EmbeddedLyricAdapter.ts` | Parses embedded tag lyrics extracted from audio metadata. |
 | `utils/lyrics/adapters/NavidromeLyricAdapter.ts` | Parses Navidrome/OpenSubsonic lyric payloads. |
 | `utils/lyrics/workerClient.ts` | Frontend client for lyric parsing worker. |
-| `workers/lyricsParser.worker.ts` | Off-main-thread LRC/YRC/VTT parsing worker. |
-| `utils/lrcParser.ts` / `utils/yrcParser.ts` | Standalone lyric parsers kept as reusable low-level implementations. |
+| `workers/lyricsParser.worker.ts` | Off-main-thread execution layer that delegates parsing to `parserCore`. |
+| `utils/lrcParser.ts` / `utils/yrcParser.ts` | Backward-compatible thin wrappers over `parserCore`. |
 | `utils/lyrics/timelineSplitter.ts` | Splits combined lyric/translation timelines when needed. |
-| `utils/chorusDetector.ts` | Detects repeated chorus lines and marks visual effects. |
+| `utils/lyrics/chorusEffects.ts` | Applies chorus annotations on top of parsed lyrics. |
+| `utils/chorusDetector.ts` | Detects repeated chorus lines for visual effects. |
 
 ## 7. Metadata, Types, and Utilities
 

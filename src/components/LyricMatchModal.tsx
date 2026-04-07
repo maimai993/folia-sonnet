@@ -3,12 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Search, Loader2, X, Music, Check } from 'lucide-react';
 import { LocalSong, SongResult, LyricData } from '../types';
 import { neteaseApi } from '../services/netease';
-import { parseLRC } from '../utils/lrcParser';
-import { parseYRC } from '../utils/yrcParser';
-import { detectChorusLines } from '../utils/chorusDetector';
 import { saveLocalSong, removeFromCache, saveToCache } from '../services/db';
 import { formatSongName } from '../utils/songNameFormatter';
-import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
+import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 
 interface LyricMatchModalProps {
     song: LocalSong;
@@ -159,46 +156,15 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
         try {
             // Always fetch lyrics from selected song (we decide whether to save them based on toggle)
             const lyricRes = await neteaseApi.getLyric(selectedResult.id);
-            const yrcLrc = lyricRes.yrc?.lyric || lyricRes.lrc?.yrc?.lyric;
-            const mainLrc = lyricRes.lrc?.lyric;
-            const ytlrc = lyricRes.ytlrc?.lyric || lyricRes.lrc?.ytlrc?.lyric;
-            const tlyric = lyricRes.tlyric?.lyric || "";
-            const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
-
-            const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
-
-            let parsedLyrics: LyricData | null = null;
-            if (yrcLrc) {
-                parsedLyrics = parseYRC(yrcLrc, transLrc);
-            } else if (mainLrc) {
-                parsedLyrics = parseLRC(mainLrc, transLrc);
-            }
-
-            // Chorus detection
-            if (parsedLyrics && !isPureMusic && mainLrc) {
-                const chorusLines = detectChorusLines(mainLrc);
-                if (chorusLines.size > 0) {
-                    const effectMap = new Map<string, 'bars' | 'circles' | 'beams'>();
-                    const effects: ('bars' | 'circles' | 'beams')[] = ['bars', 'circles', 'beams'];
-
-                    chorusLines.forEach(text => {
-                        const randomEffect = effects[Math.floor(Math.random() * effects.length)];
-                        effectMap.set(text, randomEffect);
-                    });
-
-                    parsedLyrics.lines.forEach(line => {
-                        const text = line.fullText.trim();
-                        if (chorusLines.has(text)) {
-                            line.isChorus = true;
-                            line.chorusEffect = effectMap.get(text);
-                        }
-                    });
-                }
-            }
+            const processed = await processNeteaseLyrics({
+                type: 'netease',
+                ...lyricRes
+            });
+            const parsedLyrics: LyricData | null = processed.lyrics;
 
             // Always save the matched song ID for reference
             song.matchedSongId = selectedResult.id;
-            song.matchedIsPureMusic = isPureMusic;
+            song.matchedIsPureMusic = processed.isPureMusic;
 
             // Save lyrics if online is selected
             if (lyricsSource === 'online') {

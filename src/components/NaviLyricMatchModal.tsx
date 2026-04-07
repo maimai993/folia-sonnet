@@ -4,13 +4,10 @@ import { Search, Loader2, X, Music, Check } from 'lucide-react';
 import { SongResult, LyricData } from '../types';
 import { NavidromeSong } from '../types/navidrome';
 import { neteaseApi } from '../services/netease';
-import { parseLRC } from '../utils/lrcParser';
-import { parseYRC } from '../utils/yrcParser';
-import { detectChorusLines } from '../utils/chorusDetector';
-import { saveToCache, getFromCacheWithMigration, removeFromCache } from '../services/db';
+import { saveToCache, getFromCacheWithMigration } from '../services/db';
 import { formatSongName } from '../utils/songNameFormatter';
-import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import { migrateMatchedLyricsCarrierRenderHints } from '../utils/lyrics/storageMigration';
+import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 
 export interface NavidromeMatchData {
     matchedSongId?: number;
@@ -126,37 +123,16 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
         try {
             // Always fetch lyrics
             const lyricRes = await neteaseApi.getLyric(selectedResult.id);
-            const mainLrc = lyricRes.yrc?.lyric || lyricRes.lrc?.yrc?.lyric || lyricRes.lrc?.lyric;
-            const transLrc = lyricRes.ytlrc?.lyric || lyricRes.tlyric?.lyric || "";
-            const isPureMusic = hasNeteasePureMusicFlag(lyricRes) || isPureMusicLyricText(mainLrc);
-
-            let parsedLyrics: LyricData | null = null;
-            if (mainLrc) {
-                parsedLyrics = lyricRes.yrc?.lyric ? parseYRC(mainLrc, transLrc) : parseLRC(mainLrc, transLrc);
-            }
-
-            if (parsedLyrics && mainLrc && !isPureMusic) {
-                const chorusLines = detectChorusLines(mainLrc);
-                if (chorusLines.size > 0) {
-                    const effectMap = new Map<string, 'bars' | 'circles' | 'beams'>();
-                    const effects: ('bars' | 'circles' | 'beams')[] = ['bars', 'circles', 'beams'];
-                    chorusLines.forEach(text => {
-                        effectMap.set(text, effects[Math.floor(Math.random() * effects.length)]);
-                    });
-                    parsedLyrics.lines.forEach(line => {
-                        const text = line.fullText.trim();
-                        if (chorusLines.has(text)) {
-                            line.isChorus = true;
-                            line.chorusEffect = effectMap.get(text);
-                        }
-                    });
-                }
-            }
+            const processed = await processNeteaseLyrics({
+                type: 'netease',
+                ...lyricRes
+            });
+            const parsedLyrics: LyricData | null = processed.lyrics;
 
             const matchData: NavidromeMatchData = {
                 matchedSongId: selectedResult.id,
                 matchedLyrics: parsedLyrics || undefined,
-                matchedIsPureMusic: isPureMusic,
+                matchedIsPureMusic: processed.isPureMusic,
                 useOnlineLyrics: lyricsSource === 'online',
                 lyricsSource,
                 hasManualLyricSelection: true
