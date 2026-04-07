@@ -12,6 +12,7 @@ import { buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifi
 import { getPrefetchedData, prefetchNearbySongs, invalidateAndRefetch } from './services/prefetchService';
 import Visualizer from './components/Visualizer';
 import VisualizerCadenza from './components/VisualizerCadenza';
+import DevDebugOverlay from './components/DevDebugOverlay';
 import ProgressBar from './components/ProgressBar';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
 import Home from './components/Home';
@@ -30,13 +31,14 @@ import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
 import { hasNeteasePureMusicFlag, isPureMusicLyricText } from './utils/lyrics/pureMusic';
 import { detectTimedLyricFormat } from './utils/lyrics/formatDetection';
-import { ensureLyricDataRenderHints, migrateLyricDataRenderHints } from './utils/lyrics/renderHints';
+import { ensureLyricDataRenderHints, getLineRenderHints, migrateLyricDataRenderHints } from './utils/lyrics/renderHints';
 import { migrateMatchedLyricsCarrierRenderHints } from './utils/lyrics/storageMigration';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
 const LOCAL_PREWARM_DELAY_MS = 1000;
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
+const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
 
 const findLatestActiveLineIndex = (lines: LyricData['lines'], time: number) => {
     for (let index = lines.length - 1; index >= 0; index -= 1) {
@@ -97,6 +99,22 @@ const hasRenderableLyrics = (lyricData: LyricData | null | undefined): lyricData
     );
 };
 
+const getAudioSrcKind = (audioSrc: string | null): 'empty' | 'blob' | 'http' | 'other' => {
+    if (!audioSrc) {
+        return 'empty';
+    }
+
+    if (audioSrc.startsWith('blob:')) {
+        return 'blob';
+    }
+
+    if (audioSrc.startsWith('http://') || audioSrc.startsWith('https://')) {
+        return 'http';
+    }
+
+    return 'other';
+};
+
 const isNavidromePlaybackSong = (song: SongResult | null | undefined): song is NavidromeSong => {
     return Boolean(song && (song as any).isNavidrome === true);
 };
@@ -109,6 +127,65 @@ const isLocalPlaybackSong = (
         !isNavidromePlaybackSong(song) &&
         (((song as any).isLocal === true) || Boolean((song as any).localData))
     );
+};
+
+const resolveDebugSongSource = (song: SongResult | null): 'none' | 'local' | 'navidrome' | 'online' => {
+    if (isLocalPlaybackSong(song)) {
+        return 'local';
+    }
+
+    if (isNavidromePlaybackSong(song)) {
+        return 'navidrome';
+    }
+
+    return song ? 'online' : 'none';
+};
+
+const resolveDebugLyricsSource = (
+    song: SongResult | null,
+    lyrics: LyricData | null
+): 'none' | 'local' | 'embedded' | 'online' | 'navi' => {
+    if (isLocalPlaybackSong(song)) {
+        const localData = song.localData;
+        if (localData.lyricsSource) {
+            return localData.lyricsSource;
+        }
+        if (localData.hasLocalLyrics && localData.localLyricsContent) {
+            return 'local';
+        }
+        if (localData.hasEmbeddedLyrics && localData.embeddedLyricsContent) {
+            return 'embedded';
+        }
+        if (localData.matchedLyrics) {
+            return 'online';
+        }
+        return 'none';
+    }
+
+    if (isNavidromePlaybackSong(song)) {
+        const navidromeSong = song as NavidromeSong & {
+            lyricsSource?: 'navi' | 'online';
+            matchedLyrics?: LyricData;
+            cachedStructuredLyrics?: StructuredLyric['line'];
+            cachedPlainLyrics?: string;
+        };
+        if (navidromeSong.lyricsSource) {
+            return navidromeSong.lyricsSource;
+        }
+        if (navidromeSong.matchedLyrics) {
+            return 'online';
+        }
+        if (lyrics || navidromeSong.cachedStructuredLyrics?.length || navidromeSong.cachedPlainLyrics?.trim()) {
+            return 'navi';
+        }
+        return 'none';
+    }
+
+    if (song && lyrics) {
+        return 'online';
+    }
+
+    return 'none';
 };
 
 const hasEnhancedStructuredLines = (item: StructuredLyric): boolean => {
@@ -182,6 +259,7 @@ const hydrateNavidromeLyricPayload = async (config: NavidromeConfig, navidromeSo
 
 export default function App() {
     const { t } = useTranslation();
+    const isDev = import.meta.env.DEV;
 
     // Player Data
     const [audioSrc, setAudioSrc] = useState<string | null>(null);
@@ -199,6 +277,7 @@ export default function App() {
     const [statusMsg, setStatusMsg] = useState<{ type: 'error' | 'success' | 'info', text: string; } | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi'>('cover');
+    const [isDevDebugOverlayVisible, setIsDevDebugOverlayVisible] = useState(false);
 
     // Player State
     const [playerState, setPlayerState] = useState<PlayerState>(PlayerState.IDLE);
@@ -1663,7 +1742,19 @@ export default function App() {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             // Ignore if typing in an input (though we don't have many inputs yet)
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+            if (
+                e.target instanceof HTMLInputElement
+                || e.target instanceof HTMLTextAreaElement
+                || (e.target instanceof HTMLElement && e.target.isContentEditable)
+            ) {
+                return;
+            }
+
+            if (isDev && e.altKey && e.shiftKey && e.code === 'KeyD') {
+                e.preventDefault();
+                setIsDevDebugOverlayVisible(prev => !prev);
+                return;
+            }
 
             switch (e.code) {
                 case 'Space':
@@ -1694,7 +1785,7 @@ export default function App() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentView, playerState, currentSong, audioSrc]);
+    }, [audioSrc, currentSong, currentView, isDev, playerState]);
 
     const toggleLoop = (e?: React.MouseEvent) => {
         e?.stopPropagation();
@@ -1885,6 +1976,53 @@ export default function App() {
         color: 'var(--text-primary)'
     } as React.CSSProperties;
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
+    const debugCurrentTimeValue = currentTime.get();
+    const debugActiveLine = lyrics && currentLineIndex >= 0 ? lyrics.lines[currentLineIndex] ?? null : null;
+    const debugNextLine = (() => {
+        if (!lyrics?.lines.length) {
+            return null;
+        }
+
+        if (debugActiveLine) {
+            return lyrics.lines[currentLineIndex + 1] ?? null;
+        }
+
+        return lyrics.lines.find(line => line.startTime > debugCurrentTimeValue) ?? null;
+    })();
+    const toDebugLineSnapshot = (line: LyricData['lines'][number] | null) => {
+        if (!line) {
+            return null;
+        }
+
+        const renderHints = getLineRenderHints(line);
+        return {
+            text: line.fullText || null,
+            translation: line.translation ?? null,
+            wordCount: line.words.length,
+            startTime: line.startTime,
+            endTime: line.endTime,
+            renderEndTime: renderHints?.renderEndTime ?? null,
+            rawDuration: renderHints?.rawDuration ?? Math.max(line.endTime - line.startTime, 0),
+            timingClass: renderHints?.timingClass ?? null,
+            lineTransitionMode: renderHints?.lineTransitionMode ?? null,
+            wordRevealMode: renderHints?.wordRevealMode ?? null,
+        };
+    };
+    const devDebugSnapshot = {
+        shortcutLabel: DEV_DEBUG_SHORTCUT_LABEL,
+        currentView,
+        playerState,
+        visualizerMode,
+        songName: currentSong?.name ?? null,
+        songSource: resolveDebugSongSource(currentSong),
+        lyricsSource: resolveDebugLyricsSource(currentSong, lyrics),
+        audioSrcKind: getAudioSrcKind(audioSrc),
+        duration,
+        currentLineIndex,
+        totalLines: lyrics?.lines.length ?? 0,
+        activeLine: toDebugLineSnapshot(debugActiveLine),
+        nextLine: toDebugLineSnapshot(debugNextLine),
+    };
 
     return (
         <div
@@ -2168,6 +2306,14 @@ export default function App() {
                     />
                 )}
             </AnimatePresence>
+
+            {isDev && currentView === 'player' && isDevDebugOverlayVisible && (
+                <DevDebugOverlay
+                    snapshot={devDebugSnapshot}
+                    currentTime={currentTime}
+                    isDaylight={isDaylight}
+                />
+            )}
 
             {/* --- STATUS TOAST --- */}
             <AnimatePresence>
