@@ -7,8 +7,9 @@
 
 import { SongResult, LyricData } from '../types';
 import { neteaseApi } from './netease';
-import { getFromCache, saveToCache } from './db';
+import { getFromCache, getFromCacheWithMigration, saveToCache } from './db';
 import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
+import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 
 // Prefetch configuration
 const PREFETCH_COUNT_NEXT = 2;  // Prefetch 2 songs ahead
@@ -137,7 +138,7 @@ const prefetchSong = async (
     if (!data.lyrics) {
         try {
             // Check IndexedDB cache first
-            const cachedLyrics = await getFromCache<LyricData>(`lyric_${songId}`);
+            const cachedLyrics = await getFromCacheWithMigration<LyricData>(`lyric_${songId}`, migrateLyricDataRenderHints);
             if (cachedLyrics) {
                 console.log(`[Prefetch] Lyrics in IndexedDB for: ${song.name}`);
                 data.lyrics = cachedLyrics;

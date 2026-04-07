@@ -7,9 +7,10 @@ import { neteaseApi } from '../services/netease';
 import { parseLRC } from '../utils/lrcParser';
 import { parseYRC } from '../utils/yrcParser';
 import { detectChorusLines } from '../utils/chorusDetector';
-import { saveToCache, getFromCache, removeFromCache } from '../services/db';
+import { saveToCache, getFromCacheWithMigration, removeFromCache } from '../services/db';
 import { formatSongName } from '../utils/songNameFormatter';
 import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
+import { migrateMatchedLyricsCarrierRenderHints } from '../utils/lyrics/storageMigration';
 
 export interface NavidromeMatchData {
     matchedSongId?: number;
@@ -72,7 +73,10 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
     // Prepare component data
     useEffect(() => {
         const loadExistingMatch = async () => {
-            const data = await getFromCache<NavidromeMatchData>(`navidrome_match_${song.navidromeData.id}`);
+            const data = await getFromCacheWithMigration<NavidromeMatchData>(
+                `navidrome_match_${song.navidromeData.id}`,
+                migrateMatchedLyricsCarrierRenderHints
+            );
             if (data) {
                 setInitialMatchData(data);
                 setLyricsSource(data.lyricsSource ?? (data.useOnlineLyrics ? 'online' : 'navi'));

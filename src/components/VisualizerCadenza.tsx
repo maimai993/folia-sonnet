@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { layoutWithLines, prepareWithSegments, type LayoutLine, type LayoutCursor, type PreparedTextWithSegments } from '@chenglou/pretext';
 import { AudioBands, DEFAULT_CADENZA_TUNING, Line, Theme, Word as WordType, type CadenzaTuning } from '../types';
-import { getLineRenderEndTime, getLineRenderHints } from '../utils/lyrics/renderHints';
 import GeometricBackground from './GeometricBackground';
 import FluidBackground from './FluidBackground';
 
@@ -117,6 +116,14 @@ interface PreparedStateCacheContext {
     viewport: { width: number; height: number; };
     theme: Theme;
     tuning: Pick<CadenzaTuning, 'fontScale' | 'widthRatio'>;
+}
+
+interface ResolvedLineRenderTiming {
+    renderHints: NonNullable<Line['renderHints']> | null;
+    lineRenderEndTime: number;
+    wordRevealMode: 'normal' | 'fast' | 'instant';
+    lastWordEndTime: number;
+    linePassHold: number;
 }
 
 const createOverlayWordNodes = (): OverlayWordNodes => {
@@ -295,16 +302,14 @@ const mixColors = (from: string, to: string, amount: number, alpha = 1) => {
     return `rgba(${Math.round(mix(fromChannels.r, toChannels.r, normalizedAmount))}, ${Math.round(mix(fromChannels.g, toChannels.g, normalizedAmount))}, ${Math.round(mix(fromChannels.b, toChannels.b, normalizedAmount))}, ${clamp(alpha, 0, 1)})`;
 };
 
-const getWordStatus = (time: number, line: Line, word: WordType) => {
-    const renderHints = getLineRenderHints(line);
-    const wordRevealMode = renderHints?.wordRevealMode ?? 'normal';
-    const lookahead = wordRevealMode === 'fast'
+const getWordStatus = (time: number, lineTiming: ResolvedLineRenderTiming, word: WordType) => {
+    const lookahead = lineTiming.wordRevealMode === 'fast'
         ? 0.045
-        : wordRevealMode === 'instant'
+        : lineTiming.wordRevealMode === 'instant'
             ? 0
             : 0.18;
-    const activeEndTime = wordRevealMode === 'instant'
-        ? getLineRenderEndTime(line)
+    const activeEndTime = lineTiming.wordRevealMode === 'instant'
+        ? lineTiming.lineRenderEndTime
         : word.endTime;
 
     if (time >= word.startTime - lookahead && time <= activeEndTime) {
@@ -316,10 +321,7 @@ const getWordStatus = (time: number, line: Line, word: WordType) => {
     return 'waiting' as const;
 };
 
-const getWordProgress = (time: number, line: Line, word: WordType) => {
-    const renderHints = getLineRenderHints(line);
-    const wordRevealMode = renderHints?.wordRevealMode ?? 'normal';
-
+const getWordProgress = (time: number, wordRevealMode: ResolvedLineRenderTiming['wordRevealMode'], word: WordType) => {
     if (wordRevealMode === 'instant') {
         return time < word.startTime ? 0 : 1;
     }
@@ -341,12 +343,9 @@ const getClassicKeyframedGlow = (progress: number) => {
     return 1 - clamp((progress - 0.3) / 0.7, 0, 1);
 };
 
-const getClassicGlowEnvelope = (time: number, line: Line, word: WordType) => {
-    const renderHints = getLineRenderHints(line);
-    const wordRevealMode = renderHints?.wordRevealMode ?? 'normal';
-
-    if (wordRevealMode === 'instant') {
-        const activeEndTime = getLineRenderEndTime(line);
+const getClassicGlowEnvelope = (time: number, lineTiming: ResolvedLineRenderTiming, word: WordType) => {
+    if (lineTiming.wordRevealMode === 'instant') {
+        const activeEndTime = lineTiming.lineRenderEndTime;
         if (time < word.startTime || time > activeEndTime) {
             return 0;
         }
@@ -355,7 +354,7 @@ const getClassicGlowEnvelope = (time: number, line: Line, word: WordType) => {
         return getClassicKeyframedGlow(pulseProgress);
     }
 
-    if (wordRevealMode === 'fast') {
+    if (lineTiming.wordRevealMode === 'fast') {
         const duration = Math.max(word.endTime - word.startTime, 0.045);
 
         if (time < word.startTime) {
@@ -424,16 +423,13 @@ const getClassicCharGlow = (
     return activeGlow * fadeOut;
 };
 
-const getClassicBodyMix = (time: number, line: Line, word: WordType) => {
-    const renderHints = getLineRenderHints(line);
-    const wordRevealMode = renderHints?.wordRevealMode ?? 'normal';
-
-    if (wordRevealMode === 'instant') {
+const getClassicBodyMix = (time: number, lineTiming: ResolvedLineRenderTiming, word: WordType) => {
+    if (lineTiming.wordRevealMode === 'instant') {
         if (time < word.startTime) {
             return 0;
         }
 
-        return time <= getLineRenderEndTime(line) ? 1 : 0;
+        return time <= lineTiming.lineRenderEndTime ? 1 : 0;
     }
 
     if (time < word.startTime) {
@@ -441,14 +437,14 @@ const getClassicBodyMix = (time: number, line: Line, word: WordType) => {
     }
 
     if (time <= word.endTime) {
-        return getWordProgress(time, line, word);
+        return getWordProgress(time, lineTiming.wordRevealMode, word);
     }
 
-    const fadeOut = clamp((time - word.endTime) / (wordRevealMode === 'fast' ? 0.12 : 0.8), 0, 1);
+    const fadeOut = clamp((time - word.endTime) / (lineTiming.wordRevealMode === 'fast' ? 0.12 : 0.8), 0, 1);
     return 1 - fadeOut;
 };
 
-const getClassicLineEnvelope = (time: number, line: Line | null, staticMode: boolean) => {
+const getClassicLineEnvelope = (time: number, line: Line | null, lineTiming: ResolvedLineRenderTiming | null, staticMode: boolean) => {
     if (!line || staticMode) {
         return {
             opacity: 1,
@@ -457,8 +453,9 @@ const getClassicLineEnvelope = (time: number, line: Line | null, staticMode: boo
         };
     }
 
-    const renderHints = getLineRenderHints(line);
-    const lineEndTime = getLineRenderEndTime(line);
+    const renderHints = lineTiming?.renderHints ?? null;
+    const lineEndTime = lineTiming?.lineRenderEndTime ?? line.endTime;
+    const linePassStart = Math.max(lineTiming?.lastWordEndTime ?? line.endTime, line.startTime) + (lineTiming?.linePassHold ?? 0);
 
     if (renderHints?.lineTransitionMode === 'none') {
         return {
@@ -471,7 +468,7 @@ const getClassicLineEnvelope = (time: number, line: Line | null, staticMode: boo
     if (renderHints?.lineTransitionMode === 'fast') {
         const enterDuration = clamp(renderHints.rawDuration * 0.45, 0.045, 0.06);
         const exitDuration = clamp(renderHints.rawDuration * 0.22, 0.03, 0.04);
-        const exitStart = Math.max(line.startTime + enterDuration + 0.01, lineEndTime - exitDuration);
+        const exitStart = Math.max(line.startTime + enterDuration + 0.01, linePassStart, lineEndTime - exitDuration);
         const enterProgress = easeOutCubic(clamp((time - line.startTime) / enterDuration, 0, 1));
         let opacity = mix(0.65, 1, enterProgress);
         let scale = mix(0.97, 1, enterProgress);
@@ -501,7 +498,8 @@ const getClassicLineEnvelope = (time: number, line: Line | null, staticMode: boo
     let scale = mix(0.9, 1, enterProgress);
     let blur = mix(10, 0, enterProgress);
 
-    const exitProgress = easeOutCubic(clamp((time - (lineEndTime - exitDuration)) / exitDuration, 0, 1));
+    const exitStart = Math.max(linePassStart, lineEndTime - exitDuration);
+    const exitProgress = easeOutCubic(clamp((time - exitStart) / exitDuration, 0, 1));
     if (exitProgress > 0) {
         opacity *= 1 - exitProgress;
         scale = mix(scale, 1.1, exitProgress);
@@ -521,6 +519,20 @@ const getClassicPassedDrift = (time: number, word: WordType) => {
     }
 
     return easeInOutQuad(clamp((time - word.endTime) / 5, 0, 1));
+};
+
+const resolveLineRenderTiming = (line: Line): ResolvedLineRenderTiming => {
+    const renderHints = line.renderHints ?? null;
+    const wordRevealMode = renderHints?.wordRevealMode ?? 'normal';
+    const lastWord = line.words[line.words.length - 1];
+
+    return {
+        renderHints,
+        lineRenderEndTime: renderHints?.renderEndTime ?? line.endTime,
+        wordRevealMode,
+        lastWordEndTime: lastWord?.endTime ?? line.endTime,
+        linePassHold: wordRevealMode === 'fast' ? 0.03 : wordRevealMode === 'instant' ? 0 : 0.06,
+    };
 };
 
 const buildDomTextShadow = (color: string, intensity: number, blurScale = 1) => {
@@ -1517,9 +1529,9 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
             }
 
             const time = currentTime.get();
-            const lineEnvelope = getClassicLineEnvelope(time, activeLine, staticMode);
-            const lineRenderHints = getLineRenderHints(activeLine);
-            const wordRevealMode = lineRenderHints?.wordRevealMode ?? 'normal';
+            const lineTiming = resolveLineRenderTiming(activeLine);
+            const lineEnvelope = getClassicLineEnvelope(time, activeLine, lineTiming, staticMode);
+            const wordRevealMode = lineTiming.wordRevealMode;
             const isInstantWordReveal = wordRevealMode === 'instant';
             const lineSeed = Math.abs(Math.sin(activeLine.startTime * 997.1));
             const linePerspective = theme.animationIntensity === 'chaotic' ? 500 + Math.round(lineSeed * 500) : 1000;
@@ -1540,15 +1552,15 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
 
             const placements = [...preparedState.placements].sort((a, b) => {
                 const order = { waiting: 0, passed: 1, active: 2 } as const;
-                return order[getWordStatus(time, activeLine, a.word)] - order[getWordStatus(time, activeLine, b.word)];
+                return order[getWordStatus(time, lineTiming, a.word)] - order[getWordStatus(time, lineTiming, b.word)];
             });
             const placementIds = new Set(placements.map(placement => placement.id));
             const overlayNodes = overlayNodesRef.current;
             const usedOverlayIds = new Set<string>();
 
             placements.forEach((placement, placementIndex) => {
-                const status = getWordStatus(time, activeLine, placement.word);
-                const progress = getWordProgress(time, activeLine, placement.word);
+                const status = getWordStatus(time, lineTiming, placement.word);
+                const progress = getWordProgress(time, wordRevealMode, placement.word);
                 const passedAlpha = isInstantWordReveal
                     ? 0
                     : theme.animationIntensity === 'chaotic'
@@ -1585,8 +1597,8 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
                 const targetY = focusY + placement.y + localFloatY + passedDriftY + (status === 'waiting' ? placement.entryOffsetY : 0);
                 const targetBodyAlpha = status === 'waiting' ? 0 : status === 'active' ? 1 : passedAlpha;
                 const targetBlur = status === 'waiting' && !isInstantWordReveal ? 10 : 0;
-                const targetActiveMix = getClassicBodyMix(time, activeLine, placement.word);
-                const targetGlowAlpha = getClassicGlowEnvelope(time, activeLine, placement.word);
+                const targetActiveMix = getClassicBodyMix(time, lineTiming, placement.word);
+                const targetGlowAlpha = getClassicGlowEnvelope(time, lineTiming, placement.word);
                 const transformTransitionAmount = 1 - Math.exp(-11 * dt);
                 const visualTransitionAmount = 1 - Math.exp(-14 * dt);
                 const stateMap = animatedPlacementRef.current;
@@ -1686,7 +1698,7 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
                         glyphSpan.style.textShadow = buildDomTextShadow(placement.color, intensity, blurScale);
                     });
                 } else if (overlayWord.glyphSpans[0]) {
-                    const intensity = getClassicGlowEnvelope(time, activeLine, placement.word)
+                    const intensity = getClassicGlowEnvelope(time, lineTiming, placement.word)
                         * clamp(animatedState.glowAlpha, 0, 1)
                         * Math.max(tuning.glowIntensity, 0);
                     overlayWord.glyphSpans[0].style.textShadow = buildDomTextShadow(placement.color, intensity, blurScale);

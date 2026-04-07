@@ -16,6 +16,15 @@ export interface RenderHintLineLike {
     renderHints?: LineRenderHints;
 }
 
+export interface RenderHintLyricDataLike<TLine extends RenderHintLineLike = RenderHintLineLike> {
+    lines: TLine[];
+}
+
+export interface MigrationResult<T> {
+    value: T;
+    changed: boolean;
+}
+
 export const MICRO_LINE_DURATION_THRESHOLD = 0.10;
 export const SHORT_LINE_DURATION_THRESHOLD = 0.18;
 export const MICRO_LINE_RENDER_FLOOR = 0.067;
@@ -68,9 +77,74 @@ export const getLineRenderEndTime = <T extends RenderHintLineLike>(line: T | nul
     return getLineRenderHints(line)?.renderEndTime ?? line.endTime;
 };
 
+const hasExpectedRenderHints = (line: RenderHintLineLike, expected: LineRenderHints): boolean => {
+    const current = line.renderHints;
+
+    return Boolean(
+        current
+        && current.rawDuration === expected.rawDuration
+        && current.timingClass === expected.timingClass
+        && current.renderEndTime === expected.renderEndTime
+        && current.lineTransitionMode === expected.lineTransitionMode
+        && current.wordRevealMode === expected.wordRevealMode
+    );
+};
+
+export const migrateLyricLinesRenderHints = <T extends RenderHintLineLike>(lines: T[]): MigrationResult<T[]> => {
+    let changed = false;
+
+    const nextLines = lines.map(line => {
+        const renderHints = buildLineRenderHints(line.startTime, line.endTime);
+        if (hasExpectedRenderHints(line, renderHints)) {
+            return line;
+        }
+
+        changed = true;
+        return {
+            ...line,
+            renderHints,
+        };
+    });
+
+    return {
+        value: changed ? nextLines : lines,
+        changed,
+    };
+};
+
 export const annotateLyricLines = <T extends RenderHintLineLike>(lines: T[]): T[] => {
-    return lines.map(line => ({
-        ...line,
-        renderHints: buildLineRenderHints(line.startTime, line.endTime),
-    }));
+    return migrateLyricLinesRenderHints(lines).value;
+};
+
+export const ensureLyricLinesRenderHints = <T extends RenderHintLineLike>(lines: T[]): T[] => {
+    return migrateLyricLinesRenderHints(lines).value;
+};
+
+export function migrateLyricDataRenderHints<T extends RenderHintLyricDataLike>(lyrics: T): MigrationResult<T>;
+export function migrateLyricDataRenderHints<T extends RenderHintLyricDataLike>(
+    lyrics: T | null | undefined
+): MigrationResult<T | null>;
+export function migrateLyricDataRenderHints<T extends RenderHintLyricDataLike>(
+    lyrics: T | null | undefined
+): MigrationResult<T | null> {
+    if (!lyrics) {
+        return { value: null, changed: false };
+    }
+
+    const migration = migrateLyricLinesRenderHints(lyrics.lines);
+    if (!migration.changed) {
+        return { value: lyrics, changed: false };
+    }
+
+    return {
+        value: {
+            ...lyrics,
+            lines: migration.value,
+        },
+        changed: true,
+    };
+}
+
+export const ensureLyricDataRenderHints = <T extends RenderHintLyricDataLike>(lyrics: T | null | undefined): T | null => {
+    return migrateLyricDataRenderHints(lyrics).value;
 };

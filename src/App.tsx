@@ -4,7 +4,7 @@ import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { LyricParserFactory } from './utils/lyrics/LyricParserFactory';
 import { detectChorusLines } from './utils/chorusDetector';
-import { saveSessionData, getSessionData, getFromCache, saveToCache, getLocalSongs } from './services/db';
+import { saveSessionData, getSessionData, getFromCache, getFromCacheWithMigration, saveToCache, getLocalSongs } from './services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from './services/coverCache';
 import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from './services/localMusicService';
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from './services/onlinePlayback';
@@ -30,7 +30,8 @@ import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
 import { hasNeteasePureMusicFlag, isPureMusicLyricText } from './utils/lyrics/pureMusic';
 import { detectTimedLyricFormat } from './utils/lyrics/formatDetection';
-import { getLineRenderEndTime } from './utils/lyrics/renderHints';
+import { ensureLyricDataRenderHints, migrateLyricDataRenderHints } from './utils/lyrics/renderHints';
+import { migrateMatchedLyricsCarrierRenderHints } from './utils/lyrics/storageMigration';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
@@ -43,7 +44,7 @@ const findLatestActiveLineIndex = (lines: LyricData['lines'], time: number) => {
         if (!line || time < line.startTime) {
             continue;
         }
-        if (time <= getLineRenderEndTime(line)) {
+        if (time <= (line.renderHints?.renderEndTime ?? line.endTime)) {
             return index;
         }
     }
@@ -185,8 +186,11 @@ export default function App() {
     // Player Data
     const [audioSrc, setAudioSrc] = useState<string | null>(null);
     const [currentSong, setCurrentSong] = useState<SongResult | null>(null);
-    const [lyrics, setLyrics] = useState<LyricData | null>(null);
+    const [lyrics, setLyricsState] = useState<LyricData | null>(null);
     const [cachedCoverUrl, setCachedCoverUrl] = useState<string | null>(null);
+    const setLyrics = useCallback((nextLyrics: LyricData | null) => {
+        setLyricsState(ensureLyricDataRenderHints(nextLyrics));
+    }, []);
 
     // Queue
     const [playQueue, setPlayQueue] = useState<SongResult[]>([]);
@@ -562,7 +566,7 @@ export default function App() {
                         }
 
                         // Try cache first for lyrics (cloud songs only)
-                        const cachedLyrics = await getFromCache<LyricData>(`lyric_${lastSong.id}`);
+                        const cachedLyrics = await getFromCacheWithMigration<LyricData>(`lyric_${lastSong.id}`, migrateLyricDataRenderHints);
                         if (cachedLyrics) {
                             const cachedText = cachedLyrics.lines.map(line => line.fullText).join('\n');
                             setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, isPureMusic: isPureMusicLyricText(cachedText) } : prev);
@@ -870,7 +874,10 @@ export default function App() {
             const streamUrl = navidromeApi.getStreamUrl(config, navidromeId);
 
             // Fetch match data if available
-            const matchData = await getFromCache<NavidromeMatchData>(`navidrome_match_${navidromeId}`);
+            const matchData = await getFromCacheWithMigration<NavidromeMatchData>(
+                `navidrome_match_${navidromeId}`,
+                migrateMatchedLyricsCarrierRenderHints
+            );
 
             let lyrics: LyricData | null = null;
             let coverUrl: string | undefined;

@@ -1,5 +1,7 @@
 
 import { LyricData, Theme, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, LocalLibrarySnapshot } from "../types";
+import { migrateLocalSongsRenderHints, migrateMatchedLyricsCarrierRenderHints } from "../utils/lyrics/storageMigration";
+import type { MigrationResult } from "../utils/lyrics/renderHints";
 
 const DB_NAME = 'KineticPlayerDB';
 const DB_VERSION = 5; // Incremented version to ensure local_music store is created
@@ -105,7 +107,8 @@ const openDB = (): Promise<IDBDatabase> => {
 export { openDB };
 
 const sanitizeLocalSongForStorage = (song: LocalSong): LocalSong => {
-  const { fileHandle, ...persistedSong } = song;
+  const normalizedSong = migrateMatchedLyricsCarrierRenderHints(song).value ?? song;
+  const { fileHandle, ...persistedSong } = normalizedSong;
   return persistedSong;
 };
 
@@ -261,6 +264,25 @@ export const getFromCache = async <T>(key: string): Promise<T | null> => {
   } catch (e) {
     return null;
   }
+};
+
+export const getFromCacheWithMigration = async <T>(
+  key: string,
+  migrate: (data: T) => MigrationResult<T>
+): Promise<T | null> => {
+  const cached = await getFromCache<T>(key);
+  if (!cached) {
+    return null;
+  }
+
+  const migration = migrate(cached);
+  if (migration.changed) {
+    void saveToCache(key, migration.value).catch(error => {
+      console.warn(`[DB] Failed to write back migrated cache entry: ${key}`, error);
+    });
+  }
+
+  return migration.value;
 };
 
 export const removeFromCache = async (key: string): Promise<void> => {
@@ -538,13 +560,22 @@ export const saveLocalSongs = async (songs: LocalSong[]): Promise<void> => {
 export const getLocalSongs = async (): Promise<LocalSong[]> => {
   try {
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    const songs = await new Promise<LocalSong[]>((resolve, reject) => {
       const tx = db.transaction([LOCAL_MUSIC_STORE], 'readonly');
       const store = tx.objectStore(LOCAL_MUSIC_STORE);
       const req = store.getAll();
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
     });
+
+    const migration = migrateLocalSongsRenderHints(songs);
+    if (migration.changedSongs.length > 0) {
+      void saveLocalSongs(migration.changedSongs).catch(error => {
+        console.warn('[DB] Failed to write back migrated local song lyrics', error);
+      });
+    }
+
+    return migration.value;
   } catch (e) {
     console.error("Failed to get local songs", e);
     return [];

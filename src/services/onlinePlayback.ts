@@ -1,9 +1,10 @@
 import { LyricData } from '../types';
-import { getFromCache, saveToCache } from './db';
+import { getFromCache, getFromCacheWithMigration, saveToCache } from './db';
 import { neteaseApi } from './netease';
 import { PrefetchedSongData, isUrlValid } from './prefetchService';
 import { detectChorusLines } from '../utils/chorusDetector';
 import { hasNeteasePureMusicFlag, isPureMusicLyricText } from '../utils/lyrics/pureMusic';
+import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 
 const CHORUS_EFFECTS: Array<'bars' | 'circles' | 'beams'> = ['bars', 'circles', 'beams'];
 
@@ -72,7 +73,7 @@ export async function loadOnlineSongLyrics(
 ): Promise<void> {
     const { isCurrent, onLyrics, onPureMusicChange, onDone } = callbacks;
 
-    const cachedLyrics = await getFromCache<LyricData>(`lyric_${songId}`);
+    const cachedLyrics = await getFromCacheWithMigration<LyricData>(`lyric_${songId}`, migrateLyricDataRenderHints);
     if (!isCurrent()) return;
     if (cachedLyrics) {
         const cachedText = cachedLyrics.lines.map(line => line.fullText).join('\n');
