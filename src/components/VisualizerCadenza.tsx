@@ -1403,17 +1403,21 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
             .map(entry => `${entry.word}:${entry.color}`)
             .join('||');
 
+        // Prepared line state caches per-word highlight colors derived from the active theme.
+        // Include accentColor so daylight/default resets invalidate already-seen lyric lines immediately.
         return [
             showText ? '1' : '0',
             viewport.width,
             viewport.height,
             theme.fontStyle,
             theme.animationIntensity,
+            theme.accentColor,
             tuning.fontScale,
             tuning.widthRatio,
             wordColorSignature,
         ].join('|');
     }, [
+        theme.accentColor,
         showText,
         theme.animationIntensity,
         theme.fontStyle,
