@@ -8,6 +8,7 @@ import GeometricBackground from './GeometricBackground';
 import FluidBackground from './FluidBackground';
 import { getLineTransitionTiming, type LineTransitionTiming } from '../utils/lyrics/renderHints';
 
+// Visualizer cadenza
 interface VisualizerProps {
     currentTime: MotionValue<number>;
     currentLineIndex: number;

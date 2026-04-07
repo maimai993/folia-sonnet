@@ -3,10 +3,11 @@ import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } f
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { Line, Theme, Word as WordType, AudioBands } from '../types';
+import { getLineRenderEndTime, getLineRenderHints } from '../utils/lyrics/renderHints';
 import GeometricBackground from './GeometricBackground';
 import FluidBackground from './FluidBackground';
 
-
+// Visualizer classic
 interface VisualizerProps {
     currentTime: MotionValue<number>;
     currentLineIndex: number;
@@ -39,8 +40,91 @@ interface LineLayoutConfig {
     perspective: number;
 }
 
+interface ClassicLineRenderProfile {
+    renderHints: NonNullable<Line['renderHints']> | null;
+    lineRenderEndTime: number;
+    lineTransitionMode: 'normal' | 'fast' | 'none';
+    wordRevealMode: 'normal' | 'fast' | 'instant';
+    wordLookahead: number;
+}
+
 // Helper to determine if text contains CJK characters
 const isCJK = (text: string) => /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/.test(text);
+
+const resolveClassicLineRenderProfile = (line: Line | null | undefined): ClassicLineRenderProfile | null => {
+    if (!line) {
+        return null;
+    }
+
+    const renderHints = getLineRenderHints(line);
+    const wordRevealMode = renderHints?.wordRevealMode ?? 'normal';
+
+    return {
+        renderHints,
+        lineRenderEndTime: getLineRenderEndTime(line),
+        lineTransitionMode: renderHints?.lineTransitionMode ?? 'normal',
+        wordRevealMode,
+        wordLookahead: wordRevealMode === 'instant' ? 0.03 : wordRevealMode === 'fast' ? 0.08 : 0.15,
+    };
+};
+
+const getClassicWordActiveEndTime = (word: WordType, renderProfile: ClassicLineRenderProfile) => {
+    if (renderProfile.wordRevealMode === 'instant') {
+        return renderProfile.lineRenderEndTime;
+    }
+
+    if (renderProfile.wordRevealMode === 'fast') {
+        return Math.min(renderProfile.lineRenderEndTime, Math.max(word.endTime, word.startTime + 0.12));
+    }
+
+    return word.endTime;
+};
+
+const getClassicWordDisplayDuration = (word: WordType, renderProfile: ClassicLineRenderProfile) => {
+    const activeEndTime = getClassicWordActiveEndTime(word, renderProfile);
+    const minDuration = renderProfile.wordRevealMode === 'instant'
+        ? 0.08
+        : renderProfile.wordRevealMode === 'fast'
+            ? 0.12
+            : 0.1;
+
+    return Math.max(activeEndTime - word.startTime, minDuration);
+};
+
+const getClassicLineContainerMotion = (renderProfile: ClassicLineRenderProfile | null) => {
+    if (renderProfile?.lineTransitionMode === 'none') {
+        return {
+            initial: { opacity: 1, scale: 1, filter: 'blur(0px)' },
+            animate: { opacity: 1, scale: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none' } },
+            exit: { opacity: 0, scale: 1.02, filter: 'blur(6px)', transition: { duration: 0.12, ease: 'easeOut' as const } },
+        };
+    }
+
+    if (renderProfile?.lineTransitionMode === 'fast') {
+        return {
+            initial: { opacity: 0.35, scale: 0.96, filter: 'blur(4px)' },
+            animate: {
+                opacity: 1,
+                scale: 1,
+                filter: 'blur(0px)',
+                transition: { duration: 0.16, ease: 'easeOut' as const },
+                transitionEnd: { filter: 'none' },
+            },
+            exit: {
+                opacity: 0,
+                scale: 1.04,
+                filter: 'blur(10px)',
+                transition: { duration: 0.16, ease: 'easeInOut' as const },
+            },
+        };
+    }
+
+    return {
+        initial: { opacity: 0, scale: 0.9, filter: 'blur(10px)' },
+        animate: { opacity: 1, scale: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none' } },
+        exit: { opacity: 0, scale: 1.1, filter: 'blur(20px)', transition: { duration: 0.3 } },
+    };
+};
 
 const Word: React.FC<{
     word: WordType;
@@ -53,19 +137,20 @@ const Word: React.FC<{
     glowVariants: Variants;
     baseColor: string;
     activeColor: string;
+    renderProfile: ClassicLineRenderProfile;
     isChorus?: boolean;
-}> = ({ word, config, currentTime, theme, isChaotic, layoutVariants, bodyVariants, glowVariants, baseColor, activeColor, isChorus }) => {
+}> = ({ word, config, currentTime, theme, isChaotic, layoutVariants, bodyVariants, glowVariants, baseColor, activeColor, renderProfile, isChorus }) => {
     const [status, setStatus] = useState<"waiting" | "active" | "passed">("waiting");
     const rippleScale = useMemo(() => 1.5 + Math.random() * 2, []);
-    const duration = Math.max(word.endTime - word.startTime, 0.1);
+    const duration = getClassicWordDisplayDuration(word, renderProfile);
+    const activeEndTime = getClassicWordActiveEndTime(word, renderProfile);
 
     useMotionValueEvent(currentTime, "change", (latest: number) => {
-        const PRE_LOOKAHEAD = 0.15;
         let newStatus: "waiting" | "active" | "passed" = "waiting";
 
-        if (latest >= word.startTime - PRE_LOOKAHEAD && latest <= word.endTime) {
+        if (latest >= word.startTime - renderProfile.wordLookahead && latest <= activeEndTime) {
             newStatus = "active";
-        } else if (latest > word.endTime) {
+        } else if (latest > activeEndTime) {
             newStatus = "passed";
         } else {
             newStatus = "waiting";
@@ -83,7 +168,8 @@ const Word: React.FC<{
                 config,
                 activeColor,
                 baseColor,
-                duration
+                duration,
+                wordRevealMode: renderProfile.wordRevealMode,
             }}
             variants={layoutVariants}
             initial="waiting"
@@ -105,7 +191,7 @@ const Word: React.FC<{
                         <motion.span
                             key={index}
                             variants={glowVariants}
-                            custom={{ config, activeColor, baseColor, duration, index, total: word.text.length }}
+                            custom={{ config, activeColor, baseColor, duration, index, total: word.text.length, wordRevealMode: renderProfile.wordRevealMode }}
                         >
                             {char}
                         </motion.span>
@@ -113,7 +199,7 @@ const Word: React.FC<{
                 ) : (
                     <motion.span
                         variants={glowVariants}
-                        custom={{ config, activeColor, baseColor, duration }}
+                        custom={{ config, activeColor, baseColor, duration, wordRevealMode: renderProfile.wordRevealMode }}
                     >
                         {word.text}
                     </motion.span>
@@ -123,7 +209,7 @@ const Word: React.FC<{
             {/* Body Layer - Handles Color and Blur - Relative Position */}
             <motion.span
                 variants={bodyVariants}
-                custom={{ config, activeColor, baseColor, duration }}
+                custom={{ config, activeColor, baseColor, duration, wordRevealMode: renderProfile.wordRevealMode }}
                 className="relative z-10 block"
             >
                 {word.text}
@@ -155,12 +241,15 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
     const currentTimeValue = currentTime.get();
 
     const activeLine = lines[currentLineIndex];
+    const activeLineRenderProfile = activeLine ? resolveClassicLineRenderProfile(activeLine) : null;
+    const activeWordRenderProfile = activeLineRenderProfile ?? (activeLine ? resolveClassicLineRenderProfile(activeLine) : null);
+    const activeLineContainerMotion = getClassicLineContainerMotion(activeLineRenderProfile);
 
     // Find the most recent completed lyric (for translation display during breaks)
     let recentCompletedLine = null;
     if (currentLineIndex === -1 && lines.length > 0) {
         for (let i = lines.length - 1; i >= 0; i--) {
-            if (currentTimeValue > lines[i].endTime) {
+            if (currentTimeValue > getLineRenderEndTime(lines[i])) {
                 recentCompletedLine = lines[i];
                 break;
             }
@@ -287,23 +376,23 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
             filter: "blur(10px)",
             transition: { duration: 0.4 }
         }),
-        active: ({ activeColor, duration }: any) => ({
+        active: ({ activeColor, duration, wordRevealMode }: any) => ({
             color: activeColor,
             filter: "none",
             transition: {
                 color: { duration: duration || 0.2, ease: "linear" },
-                filter: { type: "tween", duration: 0.2 }
+                filter: { type: "tween", duration: wordRevealMode === 'instant' ? 0.08 : wordRevealMode === 'fast' ? 0.12 : 0.2 }
             },
             transitionEnd: {
                 filter: "none"
             }
         }),
-        passed: ({ baseColor }: any) => ({
+        passed: ({ baseColor, wordRevealMode }: any) => ({
             color: baseColor,
             filter: "blur(0px)",
             transition: {
-                color: { duration: 0.8, ease: "easeInOut" },
-                filter: { duration: 0.5 }
+                color: { duration: wordRevealMode === 'instant' ? 0.12 : wordRevealMode === 'fast' ? 0.24 : 0.8, ease: "easeInOut" },
+                filter: { duration: wordRevealMode === 'instant' ? 0.12 : wordRevealMode === 'fast' ? 0.2 : 0.5 }
             },
             transitionEnd: {
                 filter: "none"
@@ -317,7 +406,39 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
             color: "transparent",
             textShadow: "none",
         },
-        active: ({ activeColor, duration, index, total }: any) => {
+        active: ({ activeColor, duration, index, total, wordRevealMode }: any) => {
+            if (wordRevealMode === 'instant') {
+                return {
+                    color: "transparent",
+                    textShadow: [
+                        "none",
+                        `0 0 14px ${activeColor}, 0 0 24px ${activeColor}`,
+                        "none"
+                    ],
+                    transition: {
+                        duration: Math.min(duration || 0.08, 0.12),
+                        times: [0, 0.35, 1],
+                        ease: "easeOut"
+                    }
+                };
+            }
+
+            if (wordRevealMode === 'fast') {
+                return {
+                    color: "transparent",
+                    textShadow: [
+                        "none",
+                        `0 0 18px ${activeColor}, 0 0 32px ${activeColor}`,
+                        "none"
+                    ],
+                    transition: {
+                        duration: Math.min(Math.max(duration || 0.12, 0.12), 0.2),
+                        times: [0, 0.4, 1],
+                        ease: "easeInOut"
+                    }
+                };
+            }
+
             if (total !== undefined && total > 1) {
                 const singleDuration = duration / total;
                 return {
@@ -349,11 +470,11 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
                 }
             };
         },
-        passed: {
+        passed: ({ wordRevealMode }: any) => ({
             color: "transparent",
             textShadow: "none",
-            transition: { duration: 0.9, ease: "easeOut" }
-        }
+            transition: { duration: wordRevealMode === 'instant' ? 0.12 : wordRevealMode === 'fast' ? 0.22 : 0.9, ease: "easeOut" }
+        })
     };
 
     const lyricContainerFloat = useMemo(() => {
@@ -456,9 +577,9 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
                     {showText && activeLine && (
                         <motion.div
                             key={activeLine.startTime}
-                            initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }}
-                            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', transitionEnd: { filter: "none" } }}
-                            exit={{ opacity: 0, scale: 1.1, filter: 'blur(20px)', transition: { duration: 0.3 } }}
+                            initial={activeLineContainerMotion.initial}
+                            animate={activeLineContainerMotion.animate}
+                            exit={activeLineContainerMotion.exit}
                             className={`flex flex-wrap w-full max-w-6xl content-center ${lineConfig.justifyContent} ${lineConfig.alignItems}`}
                             style={{ perspective: `${lineConfig.perspective}px`, minHeight: '300px' }}
                         >
@@ -497,6 +618,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
                                         glowVariants={glowVariants}
                                         baseColor={theme.primaryColor}
                                         activeColor={activeColor}
+                                        renderProfile={activeWordRenderProfile!}
                                         isChorus={activeLine.isChorus}
                                     />
                                 );
