@@ -1,4 +1,5 @@
 import { LyricData, Line, Word } from '../types';
+import { annotateLyricLines } from './lyrics/renderHints';
 
 export const parseYRC = (yrcString: string, translationString: string = ''): LyricData => {
   // Synced lyrics means word-by-word lyrics with precise timing, as opposed to line-based lyrics.
@@ -131,6 +132,5 @@ export const parseYRC = (yrcString: string, translationString: string = ''): Lyr
     }
   }
 
-  return { lines: finalLines };
+  return { lines: annotateLyricLines(finalLines) };
 };
-

@@ -8,6 +8,9 @@
  * Response: { type: 'result', data: LyricData, requestId?: string } | { type: 'error', message: string, requestId?: string }
  */
 
+import { annotateLyricLines } from '../utils/lyrics/renderHints';
+import type { LineRenderHints } from '../utils/lyrics/renderHints';
+
 // Inline type definitions (workers can't import from main)
 interface Word {
     text: string;
@@ -21,6 +24,7 @@ interface Line {
     endTime: number;
     fullText: string;
     translation?: string;
+    renderHints?: LineRenderHints;
     isChorus?: boolean;
     chorusEffect?: 'bars' | 'circles' | 'beams';
 }
@@ -370,7 +374,7 @@ export const parseLRC = (lrcString: string, translationString: string = ''): Lyr
         });
     }
 
-    return { lines: attachInterludes(lines) };
+    return { lines: annotateLyricLines(attachInterludes(lines)) };
 };
 
 // --- YRC Parser ---
@@ -418,7 +422,7 @@ export const parseYRC = (yrcString: string, translationString: string = ''): Lyr
 
     lines.sort((a, b) => a.startTime - b.startTime);
 
-    return { lines: attachInterludes(lines) };
+    return { lines: annotateLyricLines(attachInterludes(lines)) };
 };
 
 // --- VTT Parser ---
@@ -516,7 +520,7 @@ export const parseVTT = (vttString: string, translationString: string = ''): Lyr
         });
     }
 
-    return { lines: attachInterludes(lines) };
+    return { lines: annotateLyricLines(attachInterludes(lines)) };
 };
 
 // --- Enhanced LRC Parser ---
@@ -594,7 +598,7 @@ export const parseEnhancedLRC = (lrcString: string, translationString: string = 
     });
 
     return {
-        lines: attachInterludes(lines),
+        lines: annotateLyricLines(attachInterludes(lines)),
         title: metadata.title,
         artist: metadata.artist
     };

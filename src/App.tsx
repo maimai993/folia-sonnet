@@ -30,11 +30,25 @@ import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
 import { hasNeteasePureMusicFlag, isPureMusicLyricText } from './utils/lyrics/pureMusic';
 import { detectTimedLyricFormat } from './utils/lyrics/formatDetection';
+import { getLineRenderEndTime } from './utils/lyrics/renderHints';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
 const LOCAL_PREWARM_DELAY_MS = 1000;
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
+
+const findLatestActiveLineIndex = (lines: LyricData['lines'], time: number) => {
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index];
+        if (!line || time < line.startTime) {
+            continue;
+        }
+        if (time <= getLineRenderEndTime(line)) {
+            return index;
+        }
+    }
+    return -1;
+};
 
 // Default Theme
 // 午夜墨染
@@ -1601,15 +1615,7 @@ export default function App() {
             currentTime.set(time);
 
             if (lyrics) {
-                let foundIndex = -1;
-                if (currentLineIndexRef.current !== -1 &&
-                    lyrics.lines[currentLineIndexRef.current] &&
-                    time >= lyrics.lines[currentLineIndexRef.current].startTime &&
-                    time <= lyrics.lines[currentLineIndexRef.current].endTime) {
-                    foundIndex = currentLineIndexRef.current;
-                } else {
-                    foundIndex = lyrics.lines.findIndex(l => time >= l.startTime && time <= l.endTime);
-                }
+                const foundIndex = findLatestActiveLineIndex(lyrics.lines, time);
                 // Update currentLineIndex whenever it changes, including when moving to -1 (no active lyric)
                 if (foundIndex !== currentLineIndexRef.current) {
                     setCurrentLineIndex(foundIndex);

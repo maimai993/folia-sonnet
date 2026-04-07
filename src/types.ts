@@ -1,3 +1,5 @@
+import type { LineRenderHints } from './utils/lyrics/renderHints';
+
 export interface Word {
   text: string;
   startTime: number; // Seconds
@@ -10,6 +12,7 @@ export interface Line {
   endTime: number;
   fullText: string;
   translation?: string;
+  renderHints?: LineRenderHints;
   isChorus?: boolean;
   chorusEffect?: 'bars' | 'circles' | 'beams';
 }

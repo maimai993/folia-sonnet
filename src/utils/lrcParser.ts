@@ -1,4 +1,5 @@
 import { LyricData, Line, Word } from '../types';
+import { annotateLyricLines } from './lyrics/renderHints';
 
 export const parseLRC = (lrcString: string, translationString: string = ''): LyricData => {
     const lines: Line[] = [];
@@ -173,5 +174,5 @@ export const parseLRC = (lrcString: string, translationString: string = ''): Lyr
         }
     }
 
-    return { lines: finalLines };
+    return { lines: annotateLyricLines(finalLines) };
 };
