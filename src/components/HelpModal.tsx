@@ -723,7 +723,10 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             {t('options.enableStaticMode') || "Static Mode"}
                                         </div>
                                         <div className="text-xs opacity-50 max-w-[200px]" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('options.enableStaticModeDesc') || "Disable geometric backgrounds and dynamic lyrics."}
+                                            {t('options.enableStaticModeDesc') || "Disable geometric backgrounds."}
+                                        </div>
+                                        <div className="text-[11px] opacity-40 max-w-[200px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.enableStaticModeDescSub') || "Does not affect lyric text effects or rendering."}
                                         </div>
                                     </div>
                                     <button

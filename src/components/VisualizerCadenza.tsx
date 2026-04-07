@@ -447,8 +447,8 @@ const getClassicBodyMix = (time: number, lineTiming: ResolvedLineRenderTiming, w
     return 1 - fadeOut;
 };
 
-const getClassicLineEnvelope = (time: number, line: Line | null, lineTiming: ResolvedLineRenderTiming | null, staticMode: boolean) => {
-    if (!line || staticMode) {
+const getClassicLineEnvelope = (time: number, line: Line | null, lineTiming: ResolvedLineRenderTiming | null) => {
+    if (!line) {
         return {
             opacity: 1,
             scale: 1,
@@ -1539,14 +1539,14 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
 
             const time = currentTime.get();
             const lineTiming = resolveLineRenderTiming(activeLine);
-            const lineEnvelope = getClassicLineEnvelope(time, activeLine, lineTiming, staticMode);
+            const lineEnvelope = getClassicLineEnvelope(time, activeLine, lineTiming);
             const wordRevealMode = lineTiming.wordRevealMode;
             const isInstantWordReveal = wordRevealMode === 'instant';
             const lineSeed = Math.abs(Math.sin(activeLine.startTime * 997.1));
             const linePerspective = theme.animationIntensity === 'chaotic' ? 500 + Math.round(lineSeed * 500) : 1000;
-            const energy = staticMode ? 0 : clamp(audioPower.get() / 255, 0, 1);
+            const energy = clamp(audioPower.get() / 255, 0, 1);
             const motionEnergy = energy * tuning.motionAmount;
-            const verticalLift = staticMode ? 0 : Math.sin(time * 2.3) * (3 + motionEnergy * 8);
+            const verticalLift = Math.sin(time * 2.3) * (3 + motionEnergy * 8);
             const focusY = height * 0.42 + verticalLift;
 
             lineLayer.style.opacity = lineEnvelope.opacity.toString();
@@ -1598,8 +1598,8 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
                             ? placement.rotate
                             : placement.rotate + placement.passedRotate * passedDriftProgress
                         : placement.rotate;
-                const localFloatX = staticMode ? 0 : Math.sin(time * 1.2 + placementIndex * 0.6) * motionEnergy * 4;
-                const localFloatY = staticMode ? 0 : Math.cos(time * 1.5 + placementIndex * 0.4) * motionEnergy * 2.5;
+                const localFloatX = Math.sin(time * 1.2 + placementIndex * 0.6) * motionEnergy * 4;
+                const localFloatY = Math.cos(time * 1.5 + placementIndex * 0.4) * motionEnergy * 2.5;
                 const passedDriftX = status === 'passed' ? placement.passedDriftX * passedDriftProgress : 0;
                 const passedDriftY = status === 'passed' ? placement.passedDriftY * passedDriftProgress : 0;
                 const targetX = width / 2 + placement.x + localFloatX + passedDriftX + (status === 'waiting' ? placement.entryOffsetX : 0);
@@ -1743,7 +1743,6 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
         activeLine,
         preparedState,
         showText,
-        staticMode,
         theme,
         tuning.glowIntensity,
         tuning.motionAmount,
@@ -1791,7 +1790,7 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
             )}
 
             <AnimatePresence>
-                {useCoverColorBg && !staticMode && (
+                {useCoverColorBg && (
                     <motion.div
                         key="fluid-bg"
                         initial={{ opacity: 0 }}
@@ -1807,7 +1806,7 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
 
             <div
                 className="absolute inset-0 z-0 transition-all duration-1000"
-                style={{ backgroundColor: theme.backgroundColor, opacity: (useCoverColorBg && !staticMode) ? backgroundOpacity : 1 }}
+                style={{ backgroundColor: theme.backgroundColor, opacity: useCoverColorBg ? backgroundOpacity : 1 }}
             />
 
             {!staticMode && (

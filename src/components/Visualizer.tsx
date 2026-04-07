@@ -263,7 +263,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
 
     // Generate a stable random layout configuration for the current line
     const { wordConfigs, lineConfig } = useMemo(() => {
-        if (!activeLine || staticMode) return { wordConfigs: [], lineConfig: { justifyContent: 'center', alignItems: 'center', perspective: 1000 } };
+        if (!activeLine) return { wordConfigs: [], lineConfig: { justifyContent: 'center', alignItems: 'center', perspective: 1000 } };
 
         const seed = activeLine.startTime;
         const intensity = theme.animationIntensity;
@@ -327,7 +327,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
         });
 
         return { wordConfigs, lineConfig };
-    }, [activeLine, theme.animationIntensity, staticMode]);
+    }, [activeLine, theme.animationIntensity]);
 
     // Animation Variants
     // Container: Layout (x, y, rotate, scale) + Opacity
@@ -487,21 +487,17 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
         const { distance, duration } = configByIntensity[theme.animationIntensity];
 
         return {
-            animate: staticMode
-                ? { y: 0, scale: 1 }
-                : {
-                    y: [0, -distance, 0, distance * 0.45, 0],
-                    scale: [1, 1.01, 1, 0.995, 1]
-                },
-            transition: staticMode
-                ? { duration: 0 }
-                : {
-                    duration,
-                    repeat: Infinity,
-                    ease: "easeInOut" as const
-                }
+            animate: {
+                y: [0, -distance, 0, distance * 0.45, 0],
+                scale: [1, 1.01, 1, 0.995, 1]
+            },
+            transition: {
+                duration,
+                repeat: Infinity,
+                ease: "easeInOut" as const
+            }
         };
-    }, [theme.animationIntensity, staticMode]);
+    }, [theme.animationIntensity]);
 
     return (
         <div
@@ -542,7 +538,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
             )}
 
             <AnimatePresence>
-                {useCoverColorBg && !staticMode && (
+                {useCoverColorBg && (
                     <motion.div
                         key="fluid-bg"
                         initial={{ opacity: 0 }}
@@ -558,7 +554,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
 
             <div
                 className="absolute inset-0 z-0 transition-all duration-1000"
-                style={{ backgroundColor: theme.backgroundColor, opacity: (useCoverColorBg && !staticMode) ? backgroundOpacity : 1 }}
+                style={{ backgroundColor: theme.backgroundColor, opacity: useCoverColorBg ? backgroundOpacity : 1 }}
             />
 
             {!staticMode && (
