@@ -412,9 +412,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                             <ChevronLeft size={18} />
                         </button>
                         <div className="min-w-0">
-                            <div className="text-[11px] uppercase tracking-[0.24em] opacity-45" style={{ color: 'var(--text-secondary)' }}>
-                                {t('ui.visualizerTemporary') || '临时工作台'}
-                            </div>
                             <div className="text-lg sm:text-xl font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
                                 {t('options.lyricsStyleSettings') || '歌词样式'}
                             </div>
