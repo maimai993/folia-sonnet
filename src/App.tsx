@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Play, Pause, Repeat, Repeat1, Settings2, CheckCircle2, AlertCircle, Sparkles, X } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -360,6 +360,10 @@ export default function App() {
         isDaylight,
         visualizerMode,
         cadenzaTuning,
+        lyricsFontStyle,
+        lyricsFontScale,
+        lyricsCustomFontFamily,
+        lyricsCustomFontLabel,
         handleToggleCoverColorBg,
         handleToggleStaticMode,
         handleToggleMediaCache,
@@ -368,6 +372,9 @@ export default function App() {
         handleSetVisualizerMode,
         handleSetCadenzaTuning,
         handleResetCadenzaTuning,
+        handleSetLyricsFontStyle,
+        handleSetLyricsFontScale,
+        handleSetLyricsCustomFont,
         volume,
         isMuted,
         handleSetVolume,
@@ -1940,6 +1947,17 @@ export default function App() {
         backgroundColor: 'var(--bg-color)',
         color: 'var(--text-primary)'
     } as React.CSSProperties;
+    const visualizerBackgroundColor = String(appStyle['--bg-color']);
+    const visualizerTheme = useMemo(() => ({
+        ...theme,
+        fontStyle: lyricsFontStyle,
+        fontFamily: lyricsCustomFontFamily ?? undefined,
+        backgroundColor: visualizerBackgroundColor,
+    }), [lyricsCustomFontFamily, lyricsFontStyle, theme, visualizerBackgroundColor]);
+    const effectiveCadenzaTuning = useMemo(() => ({
+        ...cadenzaTuning,
+        fontScale: cadenzaTuning.fontScale * lyricsFontScale,
+    }), [cadenzaTuning, lyricsFontScale]);
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
     const debugCurrentTimeValue = currentTime.get();
     const debugActiveLine = lyrics && currentLineIndex >= 0 ? lyrics.lines[currentLineIndex] ?? null : null;
@@ -2033,7 +2051,7 @@ export default function App() {
                         currentTime={currentTime}
                         currentLineIndex={currentLineIndex}
                         lines={lyrics?.lines || []}
-                        theme={{ ...theme, backgroundColor: String(appStyle['--bg-color']) }}
+                        theme={visualizerTheme}
                         audioPower={audioPower}
                         audioBands={audioBands}
                         coverUrl={getCoverUrl()}
@@ -2042,7 +2060,8 @@ export default function App() {
                         seed={currentSong?.id}
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
-                        cadenzaTuning={cadenzaTuning}
+                        cadenzaTuning={effectiveCadenzaTuning}
+                        lyricsFontScale={lyricsFontScale}
                         onBack={navigateToHome}
                     />
                 ) : (
@@ -2050,7 +2069,7 @@ export default function App() {
                         currentTime={currentTime}
                         currentLineIndex={currentLineIndex}
                         lines={lyrics?.lines || []}
-                        theme={{ ...theme, backgroundColor: String(appStyle['--bg-color']) }}
+                        theme={visualizerTheme}
                         audioPower={audioPower}
                         audioBands={audioBands}
                         coverUrl={getCoverUrl()}
@@ -2059,6 +2078,7 @@ export default function App() {
                         seed={currentSong?.id}
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
+                        lyricsFontScale={lyricsFontScale}
                         onBack={navigateToHome}
                     />
                 )}
@@ -2111,7 +2131,15 @@ export default function App() {
                             setBackgroundOpacity={handleSetBackgroundOpacity}
                             onSetThemePreset={handleSetThemePreset}
                             visualizerMode={visualizerMode}
+                            cadenzaTuning={cadenzaTuning}
                             onVisualizerModeChange={handleSetVisualizerMode}
+                            lyricsFontStyle={lyricsFontStyle}
+                            lyricsFontScale={lyricsFontScale}
+                            lyricsCustomFontFamily={lyricsCustomFontFamily}
+                            lyricsCustomFontLabel={lyricsCustomFontLabel}
+                            onLyricsFontStyleChange={handleSetLyricsFontStyle}
+                            onLyricsFontScaleChange={handleSetLyricsFontScale}
+                            onLyricsCustomFontChange={handleSetLyricsCustomFont}
                             onMatchSong={async (song) => {
                                 await loadLocalSongs();
 

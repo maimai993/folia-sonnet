@@ -30,6 +30,7 @@ export interface Theme {
   accentColor: string;
   secondaryColor: string;
   fontStyle: 'sans' | 'serif' | 'mono';
+  fontFamily?: string;
   animationIntensity: 'calm' | 'normal' | 'chaotic';
   wordColors?: { word: string; color: string; }[];
   lyricsIcons?: string[];

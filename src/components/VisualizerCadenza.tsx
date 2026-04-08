@@ -7,6 +7,7 @@ import { AudioBands, DEFAULT_CADENZA_TUNING, Line, Theme, Word as WordType, type
 import GeometricBackground from './GeometricBackground';
 import FluidBackground from './FluidBackground';
 import { getLineTransitionTiming, type LineTransitionTiming } from '../utils/lyrics/renderHints';
+import { resolveThemeFontStack } from '../utils/fontStacks';
 
 // Visualizer cadenza
 interface VisualizerProps {
@@ -22,6 +23,7 @@ interface VisualizerProps {
     seed?: string | number;
     backgroundOpacity?: number;
     cadenzaTuning?: CadenzaTuning;
+    lyricsFontScale?: number;
     onBack?: () => void;
 }
 
@@ -220,12 +222,6 @@ const easeInOutQuad = (value: number) => {
 const ACTIVE_PULSE_FREQUENCY = 10;
 
 const isCJK = (text: string) => /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/.test(text);
-
-const fontFamilyByStyle: Record<Theme['fontStyle'], string> = {
-    sans: '"Inter", "Noto Sans CJK SC", "Noto Sans JP", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
-    serif: '"Iowan Old Style", "Noto Serif CJK SC", "Noto Serif JP", "Source Han Serif SC", "Songti SC", "STSong", "Georgia", serif',
-    mono: '"IBM Plex Mono", "Sarasa Mono SC", "Noto Sans Mono CJK SC", "Noto Sans Mono", "SFMono-Regular", Consolas, monospace',
-};
 
 const colorWithAlpha = (color: string, alpha: number) => {
     const normalizedAlpha = clamp(alpha, 0, 1);
@@ -566,7 +562,7 @@ const chooseFontPx = (width: number, line: Line) => {
     return clamp(widthBase - lengthPenalty - densityPenalty, 28, 104);
 };
 
-const buildCanvasFont = (theme: Theme, fontPx: number) => `700 ${fontPx}px ${fontFamilyByStyle[theme.fontStyle]}`;
+const buildCanvasFont = (theme: Theme, fontPx: number) => `700 ${fontPx}px ${resolveThemeFontStack(theme)}`;
 
 const buildPreparedState = (
     line: Line,
@@ -1357,6 +1353,7 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
     staticMode = false,
     backgroundOpacity = 0.75,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
+    lyricsFontScale = 1,
     onBack,
 }) => {
     const { t } = useTranslation();
@@ -1387,6 +1384,9 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
 
     const nextLines = lines.slice(currentLineIndex + 1, currentLineIndex + 3);
     const tuning = cadenzaTuning;
+    const emptyFontSize = `clamp(${(1.5 * lyricsFontScale).toFixed(3)}rem, ${(3.5 * lyricsFontScale).toFixed(3)}vw, ${(2.25 * lyricsFontScale).toFixed(3)}rem)`;
+    const translationFontSize = `clamp(${(1.125 * lyricsFontScale).toFixed(3)}rem, ${(2.6 * lyricsFontScale).toFixed(3)}vw, ${(1.25 * lyricsFontScale).toFixed(3)}rem)`;
+    const upcomingFontSize = `clamp(${(0.875 * lyricsFontScale).toFixed(3)}rem, ${(2 * lyricsFontScale).toFixed(3)}vw, ${(1 * lyricsFontScale).toFixed(3)}rem)`;
 
     const preparedStateContext = useMemo<PreparedStateCacheContext>(() => ({
         showText,
@@ -1410,6 +1410,7 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
             viewport.width,
             viewport.height,
             theme.fontStyle,
+            theme.fontFamily ?? '',
             theme.animationIntensity,
             theme.accentColor,
             tuning.fontScale,
@@ -1420,6 +1421,7 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
         theme.accentColor,
         showText,
         theme.animationIntensity,
+        theme.fontFamily,
         theme.fontStyle,
         theme.wordColors,
         tuning.fontScale,
@@ -1758,7 +1760,10 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
         <div
             ref={containerRef}
             className="w-full h-full flex flex-col items-center justify-center overflow-hidden relative transition-colors duration-1000"
-            style={{ backgroundColor: 'transparent' }}
+            style={{
+                backgroundColor: 'transparent',
+                fontFamily: resolveThemeFontStack(theme),
+            }}
             onMouseMove={(event) => {
                 const nearBackArea = event.clientX <= 120 && event.clientY <= 120;
                 if (nearBackArea !== showBackButton) {
@@ -1843,7 +1848,10 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             className="text-2xl opacity-50 absolute"
-                            style={{ color: theme.secondaryColor }}
+                            style={{
+                                color: theme.secondaryColor,
+                                fontSize: emptyFontSize,
+                            }}
                         >
                             {t('ui.waitingForMusic')}
                         </motion.div>
@@ -1865,8 +1873,11 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0 }}
-                                className="text-lg md:text-xl font-medium max-w-4xl mx-auto"
-                                style={{ color: theme.secondaryColor }}
+                                className="font-medium max-w-4xl mx-auto"
+                                style={{
+                                    color: theme.secondaryColor,
+                                    fontSize: translationFontSize,
+                                }}
                             >
                                 {activeLine?.translation || recentCompletedLine?.translation}
                             </motion.div>
@@ -1874,8 +1885,11 @@ const VisualizerCadenza: React.FC<VisualizerProps & { staticMode?: boolean; }> =
                             activeLine && nextLines.map((line, index) => (
                                 <p
                                     key={index}
-                                    className="text-sm md:text-base truncate max-w-2xl mx-auto transition-all duration-500 blur-[1px]"
-                                    style={{ color: theme.secondaryColor }}
+                                    className="truncate max-w-2xl mx-auto transition-all duration-500 blur-[1px]"
+                                    style={{
+                                        color: theme.secondaryColor,
+                                        fontSize: upcomingFontSize,
+                                    }}
                                 >
                                     {line.fullText}
                                 </p>

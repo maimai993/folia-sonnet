@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, type VisualizerMode } from '../types';
+import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, type CadenzaTuning, type VisualizerMode } from '../types';
 import { NavidromeSong } from '../types/navidrome';
 import { isNavidromeEnabled, getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
@@ -68,7 +68,15 @@ interface HomeProps {
     onSetThemePreset: (preset: 'midnight' | 'daylight') => void;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
+    cadenzaTuning: CadenzaTuning;
     onVisualizerModeChange: (mode: VisualizerMode) => void;
+    lyricsFontStyle: Theme['fontStyle'];
+    lyricsFontScale: number;
+    lyricsCustomFontFamily: string | null;
+    lyricsCustomFontLabel: string | null;
+    onLyricsFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
+    onLyricsFontScaleChange: (fontScale: number) => void;
+    onLyricsCustomFontChange: (font: { family: string; label?: string | null; } | null) => void;
 }
 const SearchResultCover: React.FC<{ track: UnifiedSong }> = ({ track }) => {
     const [src, setSrc] = useState<string | undefined>(undefined);
@@ -160,7 +168,15 @@ const Home: React.FC<HomeProps> = ({
     onSetThemePreset,
     isDaylight,
     visualizerMode,
+    cadenzaTuning,
     onVisualizerModeChange,
+    lyricsFontStyle,
+    lyricsFontScale,
+    lyricsCustomFontFamily,
+    lyricsCustomFontLabel,
+    onLyricsFontStyleChange,
+    onLyricsFontScaleChange,
+    onLyricsCustomFontChange,
 }) => {
     const { t } = useTranslation();
     const hasNeteaseLogin = Boolean(user);
@@ -976,7 +992,15 @@ const Home: React.FC<HomeProps> = ({
                                 isDaylight={isDaylight}
                                 onToggleNavidrome={handleToggleNavidrome}
                                 visualizerMode={visualizerMode}
+                                cadenzaTuning={cadenzaTuning}
                                 onVisualizerModeChange={onVisualizerModeChange}
+                                lyricsFontStyle={lyricsFontStyle}
+                                lyricsFontScale={lyricsFontScale}
+                                lyricsCustomFontFamily={lyricsCustomFontFamily}
+                                lyricsCustomFontLabel={lyricsCustomFontLabel}
+                                onLyricsFontStyleChange={onLyricsFontStyleChange}
+                                onLyricsFontScaleChange={onLyricsFontScaleChange}
+                                onLyricsCustomFontChange={onLyricsCustomFontChange}
                             />
                         )
                     }

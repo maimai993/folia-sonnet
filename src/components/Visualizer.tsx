@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { Line, Theme, Word as WordType, AudioBands } from '../types';
 import { getLineRenderEndTime, getLineRenderHints } from '../utils/lyrics/renderHints';
+import { resolveThemeFontStack } from '../utils/fontStacks';
 import GeometricBackground from './GeometricBackground';
 import FluidBackground from './FluidBackground';
 
@@ -20,6 +21,7 @@ interface VisualizerProps {
     useCoverColorBg?: boolean;
     seed?: string | number; // Added seed for geometric bg
     backgroundOpacity?: number;
+    lyricsFontScale?: number;
     onBack?: () => void;
 }
 
@@ -139,7 +141,8 @@ const Word: React.FC<{
     activeColor: string;
     renderProfile: ClassicLineRenderProfile;
     isChorus?: boolean;
-}> = ({ word, config, currentTime, theme, isChaotic, layoutVariants, bodyVariants, glowVariants, baseColor, activeColor, renderProfile, isChorus }) => {
+    fontSize: string;
+}> = ({ word, config, currentTime, theme, isChaotic, layoutVariants, bodyVariants, glowVariants, baseColor, activeColor, renderProfile, isChorus, fontSize }) => {
     const [status, setStatus] = useState<"waiting" | "active" | "passed">("waiting");
     const rippleScale = useMemo(() => 1.5 + Math.random() * 2, []);
     const duration = getClassicWordDisplayDuration(word, renderProfile);
@@ -175,8 +178,9 @@ const Word: React.FC<{
             initial="waiting"
             animate={status}
             // Add `whitespace-nowrap` to prevent unexpected line breaks
-            className="text-4xl md:text-6xl lg:text-7xl font-bold inline-block origin-center relative will-change-transform whitespace-nowrap"
+            className="font-bold inline-block origin-center relative will-change-transform whitespace-nowrap"
             style={{
+                fontSize,
                 marginRight: config.marginRight,
                 alignSelf: config.alignSelf,
                 lineHeight: 1.22,
@@ -234,7 +238,22 @@ const Word: React.FC<{
     );
 };
 
-const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ currentTime, currentLineIndex, lines, theme, audioPower, audioBands, showText = true, coverUrl, useCoverColorBg = false, seed, staticMode = false, backgroundOpacity = 0.75, onBack }) => {
+const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
+    currentTime,
+    currentLineIndex,
+    lines,
+    theme,
+    audioPower,
+    audioBands,
+    showText = true,
+    coverUrl,
+    useCoverColorBg = false,
+    seed,
+    staticMode = false,
+    backgroundOpacity = 0.75,
+    lyricsFontScale = 1,
+    onBack
+}) => {
     const { t } = useTranslation();
     const [showBackButton, setShowBackButton] = useState(false);
 
@@ -260,7 +279,12 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
     // Find recent previous and next lines for context subtitles
     const nextLines = lines.slice(currentLineIndex + 1, currentLineIndex + 3);
 
-    const fontFamily = theme.fontStyle === 'mono' ? 'font-mono' : theme.fontStyle === 'serif' ? 'font-serif' : 'font-sans';
+    const fontClassName = theme.fontStyle === 'mono' ? 'font-mono' : theme.fontStyle === 'serif' ? 'font-serif' : 'font-sans';
+    const resolvedFontFamily = resolveThemeFontStack(theme);
+    const mainFontSize = `clamp(${(2.25 * lyricsFontScale).toFixed(3)}rem, ${(6 * lyricsFontScale).toFixed(3)}vw, ${(4.5 * lyricsFontScale).toFixed(3)}rem)`;
+    const emptyFontSize = `clamp(${(1.5 * lyricsFontScale).toFixed(3)}rem, ${(3.5 * lyricsFontScale).toFixed(3)}vw, ${(2.25 * lyricsFontScale).toFixed(3)}rem)`;
+    const translationFontSize = `clamp(${(1.125 * lyricsFontScale).toFixed(3)}rem, ${(2.6 * lyricsFontScale).toFixed(3)}vw, ${(1.25 * lyricsFontScale).toFixed(3)}rem)`;
+    const upcomingFontSize = `clamp(${(0.875 * lyricsFontScale).toFixed(3)}rem, ${(2 * lyricsFontScale).toFixed(3)}vw, ${(1 * lyricsFontScale).toFixed(3)}rem)`;
 
     // Generate a stable random layout configuration for the current line
     const { wordConfigs, lineConfig } = useMemo(() => {
@@ -502,8 +526,11 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
 
     return (
         <div
-            className={`w-full h-full flex flex-col items-center justify-center overflow-hidden relative ${fontFamily} transition-colors duration-1000`}
-            style={{ backgroundColor: 'transparent' }} // Main bg transparent to show fluid
+            className={`w-full h-full flex flex-col items-center justify-center overflow-hidden relative ${fontClassName} transition-colors duration-1000`}
+            style={{
+                backgroundColor: 'transparent',
+                fontFamily: resolvedFontFamily,
+            }} // Main bg transparent to show fluid
             onMouseMove={(event) => {
                 const nearBackArea = event.clientX <= 120 && event.clientY <= 120;
                 if (nearBackArea !== showBackButton) {
@@ -617,6 +644,7 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
                                         activeColor={activeColor}
                                         renderProfile={activeWordRenderProfile!}
                                         isChorus={activeLine.isChorus}
+                                        fontSize={mainFontSize}
                                     />
                                 );
                             })}
@@ -630,7 +658,10 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             className="text-2xl opacity-50 absolute"
-                            style={{ color: theme.secondaryColor }}
+                            style={{
+                                color: theme.secondaryColor,
+                                fontSize: emptyFontSize,
+                            }}
                         >
                             {t('ui.waitingForMusic')}
                         </motion.div>
@@ -654,15 +685,25 @@ const Visualizer: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({ cur
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0 }}
-                                className="text-lg md:text-xl font-medium max-w-4xl mx-auto"
-                                style={{ color: theme.secondaryColor }}
+                                className="font-medium max-w-4xl mx-auto"
+                                style={{
+                                    color: theme.secondaryColor,
+                                    fontSize: translationFontSize,
+                                }}
                             >
                                 {activeLine?.translation || recentCompletedLine?.translation}
                             </motion.div>
                         ) : (
                             /* Show next lines only when there's an active line (not during breaks) */
                             activeLine && nextLines.map((line, i) => (
-                                <p key={i} className="text-sm md:text-base truncate max-w-2xl mx-auto transition-all duration-500 blur-[1px]" style={{ color: theme.secondaryColor }}>
+                                <p
+                                    key={i}
+                                    className="truncate max-w-2xl mx-auto transition-all duration-500 blur-[1px]"
+                                    style={{
+                                        color: theme.secondaryColor,
+                                        fontSize: upcomingFontSize,
+                                    }}
+                                >
                                     {line.fullText}
                                 </p>
                             ))

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { DEFAULT_CADENZA_TUNING, type CadenzaTuning, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, type CadenzaTuning, type Theme, type VisualizerMode } from '../types';
 
 type StatusSetter = Dispatch<SetStateAction<{ type: 'error' | 'success' | 'info', text: string; } | null>>;
 type AudioQuality = 'exhigh' | 'lossless' | 'hires';
+type StoredCustomLyricsFont = { family: string; label?: string | null; };
 
 const getStoredBoolean = (key: string, fallback: boolean) => {
     const saved = localStorage.getItem(key);
@@ -25,6 +26,39 @@ const readStoredCadenzaTuning = (): CadenzaTuning => {
     }
 };
 
+const readStoredLyricsFontStyle = (): Theme['fontStyle'] => {
+    const saved = localStorage.getItem('lyrics_font_style');
+    return saved === 'serif' || saved === 'mono' ? saved : 'sans';
+};
+
+const readStoredLyricsFontScale = (): number => {
+    const saved = localStorage.getItem('lyrics_font_scale');
+    if (!saved) return 1;
+
+    const parsed = parseFloat(saved);
+    if (!Number.isFinite(parsed)) return 1;
+
+    return Math.min(1.4, Math.max(0.85, parsed));
+};
+
+const readStoredCustomLyricsFont = (): StoredCustomLyricsFont | null => {
+    const saved = localStorage.getItem('lyrics_custom_font');
+    if (!saved) return null;
+
+    try {
+        const parsed = JSON.parse(saved) as Partial<StoredCustomLyricsFont>;
+        const family = parsed.family?.trim();
+        if (!family) return null;
+
+        return {
+            family,
+            label: parsed.label?.trim() || family,
+        };
+    } catch {
+        return null;
+    }
+};
+
 export function useAppPreferences(setStatusMsg: StatusSetter) {
     const [audioQuality, setAudioQuality] = useState<AudioQuality>(() => {
         const saved = localStorage.getItem('default_audio_quality');
@@ -43,6 +77,9 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         return saved === 'cadenza' || saved === 'cadenze' ? 'cadenza' : 'classic';
     });
     const [cadenzaTuning, setCadenzaTuning] = useState<CadenzaTuning>(readStoredCadenzaTuning);
+    const [lyricsFontStyle, setLyricsFontStyle] = useState<Theme['fontStyle']>(readStoredLyricsFontStyle);
+    const [lyricsFontScale, setLyricsFontScale] = useState<number>(readStoredLyricsFontScale);
+    const [lyricsCustomFont, setLyricsCustomFont] = useState<StoredCustomLyricsFont | null>(readStoredCustomLyricsFont);
     const [volume, setVolume] = useState(() => {
         const saved = localStorage.getItem('player_volume');
         return saved !== null ? parseFloat(saved) : 1.0;
@@ -125,6 +162,33 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         });
     };
 
+    const handleSetLyricsFontStyle = useCallback((fontStyle: Theme['fontStyle']) => {
+        setLyricsFontStyle(fontStyle);
+        localStorage.setItem('lyrics_font_style', fontStyle);
+    }, []);
+
+    const handleSetLyricsFontScale = useCallback((fontScale: number) => {
+        const next = Math.min(1.4, Math.max(0.85, fontScale));
+        setLyricsFontScale(next);
+        localStorage.setItem('lyrics_font_scale', String(next));
+    }, []);
+
+    const handleSetLyricsCustomFont = useCallback((font: StoredCustomLyricsFont | null) => {
+        if (!font?.family?.trim()) {
+            setLyricsCustomFont(null);
+            localStorage.removeItem('lyrics_custom_font');
+            return;
+        }
+
+        const next = {
+            family: font.family.trim(),
+            label: font.label?.trim() || font.family.trim(),
+        };
+
+        setLyricsCustomFont(next);
+        localStorage.setItem('lyrics_custom_font', JSON.stringify(next));
+    }, []);
+
     const handleSetVolume = useCallback((val: number) => {
         setVolume(val);
         localStorage.setItem('player_volume', String(val));
@@ -146,6 +210,10 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         isDaylight,
         visualizerMode,
         cadenzaTuning,
+        lyricsFontStyle,
+        lyricsFontScale,
+        lyricsCustomFontFamily: lyricsCustomFont?.family ?? null,
+        lyricsCustomFontLabel: lyricsCustomFont?.label ?? null,
         handleToggleCoverColorBg,
         handleToggleStaticMode,
         handleToggleMediaCache,
@@ -154,6 +222,9 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         handleSetVisualizerMode,
         handleSetCadenzaTuning,
         handleResetCadenzaTuning,
+        handleSetLyricsFontStyle,
+        handleSetLyricsFontScale,
+        handleSetLyricsCustomFont,
         volume,
         isMuted,
         handleSetVolume,
