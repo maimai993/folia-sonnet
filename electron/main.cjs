@@ -70,8 +70,12 @@ function isFileSystemPermission(permission) {
   return permission === 'fileSystem' || permission === 'filesystem';
 }
 
+function isFontAccessPermission(permission) {
+  return permission === 'local-fonts';
+}
+
 function isAllowedMainWindowPermission(permission) {
-  return isFileSystemPermission(permission) || permission === 'unknown';
+  return isFileSystemPermission(permission) || isFontAccessPermission(permission) || permission === 'unknown';
 }
 
 function isTrustedMainWindowContents(webContents) {
