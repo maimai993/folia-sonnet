@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../services/db';
-import { Theme, type VisualizerMode } from '../types';
+import { Theme, type CadenzaTuning, type VisualizerMode } from '../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../services/navidromeService';
 import { NavidromeConfig } from '../types/navidrome';
+import VisPlayground from './VisPlayground';
 
 interface HelpModalProps {
     onClose: () => void;
@@ -19,7 +20,15 @@ interface HelpModalProps {
     isDaylight: boolean;
     onToggleNavidrome?: (enabled: boolean) => void;
     visualizerMode?: VisualizerMode;
+    cadenzaTuning?: CadenzaTuning;
     onVisualizerModeChange?: (mode: VisualizerMode) => void;
+    lyricsFontStyle: Theme['fontStyle'];
+    lyricsFontScale: number;
+    lyricsCustomFontFamily: string | null;
+    lyricsCustomFontLabel: string | null;
+    onLyricsFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
+    onLyricsFontScaleChange: (fontScale: number) => void;
+    onLyricsCustomFontChange: (font: { family: string; label?: string | null; } | null) => void;
 }
 
 const HelpModal: React.FC<HelpModalProps> = ({
@@ -35,10 +44,19 @@ const HelpModal: React.FC<HelpModalProps> = ({
     isDaylight,
     onToggleNavidrome,
     visualizerMode = 'classic',
+    cadenzaTuning,
     onVisualizerModeChange,
+    lyricsFontStyle,
+    lyricsFontScale,
+    lyricsCustomFontFamily,
+    lyricsCustomFontLabel,
+    onLyricsFontStyleChange,
+    onLyricsFontScaleChange,
+    onLyricsCustomFontChange,
 }) => {
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<'help' | 'options'>('help');
+    const [showVisPlayground, setShowVisPlayground] = useState(false);
 
     // Cache State
     const [cacheSizes, setCacheSizes] = useState({
@@ -332,13 +350,25 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     </div>
 
                                     <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
-                                        <div className="space-y-1">
-                                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                {t('options.lyricsRenderer') || "Lyrics Renderer"}
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="space-y-1">
+                                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('options.lyricsRenderer') || "Lyrics Renderer"}
+                                                </div>
+                                                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                                    {t('options.lyricsRendererDesc') || "Choose the lyrics rendering mode used on the playback page."}
+                                                </div>
                                             </div>
-                                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                                {t('options.lyricsRendererDesc') || "Choose the lyrics rendering mode used on the playback page."}
-                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowVisPlayground(true)}
+                                                className="shrink-0 w-9 h-9 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center"
+                                                style={{ color: 'var(--text-primary)' }}
+                                                title={t('options.openLyricsStyleSettings') || '打开歌词样式设置'}
+                                                aria-label={t('options.openLyricsStyleSettings') || '打开歌词样式设置'}
+                                            >
+                                                <Settings2 size={16} />
+                                            </button>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <button
@@ -745,6 +775,24 @@ const HelpModal: React.FC<HelpModalProps> = ({
                 {/* Footer (Empty now) */}
                 {/* <div className="mt-8 pt-0 border-t-0 p-0" /> */}
             </div>
+            {showVisPlayground && (
+                <VisPlayground
+                    theme={theme}
+                    isDaylight={isDaylight}
+                    visualizerMode={visualizerMode}
+                    backgroundOpacity={backgroundOpacity}
+                    staticMode={staticMode}
+                    cadenzaTuning={cadenzaTuning}
+                    fontStyle={lyricsFontStyle}
+                    fontScale={lyricsFontScale}
+                    customFontFamily={lyricsCustomFontFamily}
+                    customFontLabel={lyricsCustomFontLabel}
+                    onFontStyleChange={onLyricsFontStyleChange}
+                    onFontScaleChange={onLyricsFontScaleChange}
+                    onCustomFontChange={onLyricsCustomFontChange}
+                    onClose={() => setShowVisPlayground(false)}
+                />
+            )}
         </div>
     );
 };

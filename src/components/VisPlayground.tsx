@@ -1,0 +1,635 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
+import { ChevronLeft, Loader2, RotateCcw, Search, Sparkles, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import Visualizer from './Visualizer';
+import VisualizerCadenza from './VisualizerCadenza';
+import {
+    DEFAULT_CADENZA_TUNING,
+    type AudioBands,
+    type CadenzaTuning,
+    type Line,
+    type Theme,
+    type VisualizerMode,
+} from '../types';
+import { getLineRenderEndTime } from '../utils/lyrics/renderHints';
+import { resolveThemeFontStack } from '../utils/fontStacks';
+
+interface VisPlaygroundProps {
+    theme?: Theme;
+    isDaylight: boolean;
+    visualizerMode: VisualizerMode;
+    backgroundOpacity?: number;
+    staticMode?: boolean;
+    cadenzaTuning?: CadenzaTuning;
+    fontStyle: Theme['fontStyle'];
+    fontScale: number;
+    customFontFamily: string | null;
+    customFontLabel: string | null;
+    onFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
+    onFontScaleChange: (fontScale: number) => void;
+    onCustomFontChange: (font: { family: string; label?: string | null; } | null) => void;
+    onClose: () => void;
+}
+
+interface PresetOption<T> {
+    label: string;
+    value: T;
+}
+
+interface PresetGroupProps<T> {
+    label: string;
+    value: T;
+    options: PresetOption<T>[];
+    onChange: (next: T) => void;
+    isDaylight: boolean;
+    isOptionActive?: (option: PresetOption<T>) => boolean;
+}
+
+interface LocalFontDataLike {
+    family: string;
+    fullName?: string;
+    postscriptName?: string;
+    style?: string;
+}
+
+interface LocalFontEntry {
+    family: string;
+    label: string;
+}
+
+type QueryLocalFontsWindow = Window & {
+    queryLocalFonts?: () => Promise<LocalFontDataLike[]>;
+};
+
+const PREVIEW_THEME: Theme = {
+    name: 'Preview Theme',
+    backgroundColor: '#09090b',
+    primaryColor: '#f4f4f5',
+    accentColor: '#f4f4f5',
+    secondaryColor: '#71717a',
+    fontStyle: 'sans',
+    animationIntensity: 'normal',
+};
+
+const FONT_SCALE_OPTIONS: PresetOption<number>[] = [
+    { label: '90%', value: 0.9 },
+    { label: '100%', value: 1 },
+    { label: '110%', value: 1.1 },
+    { label: '125%', value: 1.25 },
+];
+
+const LOOP_DURATION = 16.2;
+
+const clampFontScale = (value: number) => Math.min(1.4, Math.max(0.85, value));
+
+const createCharacterWords = (text: string, startTime: number, endTime: number) => {
+    const chars = Array.from(text);
+    const duration = endTime - startTime;
+
+    return chars.map((char, index) => {
+        const charStart = startTime + duration * (index / chars.length);
+        const charEnd = startTime + duration * ((index + 1) / chars.length);
+
+        return {
+            text: char,
+            startTime: charStart,
+            endTime: charEnd,
+        };
+    });
+};
+
+const PREVIEW_LINES: Line[] = [
+    {
+        startTime: 0.7,
+        endTime: 3.6,
+        fullText: 'この愛は、すべての太陽を織り上げた。',
+        translation: '这份爱编织了所有的太阳。',
+        words: createCharacterWords('この愛は、すべての太陽を織り上げた。', 0.7, 3.6),
+    },
+    {
+        startTime: 4.2,
+        endTime: 7.2,
+        fullText: 'This love has woven all the suns.',
+        translation: '这份爱编织了所有的太阳。',
+        words: [
+            { text: 'This', startTime: 4.2, endTime: 4.7 },
+            { text: 'love', startTime: 4.7, endTime: 5.15 },
+            { text: 'has', startTime: 5.15, endTime: 5.55 },
+            { text: 'woven', startTime: 5.55, endTime: 6.1 },
+            { text: 'all', startTime: 6.1, endTime: 6.45 },
+            { text: 'the', startTime: 6.45, endTime: 6.7 },
+            { text: 'suns.', startTime: 6.7, endTime: 7.2 },
+        ],
+    },
+    {
+        startTime: 7.8,
+        endTime: 10.9,
+        fullText: 'Cet amour a tisse tous les soleils.',
+        translation: '这份爱编织了所有的太阳。',
+        words: [
+            { text: 'Cet', startTime: 7.8, endTime: 8.25 },
+            { text: 'amour', startTime: 8.25, endTime: 8.85 },
+            { text: 'a', startTime: 8.85, endTime: 9.05 },
+            { text: 'tisse', startTime: 9.05, endTime: 9.6 },
+            { text: 'tous', startTime: 9.6, endTime: 10.05 },
+            { text: 'les', startTime: 10.05, endTime: 10.35 },
+            { text: 'soleils.', startTime: 10.35, endTime: 10.9 },
+        ],
+    },
+    {
+        startTime: 11.5,
+        endTime: 14.4,
+        fullText: '这份爱编织了所有的太阳。',
+        translation: '这份爱编织了所有的太阳。',
+        words: createCharacterWords('这份爱编织了所有的太阳。', 11.5, 14.4),
+    },
+];
+
+const findPreviewLineIndex = (lines: Line[], time: number) => {
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index];
+        if (!line || time < line.startTime) {
+            continue;
+        }
+
+        if (time <= getLineRenderEndTime(line)) {
+            return index;
+        }
+    }
+
+    return -1;
+};
+
+const PresetGroup = <T,>({
+    label,
+    value,
+    options,
+    onChange,
+    isDaylight,
+    isOptionActive,
+}: PresetGroupProps<T>) => (
+    <div className="space-y-2.5">
+        <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: 'var(--text-secondary)' }}>
+            {label}
+        </div>
+        <div className="flex flex-wrap gap-2">
+            {options.map(option => {
+                const isActive = isOptionActive ? isOptionActive(option) : option.value === value;
+
+                return (
+                    <button
+                        key={String(option.value)}
+                        type="button"
+                        onClick={() => onChange(option.value)}
+                        className="px-3 py-2 rounded-full text-sm transition-all border"
+                        style={{
+                            color: 'var(--text-primary)',
+                            borderColor: isActive ? 'var(--text-accent)' : (isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)'),
+                            backgroundColor: isActive
+                                ? (isDaylight ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.10)')
+                                : (isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)'),
+                            boxShadow: isActive ? '0 8px 22px rgba(0,0,0,0.14)' : 'none',
+                        }}
+                    >
+                        {option.label}
+                    </button>
+                );
+            })}
+        </div>
+    </div>
+);
+
+const dedupeLocalFonts = (fonts: LocalFontDataLike[]) => {
+    const entries = new Map<string, LocalFontEntry>();
+
+    fonts.forEach(font => {
+        const family = font.family?.trim();
+        if (!family) {
+            return;
+        }
+
+        const key = family.toLocaleLowerCase();
+        if (!entries.has(key)) {
+            entries.set(key, {
+                family,
+                label: family,
+            });
+        }
+    });
+
+    return Array.from(entries.values()).sort((left, right) => left.label.localeCompare(right.label));
+};
+
+const VisPlayground: React.FC<VisPlaygroundProps> = ({
+    theme,
+    isDaylight,
+    visualizerMode,
+    backgroundOpacity = 0.75,
+    staticMode = false,
+    cadenzaTuning = DEFAULT_CADENZA_TUNING,
+    fontStyle,
+    fontScale,
+    customFontFamily,
+    customFontLabel,
+    onFontStyleChange,
+    onFontScaleChange,
+    onCustomFontChange,
+    onClose,
+}) => {
+    const { t } = useTranslation();
+    const currentTime = useMotionValue(0);
+    const audioPower = useMotionValue(0.24);
+    const bass = useMotionValue(0.18);
+    const lowMid = useMotionValue(0.15);
+    const mid = useMotionValue(0.12);
+    const vocal = useMotionValue(0.2);
+    const treble = useMotionValue(0.1);
+    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewLineIndex(PREVIEW_LINES, 0));
+    const [isFontPickerOpen, setIsFontPickerOpen] = useState(false);
+    const [isLoadingSystemFonts, setIsLoadingSystemFonts] = useState(false);
+    const [systemFonts, setSystemFonts] = useState<LocalFontEntry[]>([]);
+    const [fontSearchQuery, setFontSearchQuery] = useState('');
+    const [fontPickerError, setFontPickerError] = useState<string | null>(null);
+
+    const audioBands = useMemo<AudioBands>(() => ({
+        bass,
+        lowMid,
+        mid,
+        vocal,
+        treble,
+    }), [bass, lowMid, mid, treble, vocal]);
+
+    const normalizedFontScale = clampFontScale(fontScale);
+    const builtinFontOptions: PresetOption<Theme['fontStyle']>[] = useMemo(() => ([
+        { value: 'sans', label: t('options.fontSans') || '无衬线' },
+        { value: 'serif', label: t('options.fontSerif') || '衬线' },
+        { value: 'mono', label: t('options.fontMono') || '等宽' },
+    ]), [t]);
+    const baseTheme = theme ?? PREVIEW_THEME;
+    const previewTheme = useMemo<Theme>(() => ({
+        ...baseTheme,
+        fontStyle,
+        fontFamily: customFontFamily ?? undefined,
+    }), [baseTheme, customFontFamily, fontStyle]);
+    const effectiveCadenzaTuning = useMemo<CadenzaTuning>(() => ({
+        ...cadenzaTuning,
+        fontScale: cadenzaTuning.fontScale * normalizedFontScale,
+    }), [cadenzaTuning, normalizedFontScale]);
+    const currentFontLabel = customFontLabel || customFontFamily || (t('options.customFont') || '自定义字体');
+    const fontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[] = useMemo(() => ([
+        ...builtinFontOptions,
+        { value: 'custom', label: currentFontLabel },
+    ]), [builtinFontOptions, currentFontLabel]);
+    const filteredSystemFonts = useMemo(() => {
+        const query = fontSearchQuery.trim().toLocaleLowerCase();
+        if (!query) {
+            return systemFonts;
+        }
+
+        return systemFonts.filter(font => font.label.toLocaleLowerCase().includes(query));
+    }, [fontSearchQuery, systemFonts]);
+
+    useEffect(() => {
+        let frameId = 0;
+        const startedAt = performance.now();
+
+        const tick = (now: number) => {
+            const elapsed = ((now - startedAt) / 1000) % LOOP_DURATION;
+            currentTime.set(elapsed);
+
+            const wave = (offset: number, speed: number, floor: number, amplitude: number) =>
+                floor + (Math.sin(now * speed + offset) * 0.5 + 0.5) * amplitude;
+
+            audioPower.set(wave(0.2, 0.0024, 0.16, 0.18));
+            bass.set(wave(0.9, 0.0032, 0.14, 0.2));
+            lowMid.set(wave(1.7, 0.0028, 0.12, 0.16));
+            mid.set(wave(2.6, 0.0023, 0.1, 0.14));
+            vocal.set(wave(3.4, 0.0038, 0.16, 0.22));
+            treble.set(wave(4.2, 0.0046, 0.08, 0.14));
+
+            frameId = window.requestAnimationFrame(tick);
+        };
+
+        frameId = window.requestAnimationFrame(tick);
+        return () => window.cancelAnimationFrame(frameId);
+    }, [audioPower, bass, currentTime, lowMid, mid, treble, vocal]);
+
+    useMotionValueEvent(currentTime, 'change', latest => {
+        const nextIndex = findPreviewLineIndex(PREVIEW_LINES, latest);
+        setCurrentLineIndex(prev => (prev === nextIndex ? prev : nextIndex));
+    });
+
+    const modeLabel = visualizerMode === 'classic'
+        ? (t('ui.visualizerClassic') || '流光')
+        : (t('ui.visualizerCadenze') || '心象');
+    const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
+    const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
+    const tabSwitcherBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
+    const activeTabBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
+    const controlCardBg = isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)';
+
+    const handleReset = () => {
+        onCustomFontChange(null);
+        onFontStyleChange('sans');
+        onFontScaleChange(1);
+    };
+
+    const handleSelectBuiltinFont = (next: Theme['fontStyle']) => {
+        onCustomFontChange(null);
+        onFontStyleChange(next);
+    };
+
+    const loadSystemFonts = async () => {
+        setIsFontPickerOpen(true);
+        setFontPickerError(null);
+
+        if (systemFonts.length > 0 || isLoadingSystemFonts) {
+            return;
+        }
+
+        const localFontWindow = window as QueryLocalFontsWindow;
+        if (!localFontWindow.queryLocalFonts) {
+            setFontPickerError(t('options.systemFontUnsupported') || '当前环境无法读取本机字体。');
+            return;
+        }
+
+        setIsLoadingSystemFonts(true);
+        try {
+            const fonts = await localFontWindow.queryLocalFonts();
+            const nextFonts = dedupeLocalFonts(fonts);
+            setSystemFonts(nextFonts);
+            if (nextFonts.length === 0) {
+                setFontPickerError(t('options.systemFontEmpty') || '没有读取到可用字体。');
+            }
+        } catch (error) {
+            console.error('[VisPlayground] Failed to query local fonts:', error);
+            setFontPickerError(
+                error instanceof Error && error.message
+                    ? error.message
+                    : (t('options.systemFontPermissionDenied') || '读取本机字体失败，请检查权限。')
+            );
+        } finally {
+            setIsLoadingSystemFonts(false);
+        }
+    };
+
+    const handleChooseSystemFont = (font: LocalFontEntry) => {
+        onCustomFontChange({
+            family: font.family,
+            label: font.label,
+        });
+        setIsFontPickerOpen(false);
+    };
+
+    const handleSelectFontStyle = (next: Theme['fontStyle'] | 'custom') => {
+        if (next === 'custom') {
+            void loadSystemFonts();
+            return;
+        }
+
+        handleSelectBuiltinFont(next);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[130] bg-black/65 backdrop-blur-xl p-3 sm:p-5" onClick={onClose}>
+            <motion.div
+                initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 18, scale: 0.98 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                onClick={(event) => event.stopPropagation()}
+                className={`mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${glassBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
+            >
+                <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="h-10 w-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center transition-colors hover:bg-white/10"
+                            style={{ color: 'var(--text-primary)' }}
+                        >
+                            <ChevronLeft size={18} />
+                        </button>
+                        <div className="min-w-0">
+                            <div className="text-[11px] uppercase tracking-[0.24em] opacity-45" style={{ color: 'var(--text-secondary)' }}>
+                                {t('ui.visualizerTemporary') || '临时工作台'}
+                            </div>
+                            <div className="text-lg sm:text-xl font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.lyricsStyleSettings') || '歌词样式'}
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleReset}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm transition-colors hover:bg-white/10"
+                        style={{ color: 'var(--text-primary)' }}
+                    >
+                        <RotateCcw size={14} />
+                        <span>{t('ui.default') || '默认'}</span>
+                    </button>
+                </div>
+
+                <div className="grid min-h-0 flex-1 gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.25fr)_360px]">
+                    <div className="relative min-h-[320px] overflow-hidden rounded-[28px] border border-white/10 bg-black/20">
+                        <div className="absolute left-4 top-4 z-20 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-xs uppercase tracking-[0.22em] backdrop-blur-md" style={{ color: 'rgba(255,255,255,0.78)' }}>
+                            <Sparkles size={13} />
+                            <span>{t('ui.livePreview') || '实时预览'}</span>
+                        </div>
+                        <div className="absolute right-4 top-4 z-20 rounded-full border border-white/10 bg-black/25 px-3 py-1.5 text-xs backdrop-blur-md" style={{ color: 'rgba(255,255,255,0.78)' }}>
+                            {modeLabel}
+                        </div>
+
+                        <div className="absolute inset-0">
+                            {visualizerMode === 'classic' ? (
+                                <Visualizer
+                                    currentTime={currentTime}
+                                    currentLineIndex={currentLineIndex}
+                                    lines={PREVIEW_LINES}
+                                    theme={previewTheme}
+                                    audioPower={audioPower}
+                                    audioBands={audioBands}
+                                    showText
+                                    staticMode={staticMode}
+                                    backgroundOpacity={backgroundOpacity}
+                                    lyricsFontScale={normalizedFontScale}
+                                    seed="vis-playground-classic"
+                                />
+                            ) : (
+                                <VisualizerCadenza
+                                    currentTime={currentTime}
+                                    currentLineIndex={currentLineIndex}
+                                    lines={PREVIEW_LINES}
+                                    theme={previewTheme}
+                                    audioPower={audioPower}
+                                    audioBands={audioBands}
+                                    showText
+                                    staticMode={staticMode}
+                                    backgroundOpacity={backgroundOpacity}
+                                    cadenzaTuning={effectiveCadenzaTuning}
+                                    lyricsFontScale={normalizedFontScale}
+                                    seed="vis-playground-cadenza"
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="min-h-0 flex flex-col gap-4">
+                        <div className={`inline-flex w-fit items-center gap-1 rounded-full p-1 ${tabSwitcherBg}`}>
+                            <div className={`rounded-full px-3 py-1.5 text-sm ${activeTabBg}`} style={{ color: 'var(--text-primary)' }}>
+                                {t('options.fontFamily') || '字体'}
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-4">
+                            <div
+                                className="rounded-[24px] border border-white/10 p-4 space-y-4"
+                                style={{ backgroundColor: controlCardBg }}
+                            >
+                                <div className="space-y-1">
+                                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                        {t('options.lyricsStyleSettings') || '歌词样式'}
+                                    </div>
+                                    <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('options.lyricsStyleSettingsDesc') || '字体和字号选择'}
+                                    </div>
+                                </div>
+
+                                <PresetGroup
+                                    label={t('options.fontFamily') || '字体'}
+                                    value={customFontFamily ? 'custom' : fontStyle}
+                                    options={fontStyleOptions}
+                                    onChange={handleSelectFontStyle}
+                                    isDaylight={isDaylight}
+                                    isOptionActive={(option) => option.value === (customFontFamily ? 'custom' : fontStyle)}
+                                />
+
+                                <PresetGroup
+                                    label={t('options.fontSize') || '字号'}
+                                    value={normalizedFontScale}
+                                    options={FONT_SCALE_OPTIONS}
+                                    onChange={onFontScaleChange}
+                                    isDaylight={isDaylight}
+                                />
+
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                                        <span>{t('options.fontSize') || '字号'}</span>
+                                        <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                                            {Math.round(normalizedFontScale * 100)}%
+                                        </span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="0.85"
+                                        max="1.4"
+                                        step="0.05"
+                                        value={normalizedFontScale}
+                                        onChange={(event) => onFontScaleChange(parseFloat(event.target.value))}
+                                        className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:hover:scale-125 [&::-webkit-slider-thumb]:transition-transform"
+                                    />
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                {isFontPickerOpen && (
+                    <div className="absolute inset-0 z-30 bg-black/45 backdrop-blur-md p-4 sm:p-6">
+                        <div className={`mx-auto flex h-full max-w-2xl flex-col overflow-hidden rounded-[28px] border ${borderColor} ${glassBg} shadow-[0_24px_80px_rgba(0,0,0,0.32)]`}>
+                            <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
+                                <div className="min-w-0">
+                                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                        {t('options.chooseSystemFont') || '选择自定义字体'}
+                                    </div>
+                                    <div className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('options.chooseSystemFontDesc') || '从当前系统已安装字体中选择一个字体。'}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsFontPickerOpen(false)}
+                                    className="h-10 w-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center transition-colors hover:bg-white/10"
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <div className="border-b border-white/10 px-5 py-4">
+                                <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                                    <Search size={16} style={{ color: 'var(--text-secondary)' }} />
+                                    <input
+                                        type="text"
+                                        value={fontSearchQuery}
+                                        onChange={(event) => setFontSearchQuery(event.target.value)}
+                                        placeholder={t('options.searchSystemFont') || '搜索字体'}
+                                        className="w-full bg-transparent text-sm outline-none placeholder:opacity-40"
+                                        style={{ color: 'var(--text-primary)' }}
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="min-h-0 flex-1 overflow-y-auto p-5 custom-scrollbar">
+                                {isLoadingSystemFonts ? (
+                                    <div className="h-full flex items-center justify-center text-sm gap-3" style={{ color: 'var(--text-secondary)' }}>
+                                        <Loader2 size={18} className="animate-spin" />
+                                        <span>{t('options.loadingSystemFonts') || '正在读取系统字体...'}</span>
+                                    </div>
+                                ) : fontPickerError ? (
+                                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                                        {fontPickerError}
+                                    </div>
+                                ) : filteredSystemFonts.length === 0 ? (
+                                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('options.systemFontNoResults') || '没有找到匹配的系统字体。'}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {filteredSystemFonts.map(font => {
+                                            const isActive = customFontFamily?.toLocaleLowerCase() === font.family.toLocaleLowerCase();
+                                            return (
+                                                <button
+                                                    key={font.family}
+                                                    type="button"
+                                                    onClick={() => handleChooseSystemFont(font)}
+                                                    className="w-full rounded-2xl border p-4 text-left transition-all"
+                                                    style={{
+                                                        color: 'var(--text-primary)',
+                                                        borderColor: isActive ? 'var(--text-accent)' : (isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)'),
+                                                        backgroundColor: isActive
+                                                            ? (isDaylight ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.08)')
+                                                            : (isDaylight ? 'rgba(255,255,255,0.58)' : 'rgba(255,255,255,0.03)'),
+                                                    }}
+                                                >
+                                                    <div
+                                                        className="text-lg font-medium"
+                                                        style={{
+                                                            fontFamily: resolveThemeFontStack({
+                                                                fontStyle,
+                                                                fontFamily: font.family,
+                                                            }),
+                                                        }}
+                                                    >
+                                                        {font.label}
+                                                    </div>
+                                                    <div className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
+                                                        {font.family}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </motion.div>
+        </div>
+    );
+};
+
+export default VisPlayground;
