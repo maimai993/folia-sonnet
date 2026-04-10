@@ -52,7 +52,6 @@ https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
 
 ```
 yay -S folia-major-bin
-
 ```
 
 2. Debian / Ubuntu / Linux Mint：下载 `.deb`
