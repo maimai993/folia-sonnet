@@ -9,7 +9,7 @@ import NavidromeArtistView from './navidrome/NavidromeArtistView';
 import { SubsonicAlbum, NavidromeSong, NavidromeConfig, SubsonicPlaylist, SubsonicSong, SubsonicArtist } from '../types/navidrome';
 import { navidromeApi, getNavidromeConfig } from '../services/navidromeService';
 import { Theme } from '../types';
-import { createCoverPlaceholder, pickRandomSongCoverUrl, resolveNavidromeArtistCoverUrl } from '../utils/coverPlaceholders';
+import { createCoverPlaceholder, pickRandomSongCoverUrl } from '../utils/coverPlaceholders';
 
 interface NavidromeMusicViewProps {
     onPlaySong: (song: NavidromeSong, queue?: NavidromeSong[]) => void;
@@ -150,13 +150,7 @@ const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
     const artistItems = useMemo(() => artists.map(artist => ({
         id: artist.id,
         name: artist.name,
-        coverUrl: config
-            ? (resolveNavidromeArtistCoverUrl(
-                artist,
-                (coverArtId, size) => navidromeApi.getCoverArtUrl(config, coverArtId, size),
-                600
-            ) || createCoverPlaceholder(artist.name, 'artist'))
-            : createCoverPlaceholder(artist.name, 'artist'),
+        coverUrl: createCoverPlaceholder(artist.name, 'artist'),
         trackCount: artist.albumCount,
         description: t('navidrome.artists'),
     })), [artists, config, t]);

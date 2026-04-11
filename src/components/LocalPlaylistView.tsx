@@ -24,6 +24,7 @@ interface LocalPlaylistViewProps {
     playlistId?: string;
     isEditablePlaylist?: boolean;
     onDeletePlaylist?: () => void;
+    onRenamePlaylist?: (playlistId: string, name: string) => Promise<void>;
     theme: any;
     isDaylight: boolean;
 }
@@ -140,7 +141,7 @@ const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQu
 
 LocalPlaylistRow.displayName = 'LocalPlaylistRow';
 
-const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, onBack, onPlaySong, onAddToQueue, onSelectArtist, onSelectAlbum, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, playlistId, isEditablePlaylist = false, onDeletePlaylist, theme, isDaylight }) => {
+const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, onBack, onPlaySong, onAddToQueue, onSelectArtist, onSelectAlbum, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, playlistId, isEditablePlaylist = false, onDeletePlaylist, onRenamePlaylist, theme, isDaylight }) => {
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBg = isDaylight ? 'bg-white/60 backdrop-blur-md border border-white/20 shadow-xl' : 'bg-black/40 backdrop-blur-md border border-white/10';
     const panelBg = isDaylight ? 'bg-white/40 shadow-xl border border-white/20' : 'bg-black/20';
@@ -158,6 +159,8 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
     const [scrollTop, setScrollTop] = useState(0);
     const [editableSongs, setEditableSongs] = useState<LocalSong[]>(songs);
     const [isEditMode, setIsEditMode] = useState(false);
+    const [editableTitle, setEditableTitle] = useState(title);
+    const [isRenamingPlaylist, setIsRenamingPlaylist] = useState(false);
 
     useEffect(() => {
         setEditableSongs(songs);
@@ -165,6 +168,7 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
 
     useEffect(() => {
         setIsEditMode(false);
+        setEditableTitle(title);
     }, [playlistId, title]);
 
     // Calculate total songs to delete (including nested folders)
@@ -236,6 +240,29 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
         onRefresh?.();
     };
 
+    const handleEditToggle = async () => {
+        if (!isEditMode) {
+            setEditableTitle(title);
+            setIsEditMode(true);
+            return;
+        }
+
+        if (playlistId && onRenamePlaylist) {
+            const trimmedTitle = editableTitle.trim();
+            if (trimmedTitle && trimmedTitle !== title) {
+                try {
+                    setIsRenamingPlaylist(true);
+                    await onRenamePlaylist(playlistId, trimmedTitle);
+                    onRefresh?.();
+                } finally {
+                    setIsRenamingPlaylist(false);
+                }
+            }
+        }
+
+        setIsEditMode(false);
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -273,7 +300,24 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                     </div>
 
                     <div className="text-center md:text-left space-y-2 w-full mb-6">
-                        <h1 className="text-2xl md:text-3xl font-bold line-clamp-2" style={{ color: 'var(--text-primary)' }}>{title}</h1>
+                        {isEditablePlaylist && isEditMode ? (
+                            <input
+                                type="text"
+                                value={editableTitle}
+                                onChange={(event) => setEditableTitle(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                        event.preventDefault();
+                                        void handleEditToggle();
+                                    }
+                                }}
+                                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-2xl font-bold outline-none transition-colors focus:border-sky-400 md:text-3xl"
+                                style={{ color: 'var(--text-primary)' }}
+                                autoFocus
+                            />
+                        ) : (
+                            <h1 className="text-2xl md:text-3xl font-bold line-clamp-2" style={{ color: 'var(--text-primary)' }}>{title}</h1>
+                        )}
                         <div className="text-xs mt-2 opacity-30" style={{ color: 'var(--text-secondary)' }}>{displayedSongs.length} {t('playlist.tracks')}</div>
                     </div>
 
@@ -328,10 +372,13 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                         )}
 
                         {isEditablePlaylist && (
-                            <div className="space-y-2">
+                            <div className="flex gap-2">
                                 <button
-                                    onClick={() => setIsEditMode(prev => !prev)}
-                                    className="w-full py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10"
+                                    onClick={() => {
+                                        void handleEditToggle();
+                                    }}
+                                    disabled={isRenamingPlaylist}
+                                    className="flex-1 py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-60 disabled:cursor-not-allowed"
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     <Pencil size={16} />
@@ -341,7 +388,7 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                                 {onDeletePlaylist && (
                                     <button
                                         onClick={onDeletePlaylist}
-                                        className="w-full py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-500"
+                                        className="flex-1 py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-500"
                                     >
                                         <Trash2 size={16} />
                                         {t('localMusic.deletePlaylist') || '删除歌单'}

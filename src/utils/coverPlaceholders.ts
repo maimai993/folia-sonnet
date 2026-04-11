@@ -1,32 +1,48 @@
 type PlaceholderVariant = 'artist' | 'playlist';
 
 const svgToDataUrl = (svg: string) => `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+const hashString = (value: string) => Array.from(value).reduce((acc, char) => acc + char.charCodeAt(0), 0);
 
-const getInitial = (label: string, fallback: string) => {
+const getDisplayText = (label: string, fallback: string) => {
     const trimmed = label.trim();
-    return (trimmed.charAt(0) || fallback).toUpperCase();
+    if (!trimmed) {
+        return fallback;
+    }
+
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+        return words
+            .slice(0, 2)
+            .map(word => word.charAt(0).toUpperCase())
+            .join('');
+    }
+
+    return Array.from(trimmed).slice(0, 2).join('').toUpperCase();
 };
 
 export const createCoverPlaceholder = (
     label: string,
     variant: PlaceholderVariant = 'playlist'
 ): string => {
-    const configs: Record<PlaceholderVariant, { start: string; end: string; accent: string; symbol: string; }> = {
-        artist: {
-            start: '#d9f1ff',
-            end: '#8ec5ff',
-            accent: '#eff8ff',
-            symbol: getInitial(label, 'A'),
-        },
-        playlist: {
-            start: '#dbf4ff',
-            end: '#7cc6f6',
-            accent: '#edf9ff',
-            symbol: getInitial(label, 'M'),
-        },
+    const palettes: Record<PlaceholderVariant, Array<{ start: string; end: string; text: string; }>> = {
+        artist: [
+            { start: '#dbeafe', end: '#bfdbfe', text: '#1e3a8a' },
+            { start: '#e0f2fe', end: '#bae6fd', text: '#0f3a5b' },
+            { start: '#ede9fe', end: '#ddd6fe', text: '#4c1d95' },
+            { start: '#fce7f3', end: '#fbcfe8', text: '#831843' },
+        ],
+        playlist: [
+            { start: '#dcfce7', end: '#bbf7d0', text: '#166534' },
+            { start: '#ecfccb', end: '#d9f99d', text: '#365314' },
+            { start: '#fef3c7', end: '#fde68a', text: '#92400e' },
+            { start: '#fee2e2', end: '#fecaca', text: '#991b1b' },
+        ],
     };
 
-    const config = configs[variant];
+    const symbol = getDisplayText(label, variant === 'artist' ? 'A' : 'M');
+    const paletteGroup = palettes[variant];
+    const paletteIndex = hashString(`${variant}:${label.trim().toLowerCase()}`) % paletteGroup.length;
+    const config = paletteGroup[paletteIndex];
     const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
             <defs>
@@ -34,26 +50,19 @@ export const createCoverPlaceholder = (
                     <stop offset="0%" stop-color="${config.start}" />
                     <stop offset="100%" stop-color="${config.end}" />
                 </linearGradient>
-                <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
-                    <stop offset="100%" stop-color="${config.accent}" stop-opacity="0.15" />
-                </linearGradient>
             </defs>
-            <rect width="600" height="600" rx="72" fill="url(#bg)" />
-            <circle cx="164" cy="154" r="128" fill="url(#glow)" opacity="0.55" />
-            <circle cx="496" cy="478" r="152" fill="#ffffff" opacity="0.14" />
-            <circle cx="462" cy="154" r="46" fill="#ffffff" opacity="0.28" />
-            <rect x="96" y="96" width="408" height="408" rx="48" fill="#ffffff" opacity="0.14" />
+            <rect width="600" height="600" fill="url(#bg)" />
             <text
                 x="300"
-                y="338"
+                y="320"
                 text-anchor="middle"
-                font-size="180"
+                dominant-baseline="middle"
+                font-size="148"
                 font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
                 font-weight="700"
-                fill="#ffffff"
-                opacity="0.92"
-            >${config.symbol}</text>
+                letter-spacing="8"
+                fill="${config.text}"
+            >${symbol}</text>
         </svg>
     `;
 

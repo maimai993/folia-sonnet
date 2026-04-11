@@ -228,9 +228,9 @@ export default {
     "save": "保存"
   },
   "localMusic": {
-    "foldersAndPlaylists": "本地文件夹",
-    "albums": "本地专辑",
-    "artists": "本地艺术家",
+    "foldersAndPlaylists": "文件夹",
+    "albums": "专辑",
+    "artists": "艺术家",
     "customPlaylists": "歌单",
     "favoritePlaylist": "我喜欢的音乐",
     "unknownAlbum": "未知专辑",

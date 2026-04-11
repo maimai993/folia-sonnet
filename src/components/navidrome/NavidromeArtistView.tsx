@@ -6,7 +6,7 @@ import { NavidromeConfig, SubsonicAlbum, SubsonicArtist, SubsonicSong } from '..
 import { navidromeApi } from '../../services/navidromeService';
 import { Theme } from '../../types';
 import NavidromeCollectionView from './NavidromeCollectionView';
-import { createCoverPlaceholder, resolveNavidromeArtistCoverUrl } from '../../utils/coverPlaceholders';
+import { createCoverPlaceholder } from '../../utils/coverPlaceholders';
 
 interface NavidromeArtistViewProps {
     artist: SubsonicArtist;
@@ -28,11 +28,7 @@ const NavidromeArtistView: React.FC<NavidromeArtistViewProps> = ({
     const { t } = useTranslation();
     const [songs, setSongs] = useState<SubsonicSong[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const coverUrl = resolveNavidromeArtistCoverUrl(
-        artist,
-        (coverArtId, size) => navidromeApi.getCoverArtUrl(config, coverArtId, size),
-        600
-    ) || createCoverPlaceholder(artist.name, 'artist');
+    const coverUrl = createCoverPlaceholder(artist.name, 'artist');
 
     useEffect(() => {
         const loadArtistSongs = async () => {

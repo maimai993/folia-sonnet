@@ -9,7 +9,7 @@ import LyricMatchModal from './LyricMatchModal';
 import LocalPlaylistView from './LocalPlaylistView';
 import Carousel3D from './Carousel3D';
 import LocalArtistView from './local/LocalArtistView';
-import { deleteLocalPlaylist } from '../services/localPlaylistService';
+import { deleteLocalPlaylist, updateLocalPlaylist } from '../services/localPlaylistService';
 
 interface LocalMusicViewProps {
     localSongs: LocalSong[];
@@ -454,6 +454,15 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                         await deleteLocalPlaylist(resolvedSelectedGroup.playlistId!);
                         await onRefresh();
                         setSelectedGroup(null);
+                    }
+                    : undefined}
+                onRenamePlaylist={resolvedSelectedGroup.type === 'playlist' && resolvedSelectedGroup.playlistId && !resolvedSelectedGroup.isVirtual
+                    ? async (playlistId, name) => {
+                        await updateLocalPlaylist(playlistId, playlist => ({
+                            ...playlist,
+                            name: name.trim(),
+                        }));
+                        await onRefresh();
                     }
                     : undefined}
                 onSelectArtist={onSelectArtistGroup}
