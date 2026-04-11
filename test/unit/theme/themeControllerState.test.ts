@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildBuiltinDualTheme,
     buildThemeFallback,
     getBaseThemeForMode,
     resolveBgModeTheme,
@@ -136,5 +137,33 @@ describe('themeControllerState', () => {
             wordColors: [],
             lyricsIcons: []
         });
+    });
+
+    it('builds a built-in dual theme from warm cover colors', () => {
+        const builtinTheme = buildBuiltinDualTheme({
+            coverColors: ['rgb(220, 110, 70)', '#f97316']
+        });
+
+        expect(builtinTheme.dark.name).toContain('Built-in');
+        expect(builtinTheme.light.name).toContain('Built-in');
+        expect(builtinTheme.dark.provider).toBe('Built-in');
+        expect(builtinTheme.light.provider).toBe('Built-in');
+        expect(builtinTheme.dark.backgroundColor).toMatch(/^#/);
+        expect(builtinTheme.light.backgroundColor).toMatch(/^#/);
+        expect(builtinTheme.dark.backgroundColor).not.toBe(builtinTheme.light.backgroundColor);
+        expect(builtinTheme.dark.primaryColor).toBe('#f8fafc');
+        expect(builtinTheme.light.primaryColor).toBe('#111827');
+    });
+
+    it('switches built-in palette families when the cover color hue changes', () => {
+        const warmTheme = buildBuiltinDualTheme({
+            coverColors: ['rgb(235, 120, 60)']
+        });
+        const coolTheme = buildBuiltinDualTheme({
+            coverColors: ['rgb(40, 150, 220)']
+        });
+
+        expect(warmTheme.dark.name).not.toBe(coolTheme.dark.name);
+        expect(warmTheme.light.accentColor).not.toBe(coolTheme.light.accentColor);
     });
 });

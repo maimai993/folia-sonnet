@@ -19,6 +19,7 @@ export default {
     "themeApplied": "Applied theme: {{themeName}}",
     "themeGenerationFailed": "Theme generation failed.",
     "missingApiKey": "Please configure your AI API Key in Settings",
+    "aiFallbackThemeUsed": "AI is not configured, using a built-in theme",
     "playbackError": "Playback Error",
     "loadingSong": "Loading song URL...",
     "cacheCleared": "Cache cleared",

@@ -496,6 +496,16 @@ export default function App() {
         setPlayerState(PlayerState.PAUSED);
     }, [getTargetPlaybackVolume, syncOutputGain]);
 
+    const getCoverUrl = useCallback(() => {
+        if (cachedCoverUrl) return cachedCoverUrl;
+        let url = null;
+        if (currentSong?.al?.picUrl) url = currentSong.al.picUrl;
+        else if (currentSong?.album?.picUrl) url = currentSong.album.picUrl;
+        return toSafeRemoteUrl(url) || null;
+    }, [cachedCoverUrl, currentSong]);
+
+    const coverUrl = getCoverUrl();
+
     // Theme Controller
     // manages current theme, daylight mode, and related actions like generating AI themes 
     // and restoring cached themes for songs
@@ -516,6 +526,7 @@ export default function App() {
         isDaylight,
         setDaylightPreference,
         setStatusMsg,
+        coverUrl,
         t,
     });
 
@@ -2099,16 +2110,6 @@ export default function App() {
             return 'off';
         });
     };
-
-    const getCoverUrl = () => {
-        if (cachedCoverUrl) return cachedCoverUrl;
-        let url = null;
-        if (currentSong?.al?.picUrl) url = currentSong.al.picUrl;
-        else if (currentSong?.album?.picUrl) url = currentSong.album.picUrl;
-        return toSafeRemoteUrl(url) || null;
-    };
-
-    const coverUrl = getCoverUrl();
 
     const handleLike = async () => {
         if (!currentSong) return;

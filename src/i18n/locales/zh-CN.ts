@@ -19,6 +19,7 @@ export default {
     "themeApplied": "已应用主题: {{themeName}}",
     "themeGenerationFailed": "主题生成失败。",
     "missingApiKey": "请在设置中配置你的 AI API 密钥",
+    "aiFallbackThemeUsed": "AI功能未配置，使用内置主题",
     "playbackError": "播放出错",
     "loadingSong": "正在获取歌曲链接...",
     "cacheCleared": "缓存已清除",

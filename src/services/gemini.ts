@@ -1,5 +1,18 @@
 import { DualTheme } from "../types";
 
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error ?? '');
+};
+
+export const isMissingAiApiKeyError = (error: unknown) => {
+  const message = getErrorMessage(error);
+  return /(?:openai_api_key|gemini_api_key|api key)/i.test(message)
+    && /(?:not configured|missing|configure)/i.test(message);
+};
+
 export const generateThemeFromLyrics = async (
   lyricsText: string,
   options?: { isPureMusic?: boolean; songTitle?: string }

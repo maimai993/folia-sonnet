@@ -1,10 +1,12 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { generateThemeFromLyrics } from '../services/gemini';
+import { generateThemeFromLyrics, isMissingAiApiKeyError } from '../services/gemini';
 import { saveToCache } from '../services/db';
 import { DualTheme, LyricData, SongResult, Theme } from '../types';
 import { getCachedThemeState, getLastDualTheme } from '../services/themeCache';
+import { extractColors } from '../utils/colorExtractor';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import {
+    buildBuiltinDualTheme,
     buildThemeFallback,
     getBaseThemeForMode,
     resolveBgModeTheme,
@@ -19,6 +21,7 @@ export function useThemeController({
     isDaylight,
     setDaylightPreference,
     setStatusMsg,
+    coverUrl,
     t,
 }: {
     defaultTheme: Theme;
@@ -26,6 +29,7 @@ export function useThemeController({
     isDaylight: boolean;
     setDaylightPreference: (enabled: boolean) => void;
     setStatusMsg: StatusSetter;
+    coverUrl?: string | null;
     t: (key: string, options?: Record<string, unknown>) => string;
 }) {
     const getBaseTheme = () => getBaseThemeForMode({ defaultTheme, daylightTheme, isDaylight });
@@ -88,6 +92,14 @@ export function useThemeController({
         setAiTheme(null);
         setTheme(legacyTheme);
         setBgMode('ai');
+    };
+
+    const applyGeneratedDualTheme = (dualTheme: DualTheme) => {
+        const selectedTheme = isDaylight ? dualTheme.light : dualTheme.dark;
+        setTheme(selectedTheme);
+        setAiTheme(dualTheme);
+        setBgMode('ai');
+        return selectedTheme;
     };
 
     const applyThemeFallback = () => {
@@ -153,11 +165,7 @@ export function useThemeController({
                 isPureMusic,
                 songTitle: songTitle || undefined,
             });
-            const selectedTheme = isDaylight ? dualTheme.light : dualTheme.dark;
-
-            setTheme(selectedTheme);
-            setAiTheme(dualTheme);
-            setBgMode('ai');
+            const selectedTheme = applyGeneratedDualTheme(dualTheme);
             setStatusMsg({ type: 'success', text: t('status.themeApplied', { themeName: selectedTheme.name }) });
 
             if (currentSong) {
@@ -166,9 +174,16 @@ export function useThemeController({
             saveToCache('last_dual_theme', dualTheme);
         } catch (error: any) {
             console.error(error);
-            const errMsg = error.message || '';
-            if (errMsg.includes('not configured')) {
-                setStatusMsg({ type: 'error', text: t('status.missingApiKey') || 'Please configure AI API Key in Settings' });
+            if (isMissingAiApiKeyError(error)) {
+                const coverColors = coverUrl ? await extractColors(coverUrl, 5) : [];
+                const fallbackTheme = buildBuiltinDualTheme({ coverColors });
+                applyGeneratedDualTheme(fallbackTheme);
+
+                if (currentSong) {
+                    saveToCache(`dual_theme_${currentSong.id}`, fallbackTheme);
+                }
+                saveToCache('last_dual_theme', fallbackTheme);
+                setStatusMsg({ type: 'info', text: t('status.aiFallbackThemeUsed') });
             } else {
                 setStatusMsg({ type: 'error', text: t('status.themeGenerationFailed') });
             }
