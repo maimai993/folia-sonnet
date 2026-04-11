@@ -117,8 +117,41 @@ const getAudioSrcKind = (audioSrc: string | null): 'empty' | 'blob' | 'http' | '
     return 'other';
 };
 
+const toSafeRemoteUrl = (url: string | null | undefined): string | null | undefined => {
+    if (!url) {
+        return url;
+    }
+
+    // Only upgrade known Netease CDN URLs. Navidrome/self-hosted servers may only expose HTTP.
+    if (url.startsWith('http:') && url.includes('music.126.net')) {
+        return url.replace('http:', 'https:');
+    }
+
+    return url;
+};
+
 const isNavidromePlaybackSong = (song: SongResult | null | undefined): song is NavidromeSong => {
     return Boolean(song && (song as any).isNavidrome === true);
+};
+
+const resolveNavidromePlaybackCarrier = (song: SongResult | NavidromeSong | null | undefined): NavidromeSong | null => {
+    if (!song) {
+        return null;
+    }
+
+    const candidate = song as NavidromeSong & {
+        navidromeData?: NavidromeSong['navidromeData'] | NavidromeSong;
+    };
+
+    if (candidate.navidromeData && (candidate.navidromeData as NavidromeSong).isNavidrome === true) {
+        return candidate.navidromeData as NavidromeSong;
+    }
+
+    if (candidate.isNavidrome === true && candidate.navidromeData) {
+        return candidate as NavidromeSong;
+    }
+
+    return null;
 };
 
 const isLocalPlaybackSong = (
@@ -1439,6 +1472,27 @@ export default function App() {
 
         // Check if it is a local song
         const isLocal = isLocalPlaybackSong(song);
+        const isNavidrome = isNavidromePlaybackSong(song);
+
+        if (isNavidrome) {
+            const navidromeSong = resolveNavidromePlaybackCarrier(song);
+            if (!navidromeSong) {
+                setStatusMsg({ type: 'error', text: t('status.playbackError') });
+                setIsLyricsLoading(false);
+                return;
+            }
+
+            const navidromeQueue = queue.length > 0
+                ? queue
+                    .map(queuedSong => resolveNavidromePlaybackCarrier(queuedSong))
+                    .filter((queuedSong): queuedSong is NavidromeSong => Boolean(queuedSong))
+                : playQueue
+                    .map(queuedSong => resolveNavidromePlaybackCarrier(queuedSong))
+                    .filter((queuedSong): queuedSong is NavidromeSong => Boolean(queuedSong));
+
+            await onPlayNavidromeSong(navidromeSong, navidromeQueue);
+            return;
+        }
 
         if (isLocal) {
             console.log("[App] Playing Local Song");
@@ -2051,11 +2105,7 @@ export default function App() {
         let url = null;
         if (currentSong?.al?.picUrl) url = currentSong.al.picUrl;
         else if (currentSong?.album?.picUrl) url = currentSong.album.picUrl;
-
-        if (url && url.startsWith('http:')) {
-            return url.replace('http:', 'https:');
-        }
-        return url;
+        return toSafeRemoteUrl(url) || null;
     };
 
     const coverUrl = getCoverUrl();
