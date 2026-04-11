@@ -147,6 +147,11 @@ export const neteaseApi = {
     return res;
   },
 
+  updatePlaylistTracks: async (op: 'add' | 'del', pid: number, tracks: number[] | number) => {
+    const trackParam = Array.isArray(tracks) ? tracks.join(',') : String(tracks);
+    return fetchWithCreds(`/playlist/tracks?op=${op}&pid=${pid}&tracks=${trackParam}&timestamp=${Date.now()}`);
+  },
+
   getAlbum: async (id: number) => {
     const res = await fetchWithCreds(`/album?id=${id}`);
     if (res.album) {

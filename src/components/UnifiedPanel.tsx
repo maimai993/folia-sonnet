@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio, Cloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist } from '../types';
+import { SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, NeteasePlaylist } from '../types';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
 import QueueTab from './panelTab/QueueTab';
@@ -77,8 +77,10 @@ interface UnifiedPanelProps {
     onVolumeChange: (val: number) => void;
     onToggleMute: () => void;
     localPlaylists: LocalPlaylist[];
+    neteasePlaylists: NeteasePlaylist[];
     onSaveCurrentQueueAsPlaylist: (name: string) => Promise<void>;
     onAddCurrentSongToLocalPlaylist: (playlistId: string) => Promise<void>;
+    onAddCurrentSongToNeteasePlaylist: (playlistId: number) => Promise<void>;
     onOpenCurrentLocalAlbum: () => void;
     onOpenCurrentLocalArtist: () => void;
 }
@@ -141,8 +143,10 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     onVolumeChange,
     onToggleMute,
     localPlaylists,
+    neteasePlaylists,
     onSaveCurrentQueueAsPlaylist,
     onAddCurrentSongToLocalPlaylist,
+    onAddCurrentSongToNeteasePlaylist,
     onOpenCurrentLocalAlbum,
     onOpenCurrentLocalArtist,
 }) => {
@@ -243,7 +247,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 onToggle();
                                             }}
                                             localPlaylists={localPlaylists}
+                                            neteasePlaylists={neteasePlaylists}
                                             onAddCurrentSongToLocalPlaylist={onAddCurrentSongToLocalPlaylist}
+                                            onAddCurrentSongToNeteasePlaylist={onAddCurrentSongToNeteasePlaylist}
                                             onOpenCurrentLocalAlbum={() => {
                                                 onOpenCurrentLocalAlbum();
                                                 onToggle();
@@ -252,6 +258,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 onOpenCurrentLocalArtist();
                                                 onToggle();
                                             }}
+                                            isDaylight={isDaylight}
                                         />
                                     )}
                                     {currentTab === 'controls' && (
@@ -304,6 +311,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 onShuffle={onShuffle}
                                                 canSaveLocalPlaylist={Boolean(isLocal && playQueue.some(song => ((song as any).isLocal === true) || (song as any).localData))}
                                                 onSaveCurrentQueueAsPlaylist={onSaveCurrentQueueAsPlaylist}
+                                                isDaylight={isDaylight}
                                             />
                                         )
                                     )}

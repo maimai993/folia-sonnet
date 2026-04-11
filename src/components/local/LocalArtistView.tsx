@@ -11,6 +11,7 @@ interface LocalArtistViewProps {
     onBack: () => void;
     onPlaySong: (song: LocalSong, queue?: LocalSong[]) => void;
     onAddToQueue?: (song: LocalSong) => void;
+    onSelectAlbum?: (albumName: string) => void;
     theme: unknown;
     isDaylight: boolean;
 }
@@ -28,6 +29,7 @@ const LocalArtistView: React.FC<LocalArtistViewProps> = ({
     onBack,
     onPlaySong,
     onAddToQueue,
+    onSelectAlbum,
     isDaylight,
 }) => {
     const { t } = useTranslation();
@@ -105,7 +107,21 @@ const LocalArtistView: React.FC<LocalArtistViewProps> = ({
                                         {song.title || song.fileName}
                                     </div>
                                     <div className="text-xs truncate opacity-40 group-hover:opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                                        {song.matchedAlbumName || song.album || t('localMusic.unknownAlbum')}
+                                        <span
+                                            className={onSelectAlbum ? 'cursor-pointer hover:underline hover:opacity-100 transition-opacity' : ''}
+                                            onClick={(event) => {
+                                                if (!onSelectAlbum) {
+                                                    return;
+                                                }
+                                                event.stopPropagation();
+                                                const albumName = song.matchedAlbumName || song.album;
+                                                if (albumName) {
+                                                    onSelectAlbum(albumName);
+                                                }
+                                            }}
+                                        >
+                                            {song.matchedAlbumName || song.album || t('localMusic.unknownAlbum')}
+                                        </span>
                                     </div>
                                 </div>
                                 <div className="w-12 md:w-16 text-right text-xs font-medium opacity-30 group-hover:opacity-80" style={{ color: 'var(--text-secondary)' }}>

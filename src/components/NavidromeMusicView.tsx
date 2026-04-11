@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Settings2, Loader2, RefreshCw } from 'lucide-react';
+import { Settings2, Loader2, RefreshCw, User, ListMusic, Shuffle, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Carousel3D from './Carousel3D';
 import NavidromeAlbumView from './NavidromeAlbumView';
-import { SubsonicAlbum, NavidromeSong, NavidromeConfig } from '../types/navidrome';
+import NavidromeCollectionView from './navidrome/NavidromeCollectionView';
+import NavidromeArtistView from './navidrome/NavidromeArtistView';
+import { SubsonicAlbum, NavidromeSong, NavidromeConfig, SubsonicPlaylist, SubsonicSong, SubsonicArtist } from '../types/navidrome';
 import { navidromeApi, getNavidromeConfig } from '../services/navidromeService';
 import { Theme } from '../types';
+import { createCoverPlaceholder, pickRandomSongCoverUrl, resolveNavidromeArtistCoverUrl } from '../utils/coverPlaceholders';
 
 interface NavidromeMusicViewProps {
     onPlaySong: (song: NavidromeSong, queue?: NavidromeSong[]) => void;
@@ -17,6 +20,14 @@ interface NavidromeMusicViewProps {
     focusedAlbumIndex?: number;
     setFocusedAlbumIndex?: (index: number) => void;
 }
+
+type NaviSection = 'albums' | 'playlists' | 'artists';
+type NaviSelection =
+    | { type: 'album'; album: SubsonicAlbum; }
+    | { type: 'playlist'; playlist: SubsonicPlaylist; songs: SubsonicSong[]; }
+    | { type: 'random'; songs: SubsonicSong[]; }
+    | { type: 'favorites'; songs: SubsonicSong[]; }
+    | { type: 'artist'; artist: SubsonicArtist; };
 
 const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
     onPlaySong,
@@ -29,19 +40,21 @@ const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
 }) => {
     const { t } = useTranslation();
 
-    // Config state
     const [config, setConfig] = useState<NavidromeConfig | null>(null);
     const [isConfigured, setIsConfigured] = useState(false);
 
-    // Data state
     const [albums, setAlbums] = useState<SubsonicAlbum[]>([]);
+    const [playlists, setPlaylists] = useState<SubsonicPlaylist[]>([]);
+    const [artists, setArtists] = useState<SubsonicArtist[]>([]);
+    const [favoriteSongs, setFavoriteSongs] = useState<SubsonicSong[]>([]);
+    const [randomSongs, setRandomSongs] = useState<SubsonicSong[]>([]);
+    const [selectedItem, setSelectedItem] = useState<NaviSelection | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [selectedAlbum, setSelectedAlbum] = useState<SubsonicAlbum | null>(null);
+    const [section, setSection] = useState<NaviSection>('albums');
 
-    // Sort mode
-    const [sortMode, setSortMode] = useState<'alphabeticalByName' | 'newest' | 'recent'>('alphabeticalByName');
+    const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
+    const [focusedArtistIndex, setFocusedArtistIndex] = useState(0);
 
-    // Check configuration on mount
     useEffect(() => {
         const storedConfig = getNavidromeConfig();
         if (storedConfig && storedConfig.serverUrl && storedConfig.username && storedConfig.passwordHash) {
@@ -52,66 +65,219 @@ const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
         }
     }, []);
 
-    // Fetch albums when config is ready
-    const fetchAlbums = useCallback(async () => {
-        if (!config) return;
+    const fetchLibrary = useCallback(async () => {
+        if (!config) {
+            return;
+        }
 
         setIsLoading(true);
         try {
-            const fetchedAlbums = await navidromeApi.getAlbumList2(config, sortMode, 500);
+            const [fetchedAlbums, fetchedPlaylists, fetchedArtists, fetchedFavorites, fetchedRandom] = await Promise.all([
+                navidromeApi.getAlbumList2(config, 'alphabeticalByName', 500),
+                navidromeApi.getPlaylists(config),
+                navidromeApi.getArtists(config),
+                navidromeApi.getStarred2(config),
+                navidromeApi.getRandomSongs(config, 100),
+            ]);
+
             setAlbums(fetchedAlbums);
+            setPlaylists(fetchedPlaylists);
+            setArtists(fetchedArtists);
+            setFavoriteSongs(fetchedFavorites);
+            setRandomSongs(fetchedRandom);
         } catch (error) {
-            console.error('[NavidromeMusicView] Failed to fetch albums:', error);
+            console.error('[NavidromeMusicView] Failed to fetch library:', error);
         } finally {
             setIsLoading(false);
         }
-    }, [config, sortMode]);
+    }, [config]);
 
     useEffect(() => {
         if (isConfigured && config) {
-            fetchAlbums();
+            void fetchLibrary();
         }
-    }, [isConfigured, config, fetchAlbums]);
+    }, [config, fetchLibrary, isConfigured]);
 
-    // Convert SubsonicAlbum to Carousel3D item format
-    const carouselItems = albums.map(album => ({
+    const albumItems = useMemo(() => albums.map(album => ({
         id: album.id,
         name: album.name,
         coverUrl: album.coverArt && config
             ? navidromeApi.getCoverArtUrl(config, album.coverArt, 600)
             : undefined,
         trackCount: album.songCount,
-        description: album.artist
-    }));
+        description: album.artist,
+    })), [albums, config]);
 
-    // Handle album selection
-    const handleAlbumSelect = (item: { id: string | number; name: string }) => {
-        const album = albums.find(a => a.id === item.id);
+    const playlistItems = useMemo(() => {
+        if (!config) {
+            return [];
+        }
+
+        const getCoverUrl = (coverArtId: string, size?: number) => navidromeApi.getCoverArtUrl(config, coverArtId, size);
+        const randomCoverUrl = pickRandomSongCoverUrl(randomSongs, getCoverUrl, 600, 3)
+            || createCoverPlaceholder(t('navidrome.random') || '随机音乐', 'playlist');
+        const favoriteCoverUrl = pickRandomSongCoverUrl(favoriteSongs, getCoverUrl, 600, 3)
+            || createCoverPlaceholder(t('navidrome.favorites') || '收藏', 'playlist');
+
+        const virtualItems = [
+            {
+                id: '__navi_random__',
+                name: t('navidrome.random') || '随机音乐',
+                coverUrl: randomCoverUrl,
+                trackCount: randomSongs.length,
+                description: t('navidrome.randomDesc') || '即时随机播放列表',
+            },
+            {
+                id: '__navi_favorites__',
+                name: t('navidrome.favorites') || '收藏',
+                coverUrl: favoriteCoverUrl,
+                trackCount: favoriteSongs.length,
+                description: t('navidrome.favoritesDesc') || '已标星歌曲',
+            },
+        ];
+
+        const playlistCards = playlists.map(playlist => ({
+            id: playlist.id,
+            name: playlist.name,
+            coverUrl: playlist.coverArt ? navidromeApi.getCoverArtUrl(config, playlist.coverArt, 600) : undefined,
+            trackCount: playlist.songCount,
+            description: playlist.owner || t('home.playlists'),
+        }));
+
+        return [...virtualItems, ...playlistCards];
+    }, [config, favoriteSongs, playlists, randomSongs, t]);
+
+    const artistItems = useMemo(() => artists.map(artist => ({
+        id: artist.id,
+        name: artist.name,
+        coverUrl: config
+            ? (resolveNavidromeArtistCoverUrl(
+                artist,
+                (coverArtId, size) => navidromeApi.getCoverArtUrl(config, coverArtId, size),
+                600
+            ) || createCoverPlaceholder(artist.name, 'artist'))
+            : createCoverPlaceholder(artist.name, 'artist'),
+        trackCount: artist.albumCount,
+        description: t('navidrome.artists'),
+    })), [artists, config, t]);
+
+    const handleAlbumSelect = (item: { id: string | number; }) => {
+        const album = albums.find(entry => entry.id === item.id);
         if (album) {
-            setSelectedAlbum(album);
+            setSelectedItem({ type: 'album', album });
         }
     };
 
-    // Style variants based on theme
+    const handlePlaylistSelect = async (item: { id: string | number; name: string; }) => {
+        if (!config) {
+            return;
+        }
+
+        if (item.id === '__navi_random__') {
+            const songs = randomSongs.length > 0 ? randomSongs : await navidromeApi.getRandomSongs(config, 100);
+            setRandomSongs(songs);
+            setSelectedItem({ type: 'random', songs });
+            return;
+        }
+
+        if (item.id === '__navi_favorites__') {
+            const songs = favoriteSongs.length > 0 ? favoriteSongs : await navidromeApi.getStarred2(config);
+            setFavoriteSongs(songs);
+            setSelectedItem({ type: 'favorites', songs });
+            return;
+        }
+
+        const playlist = playlists.find(entry => entry.id === item.id);
+        if (!playlist) {
+            return;
+        }
+
+        const playlistDetail = await navidromeApi.getPlaylist(config, playlist.id);
+        setSelectedItem({
+            type: 'playlist',
+            playlist: playlistDetail || playlist,
+            songs: playlistDetail?.entry || [],
+        });
+    };
+
+    const handleArtistSelect = (item: { id: string | number; }) => {
+        const artist = artists.find(entry => entry.id === item.id);
+        if (artist) {
+            setSelectedItem({ type: 'artist', artist });
+        }
+    };
+
     const buttonBg = isDaylight ? 'bg-black/5 hover:bg-black/10' : 'bg-white/10 hover:bg-white/20';
     const textColor = isDaylight ? 'text-black' : 'text-white';
 
-    // If an album is selected, show the album view
-    if (selectedAlbum && config) {
+    if (selectedItem && config) {
+        if (selectedItem.type === 'album') {
+            return (
+                <NavidromeAlbumView
+                    album={selectedItem.album}
+                    config={config}
+                    onBack={() => setSelectedItem(null)}
+                    onPlaySong={onPlaySong}
+                    onMatchSong={onMatchSong}
+                    theme={theme}
+                    isDaylight={isDaylight}
+                />
+            );
+        }
+
+        if (selectedItem.type === 'artist') {
+            return (
+                <NavidromeArtistView
+                    artist={selectedItem.artist}
+                    config={config}
+                    onBack={() => setSelectedItem(null)}
+                    onPlaySong={onPlaySong}
+                    theme={theme}
+                    isDaylight={isDaylight}
+                />
+            );
+        }
+
         return (
-            <NavidromeAlbumView
-                album={selectedAlbum}
+            <NavidromeCollectionView
+                title={selectedItem.type === 'playlist'
+                    ? selectedItem.playlist.name
+                    : selectedItem.type === 'favorites'
+                        ? (t('navidrome.favorites') || '收藏')
+                        : (t('navidrome.random') || '随机音乐')}
+                subtitle={selectedItem.type === 'playlist'
+                    ? (selectedItem.playlist.owner || t('home.playlists'))
+                    : selectedItem.type === 'favorites'
+                        ? (t('navidrome.favoritesDesc') || '已标星歌曲')
+                        : (t('navidrome.randomDesc') || '即时随机播放列表')}
+                coverUrl={selectedItem.type === 'playlist'
+                    ? (selectedItem.playlist.coverArt
+                        ? navidromeApi.getCoverArtUrl(config, selectedItem.playlist.coverArt, 600)
+                        : createCoverPlaceholder(selectedItem.playlist.name, 'playlist'))
+                    : selectedItem.type === 'favorites'
+                        ? (pickRandomSongCoverUrl(
+                            selectedItem.songs,
+                            (coverArtId, size) => navidromeApi.getCoverArtUrl(config, coverArtId, size),
+                            600,
+                            3
+                        ) || createCoverPlaceholder(t('navidrome.favorites') || '收藏', 'playlist'))
+                        : (pickRandomSongCoverUrl(
+                            selectedItem.songs,
+                            (coverArtId, size) => navidromeApi.getCoverArtUrl(config, coverArtId, size),
+                            600,
+                            3
+                        ) || createCoverPlaceholder(t('navidrome.random') || '随机音乐', 'playlist'))}
+                placeholderVariant="playlist"
+                songs={selectedItem.songs}
                 config={config}
-                onBack={() => setSelectedAlbum(null)}
+                onBack={() => setSelectedItem(null)}
                 onPlaySong={onPlaySong}
-                onMatchSong={onMatchSong}
                 theme={theme}
                 isDaylight={isDaylight}
             />
         );
     }
 
-    // Not configured state
     if (!isConfigured) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center p-8">
@@ -138,17 +304,42 @@ const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
         );
     }
 
+    const currentItems = section === 'albums' ? albumItems : section === 'playlists' ? playlistItems : artistItems;
+    const currentSelect = section === 'albums' ? handleAlbumSelect : section === 'playlists' ? handlePlaylistSelect : handleArtistSelect;
+    const currentFocusedIndex = section === 'albums' ? focusedAlbumIndex : section === 'playlists' ? focusedPlaylistIndex : focusedArtistIndex;
+    const currentFocusedSetter = section === 'albums' ? setFocusedAlbumIndex : section === 'playlists' ? setFocusedPlaylistIndex : setFocusedArtistIndex;
+    const currentEmptyMessage = section === 'albums'
+        ? t('navidrome.noAlbumsFound')
+        : section === 'playlists'
+            ? (t('navidrome.noPlaylistsFound') || 'No playlists found')
+            : (t('navidrome.noArtistsFound') || 'No artists found');
+
     return (
         <div className="w-full h-full flex flex-col p-6 pb-32 overflow-hidden relative">
-            {/* Header */}
-            <div className="flex items-center justify-center gap-3 mb-4 z-10">
-                <div className="text-sm font-medium uppercase tracking-widest" style={{ color: 'var(--text-primary)' }}>
-                    {t('navidrome.albums')}
+            <div className="flex items-center justify-center gap-3 mb-4 z-10 flex-wrap">
+                <div className="flex gap-2 text-xs">
+                    <button
+                        onClick={() => setSection('albums')}
+                        className={`px-3 py-1.5 rounded-full transition-all ${section === 'albums' ? 'bg-white/10 opacity-100' : 'opacity-40 hover:opacity-80'}`}
+                    >
+                        {t('navidrome.albums')}
+                    </button>
+                    <button
+                        onClick={() => setSection('playlists')}
+                        className={`px-3 py-1.5 rounded-full transition-all ${section === 'playlists' ? 'bg-white/10 opacity-100' : 'opacity-40 hover:opacity-80'}`}
+                    >
+                        <span className="inline-flex items-center gap-1"><ListMusic size={12} />{t('home.playlists')}</span>
+                    </button>
+                    <button
+                        onClick={() => setSection('artists')}
+                        className={`px-3 py-1.5 rounded-full transition-all ${section === 'artists' ? 'bg-white/10 opacity-100' : 'opacity-40 hover:opacity-80'}`}
+                    >
+                        <span className="inline-flex items-center gap-1"><User size={12} />{t('navidrome.artists')}</span>
+                    </button>
                 </div>
 
-                {/* Refresh Button */}
                 <button
-                    onClick={fetchAlbums}
+                    onClick={fetchLibrary}
                     className={`p-1.5 rounded-full ${buttonBg} transition-colors`}
                     disabled={isLoading}
                     title="Refresh"
@@ -159,32 +350,19 @@ const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
                         <RefreshCw size={14} style={{ color: 'var(--text-primary)' }} />
                     )}
                 </button>
-
-                <span className="opacity-30" style={{ color: 'var(--text-primary)' }}>|</span>
-
-                {/* Sort Options */}
-                <div className="flex gap-2 text-xs">
-                    {(['alphabeticalByName', 'newest', 'recent'] as const).map(mode => (
-                        <button
-                            key={mode}
-                            onClick={() => setSortMode(mode)}
-                            className={`px-2 py-1 rounded transition-opacity ${sortMode === mode ? 'opacity-100' : 'opacity-40 hover:opacity-80'
-                                }`}
-                            style={{ color: 'var(--text-primary)' }}
-                        >
-                            {mode === 'alphabeticalByName' && (t('navidrome.allAlbums') || 'A-Z')}
-                            {mode === 'newest' && (t('navidrome.recentlyAdded') || 'New')}
-                            {mode === 'recent' && (t('navidrome.recents') || 'Recent')}
-                        </button>
-                    ))}
-                </div>
             </div>
 
-            {/* Main Content - Carousel3D */}
+            {section === 'playlists' && (
+                <div className="flex items-center justify-center gap-4 mb-2 opacity-50 text-xs">
+                    <span className="inline-flex items-center gap-1"><Shuffle size={12} />{t('navidrome.random') || '随机音乐'}</span>
+                    <span className="inline-flex items-center gap-1"><Heart size={12} />{t('navidrome.favorites') || '收藏'}</span>
+                </div>
+            )}
+
             <div className="flex-1 relative overflow-hidden">
                 <AnimatePresence mode="wait">
                     <motion.div
-                        key={sortMode}
+                        key={section}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
@@ -192,13 +370,13 @@ const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
                         className="w-full h-full"
                     >
                         <Carousel3D
-                            items={carouselItems}
-                            onSelect={handleAlbumSelect}
+                            items={currentItems}
+                            onSelect={currentSelect}
                             isLoading={isLoading}
-                            emptyMessage={t('navidrome.noAlbumsFound')}
+                            emptyMessage={currentEmptyMessage}
                             textBottomClass="-bottom-1"
-                            initialFocusedIndex={focusedAlbumIndex}
-                            onFocusedIndexChange={setFocusedAlbumIndex}
+                            initialFocusedIndex={currentFocusedIndex}
+                            onFocusedIndexChange={currentFocusedSetter}
                             isDaylight={isDaylight}
                         />
                     </motion.div>

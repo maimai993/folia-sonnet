@@ -29,6 +29,7 @@ export default {
     "liked": "已添加到喜欢的音乐",
     "likeFailed": "添加失败",
     "unliked": "已取消喜欢",
+    "playlistUpdated": "歌单已更新",
     "songUnavailable": "歌曲已下架",
     "queueShuffled": "播放队列已打乱",
   },
@@ -298,7 +299,8 @@ export default {
     "noArtistsFound": "未找到艺术家",
     "noPlaylistsFound": "还没有歌单",
     "editPlaylist": "编辑歌单",
-    "finishEditing": "完成编辑"
+    "finishEditing": "完成编辑",
+    "deletePlaylist": "删除歌单"
   },
   "navidrome": {
     "title": "Navi",
@@ -322,7 +324,13 @@ export default {
     "allAlbums": "全部",
     "recentlyAdded": "最新",
     "noAlbumsFound": "未找到专辑",
+    "noPlaylistsFound": "未找到歌单",
+    "noArtistsFound": "未找到艺术家",
     "noSongsFound": "未找到歌曲",
+    "random": "随机音乐",
+    "randomDesc": "即时随机播放列表",
+    "favorites": "收藏",
+    "favoritesDesc": "已标星歌曲",
     "fetchingLyrics": "正在匹配歌词...",
     "lyricsFromNetease": "歌词来自网易云音乐",
     "saveSettings": "保存设置",

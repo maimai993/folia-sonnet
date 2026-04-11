@@ -11,6 +11,14 @@ import {
     NavidromeSong,
     LyricsBySongIdResponse,
     StructuredLyric,
+    PlaylistsResponse,
+    PlaylistResponse,
+    SubsonicPlaylist,
+    RandomSongsResponse,
+    Starred2Response,
+    ArtistsIndexResponse,
+    ArtistResponse,
+    SubsonicArtist,
 } from '../types/navidrome';
 import md5 from 'blueimp-md5';
 
@@ -156,6 +164,81 @@ export const navidromeApi = {
             }
         } catch (e) {
             console.error('[Navidrome] getAlbum failed:', e);
+        }
+        return null;
+    },
+
+    getPlaylists: async (config: NavidromeConfig): Promise<SubsonicPlaylist[]> => {
+        try {
+            const res = await fetchSubsonic<PlaylistsResponse>(config, 'getPlaylists');
+            if (res['subsonic-response'].status === 'ok') {
+                return res['subsonic-response'].playlists?.playlist || [];
+            }
+        } catch (e) {
+            console.error('[Navidrome] getPlaylists failed:', e);
+        }
+        return [];
+    },
+
+    getPlaylist: async (config: NavidromeConfig, id: string): Promise<SubsonicPlaylist | null> => {
+        try {
+            const res = await fetchSubsonic<PlaylistResponse>(config, 'getPlaylist', { id });
+            if (res['subsonic-response'].status === 'ok') {
+                return res['subsonic-response'].playlist;
+            }
+        } catch (e) {
+            console.error('[Navidrome] getPlaylist failed:', e);
+        }
+        return null;
+    },
+
+    getRandomSongs: async (config: NavidromeConfig, size: number = 100): Promise<SubsonicSong[]> => {
+        try {
+            const res = await fetchSubsonic<RandomSongsResponse>(config, 'getRandomSongs', {
+                size: size.toString(),
+            });
+            if (res['subsonic-response'].status === 'ok') {
+                return res['subsonic-response'].randomSongs?.song || [];
+            }
+        } catch (e) {
+            console.error('[Navidrome] getRandomSongs failed:', e);
+        }
+        return [];
+    },
+
+    getStarred2: async (config: NavidromeConfig): Promise<SubsonicSong[]> => {
+        try {
+            const res = await fetchSubsonic<Starred2Response>(config, 'getStarred2');
+            if (res['subsonic-response'].status === 'ok') {
+                return res['subsonic-response'].starred2?.song || [];
+            }
+        } catch (e) {
+            console.error('[Navidrome] getStarred2 failed:', e);
+        }
+        return [];
+    },
+
+    getArtists: async (config: NavidromeConfig): Promise<SubsonicArtist[]> => {
+        try {
+            const res = await fetchSubsonic<ArtistsIndexResponse>(config, 'getArtists');
+            if (res['subsonic-response'].status === 'ok') {
+                const indexes = res['subsonic-response'].artists?.index || [];
+                return indexes.flatMap(index => index.artist || []);
+            }
+        } catch (e) {
+            console.error('[Navidrome] getArtists failed:', e);
+        }
+        return [];
+    },
+
+    getArtist: async (config: NavidromeConfig, id: string): Promise<(SubsonicArtist & { album?: SubsonicAlbum[]; }) | null> => {
+        try {
+            const res = await fetchSubsonic<ArtistResponse>(config, 'getArtist', { id });
+            if (res['subsonic-response'].status === 'ok') {
+                return res['subsonic-response'].artist;
+            }
+        } catch (e) {
+            console.error('[Navidrome] getArtist failed:', e);
         }
         return null;
     },

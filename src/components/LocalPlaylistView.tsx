@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { Play, ChevronLeft, Folder, RefreshCw, Trash2, Plus, Pencil, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Play, ChevronLeft, Folder, RefreshCw, Trash2, Plus, Pencil, X } from 'lucide-react';
 import { LocalSong } from '../types';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import DeleteFolderConfirmModal from './DeleteFolderConfirmModal';
-import { removeSongsFromLocalPlaylist, reorderLocalPlaylistSongs } from '../services/localPlaylistService';
+import { removeSongsFromLocalPlaylist } from '../services/localPlaylistService';
 
 interface LocalPlaylistViewProps {
     title: string;
@@ -23,6 +23,7 @@ interface LocalPlaylistViewProps {
     onRefresh?: () => void;
     playlistId?: string;
     isEditablePlaylist?: boolean;
+    onDeletePlaylist?: () => void;
     theme: any;
     isDaylight: boolean;
 }
@@ -40,12 +41,10 @@ interface LocalPlaylistRowProps {
     onSelectAlbum?: (albumName: string) => void;
     t: ReturnType<typeof useTranslation>['t'];
     isEditing?: boolean;
-    onMoveUp?: (song: LocalSong) => void;
-    onMoveDown?: (song: LocalSong) => void;
     onRemove?: (song: LocalSong) => void;
 }
 
-const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQueue, onSelectArtist, onSelectAlbum, t, isEditing = false, onMoveUp, onMoveDown, onRemove }: LocalPlaylistRowProps) => {
+const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQueue, onSelectArtist, onSelectAlbum, t, isEditing = false, onRemove }: LocalPlaylistRowProps) => {
     const formatDuration = (ms: number) => {
         const minutes = Math.floor(ms / 60000);
         const seconds = ((ms % 60000) / 1000).toFixed(0);
@@ -127,24 +126,6 @@ const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQu
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            onMoveUp?.(song);
-                        }}
-                        className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                    >
-                        <ArrowUp size={14} />
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onMoveDown?.(song);
-                        }}
-                        className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                    >
-                        <ArrowDown size={14} />
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
                             onRemove?.(song);
                         }}
                         className="p-2 rounded-full hover:bg-red-500/10 text-red-400 transition-colors"
@@ -159,7 +140,7 @@ const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQu
 
 LocalPlaylistRow.displayName = 'LocalPlaylistRow';
 
-const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, onBack, onPlaySong, onAddToQueue, onSelectArtist, onSelectAlbum, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, playlistId, isEditablePlaylist = false, theme, isDaylight }) => {
+const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, onBack, onPlaySong, onAddToQueue, onSelectArtist, onSelectAlbum, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, playlistId, isEditablePlaylist = false, onDeletePlaylist, theme, isDaylight }) => {
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBg = isDaylight ? 'bg-white/60 backdrop-blur-md border border-white/20 shadow-xl' : 'bg-black/40 backdrop-blur-md border border-white/10';
     const panelBg = isDaylight ? 'bg-white/40 shadow-xl border border-white/20' : 'bg-black/20';
@@ -243,29 +224,6 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
 
         return displayedSongs.slice(visibleRange.startIndex, visibleRange.endIndex + 1);
     }, [displayedSongs, visibleRange.endIndex, visibleRange.startIndex]);
-
-    const persistEditableSongs = async (nextSongs: LocalSong[]) => {
-        if (!playlistId) {
-            return;
-        }
-
-        setEditableSongs(nextSongs);
-        await reorderLocalPlaylistSongs(playlistId, nextSongs.map(song => song.id));
-        onRefresh?.();
-    };
-
-    const handleMoveSong = async (songId: string, direction: -1 | 1) => {
-        const currentIndex = editableSongs.findIndex(song => song.id === songId);
-        const targetIndex = currentIndex + direction;
-        if (currentIndex === -1 || targetIndex < 0 || targetIndex >= editableSongs.length) {
-            return;
-        }
-
-        const nextSongs = [...editableSongs];
-        const [song] = nextSongs.splice(currentIndex, 1);
-        nextSongs.splice(targetIndex, 0, song);
-        await persistEditableSongs(nextSongs);
-    };
 
     const handleRemoveSong = async (songId: string) => {
         if (!playlistId) {
@@ -370,14 +328,26 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                         )}
 
                         {isEditablePlaylist && (
-                            <button
-                                onClick={() => setIsEditMode(prev => !prev)}
-                                className="w-full py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10"
-                                style={{ color: 'var(--text-primary)' }}
-                            >
-                                <Pencil size={16} />
-                                {isEditMode ? (t('localMusic.finishEditing') || '完成编辑') : (t('localMusic.editPlaylist') || '编辑歌单')}
-                            </button>
+                            <div className="space-y-2">
+                                <button
+                                    onClick={() => setIsEditMode(prev => !prev)}
+                                    className="w-full py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10"
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <Pencil size={16} />
+                                    {isEditMode ? (t('localMusic.finishEditing') || '完成编辑') : (t('localMusic.editPlaylist') || '编辑歌单')}
+                                </button>
+
+                                {onDeletePlaylist && (
+                                    <button
+                                        onClick={onDeletePlaylist}
+                                        className="w-full py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-500"
+                                    >
+                                        <Trash2 size={16} />
+                                        {t('localMusic.deletePlaylist') || '删除歌单'}
+                                    </button>
+                                )}
+                            </div>
                         )}
                     </div>
                 </div>
@@ -422,8 +392,6 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                                                 onSelectAlbum={onSelectAlbum}
                                                 t={t}
                                                 isEditing={isEditMode}
-                                                onMoveUp={() => handleMoveSong(song.id, -1)}
-                                                onMoveDown={() => handleMoveSong(song.id, 1)}
                                                 onRemove={() => handleRemoveSong(song.id)}
                                             />
                                         </div>

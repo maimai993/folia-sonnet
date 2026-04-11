@@ -512,6 +512,9 @@ const Home: React.FC<HomeProps> = ({
                     }}
                     onSelectAlbum={(id) => onSelectAlbum(id)}
                     onSelectArtist={onSelectArtist}
+                    currentUserId={user?.userId}
+                    isLikedSongsPlaylist={Boolean(playlists[0] && playlists[0].id === selectedPlaylist.id)}
+                    onPlaylistMutated={onRefreshUser}
                     theme={theme}
                     isDaylight={isDaylight}
                 />

@@ -115,6 +115,10 @@ export const deleteLocalPlaylist = async (playlistId: string): Promise<void> => 
     await persistPlaylists(playlists.filter(playlist => playlist.id !== playlistId));
 };
 
+export const canDeleteLocalPlaylist = (playlist: LocalPlaylist | null | undefined): boolean => {
+    return Boolean(playlist && !playlist.isFavorite);
+};
+
 export const addSongsToLocalPlaylist = async (playlistId: string, songs: LocalSong[]): Promise<LocalPlaylist | null> => {
     const songIds = songs.map(song => song.id);
     return updateLocalPlaylist(playlistId, playlist => ({

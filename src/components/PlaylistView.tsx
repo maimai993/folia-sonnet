@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Play, ChevronLeft, Disc, Loader2 } from 'lucide-react';
+import { Play, ChevronLeft, Disc, Loader2, Pencil, X } from 'lucide-react';
 import { NeteasePlaylist, SongResult } from '../types';
 import { neteaseApi } from '../services/netease';
-import { saveToCache, getFromCache } from '../services/db';
+import { saveToCache, getFromCache, removeFromCache } from '../services/db';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { formatSongName } from '../utils/songNameFormatter';
@@ -14,11 +14,14 @@ interface PlaylistViewProps {
   onPlayAll: (songs: SongResult[]) => void;
   onSelectAlbum: (albumId: number) => void;
   onSelectArtist: (artistId: number) => void;
+  currentUserId?: number | null;
+  isLikedSongsPlaylist?: boolean;
+  onPlaylistMutated?: () => Promise<void> | void;
   theme: any;
   isDaylight: boolean;
 }
 
-const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySong, onPlayAll, onSelectAlbum, onSelectArtist, theme, isDaylight }) => {
+const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySong, onPlayAll, onSelectAlbum, onSelectArtist, currentUserId, isLikedSongsPlaylist = false, onPlaylistMutated, theme, isDaylight }) => {
   // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
   const glassBg = isDaylight ? 'bg-white/60 backdrop-blur-md border border-white/20 shadow-xl' : 'bg-black/40 backdrop-blur-md border border-white/10';
   const panelBg = isDaylight ? 'bg-white/40 shadow-xl border border-white/20' : 'bg-black/20';
@@ -29,6 +32,7 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   // Scroll Ref
   const containerRef = useRef<HTMLDivElement>(null);
@@ -226,6 +230,25 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
     return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
   };
 
+  const canEditPlaylist = Boolean(currentUserId && playlist.creator?.userId === currentUserId);
+
+  const handleRemoveTrack = async (trackId: number) => {
+    try {
+      if (isLikedSongsPlaylist) {
+        await neteaseApi.likeSong(trackId, false);
+      } else {
+        await neteaseApi.updatePlaylistTracks('del', playlist.id, [trackId]);
+      }
+      const nextTracks = tracks.filter(track => track.id !== trackId);
+      setTracks(nextTracks);
+      await saveToCache(CACHE_KEY, { tracks: nextTracks, snapshotTime: Date.now() });
+      await removeFromCache(`playlist_detail_${playlist.id}`);
+      await onPlaylistMutated?.();
+    } catch (error) {
+      console.error('Failed to remove track from playlist', error);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -279,14 +302,26 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
           </div>
 
           <div className="w-full">
-            <button
-              onClick={() => onPlayAll(tracks)}
-              className="w-full py-3.5 rounded-full font-bold text-sm transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:scale-105 transform duration-200"
-              style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-color)' }}
-            >
-              <Play size={18} fill="currentColor" />
-              {t('playlist.playAll')}
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => onPlayAll(tracks)}
+                className="w-full py-3.5 rounded-full font-bold text-sm transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:scale-105 transform duration-200"
+                style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-color)' }}
+              >
+                <Play size={18} fill="currentColor" />
+                {t('playlist.playAll')}
+              </button>
+              {canEditPlaylist && (
+                <button
+                  onClick={() => setIsEditMode(prev => !prev)}
+                  className="w-full py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10"
+                  style={{ color: 'var(--text-primary)' }}
+                >
+                  <Pencil size={16} />
+                  {isEditMode ? (t('localMusic.finishEditing') || '完成编辑') : (t('localMusic.editPlaylist') || '编辑歌单')}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -356,6 +391,19 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
                 <div className="w-12 md:w-16 text-right text-xs font-medium opacity-30 group-hover:opacity-80" style={{ color: 'var(--text-secondary)' }}>
                   {formatDuration(track.dt || track.duration)}
                 </div>
+
+                {isEditMode && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleRemoveTrack(track.id);
+                    }}
+                    className="p-2 ml-2 rounded-full hover:bg-red-500/10 text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                    title={t('localMusic.delete') || '删除'}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             ))}
 

@@ -9,6 +9,7 @@ import LyricMatchModal from './LyricMatchModal';
 import LocalPlaylistView from './LocalPlaylistView';
 import Carousel3D from './Carousel3D';
 import LocalArtistView from './local/LocalArtistView';
+import { deleteLocalPlaylist } from '../services/localPlaylistService';
 
 interface LocalMusicViewProps {
     localSongs: LocalSong[];
@@ -421,6 +422,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 }}
                 onPlaySong={onPlaySong}
                 onAddToQueue={onAddToQueue}
+                onSelectAlbum={onSelectAlbumGroup}
                 theme={theme}
                 isDaylight={isDaylight}
             />
@@ -447,6 +449,13 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 onRefresh={onRefresh}
                 playlistId={resolvedSelectedGroup.playlistId}
                 isEditablePlaylist={resolvedSelectedGroup.type === 'playlist' && !resolvedSelectedGroup.isVirtual}
+                onDeletePlaylist={resolvedSelectedGroup.type === 'playlist' && resolvedSelectedGroup.playlistId && !resolvedSelectedGroup.isVirtual
+                    ? async () => {
+                        await deleteLocalPlaylist(resolvedSelectedGroup.playlistId!);
+                        await onRefresh();
+                        setSelectedGroup(null);
+                    }
+                    : undefined}
                 onSelectArtist={onSelectArtistGroup}
                 onSelectAlbum={onSelectAlbumGroup}
                 theme={theme}

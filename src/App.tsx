@@ -3,7 +3,7 @@ import { Play, Pause, Repeat, Repeat1, Settings2, CheckCircle2, AlertCircle, Spa
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { LyricParserFactory } from './utils/lyrics/LyricParserFactory';
-import { saveSessionData, getSessionData, getFromCache, getFromCacheWithMigration, saveToCache, getLocalSongs } from './services/db';
+import { saveSessionData, getSessionData, getFromCache, getFromCacheWithMigration, saveToCache, getLocalSongs, removeFromCache } from './services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from './services/coverCache';
 import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from './services/localMusicService';
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from './services/onlinePlayback';
@@ -40,7 +40,7 @@ const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
 const LOCAL_PREWARM_DELAY_MS = 1000;
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
-const AUDIO_FADE_DURATION_MS = 140;
+const clampMediaVolume = (value: number) => Math.min(1, Math.max(0, value));
 
 const findLatestActiveLineIndex = (lines: LyricData['lines'], time: number) => {
     for (let index = lines.length - 1; index >= 0; index -= 1) {
@@ -308,6 +308,7 @@ export default function App() {
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const gainNodeRef = useRef<GainNode | null>(null);
+    const replayGainLinearRef = useRef(1);
     const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
     const blobUrlRef = useRef<string | null>(null);
     const queueScrollRef = useRef<HTMLDivElement>(null);
@@ -315,7 +316,6 @@ export default function App() {
     const currentSongRef = useRef<number | null>(null);
     const volumePreviewFrameRef = useRef<number | null>(null);
     const pendingVolumePreviewRef = useRef<number | null>(null);
-    const fadeAnimationFrameRef = useRef<number | null>(null);
     const [isLyricsLoading, setIsLyricsLoading] = useState(false);
 
     // Local Music State
@@ -389,6 +389,38 @@ export default function App() {
         handleToggleMute,
     } = useAppPreferences(setStatusMsg);
 
+    const getTargetPlaybackVolume = useCallback(() => (isMuted ? 0 : volume), [isMuted, volume]);
+
+    const syncOutputGain = useCallback((targetVolume: number, smoothing = 0.015) => {
+        const clampedVolume = clampMediaVolume(targetVolume);
+
+        if (gainNodeRef.current && audioContextRef.current) {
+            if (smoothing <= 0) {
+                gainNodeRef.current.gain.setValueAtTime(
+                    replayGainLinearRef.current * clampedVolume,
+                    audioContextRef.current.currentTime
+                );
+            } else {
+                gainNodeRef.current.gain.setTargetAtTime(
+                    replayGainLinearRef.current * clampedVolume,
+                    audioContextRef.current.currentTime,
+                    smoothing
+                );
+            }
+
+            if (audioRef.current) {
+                audioRef.current.volume = 1;
+                audioRef.current.muted = false;
+            }
+            return;
+        }
+
+        if (audioRef.current) {
+            audioRef.current.volume = clampedVolume;
+            audioRef.current.muted = isMuted;
+        }
+    }, [isMuted]);
+
     const handlePreviewVolume = useCallback((val: number) => {
         pendingVolumePreviewRef.current = val;
 
@@ -399,54 +431,13 @@ export default function App() {
         volumePreviewFrameRef.current = requestAnimationFrame(() => {
             volumePreviewFrameRef.current = null;
             const nextVolume = pendingVolumePreviewRef.current;
-            if (audioRef.current && nextVolume !== null) {
-                audioRef.current.volume = nextVolume;
+            if (nextVolume !== null) {
+                syncOutputGain(nextVolume, 0.015);
             }
         });
-    }, []);
+    }, [syncOutputGain]);
 
-    const stopFadeAnimation = useCallback(() => {
-        if (fadeAnimationFrameRef.current !== null) {
-            cancelAnimationFrame(fadeAnimationFrameRef.current);
-            fadeAnimationFrameRef.current = null;
-        }
-    }, []);
-
-    const getTargetPlaybackVolume = useCallback(() => (isMuted ? 0 : volume), [isMuted, volume]);
-
-    const animateAudioVolume = useCallback((from: number, to: number, durationMs: number, onComplete?: () => void) => {
-        stopFadeAnimation();
-
-        const audio = audioRef.current;
-        if (!audio || durationMs <= 0) {
-            if (audio) {
-                audio.volume = to;
-            }
-            onComplete?.();
-            return;
-        }
-
-        const start = performance.now();
-        const tick = (now: number) => {
-            const progress = Math.min(1, (now - start) / durationMs);
-            const eased = 1 - Math.pow(1 - progress, 3);
-            if (audioRef.current) {
-                audioRef.current.volume = from + (to - from) * eased;
-            }
-
-            if (progress < 1) {
-                fadeAnimationFrameRef.current = requestAnimationFrame(tick);
-                return;
-            }
-
-            fadeAnimationFrameRef.current = null;
-            onComplete?.();
-        };
-
-        fadeAnimationFrameRef.current = requestAnimationFrame(tick);
-    }, [stopFadeAnimation]);
-
-    const playWithFade = useCallback(async () => {
+    const resumePlayback = useCallback(async () => {
         if (!audioRef.current) {
             return;
         }
@@ -456,29 +447,20 @@ export default function App() {
             await audioContextRef.current.resume();
         }
 
-        const targetVolume = getTargetPlaybackVolume();
-        audioRef.current.volume = 0;
+        syncOutputGain(getTargetPlaybackVolume(), 0);
         await audioRef.current.play();
         setPlayerState(PlayerState.PLAYING);
-        animateAudioVolume(0, targetVolume, AUDIO_FADE_DURATION_MS);
-    }, [animateAudioVolume, getTargetPlaybackVolume]);
+    }, [getTargetPlaybackVolume, syncOutputGain]);
 
-    const pauseWithFade = useCallback(() => {
+    const pausePlayback = useCallback(() => {
         if (!audioRef.current) {
             return;
         }
 
-        const audio = audioRef.current;
-        const currentVolume = audio.volume;
-        animateAudioVolume(currentVolume, 0, AUDIO_FADE_DURATION_MS, () => {
-            if (!audioRef.current) {
-                return;
-            }
-            audioRef.current.pause();
-            audioRef.current.volume = getTargetPlaybackVolume();
-            setPlayerState(PlayerState.PAUSED);
-        });
-    }, [animateAudioVolume, getTargetPlaybackVolume]);
+        audioRef.current.pause();
+        syncOutputGain(getTargetPlaybackVolume(), 0);
+        setPlayerState(PlayerState.PAUSED);
+    }, [getTargetPlaybackVolume, syncOutputGain]);
 
     // Theme Controller
     // manages current theme, daylight mode, and related actions like generating AI themes 
@@ -570,9 +552,8 @@ export default function App() {
             if (volumePreviewFrameRef.current !== null) {
                 cancelAnimationFrame(volumePreviewFrameRef.current);
             }
-            stopFadeAnimation();
         };
-    }, [stopFadeAnimation]);
+    }, []);
 
     useEffect(() => {
         if (isPanelOpen && panelTab === 'account') {
@@ -946,6 +927,18 @@ export default function App() {
         await addSongsToLocalPlaylist(playlistId, [currentSong.localData]);
         await loadLocalPlaylists();
     }, [currentSong, loadLocalPlaylists]);
+
+    const addCurrentSongToNeteasePlaylist = useCallback(async (playlistId: number) => {
+        if (!currentSong || isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
+            throw new Error('Current song is not a Netease song');
+        }
+
+        await neteaseApi.updatePlaylistTracks('add', playlistId, [currentSong.id]);
+        await removeFromCache(`playlist_tracks_${playlistId}`);
+        await removeFromCache(`playlist_detail_${playlistId}`);
+        await refreshUserData();
+        setStatusMsg({ type: 'success', text: t('status.playlistUpdated') || '歌单已更新' });
+    }, [currentSong, refreshUserData, t]);
 
     const handleLocalSongMatch = async (localSong: LocalSong): Promise<{ updatedLocalSong: LocalSong, matchedSongResult: SongResult | null; }> => {
         let updatedLocalSong = localSong;
@@ -1345,6 +1338,7 @@ export default function App() {
             gainNode.connect(analyser);
             analyser.connect(ctx.destination);
             sourceRef.current = source;
+            syncOutputGain(getTargetPlaybackVolume(), 0);
         } catch (e) {
             console.error("Audio Context Setup Failed:", e);
         }
@@ -1718,10 +1712,9 @@ export default function App() {
     // Volume & Mute Sync
     useEffect(() => {
         if (audioRef.current) {
-            audioRef.current.volume = volume;
-            audioRef.current.muted = isMuted;
+            syncOutputGain(getTargetPlaybackVolume(), 0.015);
         }
-    }, [volume, isMuted]);
+    }, [getTargetPlaybackVolume, syncOutputGain]);
 
     useEffect(() => {
         localStorage.setItem('local_replaygain_mode', replayGainMode);
@@ -1764,18 +1757,15 @@ export default function App() {
         }
 
         const linearGain = Math.pow(10, effectiveReplayGainDb / 20);
+        replayGainLinearRef.current = linearGain;
         
         try {
-            gainNodeRef.current.gain.setTargetAtTime(
-                linearGain, 
-                audioContextRef.current.currentTime, 
-                0.1
-            );
+            syncOutputGain(getTargetPlaybackVolume(), 0.1);
             console.log(`[AudioContext] ReplayGain mode=${replayGainMode} gain=${effectiveReplayGainDb}dB (raw=${replayGainDb}dB, peak=${replayGainPeak ?? 'n/a'}, linear=${linearGain.toFixed(2)})`);
         } catch (e) {
             console.warn('[AudioContext] Failed to apply ReplayGain', e);
         }
-    }, [currentSong, replayGainMode]);
+    }, [currentSong, getTargetPlaybackVolume, replayGainMode, syncOutputGain]);
 
     // Media Session API Integration
     useEffect(() => {
@@ -1811,7 +1801,7 @@ export default function App() {
             navigator.mediaSession.setActionHandler('play', async () => {
                 if (audioRef.current) {
                     try {
-                        await playWithFade();
+                        await resumePlayback();
                     } catch (e) {
                         console.error("MediaSession play failed", e);
                     }
@@ -1819,20 +1809,20 @@ export default function App() {
             });
             navigator.mediaSession.setActionHandler('pause', () => {
                 if (audioRef.current) {
-                    pauseWithFade();
+                    pausePlayback();
                 }
             });
             navigator.mediaSession.setActionHandler('previoustrack', handlePrevTrack);
             navigator.mediaSession.setActionHandler('nexttrack', handleNextTrack);
         }
-    }, [cachedCoverUrl, currentSong, handleNextTrack, handlePrevTrack, pauseWithFade, playWithFade, playerState, t]);
+    }, [cachedCoverUrl, currentSong, handleNextTrack, handlePrevTrack, pausePlayback, playerState, resumePlayback, t]);
 
 
     useEffect(() => {
         if (audioSrc && audioRef.current) {
             // Only play if shouldAutoPlay is true AND lyrics are not loading
             if (shouldAutoPlay.current && !isLyricsLoading) {
-                audioRef.current.volume = getTargetPlaybackVolume();
+                syncOutputGain(getTargetPlaybackVolume(), 0);
                 const playPromise = audioRef.current.play();
                 if (playPromise !== undefined) {
                     playPromise
@@ -1852,7 +1842,7 @@ export default function App() {
                 setPlayerState(PlayerState.PAUSED);
             }
         }
-    }, [audioSrc, getTargetPlaybackVolume, isLyricsLoading]);
+    }, [audioSrc, getTargetPlaybackVolume, isLyricsLoading, syncOutputGain]);
 
     // Ref to track currentLineIndex inside animation loop (avoid callback recreation)
     const currentLineIndexRef = useRef(currentLineIndex);
@@ -1945,9 +1935,9 @@ export default function App() {
         e?.stopPropagation();
         if (audioRef.current) {
             if (playerState === PlayerState.PLAYING) {
-                pauseWithFade();
+                pausePlayback();
             } else {
-                void playWithFade();
+                void resumePlayback();
             }
         }
     };
@@ -2676,8 +2666,10 @@ export default function App() {
                         onVolumeChange={handleSetVolume}
                         onToggleMute={handleToggleMute}
                         localPlaylists={localPlaylists}
+                        neteasePlaylists={playlists}
                         onSaveCurrentQueueAsPlaylist={saveCurrentQueueAsLocalPlaylist}
                         onAddCurrentSongToLocalPlaylist={addCurrentSongToLocalPlaylist}
+                        onAddCurrentSongToNeteasePlaylist={addCurrentSongToNeteasePlaylist}
                         onOpenCurrentLocalAlbum={openCurrentLocalAlbum}
                         onOpenCurrentLocalArtist={openCurrentLocalArtist}
                     />

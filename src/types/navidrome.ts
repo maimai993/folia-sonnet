@@ -90,6 +90,60 @@ export interface AlbumResponse {
     album: SubsonicAlbum;
 }
 
+export interface SubsonicPlaylist {
+    id: string;
+    name: string;
+    comment?: string;
+    owner?: string;
+    public?: boolean;
+    songCount: number;
+    duration: number;
+    created?: string;
+    changed?: string;
+    coverArt?: string;
+    entry?: SubsonicSong[];
+}
+
+export interface PlaylistsResponse {
+    playlists?: {
+        playlist?: SubsonicPlaylist[];
+    };
+}
+
+export interface PlaylistResponse {
+    playlist: SubsonicPlaylist;
+}
+
+export interface ArtistsIndexResponse {
+    artists?: {
+        ignoredArticles?: string;
+        index?: Array<{
+            name: string;
+            artist: SubsonicArtist[];
+        }>;
+    };
+}
+
+export interface ArtistResponse {
+    artist: SubsonicArtist & {
+        album?: SubsonicAlbum[];
+    };
+}
+
+export interface RandomSongsResponse {
+    randomSongs?: {
+        song?: SubsonicSong[];
+    };
+}
+
+export interface Starred2Response {
+    starred2?: {
+        song?: SubsonicSong[];
+        album?: SubsonicAlbum[];
+        artist?: SubsonicArtist[];
+    };
+}
+
 // Ping Response
 export interface PingResponse {
     // Empty, just checks status

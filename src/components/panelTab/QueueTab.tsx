@@ -4,6 +4,7 @@ import { List, useListRef, type ListImperativeAPI } from 'react-window';
 import { Shuffle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult } from '../../types';
+import TextInputDialog from '../shared/TextInputDialog';
 
 interface QueueTabProps {
     playQueue: SongResult[];
@@ -14,6 +15,7 @@ interface QueueTabProps {
     onShuffle?: () => void;
     canSaveLocalPlaylist?: boolean;
     onSaveCurrentQueueAsPlaylist?: (name: string) => Promise<void>;
+    isDaylight?: boolean;
 }
 
 const QueueTab: React.FC<QueueTabProps> = ({
@@ -25,6 +27,7 @@ const QueueTab: React.FC<QueueTabProps> = ({
     onShuffle,
     canSaveLocalPlaylist = false,
     onSaveCurrentQueueAsPlaylist,
+    isDaylight = false,
 }) => {
     const { t } = useTranslation();
     const ITEM_HEIGHT = 50;
@@ -46,6 +49,7 @@ const QueueTab: React.FC<QueueTabProps> = ({
     const isInitialMountRef = React.useRef(true);
     const lastScrolledIndexRef = React.useRef<number>(-1);
     const wasOpenRef = React.useRef(false);
+    const [isSaveDialogOpen, setIsSaveDialogOpen] = React.useState(false);
 
     // Reset initial mount state when panel is opened
     React.useEffect(() => {
@@ -87,17 +91,7 @@ const QueueTab: React.FC<QueueTabProps> = ({
         if (!onSaveCurrentQueueAsPlaylist) {
             return;
         }
-
-        const playlistName = window.prompt(t('localMusic.enterPlaylistName') || '输入歌单名称');
-        if (!playlistName?.trim()) {
-            return;
-        }
-
-        try {
-            await onSaveCurrentQueueAsPlaylist(playlistName);
-        } catch (error) {
-            console.error('Failed to save local playlist', error);
-        }
+        setIsSaveDialogOpen(true);
     };
 
     // Row component for rendering each item
@@ -138,50 +132,68 @@ const QueueTab: React.FC<QueueTabProps> = ({
     }
 
     return (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full max-h-[300px]">
-            {/* Header */}
-            <div className="flex items-center justify-between px-2 pb-2 shrink-0">
-                <span className="text-xs font-medium opacity-60">
-                    {t('queue.title')} ({playQueue.length})
-                </span>
-                <div className="flex items-center gap-1">
-                    {canSaveLocalPlaylist && (
-                        <button
-                            onClick={handleSavePlaylist}
-                            className="px-2 py-1 rounded-md hover:bg-white/10 transition-colors opacity-60 hover:opacity-100 text-[10px] font-medium"
-                            title={t('localMusic.saveQueueAsPlaylist') || '保存为歌单'}
-                        >
-                            {t('localMusic.saveQueueAsPlaylist') || '保存为歌单'}
-                        </button>
-                    )}
-                    {onShuffle && (
-                        <button
-                            onClick={onShuffle}
-                            className="p-1.5 rounded-md hover:bg-white/10 transition-colors opacity-60 hover:opacity-100"
-                            title={t('queue.shuffle')}
-                        >
-                            <Shuffle size={14} />
-                        </button>
-                    )}
+        <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full max-h-[300px]">
+                <div className="flex items-center justify-between px-2 pb-2 shrink-0">
+                    <span className="text-xs font-medium opacity-60">
+                        {t('queue.title')} ({playQueue.length})
+                    </span>
+                    <div className="flex items-center gap-1">
+                        {canSaveLocalPlaylist && (
+                            <button
+                                onClick={handleSavePlaylist}
+                                className="px-2 py-1 rounded-md hover:bg-white/10 transition-colors opacity-60 hover:opacity-100 text-[10px] font-medium"
+                                title={t('localMusic.saveQueueAsPlaylist') || '保存为歌单'}
+                            >
+                                {t('localMusic.saveQueueAsPlaylist') || '保存为歌单'}
+                            </button>
+                        )}
+                        {onShuffle && (
+                            <button
+                                onClick={onShuffle}
+                                className="p-1.5 rounded-md hover:bg-white/10 transition-colors opacity-60 hover:opacity-100"
+                                title={t('queue.shuffle')}
+                            >
+                                <Shuffle size={14} />
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
 
-            <div
-                ref={queueScrollRef}
-                className="flex-1 -mx-2 px-2 overflow-hidden"
-            >
-                <List
-                    listRef={listRef}
-                    rowCount={playQueue.length}
-                    rowHeight={ITEM_HEIGHT}
-                    rowComponent={RowComponent}
-                    rowProps={{}}
-                    overscanCount={5}
-                    className="custom-scrollbar"
-                    style={{ height: CONTAINER_HEIGHT, width: '100%' }}
-                />
-            </div>
-        </motion.div>
+                <div
+                    ref={queueScrollRef}
+                    className="flex-1 -mx-2 px-2 overflow-hidden"
+                >
+                    <List
+                        listRef={listRef}
+                        rowCount={playQueue.length}
+                        rowHeight={ITEM_HEIGHT}
+                        rowComponent={RowComponent}
+                        rowProps={{}}
+                        overscanCount={5}
+                        className="custom-scrollbar"
+                        style={{ height: CONTAINER_HEIGHT, width: '100%' }}
+                    />
+                </div>
+            </motion.div>
+
+            <TextInputDialog
+                isOpen={isSaveDialogOpen}
+                onClose={() => setIsSaveDialogOpen(false)}
+                isDaylight={isDaylight}
+                title={t('localMusic.saveQueueAsPlaylist') || '保存为歌单'}
+                description={t('localMusic.enterPlaylistName') || '输入歌单名称'}
+                placeholder={t('localMusic.enterPlaylistName') || '输入歌单名称'}
+                confirmLabel={t('localMusic.save')}
+                onConfirm={async (playlistName) => {
+                    try {
+                        await onSaveCurrentQueueAsPlaylist?.(playlistName);
+                    } catch (error) {
+                        console.error('Failed to save local playlist', error);
+                    }
+                }}
+            />
+        </>
     );
 };
 
