@@ -35,7 +35,7 @@ const ThemedDialog: React.FC<ThemedDialogProps> = ({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4"
+                    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
                     onClick={onClose}
                 >
                     <motion.div
@@ -44,7 +44,7 @@ const ThemedDialog: React.FC<ThemedDialogProps> = ({
                         exit={{ scale: 0.94, opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 280, damping: 24 }}
                         onClick={(event) => event.stopPropagation()}
-                        className={`relative w-full ${maxWidthClass} rounded-3xl border ${bgClass} p-6 shadow-2xl backdrop-blur-md`}
+                        className={`relative w-full ${maxWidthClass} rounded-3xl border ${bgClass} p-6 shadow-2xl backdrop-blur-sm`}
                     >
                         <button
                             type="button"

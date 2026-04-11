@@ -10,6 +10,7 @@ import AccountTab from './panelTab/AccountTab';
 import LocalTab from './panelTab/LocalTab';
 import FmTab from './panelTab/FmTab';
 import NaviTab from './panelTab/NaviTab';
+import PlaylistSelectionDialog from './shared/PlaylistSelectionDialog';
 
 export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi';
 
@@ -158,13 +159,32 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const coverAreaRef = React.useRef<HTMLDivElement>(null);
     const hideActionLayerTimeoutRef = React.useRef<number | null>(null);
     const [isCoverActionsVisible, setIsCoverActionsVisible] = React.useState(false);
-    const [openPlaylistPickerSignal, setOpenPlaylistPickerSignal] = React.useState(0);
+    const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = React.useState(false);
 
     const isNavidrome = currentSong && (currentSong as any).isNavidrome === true;
     const isLocal = currentSong && !isNavidrome && (((currentSong as any).isLocal === true) || Boolean((currentSong as any).localData));
     const isNetease = Boolean(currentSong && !isLocal && !isNavidrome);
     const canAddCurrentSongToPlaylist = (isLocal && localPlaylists.length > 0) || (isNetease && neteasePlaylists.length > 0);
     const supportsHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const availablePlaylists = React.useMemo(() => {
+        if (isLocal) {
+            return localPlaylists.map((playlist) => ({
+                id: playlist.id,
+                name: playlist.name,
+                description: `${playlist.songIds.length} ${t('playlist.tracks')}`,
+            }));
+        }
+
+        if (isNetease) {
+            return neteasePlaylists.map((playlist) => ({
+                id: playlist.id,
+                name: playlist.name,
+                description: `${playlist.trackCount || 0} ${t('playlist.tracks')}`,
+            }));
+        }
+
+        return [];
+    }, [isLocal, isNetease, localPlaylists, neteasePlaylists, t]);
 
     const tabs = [
         { id: 'cover' as PanelTab, label: t('panel.cover'), icon: Disc },
@@ -221,12 +241,19 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     React.useEffect(() => {
         if (!isOpen) {
             setIsCoverActionsVisible(false);
+            setIsPlaylistPickerOpen(false);
         }
     }, [isOpen]);
 
     React.useEffect(() => {
         setIsCoverActionsVisible(false);
     }, [currentTab, currentSong?.id]);
+
+    React.useEffect(() => {
+        if (!canAddCurrentSongToPlaylist) {
+            setIsPlaylistPickerOpen(false);
+        }
+    }, [canAddCurrentSongToPlaylist]);
 
     React.useEffect(() => {
         if (!isCoverActionsVisible) {
@@ -351,7 +378,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                             onClick={(event) => {
                                                                 event.stopPropagation();
                                                                 setIsCoverActionsVisible(false);
-                                                                setOpenPlaylistPickerSignal(prev => prev + 1);
+                                                                setIsPlaylistPickerOpen(true);
                                                             }}
                                                             className="w-11 h-11 rounded-full border border-white/15 bg-black/25 text-white/90 backdrop-blur-md flex items-center justify-center transition-all hover:bg-black/40 hover:text-white"
                                                             title={t('localMusic.addToPlaylist') || '添加到歌单'}
@@ -397,10 +424,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 onSelectArtist(artistId);
                                                 onToggle();
                                             }}
-                                            localPlaylists={localPlaylists}
-                                            neteasePlaylists={neteasePlaylists}
-                                            onAddCurrentSongToLocalPlaylist={onAddCurrentSongToLocalPlaylist}
-                                            onAddCurrentSongToNeteasePlaylist={onAddCurrentSongToNeteasePlaylist}
                                             onOpenCurrentLocalAlbum={() => {
                                                 onOpenCurrentLocalAlbum();
                                                 onToggle();
@@ -417,8 +440,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 onOpenCurrentNavidromeArtist();
                                                 onToggle();
                                             }}
-                                            isDaylight={isDaylight}
-                                            openPlaylistPickerSignal={openPlaylistPickerSignal}
                                         />
                                     )}
                                     {currentTab === 'controls' && (
@@ -516,6 +537,27 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         </motion.div>
                     )}
                 </AnimatePresence>
+            </div>
+
+            <div className="pointer-events-auto">
+                <PlaylistSelectionDialog
+                    isOpen={isPlaylistPickerOpen}
+                    onClose={() => setIsPlaylistPickerOpen(false)}
+                    isDaylight={isDaylight}
+                    title={t('localMusic.addToPlaylist') || '添加到歌单'}
+                    description={t('home.playlists') || 'Playlists'}
+                    playlists={availablePlaylists}
+                    onSelect={async (playlistId) => {
+                        if (isLocal) {
+                            await onAddCurrentSongToLocalPlaylist(String(playlistId));
+                            return;
+                        }
+
+                        if (isNetease) {
+                            await onAddCurrentSongToNeteasePlaylist(Number(playlistId));
+                        }
+                    }}
+                />
             </div>
 
             {/* Toggle Button */}
