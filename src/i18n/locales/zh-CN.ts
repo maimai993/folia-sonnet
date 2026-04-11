@@ -229,6 +229,9 @@ export default {
   "localMusic": {
     "foldersAndPlaylists": "本地文件夹",
     "albums": "本地专辑",
+    "artists": "本地艺术家",
+    "customPlaylists": "歌单",
+    "favoritePlaylist": "我喜欢的音乐",
     "unknownAlbum": "未知专辑",
     "unknownArtist": "未知艺术家",
     "folder": "本地",
@@ -289,6 +292,13 @@ export default {
     "permissionNeeded": "需要恢复本地音乐访问权限",
     "grantPermission": "点击恢复",
     "chooseCover": "选择封面图片",
+    "addToPlaylist": "添加到歌单",
+    "saveQueueAsPlaylist": "保存为歌单",
+    "enterPlaylistName": "输入歌单名称",
+    "noArtistsFound": "未找到艺术家",
+    "noPlaylistsFound": "还没有歌单",
+    "editPlaylist": "编辑歌单",
+    "finishEditing": "完成编辑"
   },
   "navidrome": {
     "title": "Navi",

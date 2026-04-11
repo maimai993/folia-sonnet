@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { Play, ChevronLeft, Folder, RefreshCw, Trash2, Plus } from 'lucide-react';
+import { Play, ChevronLeft, Folder, RefreshCw, Trash2, Plus, Pencil, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { LocalSong } from '../types';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import DeleteFolderConfirmModal from './DeleteFolderConfirmModal';
+import { removeSongsFromLocalPlaylist, reorderLocalPlaylistSongs } from '../services/localPlaylistService';
 
 interface LocalPlaylistViewProps {
     title: string;
@@ -12,12 +13,16 @@ interface LocalPlaylistViewProps {
     onBack: () => void;
     onPlaySong: (song: LocalSong, queue?: LocalSong[]) => void;
     onAddToQueue?: (song: LocalSong) => void;
+    onSelectArtist?: (artistName: string) => void;
+    onSelectAlbum?: (albumName: string) => void;
     isFolderView?: boolean;
     allSongs?: LocalSong[];
     onResync?: () => void;
     onDelete?: () => void;
     onMatchSong?: (song: LocalSong) => void;
     onRefresh?: () => void;
+    playlistId?: string;
+    isEditablePlaylist?: boolean;
     theme: any;
     isDaylight: boolean;
 }
@@ -31,10 +36,16 @@ interface LocalPlaylistRowProps {
     songs: LocalSong[];
     onPlaySong: (song: LocalSong, queue?: LocalSong[]) => void;
     onAddToQueue?: (song: LocalSong) => void;
+    onSelectArtist?: (artistName: string) => void;
+    onSelectAlbum?: (albumName: string) => void;
     t: ReturnType<typeof useTranslation>['t'];
+    isEditing?: boolean;
+    onMoveUp?: (song: LocalSong) => void;
+    onMoveDown?: (song: LocalSong) => void;
+    onRemove?: (song: LocalSong) => void;
 }
 
-const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQueue, t }: LocalPlaylistRowProps) => {
+const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQueue, onSelectArtist, onSelectAlbum, t, isEditing = false, onMoveUp, onMoveDown, onRemove }: LocalPlaylistRowProps) => {
     const formatDuration = (ms: number) => {
         const minutes = Math.floor(ms / 60000);
         const seconds = ((ms % 60000) / 1000).toFixed(0);
@@ -55,11 +66,39 @@ const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQu
                     {song.title || song.fileName}
                 </div>
                 <div className="text-xs truncate opacity-40 group-hover:opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                    {song.matchedArtists || song.artist || t('localMusic.unknownArtist')}
-                    {song.matchedAlbumName && (
+                    <span
+                        className={onSelectArtist ? 'cursor-pointer hover:underline hover:opacity-100 transition-opacity' : ''}
+                        onClick={(event) => {
+                            if (!onSelectArtist) {
+                                return;
+                            }
+                            event.stopPropagation();
+                            const artistName = song.matchedArtists || song.artist;
+                            if (artistName) {
+                                onSelectArtist(artistName);
+                            }
+                        }}
+                    >
+                        {song.matchedArtists || song.artist || t('localMusic.unknownArtist')}
+                    </span>
+                    {(song.matchedAlbumName || song.album) && (
                         <>
                             <span className="mx-1.5">•</span>
-                            {song.matchedAlbumName}
+                            <span
+                                className={onSelectAlbum ? 'cursor-pointer hover:underline hover:opacity-100 transition-opacity' : ''}
+                                onClick={(event) => {
+                                    if (!onSelectAlbum) {
+                                        return;
+                                    }
+                                    event.stopPropagation();
+                                    const albumName = song.matchedAlbumName || song.album;
+                                    if (albumName) {
+                                        onSelectAlbum(albumName);
+                                    }
+                                }}
+                            >
+                                {song.matchedAlbumName || song.album}
+                            </span>
                         </>
                     )}
                 </div>
@@ -69,7 +108,7 @@ const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQu
                 {formatDuration(song.duration)}
             </div>
 
-            {onAddToQueue && (
+            {!isEditing && onAddToQueue && (
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -82,13 +121,45 @@ const LocalPlaylistRow = React.memo(({ song, index, songs, onPlaySong, onAddToQu
                     <Plus size={14} />
                 </button>
             )}
+
+            {isEditing && (
+                <div className="flex items-center gap-1 ml-2">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onMoveUp?.(song);
+                        }}
+                        className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                    >
+                        <ArrowUp size={14} />
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onMoveDown?.(song);
+                        }}
+                        className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                    >
+                        <ArrowDown size={14} />
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove?.(song);
+                        }}
+                        className="p-2 rounded-full hover:bg-red-500/10 text-red-400 transition-colors"
+                    >
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
         </div>
     );
 });
 
 LocalPlaylistRow.displayName = 'LocalPlaylistRow';
 
-const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, onBack, onPlaySong, onAddToQueue, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, theme, isDaylight }) => {
+const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, songs, onBack, onPlaySong, onAddToQueue, onSelectArtist, onSelectAlbum, isFolderView = false, allSongs, onResync, onDelete, onMatchSong, onRefresh, playlistId, isEditablePlaylist = false, theme, isDaylight }) => {
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBg = isDaylight ? 'bg-white/60 backdrop-blur-md border border-white/20 shadow-xl' : 'bg-black/40 backdrop-blur-md border border-white/10';
     const panelBg = isDaylight ? 'bg-white/40 shadow-xl border border-white/20' : 'bg-black/20';
@@ -104,6 +175,16 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
     const [isResyncing, setIsResyncing] = useState(false);
     const [listHeight, setListHeight] = useState(0);
     const [scrollTop, setScrollTop] = useState(0);
+    const [editableSongs, setEditableSongs] = useState<LocalSong[]>(songs);
+    const [isEditMode, setIsEditMode] = useState(false);
+
+    useEffect(() => {
+        setEditableSongs(songs);
+    }, [songs]);
+
+    useEffect(() => {
+        setIsEditMode(false);
+    }, [playlistId, title]);
 
     // Calculate total songs to delete (including nested folders)
     const songsToDeleteCount = useMemo(() => {
@@ -138,29 +219,64 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
         setScrollTop(0);
     }, [title, songs]);
 
-    const totalHeight = songs.length * TRACK_ROW_HEIGHT;
+    const displayedSongs = isEditablePlaylist ? editableSongs : songs;
+    const totalHeight = displayedSongs.length * TRACK_ROW_HEIGHT;
     const visibleRange = useMemo(() => {
-        if (songs.length === 0) {
+        if (displayedSongs.length === 0) {
             return { startIndex: 0, endIndex: -1 };
         }
 
         const viewportHeight = listHeight || 600;
         const startIndex = Math.max(0, Math.floor(scrollTop / TRACK_ROW_HEIGHT) - TRACK_OVERSCAN);
         const endIndex = Math.min(
-            songs.length - 1,
+            displayedSongs.length - 1,
             Math.ceil((scrollTop + viewportHeight) / TRACK_ROW_HEIGHT) + TRACK_OVERSCAN
         );
 
         return { startIndex, endIndex };
-    }, [listHeight, scrollTop, songs.length]);
+    }, [displayedSongs.length, listHeight, scrollTop]);
 
     const visibleSongs = useMemo(() => {
         if (visibleRange.endIndex < visibleRange.startIndex) {
             return [];
         }
 
-        return songs.slice(visibleRange.startIndex, visibleRange.endIndex + 1);
-    }, [songs, visibleRange.endIndex, visibleRange.startIndex]);
+        return displayedSongs.slice(visibleRange.startIndex, visibleRange.endIndex + 1);
+    }, [displayedSongs, visibleRange.endIndex, visibleRange.startIndex]);
+
+    const persistEditableSongs = async (nextSongs: LocalSong[]) => {
+        if (!playlistId) {
+            return;
+        }
+
+        setEditableSongs(nextSongs);
+        await reorderLocalPlaylistSongs(playlistId, nextSongs.map(song => song.id));
+        onRefresh?.();
+    };
+
+    const handleMoveSong = async (songId: string, direction: -1 | 1) => {
+        const currentIndex = editableSongs.findIndex(song => song.id === songId);
+        const targetIndex = currentIndex + direction;
+        if (currentIndex === -1 || targetIndex < 0 || targetIndex >= editableSongs.length) {
+            return;
+        }
+
+        const nextSongs = [...editableSongs];
+        const [song] = nextSongs.splice(currentIndex, 1);
+        nextSongs.splice(targetIndex, 0, song);
+        await persistEditableSongs(nextSongs);
+    };
+
+    const handleRemoveSong = async (songId: string) => {
+        if (!playlistId) {
+            return;
+        }
+
+        await removeSongsFromLocalPlaylist(playlistId, [songId]);
+        const nextSongs = editableSongs.filter(song => song.id !== songId);
+        setEditableSongs(nextSongs);
+        onRefresh?.();
+    };
 
     return (
         <motion.div
@@ -200,13 +316,13 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
 
                     <div className="text-center md:text-left space-y-2 w-full mb-6">
                         <h1 className="text-2xl md:text-3xl font-bold line-clamp-2" style={{ color: 'var(--text-primary)' }}>{title}</h1>
-                        <div className="text-xs mt-2 opacity-30" style={{ color: 'var(--text-secondary)' }}>{songs.length} {t('playlist.tracks')}</div>
+                        <div className="text-xs mt-2 opacity-30" style={{ color: 'var(--text-secondary)' }}>{displayedSongs.length} {t('playlist.tracks')}</div>
                     </div>
 
                     <div className="w-full space-y-3">
                         <button
                             onClick={() => {
-                                if (songs.length > 0) onPlaySong(songs[0], songs);
+                                if (displayedSongs.length > 0) onPlaySong(displayedSongs[0], displayedSongs);
                             }}
                             className="w-full py-3.5 rounded-full font-bold text-sm transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:scale-105 transform duration-200"
                             style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-color)' }}
@@ -252,6 +368,17 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                                 )}
                             </div>
                         )}
+
+                        {isEditablePlaylist && (
+                            <button
+                                onClick={() => setIsEditMode(prev => !prev)}
+                                className="w-full py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10"
+                                style={{ color: 'var(--text-primary)' }}
+                            >
+                                <Pencil size={16} />
+                                {isEditMode ? (t('localMusic.finishEditing') || '完成编辑') : (t('localMusic.editPlaylist') || '编辑歌单')}
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -288,10 +415,16 @@ const LocalPlaylistView: React.FC<LocalPlaylistViewProps> = ({ title, coverUrl, 
                                             <LocalPlaylistRow
                                                 song={song}
                                                 index={actualIndex}
-                                                songs={songs}
+                                                songs={displayedSongs}
                                                 onPlaySong={onPlaySong}
                                                 onAddToQueue={onAddToQueue}
+                                                onSelectArtist={onSelectArtist}
+                                                onSelectAlbum={onSelectAlbum}
                                                 t={t}
+                                                isEditing={isEditMode}
+                                                onMoveUp={() => handleMoveSong(song.id, -1)}
+                                                onMoveDown={() => handleMoveSong(song.id, 1)}
+                                                onRemove={() => handleRemoveSong(song.id)}
                                             />
                                         </div>
                                     );

@@ -20,10 +20,11 @@ import ArtistView from './components/ArtistView';
 import UnifiedPanel from './components/UnifiedPanel';
 import LyricMatchModal from './components/LyricMatchModal';
 import NaviLyricMatchModal, { NavidromeMatchData } from './components/NaviLyricMatchModal';
-import { LyricData, Theme, PlayerState, SongResult, LocalSong, ReplayGainMode } from './types';
+import { LyricData, Theme, PlayerState, SongResult, LocalSong, ReplayGainMode, LocalLibraryGroup, LocalPlaylist } from './types';
 import { NavidromeSong, NavidromeConfig, StructuredLyric } from './types/navidrome';
 import { neteaseApi } from './services/netease';
 import { navidromeApi, getNavidromeConfig } from './services/navidromeService';
+import { addSongsToLocalPlaylist, createLocalPlaylist, getLocalPlaylists, removeSongsFromLocalPlaylist, setLocalSongFavorite } from './services/localPlaylistService';
 import { useAppNavigation } from './hooks/useAppNavigation';
 import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useAppPreferences } from './hooks/useAppPreferences';
@@ -39,6 +40,7 @@ const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
 const LOCAL_PREWARM_DELAY_MS = 1000;
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
+const AUDIO_FADE_DURATION_MS = 140;
 
 const findLatestActiveLineIndex = (lines: LyricData['lines'], time: number) => {
     for (let index = lines.length - 1; index >= 0; index -= 1) {
@@ -313,10 +315,12 @@ export default function App() {
     const currentSongRef = useRef<number | null>(null);
     const volumePreviewFrameRef = useRef<number | null>(null);
     const pendingVolumePreviewRef = useRef<number | null>(null);
+    const fadeAnimationFrameRef = useRef<number | null>(null);
     const [isLyricsLoading, setIsLyricsLoading] = useState(false);
 
     // Local Music State
     const [localSongs, setLocalSongs] = useState<LocalSong[]>([]);
+    const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylist[]>([]);
     const [replayGainMode, setReplayGainMode] = useState<ReplayGainMode>(() => {
         const saved = localStorage.getItem('local_replaygain_mode');
         return saved === 'track' || saved === 'album' ? saved : 'off';
@@ -335,15 +339,19 @@ export default function App() {
     const [focusedRadioIndex, setFocusedRadioIndex] = useState(0);
     const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
     const [localMusicState, setLocalMusicState] = useState<{
-        activeRow: 0 | 1;
-        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; isVirtual?: boolean; } | null;
+        activeRow: 0 | 1 | 2 | 3;
+        selectedGroup: LocalLibraryGroup | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
+        focusedArtistIndex: number;
+        focusedPlaylistIndex: number;
     }>({
         activeRow: 0,
         selectedGroup: null,
         focusedFolderIndex: 0,
-        focusedAlbumIndex: 0
+        focusedAlbumIndex: 0,
+        focusedArtistIndex: 0,
+        focusedPlaylistIndex: 0,
     });
 
     // Preferences and Theme
@@ -396,6 +404,81 @@ export default function App() {
             }
         });
     }, []);
+
+    const stopFadeAnimation = useCallback(() => {
+        if (fadeAnimationFrameRef.current !== null) {
+            cancelAnimationFrame(fadeAnimationFrameRef.current);
+            fadeAnimationFrameRef.current = null;
+        }
+    }, []);
+
+    const getTargetPlaybackVolume = useCallback(() => (isMuted ? 0 : volume), [isMuted, volume]);
+
+    const animateAudioVolume = useCallback((from: number, to: number, durationMs: number, onComplete?: () => void) => {
+        stopFadeAnimation();
+
+        const audio = audioRef.current;
+        if (!audio || durationMs <= 0) {
+            if (audio) {
+                audio.volume = to;
+            }
+            onComplete?.();
+            return;
+        }
+
+        const start = performance.now();
+        const tick = (now: number) => {
+            const progress = Math.min(1, (now - start) / durationMs);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            if (audioRef.current) {
+                audioRef.current.volume = from + (to - from) * eased;
+            }
+
+            if (progress < 1) {
+                fadeAnimationFrameRef.current = requestAnimationFrame(tick);
+                return;
+            }
+
+            fadeAnimationFrameRef.current = null;
+            onComplete?.();
+        };
+
+        fadeAnimationFrameRef.current = requestAnimationFrame(tick);
+    }, [stopFadeAnimation]);
+
+    const playWithFade = useCallback(async () => {
+        if (!audioRef.current) {
+            return;
+        }
+
+        setupAudioAnalyzer();
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+            await audioContextRef.current.resume();
+        }
+
+        const targetVolume = getTargetPlaybackVolume();
+        audioRef.current.volume = 0;
+        await audioRef.current.play();
+        setPlayerState(PlayerState.PLAYING);
+        animateAudioVolume(0, targetVolume, AUDIO_FADE_DURATION_MS);
+    }, [animateAudioVolume, getTargetPlaybackVolume]);
+
+    const pauseWithFade = useCallback(() => {
+        if (!audioRef.current) {
+            return;
+        }
+
+        const audio = audioRef.current;
+        const currentVolume = audio.volume;
+        animateAudioVolume(currentVolume, 0, AUDIO_FADE_DURATION_MS, () => {
+            if (!audioRef.current) {
+                return;
+            }
+            audioRef.current.pause();
+            audioRef.current.volume = getTargetPlaybackVolume();
+            setPlayerState(PlayerState.PAUSED);
+        });
+    }, [animateAudioVolume, getTargetPlaybackVolume]);
 
     // Theme Controller
     // manages current theme, daylight mode, and related actions like generating AI themes 
@@ -462,6 +545,7 @@ export default function App() {
     useEffect(() => {
         restoreSession();
         loadLocalSongs();
+        void loadLocalPlaylists();
     }, []);
 
     const handleSetHomeViewTab = useCallback((tab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio') => {
@@ -472,6 +556,7 @@ export default function App() {
     useEffect(() => {
         const handleLocalMusicUpdated = () => {
             loadLocalSongs();
+            void loadLocalPlaylists();
         };
 
         window.addEventListener(LOCAL_MUSIC_UPDATED_EVENT, handleLocalMusicUpdated);
@@ -485,8 +570,9 @@ export default function App() {
             if (volumePreviewFrameRef.current !== null) {
                 cancelAnimationFrame(volumePreviewFrameRef.current);
             }
+            stopFadeAnimation();
         };
-    }, []);
+    }, [stopFadeAnimation]);
 
     useEffect(() => {
         if (isPanelOpen && panelTab === 'account') {
@@ -688,9 +774,178 @@ export default function App() {
         }
     };
 
+    const loadLocalPlaylists = useCallback(async () => {
+        try {
+            const playlists = await getLocalPlaylists();
+            setLocalPlaylists(playlists);
+        } catch (error) {
+            console.error('Failed to load local playlists:', error);
+        }
+    }, []);
+
     const onRefreshLocalSongs = async () => {
         await loadLocalSongs();
+        await loadLocalPlaylists();
     };
+
+    const getFavoriteLocalPlaylist = useMemo(
+        () => localPlaylists.find(playlist => playlist.isFavorite) ?? null,
+        [localPlaylists]
+    );
+
+    const isLocalSongLiked = useCallback((song: SongResult | null) => {
+        if (!song || !isLocalPlaybackSong(song) || !song.localData || !getFavoriteLocalPlaylist) {
+            return false;
+        }
+
+        return getFavoriteLocalPlaylist.songIds.includes(song.localData.id);
+    }, [getFavoriteLocalPlaylist]);
+
+    const openLocalLibraryGroup = useCallback((group: LocalLibraryGroup, row: 0 | 1 | 2 | 3) => {
+        handleSetHomeViewTab('local');
+        setLocalMusicState(prev => ({
+            ...prev,
+            activeRow: row,
+            selectedGroup: group,
+        }));
+        navigateToHome();
+    }, [handleSetHomeViewTab, navigateToHome]);
+
+    const openCurrentLocalAlbum = useCallback(() => {
+        if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) {
+            return;
+        }
+
+        const localSong = currentSong.localData;
+        const albumName = currentSong.al?.name || currentSong.album?.name || localSong.matchedAlbumName || localSong.album;
+        if (!albumName) {
+            return;
+        }
+
+        const songs = localSongs.filter(song => {
+            const candidateAlbum = song.matchedAlbumName || song.album || '';
+            return candidateAlbum === albumName;
+        });
+
+        if (!songs.length) {
+            return;
+        }
+
+        openLocalLibraryGroup({
+            type: 'album',
+            id: `album-current-${albumName}`,
+            name: albumName,
+            songs,
+            coverUrl: currentSong.al?.picUrl || currentSong.album?.picUrl,
+            albumId: localSong.matchedAlbumId,
+            description: currentSong.ar?.map(artist => artist.name).join(', '),
+        }, 1);
+    }, [currentSong, localSongs, openLocalLibraryGroup]);
+
+    const openCurrentLocalArtist = useCallback(() => {
+        if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) {
+            return;
+        }
+
+        const artistName = currentSong.ar?.[0]?.name || currentSong.artists?.[0]?.name || currentSong.localData.matchedArtists || currentSong.localData.artist;
+        if (!artistName) {
+            return;
+        }
+
+        const songs = localSongs.filter(song => {
+            const candidateArtist = song.matchedArtists || song.artist || '';
+            return candidateArtist === artistName;
+        });
+
+        if (!songs.length) {
+            return;
+        }
+
+        openLocalLibraryGroup({
+            type: 'artist',
+            id: `artist-current-${artistName}`,
+            name: artistName,
+            songs,
+            coverUrl: currentSong.al?.picUrl || currentSong.album?.picUrl,
+            description: `${songs.length} 首歌曲`,
+        }, 2);
+    }, [currentSong, localSongs, openLocalLibraryGroup]);
+
+    const openLocalAlbumByName = useCallback((albumName: string) => {
+        if (!albumName) {
+            return;
+        }
+
+        const songs = localSongs.filter(song => {
+            const candidateAlbum = song.matchedAlbumName || song.album || '';
+            return candidateAlbum === albumName;
+        });
+
+        if (!songs.length) {
+            return;
+        }
+
+        openLocalLibraryGroup({
+            type: 'album',
+            id: `album-by-name-${albumName}`,
+            name: albumName,
+            songs,
+            coverUrl: songs.find(song => song.matchedCoverUrl)?.matchedCoverUrl,
+            albumId: songs.find(song => song.matchedAlbumId)?.matchedAlbumId,
+            description: songs[0]?.matchedArtists || songs[0]?.artist,
+        }, 1);
+    }, [localSongs, openLocalLibraryGroup]);
+
+    const openLocalArtistByName = useCallback((artistName: string) => {
+        if (!artistName) {
+            return;
+        }
+
+        const songs = localSongs.filter(song => {
+            const candidateArtist = song.matchedArtists || song.artist || '';
+            return candidateArtist === artistName;
+        });
+
+        if (!songs.length) {
+            return;
+        }
+
+        openLocalLibraryGroup({
+            type: 'artist',
+            id: `artist-by-name-${artistName}`,
+            name: artistName,
+            songs,
+            coverUrl: songs.find(song => song.matchedCoverUrl)?.matchedCoverUrl,
+            description: `${songs.length} 首歌曲`,
+        }, 2);
+    }, [localSongs, openLocalLibraryGroup]);
+
+    const saveCurrentQueueAsLocalPlaylist = useCallback(async (name: string) => {
+        const trimmedName = name.trim();
+        if (!trimmedName) {
+            throw new Error('Playlist name is empty');
+        }
+
+        const queueSongs = playQueue
+            .map(song => (song as any).localData as LocalSong | undefined)
+            .filter((song): song is LocalSong => Boolean(song?.id));
+
+        if (!queueSongs.length) {
+            throw new Error('No local songs in queue');
+        }
+
+        await createLocalPlaylist(trimmedName, queueSongs);
+        await loadLocalPlaylists();
+    }, [loadLocalPlaylists, playQueue]);
+
+    const addCurrentSongToLocalPlaylist = useCallback(async (playlistId: string) => {
+        if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) {
+            throw new Error('Current song is not local');
+        }
+
+        await addSongsToLocalPlaylist(playlistId, [currentSong.localData]);
+        await loadLocalPlaylists();
+    }, [currentSong, loadLocalPlaylists]);
 
     const handleLocalSongMatch = async (localSong: LocalSong): Promise<{ updatedLocalSong: LocalSong, matchedSongResult: SongResult | null; }> => {
         let updatedLocalSong = localSong;
@@ -1556,12 +1811,7 @@ export default function App() {
             navigator.mediaSession.setActionHandler('play', async () => {
                 if (audioRef.current) {
                     try {
-                        setupAudioAnalyzer();
-                        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-                            audioContextRef.current.resume();
-                        }
-                        await audioRef.current.play();
-                        setPlayerState(PlayerState.PLAYING);
+                        await playWithFade();
                     } catch (e) {
                         console.error("MediaSession play failed", e);
                     }
@@ -1569,20 +1819,20 @@ export default function App() {
             });
             navigator.mediaSession.setActionHandler('pause', () => {
                 if (audioRef.current) {
-                    audioRef.current.pause();
-                    setPlayerState(PlayerState.PAUSED);
+                    pauseWithFade();
                 }
             });
             navigator.mediaSession.setActionHandler('previoustrack', handlePrevTrack);
             navigator.mediaSession.setActionHandler('nexttrack', handleNextTrack);
         }
-    }, [currentSong, playerState, cachedCoverUrl, handleNextTrack, handlePrevTrack, t]);
+    }, [cachedCoverUrl, currentSong, handleNextTrack, handlePrevTrack, pauseWithFade, playWithFade, playerState, t]);
 
 
     useEffect(() => {
         if (audioSrc && audioRef.current) {
             // Only play if shouldAutoPlay is true AND lyrics are not loading
             if (shouldAutoPlay.current && !isLyricsLoading) {
+                audioRef.current.volume = getTargetPlaybackVolume();
                 const playPromise = audioRef.current.play();
                 if (playPromise !== undefined) {
                     playPromise
@@ -1602,7 +1852,7 @@ export default function App() {
                 setPlayerState(PlayerState.PAUSED);
             }
         }
-    }, [audioSrc, isLyricsLoading]);
+    }, [audioSrc, getTargetPlaybackVolume, isLyricsLoading]);
 
     // Ref to track currentLineIndex inside animation loop (avoid callback recreation)
     const currentLineIndexRef = useRef(currentLineIndex);
@@ -1695,17 +1945,9 @@ export default function App() {
         e?.stopPropagation();
         if (audioRef.current) {
             if (playerState === PlayerState.PLAYING) {
-                audioRef.current.pause();
-                setPlayerState(PlayerState.PAUSED);
+                pauseWithFade();
             } else {
-                // Ensure audio context is set up and resumed
-                setupAudioAnalyzer();
-                if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-                    audioContextRef.current.resume();
-                }
-
-                audioRef.current.play();
-                setPlayerState(PlayerState.PLAYING);
+                void playWithFade();
             }
         }
     };
@@ -1785,9 +2027,21 @@ export default function App() {
     const handleLike = async () => {
         if (!currentSong) return;
 
-        // Check if local song
-        if (isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
-            setStatusMsg({ type: 'info', text: '仅网易云歌曲支持添加到"我喜欢的音乐"' });
+        if (isLocalPlaybackSong(currentSong) && currentSong.localData) {
+            const nextLiked = !isLocalSongLiked(currentSong);
+            try {
+                await setLocalSongFavorite(currentSong.localData, nextLiked);
+                await loadLocalPlaylists();
+                setStatusMsg({ type: 'success', text: nextLiked ? t('status.liked') : (t('status.unliked') || '已取消喜欢') });
+            } catch (e) {
+                console.error('Failed to update local favorite playlist', e);
+                setStatusMsg({ type: 'error', text: t('status.likeFailed') });
+            }
+            return;
+        }
+
+        if (isNavidromePlaybackSong(currentSong)) {
+            setStatusMsg({ type: 'info', text: 'Navidrome 歌曲的收藏能力尚未接入' });
             return;
         }
 
@@ -2107,11 +2361,14 @@ export default function App() {
                             onSelectPlaylist={handlePlaylistSelect}
                             onSelectAlbum={handleAlbumSelect}
                             onSelectArtist={handleArtistSelect}
-                                                localSongs={localSongs}
-                                                onRefreshLocalSongs={onRefreshLocalSongs}
-                                                onPlayLocalSong={onPlayLocalSong}
-                                                onAddLocalSongToQueue={handleLocalQueueAdd}
-                                                viewTab={homeViewTab}
+                            onSelectLocalAlbum={openLocalAlbumByName}
+                            onSelectLocalArtist={openLocalArtistByName}
+                            localSongs={localSongs}
+                            localPlaylists={localPlaylists}
+                            onRefreshLocalSongs={onRefreshLocalSongs}
+                            onPlayLocalSong={onPlayLocalSong}
+                            onAddLocalSongToQueue={handleLocalQueueAdd}
+                            viewTab={homeViewTab}
                             setViewTab={handleSetHomeViewTab}
                             focusedPlaylistIndex={focusedPlaylistIndex}
                             setFocusedPlaylistIndex={setFocusedPlaylistIndex}
@@ -2374,7 +2631,7 @@ export default function App() {
                         loopMode={loopMode}
                         onToggleLoop={toggleLoop}
                         onLike={handleLike}
-                        isLiked={currentSong ? likedSongIds.has(currentSong.id) : false}
+                        isLiked={currentSong ? (isLocalPlaybackSong(currentSong) ? isLocalSongLiked(currentSong) : likedSongIds.has(currentSong.id)) : false}
                         onGenerateAITheme={() => generateAITheme(lyrics, currentSong)}
                         isGeneratingTheme={isGeneratingTheme}
                         hasLyrics={!!lyrics}
@@ -2418,6 +2675,11 @@ export default function App() {
                         onVolumePreview={handlePreviewVolume}
                         onVolumeChange={handleSetVolume}
                         onToggleMute={handleToggleMute}
+                        localPlaylists={localPlaylists}
+                        onSaveCurrentQueueAsPlaylist={saveCurrentQueueAsLocalPlaylist}
+                        onAddCurrentSongToLocalPlaylist={addCurrentSongToLocalPlaylist}
+                        onOpenCurrentLocalAlbum={openCurrentLocalAlbum}
+                        onOpenCurrentLocalArtist={openCurrentLocalArtist}
                     />
                 )
             }

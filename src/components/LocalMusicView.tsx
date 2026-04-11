@@ -3,39 +3,35 @@ import { useTranslation } from 'react-i18next';
 import { FolderOpen, Music, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
-import { LocalSong } from '../types';
-import { importFolder, matchLyrics, deleteLocalSong, resyncFolder, deleteFolderSongs, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
+import { LocalSong, LocalLibraryGroup, LocalPlaylist } from '../types';
+import { importFolder, matchLyrics, resyncFolder, deleteFolderSongs, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 import LyricMatchModal from './LyricMatchModal';
 import LocalPlaylistView from './LocalPlaylistView';
 import Carousel3D from './Carousel3D';
-
-type LocalMusicGroup = {
-    type: 'folder' | 'album';
-    name: string;
-    songs: LocalSong[];
-    coverUrl?: string;
-    id?: string;
-    isVirtual?: boolean;
-    trackCount?: number;
-    description?: string;
-    albumId?: number;
-};
+import LocalArtistView from './local/LocalArtistView';
 
 interface LocalMusicViewProps {
     localSongs: LocalSong[];
+    localPlaylists: LocalPlaylist[];
     onRefresh: () => void;
     onPlaySong: (song: LocalSong, queue?: LocalSong[]) => void;
     onAddToQueue?: (song: LocalSong) => void;
     onPlaylistVisibilityChange?: (isOpen: boolean) => void;
-    activeRow: 0 | 1;
-    setActiveRow: (row: 0 | 1) => void;
-    selectedGroup: LocalMusicGroup | null;
-    setSelectedGroup: (group: LocalMusicGroup | null) => void;
+    activeRow: 0 | 1 | 2 | 3;
+    setActiveRow: (row: 0 | 1 | 2 | 3) => void;
+    selectedGroup: LocalLibraryGroup | null;
+    setSelectedGroup: (group: LocalLibraryGroup | null) => void;
     onMatchSong?: (song: LocalSong) => void;
     focusedFolderIndex?: number;
     setFocusedFolderIndex?: (index: number) => void;
     focusedAlbumIndex?: number;
     setFocusedAlbumIndex?: (index: number) => void;
+    focusedArtistIndex?: number;
+    setFocusedArtistIndex?: (index: number) => void;
+    focusedPlaylistIndex?: number;
+    setFocusedPlaylistIndex?: (index: number) => void;
+    onSelectArtistGroup?: (artistName: string) => void;
+    onSelectAlbumGroup?: (albumName: string) => void;
     theme: any;
     isDaylight: boolean;
 }
@@ -53,6 +49,7 @@ const getGroupCover = (songs: LocalSong[]) => {
 
 const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     localSongs,
+    localPlaylists,
     onRefresh,
     onPlaySong,
     onAddToQueue,
@@ -66,6 +63,12 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     setFocusedFolderIndex,
     focusedAlbumIndex = 0,
     setFocusedAlbumIndex,
+    focusedArtistIndex = 0,
+    setFocusedArtistIndex,
+    focusedPlaylistIndex = 0,
+    setFocusedPlaylistIndex,
+    onSelectArtistGroup,
+    onSelectAlbumGroup,
     theme,
     isDaylight
 }) => {
@@ -138,6 +141,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     const groups = useMemo(() => {
         const folders: Record<string, LocalSong[]> = {};
         const albums: Record<string, LocalSong[]> = {};
+        const artists: Record<string, LocalSong[]> = {};
 
         localSongs.forEach(song => {
             // Folder Grouping - all songs should have folderName from folder import
@@ -172,10 +176,18 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 if (!albums[albumKey]) albums[albumKey] = [];
                 albums[albumKey].push(song);
             }
+
+            const artistName = song.matchedArtists || song.artist;
+            if (artistName) {
+                if (!artists[artistName]) {
+                    artists[artistName] = [];
+                }
+                artists[artistName].push(song);
+            }
         });
 
         // Sort folders alphabetically
-        const folderList: LocalMusicGroup[] = Object.entries(folders).map(([name, songs]) => ({
+        const folderList: LocalLibraryGroup[] = Object.entries(folders).map(([name, songs]) => ({
             id: `folder-${name}`,
             name,
             songs,
@@ -199,7 +211,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         }
 
         // Sort albums
-        const albumList: LocalMusicGroup[] = Object.entries(albums).map(([key, songs]) => {
+        const albumList: LocalLibraryGroup[] = Object.entries(albums).map(([key, songs]) => {
             // Try to find a song with matched info to get the best metadata
             const representative = songs.find(s => s.matchedAlbumId) || songs[0];
             const name = representative.matchedAlbumName || representative.album || t('localMusic.unknownAlbum');
@@ -216,13 +228,54 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             };
         }).sort((a, b) => a.name.localeCompare(b.name));
 
-        return { folders: folderList, albums: albumList };
-    }, [localSongs, resolvedAllSongsLabel, t]);
+        const artistList: LocalLibraryGroup[] = Object.entries(artists).map(([name, songs]) => ({
+            id: `artist-${name}`,
+            name,
+            songs,
+            type: 'artist' as const,
+            coverUrl: getGroupCover(songs),
+            trackCount: songs.length,
+            description: songs[0]?.matchedAlbumName || songs[0]?.album || t('localMusic.unknownAlbum'),
+        })).sort((a, b) => a.name.localeCompare(b.name));
+
+        const playlistList: LocalLibraryGroup[] = localPlaylists.map(playlist => {
+            const songMap = new Map(localSongs.map(song => [song.id, song]));
+            const songs = playlist.songIds
+                .map(songId => songMap.get(songId))
+                .filter((song): song is LocalSong => Boolean(song));
+
+            return {
+                id: `playlist-${playlist.id}`,
+                playlistId: playlist.id,
+                name: playlist.name,
+                songs,
+                type: 'playlist' as const,
+                coverUrl: getGroupCover(songs),
+                trackCount: songs.length,
+                description: playlist.isFavorite ? t('localMusic.favoritePlaylist') : t('home.playlists'),
+                isVirtual: playlist.isFavorite,
+            };
+        }).sort((left, right) => {
+            if (left.isVirtual && !right.isVirtual) {
+                return -1;
+            }
+            if (!left.isVirtual && right.isVirtual) {
+                return 1;
+            }
+            return left.name.localeCompare(right.name);
+        });
+
+        return { folders: folderList, albums: albumList, artists: artistList, playlists: playlistList };
+    }, [localPlaylists, localSongs, resolvedAllSongsLabel, t]);
 
     const resolvedSelectedGroup = useMemo(() => {
         if (!selectedGroup) return null;
 
-        const sourceGroups = selectedGroup.type === 'folder' ? groups.folders : groups.albums;
+        const sourceGroups =
+            selectedGroup.type === 'folder' ? groups.folders
+                : selectedGroup.type === 'album' ? groups.albums
+                    : selectedGroup.type === 'artist' ? groups.artists
+                        : groups.playlists;
         const matchedGroup = sourceGroups.find(group =>
             (selectedGroup.id && group.id === selectedGroup.id) ||
             group.name === selectedGroup.name
@@ -346,8 +399,8 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         if (selectedGroup) return;
         const diff = touchStartY - e.changedTouches[0].clientY;
         if (Math.abs(diff) > 50) {
-            if (diff > 0 && activeRow === 0) setActiveRow(1);
-            if (diff < 0 && activeRow === 1) setActiveRow(0);
+            if (diff > 0 && activeRow < 3) setActiveRow((activeRow + 1) as 0 | 1 | 2 | 3);
+            if (diff < 0 && activeRow > 0) setActiveRow((activeRow - 1) as 0 | 1 | 2 | 3);
         }
     };
 
@@ -355,6 +408,24 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     React.useEffect(() => {
         onPlaylistVisibilityChange?.(resolvedSelectedGroup !== null);
     }, [resolvedSelectedGroup, onPlaylistVisibilityChange]);
+
+    if (resolvedSelectedGroup?.type === 'artist') {
+        return (
+            <LocalArtistView
+                artistName={resolvedSelectedGroup.name}
+                coverUrl={resolvedSelectedGroup.coverUrl}
+                songs={resolvedSelectedGroup.songs}
+                onBack={() => {
+                    setSelectedGroup(null);
+                    onPlaylistVisibilityChange?.(false);
+                }}
+                onPlaySong={onPlaySong}
+                onAddToQueue={onAddToQueue}
+                theme={theme}
+                isDaylight={isDaylight}
+            />
+        );
+    }
 
     if (resolvedSelectedGroup) {
         return (
@@ -374,11 +445,57 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 onDelete={resolvedSelectedGroup.type === 'folder' && !resolvedSelectedGroup.isVirtual ? handleDeleteFolder : undefined}
                 onMatchSong={onMatchSong}
                 onRefresh={onRefresh}
+                playlistId={resolvedSelectedGroup.playlistId}
+                isEditablePlaylist={resolvedSelectedGroup.type === 'playlist' && !resolvedSelectedGroup.isVirtual}
+                onSelectArtist={onSelectArtistGroup}
+                onSelectAlbum={onSelectAlbumGroup}
                 theme={theme}
                 isDaylight={isDaylight}
             />
         );
     }
+
+    const sections = [
+        {
+            key: 'folders',
+            row: 0 as const,
+            label: t('localMusic.foldersAndPlaylists'),
+            items: groups.folders,
+            emptyMessage: t('localMusic.noFoldersFound'),
+            focusedIndex: focusedFolderIndex,
+            onFocusedIndexChange: setFocusedFolderIndex,
+            withImport: true,
+        },
+        {
+            key: 'albums',
+            row: 1 as const,
+            label: t('localMusic.albums'),
+            items: groups.albums,
+            emptyMessage: t('localMusic.noAlbumsFound'),
+            focusedIndex: focusedAlbumIndex,
+            onFocusedIndexChange: setFocusedAlbumIndex,
+        },
+        {
+            key: 'artists',
+            row: 2 as const,
+            label: t('localMusic.artists'),
+            items: groups.artists,
+            emptyMessage: t('localMusic.noArtistsFound'),
+            focusedIndex: focusedArtistIndex,
+            onFocusedIndexChange: setFocusedArtistIndex,
+        },
+        {
+            key: 'playlists',
+            row: 3 as const,
+            label: t('localMusic.customPlaylists'),
+            items: groups.playlists,
+            emptyMessage: t('localMusic.noPlaylistsFound'),
+            focusedIndex: focusedPlaylistIndex,
+            onFocusedIndexChange: setFocusedPlaylistIndex,
+        },
+    ];
+
+    const activeSection = sections.find(section => section.row === activeRow) ?? sections[0];
 
     return (
         <div
@@ -435,21 +552,26 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 ) : (
                     <div className="w-full h-full relative">
                         <AnimatePresence mode="wait">
-                            {activeRow === 0 ? (
-                                <motion.div
-                                    key="folders"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ duration: 0.3 }}
-                                    className="w-full h-full flex flex-col justify-center"
-                                >
-                                    <div className="flex items-center justify-center gap-3 mb-4">
-                                        <div className="text-sm font-medium uppercase tracking-widest">
-                                            {t('localMusic.foldersAndPlaylists')}
-                                        </div>
+                            <motion.div
+                                key={activeSection.key}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.3 }}
+                                className="w-full h-full flex flex-col justify-center"
+                            >
+                                <div className="flex items-center justify-center gap-2 mb-4 flex-wrap">
+                                    {sections.map(section => (
+                                        <button
+                                            key={section.key}
+                                            onClick={() => setActiveRow(section.row)}
+                                            className={`px-3 py-1.5 rounded-full text-sm font-medium uppercase tracking-widest transition-all ${activeSection.row === section.row ? 'bg-white/10 opacity-100' : 'opacity-40 hover:opacity-80'}`}
+                                        >
+                                            {section.label}
+                                        </button>
+                                    ))}
 
-                                        {/* Import Button */}
+                                    {activeSection.withImport && (
                                         <button
                                             onClick={handleFolderImport}
                                             className={`p-1.5 rounded-full transition-colors ${
@@ -462,66 +584,20 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                                         >
                                             {importButtonDisabled ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
                                         </button>
-
-                                        <span className="opacity-30">/</span>
-
-                                        {/* Switch to Albums */}
-                                        <button
-                                            onClick={() => setActiveRow(1)}
-                                            className="opacity-40 hover:opacity-80 text-sm font-medium uppercase tracking-widest transition-opacity"
-                                        >
-                                            {t('localMusic.albums')}
-                                        </button>
-                                    </div>
-                                    <div className="h-[400px]">
-                                        <Carousel3D
-                                            items={groups.folders}
-                                            onSelect={(item) => setSelectedGroup(item)}
-                                            emptyMessage={t('localMusic.noFoldersFound')}
-                                            textBottomClass="-bottom-1"
-                                            initialFocusedIndex={focusedFolderIndex}
-                                            onFocusedIndexChange={setFocusedFolderIndex}
-                                            isDaylight={isDaylight}
-                                        />
-                                    </div>
-                                </motion.div>
-                            ) : (
-                                <motion.div
-                                    key="albums"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ duration: 0.3 }}
-                                    className="w-full h-full flex flex-col justify-center"
-                                >
-                                    <div className="flex items-center justify-center gap-3 mb-4">
-                                        {/* Switch to Folders */}
-                                        <button
-                                            onClick={() => setActiveRow(0)}
-                                            className="opacity-40 hover:opacity-80 text-sm font-medium uppercase tracking-widest transition-opacity"
-                                        >
-                                            {t('localMusic.foldersAndPlaylists')}
-                                        </button>
-
-                                        <span className="opacity-30">|</span>
-
-                                        <div className="text-sm font-medium uppercase tracking-widest">
-                                            {t('localMusic.albums')}
-                                        </div>
-                                    </div>
-                                    <div className="h-[400px]">
-                                        <Carousel3D
-                                            items={groups.albums}
-                                            onSelect={(item) => setSelectedGroup(item)}
-                                            emptyMessage={t('localMusic.noAlbumsFound')}
-                                            textBottomClass="-bottom-1"
-                                            initialFocusedIndex={focusedAlbumIndex}
-                                            onFocusedIndexChange={setFocusedAlbumIndex}
-                                            isDaylight={isDaylight}
-                                        />
-                                    </div>
-                                </motion.div>
-                            )}
+                                    )}
+                                </div>
+                                <div className="h-[400px]">
+                                    <Carousel3D
+                                        items={activeSection.items}
+                                        onSelect={(item) => setSelectedGroup(item)}
+                                        emptyMessage={activeSection.emptyMessage}
+                                        textBottomClass="-bottom-1"
+                                        initialFocusedIndex={activeSection.focusedIndex}
+                                        onFocusedIndexChange={activeSection.onFocusedIndexChange}
+                                        isDaylight={isDaylight}
+                                    />
+                                </div>
+                            </motion.div>
                         </AnimatePresence>
                     </div>
                 )}

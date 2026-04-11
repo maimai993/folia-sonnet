@@ -210,6 +210,30 @@ export interface LocalLibrarySnapshot {
   tree: LocalLibrarySnapshotNode;
 }
 
+export interface LocalPlaylist {
+  id: string;
+  name: string;
+  songIds: string[];
+  createdAt: number;
+  updatedAt: number;
+  isFavorite?: boolean;
+}
+
+export type LocalLibraryGroupType = 'folder' | 'album' | 'artist' | 'playlist';
+
+export interface LocalLibraryGroup {
+  type: LocalLibraryGroupType;
+  name: string;
+  songs: LocalSong[];
+  coverUrl?: string;
+  id: string;
+  isVirtual?: boolean;
+  trackCount?: number;
+  description?: string;
+  albumId?: number;
+  playlistId?: string;
+}
+
 // Extend SongResult to support local files and Navidrome files
 export interface UnifiedSong extends SongResult {
   isLocal?: boolean;

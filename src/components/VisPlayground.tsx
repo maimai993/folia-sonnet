@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
 import { ChevronLeft, Loader2, RotateCcw, Search, Sparkles, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { List, useListRef } from 'react-window';
 import Visualizer from './Visualizer';
 import VisualizerCadenza from './VisualizerCadenza';
 import {
@@ -79,7 +80,8 @@ const FONT_SCALE_OPTIONS: PresetOption<number>[] = [
     { label: '125%', value: 1.25 },
 ];
 
-const LOOP_DURATION = 16.2;
+const LOOP_DURATION = 14.4;
+const FONT_ROW_HEIGHT = 94;
 
 const clampFontScale = (value: number) => Math.min(1.4, Math.max(0.85, value));
 
@@ -125,7 +127,7 @@ const PREVIEW_LINES: Line[] = [
     {
         startTime: 7.8,
         endTime: 10.9,
-        fullText: 'Cet amour a tisse tous les soleils.',
+        fullText: 'Cet amour a tissé tous les soleils.',
         translation: '这份爱编织了所有的太阳。',
         words: [
             { text: 'Cet', startTime: 7.8, endTime: 8.25 },
@@ -251,6 +253,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [systemFonts, setSystemFonts] = useState<LocalFontEntry[]>([]);
     const [fontSearchQuery, setFontSearchQuery] = useState('');
     const [fontPickerError, setFontPickerError] = useState<string | null>(null);
+    const [fontListHeight, setFontListHeight] = useState(420);
+    const fontListRef = React.useRef<HTMLDivElement>(null);
+    const fontVirtualListRef = useListRef(null);
 
     const audioBands = useMemo<AudioBands>(() => ({
         bass,
@@ -381,6 +386,74 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         });
         setIsFontPickerOpen(false);
     };
+
+    useEffect(() => {
+        if (!isFontPickerOpen || !fontListRef.current) {
+            return;
+        }
+
+        const updateHeight = () => {
+            if (fontListRef.current) {
+                setFontListHeight(fontListRef.current.clientHeight);
+            }
+        };
+
+        updateHeight();
+        const observer = new ResizeObserver(updateHeight);
+        observer.observe(fontListRef.current);
+        return () => observer.disconnect();
+    }, [isFontPickerOpen]);
+
+    useEffect(() => {
+        if (!isFontPickerOpen || !fontVirtualListRef.current) {
+            return;
+        }
+
+        fontVirtualListRef.current.scrollToRow({ index: 0, align: 'start', behavior: 'instant' });
+    }, [filteredSystemFonts.length, fontSearchQuery, isFontPickerOpen, fontVirtualListRef]);
+
+    const FontRow = React.useCallback(({ index, style, ariaAttributes }: {
+        index: number;
+        style: React.CSSProperties;
+        ariaAttributes: { "aria-posinset": number; "aria-setsize": number; role: "listitem"; };
+    }) => {
+        const font = filteredSystemFonts[index];
+        const isActive = customFontFamily?.toLocaleLowerCase() === font.family.toLocaleLowerCase();
+
+        return (
+            <div style={style} {...ariaAttributes}>
+                <button
+                    type="button"
+                    onClick={() => handleChooseSystemFont(font)}
+                    className="w-full rounded-2xl border p-4 text-left transition-all"
+                    style={{
+                        color: 'var(--text-primary)',
+                        borderColor: isActive ? 'var(--text-accent)' : (isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)'),
+                        backgroundColor: isActive
+                            ? (isDaylight ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.08)')
+                            : (isDaylight ? 'rgba(255,255,255,0.58)' : 'rgba(255,255,255,0.03)'),
+                        height: FONT_ROW_HEIGHT - 8,
+                        marginBottom: 8,
+                    }}
+                >
+                    <div
+                        className="text-lg font-medium"
+                        style={{
+                            fontFamily: resolveThemeFontStack({
+                                fontStyle,
+                                fontFamily: font.family,
+                            }),
+                        }}
+                    >
+                        {font.label}
+                    </div>
+                    <div className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
+                        {font.family}
+                    </div>
+                </button>
+            </div>
+        );
+    }, [customFontFamily, filteredSystemFonts, fontStyle, handleChooseSystemFont, isDaylight]);
 
     const handleSelectFontStyle = (next: Theme['fontStyle'] | 'custom') => {
         if (next === 'custom') {
@@ -569,7 +642,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 </label>
                             </div>
 
-                            <div className="min-h-0 flex-1 overflow-y-auto p-5 custom-scrollbar">
+                            <div ref={fontListRef} className="min-h-0 flex-1 overflow-hidden p-5">
                                 {isLoadingSystemFonts ? (
                                     <div className="h-full flex items-center justify-center text-sm gap-3" style={{ color: 'var(--text-secondary)' }}>
                                         <Loader2 size={18} className="animate-spin" />
@@ -584,41 +657,16 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                         {t('options.systemFontNoResults') || '没有找到匹配的系统字体。'}
                                     </div>
                                 ) : (
-                                    <div className="space-y-2">
-                                        {filteredSystemFonts.map(font => {
-                                            const isActive = customFontFamily?.toLocaleLowerCase() === font.family.toLocaleLowerCase();
-                                            return (
-                                                <button
-                                                    key={font.family}
-                                                    type="button"
-                                                    onClick={() => handleChooseSystemFont(font)}
-                                                    className="w-full rounded-2xl border p-4 text-left transition-all"
-                                                    style={{
-                                                        color: 'var(--text-primary)',
-                                                        borderColor: isActive ? 'var(--text-accent)' : (isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)'),
-                                                        backgroundColor: isActive
-                                                            ? (isDaylight ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.08)')
-                                                            : (isDaylight ? 'rgba(255,255,255,0.58)' : 'rgba(255,255,255,0.03)'),
-                                                    }}
-                                                >
-                                                    <div
-                                                        className="text-lg font-medium"
-                                                        style={{
-                                                            fontFamily: resolveThemeFontStack({
-                                                                fontStyle,
-                                                                fontFamily: font.family,
-                                                            }),
-                                                        }}
-                                                    >
-                                                        {font.label}
-                                                    </div>
-                                                    <div className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                                        {font.family}
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
+                                    <List
+                                        listRef={fontVirtualListRef}
+                                        rowCount={filteredSystemFonts.length}
+                                        rowHeight={FONT_ROW_HEIGHT}
+                                        rowComponent={FontRow}
+                                        rowProps={{}}
+                                        overscanCount={6}
+                                        className="custom-scrollbar"
+                                        style={{ height: fontListHeight, width: '100%' }}
+                                    />
                                 )}
                             </div>
                         </div>

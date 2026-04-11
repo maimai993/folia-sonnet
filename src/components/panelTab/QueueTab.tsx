@@ -12,6 +12,8 @@ interface QueueTabProps {
     queueScrollRef: React.RefObject<HTMLDivElement>;
     shouldScrollToCurrent?: boolean;
     onShuffle?: () => void;
+    canSaveLocalPlaylist?: boolean;
+    onSaveCurrentQueueAsPlaylist?: (name: string) => Promise<void>;
 }
 
 const QueueTab: React.FC<QueueTabProps> = ({
@@ -20,7 +22,9 @@ const QueueTab: React.FC<QueueTabProps> = ({
     onPlaySong,
     queueScrollRef,
     shouldScrollToCurrent = false,
-    onShuffle
+    onShuffle,
+    canSaveLocalPlaylist = false,
+    onSaveCurrentQueueAsPlaylist,
 }) => {
     const { t } = useTranslation();
     const ITEM_HEIGHT = 50;
@@ -79,6 +83,23 @@ const QueueTab: React.FC<QueueTabProps> = ({
         }
     }, [shouldScrollToCurrent, currentSong?.id, playQueue, listRef]);
 
+    const handleSavePlaylist = async () => {
+        if (!onSaveCurrentQueueAsPlaylist) {
+            return;
+        }
+
+        const playlistName = window.prompt(t('localMusic.enterPlaylistName') || '输入歌单名称');
+        if (!playlistName?.trim()) {
+            return;
+        }
+
+        try {
+            await onSaveCurrentQueueAsPlaylist(playlistName);
+        } catch (error) {
+            console.error('Failed to save local playlist', error);
+        }
+    };
+
     // Row component for rendering each item
     const RowComponent = React.useCallback(({ index, style, ariaAttributes }: {
         index: number;
@@ -123,15 +144,26 @@ const QueueTab: React.FC<QueueTabProps> = ({
                 <span className="text-xs font-medium opacity-60">
                     {t('queue.title')} ({playQueue.length})
                 </span>
-                {onShuffle && (
-                    <button
-                        onClick={onShuffle}
-                        className="p-1.5 rounded-md hover:bg-white/10 transition-colors opacity-60 hover:opacity-100"
-                        title={t('queue.shuffle')}
-                    >
-                        <Shuffle size={14} />
-                    </button>
-                )}
+                <div className="flex items-center gap-1">
+                    {canSaveLocalPlaylist && (
+                        <button
+                            onClick={handleSavePlaylist}
+                            className="px-2 py-1 rounded-md hover:bg-white/10 transition-colors opacity-60 hover:opacity-100 text-[10px] font-medium"
+                            title={t('localMusic.saveQueueAsPlaylist') || '保存为歌单'}
+                        >
+                            {t('localMusic.saveQueueAsPlaylist') || '保存为歌单'}
+                        </button>
+                    )}
+                    {onShuffle && (
+                        <button
+                            onClick={onShuffle}
+                            className="p-1.5 rounded-md hover:bg-white/10 transition-colors opacity-60 hover:opacity-100"
+                            title={t('queue.shuffle')}
+                        >
+                            <Shuffle size={14} />
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div
@@ -154,4 +186,3 @@ const QueueTab: React.FC<QueueTabProps> = ({
 };
 
 export default QueueTab;
-

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, type CadenzaTuning, type VisualizerMode } from '../types';
+import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, LocalLibraryGroup, LocalPlaylist, type CadenzaTuning, type VisualizerMode } from '../types';
 import { NavidromeSong } from '../types/navidrome';
 import { isNavidromeEnabled, getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
@@ -29,7 +29,10 @@ interface HomeProps {
     onSelectPlaylist: (playlist: NeteasePlaylist | null) => void;
     onSelectAlbum: (albumId: number | null) => void;
     onSelectArtist: (artistId: number | null) => void;
+    onSelectLocalAlbum?: (albumName: string) => void;
+    onSelectLocalArtist?: (artistName: string) => void;
     localSongs: LocalSong[];
+    localPlaylists: LocalPlaylist[];
     onRefreshLocalSongs: () => void;
     onPlayLocalSong: (song: LocalSong, queue?: LocalSong[]) => void;
     onAddLocalSongToQueue?: (song: LocalSong) => void;
@@ -42,16 +45,20 @@ interface HomeProps {
     focusedRadioIndex?: number;
     setFocusedRadioIndex?: (index: number) => void;
     localMusicState: {
-        activeRow: 0 | 1;
-        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; isVirtual?: boolean; } | null;
+        activeRow: 0 | 1 | 2 | 3;
+        selectedGroup: LocalLibraryGroup | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
+        focusedArtistIndex: number;
+        focusedPlaylistIndex: number;
     };
     setLocalMusicState: React.Dispatch<React.SetStateAction<{
-        activeRow: 0 | 1;
-        selectedGroup: { type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; isVirtual?: boolean; } | null;
+        activeRow: 0 | 1 | 2 | 3;
+        selectedGroup: LocalLibraryGroup | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
+        focusedArtistIndex: number;
+        focusedPlaylistIndex: number;
     }>>;
     onMatchSong?: (song: LocalSong) => void;
     onPlayNavidromeSong?: (song: NavidromeSong, queue?: NavidromeSong[]) => void;
@@ -139,7 +146,10 @@ const Home: React.FC<HomeProps> = ({
     onSelectPlaylist,
     onSelectAlbum,
     onSelectArtist,
+    onSelectLocalAlbum,
+    onSelectLocalArtist,
     localSongs,
+    localPlaylists,
     onRefreshLocalSongs,
     onPlayLocalSong,
     onAddLocalSongToQueue,
@@ -788,6 +798,7 @@ const Home: React.FC<HomeProps> = ({
                                         >
                                             <LocalMusicView
                                                 localSongs={localSongs}
+                                                localPlaylists={localPlaylists}
                                                 onRefresh={onRefreshLocalSongs}
                                                 onPlaySong={onPlayLocalSong}
                                                 onAddToQueue={onAddLocalSongToQueue}
@@ -801,6 +812,12 @@ const Home: React.FC<HomeProps> = ({
                                                 setFocusedFolderIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedFolderIndex: index }))}
                                                 focusedAlbumIndex={localMusicState.focusedAlbumIndex}
                                                 setFocusedAlbumIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedAlbumIndex: index }))}
+                                                focusedArtistIndex={localMusicState.focusedArtistIndex}
+                                                setFocusedArtistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedArtistIndex: index }))}
+                                                focusedPlaylistIndex={localMusicState.focusedPlaylistIndex}
+                                                setFocusedPlaylistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedPlaylistIndex: index }))}
+                                                onSelectArtistGroup={onSelectLocalArtist}
+                                                onSelectAlbumGroup={onSelectLocalAlbum}
                                                 theme={theme}
                                                 isDaylight={isDaylight}
                                             />
@@ -902,7 +919,11 @@ const Home: React.FC<HomeProps> = ({
                                                                         className="cursor-pointer hover:underline hover:opacity-100 transition-opacity"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            onSelectArtist(a.id);
+                                                                            if ((track as UnifiedSong).isLocal) {
+                                                                                onSelectLocalArtist?.(a.name);
+                                                                            } else {
+                                                                                onSelectArtist(a.id);
+                                                                            }
                                                                             setSearchResults(null);
                                                                         }}
                                                                     >
@@ -914,6 +935,14 @@ const Home: React.FC<HomeProps> = ({
                                                                 className="cursor-pointer hover:opacity-100 hover:underline transition-all"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
+                                                                    if ((track as UnifiedSong).isLocal) {
+                                                                        const albumName = track.al?.name || track.album?.name;
+                                                                        if (albumName) {
+                                                                            onSelectLocalAlbum?.(albumName);
+                                                                            setSearchResults(null);
+                                                                        }
+                                                                        return;
+                                                                    }
                                                                     const albumId = track.al?.id || track.album?.id;
                                                                     if (albumId) {
                                                                         onSelectAlbum(albumId);

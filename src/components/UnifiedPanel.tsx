@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio, Cloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { SongResult, Theme, PlayerState, ReplayGainMode } from '../types';
+import { SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist } from '../types';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
 import QueueTab from './panelTab/QueueTab';
@@ -76,6 +76,11 @@ interface UnifiedPanelProps {
     onVolumePreview: (val: number) => void;
     onVolumeChange: (val: number) => void;
     onToggleMute: () => void;
+    localPlaylists: LocalPlaylist[];
+    onSaveCurrentQueueAsPlaylist: (name: string) => Promise<void>;
+    onAddCurrentSongToLocalPlaylist: (playlistId: string) => Promise<void>;
+    onOpenCurrentLocalAlbum: () => void;
+    onOpenCurrentLocalArtist: () => void;
 }
 
 const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
@@ -134,7 +139,12 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     isMuted,
     onVolumePreview,
     onVolumeChange,
-    onToggleMute
+    onToggleMute,
+    localPlaylists,
+    onSaveCurrentQueueAsPlaylist,
+    onAddCurrentSongToLocalPlaylist,
+    onOpenCurrentLocalAlbum,
+    onOpenCurrentLocalArtist,
 }) => {
     const { t } = useTranslation();
 
@@ -232,6 +242,16 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 onSelectArtist(artistId);
                                                 onToggle();
                                             }}
+                                            localPlaylists={localPlaylists}
+                                            onAddCurrentSongToLocalPlaylist={onAddCurrentSongToLocalPlaylist}
+                                            onOpenCurrentLocalAlbum={() => {
+                                                onOpenCurrentLocalAlbum();
+                                                onToggle();
+                                            }}
+                                            onOpenCurrentLocalArtist={() => {
+                                                onOpenCurrentLocalArtist();
+                                                onToggle();
+                                            }}
                                         />
                                     )}
                                     {currentTab === 'controls' && (
@@ -282,6 +302,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 queueScrollRef={queueScrollRef}
                                                 shouldScrollToCurrent={isOpen && currentTab === 'queue'}
                                                 onShuffle={onShuffle}
+                                                canSaveLocalPlaylist={Boolean(isLocal && playQueue.some(song => ((song as any).isLocal === true) || (song as any).localData))}
+                                                onSaveCurrentQueueAsPlaylist={onSaveCurrentQueueAsPlaylist}
                                             />
                                         )
                                     )}

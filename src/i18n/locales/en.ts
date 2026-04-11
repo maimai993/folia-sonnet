@@ -229,6 +229,9 @@ export default {
   "localMusic": {
     "foldersAndPlaylists": "Folders & Playlists",
     "albums": "Albums",
+    "artists": "Artists",
+    "customPlaylists": "Playlists",
+    "favoritePlaylist": "Liked Songs",
     "unknownAlbum": "Unknown Album",
     "unknownArtist": "Unknown Artist",
     "folder": "Folder",
@@ -290,6 +293,13 @@ export default {
     "permissionNeeded": "Restore Folder Access",
     "grantPermission": "Restore",
     "chooseCover": "Choose Cover Image",
+    "addToPlaylist": "Add to Playlist",
+    "saveQueueAsPlaylist": "Save as Playlist",
+    "enterPlaylistName": "Enter playlist name",
+    "noArtistsFound": "No artists found",
+    "noPlaylistsFound": "No playlists yet",
+    "editPlaylist": "Edit Playlist",
+    "finishEditing": "Finish Editing",
   },
   "navidrome": {
     "title": "Navi",

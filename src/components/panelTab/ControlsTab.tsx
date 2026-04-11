@@ -53,7 +53,7 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     isMuted,
     onVolumePreview,
     onVolumeChange,
-    onToggleMute
+    onToggleMute,
 }) => {
     const { t } = useTranslation();
     const [sliderVolume, setSliderVolume] = useState(isMuted ? 0 : volume);
