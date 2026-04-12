@@ -1483,6 +1483,7 @@ export default function App() {
         setLyrics(null);
         setCurrentLineIndex(-1);
         currentTime.set(0); // Reset currentTime to prevent stale playback position
+        setDuration(0);
         setCurrentSong(song);
         setCachedCoverUrl(null);
         setAudioSrc(null);
@@ -1511,13 +1512,14 @@ export default function App() {
         // Navigate to Player with History
         navigateToPlayer();
         setPlayerState(PlayerState.IDLE);
-        setStatusMsg({ type: 'info', text: t('status.loadingSong') });
 
         // Check if it is a local song
         const isLocal = isLocalPlaybackSong(song);
         const isNavidrome = isNavidromePlaybackSong(song);
+        let prefetched = null;
 
         if (isNavidrome) {
+            setStatusMsg({ type: 'info', text: t('status.loadingSong') });
             const navidromeSong = resolveNavidromePlaybackCarrier(song);
             if (!navidromeSong) {
                 setStatusMsg({ type: 'error', text: t('status.playbackError') });
@@ -1538,6 +1540,7 @@ export default function App() {
         }
 
         if (isLocal) {
+            setStatusMsg({ type: 'info', text: t('status.loadingSong') });
             console.log("[App] Playing Local Song");
 
             // 2. Load Local Audio
@@ -1634,7 +1637,21 @@ export default function App() {
         // --- ONLINE SONG LOGIC BELOW ---
 
         // Check prefetch cache for this song (with quality validation)
-        const prefetched = getPrefetchedData(song.id, audioQuality);
+        prefetched = getPrefetchedData(song.id, audioQuality);
+
+        const hasImmediatePrefetchedAudio = Boolean(
+            prefetched?.audioUrl &&
+            prefetched.audioUrl !== 'CACHED_IN_DB'
+        );
+        const cachedAudio = hasImmediatePrefetchedAudio
+            ? null
+            : await getFromCache<Blob>(`audio_${song.id}`);
+
+        if (currentSongRef.current !== song.id) return;
+
+        if (!hasImmediatePrefetchedAudio && !cachedAudio) {
+            setStatusMsg({ type: 'info', text: t('status.loadingSong') });
+        }
 
         // 2. Load Cached Cover (Visual Feedback)
         const cachedCoverUrl = await getCachedCoverUrl(`cover_${song.id}`);
@@ -2327,6 +2344,7 @@ export default function App() {
         fontFamily: lyricsCustomFontFamily ?? undefined,
         backgroundColor: visualizerBackgroundColor,
     }), [lyricsCustomFontFamily, lyricsFontStyle, theme, visualizerBackgroundColor]);
+    const visualizerGeometrySeed = currentSong?.id ?? `geometry-${visualizerMode}`;
     const effectiveCadenzaTuning = useMemo(() => ({
         ...cadenzaTuning,
         fontScale: cadenzaTuning.fontScale * lyricsFontScale,
@@ -2430,7 +2448,7 @@ export default function App() {
                         coverUrl={getCoverUrl()}
                         showText={currentView === 'player'}
                         useCoverColorBg={useCoverColorBg}
-                        seed={currentSong?.id}
+                        seed={visualizerGeometrySeed}
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
                         cadenzaTuning={effectiveCadenzaTuning}
@@ -2448,7 +2466,7 @@ export default function App() {
                         coverUrl={getCoverUrl()}
                         showText={currentView === 'player'}
                         useCoverColorBg={useCoverColorBg}
-                        seed={currentSong?.id}
+                        seed={visualizerGeometrySeed}
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
                         lyricsFontScale={lyricsFontScale}

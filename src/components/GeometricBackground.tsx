@@ -1,88 +1,85 @@
 import React, { useMemo } from 'react';
-import { motion, MotionValue, useTransform, useSpring } from 'framer-motion';
+import { AnimatePresence, motion, MotionValue, useSpring, useTransform } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
 import { Theme, AudioBands } from '../types';
 
 interface GeometricBackgroundProps {
   theme: Theme;
   audioPower: MotionValue<number>;
-  audioBands?: AudioBands; // Optional to prevent breaking if not passed immediately
-  seed?: string | number; // Added seed for forcing regeneration
+  audioBands?: AudioBands;
+  seed?: string | number;
 }
 
-const GeometricBackground: React.FC<GeometricBackgroundProps> = React.memo(({ theme, audioPower, audioBands, seed }) => {
-  // Generate static random configuration for shapes to prevent jitter on re-renders
+const GeometricLayer: React.FC<GeometricBackgroundProps> = ({ theme, audioPower, audioBands, seed }) => {
   const shapes = useMemo(() => {
     const shapeTypes = ['circle', 'square', 'triangle', 'cross'];
     const availableIcons = theme.lyricsIcons || [];
 
     let iconCount = 0;
-    // Increased total shapes slightly to accommodate more variety
-    return Array.from({ length: 15 }).map((_, i) => {
-      // 30% chance to use an icon if available, max 6 icons
+    return Array.from({ length: 15 }).map((_, index) => {
       const wantIcon = availableIcons.length > 0 && Math.random() > 0.7;
       const useIcon = wantIcon && iconCount < 6;
-      if (useIcon) iconCount++;
+      if (useIcon) {
+        iconCount += 1;
+      }
 
       const iconName = useIcon ? availableIcons[Math.floor(Math.random() * availableIcons.length)] : null;
 
       return {
-        id: i,
+        id: index,
         type: useIcon ? 'icon' : shapeTypes[Math.floor(Math.random() * shapeTypes.length)],
         iconName,
         initialX: Math.random() * 100,
         initialY: Math.random() * 100,
         size: 40 + Math.random() * 100,
-        // Icons move/fade faster (20s-40s), shapes move slower (30s-60s)
         duration: useIcon ? 20 + Math.random() * 20 : 30 + Math.random() * 30,
         delay: Math.random() * 5,
-        opacity: 0.11 + Math.random() * 0.08, // Increased opacity for better visibility
+        opacity: 0.11 + Math.random() * 0.08,
         reverse: Math.random() > 0.5,
-        // Randomly decide if circle/square should be filled (30% chance filled)
         filled: Math.random() < 0.3,
-        initialRotation: Math.random() * 360
+        initialRotation: Math.random() * 360,
       };
     });
-  }, [theme.lyricsIcons, seed]); // Re-generate if icons change OR seed changes
+  }, [theme.lyricsIcons, seed]);
 
-  // Stable particle configuration
   const particles = useMemo(() => {
-    return Array.from({ length: 20 }).map((_, i) => ({
-      id: i,
+    return Array.from({ length: 20 }).map((_, index) => ({
+      id: index,
       size: Math.random() * 4 + 1,
       left: Math.random() * 100,
       top: Math.random() * 100,
       opacity: Math.random() * 0.3,
-      // Slower particle float (20s - 50s)
       duration: 15 + Math.random() * 20,
-      delay: Math.random() * 10
+      delay: Math.random() * 10,
     }));
-  }, [seed]); // Also regenerate particles on seed change
+  }, [seed]);
 
-  // Create spring-based scales for each band
-  const useBandScale = (val: MotionValue<number> | undefined) => {
-    // Fallback to main audioPower if band is missing
-    const source = val || audioPower;
+  const useBandScale = (value: MotionValue<number> | undefined) => {
+    const source = value || audioPower;
     const spring = useSpring(source, { stiffness: 300, damping: 30 }) as unknown as MotionValue<number>;
     return useTransform(spring, [10, 200], [0.95, 1.45]);
   };
 
   const scales = {
-    bass: useBandScale(audioBands?.bass),       // Circle
-    lowMid: useBandScale(audioBands?.lowMid),   // Square
-    mid: useBandScale(audioBands?.mid),         // Triangle
-    vocal: useBandScale(audioBands?.vocal),     // Icon
-    treble: useBandScale(audioBands?.treble),   // Cross
-    default: useBandScale(audioPower)          // Fallback
+    bass: useBandScale(audioBands?.bass),
+    lowMid: useBandScale(audioBands?.lowMid),
+    mid: useBandScale(audioBands?.mid),
+    vocal: useBandScale(audioBands?.vocal),
+    treble: useBandScale(audioBands?.treble),
+    default: useBandScale(audioPower),
   };
 
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {shapes.map((shape) => {
-        // Handle Icon rendering
+    <motion.div
+      className="absolute inset-0"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.45, ease: 'easeInOut' }}
+    >
+      {shapes.map(shape => {
         if (shape.type === 'icon' && shape.iconName) {
-          // @ts-ignore - Dynamic access to Lucide icons
-          const IconComponent = LucideIcons[shape.iconName];
+          const IconComponent = LucideIcons[shape.iconName as keyof typeof LucideIcons] as LucideIcons.LucideIcon | undefined;
 
           if (IconComponent) {
             return (
@@ -94,26 +91,26 @@ const GeometricBackground: React.FC<GeometricBackgroundProps> = React.memo(({ th
                   top: `${shape.initialY}%`,
                   width: shape.size,
                   height: shape.size,
-                  color: theme.secondaryColor, // Use secondary color for stroke
+                  color: theme.secondaryColor,
                   scale: scales.vocal,
                 }}
                 animate={{
                   y: shape.reverse ? [-30, 30, -30] : [30, -30, 30],
                   x: shape.reverse ? [15, -15, 15] : [-15, 15, -15],
-                  rotate: [shape.initialRotation, shape.initialRotation + 360], // Slow rotation starting from random angle
-                  opacity: [0, shape.opacity * 3, 0], // Fade in and out
+                  rotate: [shape.initialRotation, shape.initialRotation + 360],
+                  opacity: [0, shape.opacity * 3, 0],
                 }}
                 transition={{
                   duration: shape.duration,
                   repeat: Infinity,
-                  ease: "linear",
+                  ease: 'linear',
                   delay: shape.delay,
                   opacity: {
-                    duration: shape.duration * 0.5, // Faster fade cycle than movement
+                    duration: shape.duration * 0.5,
                     repeat: Infinity,
-                    ease: "easeInOut",
-                    delay: shape.delay
-                  }
+                    ease: 'easeInOut',
+                    delay: shape.delay,
+                  },
                 }}
               >
                 <IconComponent size={shape.size} strokeWidth={1} absoluteStrokeWidth />
@@ -122,10 +119,7 @@ const GeometricBackground: React.FC<GeometricBackgroundProps> = React.memo(({ th
           }
         }
 
-        // Determine style based on shape type
         const isCircleOrSquare = shape.type === 'circle' || shape.type === 'square';
-        // Use stroke if it's a circle/square AND NOT filled. 
-        // If it's filled (randomly true for circle/square), or if it's other shapes (triangle/cross), use fill.
         const useStroke = isCircleOrSquare && !shape.filled;
 
         return (
@@ -141,11 +135,15 @@ const GeometricBackground: React.FC<GeometricBackgroundProps> = React.memo(({ th
               backgroundColor: !useStroke ? theme.secondaryColor : 'transparent',
               borderRadius: shape.type === 'circle' ? '50%' : '0%',
               opacity: shape.opacity,
-              scale: shape.type === 'circle' ? scales.bass :
-                shape.type === 'square' ? scales.lowMid :
-                  shape.type === 'triangle' ? scales.mid :
-                    shape.type === 'cross' ? scales.treble :
-                      scales.default, // Fallback
+              scale: shape.type === 'circle'
+                ? scales.bass
+                : shape.type === 'square'
+                  ? scales.lowMid
+                  : shape.type === 'triangle'
+                    ? scales.mid
+                    : shape.type === 'cross'
+                      ? scales.treble
+                      : scales.default,
               clipPath: shape.type === 'triangle'
                 ? 'polygon(50% 0%, 0% 100%, 100% 100%)'
                 : shape.type === 'cross'
@@ -156,93 +154,93 @@ const GeometricBackground: React.FC<GeometricBackgroundProps> = React.memo(({ th
               y: shape.reverse ? [-30, 30, -30] : [30, -30, 30],
               x: shape.reverse ? [15, -15, 15] : [-15, 15, -15],
               rotate: [shape.initialRotation, shape.initialRotation + 360],
-              // scale: removed from here to allow audio control
             }}
             transition={{
               duration: shape.duration,
               repeat: Infinity,
-              ease: "linear",
-              delay: shape.delay
+              ease: 'linear',
+              delay: shape.delay,
             }}
           />
         );
       })}
 
-      {/* Floating particles/dust */}
-      {particles.map((p) => (
+      {particles.map(particle => (
         <motion.div
-          key={`p-${p.id}`}
+          key={`p-${particle.id}`}
           className="absolute rounded-full"
           style={{
             backgroundColor: theme.accentColor,
-            width: p.size,
-            height: p.size,
-            left: `${p.left}%`,
-            top: `${p.top}%`,
-            opacity: p.opacity
+            width: particle.size,
+            height: particle.size,
+            left: `${particle.left}%`,
+            top: `${particle.top}%`,
+            opacity: particle.opacity,
           }}
           animate={{
-            y: [0, -100], // Move up slightly
-            opacity: [0, p.opacity, 0] // Fade in and out
+            y: [0, -100],
+            opacity: [0, particle.opacity, 0],
           }}
           transition={{
-            duration: p.duration,
+            duration: particle.duration,
             repeat: Infinity,
-            ease: "linear",
-            delay: p.delay
+            ease: 'linear',
+            delay: particle.delay,
           }}
         />
       ))}
 
-      {/* Gradient overlay to soften edges - Stronger Vignette */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{ background: 'radial-gradient(circle, transparent 40%, rgba(0,0,0,0.6) 100%)' }}
       />
+    </motion.div>
+  );
+};
+
+const GeometricBackground: React.FC<GeometricBackgroundProps> = React.memo((props) => {
+  const layerKey = String(props.seed ?? 'default');
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <AnimatePresence initial={false} mode="sync">
+        <GeometricLayer key={layerKey} {...props} />
+      </AnimatePresence>
     </div>
   );
 }, (prevProps, nextProps) => {
-  // Check seed change
   if (prevProps.seed !== nextProps.seed) return false;
-
-  // Check audioPower stability
   if (prevProps.audioPower !== nextProps.audioPower) return false;
 
-  // Check audioBands stability (compare individual MotionValues, not container object)
-  const pBands = prevProps.audioBands;
-  const nBands = nextProps.audioBands;
+  const previousBands = prevProps.audioBands;
+  const nextBands = nextProps.audioBands;
 
-  // If one is missing and other isn't -> re-render
-  if (!pBands !== !nBands) return false;
+  if (!previousBands !== !nextBands) return false;
 
-  // If both exist, compare all bands
   let bandsEqual = true;
-  if (pBands && nBands) {
+  if (previousBands && nextBands) {
     bandsEqual =
-      pBands.bass === nBands.bass &&
-      pBands.lowMid === nBands.lowMid &&
-      pBands.mid === nBands.mid &&
-      pBands.vocal === nBands.vocal &&
-      pBands.treble === nBands.treble;
+      previousBands.bass === nextBands.bass &&
+      previousBands.lowMid === nextBands.lowMid &&
+      previousBands.mid === nextBands.mid &&
+      previousBands.vocal === nextBands.vocal &&
+      previousBands.treble === nextBands.treble;
   }
   if (!bandsEqual) return false;
 
-  // Theme Update Check (Color Values)
-  const pTheme = prevProps.theme;
-  const nTheme = nextProps.theme;
+  const previousTheme = prevProps.theme;
+  const nextTheme = nextProps.theme;
 
-  // Check basic colors logic
   const colorsEqual =
-    pTheme.backgroundColor === nTheme.backgroundColor &&
-    pTheme.primaryColor === nTheme.primaryColor &&
-    pTheme.secondaryColor === nTheme.secondaryColor &&
-    pTheme.accentColor === nTheme.accentColor;
+    previousTheme.backgroundColor === nextTheme.backgroundColor &&
+    previousTheme.primaryColor === nextTheme.primaryColor &&
+    previousTheme.secondaryColor === nextTheme.secondaryColor &&
+    previousTheme.accentColor === nextTheme.accentColor;
 
-  // Also check lyricsIcons if they affect rendering shape usage
   const iconsEqual =
-    (pTheme.lyricsIcons === nTheme.lyricsIcons) ||
-    (pTheme.lyricsIcons?.length === nTheme.lyricsIcons?.length &&
-      pTheme.lyricsIcons?.every((val, index) => val === nTheme.lyricsIcons?.[index]));
+    previousTheme.lyricsIcons === nextTheme.lyricsIcons ||
+    (previousTheme.lyricsIcons?.length === nextTheme.lyricsIcons?.length &&
+      previousTheme.lyricsIcons?.every((value, index) => value === nextTheme.lyricsIcons?.[index]));
 
   return colorsEqual && iconsEqual;
 });

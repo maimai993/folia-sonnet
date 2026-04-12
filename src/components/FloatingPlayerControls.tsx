@@ -6,6 +6,12 @@ import ProgressBar from './ProgressBar';
 import { PlayerState, LyricData, Theme } from '../types';
 import LyricsTimelineModal from './modal/LyricsTimelineModal';
 
+const CONTROL_LAYOUT_SPRING = {
+    type: 'spring' as const,
+    stiffness: 280,
+    damping: 24,
+};
+
 interface FloatingPlayerControlsProps {
     currentSong: { name: string; } | null;
     playerState: PlayerState;
@@ -60,7 +66,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     const [isHovered, setIsHovered] = useState(false);
     const [isTimelineOpen, setIsTimelineOpen] = useState(false);
 
-    const showExpanded = isHovered || (playerState !== PlayerState.PLAYING && currentView !== 'home');
+    const canAutoExpand = Boolean(audioSrc) && duration > 0;
+    const showExpanded = isHovered || (canAutoExpand && playerState !== PlayerState.PLAYING && currentView !== 'home');
 
     const handleClick = () => {
         if (currentView === 'home') {
@@ -82,11 +89,12 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                 >
                     <motion.div
                         layout
+                        transition={{ layout: CONTROL_LAYOUT_SPRING }}
                         onClick={handleClick}
                         className={`backdrop-blur-3xl shadow-2xl overflow-hidden cursor-pointer rounded-full relative transition-colors duration-300
                             ${showExpanded ? `p-3 ${glassBgExpanded} w-full` : `px-4 py-2 ${glassBgCollapsed} w-[80%] md:w-[60%]`}`}
                     >
-                        <motion.div layout className="w-full">
+                        <motion.div layout transition={{ layout: CONTROL_LAYOUT_SPRING }} className="w-full">
                             {showExpanded ? (
                                 <ExpandedView
                                     currentSong={currentSong}
