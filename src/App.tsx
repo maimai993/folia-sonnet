@@ -1284,7 +1284,6 @@ export default function App() {
         }
 
         setIsLyricsLoading(true);
-        setStatusMsg({ type: 'info', text: t('status.loadingSong') || '加载歌曲中...' });
 
         try {
             // Get streaming URL using navidromeData.id
@@ -1299,6 +1298,7 @@ export default function App() {
 
             let lyrics: LyricData | null = null;
             let coverUrl: string | undefined;
+            let showedLoadingToast = false;
 
             if (matchData) {
                 if (matchData.lyricsSource === 'online' && matchData.matchedLyrics) {
@@ -1311,6 +1311,17 @@ export default function App() {
             }
 
             if (!lyrics) {
+                lyrics = await resolvePreferredNavidromeLyrics(navidromeSong);
+                if (hasRenderableLyrics(lyrics)) {
+                    console.log('[App] Using cached Navidrome lyrics');
+                }
+            }
+
+            if (!lyrics) {
+                if (!showedLoadingToast) {
+                    setStatusMsg({ type: 'info', text: t('status.loadingSong') || '加载歌曲中...' });
+                    showedLoadingToast = true;
+                }
                 await hydrateNavidromeLyricPayload(config, navidromeSong);
                 lyrics = await resolvePreferredNavidromeLyrics(navidromeSong);
                 if (hasRenderableLyrics(lyrics)) {
@@ -1323,6 +1334,10 @@ export default function App() {
             let autoMatchedLyrics: LyricData | null = null;
             if (!lyrics && !matchData?.noAutoMatch) {
                 try {
+                    if (!showedLoadingToast) {
+                        setStatusMsg({ type: 'info', text: t('status.loadingSong') || '加载歌曲中...' });
+                        showedLoadingToast = true;
+                    }
                     const artistName = navidromeSong.artists?.[0]?.name || navidromeSong.ar?.[0]?.name || '';
                     const searchQuery = `${navidromeSong.name} ${artistName}`.trim();
                     const searchRes = await neteaseApi.cloudSearch(searchQuery, 1);
@@ -1519,7 +1534,6 @@ export default function App() {
         let prefetched = null;
 
         if (isNavidrome) {
-            setStatusMsg({ type: 'info', text: t('status.loadingSong') });
             const navidromeSong = resolveNavidromePlaybackCarrier(song);
             if (!navidromeSong) {
                 setStatusMsg({ type: 'error', text: t('status.playbackError') });
@@ -1540,7 +1554,6 @@ export default function App() {
         }
 
         if (isLocal) {
-            setStatusMsg({ type: 'info', text: t('status.loadingSong') });
             console.log("[App] Playing Local Song");
 
             // 2. Load Local Audio

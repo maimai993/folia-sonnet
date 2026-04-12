@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, Repeat, Repeat1, ChartBar } from 'lucide-react';
 import { MotionValue } from 'framer-motion';
@@ -11,6 +11,10 @@ const CONTROL_LAYOUT_SPRING = {
     stiffness: 280,
     damping: 24,
 };
+
+const HOVER_EXPAND_DELAY_MS = 20;
+const HOVER_COLLAPSE_DELAY_MS = 100;
+const HOVER_HITBOX_BOTTOM_BUFFER_PX = 32;
 
 interface FloatingPlayerControlsProps {
     currentSong: { name: string; } | null;
@@ -65,9 +69,54 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
 
     const [isHovered, setIsHovered] = useState(false);
     const [isTimelineOpen, setIsTimelineOpen] = useState(false);
+    const expandTimeoutRef = useRef<number | null>(null);
+    const collapseTimeoutRef = useRef<number | null>(null);
 
     const canAutoExpand = Boolean(audioSrc) && duration > 0;
     const showExpanded = isHovered || (canAutoExpand && playerState !== PlayerState.PLAYING && currentView !== 'home');
+
+    useEffect(() => {
+        return () => {
+            if (expandTimeoutRef.current !== null) {
+                window.clearTimeout(expandTimeoutRef.current);
+            }
+            if (collapseTimeoutRef.current !== null) {
+                window.clearTimeout(collapseTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    const handleMouseEnter = () => {
+        if (collapseTimeoutRef.current !== null) {
+            window.clearTimeout(collapseTimeoutRef.current);
+            collapseTimeoutRef.current = null;
+        }
+
+        if (expandTimeoutRef.current !== null) {
+            return;
+        }
+
+        expandTimeoutRef.current = window.setTimeout(() => {
+            setIsHovered(true);
+            expandTimeoutRef.current = null;
+        }, HOVER_EXPAND_DELAY_MS);
+    };
+
+    const handleMouseLeave = () => {
+        if (expandTimeoutRef.current !== null) {
+            window.clearTimeout(expandTimeoutRef.current);
+            expandTimeoutRef.current = null;
+        }
+
+        if (!isHovered || collapseTimeoutRef.current !== null) {
+            return;
+        }
+
+        collapseTimeoutRef.current = window.setTimeout(() => {
+            setIsHovered(false);
+            collapseTimeoutRef.current = null;
+        }, HOVER_COLLAPSE_DELAY_MS);
+    };
 
     const handleClick = () => {
         if (currentView === 'home') {
@@ -84,8 +133,12 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             >
                 <div
                     className="pointer-events-auto w-full flex justify-center"
-                    onMouseEnter={() => setIsHovered(true)}
-                    onMouseLeave={() => setIsHovered(false)}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                    style={{
+                        paddingBottom: `${HOVER_HITBOX_BOTTOM_BUFFER_PX}px`,
+                        marginBottom: `${-HOVER_HITBOX_BOTTOM_BUFFER_PX}px`,
+                    }}
                 >
                     <motion.div
                         layout
