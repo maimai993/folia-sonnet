@@ -74,19 +74,36 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
         }
     }, [useOnlineMetadata]);
 
-    // Derive preview cover URL
-    const previewCoverUrl = useMemo(() => {
+    // Derive preview cover URL with proper ObjectURL lifecycle management
+    const [previewCoverUrl, setPreviewCoverUrl] = useState<string | null>(null);
+    useEffect(() => {
+        let objectUrl: string | null = null;
+
         if (!selectedResult) {
             // Show current state
-            if (song.embeddedCover) return URL.createObjectURL(song.embeddedCover);
-            return song.matchedCoverUrl || null;
+            if (song.embeddedCover) {
+                objectUrl = URL.createObjectURL(song.embeddedCover);
+                setPreviewCoverUrl(objectUrl);
+            } else {
+                setPreviewCoverUrl(song.matchedCoverUrl || null);
+            }
+        } else if (useOnlineCover) {
+            setPreviewCoverUrl(
+                (selectedResult.al?.picUrl || selectedResult.album?.picUrl || '').replace('http:', 'https:') || null
+            );
+        } else {
+            // Local cover
+            if (song.embeddedCover) {
+                objectUrl = URL.createObjectURL(song.embeddedCover);
+                setPreviewCoverUrl(objectUrl);
+            } else {
+                setPreviewCoverUrl(null);
+            }
         }
-        if (useOnlineCover) {
-            return (selectedResult.al?.picUrl || selectedResult.album?.picUrl || '').replace('http:', 'https:') || null;
-        }
-        // Local cover
-        if (song.embeddedCover) return URL.createObjectURL(song.embeddedCover);
-        return null;
+
+        return () => {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
     }, [selectedResult, useOnlineCover, song]);
 
     // Derive lyrics source label

@@ -1,8 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen, Music, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect } from 'react';
 import { LocalSong, LocalLibraryGroup, LocalPlaylist } from '../types';
 import { importFolder, matchLyrics, resyncFolder, deleteFolderSongs, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 import LyricMatchModal from './modal/LyricMatchModal';
@@ -37,12 +36,17 @@ interface LocalMusicViewProps {
     isDaylight: boolean;
 }
 
-const getGroupCover = (songs: LocalSong[]) => {
+/**
+ * Find the preferred cover source for a group of songs.
+ * Returns a Blob (for embedded covers) or a URL string (for matched covers).
+ * Does NOT create ObjectURLs — the caller is responsible for lifecycle management.
+ */
+const getGroupCoverSource = (songs: LocalSong[]): Blob | string | undefined => {
     const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     const preferredSong = sortedSongs.find(song => song.embeddedCover || song.matchedCoverUrl);
 
     if (preferredSong?.embeddedCover) {
-        return URL.createObjectURL(preferredSong.embeddedCover);
+        return preferredSong.embeddedCover;
     }
 
     return preferredSong?.matchedCoverUrl;
@@ -139,10 +143,11 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     // const [selectedGroup, setSelectedGroup] = useState<{ type: 'folder' | 'album', name: string, songs: LocalSong[], coverUrl?: string; } | null>(null);
 
     // Grouping Logic
-    const groups = useMemo(() => {
+    const { groups, coverSourceMap } = useMemo(() => {
         const folders: Record<string, LocalSong[]> = {};
         const albums: Record<string, LocalSong[]> = {};
         const artists: Record<string, LocalSong[]> = {};
+        const sourceMap = new Map<string, Blob | string | undefined>();
 
         localSongs.forEach(song => {
             // Folder Grouping - all songs should have folderName from folder import
@@ -188,23 +193,29 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         });
 
         // Sort folders alphabetically
-        const folderList: LocalLibraryGroup[] = Object.entries(folders).map(([name, songs]) => ({
-            id: `folder-${name}`,
-            name,
-            songs,
-            type: 'folder' as const,
-            coverUrl: getGroupCover(songs),
-            trackCount: songs.length,
-            description: t('localMusic.folder')
-        })).sort((a, b) => a.name.localeCompare(b.name));
+        const folderList: LocalLibraryGroup[] = Object.entries(folders).map(([name, songs]) => {
+            const id = `folder-${name}`;
+            sourceMap.set(id, getGroupCoverSource(songs));
+            return {
+                id,
+                name,
+                songs,
+                type: 'folder' as const,
+                coverUrl: undefined,
+                trackCount: songs.length,
+                description: t('localMusic.folder')
+            };
+        }).sort((a, b) => a.name.localeCompare(b.name));
 
         if (localSongs.length > 0) {
+            const allSongsId = 'folder-__all-songs__';
+            sourceMap.set(allSongsId, getGroupCoverSource(localSongs));
             folderList.unshift({
-                id: 'folder-__all-songs__',
+                id: allSongsId,
                 name: resolvedAllSongsLabel,
                 songs: localSongs,
                 type: 'folder' as const,
-                coverUrl: getGroupCover(localSongs),
+                coverUrl: undefined,
                 trackCount: localSongs.length,
                 description: t('localMusic.folder'),
                 isVirtual: true
@@ -216,28 +227,34 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             // Try to find a song with matched info to get the best metadata
             const representative = songs.find(s => s.matchedAlbumId) || songs[0];
             const name = representative.matchedAlbumName || representative.album || t('localMusic.unknownAlbum');
+            const id = `album-${key}`;
+            sourceMap.set(id, getGroupCoverSource(songs));
 
             return {
-                id: `album-${key}`,
+                id,
                 name,
                 songs,
                 type: 'album' as const,
-                coverUrl: getGroupCover(songs),
+                coverUrl: undefined,
                 trackCount: songs.length,
                 description: songs[0]?.artist || t('localMusic.unknownArtist'),
                 albumId: representative.matchedAlbumId
             };
         }).sort((a, b) => a.name.localeCompare(b.name));
 
-        const artistList: LocalLibraryGroup[] = Object.entries(artists).map(([name, songs]) => ({
-            id: `artist-${name}`,
-            name,
-            songs,
-            type: 'artist' as const,
-            coverUrl: getGroupCover(songs),
-            trackCount: songs.length,
-            description: songs[0]?.matchedAlbumName || songs[0]?.album || t('localMusic.unknownAlbum'),
-        })).sort((a, b) => a.name.localeCompare(b.name));
+        const artistList: LocalLibraryGroup[] = Object.entries(artists).map(([name, songs]) => {
+            const id = `artist-${name}`;
+            sourceMap.set(id, getGroupCoverSource(songs));
+            return {
+                id,
+                name,
+                songs,
+                type: 'artist' as const,
+                coverUrl: undefined,
+                trackCount: songs.length,
+                description: songs[0]?.matchedAlbumName || songs[0]?.album || t('localMusic.unknownAlbum'),
+            };
+        }).sort((a, b) => a.name.localeCompare(b.name));
 
         const playlistList: LocalLibraryGroup[] = localPlaylists.map(playlist => {
             const songMap = new Map(localSongs.map(song => [song.id, song]));
@@ -245,13 +262,16 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 .map(songId => songMap.get(songId))
                 .filter((song): song is LocalSong => Boolean(song));
 
+            const id = `playlist-${playlist.id}`;
+            sourceMap.set(id, getGroupCoverSource(songs));
+
             return {
-                id: `playlist-${playlist.id}`,
+                id,
                 playlistId: playlist.id,
                 name: playlist.name,
                 songs,
                 type: 'playlist' as const,
-                coverUrl: getGroupCover(songs),
+                coverUrl: undefined,
                 trackCount: songs.length,
                 description: playlist.isFavorite ? t('localMusic.favoritePlaylist') : t('home.playlists'),
                 isVirtual: playlist.isFavorite,
@@ -266,17 +286,67 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             return left.name.localeCompare(right.name);
         });
 
-        return { folders: folderList, albums: albumList, artists: artistList, playlists: playlistList };
+        return {
+            groups: { folders: folderList, albums: albumList, artists: artistList, playlists: playlistList },
+            coverSourceMap: sourceMap,
+        };
     }, [localPlaylists, localSongs, resolvedAllSongsLabel, t]);
+
+    const [groupCoverObjectUrls, setGroupCoverObjectUrls] = useState<Record<string, string>>({});
+    useEffect(() => {
+        const nextObjectUrls: Record<string, string> = {};
+        const createdUrls: string[] = [];
+
+        const allGroups = [
+            ...groups.folders,
+            ...groups.albums,
+            ...groups.artists,
+            ...groups.playlists,
+        ];
+
+        for (const group of allGroups) {
+            const source = coverSourceMap.get(group.id);
+            if (source instanceof Blob) {
+                const url = URL.createObjectURL(source);
+                nextObjectUrls[group.id] = url;
+                createdUrls.push(url);
+            }
+        }
+
+        setGroupCoverObjectUrls(nextObjectUrls);
+
+        return () => {
+            createdUrls.forEach(url => URL.revokeObjectURL(url));
+        };
+    }, [groups, coverSourceMap]);
+
+    const groupsWithCovers = useMemo(() => {
+        const withCoverUrls = (items: LocalLibraryGroup[]) => items.map(group => {
+            const source = coverSourceMap.get(group.id);
+            const coverUrl = typeof source === 'string' ? source : groupCoverObjectUrls[group.id];
+
+            return {
+                ...group,
+                coverUrl,
+            };
+        });
+
+        return {
+            folders: withCoverUrls(groups.folders),
+            albums: withCoverUrls(groups.albums),
+            artists: withCoverUrls(groups.artists),
+            playlists: withCoverUrls(groups.playlists),
+        };
+    }, [coverSourceMap, groupCoverObjectUrls, groups]);
 
     const resolvedSelectedGroup = useMemo(() => {
         if (!selectedGroup) return null;
 
         const sourceGroups =
-            selectedGroup.type === 'folder' ? groups.folders
-                : selectedGroup.type === 'album' ? groups.albums
-                    : selectedGroup.type === 'artist' ? groups.artists
-                        : groups.playlists;
+            selectedGroup.type === 'folder' ? groupsWithCovers.folders
+                : selectedGroup.type === 'album' ? groupsWithCovers.albums
+                    : selectedGroup.type === 'artist' ? groupsWithCovers.artists
+                        : groupsWithCovers.playlists;
         const matchedGroup = sourceGroups.find(group =>
             (selectedGroup.id && group.id === selectedGroup.id) ||
             group.name === selectedGroup.name
@@ -286,11 +356,16 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             return matchedGroup;
         }
 
+        const fallbackSource = selectedGroup.id ? coverSourceMap.get(selectedGroup.id) : undefined;
+        const fallbackCoverUrl = typeof fallbackSource === 'string'
+            ? fallbackSource
+            : (selectedGroup.id ? groupCoverObjectUrls[selectedGroup.id] : undefined) || selectedGroup.coverUrl;
+
         return {
             ...selectedGroup,
-            coverUrl: selectedGroup.coverUrl || getGroupCover(selectedGroup.songs)
+            coverUrl: fallbackCoverUrl
         };
-    }, [groups.albums, groups.folders, selectedGroup]);
+    }, [coverSourceMap, groupCoverObjectUrls, groupsWithCovers, selectedGroup]);
 
     const handleFolderImport = async () => {
         if (isScanInProgress) {
@@ -478,7 +553,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             key: 'folders',
             row: 0 as const,
             label: t('localMusic.foldersAndPlaylists'),
-            items: groups.folders,
+            items: groupsWithCovers.folders,
             emptyMessage: t('localMusic.noFoldersFound'),
             focusedIndex: focusedFolderIndex,
             onFocusedIndexChange: setFocusedFolderIndex,
@@ -488,7 +563,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             key: 'albums',
             row: 1 as const,
             label: t('localMusic.albums'),
-            items: groups.albums,
+            items: groupsWithCovers.albums,
             emptyMessage: t('localMusic.noAlbumsFound'),
             focusedIndex: focusedAlbumIndex,
             onFocusedIndexChange: setFocusedAlbumIndex,
@@ -497,7 +572,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             key: 'artists',
             row: 2 as const,
             label: t('localMusic.artists'),
-            items: groups.artists,
+            items: groupsWithCovers.artists,
             emptyMessage: t('localMusic.noArtistsFound'),
             focusedIndex: focusedArtistIndex,
             onFocusedIndexChange: setFocusedArtistIndex,
@@ -506,7 +581,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             key: 'playlists',
             row: 3 as const,
             label: t('localMusic.customPlaylists'),
-            items: groups.playlists,
+            items: groupsWithCovers.playlists,
             emptyMessage: t('localMusic.noPlaylistsFound'),
             focusedIndex: focusedPlaylistIndex,
             onFocusedIndexChange: setFocusedPlaylistIndex,

@@ -15,6 +15,7 @@ import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 const PREFETCH_COUNT_NEXT = 2;  // Prefetch 2 songs ahead
 const PREFETCH_COUNT_PREV = 1;  // Prefetch 1 song behind
 const URL_TTL_MS = 1200 * 1000; // 1200 seconds = 20 minutes
+const MAX_PREFETCH_CACHE_SIZE = 200; // Evict least recently used entries beyond this limit
 
 export interface PrefetchedSongData {
     songId: number;
@@ -33,6 +34,12 @@ export interface PrefetchedSongData {
 
 // In-memory prefetch cache (not persisted to IndexedDB to avoid stale URLs)
 const prefetchCache = new Map<number, PrefetchedSongData>();
+
+const touchPrefetchCacheEntry = (songId: number, data: PrefetchedSongData): PrefetchedSongData => {
+    prefetchCache.delete(songId);
+    prefetchCache.set(songId, data);
+    return data;
+};
 
 // Track current prefetch operation to cancel on queue change
 let currentPrefetchAbortController: AbortController | null = null;
@@ -67,7 +74,7 @@ export const getPrefetchedData = (songId: number, requiredQuality?: string): Pre
         cached.audioUrlQuality = null;
     }
 
-    return cached;
+    return touchPrefetchCacheEntry(songId, cached);
 };
 
 /**
@@ -92,6 +99,7 @@ const prefetchSong = async (
     const existing = prefetchCache.get(songId);
     if (existing && existing.audioUrl && isUrlValid(existing.audioUrlFetchedAt) && (existing.lyrics || existing.lyricRaw?.isPureMusic)) {
         console.log(`[Prefetch] Already cached: ${song.name}`);
+        touchPrefetchCacheEntry(songId, existing);
         return;
     }
 
@@ -168,6 +176,18 @@ const prefetchSong = async (
         const coverUrl = song.al?.picUrl || song.album?.picUrl;
         if (coverUrl) {
             data.coverUrl = coverUrl.startsWith('http:') ? coverUrl.replace('http:', 'https:') : coverUrl;
+        }
+    }
+
+    prefetchCache.delete(songId);
+
+    // Evict least recently used entries if cache exceeds limit
+    while (prefetchCache.size >= MAX_PREFETCH_CACHE_SIZE) {
+        const oldestKey = prefetchCache.keys().next().value;
+        if (oldestKey !== undefined) {
+            prefetchCache.delete(oldestKey);
+        } else {
+            break;
         }
     }
 
