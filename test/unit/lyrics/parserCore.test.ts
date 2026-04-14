@@ -95,13 +95,14 @@ describe('parserCore', () => {
 
         const lyrics = parseLRC(excerpt);
 
-        expect(lyrics.lines).toHaveLength(3);
-        expect(lyrics.lines[0].fullText).toBe('ハロ窓を開けて小さく呟いた');
-        expect(lyrics.lines[1].fullText).toBe('ハワユ誰もいない部屋で一人');
-        expect(lyrics.lines[2].fullText).toBe('モーニン朝が来たよ');
-        expect(lyrics.lines[0].translation).toBeUndefined();
-        expect(lyrics.lines[0].words.length).toBeGreaterThan(5);
-        expectNonDecreasingWordTimes(lyrics.lines[0].words);
+        expect(lyrics.lines).toHaveLength(4);
+        expect(lyrics.lines[0].fullText).toBe('......');
+        expect(lyrics.lines[1].fullText).toBe('ハロ窓を開けて小さく呟いた');
+        expect(lyrics.lines[2].fullText).toBe('ハワユ誰もいない部屋で一人');
+        expect(lyrics.lines[3].fullText).toBe('モーニン朝が来たよ');
+        expect(lyrics.lines[1].translation).toBeUndefined();
+        expect(lyrics.lines[1].words.length).toBeGreaterThan(5);
+        expectNonDecreasingWordTimes(lyrics.lines[1].words);
     });
 
     it('splits alternating bilingual line-level LRC before parsing through the shared pipeline', () => {
@@ -122,11 +123,12 @@ describe('parserCore', () => {
         expect(main).toContain('[00:12.428]ハロ窓を開けて小さく呟いた');
         expect(main).not.toContain('你好 打开窗户轻声说道');
         expect(trans).toContain('[00:12.428]你好 打开窗户轻声说道');
-        expect(lyrics.lines).toHaveLength(3);
-        expect(lyrics.lines[0].fullText).toBe('ハロ窓を開けて小さく呟いた');
-        expect(lyrics.lines[0].translation).toBe('你好 打开窗户轻声说道');
-        expect(lyrics.lines[1].fullText).toBe('ハワユ誰もいない部屋で一人');
-        expect(lyrics.lines[1].translation).toBe('你好吗 独自在空无一人的房间里');
+        expect(lyrics.lines).toHaveLength(4);
+        expect(lyrics.lines[0].fullText).toBe('......');
+        expect(lyrics.lines[1].fullText).toBe('ハロ窓を開けて小さく呟いた');
+        expect(lyrics.lines[1].translation).toBe('你好 打开窗户轻声说道');
+        expect(lyrics.lines[2].fullText).toBe('ハワユ誰もいない部屋で一人');
+        expect(lyrics.lines[2].translation).toBe('你好吗 独自在空无一人的房间里');
     });
 
     it('parses bracket-timed enhanced LRC excerpts from the Hello/How are you fixture', () => {
@@ -142,12 +144,13 @@ describe('parserCore', () => {
         const lyrics = parseLyricsByFormat(format, main, trans);
 
         expect(format).toBe('enhanced-lrc');
-        expect(lyrics.lines).toHaveLength(2);
-        expect(lyrics.lines[0].fullText).toBe('ハロ窓を開けて小さく呟いた');
-        expect(lyrics.lines[0].translation).toBe('你好 打开窗户轻声说道');
-        expect(lyrics.lines[0].words.slice(0, 4).map(word => word.text)).toEqual(['ハ', 'ロ', '窓', 'を']);
-        expect(lyrics.lines[0].words[0].startTime).toBe(12.428);
-        expect(lyrics.lines[0].words[0].endTime).toBe(12.667);
+        expect(lyrics.lines).toHaveLength(3);
+        expect(lyrics.lines[0].fullText).toBe('......');
+        expect(lyrics.lines[1].fullText).toBe('ハロ窓を開けて小さく呟いた');
+        expect(lyrics.lines[1].translation).toBe('你好 打开窗户轻声说道');
+        expect(lyrics.lines[1].words.slice(0, 4).map(word => word.text)).toEqual(['ハ', 'ロ', '窓', 'を']);
+        expect(lyrics.lines[1].words[0].startTime).toBe(12.428);
+        expect(lyrics.lines[1].words[0].endTime).toBe(12.667);
     });
 
     it('parses angle-timed enhanced LRC excerpts from the Hello/How are you fixture', () => {
@@ -163,12 +166,13 @@ describe('parserCore', () => {
         const lyrics = parseLyricsByFormat(format, main, trans);
 
         expect(format).toBe('enhanced-lrc');
-        expect(lyrics.lines).toHaveLength(2);
+        expect(lyrics.lines).toHaveLength(3);
         expect(lyrics.title).toBeUndefined();
-        expect(lyrics.lines[0].fullText).toBe('ハロ窓を開けて小さく呟いた');
-        expect(lyrics.lines[0].translation).toBe('你好 打开窗户轻声说道');
-        expect(lyrics.lines[0].words.slice(0, 4).map(word => word.text)).toEqual(['ハ', 'ロ', '窓', 'を']);
-        expect(lyrics.lines[0].words[2].startTime).toBe(13.343);
-        expect(lyrics.lines[0].words[2].endTime).toBe(13.548);
+        expect(lyrics.lines[0].fullText).toBe('......');
+        expect(lyrics.lines[1].fullText).toBe('ハロ窓を開けて小さく呟いた');
+        expect(lyrics.lines[1].translation).toBe('你好 打开窗户轻声说道');
+        expect(lyrics.lines[1].words.slice(0, 4).map(word => word.text)).toEqual(['ハ', 'ロ', '窓', 'を']);
+        expect(lyrics.lines[1].words[2].startTime).toBe(13.343);
+        expect(lyrics.lines[1].words[2].endTime).toBe(13.548);
     });
 });
