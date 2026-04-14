@@ -58,6 +58,7 @@ export default {
     "visualizerMode": "模式",
     "visualizerClassic": "流光",
     "visualizerCadenze": "心象",
+    "visualizerPartita": "组曲",
     "cadenzeTuning": "心象参数",
     "resetVisualizerTuning": "重置视觉参数",
     "livePreview": "实时预览",

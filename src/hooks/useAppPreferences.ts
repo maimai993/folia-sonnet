@@ -74,7 +74,13 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
     const [isDaylight, setIsDaylight] = useState(() => getStoredBoolean('default_theme_daylight', false));
     const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>(() => {
         const saved = localStorage.getItem('visualizer_mode');
-        return saved === 'cadenza' || saved === 'cadenze' ? 'cadenza' : 'classic';
+        if (saved === 'cadenza' || saved === 'cadenze') {
+            return 'cadenza';
+        }
+        if (saved === 'partita') {
+            return 'partita';
+        }
+        return 'classic';
     });
     const [cadenzaTuning, setCadenzaTuning] = useState<CadenzaTuning>(readStoredCadenzaTuning);
     const [lyricsFontStyle, setLyricsFontStyle] = useState<Theme['fontStyle']>(readStoredLyricsFontStyle);
@@ -141,7 +147,11 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         localStorage.setItem('visualizer_mode', mode);
         setStatusMsg({
             type: 'info',
-            text: mode === 'cadenza' ? '已切换到心象歌词' : '已切换到流光歌词'
+            text: mode === 'cadenza'
+                ? '已切换到心象歌词'
+                : mode === 'partita'
+                    ? '已切换到组曲歌词'
+                    : '已切换到流光歌词'
         });
     };
 

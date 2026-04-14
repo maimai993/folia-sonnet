@@ -42,7 +42,7 @@ export interface DualTheme {
   dark: Theme;
 }
 
-export type VisualizerMode = 'classic' | 'cadenza';
+export type VisualizerMode = 'classic' | 'cadenza' | 'partita';
 
 export interface CadenzaTuning {
   fontScale: number;

@@ -3,11 +3,11 @@ import { motion, AnimatePresence, MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { layoutWithLines, prepareWithSegments, type LayoutLine, type LayoutCursor, type PreparedTextWithSegments } from '@chenglou/pretext';
-import { AudioBands, DEFAULT_CADENZA_TUNING, Line, Theme, Word as WordType, type CadenzaTuning } from '../types';
+import { AudioBands, DEFAULT_CADENZA_TUNING, Line, Theme, Word as WordType, type CadenzaTuning } from '../../types';
 import GeometricBackground from './GeometricBackground';
 import FluidBackground from './FluidBackground';
-import { getLineTransitionTiming, type LineTransitionTiming } from '../utils/lyrics/renderHints';
-import { resolveThemeFontStack } from '../utils/fontStacks';
+import { getLineTransitionTiming, type LineTransitionTiming } from '../../utils/lyrics/renderHints';
+import { resolveThemeFontStack } from '../../utils/fontStacks';
 
 // Visualizer cadenza
 interface VisualizerProps {

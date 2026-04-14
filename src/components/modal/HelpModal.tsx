@@ -5,7 +5,7 @@ import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../
 import { Theme, type CadenzaTuning, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
-import VisPlayground from '../VisPlayground';
+import VisPlayground from '../visualizer/VisPlayground';
 
 interface HelpModalProps {
     onClose: () => void;
@@ -384,7 +384,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                 <Settings2 size={16} />
                                             </button>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-3 gap-3">
                                             <button
                                                 onClick={() => onVisualizerModeChange?.('classic')}
                                                 className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
@@ -407,6 +407,18 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             >
                                                 <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                                     {t('ui.visualizerCadenze')}
+                                                </span>
+                                            </button>
+                                            <button
+                                                onClick={() => onVisualizerModeChange?.('partita')}
+                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
+                                                style={{
+                                                    borderColor: visualizerMode === 'partita' ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
+                                                    backgroundColor: visualizerMode === 'partita' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
+                                                }}
+                                            >
+                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('ui.visualizerPartita')}
                                                 </span>
                                             </button>
                                         </div>

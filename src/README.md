@@ -44,8 +44,13 @@ src/
 │  ├─ navidrome/NavidromeAlbumView.tsx
 │  ├─ UnifiedPanel.tsx
 │  ├─ FloatingPlayerControls.tsx
-│  ├─ Visualizer.tsx
-│  ├─ VisualizerCadenza.tsx
+│  ├─ visualizer/
+│  │  ├─ Visualizer.tsx
+│  │  ├─ VisualizerCadenza.tsx
+│  │  ├─ VisualizerPartita.tsx
+│  │  ├─ GeometricBackground.tsx
+│  │  ├─ FluidBackground.tsx
+│  │  └─ VisPlayground.tsx
 │  ├─ modal/LyricsTimelineModal.tsx
 │  ├─ modal/LyricMatchModal.tsx
 │  ├─ modal/NaviLyricMatchModal.tsx
@@ -53,8 +58,6 @@ src/
 │  ├─ modal/DeleteFolderConfirmModal.tsx
 │  ├─ Carousel3D.tsx
 │  ├─ ProgressBar.tsx
-│  ├─ GeometricBackground.tsx
-│  ├─ FluidBackground.tsx
 │  └─ panelTab/
 │     ├─ CoverTab.tsx
 │     ├─ ControlsTab.tsx
@@ -135,10 +138,11 @@ src/
 
 | File | Responsibility |
 | :--- | :--- |
-| `components/Visualizer.tsx` | Classic lyric renderer with animated word-level timing and geometric background. |
-| `components/VisualizerCadenza.tsx` | Newer lyric renderer with more advanced layout, layered glow, fluid background, and tunable typography/motion. |
-| `components/GeometricBackground.tsx` | Audio-reactive geometric background. |
-| `components/FluidBackground.tsx` | Cover-color-driven blurred fluid background. |
+| `components/visualizer/Visualizer.tsx` | Classic lyric renderer with animated word-level timing and geometric background. |
+| `components/visualizer/VisualizerCadenza.tsx` | Newer lyric renderer with more advanced layout, layered glow, fluid background, and tunable typography/motion. |
+| `components/visualizer/VisualizerPartita.tsx` | Experimental vertical lyric renderer with column-first composition and per-word focus cards. |
+| `components/visualizer/GeometricBackground.tsx` | Audio-reactive geometric background. |
+| `components/visualizer/FluidBackground.tsx` | Cover-color-driven blurred fluid background. |
 | `components/FloatingPlayerControls.tsx` | Mini player / mobile player controls shown globally. |
 | `components/ProgressBar.tsx` | Shared draggable progress / slider UI. |
 | `components/modal/LyricsTimelineModal.tsx` | Fullscreen timeline-oriented lyrics view. |

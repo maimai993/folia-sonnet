@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { List, useListRef } from 'react-window';
 import Visualizer from './Visualizer';
 import VisualizerCadenza from './VisualizerCadenza';
+import VisualizerPartita from './VisualizerPartita';
 import {
     DEFAULT_CADENZA_TUNING,
     type AudioBands,
@@ -12,9 +13,9 @@ import {
     type Line,
     type Theme,
     type VisualizerMode,
-} from '../types';
-import { getLineRenderEndTime } from '../utils/lyrics/renderHints';
-import { resolveThemeFontStack } from '../utils/fontStacks';
+} from '../../types';
+import { getLineRenderEndTime } from '../../utils/lyrics/renderHints';
+import { resolveThemeFontStack } from '../../utils/fontStacks';
 
 interface VisPlaygroundProps {
     theme?: Theme;
@@ -327,7 +328,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
     const modeLabel = visualizerMode === 'classic'
         ? (t('ui.visualizerClassic') || '流光')
-        : (t('ui.visualizerCadenze') || '心象');
+        : visualizerMode === 'cadenza'
+            ? (t('ui.visualizerCadenze') || '心象')
+            : (t('ui.visualizerPartita') || '组曲');
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
     const tabSwitcherBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
@@ -526,7 +529,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                     lyricsFontScale={normalizedFontScale}
                                     seed="vis-playground-classic"
                                 />
-                            ) : (
+                            ) : visualizerMode === 'cadenza' ? (
                                 <VisualizerCadenza
                                     currentTime={currentTime}
                                     currentLineIndex={currentLineIndex}
@@ -540,6 +543,20 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                     cadenzaTuning={effectiveCadenzaTuning}
                                     lyricsFontScale={normalizedFontScale}
                                     seed="vis-playground-cadenza"
+                                />
+                            ) : (
+                                <VisualizerPartita
+                                    currentTime={currentTime}
+                                    currentLineIndex={currentLineIndex}
+                                    lines={PREVIEW_LINES}
+                                    theme={previewTheme}
+                                    audioPower={audioPower}
+                                    audioBands={audioBands}
+                                    showText
+                                    staticMode={staticMode}
+                                    backgroundOpacity={backgroundOpacity}
+                                    lyricsFontScale={normalizedFontScale}
+                                    seed="vis-playground-partita"
                                 />
                             )}
                         </div>

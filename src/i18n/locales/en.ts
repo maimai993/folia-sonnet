@@ -58,6 +58,7 @@ export default {
     "visualizerMode": "Mode",
     "visualizerClassic": "Luminous",
     "visualizerCadenze": "Mindscape",
+    "visualizerPartita": "Partita",
     "cadenzeTuning": "Mindscape Tuning",
     "resetVisualizerTuning": "Reset Visualizer Tuning",
     "livePreview": "Live preview",

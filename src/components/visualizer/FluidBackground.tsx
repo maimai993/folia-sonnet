@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
-import { Theme } from '../types';
+import { Theme } from '../../types';
 
 interface FluidBackgroundProps {
     coverUrl?: string | null;

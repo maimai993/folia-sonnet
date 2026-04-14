@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { AnimatePresence, motion, MotionValue, useSpring, useTransform } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
-import { Theme, AudioBands } from '../types';
+import { Theme, AudioBands } from '../../types';
 
 interface GeometricBackgroundProps {
   theme: Theme;

@@ -9,8 +9,9 @@ import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from './services/
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from './services/onlinePlayback';
 import { buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong } from './services/playbackAdapters';
 import { getPrefetchedData, prefetchNearbySongs, invalidateAndRefetch } from './services/prefetchService';
-import Visualizer from './components/Visualizer';
-import VisualizerCadenza from './components/VisualizerCadenza';
+import Visualizer from './components/visualizer/Visualizer';
+import VisualizerCadenza from './components/visualizer/VisualizerCadenza';
+import VisualizerPartita from './components/visualizer/VisualizerPartita';
 import DevDebugOverlay from './components/DevDebugOverlay';
 import ProgressBar from './components/ProgressBar';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
@@ -2568,6 +2569,23 @@ export default function App() {
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
                         cadenzaTuning={effectiveCadenzaTuning}
+                        lyricsFontScale={lyricsFontScale}
+                        onBack={navigateToHome}
+                    />
+                ) : visualizerMode === 'partita' ? (
+                    <VisualizerPartita
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={lyrics?.lines || []}
+                        theme={visualizerTheme}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        coverUrl={getCoverUrl()}
+                        showText={currentView === 'player'}
+                        useCoverColorBg={useCoverColorBg}
+                        seed={visualizerGeometrySeed}
+                        staticMode={staticMode}
+                        backgroundOpacity={backgroundOpacity}
                         lyricsFontScale={lyricsFontScale}
                         onBack={navigateToHome}
                     />
