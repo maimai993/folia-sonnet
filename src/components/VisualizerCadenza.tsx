@@ -264,8 +264,8 @@ const parseColorChannels = (color: string) => {
                 r: parse(hex[0] + hex[0]),
                 g: parse(hex[1] + hex[1]),
                 b: parse(hex[2] + hex[2]),
-            };
-        }
+    };
+}
 
         if (hex.length === 6) {
             return {

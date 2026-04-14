@@ -1837,6 +1837,27 @@ export default function App() {
         }
     }, [currentSong, playQueue, loopMode, isFmMode]);
 
+    const mediaSessionPlayRef = useRef(resumePlayback);
+    const mediaSessionPauseRef = useRef(pausePlayback);
+    const mediaSessionPrevRef = useRef(handlePrevTrack);
+    const mediaSessionNextRef = useRef(handleNextTrack);
+
+    useEffect(() => {
+        mediaSessionPlayRef.current = resumePlayback;
+    }, [resumePlayback]);
+
+    useEffect(() => {
+        mediaSessionPauseRef.current = pausePlayback;
+    }, [pausePlayback]);
+
+    useEffect(() => {
+        mediaSessionPrevRef.current = handlePrevTrack;
+    }, [handlePrevTrack]);
+
+    useEffect(() => {
+        mediaSessionNextRef.current = handleNextTrack;
+    }, [handleNextTrack]);
+
     const handleFmTrash = async () => {
         if (currentSong && isFmMode) {
             try {
@@ -1940,26 +1961,82 @@ export default function App() {
         }
     }, [currentSong, getTargetPlaybackVolume, replayGainMode, syncOutputGain]);
 
-    // Media Session API Integration
+    // Keep Media Session actions stable. Rapid SMTC input is less reliable
+    // when handlers are rebound on every track, cover, or playback update.
     useEffect(() => {
+        if (!('mediaSession' in navigator)) {
+            return;
+        }
+
+        const mediaSession = navigator.mediaSession;
+        const setActionHandlerSafely = (
+            action: MediaSessionAction,
+            handler: MediaSessionActionHandler | null
+        ) => {
+            try {
+                mediaSession.setActionHandler(action, handler);
+            } catch (e) {
+                console.warn(`[MediaSession] Failed to bind ${action} handler`, e);
+            }
+        };
+
+        setActionHandlerSafely('play', async () => {
+            if (!audioRef.current) {
+                return;
+            }
+
+            try {
+                await mediaSessionPlayRef.current();
+            } catch (e) {
+                console.error("MediaSession play failed", e);
+            }
+        });
+        setActionHandlerSafely('pause', () => {
+            if (!audioRef.current) {
+                return;
+            }
+
+            mediaSessionPauseRef.current();
+        });
+        setActionHandlerSafely('previoustrack', () => {
+            mediaSessionPrevRef.current();
+        });
+        setActionHandlerSafely('nexttrack', () => {
+            void mediaSessionNextRef.current();
+        });
+
+        return () => {
+            setActionHandlerSafely('play', null);
+            setActionHandlerSafely('pause', null);
+            setActionHandlerSafely('previoustrack', null);
+            setActionHandlerSafely('nexttrack', null);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!('mediaSession' in navigator)) {
+            return;
+        }
+
+        const mediaSession = navigator.mediaSession;
+
         if (!currentSong) {
-            if ('mediaSession' in navigator) {
-                navigator.mediaSession.metadata = null;
-                navigator.mediaSession.playbackState = 'none';
+            try {
+                mediaSession.metadata = null;
+            } catch (e) {
+                console.warn('[MediaSession] Failed to clear metadata', e);
             }
             return;
         }
 
-        if ('mediaSession' in navigator) {
-            const artistName = currentSong.ar?.map(a => a.name).join(', ') ||
-                currentSong.artists?.map(a => a.name).join(', ') ||
-                t('ui.unknownArtist');
-            const albumName = currentSong.al?.name || currentSong.album?.name || '';
+        const artistName = currentSong.ar?.map(a => a.name).join(', ') ||
+            currentSong.artists?.map(a => a.name).join(', ') ||
+            t('ui.unknownArtist');
+        const albumName = currentSong.al?.name || currentSong.album?.name || '';
+        const cover = cachedCoverUrl || currentSong.al?.picUrl || currentSong.album?.picUrl || '';
 
-            // Determine cover URL (prioritize cached blob, then network url)
-            const cover = cachedCoverUrl || currentSong.al?.picUrl || currentSong.album?.picUrl || '';
-
-            navigator.mediaSession.metadata = new MediaMetadata({
+        try {
+            mediaSession.metadata = new MediaMetadata({
                 title: currentSong.name,
                 artist: artistName,
                 album: albumName,
@@ -1967,28 +2044,24 @@ export default function App() {
                     { src: cover, sizes: '512x512', type: 'image/jpeg' }
                 ] : []
             });
-
-            navigator.mediaSession.playbackState = playerState === PlayerState.PLAYING ? 'playing' : 'paused';
-
-            // Action Handlers
-            navigator.mediaSession.setActionHandler('play', async () => {
-                if (audioRef.current) {
-                    try {
-                        await resumePlayback();
-                    } catch (e) {
-                        console.error("MediaSession play failed", e);
-                    }
-                }
-            });
-            navigator.mediaSession.setActionHandler('pause', () => {
-                if (audioRef.current) {
-                    pausePlayback();
-                }
-            });
-            navigator.mediaSession.setActionHandler('previoustrack', handlePrevTrack);
-            navigator.mediaSession.setActionHandler('nexttrack', handleNextTrack);
+        } catch (e) {
+            console.warn('[MediaSession] Failed to update metadata', e);
         }
-    }, [cachedCoverUrl, currentSong, handleNextTrack, handlePrevTrack, pausePlayback, playerState, resumePlayback, t]);
+    }, [cachedCoverUrl, currentSong, t]);
+
+    useEffect(() => {
+        if (!('mediaSession' in navigator)) {
+            return;
+        }
+
+        try {
+            navigator.mediaSession.playbackState = currentSong
+                ? (playerState === PlayerState.PLAYING ? 'playing' : 'paused')
+                : 'none';
+        } catch (e) {
+            console.warn('[MediaSession] Failed to update playback state', e);
+        }
+    }, [currentSong, playerState]);
 
 
     useEffect(() => {
