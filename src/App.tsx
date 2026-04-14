@@ -403,6 +403,7 @@ export default function App() {
         isDaylight,
         visualizerMode,
         cadenzaTuning,
+        partitaTuning,
         lyricsFontStyle,
         lyricsFontScale,
         lyricsCustomFontFamily,
@@ -415,6 +416,8 @@ export default function App() {
         handleSetVisualizerMode,
         handleSetCadenzaTuning,
         handleResetCadenzaTuning,
+        handleSetPartitaTuning,
+        handleResetPartitaTuning,
         handleSetLyricsFontStyle,
         handleSetLyricsFontScale,
         handleSetLyricsCustomFont,
@@ -2586,6 +2589,7 @@ export default function App() {
                         seed={visualizerGeometrySeed}
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
+                        partitaTuning={partitaTuning}
                         lyricsFontScale={lyricsFontScale}
                         onBack={navigateToHome}
                     />
@@ -2661,7 +2665,10 @@ export default function App() {
                             onSetThemePreset={handleSetThemePreset}
                             visualizerMode={visualizerMode}
                             cadenzaTuning={cadenzaTuning}
+                            partitaTuning={partitaTuning}
                             onVisualizerModeChange={handleSetVisualizerMode}
+                            onPartitaTuningChange={handleSetPartitaTuning}
+                            onResetPartitaTuning={handleResetPartitaTuning}
                             lyricsFontStyle={lyricsFontStyle}
                             lyricsFontScale={lyricsFontScale}
                             lyricsCustomFontFamily={lyricsCustomFontFamily}

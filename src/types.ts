@@ -60,6 +60,18 @@ export const DEFAULT_CADENZA_TUNING: CadenzaTuning = {
   beamIntensity: 0,
 };
 
+export interface PartitaTuning {
+  showGuideLines: boolean;
+  staggerMin: number;
+  staggerMax: number;
+}
+
+export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
+  showGuideLines: true,
+  staggerMin: 20,
+  staggerMax: 100,
+};
+
 export enum PlayerState {
   IDLE = 'IDLE',
   PLAYING = 'PLAYING',

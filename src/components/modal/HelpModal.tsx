@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
-import { Theme, type CadenzaTuning, type VisualizerMode } from '../../types';
+import { Theme, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
 import VisPlayground from '../visualizer/VisPlayground';
@@ -21,7 +21,10 @@ interface HelpModalProps {
     onToggleNavidrome?: (enabled: boolean) => void;
     visualizerMode?: VisualizerMode;
     cadenzaTuning?: CadenzaTuning;
+    partitaTuning?: PartitaTuning;
     onVisualizerModeChange?: (mode: VisualizerMode) => void;
+    onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
+    onResetPartitaTuning?: () => void;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
     lyricsCustomFontFamily: string | null;
@@ -45,7 +48,10 @@ const HelpModal: React.FC<HelpModalProps> = ({
     onToggleNavidrome,
     visualizerMode = 'classic',
     cadenzaTuning,
+    partitaTuning,
     onVisualizerModeChange,
+    onPartitaTuningChange,
+    onResetPartitaTuning,
     lyricsFontStyle,
     lyricsFontScale,
     lyricsCustomFontFamily,
@@ -809,6 +815,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     backgroundOpacity={backgroundOpacity}
                     staticMode={staticMode}
                     cadenzaTuning={cadenzaTuning}
+                    partitaTuning={partitaTuning}
                     fontStyle={lyricsFontStyle}
                     fontScale={lyricsFontScale}
                     customFontFamily={lyricsCustomFontFamily}
@@ -816,6 +823,8 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     onFontStyleChange={onLyricsFontStyleChange}
                     onFontScaleChange={onLyricsFontScaleChange}
                     onCustomFontChange={onLyricsCustomFontChange}
+                    onPartitaTuningChange={onPartitaTuningChange}
+                    onResetPartitaTuning={onResetPartitaTuning}
                     onClose={() => setShowVisPlayground(false)}
                 />
             )}

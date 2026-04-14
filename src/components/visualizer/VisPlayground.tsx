@@ -8,9 +8,11 @@ import VisualizerCadenza from './VisualizerCadenza';
 import VisualizerPartita from './VisualizerPartita';
 import {
     DEFAULT_CADENZA_TUNING,
+    DEFAULT_PARTITA_TUNING,
     type AudioBands,
     type CadenzaTuning,
     type Line,
+    type PartitaTuning,
     type Theme,
     type VisualizerMode,
 } from '../../types';
@@ -24,6 +26,7 @@ interface VisPlaygroundProps {
     backgroundOpacity?: number;
     staticMode?: boolean;
     cadenzaTuning?: CadenzaTuning;
+    partitaTuning?: PartitaTuning;
     fontStyle: Theme['fontStyle'];
     fontScale: number;
     customFontFamily: string | null;
@@ -31,6 +34,8 @@ interface VisPlaygroundProps {
     onFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
     onFontScaleChange: (fontScale: number) => void;
     onCustomFontChange: (font: { family: string; label?: string | null; } | null) => void;
+    onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
+    onResetPartitaTuning?: () => void;
     onClose: () => void;
 }
 
@@ -85,6 +90,7 @@ const LOOP_DURATION = 14.4;
 const FONT_ROW_HEIGHT = 94;
 
 const clampFontScale = (value: number) => Math.min(1.4, Math.max(0.85, value));
+const clampPartitaStagger = (value: number) => Math.min(180, Math.max(0, value));
 
 const createCharacterWords = (text: string, startTime: number, endTime: number) => {
     const chars = Array.from(text);
@@ -231,6 +237,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     backgroundOpacity = 0.75,
     staticMode = false,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
+    partitaTuning = DEFAULT_PARTITA_TUNING,
     fontStyle,
     fontScale,
     customFontFamily,
@@ -238,6 +245,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onFontStyleChange,
     onFontScaleChange,
     onCustomFontChange,
+    onPartitaTuningChange,
+    onResetPartitaTuning,
     onClose,
 }) => {
     const { t } = useTranslation();
@@ -282,11 +291,25 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         ...cadenzaTuning,
         fontScale: cadenzaTuning.fontScale * normalizedFontScale,
     }), [cadenzaTuning, normalizedFontScale]);
+    const resolvedPartitaTuning = useMemo<PartitaTuning>(() => {
+        const rawMin = clampPartitaStagger(partitaTuning.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
+        const rawMax = clampPartitaStagger(partitaTuning.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
+
+        return {
+            showGuideLines: partitaTuning.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+            staggerMin: Math.min(rawMin, rawMax),
+            staggerMax: Math.max(rawMin, rawMax),
+        };
+    }, [partitaTuning]);
     const currentFontLabel = customFontLabel || customFontFamily || (t('options.customFont') || '自定义字体');
     const fontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[] = useMemo(() => ([
         ...builtinFontOptions,
         { value: 'custom', label: currentFontLabel },
     ]), [builtinFontOptions, currentFontLabel]);
+    const guideLineOptions: PresetOption<boolean>[] = useMemo(() => ([
+        { value: true, label: t('options.partitaGuideLinesOn') || '显示' },
+        { value: false, label: t('options.partitaGuideLinesOff') || '隐藏' },
+    ]), [t]);
     const filteredSystemFonts = useMemo(() => {
         const query = fontSearchQuery.trim().toLocaleLowerCase();
         if (!query) {
@@ -341,6 +364,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         onCustomFontChange(null);
         onFontStyleChange('sans');
         onFontScaleChange(1);
+        if (visualizerMode === 'partita') {
+            onResetPartitaTuning?.();
+        }
     };
 
     const handleSelectBuiltinFont = (next: Theme['fontStyle']) => {
@@ -467,6 +493,26 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         handleSelectBuiltinFont(next);
     };
 
+    const handlePartitaGuideLinesChange = (enabled: boolean) => {
+        onPartitaTuningChange?.({ showGuideLines: enabled });
+    };
+
+    const handlePartitaMinChange = (next: number) => {
+        const clampedNext = clampPartitaStagger(next);
+        onPartitaTuningChange?.({
+            staggerMin: clampedNext,
+            staggerMax: Math.max(clampedNext, resolvedPartitaTuning.staggerMax),
+        });
+    };
+
+    const handlePartitaMaxChange = (next: number) => {
+        const clampedNext = clampPartitaStagger(next);
+        onPartitaTuningChange?.({
+            staggerMin: Math.min(resolvedPartitaTuning.staggerMin, clampedNext),
+            staggerMax: clampedNext,
+        });
+    };
+
     return (
         <div className="fixed inset-0 z-[130] bg-black/65 backdrop-blur-xl p-3 sm:p-5" onClick={onClose}>
             <motion.div
@@ -555,6 +601,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                     showText
                                     staticMode={staticMode}
                                     backgroundOpacity={backgroundOpacity}
+                                    partitaTuning={resolvedPartitaTuning}
                                     lyricsFontScale={normalizedFontScale}
                                     seed="vis-playground-partita"
                                 />
@@ -579,7 +626,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                         {t('options.lyricsStyleSettings') || '歌词样式'}
                                     </div>
                                     <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.lyricsStyleSettingsDesc') || '字体和字号选择'}
+                                        {t('options.lyricsStyleSettingsDesc') || '字体、字号和当前渲染器附加参数'}
                                     </div>
                                 </div>
 
@@ -618,6 +665,66 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                     />
                                 </div>
                             </div>
+
+                            {visualizerMode === 'partita' && (
+                                <div
+                                    className="rounded-[24px] border border-white/10 p-4 space-y-4"
+                                    style={{ backgroundColor: controlCardBg }}
+                                >
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                            {t('options.partitaSettings') || '组曲参数'}
+                                        </div>
+                                        <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.partitaSettingsDesc') || '控制引导线显示和分块横向错位范围。'}
+                                        </div>
+                                    </div>
+
+                                    <PresetGroup
+                                        label={t('options.partitaGuideLines') || '引导线'}
+                                        value={resolvedPartitaTuning.showGuideLines}
+                                        options={guideLineOptions}
+                                        onChange={handlePartitaGuideLinesChange}
+                                        isDaylight={isDaylight}
+                                    />
+
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                                            <span>{t('options.partitaStaggerMin') || '错位最小值'}</span>
+                                            <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                                                {resolvedPartitaTuning.staggerMin}px
+                                            </span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="180"
+                                            step="5"
+                                            value={resolvedPartitaTuning.staggerMin}
+                                            onChange={(event) => handlePartitaMinChange(parseFloat(event.target.value))}
+                                            className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:hover:scale-125 [&::-webkit-slider-thumb]:transition-transform"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                                            <span>{t('options.partitaStaggerMax') || '错位最大值'}</span>
+                                            <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                                                {resolvedPartitaTuning.staggerMax}px
+                                            </span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="180"
+                                            step="5"
+                                            value={resolvedPartitaTuning.staggerMax}
+                                            onChange={(event) => handlePartitaMaxChange(parseFloat(event.target.value))}
+                                            className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:hover:scale-125 [&::-webkit-slider-thumb]:transition-transform"
+                                        />
+                                    </div>
+                                </div>
+                            )}
 
                         </div>
                     </div>

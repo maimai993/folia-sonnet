@@ -2,19 +2,13 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
-import { Line, Theme, Word as WordType, AudioBands } from '../../types';
+import { DEFAULT_PARTITA_TUNING, Line, Theme, Word as WordType, AudioBands, type PartitaTuning } from '../../types';
 import { getLineRenderEndTime, getLineRenderHints } from '../../utils/lyrics/renderHints';
 import { resolveThemeFontStack } from '../../utils/fontStacks';
 import GeometricBackground from './GeometricBackground';
 import FluidBackground from './FluidBackground';
 
 // Visualizer Partita
-
-// ─── Partita Tuning Parameters ───────────────────────────────────────────────
-/** Whether to render the cross-shaped guide lines on each chunk row */
-const PARTITA_SHOW_GUIDE_LINES = true;
-/** Horizontal stagger spread range [min, max] in px for chunk rows */
-const PARTITA_STAGGER_RANGE: [number, number] = [20, 100];
 
 interface VisualizerPartitaProps {
     currentTime: MotionValue<number>;
@@ -28,6 +22,7 @@ interface VisualizerPartitaProps {
     useCoverColorBg?: boolean;
     seed?: string | number;
     backgroundOpacity?: number;
+    partitaTuning?: PartitaTuning;
     lyricsFontScale?: number;
     onBack?: () => void;
 }
@@ -80,6 +75,20 @@ const splitGraphemes = (text: string) => {
     return Array.from(text);
 };
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const clampPartitaStagger = (value: number, fallback: number) => Number.isFinite(value)
+    ? clamp(value, 0, 180)
+    : fallback;
+
+const resolvePartitaTuning = (tuning?: PartitaTuning): PartitaTuning => {
+    const rawMin = clampPartitaStagger(tuning?.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin, DEFAULT_PARTITA_TUNING.staggerMin);
+    const rawMax = clampPartitaStagger(tuning?.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax, DEFAULT_PARTITA_TUNING.staggerMax);
+
+    return {
+        showGuideLines: tuning?.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+        staggerMin: Math.min(rawMin, rawMax),
+        staggerMax: Math.max(rawMin, rawMax),
+    };
+};
 
 const resolvePartitaLineRenderProfile = (line: Line | null | undefined): PartitaLineRenderProfile | null => {
     if (!line) {
@@ -184,7 +193,7 @@ const getTargetColumnCount = (totalGraphemes: number, wordCount: number) => {
     return 5;
 };
 
-const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number) => {
+const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, tuning: PartitaTuning) => {
     const intensity = theme.animationIntensity;
     const isChaotic = intensity === 'chaotic';
     const isCalm = intensity === 'calm';
@@ -240,7 +249,9 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number) 
 
         const isStaggeredLeft = rowIndex % 2 === 0;
 
-        const staggerMagnitude = isCalm ? 0 : PARTITA_STAGGER_RANGE[0] + random() * (PARTITA_STAGGER_RANGE[1] - PARTITA_STAGGER_RANGE[0]);
+        const staggerMagnitude = isCalm
+            ? 0
+            : tuning.staggerMin + random() * Math.max(tuning.staggerMax - tuning.staggerMin, 0);
         const staggerX = isStaggeredLeft ? -staggerMagnitude : staggerMagnitude;
 
         const staggerScale = isCalm ? 1 : 0.8 + random() * 0.9;
@@ -396,8 +407,9 @@ const PartitaChunk: React.FC<{
     baseColor: string;
     renderProfile: PartitaLineRenderProfile;
     isChorus?: boolean;
+    showGuideLines: boolean;
     fontSize: string;
-}> = ({ chunkWords, config, guideIndex, currentTime, theme, layoutVariants, bodyVariants, glowVariants, baseColor, renderProfile, isChorus, fontSize }) => {
+}> = ({ chunkWords, config, guideIndex, currentTime, theme, layoutVariants, bodyVariants, glowVariants, baseColor, renderProfile, isChorus, showGuideLines, fontSize }) => {
     const [chunkStatus, setChunkStatus] = useState<'waiting' | 'active' | 'passed'>('waiting');
 
     const chunkStartTime = chunkWords[0].startTime;
@@ -430,7 +442,9 @@ const PartitaChunk: React.FC<{
             animate={{
                 opacity: chunkStatus === 'waiting' ? 0 : 1,
                 scale: chunkStatus === 'waiting' ? 0.85 : 1,
-                x: config.x,
+                x: chunkStatus === 'waiting'
+                    ? config.x + (guidePosition === 'left' ? -40 : 40)
+                    : config.x,
                 y: config.y,
                 rotate: config.rotate,
             }}
@@ -444,13 +458,13 @@ const PartitaChunk: React.FC<{
                 ease: 'easeOut' as const,
             }}
         >
-            {PARTITA_SHOW_GUIDE_LINES && guidePosition === 'left' && (
+            {showGuideLines && guidePosition === 'left' && (
                 <>
                     <motion.span
                         className="absolute w-px pointer-events-none"
                         style={{
                             left: '-8px',
-                            bottom: '-12px',
+                            bottom: '-16px',
                             height: '32px',
                             transformOrigin: 'bottom',
                             backgroundColor: chunkStatus === 'active' ? activeColor : chunkStatus === 'passed' ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.14)',
@@ -470,7 +484,7 @@ const PartitaChunk: React.FC<{
                         className="absolute h-px pointer-events-none"
                         style={{
                             left: '-16px',
-                            bottom: '-4px',
+                            bottom: '-8px',
                             width: 'calc(100% + 36px)',
                             transformOrigin: 'left',
                             backgroundColor: chunkStatus === 'active' ? activeColor : chunkStatus === 'passed' ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.14)',
@@ -488,13 +502,13 @@ const PartitaChunk: React.FC<{
                     />
                 </>
             )}
-            {PARTITA_SHOW_GUIDE_LINES && guidePosition === 'right' && (
+            {showGuideLines && guidePosition === 'right' && (
                 <>
                     <motion.span
                         className="absolute w-px pointer-events-none"
                         style={{
                             right: '-8px',
-                            bottom: '-12px',
+                            bottom: '-16px',
                             height: '32px',
                             transformOrigin: 'bottom',
                             backgroundColor: chunkStatus === 'active' ? activeColor : chunkStatus === 'passed' ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.14)',
@@ -514,7 +528,7 @@ const PartitaChunk: React.FC<{
                         className="absolute h-px pointer-events-none"
                         style={{
                             right: '-16px',
-                            bottom: '-4px',
+                            bottom: '-8px',
                             width: 'calc(100% + 36px)',
                             transformOrigin: 'right',
                             backgroundColor: chunkStatus === 'active' ? activeColor : chunkStatus === 'passed' ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.14)',
@@ -593,12 +607,14 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps & { staticMode?: boolea
     seed,
     staticMode = false,
     backgroundOpacity = 0.75,
+    partitaTuning = DEFAULT_PARTITA_TUNING,
     lyricsFontScale = 1,
     onBack,
 }) => {
     const { t } = useTranslation();
     const [showBackButton, setShowBackButton] = useState(false);
     const [windowHeight, setWindowHeight] = useState(800);
+    const resolvedPartitaTuning = useMemo(() => resolvePartitaTuning(partitaTuning), [partitaTuning]);
 
     useEffect(() => {
         setWindowHeight(window.innerHeight);
@@ -640,8 +656,8 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps & { staticMode?: boolea
             };
         }
 
-        return buildSequentialColumns(activeLine, theme, windowHeight);
-    }, [activeLine, theme, windowHeight]);
+        return buildSequentialColumns(activeLine, theme, windowHeight, resolvedPartitaTuning);
+    }, [activeLine, theme, windowHeight, resolvedPartitaTuning]);
 
     const densityScale = sequentialLayout.totalGraphemes > 40 ? 0.8 : 1;
     const mainFontSize = `clamp(${(2.5 * densityScale * lyricsFontScale).toFixed(3)}rem, ${(5.5 * densityScale * lyricsFontScale).toFixed(3)}vw, ${(4.5 * densityScale * lyricsFontScale).toFixed(3)}rem)`;
@@ -925,6 +941,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps & { staticMode?: boolea
                                                     baseColor={theme.primaryColor}
                                                     renderProfile={activeLineRenderProfile}
                                                     isChorus={activeLine.isChorus}
+                                                    showGuideLines={resolvedPartitaTuning.showGuideLines}
                                                     fontSize={mainFontSize}
                                                 />
                                             ))}
