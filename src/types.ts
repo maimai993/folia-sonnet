@@ -86,6 +86,7 @@ export interface NeteasePlaylist {
   trackUpdateTime: number;
   creator: NeteaseUser;
   description?: string;
+  specialType?: 'cloud';
 }
 
 export interface Artist {
@@ -106,6 +107,8 @@ export interface SongResult {
   album: Album;
   duration: number; // milliseconds usually from API
   isPureMusic?: boolean;
+  t?: 0 | 1 | 2;
+  sourceType?: 'netease' | 'cloud';
   // Netease API raw fields
   al?: {
     id: number;

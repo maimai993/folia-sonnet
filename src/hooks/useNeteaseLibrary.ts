@@ -33,6 +33,30 @@ const getAllUserPlaylists = async (uid: number): Promise<NeteasePlaylist[]> => {
     return allPlaylists;
 };
 
+const getUserCloudPlaylist = async (user: NeteaseUser): Promise<NeteasePlaylist | null> => {
+    const response = await neteaseApi.getUserCloud(1, 0);
+    const trackCount = Number(response.count || 0);
+
+    if (trackCount <= 0) {
+        return null;
+    }
+
+    const coverImgUrl = response.songs?.[0]?.al?.picUrl || response.songs?.[0]?.album?.picUrl || user.avatarUrl;
+
+    return {
+        id: -100,
+        name: '云盘',
+        coverImgUrl,
+        trackCount,
+        playCount: 0,
+        updateTime: Date.now(),
+        trackUpdateTime: Date.now(),
+        creator: user,
+        description: '网易云音乐云盘',
+        specialType: 'cloud',
+    };
+};
+
 export function useNeteaseLibrary({
     currentView,
     selectedPlaylist,
@@ -50,6 +74,7 @@ export function useNeteaseLibrary({
 }) {
     const [user, setUser] = useState<NeteaseUser | null>(null);
     const [playlists, setPlaylists] = useState<NeteasePlaylist[]>([]);
+    const [cloudPlaylist, setCloudPlaylist] = useState<NeteasePlaylist | null>(null);
     const [likedSongIds, setLikedSongIds] = useState<Set<number>>(new Set());
     const [isSyncing, setIsSyncing] = useState(false);
     const [cacheSize, setCacheSize] = useState<string>('0 B');
@@ -60,6 +85,7 @@ export function useNeteaseLibrary({
         localStorage.removeItem('netease_cookie');
         setUser(null);
         setPlaylists([]);
+        setCloudPlaylist(null);
         setLikedSongIds(new Set());
 
         try {
@@ -68,7 +94,7 @@ export function useNeteaseLibrary({
             const userStore = tx.objectStore('user_cache');
             const legacyStore = tx.objectStore('api_cache');
 
-            ['user_profile', 'user_playlists', 'user_liked_songs'].forEach((key) => {
+            ['user_profile', 'user_playlists', 'user_liked_songs', 'user_cloud_playlist'].forEach((key) => {
                 userStore.delete(key);
                 legacyStore.delete(key);
             });
@@ -104,6 +130,15 @@ export function useNeteaseLibrary({
                 }
 
                 try {
+                    const nextCloudPlaylist = await getUserCloudPlaylist(profile);
+                    setCloudPlaylist(nextCloudPlaylist);
+                    await saveToCache('user_cloud_playlist', nextCloudPlaylist);
+                } catch (error) {
+                    console.warn('Failed to fetch user cloud playlist', error);
+                    setCloudPlaylist(null);
+                }
+
+                try {
                     const likeRes = await neteaseApi.getLikedSongs(targetUid);
                     if (likeRes.ids) {
                         setLikedSongIds(new Set(likeRes.ids));
@@ -128,6 +163,7 @@ export function useNeteaseLibrary({
             const cachedUser = await getFromCache<NeteaseUser>('user_profile');
             const cachedPlaylists = await getFromCache<NeteasePlaylist[]>('user_playlists');
             const cachedLikedSongs = await getFromCache<number[]>('user_liked_songs');
+            const cachedCloudPlaylist = await getFromCache<NeteasePlaylist | null>('user_cloud_playlist');
 
             if (cachedUser) {
                 setUser(cachedUser);
@@ -139,6 +175,9 @@ export function useNeteaseLibrary({
 
                 if (cachedLikedSongs) {
                     setLikedSongIds(new Set(cachedLikedSongs));
+                }
+                if (cachedCloudPlaylist) {
+                    setCloudPlaylist(cachedCloudPlaylist);
                 }
                 return;
             }
@@ -155,6 +194,7 @@ export function useNeteaseLibrary({
         try {
             const newPlaylists = await getAllUserPlaylists(user.userId);
             if (!newPlaylists || newPlaylists.length === 0) return;
+            const nextCloudPlaylist = await getUserCloudPlaylist(user);
 
             const cachedPlaylists = await getFromCache<NeteasePlaylist[]>('user_playlists');
 
@@ -225,6 +265,8 @@ export function useNeteaseLibrary({
 
             setPlaylists(newPlaylists);
             await saveToCache('user_playlists', newPlaylists);
+            setCloudPlaylist(nextCloudPlaylist);
+            await saveToCache('user_cloud_playlist', nextCloudPlaylist);
 
             if (likedSongsPlaylistChanged && newPlaylists.length > 0) {
                 try {
@@ -243,7 +285,7 @@ export function useNeteaseLibrary({
     }, [user]);
 
     const handleClearCache = useCallback(async () => {
-        const preserveKeys = ['user_profile', 'user_playlists', 'user_liked_songs', 'last_song', 'last_queue', 'last_theme'];
+        const preserveKeys = ['user_profile', 'user_playlists', 'user_liked_songs', 'user_cloud_playlist', 'last_song', 'last_queue', 'last_theme'];
 
         try {
             const db = await openDB();
@@ -311,6 +353,7 @@ export function useNeteaseLibrary({
     return {
         user,
         playlists,
+        cloudPlaylist,
         likedSongIds,
         isSyncing,
         isUserDataReady,

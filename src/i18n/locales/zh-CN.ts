@@ -145,6 +145,7 @@ export default {
     "resultsFor": "搜索结果：",
     "noResults": "未找到相关结果",
     "playlists": "歌单",
+    "cloud": "云盘",
     "albums": "专辑",
     "allAlbums": "全部",
     "popular": "时下流行",

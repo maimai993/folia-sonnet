@@ -6,7 +6,7 @@
  */
 
 import { SongResult, LyricData } from '../types';
-import { neteaseApi } from './netease';
+import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from './netease';
 import { getFromCache, getFromCacheWithMigration } from './db';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
@@ -18,6 +18,7 @@ const URL_TTL_MS = 1200 * 1000; // 1200 seconds = 20 minutes
 const MAX_PREFETCH_CACHE_SIZE = 200; // Evict least recently used entries beyond this limit
 
 export interface PrefetchedSongData {
+    songKey: string;
     songId: number;
     audioUrl: string | null;
     audioUrlFetchedAt: number;
@@ -33,11 +34,14 @@ export interface PrefetchedSongData {
 }
 
 // In-memory prefetch cache (not persisted to IndexedDB to avoid stale URLs)
-const prefetchCache = new Map<number, PrefetchedSongData>();
+const prefetchCache = new Map<string, PrefetchedSongData>();
 
-const touchPrefetchCacheEntry = (songId: number, data: PrefetchedSongData): PrefetchedSongData => {
-    prefetchCache.delete(songId);
-    prefetchCache.set(songId, data);
+const getPrefetchSongKey = (song: Pick<SongResult, 'id' | 't'>): string =>
+    getOnlineSongCacheKey('audio', song);
+
+const touchPrefetchCacheEntry = (songKey: string, data: PrefetchedSongData): PrefetchedSongData => {
+    prefetchCache.delete(songKey);
+    prefetchCache.set(songKey, data);
     return data;
 };
 
@@ -55,8 +59,10 @@ export const isUrlValid = (fetchedAt: number): boolean => {
  * @param songId - The song ID to get prefetched data for
  * @param requiredQuality - The audio quality to validate against (optional)
  */
-export const getPrefetchedData = (songId: number, requiredQuality?: string): PrefetchedSongData | null => {
-    const cached = prefetchCache.get(songId);
+export const getPrefetchedData = (song: SongResult, requiredQuality?: string): PrefetchedSongData | null => {
+    const songKey = getPrefetchSongKey(song);
+    const songId = song.id;
+    const cached = prefetchCache.get(songKey);
     if (!cached) return null;
 
     // Check if URL is expired
@@ -74,7 +80,7 @@ export const getPrefetchedData = (songId: number, requiredQuality?: string): Pre
         cached.audioUrlQuality = null;
     }
 
-    return touchPrefetchCacheEntry(songId, cached);
+    return touchPrefetchCacheEntry(songKey, cached);
 };
 
 /**
@@ -83,7 +89,8 @@ export const getPrefetchedData = (songId: number, requiredQuality?: string): Pre
 const prefetchSong = async (
     song: SongResult,
     audioQuality: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    userId?: number | null
 ): Promise<void> => {
     if (signal.aborted) return;
 
@@ -94,18 +101,20 @@ const prefetchSong = async (
     }
 
     const songId = song.id;
+    const songKey = getPrefetchSongKey(song);
 
     // Check if already prefetched with valid URL
-    const existing = prefetchCache.get(songId);
+    const existing = prefetchCache.get(songKey);
     if (existing && existing.audioUrl && isUrlValid(existing.audioUrlFetchedAt) && (existing.lyrics || existing.lyricRaw?.isPureMusic)) {
         console.log(`[Prefetch] Already cached: ${song.name}`);
-        touchPrefetchCacheEntry(songId, existing);
+        touchPrefetchCacheEntry(songKey, existing);
         return;
     }
 
     console.log(`[Prefetch] Starting prefetch for: ${song.name} (quality: ${audioQuality})`);
 
     const data: PrefetchedSongData = {
+        songKey,
         songId,
         audioUrl: existing?.audioUrl && existing.audioUrlQuality === audioQuality && isUrlValid(existing.audioUrlFetchedAt) ? existing.audioUrl : null,
         audioUrlFetchedAt: existing?.audioUrlFetchedAt || 0,
@@ -119,7 +128,7 @@ const prefetchSong = async (
     if (!data.audioUrl) {
         try {
             // Check IndexedDB cache first
-            const cachedAudio = await getFromCache<Blob>(`audio_${songId}`);
+            const cachedAudio = await getFromCache<Blob>(getOnlineSongCacheKey('audio', song));
             if (cachedAudio) {
                 console.log(`[Prefetch] Audio in IndexedDB for: ${song.name}`);
                 data.audioUrl = 'CACHED_IN_DB';
@@ -144,16 +153,15 @@ const prefetchSong = async (
     if (!data.lyrics) {
         try {
             // Check IndexedDB cache first
-            const cachedLyrics = await getFromCacheWithMigration<LyricData>(`lyric_${songId}`, migrateLyricDataRenderHints);
+            const cachedLyrics = await getFromCacheWithMigration<LyricData>(getOnlineSongCacheKey('lyric', song), migrateLyricDataRenderHints);
             if (cachedLyrics) {
                 console.log(`[Prefetch] Lyrics in IndexedDB for: ${song.name}`);
                 data.lyrics = cachedLyrics;
             } else if (!signal.aborted) {
-                const lyricRes = await neteaseApi.getLyric(songId);
-                const processed = await processNeteaseLyrics({
-                    type: 'netease',
-                    ...lyricRes
-                });
+                const lyricRes = isCloudSong(song) && userId
+                    ? await neteaseApi.getCloudLyric(userId, song.id)
+                    : await neteaseApi.getLyric(songId);
+                const processed = await processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes));
                 data.lyricRaw = {
                     mainLrc: processed.mainLrc,
                     yrcLrc: processed.yrcLrc,
@@ -179,7 +187,7 @@ const prefetchSong = async (
         }
     }
 
-    prefetchCache.delete(songId);
+    prefetchCache.delete(songKey);
 
     // Evict least recently used entries if cache exceeds limit
     while (prefetchCache.size >= MAX_PREFETCH_CACHE_SIZE) {
@@ -191,7 +199,7 @@ const prefetchSong = async (
         }
     }
 
-    prefetchCache.set(songId, data);
+    prefetchCache.set(songKey, data);
 };
 
 /**
@@ -200,7 +208,8 @@ const prefetchSong = async (
 export const prefetchNearbySongs = async (
     currentSongId: number,
     queue: SongResult[],
-    audioQuality: string
+    audioQuality: string,
+    userId?: number | null
 ): Promise<void> => {
     // Cancel any ongoing prefetch
     if (currentPrefetchAbortController) {
@@ -247,7 +256,7 @@ export const prefetchNearbySongs = async (
             requestIdleCallback(
                 async () => {
                     if (signal.aborted) return;
-                    await prefetchSong(song, audioQuality, signal);
+                    await prefetchSong(song, audioQuality, signal, userId);
                     prefetchWithIdle(songs, index + 1);
                 },
                 { timeout: 5000 }
@@ -256,7 +265,7 @@ export const prefetchNearbySongs = async (
             // Fallback for browsers without requestIdleCallback
             setTimeout(async () => {
                 if (signal.aborted) return;
-                await prefetchSong(song, audioQuality, signal);
+                await prefetchSong(song, audioQuality, signal, userId);
                 prefetchWithIdle(songs, index + 1);
             }, 100);
         }
@@ -270,11 +279,11 @@ export const prefetchNearbySongs = async (
  * Call this after queue shuffle to free memory
  */
 export const cleanupPrefetchCache = (currentQueue: SongResult[]): void => {
-    const queueIds = new Set(currentQueue.map(s => s.id));
+    const queueIds = new Set(currentQueue.map((song) => getPrefetchSongKey(song)));
 
-    for (const songId of prefetchCache.keys()) {
-        if (!queueIds.has(songId)) {
-            prefetchCache.delete(songId);
+    for (const songKey of prefetchCache.keys()) {
+        if (!queueIds.has(songKey)) {
+            prefetchCache.delete(songKey);
         }
     }
 
@@ -287,9 +296,10 @@ export const cleanupPrefetchCache = (currentQueue: SongResult[]): void => {
 export const invalidateAndRefetch = async (
     currentSongId: number,
     queue: SongResult[],
-    audioQuality: string
+    audioQuality: string,
+    userId?: number | null
 ): Promise<void> => {
     console.log('[Prefetch] Queue changed, invalidating and re-prefetching');
     cleanupPrefetchCache(queue);
-    await prefetchNearbySongs(currentSongId, queue, audioQuality);
+    await prefetchNearbySongs(currentSongId, queue, audioQuality, userId);
 };

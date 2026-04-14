@@ -1,6 +1,6 @@
-import { LyricData } from '../types';
+import { LyricData, SongResult } from '../types';
 import { getFromCache, getFromCacheWithMigration, saveToCache } from './db';
-import { neteaseApi } from './netease';
+import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from './netease';
 import { PrefetchedSongData, isUrlValid } from './prefetchService';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
@@ -12,14 +12,15 @@ const normalizeAudioUrl = (url?: string | null) => {
 };
 
 export async function loadOnlineSongAudioSource(
-    songId: number,
+    song: SongResult,
     audioQuality: string,
     prefetched: PrefetchedSongData | null
 ): Promise<
     | { kind: 'ok'; audioSrc: string; blobUrl?: string }
     | { kind: 'unavailable' }
 > {
-    const cachedAudioBlob = await getFromCache<Blob>(`audio_${songId}`);
+    const audioCacheKey = getOnlineSongCacheKey('audio', song);
+    const cachedAudioBlob = await getFromCache<Blob>(audioCacheKey);
     if (cachedAudioBlob) {
         const blobUrl = URL.createObjectURL(cachedAudioBlob);
         return { kind: 'ok', audioSrc: blobUrl, blobUrl };
@@ -29,7 +30,7 @@ export async function loadOnlineSongAudioSource(
         return { kind: 'ok', audioSrc: prefetched.audioUrl };
     }
 
-    const urlRes = await neteaseApi.getSongUrl(songId, audioQuality);
+    const urlRes = await neteaseApi.getSongUrl(song.id, audioQuality);
     const url = normalizeAudioUrl(urlRes.data?.[0]?.url);
     if (!url) {
         return { kind: 'unavailable' };
@@ -39,8 +40,9 @@ export async function loadOnlineSongAudioSource(
 }
 
 export async function loadOnlineSongLyrics(
-    songId: number,
+    song: SongResult,
     prefetched: PrefetchedSongData | null,
+    userId: number | null | undefined,
     callbacks: {
         isCurrent: () => boolean;
         onLyrics: (lyrics: LyricData | null) => void;
@@ -49,8 +51,9 @@ export async function loadOnlineSongLyrics(
     }
 ): Promise<void> {
     const { isCurrent, onLyrics, onPureMusicChange, onDone } = callbacks;
+    const lyricCacheKey = getOnlineSongCacheKey('lyric', song);
 
-    const cachedLyrics = await getFromCacheWithMigration<LyricData>(`lyric_${songId}`, migrateLyricDataRenderHints);
+    const cachedLyrics = await getFromCacheWithMigration<LyricData>(lyricCacheKey, migrateLyricDataRenderHints);
     if (!isCurrent()) return;
     if (cachedLyrics) {
         const cachedText = cachedLyrics.lines.map(line => line.fullText).join('\n');
@@ -71,16 +74,15 @@ export async function loadOnlineSongLyrics(
         const prefetchedText = prefetched.lyrics.lines.map(line => line.fullText).join('\n');
         onPureMusicChange?.(prefetched.lyricRaw?.isPureMusic || isPureMusicLyricText(prefetchedText) || isPureMusicLyricText(prefetched.lyricRaw?.mainLrc));
         onLyrics(prefetched.lyrics);
-        saveToCache(`lyric_${songId}`, prefetched.lyrics);
+        saveToCache(lyricCacheKey, prefetched.lyrics);
         onDone();
         return;
     }
 
-    const lyricRes = await neteaseApi.getLyric(songId);
-    const processed = await processNeteaseLyrics({
-        type: 'netease',
-        ...lyricRes
-    });
+    const lyricRes = isCloudSong(song) && userId
+        ? await neteaseApi.getCloudLyric(userId, song.id)
+        : await neteaseApi.getLyric(song.id);
+    const processed = await processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes));
     const parsedLyrics = processed.lyrics;
 
     if (!isCurrent()) return;
@@ -93,6 +95,6 @@ export async function loadOnlineSongLyrics(
     }
 
     onLyrics(parsedLyrics);
-    saveToCache(`lyric_${songId}`, parsedLyrics);
+    saveToCache(lyricCacheKey, parsedLyrics);
     onDone();
 }

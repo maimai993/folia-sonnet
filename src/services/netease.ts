@@ -61,9 +61,133 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
   return res.json();
 };
 
-const toHttps = (url?: string) => {
-  if (!url) return '';
+const toHttps = (url?: unknown) => {
+  if (typeof url !== 'string' || !url) return '';
   return url.replace(/^http:/, 'https:');
+};
+
+const normalizeArtistName = (value: any): string => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value.name === 'string') return value.name;
+  return '';
+};
+
+const normalizeArtists = (source: any): { id: number; name: string }[] => {
+  if (!source) return [];
+  if (Array.isArray(source)) {
+    return source
+      .map((artist: any, index: number) => ({
+        id: Number(artist?.id ?? index),
+        name: normalizeArtistName(artist),
+      }))
+      .filter((artist) => artist.name);
+  }
+
+  if (typeof source === 'string') {
+    return source
+      .split(/[\/,]/)
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name, index) => ({ id: index, name }));
+  }
+
+  return [];
+};
+
+const getCloudCoverFallback = (raw: any) =>
+  raw?.simpleSong?.al?.picUrl ||
+  raw?.simpleSong?.album?.picUrl ||
+  raw?.al?.picUrl ||
+  raw?.album?.picUrl ||
+  raw?.cover;
+
+const normalizeSongResult = (raw: any): SongResult => {
+  const base = raw?.simpleSong || raw;
+  const tValue = Number(base?.t ?? raw?.t ?? 0) as 0 | 1 | 2;
+  const sourceType: SongResult['sourceType'] = tValue === 1 || tValue === 2 ? 'cloud' : 'netease';
+
+  const artists = normalizeArtists(
+    base?.ar ||
+    base?.artists
+  );
+
+  const albumName =
+    base?.al?.name ||
+    base?.album?.name ||
+    'Unknown Album';
+
+  const albumId = Number(
+    base?.al?.id ??
+    base?.album?.id ??
+    raw?.al?.id ??
+    raw?.album?.id ??
+    0
+  );
+
+  const picUrl = toHttps(getCloudCoverFallback(raw));
+  const duration = Number(
+    base?.dt ??
+    base?.duration ??
+    raw?.duration ??
+    raw?.songLength ??
+    0
+  );
+
+  return {
+    id: Number(base?.id ?? raw?.id ?? 0),
+    name: base?.name || raw?.songName || raw?.fileName || 'Unknown Song',
+    artists,
+    album: {
+      id: albumId,
+      name: albumName,
+      picUrl: picUrl || undefined,
+    },
+    duration,
+    t: tValue,
+    sourceType,
+    al: {
+      id: albumId,
+      name: albumName,
+      picUrl: picUrl || undefined,
+    },
+    ar: artists,
+    dt: duration,
+    alia: Array.isArray(base?.alia) ? base.alia : [],
+    tns: Array.isArray(base?.tns) ? base.tns : [],
+  };
+};
+
+export const isCloudSong = (song?: Pick<SongResult, 't'> | null): boolean =>
+  Boolean(song && (song.t === 1 || song.t === 2));
+
+export const getOnlineSongCacheKey = (
+  kind: 'audio' | 'lyric' | 'cover',
+  song: Pick<SongResult, 'id' | 't'>
+) => {
+  if (isCloudSong(song)) {
+    return `${kind}_cloud_${song.id}`;
+  }
+  return `${kind}_${song.id}`;
+};
+
+const getProcessedLyricPayload = (response: any) => {
+  if (!response) return { type: 'netease' as const };
+  if (response.lrc || response.yrc || response.tlyric || response.ytlrc) {
+    return { type: 'netease' as const, ...response };
+  }
+  if (response.data && (response.data.lrc || response.data.yrc || response.data.tlyric || response.data.ytlrc)) {
+    return { type: 'netease' as const, ...response.data };
+  }
+
+  const lyricText = response.lyric || response.data?.lyric || response.data?.lrc || response.data?.lyrics;
+  if (typeof lyricText === 'string') {
+    return {
+      type: 'netease' as const,
+      lrc: { lyric: lyricText },
+    };
+  }
+
+  return { type: 'netease' as const, ...response };
 };
 
 export const neteaseApi = {
@@ -126,9 +250,7 @@ export const neteaseApi = {
   getPlaylistTracks: async (id: number, limit = 50, offset = 0) => {
     const res = await fetchWithCreds(`/playlist/track/all?id=${id}&limit=${limit}&offset=${offset}`);
     if (res.songs) {
-      res.songs.forEach((s: any) => {
-        if (s.al) s.al.picUrl = toHttps(s.al.picUrl);
-      });
+      res.songs = res.songs.map((song: any) => normalizeSongResult(song));
     }
     return res;
   },
@@ -139,9 +261,7 @@ export const neteaseApi = {
       res.playlist.coverImgUrl = toHttps(res.playlist.coverImgUrl);
       if (res.playlist.creator) res.playlist.creator.avatarUrl = toHttps(res.playlist.creator.avatarUrl);
       if (res.playlist.tracks) {
-        res.playlist.tracks.forEach((t: any) => {
-          if (t.al) t.al.picUrl = toHttps(t.al.picUrl);
-        });
+        res.playlist.tracks = res.playlist.tracks.map((track: any) => normalizeSongResult(track));
       }
     }
     return res;
@@ -158,9 +278,7 @@ export const neteaseApi = {
       res.album.picUrl = toHttps(res.album.picUrl);
     }
     if (res.songs) {
-      res.songs.forEach((s: any) => {
-        if (s.al) s.al.picUrl = toHttps(s.al.picUrl);
-      });
+      res.songs = res.songs.map((song: any) => normalizeSongResult(song));
     }
     return res;
   },
@@ -199,9 +317,7 @@ export const neteaseApi = {
   getArtistTopSongs: async (id: number) => {
     const res = await fetchWithCreds(`/artist/top/song?id=${id}`);
     if (res.songs) {
-      res.songs.forEach((s: any) => {
-        if (s.al) s.al.picUrl = toHttps(s.al.picUrl);
-      });
+      res.songs = res.songs.map((song: any) => normalizeSongResult(song));
     }
     return res;
   },
@@ -209,9 +325,7 @@ export const neteaseApi = {
   getArtistSongs: async (id: number, limit = 50, offset = 0, order = 'hot') => {
     const res = await fetchWithCreds(`/artist/songs?id=${id}&limit=${limit}&offset=${offset}&order=${order}`);
     if (res.songs) {
-      res.songs.forEach((s: any) => {
-        if (s.al) s.al.picUrl = toHttps(s.al.picUrl);
-      });
+      res.songs = res.songs.map((song: any) => normalizeSongResult(song));
     }
     return res;
   },
@@ -229,13 +343,48 @@ export const neteaseApi = {
     return fetchWithCreds(`/lyric/new?id=${id}`);
   },
 
+  getCloudLyric: async (uid: number, sid: number) => {
+    return fetchWithCreds(`/cloud/lyric/get?uid=${uid}&sid=${sid}`);
+  },
+
+  getUserCloud: async (limit = 200, offset = 0) => {
+    const res = await fetchWithCreds(`/user/cloud?limit=${limit}&offset=${offset}`);
+    const normalizedSongs = (res.data || []).map((item: any) => normalizeSongResult({
+      ...item,
+      t: item?.t ?? 1,
+      simpleSong: item?.simpleSong
+        ? { ...item.simpleSong, t: item.simpleSong.t ?? item?.t ?? 1 }
+        : item.simpleSong,
+    }));
+    return {
+      ...res,
+      songs: normalizedSongs,
+    };
+  },
+
+  getUserCloudDetail: async (ids: number[] | number) => {
+    const idParam = Array.isArray(ids) ? ids.join(',') : String(ids);
+    const res = await fetchWithCreds(`/user/cloud/detail?id=${idParam}`);
+    return {
+      ...res,
+      songs: (res.data || []).map((item: any) => normalizeSongResult({
+        ...item,
+        t: item?.t ?? 1,
+        simpleSong: item?.simpleSong
+          ? { ...item.simpleSong, t: item.simpleSong.t ?? item?.t ?? 1 }
+          : item.simpleSong,
+      })),
+    };
+  },
+
+  normalizeSongResult,
+  getProcessedLyricPayload,
+
   // --- Search ---
   cloudSearch: async (keywords: string, limit = 30, offset = 0) => {
     const res = await fetchWithCreds(`/cloudsearch?keywords=${encodeURIComponent(keywords)}&limit=${limit}&offset=${offset}`);
     if (res.result && res.result.songs) {
-      res.result.songs.forEach((s: any) => {
-        if (s.al) s.al.picUrl = toHttps(s.al.picUrl);
-      });
+      res.result.songs = res.result.songs.map((song: any) => normalizeSongResult(song));
     }
     return res;
   },

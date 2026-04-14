@@ -39,7 +39,9 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
 
   const INITIAL_LIMIT = 150;
   const BATCH_LIMIT = 1000;
-  const CACHE_KEY = `playlist_tracks_${playlist.id}`;
+  const CACHE_KEY = playlist.specialType === 'cloud'
+    ? `playlist_tracks_cloud_${currentUserId ?? 'anonymous'}`
+    : `playlist_tracks_${playlist.id}`;
 
   const loadTracks = async (reset = false) => {
     if (loading || (!hasMore && !reset)) return;
@@ -76,14 +78,19 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
         console.log("[Playlist] Cache miss or stale, fetching fresh...", { cachedTime, targetTime });
 
         // Fetch first chunk immediately
-        const res = await neteaseApi.getPlaylistTracks(playlist.id, INITIAL_LIMIT, 0);
-        if (res.songs && res.songs.length > 0) {
-          const initialTracks = res.songs;
+        const res = playlist.specialType === 'cloud'
+          ? await neteaseApi.getUserCloud(INITIAL_LIMIT, 0)
+          : await neteaseApi.getPlaylistTracks(playlist.id, INITIAL_LIMIT, 0);
+        const responseTracks = res.songs || [];
+        if (responseTracks.length > 0) {
+          const initialTracks = responseTracks;
           setTracks(initialTracks);
           setOffset(initialTracks.length);
 
           // Determine if we need more
-          const needsMore = initialTracks.length < playlist.trackCount;
+          const needsMore = playlist.specialType === 'cloud'
+            ? Boolean(res.hasMore)
+            : initialTracks.length < playlist.trackCount;
           setHasMore(needsMore);
 
           // Save partial result immediately
@@ -99,7 +106,9 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
         }
       } else {
         // Manual Load More (fallback)
-        const res = await neteaseApi.getPlaylistTracks(playlist.id, BATCH_LIMIT, currentOffset);
+        const res = playlist.specialType === 'cloud'
+          ? await neteaseApi.getUserCloud(BATCH_LIMIT, currentOffset)
+          : await neteaseApi.getPlaylistTracks(playlist.id, BATCH_LIMIT, currentOffset);
         if (res.songs && res.songs.length > 0) {
           setTracks(prev => {
             const combined = [...prev, ...res.songs];
@@ -107,7 +116,7 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
             return combined;
           });
           setOffset(currentOffset + res.songs.length);
-          setHasMore(res.songs.length === BATCH_LIMIT);
+          setHasMore(playlist.specialType === 'cloud' ? Boolean(res.hasMore) : res.songs.length === BATCH_LIMIT);
         } else {
           setHasMore(false);
         }
@@ -134,7 +143,9 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
       try {
         await new Promise(r => setTimeout(r, 100));
 
-        const res = await neteaseApi.getPlaylistTracks(playlist.id, BATCH_LIMIT, currentOffset);
+        const res = playlist.specialType === 'cloud'
+          ? await neteaseApi.getUserCloud(BATCH_LIMIT, currentOffset)
+          : await neteaseApi.getPlaylistTracks(playlist.id, BATCH_LIMIT, currentOffset);
         if (res.songs && res.songs.length > 0) {
           const newChunk = res.songs;
           currentTracks = [...currentTracks, ...newChunk];
@@ -145,7 +156,7 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
           // Update cache
           saveToCache(CACHE_KEY, { tracks: currentTracks, snapshotTime: targetTime });
 
-          if (newChunk.length < BATCH_LIMIT) {
+          if ((playlist.specialType === 'cloud' && !res.hasMore) || (playlist.specialType !== 'cloud' && newChunk.length < BATCH_LIMIT)) {
             fetching = false;
           }
         } else {
@@ -230,7 +241,7 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, onBack, onPlaySon
     return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
   };
 
-  const canEditPlaylist = Boolean(currentUserId && playlist.creator?.userId === currentUserId);
+  const canEditPlaylist = playlist.specialType !== 'cloud' && Boolean(currentUserId && playlist.creator?.userId === currentUserId);
 
   const handleRemoveTrack = async (trackId: number) => {
     try {

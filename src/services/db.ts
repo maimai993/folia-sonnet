@@ -72,7 +72,7 @@ const openDB = (): Promise<IDBDatabase> => {
           const oldStore = transaction.objectStore(CACHE_STORE);
           const newStore = transaction.objectStore(USER_CACHE_STORE);
 
-          const userKeys = ['user_profile', 'user_playlists', 'user_liked_songs'];
+          const userKeys = ['user_profile', 'user_playlists', 'user_liked_songs', 'user_cloud_playlist'];
           let migratedCount = 0;
 
           userKeys.forEach(userKey => {
@@ -182,7 +182,7 @@ export const clearSession = async (): Promise<void> => {
 // Helper function to determine which store to use based on key
 const getStoreName = (key: string): string => {
   // User data -> user_cache
-  if (key === 'user_profile' || key === 'user_playlists' || key === 'user_liked_songs') {
+  if (key === 'user_profile' || key === 'user_playlists' || key === 'user_liked_songs' || key === 'user_cloud_playlist') {
     return USER_CACHE_STORE;
   }
 
@@ -238,7 +238,7 @@ export const getFromCache = async <T>(key: string): Promise<T | null> => {
           resolve(req.result.data as T);
         } else {
           // If not found and it's a user data key, check old api_cache for migration
-          if ((key === 'user_profile' || key === 'user_playlists' || key === 'user_liked_songs') &&
+          if ((key === 'user_profile' || key === 'user_playlists' || key === 'user_liked_songs' || key === 'user_cloud_playlist') &&
             storeName === USER_CACHE_STORE) {
             const oldTx = db.transaction([CACHE_STORE], 'readonly');
             const oldStore = oldTx.objectStore(CACHE_STORE);
@@ -452,7 +452,7 @@ export const getCacheUsageByCategory = async (): Promise<{
             } else if (key.startsWith('audio_')) {
               usage.media += size;
               usage.mediaCount++;
-            } else if (key === 'user_liked_songs' || key === 'user_profile') {
+            } else if (key === 'user_liked_songs' || key === 'user_profile' || key === 'user_cloud_playlist') {
               // Consider user profile as playlist data mostly
               usage.playlist += size;
             }

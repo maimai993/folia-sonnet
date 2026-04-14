@@ -22,7 +22,7 @@ import LyricMatchModal from './components/modal/LyricMatchModal';
 import NaviLyricMatchModal, { NavidromeMatchData } from './components/modal/NaviLyricMatchModal';
 import { LyricData, Theme, PlayerState, SongResult, LocalSong, ReplayGainMode, LocalLibraryGroup, LocalPlaylist } from './types';
 import { NavidromeSong, NavidromeConfig, StructuredLyric, NavidromeViewSelection } from './types/navidrome';
-import { neteaseApi } from './services/netease';
+import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from './services/netease';
 import { navidromeApi, getNavidromeConfig } from './services/navidromeService';
 import { addSongsToLocalPlaylist, createLocalPlaylist, getLocalPlaylists, removeSongsFromLocalPlaylist, setLocalSongFavorite } from './services/localPlaylistService';
 import { useAppNavigation } from './hooks/useAppNavigation';
@@ -549,6 +549,7 @@ export default function App() {
     const {
         user,
         playlists,
+        cloudPlaylist,
         likedSongIds,
         isSyncing,
         cacheSize,
@@ -661,7 +662,7 @@ export default function App() {
                 }
 
                 // Try to restore cover
-                setCachedCoverUrl(await getCachedCoverUrl(`cover_${lastSong.id}`));
+                setCachedCoverUrl(await getCachedCoverUrl(getOnlineSongCacheKey('cover', lastSong)));
 
                 // Load resources silently (without auto-playing)
                 try {
@@ -776,7 +777,7 @@ export default function App() {
                         }
                     } else {
                         // Cloud song - original logic
-                        const cachedAudio = await getFromCache<Blob>(`audio_${lastSong.id}`);
+                        const cachedAudio = await getFromCache<Blob>(getOnlineSongCacheKey('audio', lastSong));
                         if (cachedAudio) {
                             const blobUrl = URL.createObjectURL(cachedAudio);
                             if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
@@ -794,17 +795,16 @@ export default function App() {
                         }
 
                         // Try cache first for lyrics (cloud songs only)
-                        const cachedLyrics = await getFromCacheWithMigration<LyricData>(`lyric_${lastSong.id}`, migrateLyricDataRenderHints);
+                        const cachedLyrics = await getFromCacheWithMigration<LyricData>(getOnlineSongCacheKey('lyric', lastSong), migrateLyricDataRenderHints);
                         if (cachedLyrics) {
                             const cachedText = cachedLyrics.lines.map(line => line.fullText).join('\n');
                             setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, isPureMusic: isPureMusicLyricText(cachedText) } : prev);
                             setLyrics(cachedLyrics);
                         } else {
-                            const lyricRes = await neteaseApi.getLyric(lastSong.id);
-                            const processed = await processNeteaseLyrics({
-                                type: 'netease',
-                                ...lyricRes
-                            });
+                            const lyricRes = isCloudSong(lastSong) && user?.userId
+                                ? await neteaseApi.getCloudLyric(user.userId, lastSong.id)
+                                : await neteaseApi.getLyric(lastSong.id);
+                            const processed = await processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes));
 
                             setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, isPureMusic: processed.isPureMusic } : prev);
                             setLyrics(processed.lyrics);
@@ -1650,7 +1650,7 @@ export default function App() {
         // --- ONLINE SONG LOGIC BELOW ---
 
         // Check prefetch cache for this song (with quality validation)
-        prefetched = getPrefetchedData(song.id, audioQuality);
+        prefetched = getPrefetchedData(song, audioQuality);
 
         const hasImmediatePrefetchedAudio = Boolean(
             prefetched?.audioUrl &&
@@ -1658,7 +1658,7 @@ export default function App() {
         );
         const cachedAudio = hasImmediatePrefetchedAudio
             ? null
-            : await getFromCache<Blob>(`audio_${song.id}`);
+            : await getFromCache<Blob>(getOnlineSongCacheKey('audio', song));
 
         if (currentSongRef.current !== song.id) return;
 
@@ -1667,7 +1667,7 @@ export default function App() {
         }
 
         // 2. Load Cached Cover (Visual Feedback)
-        const cachedCoverUrl = await getCachedCoverUrl(`cover_${song.id}`);
+        const cachedCoverUrl = await getCachedCoverUrl(getOnlineSongCacheKey('cover', song));
         if (currentSongRef.current !== song.id) return;
         if (cachedCoverUrl) {
             setCachedCoverUrl(cachedCoverUrl);
@@ -1678,7 +1678,7 @@ export default function App() {
 
         // 3. Audio Loading (Prefetch Cache vs IndexedDB vs Network)
         try {
-            const audioResult = await loadOnlineSongAudioSource(song.id, audioQuality, prefetched);
+            const audioResult = await loadOnlineSongAudioSource(song, audioQuality, prefetched);
             if (currentSongRef.current !== song.id) return;
             if (audioResult.kind === 'unavailable') {
                 console.warn("[App] Song URL is empty, likely unavailable");
@@ -1701,7 +1701,7 @@ export default function App() {
 
         // 4. Fetch Lyrics (Prefetch Cache vs IndexedDB vs Network)
         try {
-            await loadOnlineSongLyrics(song.id, prefetched, {
+            await loadOnlineSongLyrics(song, prefetched, user?.userId, {
                 isCurrent: () => currentSongRef.current === song.id,
                 onLyrics: (resolvedLyrics) => setLyrics(resolvedLyrics),
                 onPureMusicChange: (isPureMusic) => {
@@ -1725,7 +1725,7 @@ export default function App() {
 
         // 6. Trigger prefetch for nearby songs in queue
         if (newQueue.length > 1) {
-            prefetchNearbySongs(song.id, newQueue, audioQuality);
+            prefetchNearbySongs(song.id, newQueue, audioQuality, user?.userId);
         }
     };
 
@@ -1733,7 +1733,7 @@ export default function App() {
         if (!currentSong || !audioSrc || audioSrc.startsWith('blob:')) return;
 
         // Don't re-cache if already in cache
-        const existing = await getFromCache(`audio_${currentSong.id}`);
+        const existing = await getFromCache(getOnlineSongCacheKey('audio', currentSong));
         if (existing) return;
 
         if (!enableMediaCache) return;
@@ -1744,7 +1744,7 @@ export default function App() {
         try {
             const response = await fetch(audioSrc);
             const blob = await response.blob();
-            await saveToCache(`audio_${currentSong.id}`, blob);
+            await saveToCache(getOnlineSongCacheKey('audio', currentSong), blob);
             console.log("[Cache] Audio saved");
         } catch (e) {
             console.error("[Cache] Failed to download audio for cache", e);
@@ -1758,7 +1758,7 @@ export default function App() {
                 // Usually images are fine, but if it fails we catch it.
                 const response = await fetch(coverUrl, { mode: 'cors' });
                 const blob = await response.blob();
-                await saveToCache(`cover_${currentSong.id}`, blob);
+                await saveToCache(getOnlineSongCacheKey('cover', currentSong), blob);
                 console.log("[Cache] Cover saved");
             } catch (e) {
                 console.error("[Cache] Failed to download cover for cache", e);
@@ -2608,6 +2608,7 @@ export default function App() {
                             onRefreshUser={() => refreshUserData()}
                             user={user}
                             playlists={playlists}
+                            cloudPlaylist={cloudPlaylist}
                             currentTrack={currentSong}
                             isPlaying={playerState === PlayerState.PLAYING}
                             selectedPlaylist={selectedPlaylist}

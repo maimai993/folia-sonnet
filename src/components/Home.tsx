@@ -23,6 +23,7 @@ interface HomeProps {
     onRefreshUser: () => void;
     user: NeteaseUser | null;
     playlists: NeteasePlaylist[];
+    cloudPlaylist?: NeteasePlaylist | null;
     currentTrack?: SongResult | null;
     isPlaying: boolean;
     selectedPlaylist: NeteasePlaylist | null;
@@ -143,6 +144,7 @@ const Home: React.FC<HomeProps> = ({
     onRefreshUser,
     user,
     playlists,
+    cloudPlaylist = null,
     currentTrack,
     isPlaying,
     selectedPlaylist,
@@ -197,6 +199,11 @@ const Home: React.FC<HomeProps> = ({
     const { t } = useTranslation();
     const hasNeteaseLogin = Boolean(user);
     const isNeteaseTab = viewTab === 'playlist' || viewTab === 'albums' || viewTab === 'radio';
+    const playlistCards = cloudPlaylist
+        ? (playlists.length > 0
+            ? [playlists[0], cloudPlaylist, ...playlists.slice(1)]
+            : [cloudPlaylist])
+        : playlists;
     // const isDaylight = theme.name === 'Daylight Default'; // Deprecated, passed as prop
 
     // Style Variants
@@ -530,7 +537,7 @@ const Home: React.FC<HomeProps> = ({
                     onSelectAlbum={(id) => onSelectAlbum(id)}
                     onSelectArtist={onSelectArtist}
                     currentUserId={user?.userId}
-                    isLikedSongsPlaylist={Boolean(playlists[0] && playlists[0].id === selectedPlaylist.id)}
+                    isLikedSongsPlaylist={selectedPlaylist.specialType !== 'cloud' && Boolean(playlists[0] && playlists[0].id === selectedPlaylist.id)}
                     onPlaylistMutated={onRefreshUser}
                     theme={theme}
                     isDaylight={isDaylight}
@@ -761,7 +768,7 @@ const Home: React.FC<HomeProps> = ({
                                             className="w-full h-full flex-1"
                                         >
                                             <Carousel3D
-                                                items={playlists.map(p => ({
+                                                items={playlistCards.map(p => ({
                                                     ...p,
                                                     coverUrl: p.coverImgUrl
                                                 }))}

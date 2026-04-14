@@ -145,6 +145,7 @@ export default {
     "resultsFor": "Results for",
     "noResults": "No results found.",
     "playlists": "Playlists",
+    "cloud": "Cloud",
     "albums": "Albums",
     "allAlbums": "All",
     "popular": "Popular",
