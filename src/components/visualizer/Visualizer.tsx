@@ -2,9 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
-import { Line, Theme, Word as WordType, AudioBands } from '../types';
-import { getLineRenderEndTime, getLineRenderHints } from '../utils/lyrics/renderHints';
-import { resolveThemeFontStack } from '../utils/fontStacks';
+import { Line, Theme, Word as WordType, AudioBands } from '../../types';
+import { getLineRenderEndTime, getLineRenderHints } from '../../utils/lyrics/renderHints';
+import { resolveThemeFontStack } from '../../utils/fontStacks';
 import GeometricBackground from './GeometricBackground';
 import FluidBackground from './FluidBackground';
 

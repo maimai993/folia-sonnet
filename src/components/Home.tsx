@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, LocalLibraryGroup, LocalPlaylist, type CadenzaTuning, type VisualizerMode } from '../types';
+import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, LocalLibraryGroup, LocalPlaylist, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../types';
 import { NavidromeSong, NavidromeViewSelection } from '../types/navidrome';
 import { isNavidromeEnabled, getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
@@ -80,7 +80,10 @@ interface HomeProps {
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
     cadenzaTuning: CadenzaTuning;
+    partitaTuning: PartitaTuning;
     onVisualizerModeChange: (mode: VisualizerMode) => void;
+    onPartitaTuningChange: (patch: Partial<PartitaTuning>) => void;
+    onResetPartitaTuning: () => void;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
     lyricsCustomFontFamily: string | null;
@@ -187,7 +190,10 @@ const Home: React.FC<HomeProps> = ({
     isDaylight,
     visualizerMode,
     cadenzaTuning,
+    partitaTuning,
     onVisualizerModeChange,
+    onPartitaTuningChange,
+    onResetPartitaTuning,
     lyricsFontStyle,
     lyricsFontScale,
     lyricsCustomFontFamily,
@@ -1067,7 +1073,10 @@ const Home: React.FC<HomeProps> = ({
                                 onToggleNavidrome={handleToggleNavidrome}
                                 visualizerMode={visualizerMode}
                                 cadenzaTuning={cadenzaTuning}
+                                partitaTuning={partitaTuning}
                                 onVisualizerModeChange={onVisualizerModeChange}
+                                onPartitaTuningChange={onPartitaTuningChange}
+                                onResetPartitaTuning={onResetPartitaTuning}
                                 lyricsFontStyle={lyricsFontStyle}
                                 lyricsFontScale={lyricsFontScale}
                                 lyricsCustomFontFamily={lyricsCustomFontFamily}

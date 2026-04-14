@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
-import { Theme, type CadenzaTuning, type VisualizerMode } from '../../types';
+import { Theme, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
-import VisPlayground from '../VisPlayground';
+import VisPlayground from '../visualizer/VisPlayground';
 
 interface HelpModalProps {
     onClose: () => void;
@@ -21,7 +21,10 @@ interface HelpModalProps {
     onToggleNavidrome?: (enabled: boolean) => void;
     visualizerMode?: VisualizerMode;
     cadenzaTuning?: CadenzaTuning;
+    partitaTuning?: PartitaTuning;
     onVisualizerModeChange?: (mode: VisualizerMode) => void;
+    onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
+    onResetPartitaTuning?: () => void;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
     lyricsCustomFontFamily: string | null;
@@ -45,7 +48,10 @@ const HelpModal: React.FC<HelpModalProps> = ({
     onToggleNavidrome,
     visualizerMode = 'classic',
     cadenzaTuning,
+    partitaTuning,
     onVisualizerModeChange,
+    onPartitaTuningChange,
+    onResetPartitaTuning,
     lyricsFontStyle,
     lyricsFontScale,
     lyricsCustomFontFamily,
@@ -384,7 +390,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                 <Settings2 size={16} />
                                             </button>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-3 gap-3">
                                             <button
                                                 onClick={() => onVisualizerModeChange?.('classic')}
                                                 className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
@@ -407,6 +413,18 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             >
                                                 <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                                     {t('ui.visualizerCadenze')}
+                                                </span>
+                                            </button>
+                                            <button
+                                                onClick={() => onVisualizerModeChange?.('partita')}
+                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
+                                                style={{
+                                                    borderColor: visualizerMode === 'partita' ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
+                                                    backgroundColor: visualizerMode === 'partita' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
+                                                }}
+                                            >
+                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('ui.visualizerPartita')}
                                                 </span>
                                             </button>
                                         </div>
@@ -797,6 +815,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     backgroundOpacity={backgroundOpacity}
                     staticMode={staticMode}
                     cadenzaTuning={cadenzaTuning}
+                    partitaTuning={partitaTuning}
                     fontStyle={lyricsFontStyle}
                     fontScale={lyricsFontScale}
                     customFontFamily={lyricsCustomFontFamily}
@@ -804,6 +823,8 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     onFontStyleChange={onLyricsFontStyleChange}
                     onFontScaleChange={onLyricsFontScaleChange}
                     onCustomFontChange={onLyricsCustomFontChange}
+                    onPartitaTuningChange={onPartitaTuningChange}
+                    onResetPartitaTuning={onResetPartitaTuning}
                     onClose={() => setShowVisPlayground(false)}
                 />
             )}

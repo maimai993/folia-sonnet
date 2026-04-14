@@ -42,7 +42,7 @@ export interface DualTheme {
   dark: Theme;
 }
 
-export type VisualizerMode = 'classic' | 'cadenza';
+export type VisualizerMode = 'classic' | 'cadenza' | 'partita';
 
 export interface CadenzaTuning {
   fontScale: number;
@@ -58,6 +58,18 @@ export const DEFAULT_CADENZA_TUNING: CadenzaTuning = {
   motionAmount: 1,
   glowIntensity: 1,
   beamIntensity: 0,
+};
+
+export interface PartitaTuning {
+  showGuideLines: boolean;
+  staggerMin: number;
+  staggerMax: number;
+}
+
+export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
+  showGuideLines: true,
+  staggerMin: 20,
+  staggerMax: 100,
 };
 
 export enum PlayerState {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { DEFAULT_CADENZA_TUNING, type CadenzaTuning, type Theme, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_PARTITA_TUNING, type CadenzaTuning, type PartitaTuning, type Theme, type VisualizerMode } from '../types';
 
 type StatusSetter = Dispatch<SetStateAction<{ type: 'error' | 'success' | 'info', text: string; } | null>>;
 type AudioQuality = 'exhigh' | 'lossless' | 'hires';
@@ -23,6 +23,33 @@ const readStoredCadenzaTuning = (): CadenzaTuning => {
         };
     } catch {
         return DEFAULT_CADENZA_TUNING;
+    }
+};
+
+const clampPartitaStagger = (value: number, fallback: number) => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(180, Math.max(0, value));
+};
+
+const readStoredPartitaTuning = (): PartitaTuning => {
+    const saved = localStorage.getItem('partita_tuning');
+    if (!saved) return DEFAULT_PARTITA_TUNING;
+
+    try {
+        const parsed = JSON.parse(saved) as Partial<PartitaTuning>;
+        const rawMin = clampPartitaStagger(parsed.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin, DEFAULT_PARTITA_TUNING.staggerMin);
+        const rawMax = clampPartitaStagger(parsed.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax, DEFAULT_PARTITA_TUNING.staggerMax);
+
+        return {
+            showGuideLines: parsed.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+            staggerMin: Math.min(rawMin, rawMax),
+            staggerMax: Math.max(rawMin, rawMax),
+        };
+    } catch {
+        return DEFAULT_PARTITA_TUNING;
     }
 };
 
@@ -74,9 +101,16 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
     const [isDaylight, setIsDaylight] = useState(() => getStoredBoolean('default_theme_daylight', false));
     const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>(() => {
         const saved = localStorage.getItem('visualizer_mode');
-        return saved === 'cadenza' || saved === 'cadenze' ? 'cadenza' : 'classic';
+        if (saved === 'cadenza' || saved === 'cadenze') {
+            return 'cadenza';
+        }
+        if (saved === 'partita') {
+            return 'partita';
+        }
+        return 'classic';
     });
     const [cadenzaTuning, setCadenzaTuning] = useState<CadenzaTuning>(readStoredCadenzaTuning);
+    const [partitaTuning, setPartitaTuning] = useState<PartitaTuning>(readStoredPartitaTuning);
     const [lyricsFontStyle, setLyricsFontStyle] = useState<Theme['fontStyle']>(readStoredLyricsFontStyle);
     const [lyricsFontScale, setLyricsFontScale] = useState<number>(readStoredLyricsFontScale);
     const [lyricsCustomFont, setLyricsCustomFont] = useState<StoredCustomLyricsFont | null>(readStoredCustomLyricsFont);
@@ -141,7 +175,11 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         localStorage.setItem('visualizer_mode', mode);
         setStatusMsg({
             type: 'info',
-            text: mode === 'cadenza' ? '已切换到心象歌词' : '已切换到流光歌词'
+            text: mode === 'cadenza'
+                ? '已切换到心象歌词'
+                : mode === 'partita'
+                    ? '已切换到云阶歌词'
+                    : '已切换到流光歌词'
         });
     };
 
@@ -159,6 +197,30 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         setStatusMsg({
             type: 'info',
             text: '心象参数已重置'
+        });
+    };
+
+    const handleSetPartitaTuning = useCallback((patch: Partial<PartitaTuning>) => {
+        setPartitaTuning(prev => {
+            const rawMin = clampPartitaStagger(patch.staggerMin ?? prev.staggerMin, prev.staggerMin);
+            const rawMax = clampPartitaStagger(patch.staggerMax ?? prev.staggerMax, prev.staggerMax);
+            const next = {
+                showGuideLines: patch.showGuideLines ?? prev.showGuideLines,
+                staggerMin: Math.min(rawMin, rawMax),
+                staggerMax: Math.max(rawMin, rawMax),
+            };
+
+            localStorage.setItem('partita_tuning', JSON.stringify(next));
+            return next;
+        });
+    }, []);
+
+    const handleResetPartitaTuning = () => {
+        setPartitaTuning(DEFAULT_PARTITA_TUNING);
+        localStorage.setItem('partita_tuning', JSON.stringify(DEFAULT_PARTITA_TUNING));
+        setStatusMsg({
+            type: 'info',
+            text: '云阶参数已重置'
         });
     };
 
@@ -210,6 +272,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         isDaylight,
         visualizerMode,
         cadenzaTuning,
+        partitaTuning,
         lyricsFontStyle,
         lyricsFontScale,
         lyricsCustomFontFamily: lyricsCustomFont?.family ?? null,
@@ -222,6 +285,8 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         handleSetVisualizerMode,
         handleSetCadenzaTuning,
         handleResetCadenzaTuning,
+        handleSetPartitaTuning,
+        handleResetPartitaTuning,
         handleSetLyricsFontStyle,
         handleSetLyricsFontScale,
         handleSetLyricsCustomFont,
