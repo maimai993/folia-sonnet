@@ -178,7 +178,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
             text: mode === 'cadenza'
                 ? '已切换到心象歌词'
                 : mode === 'partita'
-                    ? '已切换到组曲歌词'
+                    ? '已切换到云阶歌词'
                     : '已切换到流光歌词'
         });
     };
@@ -220,7 +220,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         localStorage.setItem('partita_tuning', JSON.stringify(DEFAULT_PARTITA_TUNING));
         setStatusMsg({
             type: 'info',
-            text: '组曲参数已重置'
+            text: '云阶参数已重置'
         });
     };
 

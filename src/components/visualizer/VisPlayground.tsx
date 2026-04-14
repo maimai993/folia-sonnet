@@ -353,7 +353,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         ? (t('ui.visualizerClassic') || '流光')
         : visualizerMode === 'cadenza'
             ? (t('ui.visualizerCadenze') || '心象')
-            : (t('ui.visualizerPartita') || '组曲');
+            : (t('ui.visualizerPartita') || '云阶');
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
     const tabSwitcherBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
@@ -673,7 +673,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 >
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                            {t('options.partitaSettings') || '组曲参数'}
+                                            {t('options.partitaSettings') || '云阶参数'}
                                         </div>
                                         <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
                                             {t('options.partitaSettingsDesc') || '控制引导线显示和分块横向错位范围。'}
