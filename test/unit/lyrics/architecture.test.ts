@@ -32,8 +32,8 @@ describe('lyrics architecture', () => {
             'src/services/prefetchService.ts',
             'src/services/onlinePlayback.ts',
             'src/services/localMusicService.ts',
-            'src/components/LyricMatchModal.tsx',
-            'src/components/NaviLyricMatchModal.tsx'
+            'src/components/modal/LyricMatchModal.tsx',
+            'src/components/modal/NaviLyricMatchModal.tsx'
         ];
 
         for (const file of callSites) {
