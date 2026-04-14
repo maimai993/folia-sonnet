@@ -285,6 +285,20 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">Space</kbd>
                                     </li>
                                     <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
+                                        <span>{t('help.previousTrack')}</span>
+                                        <div className="flex gap-1">
+                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">Ctrl</kbd>
+                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">←</kbd>
+                                        </div>
+                                    </li>
+                                    <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
+                                        <span>{t('help.nextTrack')}</span>
+                                        <div className="flex gap-1">
+                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">Ctrl</kbd>
+                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">→</kbd>
+                                        </div>
+                                    </li>
+                                    <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
                                         <span>{t('help.seekBackward')}</span>
                                         <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">←</kbd>
                                     </li>

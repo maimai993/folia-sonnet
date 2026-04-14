@@ -166,6 +166,8 @@ export default {
     "navigatePlaylists": "Navigate Playlists",
     "playPause": "Play / Pause",
     "playerControls": "Player Page Controls",
+    "previousTrack": "Previous Track",
+    "nextTrack": "Next Track",
     "seekForward": "Seek Forward 5s",
     "seekBackward": "Seek Backward 5s",
     "madeBy": "Made by",

@@ -166,6 +166,8 @@ export default {
     "navigatePlaylists": "切换歌单",
     "playPause": "播放 / 暂停",
     "playerControls": "播放页面控制",
+    "previousTrack": "上一首",
+    "nextTrack": "下一首",
     "seekForward": "快进 5 秒",
     "seekBackward": "倒退 5 秒",
     "madeBy": "作者",

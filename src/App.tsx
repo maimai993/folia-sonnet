@@ -1784,7 +1784,7 @@ export default function App() {
         playSong(song, newQueue, false);
     };
 
-    const handleNextTrack = useCallback(async () => {
+    const handleNextTrack = useCallback(async (options?: { allowStopOnMissing?: boolean; }) => {
         if (!currentSong || playQueue.length === 0) return;
 
         const currentIndex = playQueue.findIndex(s => s.id === currentSong.id);
@@ -1815,7 +1815,10 @@ export default function App() {
 
         if (nextIndex >= 0) {
             playSong(playQueue[nextIndex], playQueue, isFmMode);
-        } else {
+        } else if (options?.allowStopOnMissing) {
+            if (audioRef.current) {
+                audioRef.current.pause();
+            }
             setPlayerState(PlayerState.IDLE);
         }
     }, [currentSong, playQueue, loopMode, isFmMode]);
@@ -2215,6 +2218,14 @@ export default function App() {
                     }
                     break;
                 case 'ArrowLeft':
+                    if (e.ctrlKey && !e.altKey && !e.metaKey) {
+                        if (currentSong) {
+                            e.preventDefault();
+                            handlePrevTrack();
+                        }
+                        return;
+                    }
+
                     // Arrow keys only work in player view
                     if (currentView !== 'player') return;
                     e.preventDefault();
@@ -2223,6 +2234,14 @@ export default function App() {
                     }
                     break;
                 case 'ArrowRight':
+                    if (e.ctrlKey && !e.altKey && !e.metaKey) {
+                        if (currentSong) {
+                            e.preventDefault();
+                            void handleNextTrack();
+                        }
+                        return;
+                    }
+
                     // Arrow keys only work in player view
                     if (currentView !== 'player') return;
                     e.preventDefault();
@@ -2235,7 +2254,7 @@ export default function App() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [audioSrc, currentSong, currentView, isDev, playerState]);
+    }, [audioSrc, currentSong, currentView, handleNextTrack, handlePrevTrack, isDev, playerState]);
 
     const toggleLoop = (e?: React.MouseEvent) => {
         e?.stopPropagation();
@@ -2449,6 +2468,9 @@ export default function App() {
 
         return lyrics.lines.find(line => line.startTime > debugCurrentTimeValue) ?? null;
     })();
+    const debugCoverUrlKind = getAudioSrcKind(coverUrl);
+    const debugTotalWords = lyrics?.lines.reduce((sum, line) => sum + line.words.length, 0) ?? 0;
+    const debugMaxWordsPerLine = lyrics?.lines.reduce((max, line) => Math.max(max, line.words.length), 0) ?? 0;
     const toDebugLineSnapshot = (line: LyricData['lines'][number] | null) => {
         if (!line) {
             return null;
@@ -2470,6 +2492,7 @@ export default function App() {
     };
     const devDebugSnapshot = {
         shortcutLabel: DEV_DEBUG_SHORTCUT_LABEL,
+        songKey: currentSong ? `${resolveDebugSongSource(currentSong)}:${currentSong.id}` : null,
         currentView,
         playerState,
         visualizerMode,
@@ -2477,9 +2500,12 @@ export default function App() {
         songSource: resolveDebugSongSource(currentSong),
         lyricsSource: resolveDebugLyricsSource(currentSong, lyrics),
         audioSrcKind: getAudioSrcKind(audioSrc),
+        coverUrlKind: debugCoverUrlKind,
         duration,
         currentLineIndex,
         totalLines: lyrics?.lines.length ?? 0,
+        totalWords: debugTotalWords,
+        maxWordsPerLine: debugMaxWordsPerLine,
         activeLine: toDebugLineSnapshot(debugActiveLine),
         nextLine: toDebugLineSnapshot(debugNextLine),
     };
@@ -2502,7 +2528,9 @@ export default function App() {
 
                     // If single loop is active, native loop handles it.
                     // If not, we handle queue logic.
-                    if (loopMode !== 'one') handleNextTrack();
+                    if (loopMode !== 'one') {
+                        void handleNextTrack({ allowStopOnMissing: true });
+                    }
                 }}
                 onLoadedMetadata={(e) => {
                     setDuration(e.currentTarget.duration);
@@ -2513,7 +2541,9 @@ export default function App() {
                         setStatusMsg({ type: 'error', text: t('status.playbackError') });
                         // If blob failed, maybe try reloading with network? 
                         // For simplicity, just skip.
-                        setTimeout(handleNextTrack, 2000);
+                        setTimeout(() => {
+                            void handleNextTrack({ allowStopOnMissing: true });
+                        }, 2000);
                     }
                 }}
             />
