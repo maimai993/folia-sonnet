@@ -5,10 +5,20 @@ import { PrefetchedSongData, isUrlValid } from './prefetchService';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
+import { detectTimedLyricFormat } from '../utils/lyrics/formatDetection';
+import { parseLyricsAsync } from '../utils/lyrics/workerClient';
 
 const normalizeAudioUrl = (url?: string | null) => {
     if (!url) return null;
     return url.startsWith('http:') ? url.replace('http:', 'https:') : url;
+};
+
+const extractCloudLyricText = (response: any): string => {
+    if (typeof response?.lrc === 'string') return response.lrc;
+    if (typeof response?.data?.lrc === 'string') return response.data.lrc;
+    if (typeof response?.lyric === 'string') return response.lyric;
+    if (typeof response?.data?.lyric === 'string') return response.data.lyric;
+    return '';
 };
 
 export async function loadOnlineSongAudioSource(
@@ -79,10 +89,34 @@ export async function loadOnlineSongLyrics(
         return;
     }
 
-    const lyricRes = isCloudSong(song) && userId
-        ? await neteaseApi.getCloudLyric(userId, song.id)
-        : await neteaseApi.getLyric(song.id);
-    const processed = await processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes));
+    const processed = isCloudSong(song) && userId
+        ? await (async () => {
+            const lyricRes = await neteaseApi.getCloudLyric(userId, song.id);
+            const mainLrc = extractCloudLyricText(lyricRes);
+            const isPureMusic = isPureMusicLyricText(mainLrc);
+            if (!mainLrc || isPureMusic) {
+                return {
+                    mainLrc,
+                    yrcLrc: null,
+                    transLrc: null,
+                    isPureMusic,
+                    lyrics: null,
+                };
+            }
+
+            const lyrics = await parseLyricsAsync(detectTimedLyricFormat(mainLrc), mainLrc, '');
+            return {
+                mainLrc,
+                yrcLrc: null,
+                transLrc: null,
+                isPureMusic,
+                lyrics,
+            };
+        })()
+        : await (async () => {
+            const lyricRes = await neteaseApi.getLyric(song.id);
+            return processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes));
+        })();
     const parsedLyrics = processed.lyrics;
 
     if (!isCurrent()) return;
