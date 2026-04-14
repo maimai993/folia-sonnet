@@ -514,7 +514,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[130] bg-black/65 backdrop-blur-xl p-3 sm:p-5" onClick={onClose}>
+        <div className="fixed inset-0 z-[130] bg-black/65 backdrop-blur-xl px-3 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-5" onClick={onClose}>
             <motion.div
                 initial={{ opacity: 0, y: 18, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
