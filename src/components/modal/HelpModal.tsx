@@ -855,6 +855,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     initialTheme={themeParkInitialTheme}
                     isDaylight={isDaylight}
                     isCustomThemePreferred={isCustomThemePreferred}
+                    visualizerMode={visualizerMode}
+                    staticMode={staticMode}
+                    backgroundOpacity={backgroundOpacity}
+                    cadenzaTuning={cadenzaTuning}
+                    partitaTuning={partitaTuning}
                     onSaveTheme={onSaveCustomTheme}
                     onPreferTheme={(dualTheme) => {
                         onPreferCustomTheme(dualTheme);

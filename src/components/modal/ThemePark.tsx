@@ -1,14 +1,33 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useMemo, useState } from 'react';
+import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
 import { ChevronLeft, Palette, RotateCcw, Sparkles, Sun, Moon, Check } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import { useTranslation } from 'react-i18next';
-import { DualTheme, Theme } from '../../types';
+import Visualizer from '../visualizer/Visualizer';
+import VisualizerCadenza from '../visualizer/VisualizerCadenza';
+import VisualizerPartita from '../visualizer/VisualizerPartita';
+import {
+    DEFAULT_CADENZA_TUNING,
+    DEFAULT_PARTITA_TUNING,
+    AudioBands,
+    CadenzaTuning,
+    DualTheme,
+    Line,
+    PartitaTuning,
+    Theme,
+    VisualizerMode,
+} from '../../types';
+import { getLineRenderEndTime } from '../../utils/lyrics/renderHints';
 
 interface ThemeParkProps {
     initialTheme: DualTheme;
     isDaylight: boolean;
     isCustomThemePreferred: boolean;
+    visualizerMode: VisualizerMode;
+    staticMode?: boolean;
+    backgroundOpacity?: number;
+    cadenzaTuning?: CadenzaTuning;
+    partitaTuning?: PartitaTuning;
     onClose: () => void;
     onSaveTheme: (dualTheme: DualTheme) => void;
     onPreferTheme: (dualTheme: DualTheme) => void;
@@ -42,76 +61,284 @@ const normalizeDualTheme = (dualTheme: DualTheme): DualTheme => ({
     dark: normalizeTheme(dualTheme.dark, 'Theme Park Dark', 'Custom'),
 });
 
-const ThemePreviewCard: React.FC<{
+const LOOP_DURATION = 14.4;
+
+const createCharacterWords = (text: string, startTime: number, endTime: number) => {
+    const chars = Array.from(text);
+    const duration = endTime - startTime;
+
+    return chars.map((char, index) => ({
+        text: char,
+        startTime: startTime + duration * (index / chars.length),
+        endTime: startTime + duration * ((index + 1) / chars.length),
+    }));
+};
+
+const PREVIEW_LINES: Line[] = [
+    {
+        startTime: 0.7,
+        endTime: 3.6,
+        fullText: 'この愛は、すべての太陽を織り上げた。',
+        translation: '这份爱编织了所有的太阳。',
+        words: createCharacterWords('この愛は、すべての太陽を織り上げた。', 0.7, 3.6),
+    },
+    {
+        startTime: 4.2,
+        endTime: 7.2,
+        fullText: 'This love has woven all the suns.',
+        translation: '这份爱编织了所有的太阳。',
+        words: [
+            { text: 'This', startTime: 4.2, endTime: 4.7 },
+            { text: 'love', startTime: 4.7, endTime: 5.15 },
+            { text: 'has', startTime: 5.15, endTime: 5.55 },
+            { text: 'woven', startTime: 5.55, endTime: 6.1 },
+            { text: 'all', startTime: 6.1, endTime: 6.45 },
+            { text: 'the', startTime: 6.45, endTime: 6.7 },
+            { text: 'suns.', startTime: 6.7, endTime: 7.2 },
+        ],
+    },
+    {
+        startTime: 7.8,
+        endTime: 10.9,
+        fullText: 'Cet amour a tisse tous les soleils.',
+        translation: '这份爱编织了所有的太阳。',
+        words: [
+            { text: 'Cet', startTime: 7.8, endTime: 8.25 },
+            { text: 'amour', startTime: 8.25, endTime: 8.85 },
+            { text: 'a', startTime: 8.85, endTime: 9.05 },
+            { text: 'tisse', startTime: 9.05, endTime: 9.6 },
+            { text: 'tous', startTime: 9.6, endTime: 10.05 },
+            { text: 'les', startTime: 10.05, endTime: 10.35 },
+            { text: 'soleils.', startTime: 10.35, endTime: 10.9 },
+        ],
+    },
+    {
+        startTime: 11.5,
+        endTime: 14.4,
+        fullText: '这份爱编织了所有的太阳。',
+        translation: '这份爱编织了所有的太阳。',
+        words: createCharacterWords('这份爱编织了所有的太阳。', 11.5, 14.4),
+    },
+];
+
+const findPreviewLineIndex = (lines: Line[], time: number) => {
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index];
+        if (!line || time < line.startTime) {
+            continue;
+        }
+
+        if (time <= getLineRenderEndTime(line)) {
+            return index;
+        }
+    }
+
+    return -1;
+};
+
+const ThemePreviewLayer: React.FC<{
     theme: Theme;
     mode: EditableMode;
     isActive: boolean;
-    onClick: () => void;
-}> = ({ theme, mode, isActive, onClick }) => {
+    visualizerMode: VisualizerMode;
+    staticMode: boolean;
+    backgroundOpacity: number;
+    cadenzaTuning: CadenzaTuning;
+    partitaTuning: PartitaTuning;
+    currentTime: ReturnType<typeof useMotionValue<number>>;
+    currentLineIndex: number;
+    audioPower: ReturnType<typeof useMotionValue<number>>;
+    audioBands: AudioBands;
+    clipPath: string;
+    overlayAlign: 'top-left' | 'bottom-right';
+}> = ({
+    theme,
+    mode,
+    isActive,
+    visualizerMode,
+    staticMode,
+    backgroundOpacity,
+    cadenzaTuning,
+    partitaTuning,
+    currentTime,
+    currentLineIndex,
+    audioPower,
+    audioBands,
+    clipPath,
+    overlayAlign,
+}) => {
     const isLight = mode === 'light';
+    const overlayPositionClass = overlayAlign === 'top-left'
+        ? 'items-start justify-start'
+        : 'items-end justify-end';
 
     return (
-        <button
-            type="button"
-            onClick={onClick}
-            className="relative min-h-[280px] overflow-hidden rounded-[28px] border p-5 text-left transition-all"
+        <div
+            className="absolute inset-0 overflow-hidden"
             style={{
-                backgroundColor: theme.backgroundColor,
-                borderColor: isActive ? theme.accentColor : (isLight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.1)'),
-                boxShadow: isActive ? `0 22px 60px ${theme.accentColor}22` : '0 18px 50px rgba(0,0,0,0.14)',
+                clipPath,
             }}
         >
-            <div
-                className="absolute inset-0 opacity-80"
-                style={{
-                    background: `radial-gradient(circle at 18% 20%, ${theme.accentColor}25 0%, transparent 38%), radial-gradient(circle at 80% 24%, ${theme.secondaryColor}24 0%, transparent 42%), linear-gradient(135deg, transparent 0%, ${theme.primaryColor}12 100%)`,
-                }}
-            />
+            <div className="absolute inset-0">
+                {visualizerMode === 'classic' ? (
+                    <Visualizer
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={PREVIEW_LINES}
+                        theme={theme}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        showText
+                        staticMode={staticMode}
+                        backgroundOpacity={backgroundOpacity}
+                        lyricsFontScale={1}
+                        seed={`theme-park-${mode}-classic`}
+                    />
+                ) : visualizerMode === 'cadenza' ? (
+                    <VisualizerCadenza
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={PREVIEW_LINES}
+                        theme={theme}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        showText
+                        staticMode={staticMode}
+                        backgroundOpacity={backgroundOpacity}
+                        cadenzaTuning={cadenzaTuning}
+                        lyricsFontScale={1}
+                        seed={`theme-park-${mode}-cadenza`}
+                    />
+                ) : (
+                    <VisualizerPartita
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={PREVIEW_LINES}
+                        theme={theme}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        showText
+                        staticMode={staticMode}
+                        backgroundOpacity={backgroundOpacity}
+                        partitaTuning={partitaTuning}
+                        lyricsFontScale={1}
+                        seed={`theme-park-${mode}-partita`}
+                    />
+                )}
+            </div>
 
-            <div className="relative z-10 flex h-full flex-col">
-                <div className="flex items-center justify-between">
-                    <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em]" style={{ color: theme.primaryColor, borderColor: `${theme.primaryColor}30` }}>
+            <div className={`relative z-10 flex h-full p-5 pointer-events-none ${overlayPositionClass}`}>
+                <div className="space-y-3">
+                    <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] backdrop-blur-md" style={{ color: theme.primaryColor, borderColor: `${theme.primaryColor}30`, backgroundColor: `${theme.backgroundColor}80` }}>
                         {isLight ? <Sun size={13} /> : <Moon size={13} />}
                         <span>{isLight ? 'Light' : 'Dark'}</span>
                     </div>
                     {isActive && (
-                        <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs" style={{ color: theme.backgroundColor, backgroundColor: theme.accentColor }}>
+                        <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs backdrop-blur-md" style={{ color: theme.backgroundColor, backgroundColor: theme.accentColor }}>
                             <Check size={12} />
                             <span>Editing</span>
                         </div>
                     )}
-                </div>
-
-                <div className="mt-8 space-y-3">
-                    <div className="text-[11px] uppercase tracking-[0.24em] opacity-65" style={{ color: theme.secondaryColor }}>
-                        Theme Park Preview
+                    <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] backdrop-blur-md" style={{ color: theme.secondaryColor, borderColor: `${theme.secondaryColor}25`, backgroundColor: `${theme.backgroundColor}88` }}>
+                        <span>{visualizerMode}</span>
+                        <span className="opacity-50">Playback Preview</span>
                     </div>
-                    <div className="text-3xl font-semibold leading-tight" style={{ color: theme.primaryColor }}>
-                        The city learns your colors.
-                    </div>
-                    <div className="max-w-sm text-sm leading-6 opacity-90" style={{ color: theme.secondaryColor }}>
-                        亮暗双主题会一起保存。播放器切换日夜时，会自动切到对应的自定义配色。
-                    </div>
-                </div>
-
-                <div className="mt-auto space-y-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 rounded-full w-fit px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
                         <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.accentColor }} />
                         <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
                         <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.secondaryColor }} />
                     </div>
-
-                    <div className="rounded-2xl border px-4 py-3" style={{ borderColor: `${theme.secondaryColor}22`, backgroundColor: `${theme.primaryColor}10` }}>
-                        <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
-                            Folia Major
-                        </div>
-                        <div className="mt-1 text-xs" style={{ color: theme.secondaryColor }}>
-                            Accent and lyric highlights will follow this palette.
-                        </div>
-                    </div>
                 </div>
             </div>
-        </button>
+        </div>
+    );
+};
+
+const DiagonalThemePreview: React.FC<{
+    lightTheme: Theme;
+    darkTheme: Theme;
+    activeMode: EditableMode;
+    visualizerMode: VisualizerMode;
+    staticMode: boolean;
+    backgroundOpacity: number;
+    cadenzaTuning: CadenzaTuning;
+    partitaTuning: PartitaTuning;
+    currentTime: ReturnType<typeof useMotionValue<number>>;
+    currentLineIndex: number;
+    audioPower: ReturnType<typeof useMotionValue<number>>;
+    audioBands: AudioBands;
+    onSelectMode: (mode: EditableMode) => void;
+}> = ({
+    lightTheme,
+    darkTheme,
+    activeMode,
+    visualizerMode,
+    staticMode,
+    backgroundOpacity,
+    cadenzaTuning,
+    partitaTuning,
+    currentTime,
+    currentLineIndex,
+    audioPower,
+    audioBands,
+    onSelectMode,
+}) => {
+    const borderColor = activeMode === 'light' ? lightTheme.accentColor : darkTheme.accentColor;
+
+    return (
+        <div
+            className="relative isolate h-[min(46vh,460px)] min-h-[300px] overflow-hidden rounded-[30px] border shadow-[0_18px_50px_rgba(0,0,0,0.18)] lg:h-full lg:min-h-0"
+            style={{ borderColor }}
+        >
+            <button
+                type="button"
+                onClick={() => onSelectMode('light')}
+                className="absolute left-0 top-0 z-20 h-[44%] w-[44%]"
+                style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }}
+                aria-label="Select light theme preview"
+            />
+            <button
+                type="button"
+                onClick={() => onSelectMode('dark')}
+                className="absolute bottom-0 right-0 z-20 h-[44%] w-[44%]"
+                style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
+                aria-label="Select dark theme preview"
+            />
+
+            <ThemePreviewLayer
+                theme={lightTheme}
+                mode="light"
+                isActive={activeMode === 'light'}
+                visualizerMode={visualizerMode}
+                staticMode={staticMode}
+                backgroundOpacity={backgroundOpacity}
+                cadenzaTuning={cadenzaTuning}
+                partitaTuning={partitaTuning}
+                currentTime={currentTime}
+                currentLineIndex={currentLineIndex}
+                audioPower={audioPower}
+                audioBands={audioBands}
+                clipPath="polygon(0 0, 100% 0, 0 100%)"
+                overlayAlign="top-left"
+            />
+            <ThemePreviewLayer
+                theme={darkTheme}
+                mode="dark"
+                isActive={activeMode === 'dark'}
+                visualizerMode={visualizerMode}
+                staticMode={staticMode}
+                backgroundOpacity={backgroundOpacity}
+                cadenzaTuning={cadenzaTuning}
+                partitaTuning={partitaTuning}
+                currentTime={currentTime}
+                currentLineIndex={currentLineIndex}
+                audioPower={audioPower}
+                audioBands={audioBands}
+                clipPath="polygon(100% 0, 100% 100%, 0 100%)"
+                overlayAlign="bottom-right"
+            />
+
+        </div>
     );
 };
 
@@ -119,12 +346,25 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     initialTheme,
     isDaylight,
     isCustomThemePreferred,
+    visualizerMode,
+    staticMode = false,
+    backgroundOpacity = 0.75,
+    cadenzaTuning = DEFAULT_CADENZA_TUNING,
+    partitaTuning = DEFAULT_PARTITA_TUNING,
     onClose,
     onSaveTheme,
     onPreferTheme,
 }) => {
     const { t } = useTranslation();
+    const currentTime = useMotionValue(0);
+    const audioPower = useMotionValue(0.24);
+    const bass = useMotionValue(0.18);
+    const lowMid = useMotionValue(0.15);
+    const mid = useMotionValue(0.12);
+    const vocal = useMotionValue(0.2);
+    const treble = useMotionValue(0.1);
     const [draftTheme, setDraftTheme] = useState<DualTheme>(() => normalizeDualTheme(initialTheme));
+    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewLineIndex(PREVIEW_LINES, 0));
     const [pickerState, setPickerState] = useState<PickerState>({
         mode: isDaylight ? 'light' : 'dark',
         key: 'accentColor',
@@ -136,6 +376,44 @@ const ThemePark: React.FC<ThemeParkProps> = ({
             mode: isDaylight ? 'light' : previous.mode,
         }));
     }, [isDaylight]);
+
+    const audioBands = useMemo<AudioBands>(() => ({
+        bass,
+        lowMid,
+        mid,
+        vocal,
+        treble,
+    }), [bass, lowMid, mid, vocal, treble]);
+
+    useEffect(() => {
+        let frameId = 0;
+        const startedAt = performance.now();
+
+        const tick = (now: number) => {
+            const elapsed = ((now - startedAt) / 1000) % LOOP_DURATION;
+            currentTime.set(elapsed);
+
+            const wave = (offset: number, speed: number, floor: number, amplitude: number) =>
+                floor + (Math.sin(now * speed + offset) * 0.5 + 0.5) * amplitude;
+
+            audioPower.set(wave(0.2, 0.0024, 0.16, 0.18));
+            bass.set(wave(0.9, 0.0032, 0.14, 0.2));
+            lowMid.set(wave(1.7, 0.0028, 0.12, 0.16));
+            mid.set(wave(2.6, 0.0023, 0.1, 0.14));
+            vocal.set(wave(3.4, 0.0038, 0.16, 0.22));
+            treble.set(wave(4.2, 0.0046, 0.08, 0.14));
+
+            frameId = window.requestAnimationFrame(tick);
+        };
+
+        frameId = window.requestAnimationFrame(tick);
+        return () => window.cancelAnimationFrame(frameId);
+    }, [audioPower, bass, currentTime, lowMid, mid, treble, vocal]);
+
+    useMotionValueEvent(currentTime, 'change', latest => {
+        const nextIndex = findPreviewLineIndex(PREVIEW_LINES, latest);
+        setCurrentLineIndex(previous => (previous === nextIndex ? previous : nextIndex));
+    });
 
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
@@ -176,7 +454,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                 onClick={(event) => event.stopPropagation()}
                 className={`mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${glassBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
             >
-                <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6">
+                <div className="flex flex-col gap-4 border-b border-white/10 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex min-w-0 items-center gap-3">
                         <button
                             type="button"
@@ -196,11 +474,11 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                         <button
                             type="button"
                             onClick={handleReset}
-                            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm transition-colors hover:bg-white/10"
+                            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm leading-none whitespace-nowrap transition-colors hover:bg-white/10"
                             style={{ color: 'var(--text-primary)' }}
                         >
                             <RotateCcw size={14} />
@@ -209,7 +487,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                         <button
                             type="button"
                             onClick={handleSave}
-                            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm transition-colors hover:bg-white/10"
+                            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm leading-none whitespace-nowrap transition-colors hover:bg-white/10"
                             style={{ color: 'var(--text-primary)' }}
                         >
                             <Palette size={14} />
@@ -218,7 +496,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                         <button
                             type="button"
                             onClick={handlePrefer}
-                            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors"
+                            className="inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium leading-none whitespace-nowrap transition-colors"
                             style={{ color: draftTheme[isDaylight ? 'light' : 'dark'].backgroundColor, backgroundColor: draftTheme[isDaylight ? 'light' : 'dark'].accentColor }}
                         >
                             <Sparkles size={14} />
@@ -227,23 +505,26 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                     </div>
                 </div>
 
-                <div className="grid min-h-0 flex-1 gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.2fr)_380px]">
-                    <div className="grid min-h-0 gap-4 lg:grid-cols-2">
-                        <ThemePreviewCard
-                            theme={draftTheme.light}
-                            mode="light"
-                            isActive={pickerState.mode === 'light'}
-                            onClick={() => setPickerState(previous => ({ ...previous, mode: 'light' }))}
-                        />
-                        <ThemePreviewCard
-                            theme={draftTheme.dark}
-                            mode="dark"
-                            isActive={pickerState.mode === 'dark'}
-                            onClick={() => setPickerState(previous => ({ ...previous, mode: 'dark' }))}
+                <div className="grid min-h-0 flex-1 gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.2fr)_380px] lg:items-stretch">
+                    <div className="min-h-[300px] lg:min-h-0 lg:h-full">
+                        <DiagonalThemePreview
+                            lightTheme={draftTheme.light}
+                            darkTheme={draftTheme.dark}
+                            activeMode={pickerState.mode}
+                            visualizerMode={visualizerMode}
+                            staticMode={staticMode}
+                            backgroundOpacity={backgroundOpacity}
+                            cadenzaTuning={cadenzaTuning}
+                            partitaTuning={partitaTuning}
+                            currentTime={currentTime}
+                            currentLineIndex={currentLineIndex}
+                            audioPower={audioPower}
+                            audioBands={audioBands}
+                            onSelectMode={(mode) => setPickerState(previous => ({ ...previous, mode }))}
                         />
                     </div>
 
-                    <div className="min-h-0 overflow-y-auto pr-1 custom-scrollbar">
+                    <div className="relative z-30 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
                         <div
                             className="space-y-4 rounded-[24px] border border-white/10 p-4"
                             style={{ backgroundColor: controlCardBg }}
@@ -315,7 +596,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                                 })}
                             </div>
 
-                            <div className="space-y-3 rounded-[24px] border border-white/10 p-4">
+                            <div className="relative z-40 space-y-3 rounded-[24px] border border-white/10 p-4">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
