@@ -237,6 +237,28 @@ const prefetchSong = async (
     prefetchCache.set(songKey, data);
 };
 
+export const updatePrefetchedAudioUrl = (
+    song: Pick<SongResult, 'id' | 't'>,
+    audioUrl: string,
+    audioQuality: string
+): void => {
+    const songKey = getPrefetchSongKey(song);
+    const existing = prefetchCache.get(songKey);
+
+    const nextData: PrefetchedSongData = {
+        songKey,
+        songId: song.id,
+        audioUrl,
+        audioUrlFetchedAt: Date.now(),
+        audioUrlQuality: audioQuality,
+        lyrics: existing?.lyrics || null,
+        lyricRaw: existing?.lyricRaw || null,
+        coverUrl: existing?.coverUrl || null,
+    };
+
+    touchPrefetchCacheEntry(songKey, nextData);
+};
+
 /**
  * Prefetch nearby songs based on current song and queue
  */

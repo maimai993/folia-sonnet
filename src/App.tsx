@@ -41,6 +41,8 @@ const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
 const LOCAL_PREWARM_DELAY_MS = 1000;
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
+const ONLINE_AUDIO_URL_TTL_MS = 1200 * 1000;
+const ONLINE_AUDIO_URL_REFRESH_BUFFER_MS = 60 * 1000;
 const clampMediaVolume = (value: number) => Math.min(1, Math.max(0, value));
 
 const findLatestActiveLineIndex = (lines: LyricData['lines'], time: number) => {
@@ -350,6 +352,10 @@ export default function App() {
     const currentSongRef = useRef<number | null>(null);
     const volumePreviewFrameRef = useRef<number | null>(null);
     const pendingVolumePreviewRef = useRef<number | null>(null);
+    const pendingResumeTimeRef = useRef<number | null>(null);
+    const onlinePlaybackRecoveryRef = useRef<Promise<boolean> | null>(null);
+    const lastAudioRecoverySourceRef = useRef<string | null>(null);
+    const currentOnlineAudioUrlFetchedAtRef = useRef<number | null>(null);
     const [isLyricsLoading, setIsLyricsLoading] = useState(false);
 
     // Local Music State
@@ -475,6 +481,91 @@ export default function App() {
         });
     }, [syncOutputGain]);
 
+    const shouldRefreshCurrentOnlineAudioSource = useCallback(() => {
+        if (!currentSong || isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
+            return false;
+        }
+
+        if (!audioSrc || audioSrc.startsWith('blob:')) {
+            return false;
+        }
+
+        const fetchedAt = currentOnlineAudioUrlFetchedAtRef.current;
+        if (!fetchedAt) {
+            return false;
+        }
+
+        return Date.now() - fetchedAt >= ONLINE_AUDIO_URL_TTL_MS - ONLINE_AUDIO_URL_REFRESH_BUFFER_MS;
+    }, [audioSrc, currentSong]);
+
+    const recoverOnlinePlaybackSource = useCallback(async ({
+        failedSrc,
+        resumeAt,
+        autoplay,
+    }: {
+        failedSrc?: string | null;
+        resumeAt?: number;
+        autoplay: boolean;
+    }): Promise<boolean> => {
+        const song = currentSong;
+        const audioElement = audioRef.current;
+
+        if (!song || !audioElement || isLocalPlaybackSong(song) || isNavidromePlaybackSong(song)) {
+            return false;
+        }
+
+        const normalizedFailedSrc = failedSrc || audioElement.currentSrc || audioSrc || null;
+        if (normalizedFailedSrc && lastAudioRecoverySourceRef.current === normalizedFailedSrc) {
+            return false;
+        }
+
+        if (onlinePlaybackRecoveryRef.current) {
+            return onlinePlaybackRecoveryRef.current;
+        }
+
+        const recoveryTask = (async () => {
+            if (normalizedFailedSrc) {
+                lastAudioRecoverySourceRef.current = normalizedFailedSrc;
+            }
+
+            try {
+                const audioResult = await loadOnlineSongAudioSource(song, audioQuality, null);
+                if (currentSongRef.current !== song.id || !audioRef.current) {
+                    return false;
+                }
+
+                if (audioResult.kind === 'unavailable') {
+                    return false;
+                }
+
+                if (blobUrlRef.current && blobUrlRef.current !== audioResult.blobUrl) {
+                    URL.revokeObjectURL(blobUrlRef.current);
+                    blobUrlRef.current = null;
+                }
+
+                if (audioResult.blobUrl) {
+                    blobUrlRef.current = audioResult.blobUrl;
+                }
+
+                pendingResumeTimeRef.current = Math.max(0, resumeAt ?? audioRef.current.currentTime ?? 0);
+                shouldAutoPlay.current = autoplay;
+                currentOnlineAudioUrlFetchedAtRef.current = audioResult.audioSrc.startsWith('blob:')
+                    ? null
+                    : Date.now();
+                setAudioSrc(audioResult.audioSrc);
+                return true;
+            } catch (error) {
+                console.error('[App] Failed to recover online playback source', error);
+                return false;
+            } finally {
+                onlinePlaybackRecoveryRef.current = null;
+            }
+        })();
+
+        onlinePlaybackRecoveryRef.current = recoveryTask;
+        return recoveryTask;
+    }, [audioQuality, audioSrc, currentSong]);
+
     const resumePlayback = useCallback(async () => {
         if (!audioRef.current) {
             return;
@@ -486,9 +577,43 @@ export default function App() {
         }
 
         syncOutputGain(getTargetPlaybackVolume(), 0);
-        await audioRef.current.play();
-        setPlayerState(PlayerState.PLAYING);
-    }, [getTargetPlaybackVolume, syncOutputGain]);
+        if (shouldRefreshCurrentOnlineAudioSource()) {
+            const refreshed = await recoverOnlinePlaybackSource({
+                failedSrc: audioRef.current.currentSrc || audioSrc,
+                resumeAt: audioRef.current.currentTime,
+                autoplay: true,
+            });
+
+            if (refreshed) {
+                return;
+            }
+        }
+
+        try {
+            await audioRef.current.play();
+            setPlayerState(PlayerState.PLAYING);
+        } catch (error) {
+            const recovered = await recoverOnlinePlaybackSource({
+                failedSrc: audioRef.current.currentSrc || audioSrc,
+                resumeAt: audioRef.current.currentTime,
+                autoplay: true,
+            });
+
+            if (recovered) {
+                return;
+            }
+
+            if (error instanceof DOMException && error.name === 'NotAllowedError') {
+                setStatusMsg({ type: 'info', text: t('status.clickToPlay') });
+                setPlayerState(PlayerState.PAUSED);
+                return;
+            }
+
+            setStatusMsg({ type: 'error', text: t('status.playbackError') });
+            setPlayerState(PlayerState.PAUSED);
+            throw error;
+        }
+    }, [audioSrc, getTargetPlaybackVolume, recoverOnlinePlaybackSource, shouldRefreshCurrentOnlineAudioSource, t, syncOutputGain]);
 
     const pausePlayback = useCallback(() => {
         if (!audioRef.current) {
@@ -736,6 +861,7 @@ export default function App() {
                                 songToRestore = await ensureLocalSongEmbeddedCover(songToRestore);
                                 if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
                                 blobUrlRef.current = blobUrl;
+                                currentOnlineAudioUrlFetchedAtRef.current = null;
                                 setAudioSrc(blobUrl);
                                 console.log("[restoreSession] Successfully restored local song audio");
 
@@ -786,6 +912,7 @@ export default function App() {
                             const blobUrl = URL.createObjectURL(cachedAudio);
                             if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
                             blobUrlRef.current = blobUrl;
+                            currentOnlineAudioUrlFetchedAtRef.current = null;
                             setAudioSrc(blobUrl);
                         } else {
                             const urlRes = await neteaseApi.getSongUrl(lastSong.id, audioQuality);
@@ -794,6 +921,7 @@ export default function App() {
                                 if (url.startsWith('http:')) {
                                     url = url.replace('http:', 'https:');
                                 }
+                                currentOnlineAudioUrlFetchedAtRef.current = Date.now();
                                 setAudioSrc(url);
                             }
                         }
@@ -1497,6 +1625,9 @@ export default function App() {
         // Enable autoplay for user-initiated song changes
         shouldAutoPlay.current = true;
         currentSongRef.current = song.id;
+        pendingResumeTimeRef.current = null;
+        lastAudioRecoverySourceRef.current = null;
+        currentOnlineAudioUrlFetchedAtRef.current = null;
 
         // 0. Instant UI Feedback
         setLyrics(null);
@@ -1694,6 +1825,14 @@ export default function App() {
 
             if (audioResult.blobUrl) {
                 blobUrlRef.current = audioResult.blobUrl;
+                currentOnlineAudioUrlFetchedAtRef.current = null;
+            } else if (audioResult.audioSrc.startsWith('http')) {
+                currentOnlineAudioUrlFetchedAtRef.current =
+                    prefetched?.audioUrl === audioResult.audioSrc
+                        ? prefetched.audioUrlFetchedAt
+                        : Date.now();
+            } else {
+                currentOnlineAudioUrlFetchedAtRef.current = null;
             }
             setAudioSrc(audioResult.audioSrc);
         } catch (e) {
@@ -2537,18 +2676,59 @@ export default function App() {
                     }
                 }}
                 onLoadedMetadata={(e) => {
-                    setDuration(e.currentTarget.duration);
+                    const audioElement = e.currentTarget;
+                    setDuration(audioElement.duration);
+
+                    const pendingResumeTime = pendingResumeTimeRef.current;
+                    if (pendingResumeTime !== null) {
+                        const safeDuration = Number.isFinite(audioElement.duration) && audioElement.duration > 0
+                            ? Math.max(audioElement.duration - 0.25, 0)
+                            : pendingResumeTime;
+                        const nextTime = Math.min(pendingResumeTime, safeDuration);
+                        audioElement.currentTime = nextTime;
+                        currentTime.set(nextTime);
+                        pendingResumeTimeRef.current = null;
+                        return;
+                    }
+
                     currentTime.set(0); // Ensure currentTime is reset when new audio loads
                 }}
                 onError={(e) => {
-                    if (audioSrc) {
-                        setStatusMsg({ type: 'error', text: t('status.playbackError') });
-                        // If blob failed, maybe try reloading with network? 
-                        // For simplicity, just skip.
-                        setTimeout(() => {
-                            void handleNextTrack({ allowStopOnMissing: true });
-                        }, 2000);
+                    if (!audioSrc) {
+                        return;
                     }
+
+                    const failedSrc = e.currentTarget.currentSrc || audioSrc;
+                    const shouldRetryOnlineSong = Boolean(
+                        currentSong &&
+                        !isLocalPlaybackSong(currentSong) &&
+                        !isNavidromePlaybackSong(currentSong) &&
+                        failedSrc &&
+                        !failedSrc.startsWith('blob:')
+                    );
+
+                    if (shouldRetryOnlineSong) {
+                        void (async () => {
+                            const recovered = await recoverOnlinePlaybackSource({
+                                failedSrc,
+                                resumeAt: e.currentTarget.currentTime,
+                                autoplay: playerState === PlayerState.PLAYING || shouldAutoPlay.current,
+                            });
+
+                            if (!recovered) {
+                                setStatusMsg({ type: 'error', text: t('status.playbackError') });
+                                setTimeout(() => {
+                                    void handleNextTrack({ allowStopOnMissing: true });
+                                }, 2000);
+                            }
+                        })();
+                        return;
+                    }
+
+                    setStatusMsg({ type: 'error', text: t('status.playbackError') });
+                    setTimeout(() => {
+                        void handleNextTrack({ allowStopOnMissing: true });
+                    }, 2000);
                 }}
             />
 

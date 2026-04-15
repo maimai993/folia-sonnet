@@ -1,7 +1,7 @@
 import { LyricData, SongResult } from '../types';
 import { getFromCache, getFromCacheWithMigration, saveToCache } from './db';
 import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from './netease';
-import { PrefetchedSongData, isUrlValid } from './prefetchService';
+import { PrefetchedSongData, isUrlValid, updatePrefetchedAudioUrl } from './prefetchService';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
@@ -46,6 +46,7 @@ export async function loadOnlineSongAudioSource(
         return { kind: 'unavailable' };
     }
 
+    updatePrefetchedAudioUrl(song, url, audioQuality);
     return { kind: 'ok', audioSrc: url };
 }
 
