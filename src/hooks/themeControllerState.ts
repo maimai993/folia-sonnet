@@ -223,43 +223,6 @@ export const getBaseThemeForMode = ({
     return isDaylight ? daylightTheme : defaultTheme;
 };
 
-export const resolveDaylightToggleTheme = ({
-    aiTheme,
-    bgMode,
-    isLight,
-    defaultTheme,
-    daylightTheme,
-    previousTheme,
-}: {
-    aiTheme: DualTheme | null;
-    bgMode: 'default' | 'ai';
-    isLight: boolean;
-    defaultTheme: Theme;
-    daylightTheme: Theme;
-    previousTheme: Theme;
-}): Theme => {
-    if (!aiTheme) {
-        return isLight ? daylightTheme : defaultTheme;
-    }
-
-    const selectedTheme = isLight ? aiTheme.light : aiTheme.dark;
-    if (bgMode === 'default') {
-        const baseTheme = isLight ? daylightTheme : defaultTheme;
-        return {
-            ...selectedTheme,
-            backgroundColor: baseTheme.backgroundColor,
-            wordColors: previousTheme.wordColors,
-            lyricsIcons: previousTheme.lyricsIcons
-        };
-    }
-
-    return {
-        ...selectedTheme,
-        wordColors: previousTheme.wordColors,
-        lyricsIcons: previousTheme.lyricsIcons
-    };
-};
-
 export const resolveBgModeTheme = ({
     mode,
     aiTheme,
@@ -299,14 +262,6 @@ export const resolveBgModeTheme = ({
         ...selectedAiTheme,
         wordColors: previousTheme.wordColors,
         lyricsIcons: previousTheme.lyricsIcons
-    };
-};
-
-export const buildThemeFallback = (baseTheme: Theme): Theme => {
-    return {
-        ...baseTheme,
-        wordColors: [],
-        lyricsIcons: []
     };
 };
 

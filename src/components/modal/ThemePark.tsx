@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
-import { ChevronLeft, Palette, RotateCcw, Sparkles, Sun, Moon, Check } from 'lucide-react';
+import { ChevronLeft, Palette, RotateCcw, Sun, Moon, Check } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import { useTranslation } from 'react-i18next';
 import Visualizer from '../visualizer/Visualizer';
@@ -22,7 +22,6 @@ import { getLineRenderEndTime } from '../../utils/lyrics/renderHints';
 interface ThemeParkProps {
     initialTheme: DualTheme;
     isDaylight: boolean;
-    isCustomThemePreferred: boolean;
     visualizerMode: VisualizerMode;
     staticMode?: boolean;
     backgroundOpacity?: number;
@@ -30,7 +29,6 @@ interface ThemeParkProps {
     partitaTuning?: PartitaTuning;
     onClose: () => void;
     onSaveTheme: (dualTheme: DualTheme) => void;
-    onPreferTheme: (dualTheme: DualTheme) => void;
 }
 
 type EditableColorKey = 'backgroundColor' | 'primaryColor' | 'accentColor' | 'secondaryColor';
@@ -43,9 +41,9 @@ interface PickerState {
 
 const COLOR_FIELDS: Array<{ key: EditableColorKey; label: string; description: string; }> = [
     { key: 'backgroundColor', label: '背景', description: '页面主背景与大面积氛围色' },
-    { key: 'primaryColor', label: '主文本', description: '主标题与主要歌词颜色' },
-    { key: 'accentColor', label: '强调色', description: '高亮、按钮与动态焦点颜色' },
-    { key: 'secondaryColor', label: '辅助色', description: '次级文案与辅助信息颜色' },
+    { key: 'primaryColor', label: '主文本', description: '主文本与歌词颜色' },
+    { key: 'accentColor', label: '强调色', description: '高亮、按钮与歌词发光颜色' },
+    { key: 'secondaryColor', label: '辅助色', description: '辅助文本与几何背景颜色' },
 ];
 
 const normalizeTheme = (theme: Theme, fallbackName: string, provider: string): Theme => ({
@@ -141,6 +139,7 @@ const ThemePreviewLayer: React.FC<{
     mode: EditableMode;
     isActive: boolean;
     visualizerMode: VisualizerMode;
+    visualizerModeLabel: string;
     staticMode: boolean;
     backgroundOpacity: number;
     cadenzaTuning: CadenzaTuning;
@@ -156,6 +155,7 @@ const ThemePreviewLayer: React.FC<{
     mode,
     isActive,
     visualizerMode,
+    visualizerModeLabel,
     staticMode,
     backgroundOpacity,
     cadenzaTuning,
@@ -174,6 +174,7 @@ const ThemePreviewLayer: React.FC<{
     const badgeRowAlignmentClass = overlayAlign === 'top-left'
         ? 'justify-start'
         : 'justify-end';
+    const isBottomRight = overlayAlign === 'bottom-right';
 
     return (
         <div
@@ -231,26 +232,40 @@ const ThemePreviewLayer: React.FC<{
             </div>
 
             <div className={`relative z-10 flex h-full p-4 pointer-events-none ${overlayPositionClass}`}>
-                <div className={`flex max-w-full flex-wrap items-center gap-2 ${badgeRowAlignmentClass}`}>
-                    <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] backdrop-blur-md" style={{ color: theme.primaryColor, borderColor: `${theme.primaryColor}30`, backgroundColor: `${theme.backgroundColor}80` }}>
-                        {isLight ? <Sun size={13} /> : <Moon size={13} />}
-                        <span>{isLight ? 'Light' : 'Dark'}</span>
-                    </div>
-                    {isActive && (
-                        <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs backdrop-blur-md" style={{ color: theme.backgroundColor, backgroundColor: theme.accentColor }}>
-                            <Check size={12} />
-                            <span>Editing</span>
+                <div className={`flex max-w-full flex-col gap-2 ${badgeRowAlignmentClass}`}>
+                    {isBottomRight && (
+                        <div className={`flex ${badgeRowAlignmentClass}`}>
+                            <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
+                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.accentColor }} />
+                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
+                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.secondaryColor }} />
+                            </div>
                         </div>
                     )}
-                    <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] backdrop-blur-md" style={{ color: theme.secondaryColor, borderColor: `${theme.secondaryColor}25`, backgroundColor: `${theme.backgroundColor}88` }}>
-                        <span>{visualizerMode}</span>
-                        <span className="opacity-50">Playback Preview</span>
+                    <div className={`flex max-w-full flex-wrap items-center gap-2 ${badgeRowAlignmentClass}`}>
+                        <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] backdrop-blur-md" style={{ color: theme.primaryColor, borderColor: `${theme.primaryColor}30`, backgroundColor: `${theme.backgroundColor}80` }}>
+                            {isLight ? <Sun size={13} /> : <Moon size={13} />}
+                            <span>{isLight ? 'Light' : 'Dark'}</span>
+                        </div>
+                        {isActive && (
+                            <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs backdrop-blur-md" style={{ color: theme.backgroundColor, backgroundColor: theme.accentColor }}>
+                                <Check size={12} />
+                                <span>编辑中</span>
+                            </div>
+                        )}
+                        <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] backdrop-blur-md" style={{ color: theme.secondaryColor, borderColor: `${theme.secondaryColor}25`, backgroundColor: `${theme.backgroundColor}88` }}>
+                            <span>{visualizerModeLabel}</span>
+                        </div>
                     </div>
-                    <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
-                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.accentColor }} />
-                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
-                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.secondaryColor }} />
-                    </div>
+                    {!isBottomRight && (
+                        <div className={`flex ${badgeRowAlignmentClass}`}>
+                            <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
+                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.accentColor }} />
+                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
+                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.secondaryColor }} />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -262,6 +277,7 @@ const DiagonalThemePreview: React.FC<{
     darkTheme: Theme;
     activeMode: EditableMode;
     visualizerMode: VisualizerMode;
+    visualizerModeLabel: string;
     staticMode: boolean;
     backgroundOpacity: number;
     cadenzaTuning: CadenzaTuning;
@@ -276,6 +292,7 @@ const DiagonalThemePreview: React.FC<{
     darkTheme,
     activeMode,
     visualizerMode,
+    visualizerModeLabel,
     staticMode,
     backgroundOpacity,
     cadenzaTuning,
@@ -313,6 +330,7 @@ const DiagonalThemePreview: React.FC<{
                 mode="light"
                 isActive={activeMode === 'light'}
                 visualizerMode={visualizerMode}
+                visualizerModeLabel={visualizerModeLabel}
                 staticMode={staticMode}
                 backgroundOpacity={backgroundOpacity}
                 cadenzaTuning={cadenzaTuning}
@@ -329,6 +347,7 @@ const DiagonalThemePreview: React.FC<{
                 mode="dark"
                 isActive={activeMode === 'dark'}
                 visualizerMode={visualizerMode}
+                visualizerModeLabel={visualizerModeLabel}
                 staticMode={staticMode}
                 backgroundOpacity={backgroundOpacity}
                 cadenzaTuning={cadenzaTuning}
@@ -348,7 +367,6 @@ const DiagonalThemePreview: React.FC<{
 const ThemePark: React.FC<ThemeParkProps> = ({
     initialTheme,
     isDaylight,
-    isCustomThemePreferred,
     visualizerMode,
     staticMode = false,
     backgroundOpacity = 0.75,
@@ -356,7 +374,6 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     partitaTuning = DEFAULT_PARTITA_TUNING,
     onClose,
     onSaveTheme,
-    onPreferTheme,
 }) => {
     const { t } = useTranslation();
     const currentTime = useMotionValue(0);
@@ -421,6 +438,11 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
     const controlCardBg = isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)';
+    const visualizerModeLabel = visualizerMode === 'classic'
+        ? (t('ui.visualizerClassic') || '流光')
+        : visualizerMode === 'cadenza'
+            ? (t('ui.visualizerCadenze') || '心象')
+            : (t('ui.visualizerPartita') || '云阶');
     const activeTheme = draftTheme[pickerState.mode];
     const activeColor = activeTheme[pickerState.key];
     const pickerField = COLOR_FIELDS.find(field => field.key === pickerState.key) ?? COLOR_FIELDS[0];
@@ -441,10 +463,6 @@ const ThemePark: React.FC<ThemeParkProps> = ({
 
     const handleSave = () => {
         onSaveTheme(normalizeDualTheme(draftTheme));
-    };
-
-    const handlePrefer = () => {
-        onPreferTheme(normalizeDualTheme(draftTheme));
     };
 
     return (
@@ -494,16 +512,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                             style={{ color: 'var(--text-primary)' }}
                         >
                             <Palette size={14} />
-                            <span>{t('options.saveCustomTheme') || '保存自定义主题'}</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handlePrefer}
-                            className="inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium leading-none whitespace-nowrap transition-colors"
-                            style={{ color: draftTheme[isDaylight ? 'light' : 'dark'].backgroundColor, backgroundColor: draftTheme[isDaylight ? 'light' : 'dark'].accentColor }}
-                        >
-                            <Sparkles size={14} />
-                            <span>{isCustomThemePreferred ? (t('options.updatePreferredCustomTheme') || '更新首选自定义主题') : (t('options.preferCustomTheme') || '优先使用自定义主题')}</span>
+                            <span>{t('options.saveAndApplyCustomTheme') || '保存并应用自定义主题'}</span>
                         </button>
                     </div>
                 </div>
@@ -515,6 +524,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                             darkTheme={draftTheme.dark}
                             activeMode={pickerState.mode}
                             visualizerMode={visualizerMode}
+                            visualizerModeLabel={visualizerModeLabel}
                             staticMode={staticMode}
                             backgroundOpacity={backgroundOpacity}
                             cadenzaTuning={cadenzaTuning}
@@ -537,7 +547,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                                     {pickerState.mode === 'light' ? (t('options.lightTheme') || '亮色主题') : (t('options.darkTheme') || '暗色主题')}
                                 </div>
                                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.themeParkPickerDesc') || '只编辑颜色字段，不包含图标和情绪文字。'}
+                                    {t('options.themeParkPickerDesc') || '编辑颜色字段。'}
                                 </div>
                             </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle, Palette } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
-import { DualTheme, Theme, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../../types';
+import { DualTheme, Theme, ThemeMode, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
 import VisPlayground from '../visualizer/VisPlayground';
@@ -17,11 +17,14 @@ interface HelpModalProps {
     theme?: Theme;
     backgroundOpacity?: number;
     setBackgroundOpacity?: (opacity: number) => void;
-    onSetThemePreset?: (preset: 'midnight' | 'daylight') => void;
+    bgMode: ThemeMode;
+    onApplyDefaultTheme: () => void;
+    hasCustomTheme: boolean;
     themeParkInitialTheme: DualTheme;
     isCustomThemePreferred: boolean;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
-    onPreferCustomTheme: (dualTheme: DualTheme) => void;
+    onApplyCustomTheme: () => void;
+    onToggleCustomThemePreferred: (enabled: boolean) => void;
     isDaylight: boolean;
     onToggleNavidrome?: (enabled: boolean) => void;
     visualizerMode?: VisualizerMode;
@@ -48,11 +51,14 @@ const HelpModal: React.FC<HelpModalProps> = ({
     theme,
     backgroundOpacity = 0.75,
     setBackgroundOpacity,
-    onSetThemePreset,
+    bgMode,
+    onApplyDefaultTheme,
+    hasCustomTheme,
     themeParkInitialTheme,
     isCustomThemePreferred,
     onSaveCustomTheme,
-    onPreferCustomTheme,
+    onApplyCustomTheme,
+    onToggleCustomThemePreferred,
     isDaylight,
     onToggleNavidrome,
     visualizerMode = 'classic',
@@ -367,26 +373,45 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <button
-                                                onClick={() => onSetThemePreset?.('midnight')}
+                                                onClick={onApplyDefaultTheme}
                                                 className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
                                                 style={{
-                                                    borderColor: theme?.name === 'Midnight Default' ? theme.accentColor : 'transparent',
-                                                    backgroundColor: 'rgba(9, 9, 11, 0.5)'
+                                                    borderColor: bgMode === 'default' ? theme?.accentColor || 'transparent' : 'transparent',
+                                                    backgroundColor: isDaylight ? 'rgba(245, 245, 244, 0.8)' : 'rgba(9, 9, 11, 0.5)'
                                                 }}
                                             >
-                                                <div className="w-6 h-6 rounded-full bg-zinc-950 border border-zinc-700" />
-                                                <span className="text-xs opacity-80 text-zinc-300">{t('options.themePresetsMidnight') || "Midnight"}</span>
+                                                <div className="w-6 h-6 rounded-full shadow-sm" style={{ background: `linear-gradient(135deg, ${themeParkInitialTheme.light.backgroundColor}, ${themeParkInitialTheme.dark.backgroundColor})`, borderColor: isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.15)' }} />
+                                                <span className="text-xs opacity-80" style={{ color: isDaylight ? '#27272a' : '#e4e4e7' }}>{t('options.themePresetsDefault') || "Default"}</span>
                                             </button>
                                             <button
-                                                onClick={() => onSetThemePreset?.('daylight')}
-                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
+                                                onClick={() => onApplyCustomTheme()}
+                                                disabled={!hasCustomTheme}
+                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
                                                 style={{
-                                                    borderColor: theme?.name === 'Daylight Default' ? theme.accentColor : 'transparent',
-                                                    backgroundColor: 'rgba(245, 245, 244, 0.8)'
+                                                    borderColor: bgMode === 'custom' ? theme?.accentColor || 'transparent' : 'transparent',
+                                                    backgroundColor: isDaylight ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.08)'
                                                 }}
                                             >
-                                                <div className="w-6 h-6 rounded-full bg-[#f5f5f4] border border-zinc-300 shadow-sm" />
-                                                <span className="text-xs opacity-80 text-zinc-800">{t('options.themePresetsDaylight') || "Daylight"}</span>
+                                                <div className="w-6 h-6 rounded-full" style={{ background: hasCustomTheme ? `linear-gradient(135deg, ${themeParkInitialTheme.light.accentColor}, ${themeParkInitialTheme.dark.accentColor})` : 'rgba(114,119,134,0.4)' }} />
+                                                <span className="text-xs opacity-80" style={{ color: 'var(--text-primary)' }}>{t('options.customTheme') || "Custom"}</span>
+                                            </button>
+                                        </div>
+                                        <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
+                                            <div className="space-y-1">
+                                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('options.preferCustomTheme') || '优先使用自定义主题'}
+                                                </div>
+                                                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                                    {t('options.preferCustomThemeDesc') || '保存后，后续主题切换会优先保留自定义主题。'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => hasCustomTheme && onToggleCustomThemePreferred(!isCustomThemePreferred)}
+                                                disabled={!hasCustomTheme}
+                                                className={`w-12 h-6 rounded-full p-1 transition-colors ${!isCustomThemePreferred ? 'bg-white/10' : ''} disabled:opacity-40 disabled:cursor-not-allowed`}
+                                                style={{ backgroundColor: isCustomThemePreferred ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                            >
+                                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isCustomThemePreferred ? 'translate-x-6' : 'translate-x-0'}`} />
                                             </button>
                                         </div>
                                     </div>
@@ -854,15 +879,13 @@ const HelpModal: React.FC<HelpModalProps> = ({
                 <ThemePark
                     initialTheme={themeParkInitialTheme}
                     isDaylight={isDaylight}
-                    isCustomThemePreferred={isCustomThemePreferred}
                     visualizerMode={visualizerMode}
                     staticMode={staticMode}
                     backgroundOpacity={backgroundOpacity}
                     cadenzaTuning={cadenzaTuning}
                     partitaTuning={partitaTuning}
-                    onSaveTheme={onSaveCustomTheme}
-                    onPreferTheme={(dualTheme) => {
-                        onPreferCustomTheme(dualTheme);
+                    onSaveTheme={(dualTheme) => {
+                        onSaveCustomTheme(dualTheme);
                         setShowThemePark(false);
                     }}
                     onClose={() => setShowThemePark(false)}

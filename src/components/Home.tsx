@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, LocalLibraryGroup, LocalPlaylist, DualTheme, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../types';
+import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, LocalLibraryGroup, LocalPlaylist, DualTheme, ThemeMode, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../types';
 import { NavidromeSong, NavidromeViewSelection } from '../types/navidrome';
 import { isNavidromeEnabled, getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
@@ -76,11 +76,14 @@ interface HomeProps {
     theme: Theme;
     backgroundOpacity: number;
     setBackgroundOpacity: (opacity: number) => void;
-    onSetThemePreset: (preset: 'midnight' | 'daylight') => void;
+    bgMode: ThemeMode;
+    onApplyDefaultTheme: () => void;
+    hasCustomTheme: boolean;
     themeParkInitialTheme: DualTheme;
     isCustomThemePreferred: boolean;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
-    onPreferCustomTheme: (dualTheme: DualTheme) => void;
+    onApplyCustomTheme: () => void;
+    onToggleCustomThemePreferred: (enabled: boolean) => void;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
     cadenzaTuning: CadenzaTuning;
@@ -190,11 +193,14 @@ const Home: React.FC<HomeProps> = ({
     theme,
     backgroundOpacity,
     setBackgroundOpacity,
-    onSetThemePreset,
+    bgMode,
+    onApplyDefaultTheme,
+    hasCustomTheme,
     themeParkInitialTheme,
     isCustomThemePreferred,
     onSaveCustomTheme,
-    onPreferCustomTheme,
+    onApplyCustomTheme,
+    onToggleCustomThemePreferred,
     isDaylight,
     visualizerMode,
     cadenzaTuning,
@@ -1076,11 +1082,14 @@ const Home: React.FC<HomeProps> = ({
                                 theme={theme}
                                 backgroundOpacity={backgroundOpacity}
                                 setBackgroundOpacity={setBackgroundOpacity}
-                                onSetThemePreset={onSetThemePreset}
+                                bgMode={bgMode}
+                                onApplyDefaultTheme={onApplyDefaultTheme}
+                                hasCustomTheme={hasCustomTheme}
                                 themeParkInitialTheme={themeParkInitialTheme}
                                 isCustomThemePreferred={isCustomThemePreferred}
                                 onSaveCustomTheme={onSaveCustomTheme}
-                                onPreferCustomTheme={onPreferCustomTheme}
+                                onApplyCustomTheme={onApplyCustomTheme}
+                                onToggleCustomThemePreferred={onToggleCustomThemePreferred}
                                 isDaylight={isDaylight}
                                 onToggleNavidrome={handleToggleNavidrome}
                                 visualizerMode={visualizerMode}

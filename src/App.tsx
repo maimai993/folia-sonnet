@@ -642,17 +642,19 @@ export default function App() {
         theme,
         setTheme,
         hasCustomTheme,
+        isCustomThemePreferred,
         bgMode,
         isGeneratingTheme,
         handleToggleDaylight,
         handleBgModeChange,
         handleResetTheme,
-        handleSetThemePreset,
+        applyDefaultTheme,
         restoreCachedThemeForSong,
         generateAITheme,
         getThemeParkSeedTheme,
         saveCustomDualTheme,
-        applyPreferredCustomTheme,
+        applyCustomTheme,
+        handleCustomThemePreferenceChange,
     } = useThemeController({
         defaultTheme: DEFAULT_THEME,
         daylightTheme: DAYLIGHT_THEME,
@@ -2846,11 +2848,14 @@ export default function App() {
                             isDaylight={isDaylight}
                             backgroundOpacity={backgroundOpacity}
                             setBackgroundOpacity={handleSetBackgroundOpacity}
-                            onSetThemePreset={handleSetThemePreset}
+                            bgMode={bgMode}
+                            onApplyDefaultTheme={applyDefaultTheme}
                             themeParkInitialTheme={getThemeParkSeedTheme()}
-                            isCustomThemePreferred={bgMode === 'custom'}
+                            hasCustomTheme={hasCustomTheme}
+                            isCustomThemePreferred={isCustomThemePreferred}
                             onSaveCustomTheme={saveCustomDualTheme}
-                            onPreferCustomTheme={applyPreferredCustomTheme}
+                            onApplyCustomTheme={applyCustomTheme}
+                            onToggleCustomThemePreferred={handleCustomThemePreferenceChange}
                             visualizerMode={visualizerMode}
                             cadenzaTuning={cadenzaTuning}
                             partitaTuning={partitaTuning}

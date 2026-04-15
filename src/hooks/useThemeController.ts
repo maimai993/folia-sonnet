@@ -96,6 +96,7 @@ export function useThemeController({
     const [aiTheme, setAiTheme] = useState<DualTheme | null>(null);
     const [legacyTheme, setLegacyTheme] = useState<Theme | null>(null);
     const [customTheme, setCustomTheme] = useState<DualTheme | null>(initialCustomTheme);
+    const [isCustomThemePreferred, setIsCustomThemePreferred] = useState(initialCustomPreferred);
     const [bgMode, setBgMode] = useState<ThemeMode>(() => (
         initialCustomTheme && initialCustomPreferred ? 'custom' : 'default'
     ));
@@ -110,8 +111,8 @@ export function useThemeController({
     }, [customTheme]);
 
     useEffect(() => {
-        localStorage.setItem(CUSTOM_THEME_PREFERRED_KEY, String(bgMode === 'custom' && !!customTheme));
-    }, [bgMode, customTheme]);
+        localStorage.setItem(CUSTOM_THEME_PREFERRED_KEY, String(isCustomThemePreferred && !!customTheme));
+    }, [customTheme, isCustomThemePreferred]);
 
     useEffect(() => {
         setTheme(previousTheme => {
@@ -166,18 +167,20 @@ export function useThemeController({
         setBgMode('default');
     };
 
-    const handleSetThemePreset = (preset: 'midnight' | 'daylight') => {
+    const applyDefaultTheme = () => {
         setAiTheme(null);
         setLegacyTheme(null);
         setBgMode('default');
-        setDaylightPreference(preset === 'daylight');
-        setStatusMsg({ type: 'success', text: `默认主题: ${preset === 'daylight' ? 'Daylight' : 'Midnight'} Default` });
+        setStatusMsg({
+            type: 'success',
+            text: `已应用默认主题: ${isDaylight ? 'Daylight Default' : 'Midnight Default'}`,
+        });
     };
 
     const applyDualTheme = (dualTheme: DualTheme) => {
         setLegacyTheme(null);
         setAiTheme(dualTheme);
-        if (bgMode !== 'custom') {
+        if (!isCustomThemePreferred) {
             setBgMode('ai');
         }
     };
@@ -185,7 +188,7 @@ export function useThemeController({
     const applyLegacyTheme = (nextLegacyTheme: Theme) => {
         setAiTheme(null);
         setLegacyTheme(nextLegacyTheme);
-        if (bgMode !== 'custom') {
+        if (!isCustomThemePreferred) {
             setBgMode('ai');
         }
     };
@@ -241,19 +244,39 @@ export function useThemeController({
     const saveCustomDualTheme = (dualTheme: DualTheme) => {
         const sanitized = sanitizeCustomDualTheme(dualTheme);
         setCustomTheme(sanitized);
+        setBgMode('custom');
         setStatusMsg({
             type: 'success',
-            text: `已保存自定义主题: ${getSelectedDualTheme(sanitized, isDaylight).name}`,
+            text: `已保存并应用自定义主题: ${getSelectedDualTheme(sanitized, isDaylight).name}`,
         });
         return sanitized;
     };
 
-    const applyPreferredCustomTheme = (dualTheme: DualTheme) => {
-        const sanitized = saveCustomDualTheme(dualTheme);
+    const applyCustomTheme = () => {
+        if (!customTheme) {
+            return;
+        }
+
         setBgMode('custom');
         setStatusMsg({
             type: 'success',
-            text: `已优先使用自定义主题: ${getSelectedDualTheme(sanitized, isDaylight).name}`,
+            text: `已应用自定义主题: ${getSelectedDualTheme(customTheme, isDaylight).name}`,
+        });
+    };
+
+    const handleCustomThemePreferenceChange = (enabled: boolean) => {
+        if (!customTheme && enabled) {
+            return;
+        }
+
+        setIsCustomThemePreferred(enabled);
+        if (enabled && customTheme) {
+            setBgMode('custom');
+        }
+
+        setStatusMsg({
+            type: 'info',
+            text: enabled ? '已开启优先使用自定义主题' : '已关闭优先使用自定义主题',
         });
     };
 
@@ -322,7 +345,7 @@ export function useThemeController({
             });
             setLegacyTheme(null);
             setAiTheme(dualTheme);
-            if (bgMode !== 'custom') {
+            if (!isCustomThemePreferred) {
                 setBgMode('ai');
             }
 
@@ -345,9 +368,9 @@ export function useThemeController({
                 const fallbackTheme = buildBuiltinDualTheme({ coverColors });
                 setLegacyTheme(null);
                 setAiTheme(fallbackTheme);
-                if (bgMode !== 'custom') {
-                    setBgMode('ai');
-                }
+            if (!isCustomThemePreferred) {
+                setBgMode('ai');
+            }
 
                 if (currentSong) {
                     saveToCache(`dual_theme_${currentSong.id}`, fallbackTheme);
@@ -374,13 +397,14 @@ export function useThemeController({
         setAiTheme,
         customTheme,
         hasCustomTheme: Boolean(customTheme),
+        isCustomThemePreferred,
         bgMode,
         setBgMode,
         isGeneratingTheme,
         handleToggleDaylight,
         handleBgModeChange,
         handleResetTheme,
-        handleSetThemePreset,
+        applyDefaultTheme,
         applyDualTheme,
         applyLegacyTheme,
         applyThemeFallback,
@@ -388,6 +412,7 @@ export function useThemeController({
         generateAITheme,
         getThemeParkSeedTheme,
         saveCustomDualTheme,
-        applyPreferredCustomTheme,
+        applyCustomTheme,
+        handleCustomThemePreferenceChange,
     };
 }
