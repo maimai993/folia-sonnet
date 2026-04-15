@@ -19,6 +19,8 @@ import Home from './components/Home';
 import AlbumView from './components/AlbumView';
 import ArtistView from './components/ArtistView';
 import UnifiedPanel from './components/UnifiedPanel';
+import TitlebarDragZone from './components/TitlebarDragZone';
+import WindowControls from './components/WindowControls';
 import LyricMatchModal from './components/modal/LyricMatchModal';
 import NaviLyricMatchModal, { NavidromeMatchData } from './components/modal/NaviLyricMatchModal';
 import { LyricData, Theme, PlayerState, SongResult, LocalSong, ReplayGainMode, LocalLibraryGroup, LocalPlaylist } from './types';
@@ -298,6 +300,8 @@ const hydrateNavidromeLyricPayload = async (config: NavidromeConfig, navidromeSo
 export default function App() {
     const { t } = useTranslation();
     const isDev = import.meta.env.DEV;
+    const isElectronWindow = Boolean((window as typeof window & { electron?: unknown }).electron);
+    const [isTitlebarRevealed, setIsTitlebarRevealed] = useState(false);
 
     // Player Data
     const [audioSrc, setAudioSrc] = useState<string | null>(null);
@@ -2658,12 +2662,61 @@ export default function App() {
         activeLine: toDebugLineSnapshot(debugActiveLine),
         nextLine: toDebugLineSnapshot(debugNextLine),
     };
+    const isPlayerView = currentView === 'player';
+
+    useEffect(() => {
+        if (!isElectronWindow) {
+            setIsTitlebarRevealed(false);
+            return;
+        }
+
+        const revealThreshold = 56;
+        const handleMouseMove = (event: MouseEvent) => {
+            const nextVisible = event.clientY <= revealThreshold;
+            setIsTitlebarRevealed((prev) => (prev === nextVisible ? prev : nextVisible));
+        };
+        const handleMouseLeave = () => setIsTitlebarRevealed(false);
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseleave', handleMouseLeave);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseleave', handleMouseLeave);
+        };
+    }, [isElectronWindow]);
 
     return (
         <div
             className="fixed inset-0 w-full h-full flex flex-col overflow-hidden font-sans transition-colors duration-500"
             style={appStyle}
         >
+            {/* Titlebar overlay */}
+            {isElectronWindow && (
+                <div
+                    className="absolute top-0 left-0 right-0 z-[9999] h-8 pointer-events-none"
+                >
+                    {!isPlayerView && (
+                        <motion.div
+                            initial={false}
+                            animate={{
+                                opacity: isTitlebarRevealed ? 1 : 0,
+                            }}
+                            transition={{ duration: 0.18, ease: 'easeOut' }}
+                            className="absolute inset-0 backdrop-blur-sm"
+                        />
+                    )}
+                    <div className="relative h-full">
+                        <TitlebarDragZone
+                            active={isElectronWindow}
+                        />
+                        <div className="pointer-events-auto absolute top-0 right-0 z-10 h-full">
+                            <WindowControls revealed={isTitlebarRevealed} />
+                        </div>
+                    </div>
+                </div>
+            )}
+            
             <audio
                 ref={audioRef}
                 src={audioSrc || undefined}

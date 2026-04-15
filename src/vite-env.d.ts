@@ -11,6 +11,10 @@ declare global {
       saveSettings: (key: string, value: any) => Promise<any>;
       generateTheme: (lyricsText: string, options?: { isPureMusic?: boolean; songTitle?: string }) => Promise<any>;
       getNeteasePort: () => Promise<number>;
+      minimizeWindow: () => Promise<boolean>;
+      toggleMaximizeWindow: () => Promise<boolean>;
+      closeWindow: () => Promise<boolean>;
+      isWindowMaximized: () => Promise<boolean>;
     };
   }
 }

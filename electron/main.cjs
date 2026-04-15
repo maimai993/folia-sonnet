@@ -311,6 +311,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    frame: false,
+    titleBarStyle: 'hidden',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -372,6 +374,46 @@ ipcMain.handle('save-settings', (event, key, value) => {
 // Retrieve dynamic port of local Netease API Server
 ipcMain.handle('get-netease-port', () => {
   return assignedPort;
+});
+
+ipcMain.handle('window-minimize', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  mainWindow.minimize();
+  return true;
+});
+
+ipcMain.handle('window-toggle-maximize', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+    return false;
+  }
+
+  mainWindow.maximize();
+  return true;
+});
+
+ipcMain.handle('window-close', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  mainWindow.close();
+  return true;
+});
+
+ipcMain.handle('window-is-maximized', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  return mainWindow.isMaximized();
 });
 
 // Integrate AI logic locally into Electron
