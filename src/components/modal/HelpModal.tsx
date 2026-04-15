@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle } from 'lucide-react';
+import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle, Palette } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
-import { Theme, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../../types';
+import { DualTheme, Theme, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
 import VisPlayground from '../visualizer/VisPlayground';
+import ThemePark from './ThemePark';
 
 interface HelpModalProps {
     onClose: () => void;
@@ -17,6 +18,10 @@ interface HelpModalProps {
     backgroundOpacity?: number;
     setBackgroundOpacity?: (opacity: number) => void;
     onSetThemePreset?: (preset: 'midnight' | 'daylight') => void;
+    themeParkInitialTheme: DualTheme;
+    isCustomThemePreferred: boolean;
+    onSaveCustomTheme: (dualTheme: DualTheme) => void;
+    onPreferCustomTheme: (dualTheme: DualTheme) => void;
     isDaylight: boolean;
     onToggleNavidrome?: (enabled: boolean) => void;
     visualizerMode?: VisualizerMode;
@@ -44,6 +49,10 @@ const HelpModal: React.FC<HelpModalProps> = ({
     backgroundOpacity = 0.75,
     setBackgroundOpacity,
     onSetThemePreset,
+    themeParkInitialTheme,
+    isCustomThemePreferred,
+    onSaveCustomTheme,
+    onPreferCustomTheme,
     isDaylight,
     onToggleNavidrome,
     visualizerMode = 'classic',
@@ -63,6 +72,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<'help' | 'options'>('help');
     const [showVisPlayground, setShowVisPlayground] = useState(false);
+    const [showThemePark, setShowThemePark] = useState(false);
 
     // Cache State
     const [cacheSizes, setCacheSizes] = useState({
@@ -340,8 +350,20 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <div className="space-y-4">
                                     {/* Theme Presets */}
                                     <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
-                                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                            {t('options.themePresets') || "Theme Presets"}
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                {t('options.themePresets') || "Theme Presets"}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowThemePark(true)}
+                                                className="shrink-0 w-9 h-9 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center"
+                                                style={{ color: 'var(--text-primary)' }}
+                                                title={t('options.openThemePark') || '打开 Theme Park'}
+                                                aria-label={t('options.openThemePark') || '打开 Theme Park'}
+                                            >
+                                                <Palette size={16} />
+                                            </button>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <button
@@ -826,6 +848,19 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     onPartitaTuningChange={onPartitaTuningChange}
                     onResetPartitaTuning={onResetPartitaTuning}
                     onClose={() => setShowVisPlayground(false)}
+                />
+            )}
+            {showThemePark && (
+                <ThemePark
+                    initialTheme={themeParkInitialTheme}
+                    isDaylight={isDaylight}
+                    isCustomThemePreferred={isCustomThemePreferred}
+                    onSaveTheme={onSaveCustomTheme}
+                    onPreferTheme={(dualTheme) => {
+                        onPreferCustomTheme(dualTheme);
+                        setShowThemePark(false);
+                    }}
+                    onClose={() => setShowThemePark(false)}
                 />
             )}
         </div>

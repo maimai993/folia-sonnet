@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Repeat, Repeat1, Heart, Sparkles, RotateCcw, Cone, Sun, Moon, Volume2, Volume1, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Theme } from '../../types';
+import { Theme, ThemeMode } from '../../types';
 
 interface ControlsTabProps {
     loopMode: 'off' | 'all' | 'one';
@@ -14,8 +14,9 @@ interface ControlsTabProps {
     canGenerateAITheme: boolean;
     theme: Theme;
     onThemeChange: (theme: Theme) => void;
-    bgMode: 'default' | 'ai';
-    onBgModeChange: (mode: 'default' | 'ai') => void;
+    bgMode: ThemeMode;
+    onBgModeChange: (mode: ThemeMode) => void;
+    hasCustomTheme: boolean;
     onResetTheme: () => void;
     defaultTheme: Theme;
     daylightTheme: Theme;
@@ -42,6 +43,7 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     onThemeChange,
     bgMode,
     onBgModeChange,
+    hasCustomTheme,
     onResetTheme,
     defaultTheme,
     daylightTheme,
@@ -220,6 +222,16 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                             <div className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: theme.backgroundColor }}></div>
                             {t('ui.aiTheme')}
                         </button>
+                        {hasCustomTheme && (
+                            <button
+                                onClick={() => onBgModeChange('custom')}
+                                className={`flex-1 py-1.5 flex items-center justify-center gap-2 text-[10px] font-medium rounded-lg transition-all
+                                ${bgMode === 'custom' ? activeOptionBg : 'opacity-40 hover:opacity-100'}`}
+                            >
+                                <div className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: theme.accentColor }}></div>
+                                {t('options.customTheme') || 'Custom'}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

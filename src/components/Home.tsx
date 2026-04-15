@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, LocalLibraryGroup, LocalPlaylist, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../types';
+import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, LocalLibraryGroup, LocalPlaylist, DualTheme, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../types';
 import { NavidromeSong, NavidromeViewSelection } from '../types/navidrome';
 import { isNavidromeEnabled, getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
@@ -77,6 +77,10 @@ interface HomeProps {
     backgroundOpacity: number;
     setBackgroundOpacity: (opacity: number) => void;
     onSetThemePreset: (preset: 'midnight' | 'daylight') => void;
+    themeParkInitialTheme: DualTheme;
+    isCustomThemePreferred: boolean;
+    onSaveCustomTheme: (dualTheme: DualTheme) => void;
+    onPreferCustomTheme: (dualTheme: DualTheme) => void;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
     cadenzaTuning: CadenzaTuning;
@@ -187,6 +191,10 @@ const Home: React.FC<HomeProps> = ({
     backgroundOpacity,
     setBackgroundOpacity,
     onSetThemePreset,
+    themeParkInitialTheme,
+    isCustomThemePreferred,
+    onSaveCustomTheme,
+    onPreferCustomTheme,
     isDaylight,
     visualizerMode,
     cadenzaTuning,
@@ -1069,6 +1077,10 @@ const Home: React.FC<HomeProps> = ({
                                 backgroundOpacity={backgroundOpacity}
                                 setBackgroundOpacity={setBackgroundOpacity}
                                 onSetThemePreset={onSetThemePreset}
+                                themeParkInitialTheme={themeParkInitialTheme}
+                                isCustomThemePreferred={isCustomThemePreferred}
+                                onSaveCustomTheme={onSaveCustomTheme}
+                                onPreferCustomTheme={onPreferCustomTheme}
                                 isDaylight={isDaylight}
                                 onToggleNavidrome={handleToggleNavidrome}
                                 visualizerMode={visualizerMode}

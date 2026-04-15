@@ -641,6 +641,7 @@ export default function App() {
     const {
         theme,
         setTheme,
+        hasCustomTheme,
         bgMode,
         isGeneratingTheme,
         handleToggleDaylight,
@@ -649,6 +650,9 @@ export default function App() {
         handleSetThemePreset,
         restoreCachedThemeForSong,
         generateAITheme,
+        getThemeParkSeedTheme,
+        saveCustomDualTheme,
+        applyPreferredCustomTheme,
     } = useThemeController({
         defaultTheme: DEFAULT_THEME,
         daylightTheme: DAYLIGHT_THEME,
@@ -2578,7 +2582,7 @@ export default function App() {
 
     // Define dynamic style for theme variables
     const appStyle = {
-        '--bg-color': bgMode === 'ai' ? theme.backgroundColor : (isDaylight ? DAYLIGHT_THEME.backgroundColor : DEFAULT_THEME.backgroundColor),
+        '--bg-color': bgMode === 'default' ? (isDaylight ? DAYLIGHT_THEME.backgroundColor : DEFAULT_THEME.backgroundColor) : theme.backgroundColor,
         '--text-primary': theme.primaryColor,
         '--text-secondary': theme.secondaryColor,
         '--text-accent': theme.accentColor,
@@ -2843,6 +2847,10 @@ export default function App() {
                             backgroundOpacity={backgroundOpacity}
                             setBackgroundOpacity={handleSetBackgroundOpacity}
                             onSetThemePreset={handleSetThemePreset}
+                            themeParkInitialTheme={getThemeParkSeedTheme()}
+                            isCustomThemePreferred={bgMode === 'custom'}
+                            onSaveCustomTheme={saveCustomDualTheme}
+                            onPreferCustomTheme={applyPreferredCustomTheme}
                             visualizerMode={visualizerMode}
                             cadenzaTuning={cadenzaTuning}
                             partitaTuning={partitaTuning}
@@ -3102,6 +3110,7 @@ export default function App() {
                         onThemeChange={setTheme}
                         bgMode={bgMode}
                         onBgModeChange={handleBgModeChange}
+                        hasCustomTheme={hasCustomTheme}
                         onResetTheme={handleResetTheme}
                         defaultTheme={DEFAULT_THEME}
                         daylightTheme={DAYLIGHT_THEME}

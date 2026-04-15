@@ -42,6 +42,8 @@ export interface DualTheme {
   dark: Theme;
 }
 
+export type ThemeMode = 'default' | 'ai' | 'custom';
+
 export type VisualizerMode = 'classic' | 'cadenza' | 'partita';
 
 export interface CadenzaTuning {

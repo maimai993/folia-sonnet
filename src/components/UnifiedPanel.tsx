@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio, Cloud, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, NeteasePlaylist } from '../types';
+import { SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, NeteasePlaylist, ThemeMode } from '../types';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
 import QueueTab from './panelTab/QueueTab';
@@ -37,8 +37,9 @@ interface UnifiedPanelProps {
     canGenerateAITheme: boolean;
     theme: Theme;
     onThemeChange: (theme: Theme) => void;
-    bgMode: 'default' | 'ai';
-    onBgModeChange: (mode: 'default' | 'ai') => void;
+    bgMode: ThemeMode;
+    onBgModeChange: (mode: ThemeMode) => void;
+    hasCustomTheme: boolean;
     onResetTheme: () => void;
     defaultTheme: Theme;
     daylightTheme: Theme;
@@ -113,6 +114,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     onThemeChange,
     bgMode,
     onBgModeChange,
+    hasCustomTheme,
     onResetTheme,
     defaultTheme,
     daylightTheme,
@@ -508,6 +510,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             onThemeChange={onThemeChange}
                                             bgMode={bgMode}
                                             onBgModeChange={onBgModeChange}
+                                            hasCustomTheme={hasCustomTheme}
                                             onResetTheme={onResetTheme}
                                             defaultTheme={defaultTheme}
                                             daylightTheme={daylightTheme}
