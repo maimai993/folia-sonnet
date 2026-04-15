@@ -171,6 +171,9 @@ const ThemePreviewLayer: React.FC<{
     const overlayPositionClass = overlayAlign === 'top-left'
         ? 'items-start justify-start'
         : 'items-end justify-end';
+    const badgeRowAlignmentClass = overlayAlign === 'top-left'
+        ? 'justify-start'
+        : 'justify-end';
 
     return (
         <div
@@ -227,8 +230,8 @@ const ThemePreviewLayer: React.FC<{
                 )}
             </div>
 
-            <div className={`relative z-10 flex h-full p-5 pointer-events-none ${overlayPositionClass}`}>
-                <div className="space-y-3">
+            <div className={`relative z-10 flex h-full p-4 pointer-events-none ${overlayPositionClass}`}>
+                <div className={`flex max-w-full flex-wrap items-center gap-2 ${badgeRowAlignmentClass}`}>
                     <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] backdrop-blur-md" style={{ color: theme.primaryColor, borderColor: `${theme.primaryColor}30`, backgroundColor: `${theme.backgroundColor}80` }}>
                         {isLight ? <Sun size={13} /> : <Moon size={13} />}
                         <span>{isLight ? 'Light' : 'Dark'}</span>
@@ -243,7 +246,7 @@ const ThemePreviewLayer: React.FC<{
                         <span>{visualizerMode}</span>
                         <span className="opacity-50">Playback Preview</span>
                     </div>
-                    <div className="flex items-center gap-2 rounded-full w-fit px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
+                    <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
                         <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.accentColor }} />
                         <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
                         <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.secondaryColor }} />
@@ -445,7 +448,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[135] bg-black/65 backdrop-blur-xl px-3 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-5" onClick={onClose}>
+        <div className="fixed inset-0 z-[135] bg-black/65 backdrop-blur-xl px-3 pt-3 pb-[calc(8.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(5rem+env(safe-area-inset-bottom))]" onClick={onClose}>
             <motion.div
                 initial={{ opacity: 0, y: 18, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
