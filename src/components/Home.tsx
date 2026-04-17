@@ -1,24 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, User, Loader2, Disc, ArrowRight, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
+import { Search, User, Loader2, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, UnifiedSong, LocalLibraryGroup, LocalPlaylist, DualTheme, ThemeMode, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../types';
+import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, LocalLibraryGroup, LocalPlaylist, DualTheme, ThemeMode, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../types';
 import { NavidromeSong, NavidromeViewSelection } from '../types/navidrome';
-import { isNavidromeEnabled, getNavidromeConfig, navidromeApi } from '../services/navidromeService';
+import { isNavidromeEnabled } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 import PlaylistView from './PlaylistView';
 import LocalMusicView from './LocalMusicView';
 import NavidromeMusicView from './navidrome/NavidromeMusicView';
 import HelpModal from './modal/HelpModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatSongName } from '../utils/songNameFormatter';
 import Carousel3D from './Carousel3D';
-
-
+import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
+import { useShallow } from 'zustand/react/shallow';
 
 interface HomeProps {
     onPlaySong: (song: SongResult, playlistCtx?: SongResult[], isFmCall?: boolean) => void;
-    onQueueAddAndPlay: (song: SongResult) => void;
     onBackToPlayer: () => void;
     onRefreshUser: () => void;
     user: NeteaseUser | null;
@@ -37,8 +35,6 @@ interface HomeProps {
     onRefreshLocalSongs: () => void;
     onPlayLocalSong: (song: LocalSong, queue?: LocalSong[]) => void;
     onAddLocalSongToQueue?: (song: LocalSong) => void;
-    viewTab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio';
-    setViewTab: (tab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio') => void;
     focusedPlaylistIndex?: number;
     setFocusedPlaylistIndex?: (index: number) => void;
     focusedFavoriteAlbumIndex?: number;
@@ -98,58 +94,11 @@ interface HomeProps {
     onLyricsFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
     onLyricsFontScaleChange: (fontScale: number) => void;
     onLyricsCustomFontChange: (font: { family: string; label?: string | null; } | null) => void;
+    onSearchCommitted: (query: string, sourceTab: HomeViewTab, replace?: boolean) => void;
 }
-const SearchResultCover: React.FC<{ track: UnifiedSong }> = ({ track }) => {
-    const [src, setSrc] = useState<string | undefined>(undefined);
-
-    useEffect(() => {
-        let objectUrl: string | undefined;
-
-        if (track.isLocal && track.localData) {
-            const ls = track.localData;
-            if (ls.useOnlineCover !== false && ls.matchedCoverUrl) {
-                setSrc(ls.matchedCoverUrl.replace('http:', 'https:'));
-            } else if (ls.embeddedCover) {
-                objectUrl = URL.createObjectURL(ls.embeddedCover);
-                setSrc(objectUrl);
-            } else {
-                setSrc(undefined);
-            }
-        } else if (track.isNavidrome) {
-            const remoteUrl = track.al?.picUrl || track.album?.picUrl;
-            setSrc(remoteUrl);
-        } else {
-            const remoteUrl = track.al?.picUrl || track.album?.picUrl;
-            if (remoteUrl) {
-                setSrc(remoteUrl.replace('http:', 'https:'));
-            } else {
-                setSrc(undefined);
-            }
-        }
-
-        return () => {
-            if (objectUrl) {
-                URL.revokeObjectURL(objectUrl);
-            }
-        };
-    }, [track]);
-
-    if (!src) {
-        return <div className="w-full h-full flex items-center justify-center"><Disc size={20} className="opacity-20" /></div>;
-    }
-
-    return (
-        <img
-            src={src}
-            className="w-full h-full object-cover"
-            loading="lazy"
-        />
-    );
-};
 
 const Home: React.FC<HomeProps> = ({
     onPlaySong,
-    onQueueAddAndPlay,
     onBackToPlayer,
     onRefreshUser,
     user,
@@ -168,8 +117,6 @@ const Home: React.FC<HomeProps> = ({
     onRefreshLocalSongs,
     onPlayLocalSong,
     onAddLocalSongToQueue,
-    viewTab,
-    setViewTab,
     focusedPlaylistIndex = 0,
     setFocusedPlaylistIndex,
     focusedFavoriteAlbumIndex = 0,
@@ -215,8 +162,25 @@ const Home: React.FC<HomeProps> = ({
     onLyricsFontStyleChange,
     onLyricsFontScaleChange,
     onLyricsCustomFontChange,
+    onSearchCommitted,
 }) => {
     const { t } = useTranslation();
+    const {
+        homeViewTab,
+        setHomeViewTab,
+        searchQuery,
+        setSearchQuery,
+        isSearching,
+        submitSearch,
+    } = useSearchNavigationStore(useShallow(state => ({
+        homeViewTab: state.homeViewTab,
+        setHomeViewTab: state.setHomeViewTab,
+        searchQuery: state.searchQuery,
+        setSearchQuery: state.setSearchQuery,
+        isSearching: state.isSearching,
+        submitSearch: state.submitSearch,
+    })));
+    const viewTab = homeViewTab;
     const hasNeteaseLogin = Boolean(user);
     const isNeteaseTab = viewTab === 'playlist' || viewTab === 'albums' || viewTab === 'radio';
     const playlistCards = cloudPlaylist
@@ -229,7 +193,6 @@ const Home: React.FC<HomeProps> = ({
     // Style Variants
     const mainBg = isDaylight ? 'bg-white/40' : 'bg-black/20';
     const inputBg = isDaylight ? 'bg-black/5 focus:bg-black/10' : 'bg-white/5 focus:bg-white/10';
-    const resultItemBg = isDaylight ? 'bg-black/5 hover:bg-black/10' : 'bg-white/5 hover:bg-white/10';
     const cardBg = isDaylight ? 'bg-white/40' : 'bg-white/5';
     const activeTabBg = isDaylight ? 'text-black font-bold' : 'text-black'; // When tab active (white bg), text is black
     // For pill nav container
@@ -237,7 +200,6 @@ const Home: React.FC<HomeProps> = ({
     const navPillInactiveText = isDaylight ? 'text-black/60 hover:text-black' : 'text-white/60 hover:text-white';
 
     // UI State
-    const [searchQuery, setSearchQuery] = useState("");
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [navidromeEnabled, setNavidromeEnabled] = useState(isNavidromeEnabled());
@@ -255,14 +217,10 @@ const Home: React.FC<HomeProps> = ({
     const handleToggleNavidrome = (enabled: boolean) => {
         setNavidromeEnabled(enabled);
         if (!enabled && viewTab === 'navidrome') {
-            setViewTab('local');
+            setHomeViewTab('local');
         }
     };
 
-    // viewTab lifted to App.tsx
-    // Search State
-    const [searchResults, setSearchResults] = useState<SongResult[] | null>(null);
-    const [isSearching, setIsSearching] = useState(false);
     const [searchNavidromeSelection, setSearchNavidromeSelection] = useState<NavidromeViewSelection | null>(null);
 
     // Login QR
@@ -433,89 +391,22 @@ const Home: React.FC<HomeProps> = ({
         }
     };
 
-    const openNavidromeAlbum = (albumId: string) => {
-        setViewTab('navidrome');
-        setSearchNavidromeSelection({ type: 'album', albumId });
-    };
-
-    const openNavidromeArtist = (artistId: string) => {
-        setViewTab('navidrome');
-        setSearchNavidromeSelection({ type: 'artist', artistId });
-    };
-
     const handleSearch = async (e?: React.FormEvent) => {
         e?.preventDefault();
         const query = searchQuery.trim();
         if (!query) return;
 
-        setIsSearching(true);
-        setSearchResults(null); // Clear previous results while loading
+        const didSearch = await submitSearch({
+            query,
+            sourceTab: viewTab,
+            deps: {
+                localSongs,
+                t: (key, fallback) => t(key, fallback ?? ''),
+            },
+        });
 
-        try {
-            if (viewTab === 'local') {
-                const lowerQuery = query.toLowerCase();
-                const matchedLocalSongs = localSongs.filter(ls => {
-                    const title = (ls.title || ls.embeddedTitle || ls.fileName || '').toLowerCase();
-                    const artist = (ls.artist || ls.embeddedArtist || '').toLowerCase();
-                    const album = (ls.album || ls.embeddedAlbum || '').toLowerCase();
-                    return title.includes(lowerQuery) || artist.includes(lowerQuery) || album.includes(lowerQuery);
-                });
-
-                const unifiedResults: UnifiedSong[] = matchedLocalSongs.map((ls, index) => {
-                    // Create a pseudo unique negative ID
-                    const uniqueId = -(Date.now() + index);
-                    return {
-                        id: uniqueId,
-                        name: ls.title || ls.embeddedTitle || ls.fileName,
-                        artists: [{ id: 0, name: ls.artist || ls.embeddedArtist || t('player.unknownArtist', '未知歌手') }],
-                        album: { id: 0, name: ls.album || ls.embeddedAlbum || t('player.unknownAlbum', '未知专辑'), picUrl: ls.matchedCoverUrl || undefined },
-                        duration: ls.duration,
-                        al: {
-                            id: 0,
-                            name: ls.album || ls.embeddedAlbum || t('player.unknownAlbum', '未知专辑'),
-                            picUrl: ls.matchedCoverUrl || undefined
-                        },
-                        ar: [{ id: 0, name: ls.artist || ls.embeddedArtist || t('player.unknownArtist', '未知歌手') }],
-                        dt: ls.duration,
-                        isLocal: true,
-                        localData: ls
-                    };
-                });
-                setSearchResults(unifiedResults);
-            } else if (viewTab === 'navidrome') {
-                const config = getNavidromeConfig();
-                if (config) {
-                    const res = await navidromeApi.search(config, query, 0, 0, 30);
-                    if (res && res.song) {
-                        const naviResults: UnifiedSong[] = res.song.map(s => {
-                            const ns = navidromeApi.toNavidromeSong(config, s);
-                            return {
-                                ...ns,
-                                ar: ns.artists,
-                                al: ns.album,
-                                dt: ns.duration
-                            } as UnifiedSong;
-                        });
-                        setSearchResults(naviResults);
-                    } else {
-                        setSearchResults([]);
-                    }
-                } else {
-                    setSearchResults([]);
-                }
-            } else {
-                const res = await neteaseApi.cloudSearch(query);
-                if (res.result && res.result.songs) {
-                    setSearchResults(res.result.songs);
-                } else {
-                    setSearchResults([]);
-                }
-            }
-        } catch (err) {
-            console.error(err);
-            setSearchResults([]);
-        } finally {
-            setIsSearching(false);
+        if (didSearch) {
+            onSearchCommitted(query, viewTab);
         }
     };
 
@@ -667,26 +558,26 @@ const Home: React.FC<HomeProps> = ({
                                             }}
                                         />
                                         <button
-                                            onClick={() => setViewTab('playlist')}
+                                            onClick={() => setHomeViewTab('playlist')}
                                             className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'playlist' ? activeTabBg : navPillInactiveText}`}
                                         >
                                             {t('home.playlists')}
                                         </button>
                                         <button
-                                            onClick={() => setViewTab('radio')}
+                                            onClick={() => setHomeViewTab('radio')}
                                             className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'radio' ? activeTabBg : navPillInactiveText}`}
                                         >
                                             {t('home.radio') || '电台'}
                                         </button>
                                         <button
-                                            onClick={() => setViewTab('albums')}
+                                            onClick={() => setHomeViewTab('albums')}
                                             className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'albums' ? activeTabBg : navPillInactiveText
                                                 }`}
                                         >
                                             {t('home.albums') || '专辑'}
                                         </button>
                                         <button
-                                            onClick={() => setViewTab('local')}
+                                            onClick={() => setHomeViewTab('local')}
                                             className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'local' ? activeTabBg : navPillInactiveText
                                                 }`}
                                         >
@@ -694,7 +585,7 @@ const Home: React.FC<HomeProps> = ({
                                         </button>
                                         {navidromeEnabled && (
                                             <button
-                                                onClick={() => setViewTab('navidrome')}
+                                                onClick={() => setHomeViewTab('navidrome')}
                                                 className={`relative z-10 px-3 md:px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${viewTab === 'navidrome' ? activeTabBg : navPillInactiveText
                                                     }`}
                                             >
@@ -902,134 +793,6 @@ const Home: React.FC<HomeProps> = ({
                             </>
                         )}
                     </div>
-
-                    {/* Search Results Overlay */}
-                    <AnimatePresence>
-                        {searchResults !== null && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 50 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: 50 }}
-
-                                className={`fixed inset-0 z-50 ${isDaylight ? 'bg-white/95' : 'bg-black/90'} backdrop-blur-xl flex flex-col p-6 md:p-12 overflow-hidden`}
-                                style={{ color: theme.primaryColor }}
-                            >
-                                <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto w-full">
-                                    <h2 className="text-2xl font-bold flex items-center gap-2">
-                                        <Search size={24} />
-                                        <span className="opacity-80">{t('home.resultsFor')}</span>
-                                        <span className="italic">"{searchQuery}"</span>
-                                    </h2>
-                                    <button
-                                        onClick={() => setSearchResults(null)}
-                                        className="p-3 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
-                                    >
-                                        <ArrowRight className="rotate-180" size={20} />
-                                    </button>
-                                </div>
-
-                                <div className="flex-1 overflow-y-auto custom-scrollbar w-full">
-                                    {isSearching ? (
-                                        <div className="flex justify-center p-20"><Loader2 className="animate-spin w-10 h-10 opacity-50" /></div>
-                                    ) : searchResults.length === 0 ? (
-                                        <div className="text-center opacity-50 p-20 text-lg">{t('home.noResults')}</div>
-                                    ) : (
-                                        <div className="space-y-3 max-w-4xl mx-auto pb-20">
-                                            {searchResults.map((track, i) => (
-                                                <motion.div
-                                                    initial={{ opacity: 0, y: 10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    transition={{ delay: i * 0.03 }}
-                                                    key={track.id}
-                                                    onClick={() => {
-                                                        const unifiedTrack = track as UnifiedSong;
-                                                        if (unifiedTrack.isLocal && unifiedTrack.localData) {
-                                                            onPlayLocalSong(unifiedTrack.localData);
-                                                        } else if (unifiedTrack.isNavidrome && unifiedTrack.navidromeData) {
-                                                            if (onPlayNavidromeSong) {
-                                                                onPlayNavidromeSong(unifiedTrack as NavidromeSong);
-                                                            }
-                                                        } else {
-                                                            onQueueAddAndPlay(track);
-                                                        }
-                                                        setSearchResults(null);
-                                                    }}
-
-                                                    className={`flex items-center gap-4 p-4 rounded-xl ${resultItemBg} cursor-pointer group transition-colors border border-transparent hover:border-white/10`}
-                                                >
-                                                    <div className="w-12 h-12 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0 shadow-lg relative">
-                                                        <SearchResultCover track={track as UnifiedSong} />
-                                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <Disc size={20} />
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="font-bold text-base" style={{ color: 'var(--text-primary)' }}>
-                                                            {formatSongName(track)}
-                                                        </div>
-                                                        <div className="text-xs opacity-50 truncate mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                                                            {track.ar?.map((a, i) => (
-                                                                <React.Fragment key={a.id}>
-                                                                    {i > 0 && ", "}
-                                                                    <span
-                                                                        className="cursor-pointer hover:underline hover:opacity-100 transition-opacity"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            const unifiedTrack = track as UnifiedSong;
-                                                                            if (unifiedTrack.isLocal) {
-                                                                                onSelectLocalArtist?.(a.name);
-                                                                            } else if (unifiedTrack.isNavidrome && unifiedTrack.navidromeData) {
-                                                                                openNavidromeArtist(unifiedTrack.navidromeData.artistId);
-                                                                            } else {
-                                                                                onSelectArtist(a.id);
-                                                                            }
-                                                                            setSearchResults(null);
-                                                                        }}
-                                                                    >
-                                                                        {a.name}
-                                                                    </span>
-                                                                </React.Fragment>
-                                                            ))} •
-                                                            <span
-                                                                className="cursor-pointer hover:opacity-100 hover:underline transition-all"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    const unifiedTrack = track as UnifiedSong;
-                                                                    if (unifiedTrack.isLocal) {
-                                                                        const albumName = track.al?.name || track.album?.name;
-                                                                        if (albumName) {
-                                                                            onSelectLocalAlbum?.(albumName);
-                                                                            setSearchResults(null);
-                                                                        }
-                                                                        return;
-                                                                    }
-                                                                    if (unifiedTrack.isNavidrome && unifiedTrack.navidromeData) {
-                                                                        openNavidromeAlbum(unifiedTrack.navidromeData.albumId);
-                                                                        setSearchResults(null);
-                                                                        return;
-                                                                    }
-                                                                    const albumId = track.al?.id || track.album?.id;
-                                                                    if (albumId) {
-                                                                        onSelectAlbum(albumId);
-                                                                        setSearchResults(null);
-                                                                    }
-                                                                }}
-                                                            >
-                                                                {track.al?.name || track.album?.name}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-xs font-mono opacity-30">
-                                                        {((track.dt || track.duration) / 60000).toFixed(2).replace('.', ':')}
-                                                    </div>
-                                                </motion.div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
 
                     {/* Login Modal */}
                     {

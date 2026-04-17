@@ -46,6 +46,8 @@ export type ThemeMode = 'default' | 'ai' | 'custom';
 
 export type VisualizerMode = 'classic' | 'cadenza' | 'partita';
 
+export type HomeViewTab = 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio';
+
 export interface CadenzaTuning {
   fontScale: number;
   widthRatio: number;

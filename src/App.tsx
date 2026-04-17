@@ -17,6 +17,7 @@ import DevDebugOverlay from './components/DevDebugOverlay';
 import ProgressBar from './components/ProgressBar';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
 import Home from './components/Home';
+import SearchResultsOverlay from './components/SearchResultsOverlay';
 import AlbumView from './components/AlbumView';
 import ArtistView from './components/ArtistView';
 import UnifiedPanel from './components/UnifiedPanel';
@@ -24,7 +25,7 @@ import TitlebarDragZone from './components/TitlebarDragZone';
 import WindowControls from './components/WindowControls';
 import LyricMatchModal from './components/modal/LyricMatchModal';
 import NaviLyricMatchModal, { NavidromeMatchData } from './components/modal/NaviLyricMatchModal';
-import { LyricData, Theme, PlayerState, SongResult, LocalSong, ReplayGainMode, LocalLibraryGroup, LocalPlaylist } from './types';
+import { LyricData, Theme, PlayerState, SongResult, LocalSong, ReplayGainMode, LocalLibraryGroup, LocalPlaylist, UnifiedSong } from './types';
 import { NavidromeSong, NavidromeConfig, StructuredLyric, NavidromeViewSelection } from './types/navidrome';
 import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from './services/netease';
 import { navidromeApi, getNavidromeConfig } from './services/navidromeService';
@@ -33,6 +34,8 @@ import { useAppNavigation } from './hooks/useAppNavigation';
 import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useThemeController } from './hooks/useThemeController';
+import { useSearchNavigationStore } from './stores/useSearchNavigationStore';
+import { useShallow } from 'zustand/react/shallow';
 import { isPureMusicLyricText } from './utils/lyrics/pureMusic';
 import { detectTimedLyricFormat } from './utils/lyrics/formatDetection';
 import { ensureLyricDataRenderHints, getLineRenderHints, migrateLyricDataRenderHints } from './utils/lyrics/renderHints';
@@ -42,7 +45,6 @@ import { processNeteaseLyrics } from './utils/lyrics/neteaseProcessing';
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const LOCAL_PREWARM_OFFSETS = [-1, 1, 2] as const;
 const LOCAL_PREWARM_DELAY_MS = 1000;
-const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
 const ONLINE_AUDIO_URL_TTL_MS = 1200 * 1000;
 const ONLINE_AUDIO_URL_REFRESH_BUFFER_MS = 60 * 1000;
@@ -373,12 +375,6 @@ export default function App() {
     const localFileBlobsRef = useRef<Map<string, string>>(new Map()); // id -> blob URL
 
     // Navigation Persistence State (Lifted from Home/LocalMusicView)
-    const [homeViewTab, setHomeViewTab] = useState<'playlist' | 'local' | 'albums' | 'navidrome' | 'radio'>(() => {
-        const savedTab = localStorage.getItem(LAST_HOME_VIEW_TAB_KEY);
-        return savedTab === 'playlist' || savedTab === 'local' || savedTab === 'albums' || savedTab === 'navidrome' || savedTab === 'radio'
-            ? savedTab
-            : 'playlist';
-    });
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [focusedFavoriteAlbumIndex, setFocusedFavoriteAlbumIndex] = useState(0);
     const [focusedRadioIndex, setFocusedRadioIndex] = useState(0);
@@ -399,6 +395,8 @@ export default function App() {
         focusedArtistIndex: 0,
         focusedPlaylistIndex: 0,
     });
+    const homeViewTab = useSearchNavigationStore(state => state.homeViewTab);
+    const setHomeViewTab = useSearchNavigationStore(state => state.setHomeViewTab);
 
     // Preferences and Theme
     // Manages user preferences for audio quality, theme settings, 
@@ -679,10 +677,24 @@ export default function App() {
         selectedArtistId,
         navigateToPlayer,
         navigateToHome,
+        navigateToSearch,
+        closeSearchView,
         handlePlaylistSelect,
         handleAlbumSelect,
         handleArtistSelect,
     } = useAppNavigation();
+    const {
+        searchQuery,
+        searchSourceTab,
+        submitSearch,
+        loadMoreSearchResults,
+    } = useSearchNavigationStore(useShallow(state => ({
+        searchQuery: state.searchQuery,
+        searchSourceTab: state.searchSourceTab,
+        submitSearch: state.submitSearch,
+        loadMoreSearchResults: state.loadMoreSearchResults,
+    })));
+    const hideSearchOverlay = useSearchNavigationStore(state => state.hideSearchOverlay);
 
     // Netease Library Hook
     // manages user data, playlists, liked songs, and related actions
@@ -716,16 +728,11 @@ export default function App() {
         void loadLocalPlaylists();
     }, []);
 
-    const handleSetHomeViewTab = useCallback((tab: 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio') => {
-        localStorage.setItem(LAST_HOME_VIEW_TAB_KEY, tab);
-        setHomeViewTab(tab);
-    }, []);
-
     const openNavidromeSelection = useCallback((selection: NavidromeViewSelection) => {
         setPendingNavidromeSelection(selection);
-        handleSetHomeViewTab('navidrome');
+        setHomeViewTab('navidrome');
         navigateToHome();
-    }, [handleSetHomeViewTab, navigateToHome]);
+    }, [navigateToHome, setHomeViewTab]);
 
     const resolveCurrentNavidromeTargetIds = useCallback(() => {
         const currentNavidromeSong = (currentSong as any)?.navidromeData;
@@ -1001,14 +1008,14 @@ export default function App() {
     }, [getFavoriteLocalPlaylist]);
 
     const openLocalLibraryGroup = useCallback((group: LocalLibraryGroup, row: 0 | 1 | 2 | 3) => {
-        handleSetHomeViewTab('local');
+        setHomeViewTab('local');
         setLocalMusicState(prev => ({
             ...prev,
             activeRow: row,
             selectedGroup: group,
         }));
         navigateToHome();
-    }, [handleSetHomeViewTab, navigateToHome]);
+    }, [navigateToHome, setHomeViewTab]);
 
     const openCurrentLocalAlbum = useCallback(() => {
         if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) {
@@ -1938,6 +1945,91 @@ export default function App() {
         playSong(song, newQueue, false);
     };
 
+    const handleSearchOverlaySubmit = useCallback(async () => {
+        const trimmedQuery = searchQuery.trim();
+        if (!trimmedQuery) {
+            return;
+        }
+
+        const didSearch = await submitSearch({
+            query: trimmedQuery,
+            sourceTab: searchSourceTab,
+            deps: {
+                localSongs,
+                t: (key, fallback) => t(key, fallback ?? ''),
+            },
+        });
+
+        if (didSearch) {
+            navigateToSearch({
+                query: trimmedQuery,
+                sourceTab: searchSourceTab,
+                replace: window.history.state?.view === 'search',
+            });
+        }
+    }, [localSongs, navigateToSearch, searchQuery, searchSourceTab, submitSearch, t]);
+
+    const handleSearchLoadMore = useCallback(async () => {
+        await loadMoreSearchResults({
+            deps: {
+                localSongs,
+                t: (key, fallback) => t(key, fallback ?? ''),
+            },
+        });
+    }, [loadMoreSearchResults, localSongs, t]);
+
+    const handleSearchResultPlay = useCallback((track: UnifiedSong) => {
+        if (track.isLocal && track.localData) {
+            void onPlayLocalSong(track.localData);
+            return;
+        }
+
+        if (track.isNavidrome && track.navidromeData) {
+            void onPlayNavidromeSong(track as NavidromeSong);
+            return;
+        }
+
+        handleQueueAddAndPlay(track);
+    }, [handleQueueAddAndPlay, onPlayLocalSong, onPlayNavidromeSong]);
+
+    const handleSearchResultArtistSelect = useCallback((track: UnifiedSong, artistName: string, artistId?: number) => {
+        hideSearchOverlay();
+
+        if (track.isLocal) {
+            openLocalArtistByName(artistName);
+            return;
+        }
+
+        if (track.isNavidrome && track.navidromeData?.artistId) {
+            setHomeViewTab('navidrome');
+            setPendingNavidromeSelection({ type: 'artist', artistId: track.navidromeData.artistId });
+            return;
+        }
+
+        if (artistId) {
+            handleArtistSelect(artistId);
+        }
+    }, [handleArtistSelect, hideSearchOverlay, openLocalArtistByName, setHomeViewTab]);
+
+    const handleSearchResultAlbumSelect = useCallback((track: UnifiedSong, albumName: string, albumId?: number) => {
+        hideSearchOverlay();
+
+        if (track.isLocal) {
+            openLocalAlbumByName(albumName);
+            return;
+        }
+
+        if (track.isNavidrome && track.navidromeData?.albumId) {
+            setHomeViewTab('navidrome');
+            setPendingNavidromeSelection({ type: 'album', albumId: track.navidromeData.albumId });
+            return;
+        }
+
+        if (albumId) {
+            handleAlbumSelect(albumId);
+        }
+    }, [handleAlbumSelect, hideSearchOverlay, openLocalAlbumByName, setHomeViewTab]);
+
     const handleNextTrack = useCallback(async (options?: { allowStopOnMissing?: boolean; }) => {
         if (!currentSong || playQueue.length === 0) return;
 
@@ -2865,7 +2957,6 @@ export default function App() {
                     >
                         <Home
                             onPlaySong={playSong}
-                            onQueueAddAndPlay={handleQueueAddAndPlay}
                             onBackToPlayer={navigateToPlayer}
                             onRefreshUser={() => refreshUserData()}
                             user={user}
@@ -2884,8 +2975,6 @@ export default function App() {
                             onRefreshLocalSongs={onRefreshLocalSongs}
                             onPlayLocalSong={onPlayLocalSong}
                             onAddLocalSongToQueue={handleLocalQueueAdd}
-                            viewTab={homeViewTab}
-                            setViewTab={handleSetHomeViewTab}
                             focusedPlaylistIndex={focusedPlaylistIndex}
                             setFocusedPlaylistIndex={setFocusedPlaylistIndex}
                             focusedFavoriteAlbumIndex={focusedFavoriteAlbumIndex}
@@ -2992,10 +3081,26 @@ export default function App() {
                             setNavidromeFocusedAlbumIndex={setNavidromeFocusedAlbumIndex}
                             pendingNavidromeSelection={pendingNavidromeSelection}
                             onPendingNavidromeSelectionHandled={() => setPendingNavidromeSelection(null)}
+                            onSearchCommitted={(query, sourceTab, replace = false) => {
+                                navigateToSearch({ query, sourceTab, replace });
+                            }}
                         />
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {currentView === 'home' && !selectedPlaylist && (
+                <SearchResultsOverlay
+                    theme={theme}
+                    isDaylight={isDaylight}
+                    onClose={closeSearchView}
+                    onSubmitSearch={handleSearchOverlaySubmit}
+                    onLoadMore={handleSearchLoadMore}
+                    onPlayTrack={handleSearchResultPlay}
+                    onSelectArtist={handleSearchResultArtistSelect}
+                    onSelectAlbum={handleSearchResultAlbumSelect}
+                />
+            )}
 
             {/* --- ALBUM VIEW (Overlay) --- */}
             <AnimatePresence>
