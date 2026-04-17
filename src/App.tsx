@@ -376,26 +376,6 @@ export default function App() {
     const localFileBlobsRef = useRef<Map<string, string>>(new Map()); // id -> blob URL
 
     // Navigation Persistence State (Lifted from Home/LocalMusicView)
-    const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
-    const [focusedFavoriteAlbumIndex, setFocusedFavoriteAlbumIndex] = useState(0);
-    const [focusedRadioIndex, setFocusedRadioIndex] = useState(0);
-    const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
-    const [pendingNavidromeSelection, setPendingNavidromeSelection] = useState<NavidromeViewSelection | null>(null);
-    const [localMusicState, setLocalMusicState] = useState<{
-        activeRow: 0 | 1 | 2 | 3;
-        selectedGroup: LocalLibraryGroup | null;
-        focusedFolderIndex: number;
-        focusedAlbumIndex: number;
-        focusedArtistIndex: number;
-        focusedPlaylistIndex: number;
-    }>({
-        activeRow: 0,
-        selectedGroup: null,
-        focusedFolderIndex: 0,
-        focusedAlbumIndex: 0,
-        focusedArtistIndex: 0,
-        focusedPlaylistIndex: 0,
-    });
     const homeViewTab = useSearchNavigationStore(state => state.homeViewTab);
     const setHomeViewTab = useSearchNavigationStore(state => state.setHomeViewTab);
 
@@ -677,6 +657,18 @@ export default function App() {
         isOverlayVisible,
         topOverlay,
         hasOverlay,
+        focusedPlaylistIndex,
+        setFocusedPlaylistIndex,
+        focusedFavoriteAlbumIndex,
+        setFocusedFavoriteAlbumIndex,
+        focusedRadioIndex,
+        setFocusedRadioIndex,
+        navidromeFocusedAlbumIndex,
+        setNavidromeFocusedAlbumIndex,
+        pendingNavidromeSelection,
+        setPendingNavidromeSelection,
+        localMusicState,
+        setLocalMusicState,
         navigateToPlayer,
         navigateToHome,
         navigateDirectHome,
@@ -733,8 +725,8 @@ export default function App() {
     const openNavidromeSelection = useCallback((selection: NavidromeViewSelection) => {
         setPendingNavidromeSelection(selection);
         setHomeViewTab('navidrome');
-        navigateToHome();
-    }, [navigateToHome, setHomeViewTab]);
+        navigateDirectHome({ clearContext: false });
+    }, [navigateDirectHome, setHomeViewTab]);
 
     const resolveCurrentNavidromeTargetIds = useCallback(() => {
         const currentNavidromeSong = (currentSong as any)?.navidromeData;
@@ -761,12 +753,6 @@ export default function App() {
     }, [openNavidromeSelection, resolveCurrentNavidromeTargetIds]);
 
     const handleDirectHomeFromPanel = useCallback(() => {
-        setPendingNavidromeSelection(null);
-        setLocalMusicState(prev => ({
-            ...prev,
-            activeRow: 0,
-            selectedGroup: null,
-        }));
         navigateDirectHome();
     }, [navigateDirectHome]);
 
@@ -1025,9 +1011,17 @@ export default function App() {
             ...prev,
             activeRow: row,
             selectedGroup: group,
+            detailStack: prev.selectedGroup && prev.selectedGroup.id !== group.id
+                ? [...prev.detailStack, prev.selectedGroup]
+                : prev.selectedGroup
+                    ? prev.detailStack
+                    : [],
+            detailOriginView: prev.selectedGroup
+                ? prev.detailOriginView
+                : (currentView === 'player' ? 'player' : null),
         }));
-        navigateToHome();
-    }, [navigateToHome, setHomeViewTab]);
+        navigateDirectHome({ clearContext: false });
+    }, [currentView, navigateDirectHome, setHomeViewTab, setLocalMusicState]);
 
     const openCurrentLocalAlbum = useCallback(() => {
         if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) {

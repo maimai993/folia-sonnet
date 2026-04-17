@@ -7,6 +7,18 @@ import { formatSongName } from '../utils/songNameFormatter';
 import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useShallow } from 'zustand/react/shallow';
 
+const toSafeRemoteUrl = (url: string | null | undefined): string | undefined => {
+    if (!url) {
+        return undefined;
+    }
+
+    if (url.startsWith('http:') && url.includes('music.126.net')) {
+        return url.replace('http:', 'https:');
+    }
+
+    return url;
+};
+
 interface SearchResultsOverlayProps {
     theme: Theme;
     isDaylight: boolean;
@@ -27,7 +39,7 @@ const SearchResultCover: React.FC<{ track: UnifiedSong; }> = ({ track }) => {
         if (track.isLocal && track.localData) {
             const localSong = track.localData;
             if (localSong.useOnlineCover !== false && localSong.matchedCoverUrl) {
-                setSrc(localSong.matchedCoverUrl.replace('http:', 'https:'));
+                setSrc(toSafeRemoteUrl(localSong.matchedCoverUrl));
             } else if (localSong.embeddedCover) {
                 objectUrl = URL.createObjectURL(localSong.embeddedCover);
                 setSrc(objectUrl);
@@ -36,7 +48,7 @@ const SearchResultCover: React.FC<{ track: UnifiedSong; }> = ({ track }) => {
             }
         } else {
             const remoteUrl = track.al?.picUrl || track.album?.picUrl;
-            setSrc(remoteUrl ? remoteUrl.replace('http:', 'https:') : undefined);
+            setSrc(toSafeRemoteUrl(remoteUrl));
         }
 
         return () => {

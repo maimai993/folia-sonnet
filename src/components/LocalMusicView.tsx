@@ -21,6 +21,7 @@ interface LocalMusicViewProps {
     setActiveRow: (row: 0 | 1 | 2 | 3) => void;
     selectedGroup: LocalLibraryGroup | null;
     setSelectedGroup: (group: LocalLibraryGroup | null) => void;
+    onBackFromDetail?: () => void;
     onMatchSong?: (song: LocalSong) => void;
     focusedFolderIndex?: number;
     setFocusedFolderIndex?: (index: number) => void;
@@ -63,6 +64,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     setActiveRow,
     selectedGroup,
     setSelectedGroup,
+    onBackFromDetail,
     onMatchSong,
     focusedFolderIndex = 0,
     setFocusedFolderIndex,
@@ -492,8 +494,8 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 coverUrl={resolvedSelectedGroup.coverUrl}
                 songs={resolvedSelectedGroup.songs}
                 onBack={() => {
-                    setSelectedGroup(null);
                     onPlaylistVisibilityChange?.(false);
+                    onBackFromDetail?.();
                 }}
                 onPlaySong={onPlaySong}
                 onAddToQueue={onAddToQueue}
@@ -511,8 +513,8 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 coverUrl={resolvedSelectedGroup.coverUrl}
                 songs={resolvedSelectedGroup.songs}
                 onBack={() => {
-                    setSelectedGroup(null);
                     onPlaylistVisibilityChange?.(false);
+                    onBackFromDetail?.();
                 }}
                 onPlaySong={onPlaySong}
                 onAddToQueue={onAddToQueue}
@@ -528,7 +530,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                     ? async () => {
                         await deleteLocalPlaylist(resolvedSelectedGroup.playlistId!);
                         await onRefresh();
-                        setSelectedGroup(null);
+                        onBackFromDetail?.();
                     }
                     : undefined}
                 onRenamePlaylist={resolvedSelectedGroup.type === 'playlist' && resolvedSelectedGroup.playlistId && !resolvedSelectedGroup.isVirtual

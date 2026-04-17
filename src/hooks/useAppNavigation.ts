@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { HomeViewTab, NeteasePlaylist } from '../types';
+import type { HomeViewTab, LocalLibraryGroup, NeteasePlaylist } from '../types';
+import type { NavidromeViewSelection } from '../types/navidrome';
 import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 
 type ViewState = 'home' | 'player';
@@ -9,25 +10,39 @@ export type HomeOverlay =
     | { type: 'album'; id: number; }
     | { type: 'artist'; id: number; };
 
+type LocalMusicNavigationState = {
+    activeRow: 0 | 1 | 2 | 3;
+    selectedGroup: LocalLibraryGroup | null;
+    detailStack: LocalLibraryGroup[];
+    detailOriginView: ViewState | null;
+    focusedFolderIndex: number;
+    focusedAlbumIndex: number;
+    focusedArtistIndex: number;
+    focusedPlaylistIndex: number;
+};
+
 type NavigationHistoryState = {
     view: ViewState;
     overlays: HomeOverlay[];
     overlayView: ViewState | null;
+    overlayOriginView: ViewState | null;
     search?: { query: string; sourceTab: HomeViewTab; } | null;
 };
 
 const LAST_APP_VIEW_KEY = 'last_app_view';
-const NAV_DEBUG_ENABLED = true;
+const NAV_DEBUG_ENABLED = false;
 
 const buildHistoryState = (
     view: ViewState,
     overlays: HomeOverlay[],
     overlayView: ViewState | null,
+    overlayOriginView: ViewState | null,
     searchState: NavigationHistoryState['search'] = null
 ): NavigationHistoryState => ({
     view,
     overlays,
     overlayView,
+    overlayOriginView,
     search: searchState,
 });
 
@@ -35,6 +50,22 @@ export function useAppNavigation() {
     const [currentView, setCurrentView] = useState<ViewState>('home');
     const [overlayStack, setOverlayStack] = useState<HomeOverlay[]>([]);
     const [overlayView, setOverlayView] = useState<ViewState | null>(null);
+    const [overlayOriginView, setOverlayOriginView] = useState<ViewState | null>(null);
+    const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
+    const [focusedFavoriteAlbumIndex, setFocusedFavoriteAlbumIndex] = useState(0);
+    const [focusedRadioIndex, setFocusedRadioIndex] = useState(0);
+    const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
+    const [pendingNavidromeSelection, setPendingNavidromeSelection] = useState<NavidromeViewSelection | null>(null);
+    const [localMusicState, setLocalMusicState] = useState<LocalMusicNavigationState>({
+        activeRow: 0,
+        selectedGroup: null,
+        detailStack: [],
+        detailOriginView: null,
+        focusedFolderIndex: 0,
+        focusedAlbumIndex: 0,
+        focusedArtistIndex: 0,
+        focusedPlaylistIndex: 0,
+    });
 
     const formatOverlayStack = (overlays: HomeOverlay[]) => overlays.map((overlay, index) => {
         if (overlay.type === 'playlist') {
@@ -59,6 +90,7 @@ export function useAppNavigation() {
             view?: ViewState;
             overlays?: HomeOverlay[];
             overlayView?: ViewState | null;
+            overlayOriginView?: ViewState | null;
             search?: NavigationHistoryState['search'] | ReturnType<typeof getSearchSnapshot> | null;
             replace?: boolean;
             hash?: string;
@@ -73,6 +105,7 @@ export function useAppNavigation() {
         console.log('currentView', payload.view ?? currentView);
         console.log('overlayStack', formatOverlayStack(payload.overlays ?? overlayStack));
         console.log('overlayView', payload.overlayView ?? overlayView);
+        console.log('overlayOriginView', payload.overlayOriginView ?? overlayOriginView);
         console.log('search', payload.search ?? getSearchSnapshot());
         console.log('replace', payload.replace ?? false);
         console.log('hash', payload.hash ?? window.location.hash);
@@ -81,33 +114,42 @@ export function useAppNavigation() {
         console.groupEnd();
     };
 
-    const resetToHomeState = () => {
+    const resetToHomeState = (options?: { clearContext?: boolean; }) => {
+        const clearContext = options?.clearContext ?? true;
         localStorage.setItem(LAST_APP_VIEW_KEY, 'home');
         window.history.replaceState(
-            buildHistoryState('home', [], null),
+            buildHistoryState('home', [], null, null),
             '',
             window.location.pathname + window.location.search
         );
         setCurrentView('home');
         setOverlayStack([]);
         setOverlayView(null);
+        setOverlayOriginView(null);
+        if (clearContext) {
+            setPendingNavidromeSelection(null);
+            setLocalMusicState(prev => ({
+                ...prev,
+                activeRow: 0,
+                selectedGroup: null,
+                detailStack: [],
+                detailOriginView: null,
+            }));
+        }
         useSearchNavigationStore.getState().hideSearchOverlay();
         logNavigation('resetToHomeState', {
             view: 'home',
             overlays: [],
             overlayView: null,
+            overlayOriginView: null,
             search: null,
             replace: true,
             hash: window.location.pathname + window.location.search,
-            historyState: buildHistoryState('home', [], null),
+            historyState: buildHistoryState('home', [], null, null),
         });
     };
 
     useEffect(() => {
-        console.log('[nav] debug-enabled', {
-            location: window.location.href,
-            historyState: window.history.state,
-        });
         resetToHomeState();
 
         const handlePopState = (event: PopStateEvent) => {
@@ -125,10 +167,12 @@ export function useAppNavigation() {
             setCurrentView(state.view);
             setOverlayStack(state.overlays || []);
             setOverlayView(state.overlayView ?? null);
+            setOverlayOriginView(state.overlayOriginView ?? null);
             logNavigation('popstate:restore', {
                 view: state.view,
                 overlays: state.overlays || [],
                 overlayView: state.overlayView ?? null,
+                overlayOriginView: state.overlayOriginView ?? null,
                 search: state.search ?? null,
                 historyState: state,
             });
@@ -148,6 +192,7 @@ export function useAppNavigation() {
         view,
         overlays,
         overlayView,
+        overlayOriginView,
         replace = false,
         hash,
         search,
@@ -155,12 +200,13 @@ export function useAppNavigation() {
         view: ViewState;
         overlays: HomeOverlay[];
         overlayView: ViewState | null;
+        overlayOriginView: ViewState | null;
         replace?: boolean;
         hash?: string;
         search?: NavigationHistoryState['search'];
     }) => {
         const method = replace ? window.history.replaceState.bind(window.history) : window.history.pushState.bind(window.history);
-        const nextState = buildHistoryState(view, overlays, overlayView, search ?? null);
+        const nextState = buildHistoryState(view, overlays, overlayView, overlayOriginView, search ?? null);
         method(
             nextState,
             '',
@@ -170,10 +216,12 @@ export function useAppNavigation() {
         setCurrentView(view);
         setOverlayStack(overlays);
         setOverlayView(overlayView);
+        setOverlayOriginView(overlayOriginView);
         logNavigation(replace ? 'replaceNavigationState' : 'pushNavigationState', {
             view,
             overlays,
             overlayView,
+            overlayOriginView,
             search: search ?? null,
             replace,
             hash,
@@ -187,6 +235,19 @@ export function useAppNavigation() {
             ? { query: currentSearch.searchQuery, sourceTab: currentSearch.searchSourceTab }
             : null;
 
+        if (overlayStack.length > 0 && overlayView !== null) {
+            pushNavigationState({
+                view: 'player',
+                overlays: overlayStack,
+                overlayView: null,
+                overlayOriginView,
+                replace: true,
+                hash: '#player',
+                search,
+            });
+            return;
+        }
+
         if (window.history.state?.view !== 'player') {
             logNavigation('navigateToPlayer:push', {
                 view: 'player',
@@ -198,6 +259,7 @@ export function useAppNavigation() {
                 view: 'player',
                 overlays: overlayStack,
                 overlayView,
+                overlayOriginView,
                 hash: '#player',
                 search,
             });
@@ -209,6 +271,7 @@ export function useAppNavigation() {
             view: 'player',
             overlays: overlayStack,
             overlayView,
+            overlayOriginView,
             search,
         });
     };
@@ -226,6 +289,7 @@ export function useAppNavigation() {
             view: 'home',
             overlays: overlayStack,
             overlayView,
+            overlayOriginView,
             search: { query, sourceTab },
             replace,
             hash: `#search/${encodeURIComponent(query)}`,
@@ -234,6 +298,7 @@ export function useAppNavigation() {
             view: 'home',
             overlays: overlayStack,
             overlayView,
+            overlayOriginView,
             replace,
             hash: `#search/${encodeURIComponent(query)}`,
             search: { query, sourceTab },
@@ -252,6 +317,7 @@ export function useAppNavigation() {
             view: 'home',
             overlays: overlayStack,
             overlayView,
+            overlayOriginView,
             search: null,
             replace: true,
             hash: nextHash,
@@ -260,6 +326,7 @@ export function useAppNavigation() {
             view: 'home',
             overlays: overlayStack,
             overlayView,
+            overlayOriginView,
             replace: true,
             hash: nextHash,
             search: null,
@@ -268,12 +335,33 @@ export function useAppNavigation() {
 
     const navigateToHome = () => {
         if (overlayStack.length > 0) {
+            if (currentView === 'player' && overlayView === null) {
+                pushNavigationState({
+                    view: 'player',
+                    overlays: overlayStack,
+                    overlayView: 'player',
+                    overlayOriginView,
+                    replace: true,
+                    hash: `#${overlayStack[overlayStack.length - 1].type}`,
+                    search: overlayOriginView === 'home' && useSearchNavigationStore.getState().isSearchOpen
+                        ? {
+                            query: useSearchNavigationStore.getState().searchQuery,
+                            sourceTab: useSearchNavigationStore.getState().searchSourceTab,
+                        }
+                        : null,
+                });
+                return;
+            }
+
             const nextOverlays = overlayStack.slice(0, -1);
-            const nextView = currentView === 'player' ? 'player' : 'home';
+            const nextView = nextOverlays.length > 0
+                ? (overlayView ?? 'player')
+                : (overlayOriginView ?? 'home');
             logNavigation('navigateToHome:popOverlay', {
                 view: nextView,
                 overlays: nextOverlays,
                 overlayView: nextOverlays.length > 0 ? overlayView : null,
+                overlayOriginView: nextOverlays.length > 0 ? overlayOriginView : null,
                 search: nextView === 'home' && useSearchNavigationStore.getState().isSearchOpen
                     ? {
                         query: useSearchNavigationStore.getState().searchQuery,
@@ -287,6 +375,7 @@ export function useAppNavigation() {
                 view: nextView,
                 overlays: nextOverlays,
                 overlayView: nextOverlays.length > 0 ? overlayView : null,
+                overlayOriginView: nextOverlays.length > 0 ? overlayOriginView : null,
                 replace: true,
                 hash: nextOverlays.length > 0 ? `#${nextOverlays[nextOverlays.length - 1].type}` : (nextView === 'player' ? '#player' : '#home'),
                 search: nextView === 'home' && useSearchNavigationStore.getState().isSearchOpen
@@ -306,25 +395,32 @@ export function useAppNavigation() {
                 view: 'home',
                 overlays: overlayStack,
                 overlayView,
+                overlayOriginView,
             });
             return;
         }
 
     };
 
-    const navigateDirectHome = () => {
-        logNavigation('navigateDirectHome');
-        resetToHomeState();
+    const navigateDirectHome = (options?: { clearContext?: boolean; }) => {
+        logNavigation('navigateDirectHome', {
+            historyState: { clearContext: options?.clearContext ?? true },
+        });
+        resetToHomeState(options);
     };
 
     const pushOverlay = (overlay: HomeOverlay) => {
         const nextOverlays = [...overlayStack, overlay];
-        const nextView = currentView;
+        const nextOverlayOriginView = overlayStack.length > 0
+            ? overlayOriginView
+            : currentView;
+        const nextView: ViewState = 'player';
         logNavigation('pushOverlay', {
             view: nextView,
             overlays: nextOverlays,
-            overlayView: nextView,
-            search: nextView === 'home' && useSearchNavigationStore.getState().isSearchOpen
+            overlayView: 'player',
+            overlayOriginView: nextOverlayOriginView,
+            search: nextOverlayOriginView === 'home' && useSearchNavigationStore.getState().isSearchOpen
                 ? {
                     query: useSearchNavigationStore.getState().searchQuery,
                     sourceTab: useSearchNavigationStore.getState().searchSourceTab,
@@ -335,9 +431,10 @@ export function useAppNavigation() {
         pushNavigationState({
             view: nextView,
             overlays: nextOverlays,
-            overlayView: nextView,
+            overlayView: 'player',
+            overlayOriginView: nextOverlayOriginView,
             hash: `#${overlay.type}`,
-            search: nextView === 'home' && useSearchNavigationStore.getState().isSearchOpen
+            search: nextOverlayOriginView === 'home' && useSearchNavigationStore.getState().isSearchOpen
                 ? {
                     query: useSearchNavigationStore.getState().searchQuery,
                     sourceTab: useSearchNavigationStore.getState().searchSourceTab,
@@ -365,11 +462,14 @@ export function useAppNavigation() {
         }
 
         const nextOverlays = overlayStack.slice(0, -1);
-        const nextView = currentView;
+        const nextView = nextOverlays.length > 0
+            ? (overlayView ?? 'player')
+            : (overlayOriginView ?? 'home');
         logNavigation('popOverlay', {
             view: nextView,
             overlays: nextOverlays,
             overlayView: nextOverlays.length > 0 ? overlayView : null,
+            overlayOriginView: nextOverlays.length > 0 ? overlayOriginView : null,
             search: nextView === 'home' && useSearchNavigationStore.getState().isSearchOpen
                 ? {
                     query: useSearchNavigationStore.getState().searchQuery,
@@ -383,6 +483,7 @@ export function useAppNavigation() {
             view: nextView,
             overlays: nextOverlays,
             overlayView: nextOverlays.length > 0 ? overlayView : null,
+            overlayOriginView: nextOverlays.length > 0 ? overlayOriginView : null,
             replace: true,
             hash: nextOverlays.length > 0 ? `#${nextOverlays[nextOverlays.length - 1].type}` : (nextView === 'player' ? '#player' : '#home'),
             search: nextView === 'home' && useSearchNavigationStore.getState().isSearchOpen
@@ -399,24 +500,42 @@ export function useAppNavigation() {
     const isOverlayVisible = hasOverlay && overlayView === currentView;
 
     useEffect(() => {
+        if (!NAV_DEBUG_ENABLED) {
+            return;
+        }
+
         console.log('[nav] state-change', {
             currentView,
             overlayStack: formatOverlayStack(overlayStack),
             overlayView,
+            overlayOriginView,
             isOverlayVisible,
             search: getSearchSnapshot(),
             historyState: window.history.state,
             location: window.location.href,
         });
-    }, [currentView, overlayStack, overlayView, isOverlayVisible]);
+    }, [currentView, overlayStack, overlayView, overlayOriginView, isOverlayVisible]);
 
     return {
         currentView,
         overlayStack,
         overlayView,
+        overlayOriginView,
         topOverlay,
         hasOverlay,
         isOverlayVisible,
+        focusedPlaylistIndex,
+        setFocusedPlaylistIndex,
+        focusedFavoriteAlbumIndex,
+        setFocusedFavoriteAlbumIndex,
+        focusedRadioIndex,
+        setFocusedRadioIndex,
+        navidromeFocusedAlbumIndex,
+        setNavidromeFocusedAlbumIndex,
+        pendingNavidromeSelection,
+        setPendingNavidromeSelection,
+        localMusicState,
+        setLocalMusicState,
         navigateToPlayer,
         navigateToHome,
         navigateDirectHome,

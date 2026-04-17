@@ -42,6 +42,8 @@ interface HomeProps {
     localMusicState: {
         activeRow: 0 | 1 | 2 | 3;
         selectedGroup: LocalLibraryGroup | null;
+        detailStack: LocalLibraryGroup[];
+        detailOriginView: 'home' | 'player' | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
         focusedArtistIndex: number;
@@ -50,6 +52,8 @@ interface HomeProps {
     setLocalMusicState: React.Dispatch<React.SetStateAction<{
         activeRow: 0 | 1 | 2 | 3;
         selectedGroup: LocalLibraryGroup | null;
+        detailStack: LocalLibraryGroup[];
+        detailOriginView: 'home' | 'player' | null;
         focusedFolderIndex: number;
         focusedAlbumIndex: number;
         focusedArtistIndex: number;
@@ -720,7 +724,37 @@ const Home: React.FC<HomeProps> = ({
                                                 activeRow={localMusicState.activeRow}
                                                 setActiveRow={(row) => setLocalMusicState(prev => ({ ...prev, activeRow: row }))}
                                                 selectedGroup={localMusicState.selectedGroup}
-                                                setSelectedGroup={(group) => setLocalMusicState(prev => ({ ...prev, selectedGroup: group }))}
+                                                setSelectedGroup={(group) => setLocalMusicState(prev => ({
+                                                    ...prev,
+                                                    selectedGroup: group,
+                                                    detailStack: group ? prev.detailStack : [],
+                                                    detailOriginView: group ? prev.detailOriginView : null,
+                                                }))}
+                                                onBackFromDetail={() => {
+                                                    if (localMusicState.detailStack.length > 0) {
+                                                        setLocalMusicState(prev => {
+                                                            const nextStack = prev.detailStack.slice(0, -1);
+                                                            return {
+                                                                ...prev,
+                                                                selectedGroup: nextStack[nextStack.length - 1] ?? null,
+                                                                detailStack: nextStack,
+                                                            };
+                                                        });
+                                                        return;
+                                                    }
+
+                                                    const shouldReturnToPlayer = localMusicState.detailOriginView === 'player';
+                                                    setLocalMusicState(prev => ({
+                                                        ...prev,
+                                                        selectedGroup: null,
+                                                        detailStack: [],
+                                                        detailOriginView: null,
+                                                    }));
+
+                                                    if (shouldReturnToPlayer) {
+                                                        onBackToPlayer();
+                                                    }
+                                                }}
                                                 onMatchSong={onMatchSong}
                                                 focusedFolderIndex={localMusicState.focusedFolderIndex}
                                                 setFocusedFolderIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedFolderIndex: index }))}
