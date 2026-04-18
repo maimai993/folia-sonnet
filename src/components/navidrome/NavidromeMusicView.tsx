@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Settings2, Loader2, RefreshCw, User, ListMusic, Shuffle, Heart } from 'lucide-react';
+import { Settings2, Loader2, RefreshCw, User, ListMusic } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Carousel3D from '../Carousel3D';
 import NavidromeAlbumView from './NavidromeAlbumView';
@@ -553,14 +553,6 @@ const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
                     )}
                 </button>
             </div>
-
-            {section === 'playlists' && (
-                // TODO: remove this
-                <div className="flex items-center justify-center gap-4 mb-2 opacity-50 text-xs">
-                    <span className="inline-flex items-center gap-1"><Shuffle size={12} />{t('navidrome.random') || '随机音乐'}</span>
-                    <span className="inline-flex items-center gap-1"><Heart size={12} />{t('navidrome.favorites') || '收藏'}</span>
-                </div>
-            )}
 
             <div className="flex-1 min-h-0 relative">
                 <AnimatePresence mode="wait">

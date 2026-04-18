@@ -348,10 +348,10 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                             initial={{ opacity: 0, scale: 0.9, originY: 1, originX: 1 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.9 }}
-                            className={`w-80 ${glassBg} backdrop-blur-3xl rounded-3xl shadow-2xl flex flex-col mb-2 overflow-hidden`}
+                            className={`w-80 max-h-[calc(100dvh-6rem)] ${glassBg} backdrop-blur-3xl rounded-3xl shadow-2xl flex flex-col mb-2 overflow-y-auto hide-scrollbar`}
                             style={{ color: theme.primaryColor }}
                         >
-                            <div className="p-5 flex flex-col h-full">
+                            <div className="p-5 flex flex-col">
                                 {/* Top: Cover Art */}
                                 <div
                                     ref={coverAreaRef}
@@ -467,7 +467,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
                                 {/* Tab Content */}
                                 <div
-                                    className={`flex-1 overflow-hidden ${currentTab === 'cover' ? '' : 'min-h-[120px]'}`}
+                                    className={`flex-1 pr-1 ${currentTab === 'cover' ? '' : 'min-h-[120px]'}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     {currentTab === 'cover' && (

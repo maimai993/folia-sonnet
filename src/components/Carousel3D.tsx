@@ -45,7 +45,7 @@ const CarouselItem: React.FC<{
 
     return (
         <motion.div
-            className="absolute cursor-pointer origin-bottom"
+            className="absolute cursor-pointer"
             initial={false}
             animate={{
                 x: xOffset,
