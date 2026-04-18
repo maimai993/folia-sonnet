@@ -79,6 +79,9 @@ const HelpModal: React.FC<HelpModalProps> = ({
     const [activeTab, setActiveTab] = useState<'help' | 'options'>('help');
     const [showVisPlayground, setShowVisPlayground] = useState(false);
     const [showThemePark, setShowThemePark] = useState(false);
+    const [versionCopied, setVersionCopied] = useState(false);
+    const [authorClickCount, setAuthorClickCount] = useState(0);
+    const [meowEasterEgg, setMeowEasterEgg] = useState<{ id: number; color: string; } | null>(null);
 
     // Cache State
     const [cacheSizes, setCacheSizes] = useState({
@@ -120,6 +123,59 @@ const HelpModal: React.FC<HelpModalProps> = ({
             });
         }
     }, []);
+
+    const copyText = async (text: string) => {
+        if (navigator.clipboard?.writeText && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        try {
+            document.execCommand('copy');
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    };
+
+    const handleCopyVersionInfo = async () => {
+        const versionInfo = `folia-major v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`;
+
+        try {
+            await copyText(versionInfo);
+            setVersionCopied(true);
+            window.setTimeout(() => setVersionCopied(false), 1800);
+        } catch (error) {
+            console.error('Failed to copy version info:', error);
+            setVersionCopied(false);
+        }
+    };
+
+    const handleAuthorLabelClick = () => {
+        setAuthorClickCount((prev) => {
+            const nextCount = prev + 1;
+
+            if (nextCount >= 10) {
+                const color = `hsl(${Math.floor(Math.random() * 360)} 90% 70%)`;
+                const id = Date.now();
+                setMeowEasterEgg({ id, color });
+                window.setTimeout(() => {
+                    setMeowEasterEgg((current) => (current?.id === id ? null : current));
+                }, 1600);
+                return 0;
+            }
+
+            return nextCount;
+        });
+    };
 
     const saveElectronSettings = async () => {
         if ((window as any).electron) {
@@ -359,12 +415,44 @@ const HelpModal: React.FC<HelpModalProps> = ({
 
                             {/* Author Info (Moved from Footer) */}
                             <div className="mt-8 pt-6 border-t border-white/10 text-center shrink-0">
-                                <p className="text-sm opacity-60 mb-1" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('help.madeBy') || "Made by"} <a href="https://github.com/chthollyphile/folia-major" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors underline decoration-white/30 hover:decoration-white">chthollyphile</a>
-                                </p>
-                                <p className="text-xs font-mono opacity-30" style={{ color: 'var(--text-secondary)' }}>
-                                    folia-major v{__APP_VERSION__} - {__GIT_BRANCH__} - {__COMMIT_HASH__}
-                                </p>
+                                <div className="relative mb-1">
+                                    <p className="text-sm opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                        <button
+                                            type="button"
+                                            onClick={handleAuthorLabelClick}
+                                            className="hover:opacity-100 transition-opacity"
+                                            style={{ color: 'inherit' }}
+                                            aria-label="meow"
+                                        >
+                                            {t('help.madeBy') || "Made by"}
+                                        </button>{' '}
+                                        <a href="https://github.com/chthollyphile/folia-major" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors underline decoration-white/30 hover:decoration-white">chthollyphile</a>
+                                    </p>
+                                    {meowEasterEgg && (
+                                        <span
+                                            key={meowEasterEgg.id}
+                                            className="pointer-events-none absolute left-1/2 top-0 text-lg font-bold opacity-0 animate-[meow-pop_1.6s_ease-out_forwards]"
+                                            style={{
+                                                color: meowEasterEgg.color,
+                                                textShadow: '0 0 12px rgba(255,255,255,0.35)',
+                                            }}
+                                        >
+                                            喵
+                                        </span>
+                                    )}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleCopyVersionInfo}
+                                    className="text-xs font-mono opacity-30 hover:opacity-70 transition-opacity cursor-copy"
+                                    style={{ color: 'var(--text-secondary)' }}
+                                    title={versionCopied ? '已复制' : '点击复制版本信息'}
+                                    aria-label={versionCopied ? '已复制版本信息' : '点击复制版本信息'}
+                                >
+                                    {versionCopied
+                                        ? '已复制'
+                                        : `folia-major v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`}
+                                </button>
                                 {theme?.provider && (
                                     <p className="text-xs font-mono opacity-30 mb-2" style={{ color: 'var(--text-secondary)' }}>
                                         AI Service: {theme.provider}
@@ -961,6 +1049,22 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     onClose={() => setShowThemePark(false)}
                 />
             )}
+            <style>{`
+                @keyframes meow-pop {
+                    0% {
+                        opacity: 0;
+                        transform: translate(-50%, 10px) scale(0.8);
+                    }
+                    20% {
+                        opacity: 1;
+                        transform: translate(-50%, -6px) scale(1);
+                    }
+                    100% {
+                        opacity: 0;
+                        transform: translate(-50%, -24px) scale(1.08);
+                    }
+                }
+            `}</style>
         </div>
     );
 };
