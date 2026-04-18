@@ -256,12 +256,12 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
     const useCompactMetrics = compactLayout && (isNarrowLayout || isShortLayout);
     const isLargeDesktop = !useCompactMetrics
         && isDesktopWidth
-        && containerSize.width >= 1600
-        && containerSize.height >= (hasFloatingPlayer ? 700 : 640);
+        && containerSize.width >= 1440
+        && containerSize.height >= (hasFloatingPlayer ? 660 : 600);
     const isUltraDesktop = !useCompactMetrics
         && isDesktopWidth
-        && containerSize.width >= 2200
-        && containerSize.height >= (hasFloatingPlayer ? 840 : 760);
+        && containerSize.width >= 2000
+        && containerSize.height >= (hasFloatingPlayer ? 780 : 720);
     const coverSize = useCompactMetrics
         ? (isDesktopWidth ? 208 : 192)
         : (isDesktopWidth ? (isUltraDesktop ? 360 : isLargeDesktop ? 312 : 256) : 224);
