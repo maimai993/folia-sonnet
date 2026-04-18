@@ -518,7 +518,7 @@ const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
 
     return (
         <div className="w-full h-full flex flex-col p-0 relative">
-            <div className="flex items-center justify-center gap-3 mb-4 z-10 flex-wrap">
+            <div className="flex items-center justify-center gap-3 mb-3 z-10 flex-wrap">
                 <div className="flex gap-2 text-xs">
                     <button
                         onClick={() => setSection('albums')}
@@ -562,20 +562,20 @@ const NavidromeMusicView: React.FC<NavidromeMusicViewProps> = ({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="w-full h-full min-h-0 flex flex-col"
+                        className="w-full h-full min-h-0 flex flex-col justify-center"
                     >
-                        <div className="flex-1 min-h-0">
-                        <Carousel3D
-                            items={currentItems}
-                            onSelect={currentSelect}
-                            isLoading={isLoading}
-                            emptyMessage={currentEmptyMessage}
-                            initialFocusedIndex={currentFocusedIndex}
-                            onFocusedIndexChange={currentFocusedSetter}
-                            isDaylight={isDaylight}
-                            compactLayout
-                            hasFloatingPlayer={hasFloatingPlayer}
-                        />
+                        <div className="w-full flex-[0_1_460px] min-h-0 max-h-[460px]">
+                            <Carousel3D
+                                items={currentItems}
+                                onSelect={currentSelect}
+                                isLoading={isLoading}
+                                emptyMessage={currentEmptyMessage}
+                                initialFocusedIndex={currentFocusedIndex}
+                                onFocusedIndexChange={currentFocusedSetter}
+                                isDaylight={isDaylight}
+                                compactLayout
+                                hasFloatingPlayer={hasFloatingPlayer}
+                            />
                         </div>
                     </motion.div>
                 </AnimatePresence>

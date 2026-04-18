@@ -655,9 +655,9 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
                                 transition={{ duration: 0.3 }}
-                                className="w-full h-full min-h-0 flex flex-col"
+                                className="w-full h-full min-h-0 flex flex-col justify-center"
                             >
-                                <div className="flex shrink-0 items-center justify-center gap-2 mb-4 flex-wrap">
+                                <div className="flex shrink-0 items-center justify-center gap-2 mb-3 flex-wrap">
                                     {sections.map(section => (
                                         <button
                                             key={section.key}
@@ -683,7 +683,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                                         </button>
                                     )}
                                 </div>
-                                <div className="flex-1 min-h-0">
+                                <div className="w-full flex-[0_1_460px] min-h-0 max-h-[460px]">
                                     <Carousel3D
                                         items={activeSection.items}
                                         onSelect={(item) => setSelectedGroup(item)}

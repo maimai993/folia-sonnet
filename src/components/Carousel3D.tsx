@@ -19,14 +19,14 @@ const CarouselItem: React.FC<{
     distance: number;
     isActive: boolean;
     xOffset: number;
+    coverSize: number;
     scale: number;
     opacity: number;
     zIndex: number;
     rotateY: number;
     onSelect: () => void;
     onFocus: () => void;
-    compactLayout?: boolean;
-}> = ({ item, distance, isActive, xOffset, scale, opacity, zIndex, rotateY, onSelect, onFocus, compactLayout = false }) => {
+}> = ({ item, distance, isActive, xOffset, coverSize, scale, opacity, zIndex, rotateY, onSelect, onFocus }) => {
     const blurTarget = isActive ? 0 : 2;
     const blurMotion = useMotionValue(blurTarget);
     const blurString = useTransform(blurMotion, (value) => {
@@ -63,7 +63,10 @@ const CarouselItem: React.FC<{
                 else onFocus();
             }}
         >
-            <div className={`${compactLayout ? 'w-48 h-48 md:w-52 md:h-52' : 'w-56 h-56 md:w-64 md:h-64'} rounded-2xl overflow-hidden shadow-2xl relative transition-all duration-300 ${isActive ? 'ring-2 ring-white/30' : ''}`}>
+            <div
+                className={`rounded-2xl overflow-hidden shadow-2xl relative transition-all duration-300 ${isActive ? 'ring-2 ring-white/30' : ''}`}
+                style={{ width: coverSize, height: coverSize }}
+            >
                 {item.coverUrl ? (
                     <img src={toSafeUrl(item.coverUrl)} alt={item.name} className="w-full h-full object-cover pointer-events-none" />
                 ) : (
@@ -105,12 +108,20 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
     const { t } = useTranslation();
     const [focusedIndex, setFocusedIndex] = useState(initialFocusedIndex);
     const [showMap, setShowMap] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
     const carouselRef = useRef<HTMLDivElement>(null);
     const touchStartX = useRef(0);
     const touchEndX = useRef(0);
     const wheelTimeout = useRef<any>(null);
     const prevInitialIndexRef = useRef(initialFocusedIndex);
     const onFocusedIndexChangeRef = useRef(onFocusedIndexChange);
+    const [containerSize, setContainerSize] = useState(() => {
+        if (typeof window === 'undefined') {
+            return { width: 0, height: 0 };
+        }
+
+        return { width: window.innerWidth, height: window.innerHeight };
+    });
 
     // Update ref when callback changes
     useEffect(() => {
@@ -129,6 +140,36 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
     useEffect(() => {
         onFocusedIndexChangeRef.current?.(focusedIndex);
     }, [focusedIndex]);
+
+    useEffect(() => {
+        const element = containerRef.current;
+        if (!element) return;
+
+        const updateContainerSize = () => {
+            const nextWidth = element.clientWidth;
+            const nextHeight = element.clientHeight;
+
+            setContainerSize((prev) => (
+                prev.width === nextWidth && prev.height === nextHeight
+                    ? prev
+                    : { width: nextWidth, height: nextHeight }
+            ));
+        };
+
+        updateContainerSize();
+
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', updateContainerSize);
+            return () => window.removeEventListener('resize', updateContainerSize);
+        }
+
+        const observer = new ResizeObserver(() => {
+            updateContainerSize();
+        });
+        observer.observe(element);
+
+        return () => observer.disconnect();
+    }, []);
 
     // Touch Handling
     const handleTouchStart = (e: React.TouchEvent) => {
@@ -209,38 +250,72 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [items.length]);
 
-    const titleSpacingClass = compactLayout
+    const isDesktopWidth = containerSize.width >= 768;
+    const isNarrowLayout = containerSize.width > 0 && containerSize.width < 768;
+    const isShortLayout = containerSize.height > 0 && containerSize.height < (hasFloatingPlayer ? 420 : 380);
+    const useCompactMetrics = compactLayout && (isNarrowLayout || isShortLayout);
+    const coverSize = useCompactMetrics
+        ? (isDesktopWidth ? 208 : 192)
+        : (isDesktopWidth ? 256 : 224);
+    const carouselMinHeight = useCompactMetrics
+        ? (isDesktopWidth ? 260 : 240)
+        : (isDesktopWidth ? 320 : 300);
+    const stageMinHeight = useCompactMetrics
+        ? (isDesktopWidth ? 210 : 190)
+        : (isDesktopWidth ? 260 : 220);
+    const focusDecorationSize = useCompactMetrics
+        ? (isDesktopWidth ? 340 : 300)
+        : (isDesktopWidth ? 400 : 340);
+    const mapButtonPadding = useCompactMetrics
+        ? (isDesktopWidth ? 8 : 7)
+        : (isDesktopWidth ? 12 : 10);
+    const mapButtonIconSize = useCompactMetrics
+        ? (isDesktopWidth ? 20 : 18)
+        : (isDesktopWidth ? 24 : 20);
+    const sideOffset = useCompactMetrics
+        ? (isDesktopWidth ? 210 : 180)
+        : (isDesktopWidth ? 240 : 210);
+
+    const titleSpacingClass = useCompactMetrics
         ? (hasFloatingPlayer ? 'pt-4 pb-0 -mb-3 md:-mb-4' : 'pt-4 pb-4')
         : (hasFloatingPlayer ? 'pt-6 md:pt-8 pb-0 -mb-4 md:-mb-6' : 'pt-5 md:pt-6 pb-4');
 
     return (
-        <div className="w-full h-full min-h-0 flex flex-col relative">
+        <div ref={containerRef} className="w-full h-full min-h-0 flex flex-col relative">
             <div
                 ref={carouselRef}
-                className={`w-full flex-1 relative perspective-1000 touch-pan-y ${compactLayout ? 'min-h-[260px]' : 'min-h-[320px]'}`}
+                className="w-full flex-1 relative perspective-1000 touch-pan-y"
+                style={{ minHeight: carouselMinHeight }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
             >
-                <div className={`relative z-10 flex h-full w-full flex-col items-center justify-center ${compactLayout ? 'gap-3' : 'gap-5'}`}>
+                <div className={`relative z-10 flex h-full w-full flex-col items-center justify-center ${useCompactMetrics ? 'gap-3' : 'gap-5'}`}>
                     {!showMap && items.length > 0 && (
                         <motion.button
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className={`shrink-0 rounded-full transition-all ${compactLayout ? 'p-2' : 'p-3'} ${isDaylight ? 'hover:bg-black/10 text-black/50 hover:text-black' : 'hover:bg-white/10 text-white/50 hover:text-white'}`}
+                            className={`shrink-0 rounded-full transition-all ${isDaylight ? 'hover:bg-black/10 text-black/50 hover:text-black' : 'hover:bg-white/10 text-white/50 hover:text-white'}`}
+                            style={{ padding: mapButtonPadding }}
                             onClick={() => setShowMap(true)}
                             title={t('home.allAlbums') || 'Show All'}
                         >
-                            <MapIcon size={compactLayout ? 20 : 24} />
+                            <MapIcon size={mapButtonIconSize} />
                         </motion.button>
                     )}
 
-                    <div className={`relative flex w-full flex-1 items-center justify-center ${compactLayout ? 'min-h-[210px]' : 'min-h-[260px]'}`}>
+                    <div
+                        className="relative flex w-full flex-1 items-center justify-center"
+                        style={{ minHeight: stageMinHeight }}
+                    >
                         {/* Decorative Line Behind */}
                         <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-y-1/2 z-0" />
 
                         {/* Center Focus Decoration */}
-                        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/5 -z-10 ${compactLayout ? 'w-[340px] h-[340px]' : 'w-[400px] h-[400px]'}`} />
+                        <div
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/5 -z-10"
+                            style={{ width: focusDecorationSize, height: focusDecorationSize }}
+                        />
 
                         {isLoading ? (
                             <div className="opacity-50 flex flex-col items-center gap-4">
@@ -254,9 +329,9 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                                 const distance = i - focusedIndex;
                                 const isActive = distance === 0;
 
-                                const scale = isActive ? (compactLayout ? 1.04 : 1.1) : 1 - Math.abs(distance) * 0.15;
+                                const scale = isActive ? (useCompactMetrics ? 1.04 : 1.1) : 1 - Math.abs(distance) * 0.15;
                                 const opacity = isActive ? 1 : 0.6 - Math.abs(distance) * 0.15;
-                                const xOffset = distance * (compactLayout ? 210 : 240);
+                                const xOffset = distance * sideOffset;
                                 const zIndex = 10 - Math.abs(distance);
                                 const rotateY = distance > 0 ? -15 : distance < 0 ? 15 : 0;
 
@@ -267,13 +342,13 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                                         distance={distance}
                                         isActive={isActive}
                                         xOffset={xOffset}
+                                        coverSize={coverSize}
                                         scale={scale}
                                         opacity={opacity}
                                         zIndex={zIndex}
                                         rotateY={rotateY}
                                         onSelect={() => onSelect(item)}
                                         onFocus={() => setFocusedIndex(i)}
-                                        compactLayout={compactLayout}
                                     />
                                 );
                             })

@@ -455,7 +455,7 @@ const Home: React.FC<HomeProps> = ({
             >
                 {/* Header Section */}
                 {!isLocalPlaylistOpen && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto z-20 relative p-4 md:p-8 gap-y-4 md:gap-y-0">
+                    <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto z-20 relative p-4 md:p-8 gap-y-4 md:gap-y-0">
                             {/* Left: Title & Help */}
                             <div className="flex items-center justify-start order-1 md:order-none">
                                 <h1 className="text-2xl font-bold tracking-tight opacity-90 flex items-center gap-3">
@@ -583,37 +583,38 @@ const Home: React.FC<HomeProps> = ({
                                 </form>
                             </div>
                         </div>
-                    )}
+                )}
 
-                    {/* Main Content Area */}
-                    <div className={`flex-1 min-h-0 flex flex-col items-center relative ${homeContentBottomPadding}`}>
-                        {!hasNeteaseLogin && isNeteaseTab ? (
-                            <div className="flex flex-col items-center justify-center space-y-6">
-                                <div className={`w-24 h-24 rounded-3xl ${cardBg} border border-white/10 flex items-center justify-center backdrop-blur-md`}>
-                                    <User size={40} className="opacity-20" />
-                                </div>
-                                <h2 className="text-3xl font-bold opacity-80 text-center">{t('home.guestTitle')}</h2>
-                                <p className="opacity-40 text-sm text-center max-w-md leading-6">{t('home.guestPrompt')}</p>
-                                <button
-                                    onClick={initLogin}
-                                    className="px-8 py-3 bg-white text-black rounded-full font-bold text-sm hover:scale-105 transition-transform"
-                                >
-                                    {t('home.connectAccount')}
-                                </button>
+                {/* Main Content Area */}
+                <div className={`flex-1 min-h-0 flex flex-col items-center relative ${homeContentBottomPadding}`}>
+                    {!hasNeteaseLogin && isNeteaseTab ? (
+                        <div className="flex flex-col items-center justify-center space-y-6">
+                            <div className={`w-24 h-24 rounded-3xl ${cardBg} border border-white/10 flex items-center justify-center backdrop-blur-md`}>
+                                <User size={40} className="opacity-20" />
                             </div>
-                        ) : (
-                            <>
-                                {/* Conditional Content Based on Tab */}
-                                <AnimatePresence mode="wait">
-                                    {viewTab === 'albums' ? (
-                                        <motion.div
-                                            key="albums"
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="w-full h-full flex-1 min-h-0"
-                                        >
+                            <h2 className="text-3xl font-bold opacity-80 text-center">{t('home.guestTitle')}</h2>
+                            <p className="opacity-40 text-sm text-center max-w-md leading-6">{t('home.guestPrompt')}</p>
+                            <button
+                                onClick={initLogin}
+                                className="px-8 py-3 bg-white text-black rounded-full font-bold text-sm hover:scale-105 transition-transform"
+                            >
+                                {t('home.connectAccount')}
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Conditional Content Based on Tab */}
+                            <AnimatePresence mode="wait">
+                                {viewTab === 'albums' ? (
+                                    <motion.div
+                                        key="albums"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="w-full h-full flex-1 min-h-0 flex flex-col justify-center"
+                                    >
+                                        <div className="w-full flex-[0_1_520px] min-h-0 max-h-[520px]">
                                             <Carousel3D
                                                 items={favoriteAlbums.map(a => ({
                                                     id: a.id,
@@ -630,16 +631,18 @@ const Home: React.FC<HomeProps> = ({
                                                 isDaylight={isDaylight}
                                                 hasFloatingPlayer={Boolean(currentTrack)}
                                             />
-                                        </motion.div>
-                                    ) : viewTab === 'playlist' ? (
-                                        <motion.div
-                                            key="playlist"
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="w-full h-full flex-1 min-h-0"
-                                        >
+                                        </div>
+                                    </motion.div>
+                                ) : viewTab === 'playlist' ? (
+                                    <motion.div
+                                        key="playlist"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="w-full h-full flex-1 min-h-0 flex flex-col justify-center"
+                                    >
+                                        <div className="w-full flex-[0_1_520px] min-h-0 max-h-[520px]">
                                             <Carousel3D
                                                 items={playlistCards.map(p => ({
                                                     ...p,
@@ -653,16 +656,18 @@ const Home: React.FC<HomeProps> = ({
                                                 isDaylight={isDaylight}
                                                 hasFloatingPlayer={Boolean(currentTrack)}
                                             />
-                                        </motion.div>
-                                    ) : viewTab === 'radio' ? (
-                                        <motion.div
-                                            key="radio"
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="w-full h-full flex-1 min-h-0"
-                                        >
+                                        </div>
+                                    </motion.div>
+                                ) : viewTab === 'radio' ? (
+                                    <motion.div
+                                        key="radio"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="w-full h-full flex-1 min-h-0 flex flex-col justify-center"
+                                    >
+                                        <div className="w-full flex-[0_1_520px] min-h-0 max-h-[520px]">
                                             <Carousel3D
                                                 items={radioItems}
                                                 onSelect={async (item) => {
@@ -688,107 +693,108 @@ const Home: React.FC<HomeProps> = ({
                                                 isDaylight={isDaylight}
                                                 hasFloatingPlayer={Boolean(currentTrack)}
                                             />
-                                        </motion.div>
-                                    ) : viewTab === 'local' ? (
-                                        <motion.div
-                                            key="local"
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="w-full h-full flex-1"
-                                        >
-                                            <LocalMusicView
-                                                localSongs={localSongs}
-                                                localPlaylists={localPlaylists}
-                                                onRefresh={onRefreshLocalSongs}
-                                                onPlaySong={onPlayLocalSong}
-                                                onAddToQueue={onAddLocalSongToQueue}
-                                                onPlaylistVisibilityChange={setIsLocalPlaylistOpen}
-                                                activeRow={localMusicState.activeRow}
-                                                setActiveRow={(row) => setLocalMusicState(prev => ({ ...prev, activeRow: row }))}
-                                                selectedGroup={localMusicState.selectedGroup}
-                                                setSelectedGroup={(group) => setLocalMusicState(prev => ({
+                                        </div>
+                                    </motion.div>
+                                ) : viewTab === 'local' ? (
+                                    <motion.div
+                                        key="local"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="w-full h-full flex-1"
+                                    >
+                                        <LocalMusicView
+                                            localSongs={localSongs}
+                                            localPlaylists={localPlaylists}
+                                            onRefresh={onRefreshLocalSongs}
+                                            onPlaySong={onPlayLocalSong}
+                                            onAddToQueue={onAddLocalSongToQueue}
+                                            onPlaylistVisibilityChange={setIsLocalPlaylistOpen}
+                                            activeRow={localMusicState.activeRow}
+                                            setActiveRow={(row) => setLocalMusicState(prev => ({ ...prev, activeRow: row }))}
+                                            selectedGroup={localMusicState.selectedGroup}
+                                            setSelectedGroup={(group) => setLocalMusicState(prev => ({
+                                                ...prev,
+                                                selectedGroup: group,
+                                                detailStack: group ? prev.detailStack : [],
+                                                detailOriginView: group ? prev.detailOriginView : null,
+                                            }))}
+                                            onBackFromDetail={() => {
+                                                if (localMusicState.detailStack.length > 0) {
+                                                    setLocalMusicState(prev => {
+                                                        const nextStack = prev.detailStack.slice(0, -1);
+                                                        return {
+                                                            ...prev,
+                                                            selectedGroup: nextStack[nextStack.length - 1] ?? null,
+                                                            detailStack: nextStack,
+                                                        };
+                                                    });
+                                                    return;
+                                                }
+
+                                                const shouldReturnToPlayer = localMusicState.detailOriginView === 'player';
+                                                setLocalMusicState(prev => ({
                                                     ...prev,
-                                                    selectedGroup: group,
-                                                    detailStack: group ? prev.detailStack : [],
-                                                    detailOriginView: group ? prev.detailOriginView : null,
-                                                }))}
-                                                onBackFromDetail={() => {
-                                                    if (localMusicState.detailStack.length > 0) {
-                                                        setLocalMusicState(prev => {
-                                                            const nextStack = prev.detailStack.slice(0, -1);
-                                                            return {
-                                                                ...prev,
-                                                                selectedGroup: nextStack[nextStack.length - 1] ?? null,
-                                                                detailStack: nextStack,
-                                                            };
-                                                        });
-                                                        return;
-                                                    }
+                                                    selectedGroup: null,
+                                                    detailStack: [],
+                                                    detailOriginView: null,
+                                                }));
 
-                                                    const shouldReturnToPlayer = localMusicState.detailOriginView === 'player';
-                                                    setLocalMusicState(prev => ({
-                                                        ...prev,
-                                                        selectedGroup: null,
-                                                        detailStack: [],
-                                                        detailOriginView: null,
-                                                    }));
-
-                                                    if (shouldReturnToPlayer) {
-                                                        onBackToPlayer();
-                                                    }
-                                                }}
-                                                onMatchSong={onMatchSong}
-                                                focusedFolderIndex={localMusicState.focusedFolderIndex}
-                                                setFocusedFolderIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedFolderIndex: index }))}
-                                                focusedAlbumIndex={localMusicState.focusedAlbumIndex}
-                                                setFocusedAlbumIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedAlbumIndex: index }))}
-                                                focusedArtistIndex={localMusicState.focusedArtistIndex}
-                                                setFocusedArtistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedArtistIndex: index }))}
-                                                focusedPlaylistIndex={localMusicState.focusedPlaylistIndex}
-                                                setFocusedPlaylistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedPlaylistIndex: index }))}
-                                                onSelectArtistGroup={onSelectLocalArtist}
-                                                onSelectAlbumGroup={onSelectLocalAlbum}
-                                                theme={theme}
-                                                isDaylight={isDaylight}
-                                                hasFloatingPlayer={Boolean(currentTrack)}
-                                            />
-                                        </motion.div>
-                                    ) : (
-                                        <motion.div
-                                            key="navidrome"
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="w-full h-full flex-1"
-                                        >
-                                            <NavidromeMusicView
-                                                onPlaySong={onPlayNavidromeSong || (() => { })}
-                                                onAddSongsToQueue={onAddNavidromeSongsToQueue}
-                                                onOpenSettings={() => setShowHelpModal(true)}
-                                                onMatchSong={onMatchNavidromeSong}
-                                                theme={theme}
-                                                isDaylight={isDaylight}
-                                                focusedAlbumIndex={navidromeFocusedAlbumIndex}
-                                                setFocusedAlbumIndex={setNavidromeFocusedAlbumIndex}
-                                                externalSelection={pendingNavidromeSelection ?? searchNavidromeSelection}
-                                                hasFloatingPlayer={Boolean(currentTrack)}
-                                                onExternalSelectionHandled={() => {
-                                                    if (pendingNavidromeSelection) {
-                                                        onPendingNavidromeSelectionHandled?.();
-                                                        return;
-                                                    }
-                                                    setSearchNavidromeSelection(null);
-                                                }}
-                                            />
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </>
-                        )}
-                    </div>
+                                                if (shouldReturnToPlayer) {
+                                                    onBackToPlayer();
+                                                }
+                                            }}
+                                            onMatchSong={onMatchSong}
+                                            focusedFolderIndex={localMusicState.focusedFolderIndex}
+                                            setFocusedFolderIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedFolderIndex: index }))}
+                                            focusedAlbumIndex={localMusicState.focusedAlbumIndex}
+                                            setFocusedAlbumIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedAlbumIndex: index }))}
+                                            focusedArtistIndex={localMusicState.focusedArtistIndex}
+                                            setFocusedArtistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedArtistIndex: index }))}
+                                            focusedPlaylistIndex={localMusicState.focusedPlaylistIndex}
+                                            setFocusedPlaylistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedPlaylistIndex: index }))}
+                                            onSelectArtistGroup={onSelectLocalArtist}
+                                            onSelectAlbumGroup={onSelectLocalAlbum}
+                                            theme={theme}
+                                            isDaylight={isDaylight}
+                                            hasFloatingPlayer={Boolean(currentTrack)}
+                                        />
+                                    </motion.div>
+                                ) : (
+                                    <motion.div
+                                        key="navidrome"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="w-full h-full flex-1"
+                                    >
+                                        <NavidromeMusicView
+                                            onPlaySong={onPlayNavidromeSong || (() => { })}
+                                            onAddSongsToQueue={onAddNavidromeSongsToQueue}
+                                            onOpenSettings={() => setShowHelpModal(true)}
+                                            onMatchSong={onMatchNavidromeSong}
+                                            theme={theme}
+                                            isDaylight={isDaylight}
+                                            focusedAlbumIndex={navidromeFocusedAlbumIndex}
+                                            setFocusedAlbumIndex={setNavidromeFocusedAlbumIndex}
+                                            externalSelection={pendingNavidromeSelection ?? searchNavidromeSelection}
+                                            hasFloatingPlayer={Boolean(currentTrack)}
+                                            onExternalSelectionHandled={() => {
+                                                if (pendingNavidromeSelection) {
+                                                    onPendingNavidromeSelectionHandled?.();
+                                                    return;
+                                                }
+                                                setSearchNavidromeSelection(null);
+                                            }}
+                                        />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </>
+                    )}
+                </div>
 
                     {/* Login Modal */}
                     {
