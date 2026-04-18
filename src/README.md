@@ -1,27 +1,21 @@
-# Code Map (代码地图)
+# `src/` Map
 
-This document reflects the current `src/` architecture and explains how the main modules fit together.
-本文档对应当前 `src/` 的真实结构，用来快速说明主要模块及它们之间的关系。
+代码地图
 
-## 1. High-Level Architecture
+## 1. Main Entry
 
-`App.tsx` is the orchestration center of the frontend.
-`App.tsx` 是整个前端的调度中心，负责把三类音乐来源统一到同一套播放器状态里：
+- `App.tsx`
+  前端总调度中心。
+  统一三类来源：网易云 / 本地音乐 / Navidrome。
+  负责播放状态、队列、歌词、封面、主题、会话恢复、全局弹层、主页与播放器切换。
 
-- Netease online library / 网易云在线曲库
-- Local music library / 本地音乐库
-- Navidrome remote library / Navidrome 远程曲库
+- `index.tsx`
+  React 入口。
 
-Core responsibilities handled in `App.tsx`:
-`App.tsx` 的核心职责包括：
+- `index.css`
+  全局样式和共享 CSS 变量。
 
-- Global playback state: current song, queue, progress, loop mode, FM mode
-- Unified loading of audio, cover, lyrics, theme, queue, and session restore
-- Navigation between home, player, playlist, album, and artist overlays
-- Coordinating Home view, fullscreen lyric visualizer, floating controls, and side panel
-- Opening local / Navidrome lyric matching flows
-
-## 2. Current Source Tree
+## 2. Source Layout
 
 ```text
 src/
@@ -29,229 +23,159 @@ src/
 ├─ index.tsx
 ├─ index.css
 ├─ README.md
-├─ vite-env.d.ts
 ├─ types.ts
-├─ types/
-│  └─ navidrome.ts
+├─ types/navidrome.ts
 ├─ components/
-│  ├─ Home.tsx
-│  ├─ PlaylistView.tsx
-│  ├─ AlbumView.tsx
-│  ├─ ArtistView.tsx
-│  ├─ LocalMusicView.tsx
-│  ├─ local/LocalPlaylistView.tsx
-│  ├─ navidrome/NavidromeMusicView.tsx
-│  ├─ navidrome/NavidromeAlbumView.tsx
-│  ├─ UnifiedPanel.tsx
-│  ├─ FloatingPlayerControls.tsx
-│  ├─ visualizer/
-│  │  ├─ Visualizer.tsx
-│  │  ├─ VisualizerCadenza.tsx
-│  │  ├─ VisualizerPartita.tsx
-│  │  ├─ GeometricBackground.tsx
-│  │  ├─ FluidBackground.tsx
-│  │  └─ VisPlayground.tsx
-│  ├─ modal/LyricsTimelineModal.tsx
-│  ├─ modal/LyricMatchModal.tsx
-│  ├─ modal/NaviLyricMatchModal.tsx
-│  ├─ modal/HelpModal.tsx
-│  ├─ modal/DeleteFolderConfirmModal.tsx
-│  ├─ Carousel3D.tsx
-│  ├─ ProgressBar.tsx
-│  └─ panelTab/
-│     ├─ CoverTab.tsx
-│     ├─ ControlsTab.tsx
-│     ├─ QueueTab.tsx
-│     ├─ AccountTab.tsx
-│     ├─ LocalTab.tsx
-│     ├─ NaviTab.tsx
-│     └─ FmTab.tsx
 ├─ hooks/
-│  ├─ useAppNavigation.ts
-│  ├─ useAppPreferences.ts
-│  ├─ useNeteaseLibrary.ts
-│  └─ useThemeController.ts
 ├─ services/
-│  ├─ db.ts
-│  ├─ netease.ts
-│  ├─ navidromeService.ts
-│  ├─ localMusicService.ts
-│  ├─ onlinePlayback.ts
-│  ├─ playbackAdapters.ts
-│  ├─ prefetchService.ts
-│  ├─ coverCache.ts
-│  ├─ themeCache.ts
-│  └─ gemini.ts
 ├─ utils/
-│  ├─ lrcParser.ts
-│  ├─ yrcParser.ts
-│  ├─ chorusDetector.ts
-│  ├─ colorExtractor.ts
-│  ├─ songNameFormatter.tsx
-│  ├─ localMetadataWorkerClient.ts
-│  ├─ parser_test.ts
-│  └─ lyrics/
-│     ├─ types.ts
-│     ├─ LyricAdapter.ts
-│     ├─ LyricParserFactory.ts
-│     ├─ workerClient.ts
-│     ├─ timelineSplitter.ts
-│     └─ adapters/
-│        ├─ NeteaseLyricAdapter.ts
-│        ├─ LocalFileLyricAdapter.ts
-│        ├─ EmbeddedLyricAdapter.ts
-│        └─ NavidromeLyricAdapter.ts
 ├─ workers/
-│  ├─ lyricsParser.worker.ts
-│  └─ metadataParser.worker.ts
 └─ i18n/
-   ├─ config.ts
-   └─ locales/
-      ├─ en.ts
-      └─ zh-CN.ts
 ```
 
-## 3. Main UI Modules
+## 3. Module Boundaries
 
-### App Shell
+### Components
 
-| File | Responsibility |
-| :--- | :--- |
-| `App.tsx` | Root orchestrator. Handles playback lifecycle, queue, theme, session restore, routing state, local/Navidrome integration, lyric modals, and global overlays. |
-| `index.tsx` | React entry point. |
-| `index.css` | Global styles and shared CSS tokens. |
+- `components/Home.tsx`
+  首页主入口。包含搜索、网易云入口、本地音乐入口、Navidrome 入口、帮助/设置弹窗。
 
-### Home and Library Views
+- `components/PlaylistView.tsx` / `AlbumView.tsx` / `ArtistView.tsx`
+  网易云详情页。
 
-| File | Responsibility |
-| :--- | :--- |
-| `components/Home.tsx` | Main home surface. Contains search, Netease playlists, favorite albums, radio, local music tab, Navidrome tab, login modal, help/options modal, and search result overlay. |
-| `components/PlaylistView.tsx` | Netease playlist detail page. |
-| `components/AlbumView.tsx` | Netease album detail page. |
-| `components/ArtistView.tsx` | Netease artist detail page. |
-| `components/LocalMusicView.tsx` | Local library root view with folder / album grouping, refresh, match entry, and scan progress integration. |
-| `components/local/LocalPlaylistView.tsx` | Local folder or local album detail list. |
-| `components/navidrome/NavidromeMusicView.tsx` | Navidrome album browser with sort modes and configuration-aware empty state. |
-| `components/navidrome/NavidromeAlbumView.tsx` | Navidrome album detail and playback entry. |
+- `components/LocalMusicView.tsx`
+  本地音乐总览页。负责文件夹/专辑/艺人/歌单视图切换和导入入口。
 
-### Player and Visual Layer
+- `components/local/LocalPlaylistView.tsx`
+  本地文件夹或本地歌单详情列表。
 
-| File | Responsibility |
-| :--- | :--- |
-| `components/visualizer/Visualizer.tsx` | Classic lyric renderer with animated word-level timing and geometric background. |
-| `components/visualizer/VisualizerCadenza.tsx` | Newer lyric renderer with more advanced layout, layered glow, fluid background, and tunable typography/motion. |
-| `components/visualizer/VisualizerPartita.tsx` | Experimental vertical lyric renderer with column-first composition and per-word focus cards. |
-| `components/visualizer/GeometricBackground.tsx` | Audio-reactive geometric background. |
-| `components/visualizer/FluidBackground.tsx` | Cover-color-driven blurred fluid background. |
-| `components/FloatingPlayerControls.tsx` | Mini player / mobile player controls shown globally. |
-| `components/ProgressBar.tsx` | Shared draggable progress / slider UI. |
-| `components/modal/LyricsTimelineModal.tsx` | Fullscreen timeline-oriented lyrics view. |
+- `components/navidrome/NavidromeMusicView.tsx`
+  Navidrome 总览页。
 
-### Panel, Modals, and Supporting UI
+- `components/navidrome/NavidromeAlbumView.tsx`
+  Navidrome 专辑详情。
 
-| File | Responsibility |
-| :--- | :--- |
-| `components/UnifiedPanel.tsx` | Right-side floating panel used in player mode. Chooses tabs dynamically for cloud, local, FM, and Navidrome tracks. |
-| `components/panelTab/CoverTab.tsx` | Cover card and artist/album jump entry. |
-| `components/panelTab/ControlsTab.tsx` | Playback options, AI theme, day/night switch, background mode, and volume controls. |
-| `components/panelTab/QueueTab.tsx` | Queue list and shuffle action. |
-| `components/panelTab/AccountTab.tsx` | Netease account info, audio quality, cache size, sync, logout, and navigation back to home. |
-| `components/panelTab/LocalTab.tsx` | Local-track-only tools: lyric source, online match, manual lyric editing, ReplayGain mode. |
-| `components/panelTab/NaviTab.tsx` | Navidrome-track-only tools: lyric availability and online match entry. |
-| `components/panelTab/FmTab.tsx` | Personal FM quick controls. |
-| `components/modal/LyricMatchModal.tsx` | Manual Netease metadata/lyric matching for local songs. |
-| `components/modal/NaviLyricMatchModal.tsx` | Manual Netease metadata/lyric matching for Navidrome songs. |
-| `components/modal/HelpModal.tsx` | Help + options center. Also owns cache cleanup, visual options, Navidrome settings, and Electron AI settings. |
-| `components/modal/DeleteFolderConfirmModal.tsx` | Confirm deletion of imported local folders. |
-| `components/Carousel3D.tsx` | Shared 3D carousel used by playlists, albums, radio, and Navidrome browsing. |
+- `components/UnifiedPanel.tsx`
+  播放器右侧面板容器。根据当前歌曲来源切换不同 tab。
 
-## 4. Hooks Layer
+- `components/panelTab/*`
+  右侧面板各 tab 的具体实现。
 
-| File | Responsibility |
-| :--- | :--- |
-| `hooks/useAppNavigation.ts` | Maintains app-level navigation state and browser history integration for home/player/playlist/album/artist. |
-| `hooks/useAppPreferences.ts` | Stores user preferences: audio quality, static mode, media cache, daylight mode, visualizer mode, cadenza tuning, volume, mute state. |
-| `hooks/useNeteaseLibrary.ts` | Loads user profile, playlists, liked songs, handles sync/logout, and manages Netease-related cache refresh. |
-| `hooks/useThemeController.ts` | Manages default theme, AI theme, light/dark switching, theme restore, and theme generation flow. |
+- `components/modal/*`
+  各类弹窗，尤其是：
+  `HelpModal.tsx` 既是帮助弹窗，也是设置中心。
 
-## 5. Services Layer
+- `components/visualizer/*`
+  歌词可视化层。
+  `Visualizer.tsx` / `VisualizerCadenza.tsx` / `VisualizerPartita.tsx` 是三种主要表现形式。
 
-### Data Source Services
+### Hooks
 
-| File | Responsibility |
-| :--- | :--- |
-| `services/netease.ts` | Netease API wrapper used by search, playlists, albums, artists, lyrics, FM, and login. |
-| `services/navidromeService.ts` | Subsonic/Navidrome client, config persistence, auth params, album/search/stream/lyrics helpers. |
-| `services/localMusicService.ts` | Local library import/resync/delete pipeline, `.lrc` / `.vtt` pairing, folder-cover preference, embedded metadata parsing, cover hydration, file-handle recovery, local lyric matching, and scan progress events. |
+- `hooks/useAppNavigation.ts`
+  App 级导航状态。
 
-### Playback and Cache Services
+- `hooks/useAppPreferences.ts`
+  用户偏好，例如音质、白天模式、静态模式、音量、可视化模式。
 
-| File | Responsibility |
-| :--- | :--- |
-| `services/onlinePlayback.ts` | Loads cloud audio + lyrics with cache and prefetch awareness. |
-| `services/playbackAdapters.ts` | Converts local and Navidrome tracks into the unified playback shape used by `App.tsx`. |
-| `services/prefetchService.ts` | Prefetches nearby online songs in queue, including audio URLs, lyrics, and cover URLs. |
-| `services/coverCache.ts` | Loads and caches cover blobs. |
-| `services/themeCache.ts` | Restores cached song themes and last-used dual theme. |
-| `services/db.ts` | IndexedDB wrapper for session data, media cache, metadata cache, user cache, local songs, persisted directory handles, and local library snapshots. |
-| `services/gemini.ts` | Frontend bridge for AI theme generation APIs or Electron-provided theme generation. |
+- `hooks/useNeteaseLibrary.ts`
+  网易云用户资料、歌单、喜欢列表、同步、退出登录。
 
-## 6. Lyrics and Parsing Stack
+- `hooks/useThemeController.ts`
+  默认主题、AI 主题、自定义主题、明暗切换。
 
-The lyric system now has a single parser core, with worker/factory/helpers layered around it.
-现在歌词解析以单一 parser core 为真源，worker、factory 和特定来源 helper 都只是入口层：
+### Services
 
-| File | Responsibility |
-| :--- | :--- |
-| `utils/lyrics/parserCore.ts` | Single source of truth for LRC / enhanced LRC / YRC / VTT parsing, metadata extraction, translation alignment, interludes, and render hints. |
-| `utils/lyrics/LyricParserFactory.ts` | Central entry. Dispatches by source type: `netease`, `local`, `embedded`, `navidrome`. |
-| `utils/lyrics/LyricAdapter.ts` | Shared adapter contract. |
-| `utils/lyrics/types.ts` | Raw lyric input types used by the factory/adapters. |
-| `utils/lyrics/neteaseProcessing.ts` | Shared Netease lyric normalization flow: payload extraction, pure-music detection, parsing, and chorus decoration. |
-| `utils/lyrics/adapters/NeteaseLyricAdapter.ts` | Parses Netease lyric payloads. |
-| `utils/lyrics/adapters/LocalFileLyricAdapter.ts` | Parses external `.lrc` / `.vtt` lyric pairs, including translated variants. |
-| `utils/lyrics/adapters/EmbeddedLyricAdapter.ts` | Parses embedded tag lyrics extracted from audio metadata. |
-| `utils/lyrics/adapters/NavidromeLyricAdapter.ts` | Parses Navidrome/OpenSubsonic lyric payloads. |
-| `utils/lyrics/workerClient.ts` | Frontend client for lyric parsing worker. |
-| `workers/lyricsParser.worker.ts` | Off-main-thread execution layer that delegates parsing to `parserCore`. |
-| `utils/lrcParser.ts` / `utils/yrcParser.ts` | Backward-compatible thin wrappers over `parserCore`. |
-| `utils/lyrics/timelineSplitter.ts` | Splits combined lyric/translation timelines when needed. |
-| `utils/lyrics/chorusEffects.ts` | Applies chorus annotations on top of parsed lyrics. |
-| `utils/chorusDetector.ts` | Detects repeated chorus lines for visual effects. |
+- `services/netease.ts`
+  网易云 API 封装。
 
-## 7. Metadata, Types, and Utilities
+- `services/navidromeService.ts`
+  Navidrome / Subsonic API 封装。
 
-| File | Responsibility |
-| :--- | :--- |
-| `types.ts` | Core shared types: songs, local songs, lyrics, themes, player state, visualizer tuning, local snapshot structures. |
-| `types/navidrome.ts` | Navidrome/Subsonic API and playback types. |
-| `utils/localMetadataWorkerClient.ts` | Client for metadata extraction worker. |
-| `workers/metadataParser.worker.ts` | Parses embedded tags, replay gain, duration, cover, and embedded lyrics off the main thread. |
-| `utils/colorExtractor.ts` | Cover/image color extraction helpers. |
-| `utils/songNameFormatter.tsx` | Shared song title formatting logic. |
-| `i18n/config.ts` | i18n initialization. |
-| `i18n/locales/en.ts` / `i18n/locales/zh-CN.ts` | Translation dictionaries. |
+- `services/localMusicService.ts`
+  本地音乐导入、重扫、删除、歌词匹配、文件句柄恢复、扫描事件。
 
-## 8. Practical Reading Order
+- `services/onlinePlayback.ts`
+  在线音频和歌词加载。
 
-If you want to understand the codebase quickly, read in this order:
-如果想最快理解这套代码，建议按下面顺序看：
+- `services/playbackAdapters.ts`
+  把本地 / Navidrome 歌曲转成统一播放结构。
+
+- `services/prefetchService.ts`
+  队列邻近歌曲的预取。
+
+- `services/db.ts`
+  IndexedDB 封装。缓存、用户数据、本地歌曲、目录句柄、快照都在这里。
+
+- `services/coverCache.ts` / `themeCache.ts`
+  封面和主题缓存。
+
+- `services/gemini.ts`
+  AI 主题生成前端桥接。
+
+### Utils / Workers
+
+- `utils/lyrics/parserCore.ts`
+  歌词解析真源。优先看它，不要从旧 wrapper 猜逻辑。
+
+- `utils/lyrics/LyricParserFactory.ts`
+  歌词解析统一入口，按来源分发到不同 adapter。
+
+- `utils/lyrics/adapters/*`
+  网易云 / 本地文件 / 嵌入歌词 / Navidrome 的来源适配层。
+
+- `workers/lyricsParser.worker.ts`
+  歌词解析 worker。
+
+- `workers/metadataParser.worker.ts`
+  音频元数据解析 worker。
+
+- `utils/localMetadataWorkerClient.ts`
+  metadata worker 客户端。
+
+- `utils/colorExtractor.ts`
+  封面取色。
+
+### Types / i18n
+
+- `types.ts`
+  核心共享类型。先看它再改状态结构。
+
+- `types/navidrome.ts`
+  Navidrome 相关类型。
+
+- `i18n/config.ts`
+  国际化初始化。
+
+- `i18n/locales/en.ts` / `zh-CN.ts`
+  文案字典。
+
+## 4. Where Changes Usually Belong
+
+- 改页面布局或交互：`components/*`
+- 改跨页面状态或导航：`hooks/*`
+- 改 API、缓存、导入、播放数据流：`services/*`
+- 改解析、纯逻辑、格式转换：`utils/*`
+- 改耗时解析：优先看 `workers/*`
+- 改共享数据结构：先改 `types.ts`
+
+## 5. High-Value Files
+
+如果只读少数文件，优先按这个顺序：
 
 1. `App.tsx`
 2. `types.ts`
-3. `hooks/useAppNavigation.ts`
-4. `hooks/useAppPreferences.ts`
-5. `hooks/useThemeController.ts`
-6. `components/Home.tsx`
-7. `services/localMusicService.ts`
-8. `services/navidromeService.ts`
-9. `services/onlinePlayback.ts`
-10. `utils/lyrics/LyricParserFactory.ts`
+3. `components/Home.tsx`
+4. `hooks/useAppNavigation.ts`
+5. `services/localMusicService.ts`
+6. `services/navidromeService.ts`
+7. `services/onlinePlayback.ts`
+8. `utils/lyrics/LyricParserFactory.ts`
+9. `utils/lyrics/parserCore.ts`
 
-## 9. Notes
+## 6. Project-Specific Notes
 
-- The app now uses a unified playback model for cloud, local, and Navidrome tracks.
-- `modal/HelpModal.tsx` is no longer only a help dialog; it is also the options/settings hub.
-- `UnifiedPanel.tsx` is now composition-based through `panelTab/*`, instead of one monolithic control panel body.
-- Local library import is incremental and snapshot-based, not just a simple one-time folder scan.
-- The lyric pipeline now supports multiple sources and off-main-thread parsing.
+- 这是统一播放模型，不要把网易云 / 本地 / Navidrome 分成三套播放器状态。
+- `HelpModal.tsx` 是设置中心，不只是帮助说明。
+- `UnifiedPanel.tsx` 通过 `panelTab/*` 组合，不要重新把面板逻辑塞回一个大组件。
+- 本地音乐导入是增量快照式，不是单次全量扫描。
+- 歌词解析优先从 `parserCore.ts` 理解，不要从旧兼容层反推。
