@@ -264,6 +264,11 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const placeholderBg = isDaylight ? 'bg-stone-200' : 'bg-zinc-900';
     const activeTabBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
     const tabSwitcherBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
+    const toggleButtonMotionClass = isOpen
+        ? 'translate-x-0 opacity-100'
+        : supportsHover
+            ? 'translate-x-1/2 opacity-60 group-hover:translate-x-0 group-hover:opacity-100 md:translate-x-0 md:opacity-100 md:hover:scale-105'
+            : 'translate-x-1/2 opacity-60';
     const handleNavigateHome = () => {
         setIsCoverActionsVisible(false);
         onToggle();
@@ -341,14 +346,14 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             className="absolute bottom-8 right-0 z-[60] flex flex-col items-end gap-4 pointer-events-none"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="pointer-events-auto pr-4 md:pr-8 pb-16 md:pb-0">
+            <div className="pr-4 md:pr-8">
                 <AnimatePresence>
                     {isOpen && (
                         <motion.div
                             initial={{ opacity: 0, scale: 0.9, originY: 1, originX: 1 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.9 }}
-                            className={`w-80 max-h-[calc(100dvh-6rem)] ${glassBg} backdrop-blur-3xl rounded-3xl shadow-2xl flex flex-col mb-2 overflow-y-auto hide-scrollbar`}
+                            className={`pointer-events-auto w-80 max-h-[calc(100dvh-6rem)] ${glassBg} backdrop-blur-3xl rounded-3xl shadow-2xl flex flex-col mb-16 md:mb-2 overflow-y-auto hide-scrollbar`}
                             style={{ color: theme.primaryColor }}
                         >
                             <div className="p-5 flex flex-col">
@@ -644,12 +649,11 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             </div>
 
             {/* Toggle Button */}
-            <div className="pointer-events-auto fixed bottom-8 right-0 z-[60] pr-4 md:pr-8 group">
+            <div className="pointer-events-auto fixed bottom-8 right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end">
                 <button
                     onClick={onToggle}
                     className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg backdrop-blur-md transform
-                        translate-x-1/2 opacity-60 hover:translate-x-0 hover:opacity-100 md:translate-x-0 md:opacity-100 md:hover:scale-105 border-none
-                        ${isOpen ? 'bg-white text-black translate-x-0 opacity-100' : 'bg-black/40 text-white'}`}
+                        border-none ${toggleButtonMotionClass} ${isOpen ? 'bg-white text-black' : 'bg-black/40 text-white'}`}
                 >
                     {isOpen ? <X size={20} /> : <Settings2 size={20} />}
                 </button>
