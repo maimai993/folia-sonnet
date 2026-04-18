@@ -196,70 +196,84 @@ const Carousel3D: React.FC<Carousel3DProps> = ({ items, onSelect, isLoading = fa
     }, [items.length]);
 
     return (
-        <div className="w-full h-full flex flex-col justify-center relative">
-            {/* Decorative Line Behind */}
-            <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-y-1/2 z-0" />
-
-            {/* Center Focus Decoration */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full border border-white/5 -z-10" />
-
-            {/* Carousel Container */}
+        <div className="w-full h-full min-h-0 flex flex-col relative">
             <div
                 ref={carouselRef}
-                className="w-full h-[400px] relative flex items-center justify-center perspective-1000 touch-pan-y"
+                className="w-full flex-1 min-h-[320px] relative perspective-1000 touch-pan-y"
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
             >
-                {isLoading ? (
-                    <div className="opacity-50 flex flex-col items-center gap-4">
-                        <Loader2 className="animate-spin" />
-                        <span>{t('home.loadingLibrary')}</span>
+                <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-5">
+                    {!showMap && items.length > 0 && (
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className={`shrink-0 p-3 rounded-full transition-all ${isDaylight ? 'hover:bg-black/10 text-black/50 hover:text-black' : 'hover:bg-white/10 text-white/50 hover:text-white'}`}
+                            onClick={() => setShowMap(true)}
+                            title={t('home.allAlbums') || 'Show All'}
+                        >
+                            <MapIcon size={24} />
+                        </motion.button>
+                    )}
+
+                    <div className="relative flex w-full flex-1 min-h-[260px] items-center justify-center">
+                        {/* Decorative Line Behind */}
+                        <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-y-1/2 z-0" />
+
+                        {/* Center Focus Decoration */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full border border-white/5 -z-10" />
+
+                        {isLoading ? (
+                            <div className="opacity-50 flex flex-col items-center gap-4">
+                                <Loader2 className="animate-spin" />
+                                <span>{t('home.loadingLibrary')}</span>
+                            </div>
+                        ) : items.length > 0 ? (
+                            items.map((item, i) => {
+                                if (Math.abs(focusedIndex - i) > 4) return null;
+
+                                const distance = i - focusedIndex;
+                                const isActive = distance === 0;
+
+                                const scale = isActive ? 1.1 : 1 - Math.abs(distance) * 0.15;
+                                const opacity = isActive ? 1 : 0.6 - Math.abs(distance) * 0.15;
+                                const xOffset = distance * 240;
+                                const zIndex = 10 - Math.abs(distance);
+                                const rotateY = distance > 0 ? -15 : distance < 0 ? 15 : 0;
+
+                                return (
+                                    <CarouselItem
+                                        key={item.id}
+                                        item={item}
+                                        distance={distance}
+                                        isActive={isActive}
+                                        xOffset={xOffset}
+                                        scale={scale}
+                                        opacity={opacity}
+                                        zIndex={zIndex}
+                                        rotateY={rotateY}
+                                        onSelect={() => onSelect(item)}
+                                        onFocus={() => setFocusedIndex(i)}
+                                    />
+                                );
+                            })
+                        ) : (
+                            <div className="opacity-50 flex flex-col items-center gap-4">
+                                <span>{emptyMessage}</span>
+                            </div>
+                        )}
                     </div>
-                ) : items.length > 0 ? (
-                    items.map((item, i) => {
-                        if (Math.abs(focusedIndex - i) > 4) return null;
-
-                        const distance = i - focusedIndex;
-                        const isActive = distance === 0;
-
-                        const scale = isActive ? 1.1 : 1 - Math.abs(distance) * 0.15;
-                        const opacity = isActive ? 1 : 0.6 - Math.abs(distance) * 0.15;
-                        const xOffset = distance * 240;
-                        const zIndex = 10 - Math.abs(distance);
-                        const rotateY = distance > 0 ? -15 : distance < 0 ? 15 : 0;
-
-                        return (
-                            <CarouselItem
-                                key={item.id}
-                                item={item}
-                                distance={distance}
-                                isActive={isActive}
-                                xOffset={xOffset}
-                                scale={scale}
-                                opacity={opacity}
-                                zIndex={zIndex}
-                                rotateY={rotateY}
-                                onSelect={() => onSelect(item)}
-                                onFocus={() => setFocusedIndex(i)}
-                            />
-                        );
-                    })
-                ) : (
-                    <div className="opacity-50 flex flex-col items-center gap-4">
-                        <span>{emptyMessage}</span>
-                    </div>
-                )}
+                </div>
             </div>
 
-            {/* Active Item Title - Static Layer Below */}
             {items.length > 0 && items[focusedIndex] && (
                 <motion.div
                     key={items[focusedIndex].id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className={`absolute ${textBottomClass} left-0 right-0 text-center z-10 px-8 pointer-events-none`}
+                    className="relative shrink-0 text-center z-10 px-8 pb-10 pointer-events-none"
                 >
                     <h3 className="font-bold text-2xl truncate max-w-xl mx-auto" style={{ color: 'var(--text-primary)' }}>
                         {items[focusedIndex].name}
@@ -342,19 +356,6 @@ const Carousel3D: React.FC<Carousel3DProps> = ({ items, onSelect, isLoading = fa
                     </motion.div>
                 )}
             </AnimatePresence>
-
-            {/* Map Toggle Button */}
-            {!showMap && items.length > 0 && (
-                <motion.button
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className={`absolute top-4 left-1/2 -translate-x-1/2 z-40 p-3 rounded-full transition-all ${isDaylight ? 'hover:bg-black/10 text-black/50 hover:text-black' : 'hover:bg-white/10 text-white/50 hover:text-white'}`}
-                    onClick={() => setShowMap(true)}
-                    title={t('home.allAlbums') || 'Show All'}
-                >
-                    <MapIcon size={24} />
-                </motion.button>
-            )}
         </div>
     );
 };

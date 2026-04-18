@@ -234,7 +234,6 @@ const Home: React.FC<HomeProps> = ({
     const [favoriteAlbums, setFavoriteAlbums] = useState<any[]>([]);
     const [loadingAlbums, setLoadingAlbums] = useState(false);
     const [albumsLoaded, setAlbumsLoaded] = useState(false);
-
     // Swipe handling
     // const touchStartY = useRef(0);
     // const touchEndY = useRef(0);
@@ -448,7 +447,7 @@ const Home: React.FC<HomeProps> = ({
             >
                 {/* Header Section */}
                 {!isLocalPlaylistOpen && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto z-20 relative mb-8 p-4 md:p-8 gap-y-4 md:gap-y-0">
+                        <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto z-20 relative p-4 md:p-8 gap-y-4 md:gap-y-0">
                             {/* Left: Title & Help */}
                             <div className="flex items-center justify-start order-1 md:order-none">
                                 <h1 className="text-2xl font-bold tracking-tight opacity-90 flex items-center gap-3">
@@ -605,7 +604,7 @@ const Home: React.FC<HomeProps> = ({
                     )}
 
                     {/* Main Content Area */}
-                    <div className="flex-1 flex flex-col items-center justify-center relative">
+                    <div className={`flex-1 min-h-0 flex flex-col items-center relative ${currentTrack ? 'pb-28 md:pb-32' : ''}`}>
                         {!hasNeteaseLogin && isNeteaseTab ? (
                             <div className="flex flex-col items-center justify-center space-y-6">
                                 <div className={`w-24 h-24 rounded-3xl ${cardBg} border border-white/10 flex items-center justify-center backdrop-blur-md`}>
@@ -631,7 +630,7 @@ const Home: React.FC<HomeProps> = ({
                                             animate={{ opacity: 1 }}
                                             exit={{ opacity: 0 }}
                                             transition={{ duration: 0.2 }}
-                                            className="w-full h-full flex-1"
+                                            className="w-full h-full flex-1 min-h-0"
                                         >
                                             <Carousel3D
                                                 items={favoriteAlbums.map(a => ({
@@ -656,7 +655,7 @@ const Home: React.FC<HomeProps> = ({
                                             animate={{ opacity: 1 }}
                                             exit={{ opacity: 0 }}
                                             transition={{ duration: 0.2 }}
-                                            className="w-full h-full flex-1"
+                                            className="w-full h-full flex-1 min-h-0"
                                         >
                                             <Carousel3D
                                                 items={playlistCards.map(p => ({
@@ -678,7 +677,7 @@ const Home: React.FC<HomeProps> = ({
                                             animate={{ opacity: 1 }}
                                             exit={{ opacity: 0 }}
                                             transition={{ duration: 0.2 }}
-                                            className="w-full h-full flex-1"
+                                            className="w-full h-full flex-1 min-h-0"
                                         >
                                             <Carousel3D
                                                 items={radioItems}
