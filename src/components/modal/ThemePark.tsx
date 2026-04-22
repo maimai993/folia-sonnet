@@ -96,10 +96,10 @@ const PREVIEW_LINES: Line[] = [
     {
         startTime: 4.2,
         endTime: 7.2,
-        fullText: 'Weave that poem of divine words, devoid of poetry, yet capable of bringing you to reality.',
+        fullText: 'Weave that prosaic divine poem that leads you to reality.',
         translation: '编织那没有诗意，却能将你带到现实的神文之诗。',
         words: createTokenWords(
-            ['Weave', 'that', 'poem', 'of', 'divine', 'words', 'devoid', 'of', 'poetry,', 'yet', 'capable', 'of', 'bringing', 'you', 'to', 'reality.'],
+            ['Weave', 'that', 'prosaic', 'divine', 'poem', 'that', 'leads', 'you', 'to', 'reality.'],
             4.2,
             7.2,
         ),
@@ -107,10 +107,10 @@ const PREVIEW_LINES: Line[] = [
     {
         startTime: 7.8,
         endTime: 10.9,
-        fullText: "Tisser ce poème de mots divins, dénué de poésie, mais capable de t'amener à la réalité.",
+        fullText: 'Tisse ce poème divin sans poésie qui te mène au réel.',
         translation: '编织那没有诗意，却能将你带到现实的神文之诗。',
         words: createTokenWords(
-            ['Tisser', 'ce', 'poème', 'de', 'mots', 'divins,', 'dénué', 'de', 'poésie,', 'mais', 'capable', 'de', "t'amener", 'à', 'la', 'réalité.'],
+            ['Tisse', 'ce', 'poème', 'divin', 'sans', 'poésie', 'qui', 'te', 'mène', 'au', 'réel.'],
             7.8,
             10.9,
         ),

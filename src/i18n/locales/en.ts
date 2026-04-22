@@ -327,6 +327,7 @@ export default {
     "chooseCover": "Choose Cover Image",
     "addToPlaylist": "Add to Playlist",
     "saveQueueAsPlaylist": "Save as Playlist",
+    "createPlaylist": "Create Playlist",
     "enterPlaylistName": "Enter playlist name",
     "noArtistsFound": "No artists found",
     "noPlaylistsFound": "No playlists yet",

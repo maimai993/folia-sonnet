@@ -1165,6 +1165,21 @@ export default function App() {
         await loadLocalPlaylists();
     }, [currentSong, loadLocalPlaylists]);
 
+    const createCurrentLocalPlaylist = useCallback(async (name: string) => {
+        const trimmedName = name.trim();
+        if (!trimmedName) {
+            throw new Error('Playlist name is empty');
+        }
+
+        if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) {
+            throw new Error('Current song is not local');
+        }
+
+        await createLocalPlaylist(trimmedName, [currentSong.localData]);
+        await loadLocalPlaylists();
+        setStatusMsg({ type: 'success', text: t('status.playlistUpdated') || '歌单已更新' });
+    }, [currentSong, loadLocalPlaylists, t]);
+
     const addCurrentSongToNeteasePlaylist = useCallback(async (playlistId: number) => {
         if (!currentSong || isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
             throw new Error('Current song is not a Netease song');
@@ -3348,6 +3363,7 @@ export default function App() {
                         neteasePlaylists={playlists}
                         onSaveCurrentQueueAsPlaylist={saveCurrentQueueAsLocalPlaylist}
                         onAddCurrentSongToLocalPlaylist={addCurrentSongToLocalPlaylist}
+                        onCreateCurrentLocalPlaylist={createCurrentLocalPlaylist}
                         onAddCurrentSongToNeteasePlaylist={addCurrentSongToNeteasePlaylist}
                         onAddCurrentSongToNavidromePlaylist={addCurrentSongToNavidromePlaylist}
                         onCreateCurrentNavidromePlaylist={createCurrentNavidromePlaylist}

@@ -84,6 +84,7 @@ interface UnifiedPanelProps {
     neteasePlaylists: NeteasePlaylist[];
     onSaveCurrentQueueAsPlaylist: (name: string) => Promise<void>;
     onAddCurrentSongToLocalPlaylist: (playlistId: string) => Promise<void>;
+    onCreateCurrentLocalPlaylist: (name: string) => Promise<void>;
     onAddCurrentSongToNeteasePlaylist: (playlistId: number) => Promise<void>;
     onAddCurrentSongToNavidromePlaylist: (playlistId: string) => Promise<void>;
     onCreateCurrentNavidromePlaylist: (name: string) => Promise<void>;
@@ -156,6 +157,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     neteasePlaylists,
     onSaveCurrentQueueAsPlaylist,
     onAddCurrentSongToLocalPlaylist,
+    onCreateCurrentLocalPlaylist,
     onAddCurrentSongToNeteasePlaylist,
     onAddCurrentSongToNavidromePlaylist,
     onCreateCurrentNavidromePlaylist,
@@ -175,9 +177,10 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const isNavidrome = currentSong && (currentSong as any).isNavidrome === true;
     const isLocal = currentSong && !isNavidrome && (((currentSong as any).isLocal === true) || Boolean((currentSong as any).localData));
     const isNetease = Boolean(currentSong && !isLocal && !isNavidrome);
+    const canCreateLocalPlaylist = isLocal;
     const canCreateNavidromePlaylist = isNavidrome;
     const canAddCurrentSongToPlaylist =
-        (isLocal && localPlaylists.length > 0)
+        (isLocal && (localPlaylists.length > 0 || canCreateLocalPlaylist))
         || (isNetease && neteasePlaylists.length > 0)
         || (isNavidrome && (navidromePlaylists.length > 0 || canCreateNavidromePlaylist));
     const supportsHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -626,24 +629,31 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                             await refreshNavidromePlaylists();
                         }
                     }}
-                    onCreate={isNavidrome ? () => {
+                    onCreate={(isLocal || isNavidrome) ? () => {
                         setIsPlaylistPickerOpen(false);
                         setIsCreatePlaylistOpen(true);
                     } : undefined}
-                    createLabel={t('navidrome.createPlaylist') || '新建歌单'}
+                    createLabel={t(isNavidrome ? 'navidrome.createPlaylist' : 'localMusic.createPlaylist') || '新建歌单'}
                 />
 
                 <TextInputDialog
                     isOpen={isCreatePlaylistOpen}
                     onClose={() => setIsCreatePlaylistOpen(false)}
                     isDaylight={isDaylight}
-                    title={t('navidrome.createPlaylist') || '新建歌单'}
+                    title={t(isNavidrome ? 'navidrome.createPlaylist' : 'localMusic.createPlaylist') || '新建歌单'}
                     description={t('localMusic.enterPlaylistName') || '输入歌单名称'}
                     placeholder={t('localMusic.enterPlaylistName') || '输入歌单名称'}
                     confirmLabel={t('options.save') || '保存'}
                     onConfirm={async (name) => {
-                        await onCreateCurrentNavidromePlaylist(name);
-                        await refreshNavidromePlaylists();
+                        if (isLocal) {
+                            await onCreateCurrentLocalPlaylist(name);
+                            return;
+                        }
+
+                        if (isNavidrome) {
+                            await onCreateCurrentNavidromePlaylist(name);
+                            await refreshNavidromePlaylists();
+                        }
                     }}
                 />
             </div>

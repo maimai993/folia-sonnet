@@ -326,6 +326,7 @@ export default {
     "chooseCover": "选择封面图片",
     "addToPlaylist": "添加到歌单",
     "saveQueueAsPlaylist": "保存为歌单",
+    "createPlaylist": "新建歌单",
     "enterPlaylistName": "输入歌单名称",
     "noArtistsFound": "未找到艺术家",
     "noPlaylistsFound": "还没有歌单",

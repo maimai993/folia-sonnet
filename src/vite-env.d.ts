@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
 
-declare const __COMMIT_HASH__: string;
-declare const __GIT_BRANCH__: string;
-declare const __APP_VERSION__: string;
-
 declare global {
+  const __COMMIT_HASH__: string;
+  const __GIT_BRANCH__: string;
+  const __APP_VERSION__: string;
+
   interface ElectronCacheDirectoryResult {
     path: string;
     isDefault: boolean;
@@ -44,3 +44,5 @@ declare global {
     };
   }
 }
+
+export {};
