@@ -203,7 +203,12 @@ const GeometricBackground: React.FC<GeometricBackgroundProps> = React.memo((prop
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <AnimatePresence initial={false} mode="sync">
+      {/* Do NOT use initial={false} on AnimatePresence here.
+          initial={false} propagates via context to ALL nested motion components,
+          causing keyframe animations with repeat:Infinity to never be dispatched
+          on mount. Removing it allows the container to fade in (0.6s) and all
+          child keyframe animations to start normally on every mount. */}
+      <AnimatePresence mode="sync">
         <GeometricLayer key={layerKey} {...props} />
       </AnimatePresence>
     </div>
