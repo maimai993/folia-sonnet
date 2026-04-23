@@ -236,7 +236,7 @@ export default {
     "fontSerif": "Serif",
     "fontMono": "Mono",
     "previewOriginal": "The wind remembers every line you sang.",
-    "previewTranslation": "Translations keep the same sizing style, but prefer a safer CJK-friendly fallback stack.",
+    "previewTranslation": "Translations try the current font first, then use a safer CJK-friendly fallback stack.",
     "backgroundOpacity": "Background Opacity",
     "themePresets": "Theme Presets",
     "themePresetsDefault": "Default",

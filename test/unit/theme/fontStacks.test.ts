@@ -11,8 +11,6 @@ describe('fontStacks', () => {
         const stack = resolveThemeFontStack(theme);
 
         expect(stack).toContain('"Iowan Old Style"');
-        expect(stack).toContain('"SimSun"');
-        expect(stack).toContain('"Yu Mincho"');
         expect(stack).toContain('serif');
     });
 
@@ -52,16 +50,39 @@ describe('fontStacks', () => {
         expect(stack.startsWith('"Inter"')).toBe(true);
     });
 
-    it('keeps translation text on the built-in stack even when a custom font is selected', () => {
+    it('lets translation text try the custom font before using the translation-specific fallback stack', () => {
         const theme: Pick<Theme, 'fontStyle' | 'fontFamily'> = {
-            fontStyle: 'sans',
+            fontStyle: 'serif',
             fontFamily: 'SF Pro Display',
         };
 
         const stack = resolveThemeTranslationFontStack(theme);
 
-        expect(stack.startsWith('"Inter"')).toBe(true);
-        expect(stack).not.toContain('SF Pro Display');
+        expect(stack.startsWith('"SF Pro Display",')).toBe(true);
+        expect(stack).toContain('"Folia Noto Serif SC"');
+        expect(stack).toContain('Georgia');
+        expect(stack).toContain('"Times New Roman"');
+        expect(stack).toContain('"Noto Serif CJK SC"');
+        expect(stack).toContain('"SimSun"');
+        expect(stack).toContain('"Yu Mincho"');
+        expect(stack).toContain('"MS PMincho"');
+    });
+
+    it('prefers Windows-friendly Chinese fallbacks before Japanese mono fonts for translation mono text', () => {
+        const theme: Pick<Theme, 'fontStyle' | 'fontFamily'> = {
+            fontStyle: 'mono',
+        };
+
+        const stack = resolveThemeTranslationFontStack(theme);
+
+        expect(stack).toContain('"Sarasa Mono SC"');
+        expect(stack).toContain('"Noto Sans Mono CJK SC"');
+        expect(stack).toContain('"DengXian"');
+        expect(stack).toContain('"SimHei"');
+        expect(stack).toContain('"Microsoft YaHei UI"');
         expect(stack).toContain('"Microsoft YaHei"');
+        expect(stack).toContain('"MS Gothic"');
+        expect(stack.indexOf('"DengXian"')).toBeLessThan(stack.indexOf('"SimHei"'));
+        expect(stack.indexOf('"Microsoft YaHei"')).toBeLessThan(stack.indexOf('"MS Gothic"'));
     });
 });
