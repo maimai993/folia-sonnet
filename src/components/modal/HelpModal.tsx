@@ -3,11 +3,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle, Palette, FolderOpen, Pencil, FlaskConical, ChevronLeft, ChevronRight, RotateCcw, GamepadDirectional } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
-import { DualTheme, Theme, ThemeMode, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../../types';
+import { DualTheme, Theme, ThemeMode, type CadenzaTuning, type FumeTuning, type PartitaTuning, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
 import VisPlayground from '../visualizer/VisPlayground';
 import ThemePark from './ThemePark';
+import meowImageUrl from '../../../build/miao.png';
 
 interface HelpModalProps {
     onClose: () => void;
@@ -31,9 +32,12 @@ interface HelpModalProps {
     visualizerMode?: VisualizerMode;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
+    fumeTuning?: FumeTuning;
     onVisualizerModeChange?: (mode: VisualizerMode) => void;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     onResetPartitaTuning?: () => void;
+    onFumeTuningChange?: (patch: Partial<FumeTuning>) => void;
+    onResetFumeTuning?: () => void;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
     lyricsCustomFontFamily: string | null;
@@ -67,9 +71,12 @@ const HelpModal: React.FC<HelpModalProps> = ({
     visualizerMode = 'classic',
     cadenzaTuning,
     partitaTuning,
+    fumeTuning,
     onVisualizerModeChange,
     onPartitaTuningChange,
     onResetPartitaTuning,
+    onFumeTuningChange,
+    onResetFumeTuning,
     lyricsFontStyle,
     lyricsFontScale,
     lyricsCustomFontFamily,
@@ -87,7 +94,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
     const [showLabSettings, setShowLabSettings] = useState(false);
     const [versionCopied, setVersionCopied] = useState(false);
     const [authorClickCount, setAuthorClickCount] = useState(0);
-    const [meowEasterEgg, setMeowEasterEgg] = useState<{ id: number; color: string; } | null>(null);
+    const [meowEasterEgg, setMeowEasterEgg] = useState<{ id: number; } | null>(null);
 
     // Cache State
     const [cacheSizes, setCacheSizes] = useState({
@@ -171,13 +178,12 @@ const HelpModal: React.FC<HelpModalProps> = ({
         setAuthorClickCount((prev) => {
             const nextCount = prev + 1;
 
-            if (nextCount >= 10) {
-                const color = `hsl(${Math.floor(Math.random() * 360)} 90% 70%)`;
+            if (nextCount >= 7) {
                 const id = Date.now();
-                setMeowEasterEgg({ id, color });
+                setMeowEasterEgg({ id });
                 window.setTimeout(() => {
                     setMeowEasterEgg((current) => (current?.id === id ? null : current));
-                }, 1600);
+                }, 2200);
                 return 0;
             }
 
@@ -464,18 +470,24 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         </button>{' '}
                                         <a href="https://github.com/chthollyphile/folia-major" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors underline decoration-white/30 hover:decoration-white">chthollyphile</a>
                                     </p>
-                                    {meowEasterEgg && (
-                                        <span
-                                            key={meowEasterEgg.id}
-                                            className="pointer-events-none absolute left-1/2 top-0 text-lg font-bold opacity-0 animate-[meow-pop_1.6s_ease-out_forwards]"
-                                            style={{
-                                                color: meowEasterEgg.color,
-                                                textShadow: '0 0 12px rgba(255,255,255,0.35)',
-                                            }}
-                                        >
-                                            喵
-                                        </span>
-                                    )}
+                                    <AnimatePresence>
+                                        {meowEasterEgg && (
+                                            <motion.img
+                                                key={meowEasterEgg.id}
+                                                src={meowImageUrl}
+                                                alt=""
+                                                aria-hidden="true"
+                                                className="pointer-events-none absolute left-1/2 top-full z-10 w-32 -translate-x-1/2 drop-shadow-[0_18px_32px_rgba(0,0,0,0.4)] select-none"
+                                                initial={{ opacity: 0, y: 72, scale: 0.92 }}
+                                                animate={{ opacity: 1, y: -12, scale: 1 }}
+                                                exit={{ opacity: 0, y: 60, scale: 0.96 }}
+                                                transition={{
+                                                    duration: 0.6,
+                                                    ease: [0.22, 1, 0.36, 1],
+                                                }}
+                                            />
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                                 <button
                                     type="button"
@@ -590,7 +602,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                 <Settings2 size={16} />
                                             </button>
                                         </div>
-                                        <div className="grid grid-cols-3 gap-3">
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                             <button
                                                 onClick={() => onVisualizerModeChange?.('classic')}
                                                 className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
@@ -625,6 +637,18 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             >
                                                 <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                                     {t('ui.visualizerPartita')}
+                                                </span>
+                                            </button>
+                                            <button
+                                                onClick={() => onVisualizerModeChange?.('fume')}
+                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
+                                                style={{
+                                                    borderColor: visualizerMode === 'fume' ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
+                                                    backgroundColor: visualizerMode === 'fume' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
+                                                }}
+                                            >
+                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('ui.visualizerFume')}
                                                 </span>
                                             </button>
                                         </div>
@@ -897,31 +921,6 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 </div>
                             </section>
 
-                            <section>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowLabSettings(true)}
-                                    className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8"
-                                >
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div className="flex items-start gap-3 text-left">
-                                            <div className="w-10 h-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0" style={{ color: 'var(--text-primary)' }}>
-                                                <FlaskConical size={18} />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                    {t('options.labSettings') || "Lab Settings"}
-                                                </div>
-                                                <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                    {t('options.labSettingsDesc') || "Open a separate page for experimental playback and panel behavior settings."}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <ChevronRight size={18} className="shrink-0 opacity-60" style={{ color: 'var(--text-primary)' }} />
-                                    </div>
-                                </button>
-                            </section>
-
                             {/* Electron Settings */}
                             {isElectron && (
                                 <section>
@@ -1039,6 +1038,32 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     </div>
                                 </section>
                             )}
+
+                            {/* 保持实验室入口位于整个 options 列表最底部；Electron 版本下还会多出桌面端专属设置，所以这里必须放在 Electron Settings 之后。 */}
+                            <section>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowLabSettings(true)}
+                                    className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8"
+                                >
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="flex items-start gap-3 text-left">
+                                            <div className="w-10 h-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0" style={{ color: 'var(--text-primary)' }}>
+                                                <FlaskConical size={18} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('options.labSettings') || "Lab Settings"}
+                                                </div>
+                                                <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
+                                                    {t('options.labSettingsDesc') || "Open a separate page for experimental playback and panel behavior settings."}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <ChevronRight size={18} className="shrink-0 opacity-60" style={{ color: 'var(--text-primary)' }} />
+                                    </div>
+                                </button>
+                            </section>
                         </motion.div>
                     )}
                     </AnimatePresence>
@@ -1057,6 +1082,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                         staticMode={staticMode}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
+                        fumeTuning={fumeTuning}
                         fontStyle={lyricsFontStyle}
                         fontScale={lyricsFontScale}
                         customFontFamily={lyricsCustomFontFamily}
@@ -1066,6 +1092,8 @@ const HelpModal: React.FC<HelpModalProps> = ({
                         onCustomFontChange={onLyricsCustomFontChange}
                         onPartitaTuningChange={onPartitaTuningChange}
                         onResetPartitaTuning={onResetPartitaTuning}
+                        onFumeTuningChange={onFumeTuningChange}
+                        onResetFumeTuning={onResetFumeTuning}
                         onClose={() => setShowVisPlayground(false)}
                     />
                 )}
@@ -1192,22 +1220,6 @@ const HelpModal: React.FC<HelpModalProps> = ({
                 </motion.div>
             )}
             </AnimatePresence>
-            <style>{`
-                @keyframes meow-pop {
-                    0% {
-                        opacity: 0;
-                        transform: translate(-50%, 10px) scale(0.8);
-                    }
-                    20% {
-                        opacity: 1;
-                        transform: translate(-50%, -6px) scale(1);
-                    }
-                    100% {
-                        opacity: 0;
-                        transform: translate(-50%, -24px) scale(1.08);
-                    }
-                }
-            `}</style>
         </motion.div>
     );
 };

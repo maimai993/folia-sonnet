@@ -44,7 +44,7 @@ export interface DualTheme {
 
 export type ThemeMode = 'default' | 'ai' | 'custom';
 
-export type VisualizerMode = 'classic' | 'cadenza' | 'partita';
+export type VisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume';
 
 export type HomeViewTab = 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio';
 
@@ -74,6 +74,20 @@ export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
   showGuideLines: true,
   staggerMin: 20,
   staggerMax: 100,
+};
+
+export interface FumeTuning {
+  hidePrintSymbols: boolean;
+  cameraSpeed: number;
+  glowIntensity: number;
+  heroScale: number;
+}
+
+export const DEFAULT_FUME_TUNING: FumeTuning = {
+  hidePrintSymbols: false,
+  cameraSpeed: 1,
+  glowIntensity: 1,
+  heroScale: 1,
 };
 
 export enum PlayerState {
