@@ -184,6 +184,10 @@ const CAMERA_SCALE_MIN = 0.22;
 const CAMERA_SCALE_MAX = 2.24;
 const OVERVIEW_CAMERA_SOURCE = -2;
 const LAYOUT_REBUILD_DEBOUNCE_MS = 96;
+const FUME_BACKGROUND_PARALLAX_X = 0.9;
+const FUME_BACKGROUND_PARALLAX_Y = 0.74;
+const FUME_BACKGROUND_SCALE_FACTOR = 0.94;
+const FUME_BACKGROUND_VERTICAL_OFFSET_RATIO = 0.12;
 
 const parseColorChannels = (color: string) => {
     if (color.startsWith('#')) {
@@ -1512,19 +1516,48 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
             const viewportCenterX = viewport.width * 0.5;
             const viewportCenterY = viewport.height * 0.5;
             const screenScale = cameraRef.current.scale;
-            context.save();
-            context.translate(viewportCenterX, viewportCenterY);
-            context.scale(screenScale, screenScale);
-            context.translate(-cameraRef.current.x, -cameraRef.current.y);
 
             if (!staticMode) {
+                const backgroundCenterX = backgroundScene.width * 0.5;
+                const backgroundCenterY = backgroundScene.height * 0.5;
+                const backgroundVerticalOffset = clamp(
+                    viewport.height * FUME_BACKGROUND_VERTICAL_OFFSET_RATIO / Math.max(screenScale, 0.001),
+                    48,
+                    180,
+                );
+                const backgroundCameraX = mix(
+                    backgroundCenterX,
+                    cameraRef.current.x,
+                    FUME_BACKGROUND_PARALLAX_X,
+                );
+                const backgroundCameraY = mix(
+                    backgroundCenterY,
+                    cameraRef.current.y,
+                    FUME_BACKGROUND_PARALLAX_Y,
+                ) - backgroundVerticalOffset;
+                const backgroundScale = clamp(
+                    screenScale * FUME_BACKGROUND_SCALE_FACTOR,
+                    CAMERA_SCALE_MIN,
+                    CAMERA_SCALE_MAX,
+                );
+
+                context.save();
+                context.translate(viewportCenterX, viewportCenterY);
+                context.scale(backgroundScale, backgroundScale);
+                context.translate(-backgroundCameraX, -backgroundCameraY);
                 drawFumeBackground({
                     context,
                     scene: backgroundScene,
                     theme,
                     time,
                 });
+                context.restore();
             }
+
+            context.save();
+            context.translate(viewportCenterX, viewportCenterY);
+            context.scale(screenScale, screenScale);
+            context.translate(-cameraRef.current.x, -cameraRef.current.y);
 
             const activeGlowBoost = (theme.animationIntensity === 'chaotic'
                 ? 1.15
@@ -1830,7 +1863,7 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
             audioPower={audioPower}
             audioBands={audioBands}
             coverUrl={coverUrl}
-            useCoverColorBg={false}
+            useCoverColorBg={useCoverColorBg}
             seed={seed}
             staticMode={staticMode}
             backgroundOpacity={backgroundOpacity}

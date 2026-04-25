@@ -25,6 +25,8 @@ interface FumeBackgroundShape {
     opacity: number;
     colorMix: number;
     depth: number;
+    ringGapStart?: number;
+    ringGapSize?: number;
 }
 
 export interface FumeBackgroundScene {
@@ -138,7 +140,18 @@ const traceShape = (
     context.beginPath();
 
     if (shape.kind === 'ring') {
-        context.ellipse(0, 0, shape.width * 0.5, shape.width * 0.5, 0, 0, Math.PI * 2);
+        const gapStart = shape.ringGapStart ?? -Math.PI * 0.18;
+        const gapSize = clamp(shape.ringGapSize ?? (Math.PI * 0.2), 0.18, Math.PI * 0.6);
+        context.lineCap = 'round';
+        context.ellipse(
+            0,
+            0,
+            shape.width * 0.5,
+            shape.width * 0.5,
+            0,
+            gapStart + gapSize,
+            gapStart + Math.PI * 2,
+        );
     } else {
         const size = shape.width;
         if (shape.kind === 'square') {
@@ -221,10 +234,16 @@ export const buildFumeBackgroundScene = ({
             height,
             rotation: mix(-Math.PI * 0.2, Math.PI * 0.2, seeded(`${localSeed}:rotation`)),
             rotationSpeed: mix(-0.045, 0.045, seeded(`${localSeed}:rotation-speed`)),
-            strokeWidth: mix(1.6, 3.4, seeded(`${localSeed}:stroke-width`)),
+            strokeWidth: mix(0.95, 2.1, seeded(`${localSeed}:stroke-width`)),
             opacity: mix(0.042, 0.1, seeded(`${localSeed}:opacity`)),
             colorMix: mix(0.18, 0.62, seeded(`${localSeed}:color-mix`)),
             depth: seeded(`${localSeed}:depth`),
+            ringGapStart: kind === 'ring'
+                ? mix(-Math.PI, Math.PI, seeded(`${localSeed}:gap-start`))
+                : undefined,
+            ringGapSize: kind === 'ring'
+                ? mix(Math.PI * 0.12, Math.PI * 0.24, seeded(`${localSeed}:gap-size`))
+                : undefined,
         };
     }).sort((left, right) => left.depth - right.depth);
 
