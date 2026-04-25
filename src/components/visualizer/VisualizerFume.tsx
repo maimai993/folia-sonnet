@@ -1052,8 +1052,7 @@ const resolveFocusBlock = (
         return chronologicalLastBlock;
     }
 
-    for (let index = article.blocks.length - 1; index >= 0; index -= 1) {
-        const block = article.blocks[index]!;
+    const latestPrintedBlock = article.blocks.reduce<FumeBlock | null>((latest, block) => {
         const printedCount = resolvePrintedGraphemeCount(
             block.line,
             block.variant,
@@ -1062,12 +1061,29 @@ const resolveFocusBlock = (
             currentTimeValue,
         );
 
-        if (printedCount > 0) {
+        if (printedCount <= 0) {
+            return latest;
+        }
+
+        if (!latest || block.sourceLineIndex > latest.sourceLineIndex) {
             return block;
         }
+
+        return latest;
+    }, null);
+
+    if (latestPrintedBlock) {
+        return latestPrintedBlock;
     }
 
-    return article.blocks[0] ?? null;
+    const chronologicalFirstBlock = article.blocks.reduce<FumeBlock | null>((earliest, block) => {
+        if (!earliest || block.sourceLineIndex < earliest.sourceLineIndex) {
+            return block;
+        }
+        return earliest;
+    }, null);
+
+    return chronologicalFirstBlock;
 };
 
 const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
