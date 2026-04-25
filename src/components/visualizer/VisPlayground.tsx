@@ -14,18 +14,17 @@ import {
     type AudioBands,
     type CadenzaTuning,
     type FumeTuning,
-    type Line,
     type PartitaTuning,
     type Theme,
     type VisualizerMode,
 } from '../../types';
-import { getLineRenderEndTime } from '../../utils/lyrics/renderHints';
 import { resolveThemeFontStack } from '../../utils/fontStacks';
 import {
-    getVisPlaygroundPreviewStartOffset,
+    findPreviewPlaceholderLineIndex,
+    getPreviewPlaceholderStartOffset,
     VIS_PLAYGROUND_PREVIEW_LINES,
     VIS_PLAYGROUND_PREVIEW_LOOP_DURATION,
-} from './visPlaygroundPreview';
+} from './PreviewPlaceholder';
 
 interface VisPlaygroundProps {
     theme?: Theme;
@@ -104,21 +103,6 @@ const clampPartitaStagger = (value: number) => Math.min(180, Math.max(0, value))
 const clampFumeCameraSpeed = (value: number) => Math.min(1.85, Math.max(0.55, value));
 const clampFumeGlowIntensity = (value: number) => Math.min(1.8, Math.max(0, value));
 const clampFumeHeroScale = (value: number) => Math.min(1.32, Math.max(0.82, value));
-
-const findPreviewLineIndex = (lines: Line[], time: number) => {
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-        const line = lines[index];
-        if (!line || time < line.startTime) {
-            continue;
-        }
-
-        if (time <= getLineRenderEndTime(line)) {
-            return index;
-        }
-    }
-
-    return -1;
-};
 
 const PresetGroup = <T,>({
     label,
@@ -210,7 +194,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const mid = useMotionValue(0.12);
     const vocal = useMotionValue(0.2);
     const treble = useMotionValue(0.1);
-    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, 0));
+    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, 0));
     const [isFontPickerOpen, setIsFontPickerOpen] = useState(false);
     const [isLoadingSystemFonts, setIsLoadingSystemFonts] = useState(false);
     const [systemFonts, setSystemFonts] = useState<LocalFontEntry[]>([]);
@@ -290,7 +274,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     useEffect(() => {
         let frameId = 0;
         const startedAt = performance.now();
-        const previewOffset = getVisPlaygroundPreviewStartOffset(visualizerMode);
+        const previewOffset = getPreviewPlaceholderStartOffset(visualizerMode, VIS_PLAYGROUND_PREVIEW_LOOP_DURATION);
 
         const tick = (now: number) => {
             const elapsed = (previewOffset + (now - startedAt) / 1000) % VIS_PLAYGROUND_PREVIEW_LOOP_DURATION;
@@ -314,7 +298,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     }, [audioPower, bass, currentTime, lowMid, mid, treble, visualizerMode, vocal]);
 
     useMotionValueEvent(currentTime, 'change', latest => {
-        const nextIndex = findPreviewLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, latest);
+        const nextIndex = findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, latest);
         setCurrentLineIndex(prev => (prev === nextIndex ? prev : nextIndex));
     });
 

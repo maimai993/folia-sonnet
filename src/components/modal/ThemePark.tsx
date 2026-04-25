@@ -13,12 +13,16 @@ import {
     AudioBands,
     CadenzaTuning,
     DualTheme,
-    Line,
     PartitaTuning,
     Theme,
     VisualizerMode,
 } from '../../types';
-import { getLineRenderEndTime } from '../../utils/lyrics/renderHints';
+import {
+    findPreviewPlaceholderLineIndex,
+    getPreviewPlaceholderStartOffset,
+    VIS_PLAYGROUND_PREVIEW_LINES,
+    VIS_PLAYGROUND_PREVIEW_LOOP_DURATION,
+} from '../visualizer/PreviewPlaceholder';
 
 interface ThemeParkProps {
     initialTheme: DualTheme;
@@ -62,145 +66,6 @@ const normalizeDualTheme = (dualTheme: DualTheme): DualTheme => ({
     light: normalizeTheme(dualTheme.light, 'Theme Park Light', 'Custom'),
     dark: normalizeTheme(dualTheme.dark, 'Theme Park Dark', 'Custom'),
 });
-
-const LOOP_DURATION = 25.8;
-const getPreviewStartOffset = (mode: VisualizerMode) => mode === 'fume' ? 18.4 : 0;
-
-const createCharacterWords = (text: string, startTime: number, endTime: number) => {
-    const chars = Array.from(text);
-    const duration = endTime - startTime;
-
-    return chars.map((char, index) => ({
-        text: char,
-        startTime: startTime + duration * (index / chars.length),
-        endTime: startTime + duration * ((index + 1) / chars.length),
-    }));
-};
-
-const createTokenWords = (tokens: string[], startTime: number, endTime: number) => {
-    const duration = endTime - startTime;
-
-    return tokens.map((token, index) => ({
-        text: token,
-        startTime: startTime + duration * (index / tokens.length),
-        endTime: startTime + duration * ((index + 1) / tokens.length),
-    }));
-};
-
-const PREVIEW_LINES: Line[] = [
-    {
-        startTime: 0.6,
-        endTime: 2.9,
-        fullText: '詩情を持たずとも、あなたを現実へと導くその神文の詩を紡ぐ。',
-        translation: '编织那没有诗意，却能将你带到现实的神文之诗。',
-        words: createCharacterWords('詩情を持たずとも、あなたを現実へと導くその神文の詩を紡ぐ。', 0.6, 2.9),
-    },
-    {
-        startTime: 3.15,
-        endTime: 5.45,
-        fullText: 'Weave that prosaic divine poem that leads you to reality.',
-        translation: '编织那没有诗意，却能将你带到现实的神文之诗。',
-        words: createTokenWords(
-            ['Weave', 'that', 'prosaic', 'divine', 'poem', 'that', 'leads', 'you', 'to', 'reality.'],
-            3.15,
-            5.45,
-        ),
-    },
-    {
-        startTime: 5.7,
-        endTime: 8.0,
-        fullText: 'Tisse ce poème divin sans poésie qui te mène au réel.',
-        translation: '编织那没有诗意，却能将你带到现实的神文之诗。',
-        words: createTokenWords(
-            ['Tisse', 'ce', 'poème', 'divin', 'sans', 'poésie', 'qui', 'te', 'mène', 'au', 'réel.'],
-            5.7,
-            8.0,
-        ),
-    },
-    {
-        startTime: 8.25,
-        endTime: 10.25,
-        fullText: '字与字之间，不再留下任何慷慨的空白。',
-        translation: '在字与字之间，不再留下多余的空白。',
-        words: createCharacterWords('字与字之间，不再留下任何慷慨的空白。', 8.25, 10.25),
-    },
-    {
-        startTime: 10.55,
-        endTime: 12.55,
-        fullText: 'Let the column carry breath, let the heading break the night.',
-        translation: '让版列承载呼吸，让标题切开夜色。',
-        words: createTokenWords(
-            ['Let', 'the', 'column', 'carry', 'breath,', 'let', 'the', 'heading', 'break', 'the', 'night.'],
-            10.55,
-            12.55,
-        ),
-    },
-    {
-        startTime: 12.85,
-        endTime: 14.75,
-        fullText: '紙面の熱はまだ冷めず、余白まで声を持っている。',
-        translation: '版面的热度还没褪去，连留白都带着声音。',
-        words: createCharacterWords('紙面の熱はまだ冷めず、余白まで声を持っている。', 12.85, 14.75),
-    },
-    {
-        startTime: 15.0,
-        endTime: 17.05,
-        fullText: 'A serif of smoke crosses the paragraph like a second refrain.',
-        translation: '一笔烟雾般的衬线，像第二段副歌穿过正文。',
-        words: createTokenWords(
-            ['A', 'serif', 'of', 'smoke', 'crosses', 'the', 'paragraph', 'like', 'a', 'second', 'refrain.'],
-            15.0,
-            17.05,
-        ),
-    },
-    {
-        startTime: 17.35,
-        endTime: 19.2,
-        fullText: '没有边框，没有隔断，只有持续向前的印刷。',
-        translation: '没有边框，没有隔断，只有不断向前的印刷。',
-        words: createCharacterWords('没有边框，没有隔断，只有持续向前的印刷。', 17.35, 19.2),
-    },
-    {
-        startTime: 19.5,
-        endTime: 21.55,
-        fullText: 'Every margin tightens until the silence itself becomes type.',
-        translation: '每一道边距都被收紧，直到沉默本身也变成铅字。',
-        words: createTokenWords(
-            ['Every', 'margin', 'tightens', 'until', 'the', 'silence', 'itself', 'becomes', 'type.'],
-            19.5,
-            21.55,
-        ),
-    },
-    {
-        startTime: 21.9,
-        endTime: 23.95,
-        fullText: '编织那没有诗意，却能将你带到现实的神文之诗。',
-        translation: '编织那没有诗意，却能将你带到现实的神文之诗。',
-        words: createCharacterWords('编织那没有诗意，却能将你带到现实的神文之诗。', 21.9, 23.95),
-    },
-    {
-        startTime: 24.15,
-        endTime: 25.8,
-        fullText: '于是整张夜色都被排成了歌。',
-        translation: '于是整张夜色都被排成了歌。',
-        words: createCharacterWords('于是整张夜色都被排成了歌。', 24.15, 25.8),
-    },
-];
-
-const findPreviewLineIndex = (lines: Line[], time: number) => {
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-        const line = lines[index];
-        if (!line || time < line.startTime) {
-            continue;
-        }
-
-        if (time <= getLineRenderEndTime(line)) {
-            return index;
-        }
-    }
-
-    return -1;
-};
 
 const ThemePreviewLayer: React.FC<{
     theme: Theme;
@@ -258,7 +123,7 @@ const ThemePreviewLayer: React.FC<{
                     <Visualizer
                         currentTime={currentTime}
                         currentLineIndex={currentLineIndex}
-                        lines={PREVIEW_LINES}
+                        lines={VIS_PLAYGROUND_PREVIEW_LINES}
                         theme={theme}
                         audioPower={audioPower}
                         audioBands={audioBands}
@@ -272,7 +137,7 @@ const ThemePreviewLayer: React.FC<{
                     <VisualizerCadenza
                         currentTime={currentTime}
                         currentLineIndex={currentLineIndex}
-                        lines={PREVIEW_LINES}
+                        lines={VIS_PLAYGROUND_PREVIEW_LINES}
                         theme={theme}
                         audioPower={audioPower}
                         audioBands={audioBands}
@@ -287,7 +152,7 @@ const ThemePreviewLayer: React.FC<{
                     <VisualizerPartita
                         currentTime={currentTime}
                         currentLineIndex={currentLineIndex}
-                        lines={PREVIEW_LINES}
+                        lines={VIS_PLAYGROUND_PREVIEW_LINES}
                         theme={theme}
                         audioPower={audioPower}
                         audioBands={audioBands}
@@ -302,7 +167,7 @@ const ThemePreviewLayer: React.FC<{
                     <VisualizerFume
                         currentTime={currentTime}
                         currentLineIndex={currentLineIndex}
-                        lines={PREVIEW_LINES}
+                        lines={VIS_PLAYGROUND_PREVIEW_LINES}
                         theme={theme}
                         audioPower={audioPower}
                         audioBands={audioBands}
@@ -475,7 +340,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     const vocal = useMotionValue(0.2);
     const treble = useMotionValue(0.1);
     const [draftTheme, setDraftTheme] = useState<DualTheme>(() => normalizeDualTheme(initialTheme));
-    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewLineIndex(PREVIEW_LINES, 0));
+    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, 0));
     const [pickerState, setPickerState] = useState<PickerState>({
         mode: isDaylight ? 'light' : 'dark',
         key: 'accentColor',
@@ -499,10 +364,10 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     useEffect(() => {
         let frameId = 0;
         const startedAt = performance.now();
-        const previewOffset = getPreviewStartOffset(visualizerMode);
+        const previewOffset = getPreviewPlaceholderStartOffset(visualizerMode, VIS_PLAYGROUND_PREVIEW_LOOP_DURATION);
 
         const tick = (now: number) => {
-            const elapsed = (previewOffset + (now - startedAt) / 1000) % LOOP_DURATION;
+            const elapsed = (previewOffset + (now - startedAt) / 1000) % VIS_PLAYGROUND_PREVIEW_LOOP_DURATION;
             currentTime.set(elapsed);
 
             const wave = (offset: number, speed: number, floor: number, amplitude: number) =>
@@ -523,7 +388,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     }, [audioPower, bass, currentTime, lowMid, mid, treble, visualizerMode, vocal]);
 
     useMotionValueEvent(currentTime, 'change', latest => {
-        const nextIndex = findPreviewLineIndex(PREVIEW_LINES, latest);
+        const nextIndex = findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, latest);
         setCurrentLineIndex(previous => (previous === nextIndex ? previous : nextIndex));
     });
 
