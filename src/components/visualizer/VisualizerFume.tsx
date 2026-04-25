@@ -113,6 +113,10 @@ interface CameraRetargetState {
     sourceLineIndex: number;
     startedAt: number;
     duration: number;
+    fromX: number;
+    fromY: number;
+    fromScale: number;
+    useLinearBridge: boolean;
 }
 
 interface CameraViewTarget {
@@ -1087,6 +1091,10 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
         sourceLineIndex: -1,
         startedAt: 0,
         duration: 0.18,
+        fromX: 0,
+        fromY: 0,
+        fromScale: 1,
+        useLinearBridge: false,
     });
     const cameraRef = useRef<CameraTarget>({
         x: 0,
@@ -1328,6 +1336,7 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
             let targetCameraY = article.height * 0.5;
             let targetCameraScale = 1.18;
             let entryFocusPoint: { x: number; y: number; } | null = null;
+            let didRetargetThisFrame = false;
 
             if (shouldShowOverview && overviewCamera) {
                 targetCameraX = overviewCamera.x;
@@ -1339,7 +1348,12 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                         sourceLineIndex: OVERVIEW_CAMERA_SOURCE,
                         startedAt: time,
                         duration: clamp(resolveOverviewRetargetDuration(viewport) / cameraSpeed, 0.12, 1.2),
+                        fromX: cameraRef.current.x,
+                        fromY: cameraRef.current.y,
+                        fromScale: cameraRef.current.scale,
+                        useLinearBridge: false,
                     };
+                    didRetargetThisFrame = true;
                 }
             } else if (focusBlock) {
                 const focusPrintedCount = resolvePrintedGraphemeCount(
@@ -1360,14 +1374,24 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                         sourceLineIndex: focusBlock.sourceLineIndex,
                         startedAt: time,
                         duration: clamp(resolveCameraRetargetDuration(focusBlock.line) / cameraSpeed, 0.03, 0.3),
+                        fromX: cameraRef.current.x,
+                        fromY: cameraRef.current.y,
+                        fromScale: cameraRef.current.scale,
+                        useLinearBridge: false,
                     };
+                    didRetargetThisFrame = true;
                 }
             } else if (cameraRetargetRef.current.sourceLineIndex !== -1) {
                 cameraRetargetRef.current = {
                     sourceLineIndex: -1,
                     startedAt: time,
                     duration: clamp(0.18 / cameraSpeed, 0.05, 0.4),
+                    fromX: cameraRef.current.x,
+                    fromY: cameraRef.current.y,
+                    fromScale: cameraRef.current.scale,
+                    useLinearBridge: false,
                 };
+                didRetargetThisFrame = true;
             }
 
             const retargetElapsed = Math.max(time - cameraRetargetRef.current.startedAt, 0);
@@ -1408,10 +1432,38 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                 );
             }
 
+            if (didRetargetThisFrame) {
+                const bridgeScale = Math.max(cameraRef.current.scale, targetCameraScale, 0.001);
+                const screenDeltaX = Math.abs(targetCameraX - cameraRetargetRef.current.fromX) * bridgeScale;
+                const screenDeltaY = Math.abs(targetCameraY - cameraRetargetRef.current.fromY) * bridgeScale;
+                const screenDistance = Math.hypot(screenDeltaX, screenDeltaY);
+                cameraRetargetRef.current.useLinearBridge = screenDistance >= Math.min(viewport.width, viewport.height) * 0.42;
+            }
+
             const cameraDistance = Math.hypot(
                 targetCameraX - cameraRef.current.x,
                 targetCameraY - cameraRef.current.y,
             );
+            const shouldUseLinearBridge = cameraRetargetRef.current.useLinearBridge && retargetPhase < 1;
+
+            if (shouldUseLinearBridge) {
+                const bridgePhase = easeInOutCubic(retargetPhase);
+                const bridgedCameraX = mix(cameraRetargetRef.current.fromX, targetCameraX, bridgePhase);
+                const bridgedCameraY = mix(cameraRetargetRef.current.fromY, targetCameraY, bridgePhase);
+                const bridgedCameraScale = mix(cameraRetargetRef.current.fromScale, targetCameraScale, bridgePhase);
+                const bridgeCatchUp = 1 - Math.exp(-dt * mix(10.5, 17.5, 1 - retargetPhase));
+
+                cameraRef.current.focusX = bridgedCameraX;
+                cameraRef.current.focusY = bridgedCameraY;
+                cameraRef.current.focusScale = bridgedCameraScale;
+                cameraRef.current.x += (bridgedCameraX - cameraRef.current.x) * bridgeCatchUp;
+                cameraRef.current.y += (bridgedCameraY - cameraRef.current.y) * bridgeCatchUp;
+                cameraRef.current.scale += (bridgedCameraScale - cameraRef.current.scale) * bridgeCatchUp;
+                cameraRef.current.scale = clamp(cameraRef.current.scale, CAMERA_SCALE_MIN, CAMERA_SCALE_MAX);
+                cameraRef.current.velocityX *= 0.72;
+                cameraRef.current.velocityY *= 0.72;
+                cameraRef.current.velocityScale *= 0.68;
+            } else {
             const boostedCatchUpRate = clamp(
                 4.8 / Math.max(cameraRetargetRef.current.duration, 0.05),
                 20,
@@ -1455,6 +1507,7 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
             cameraRef.current.velocityScale = clamp(cameraRef.current.velocityScale, -1.6, 1.6);
             cameraRef.current.scale += cameraRef.current.velocityScale * dt;
             cameraRef.current.scale = clamp(cameraRef.current.scale, CAMERA_SCALE_MIN, CAMERA_SCALE_MAX);
+            }
 
             const viewportCenterX = viewport.width * 0.5;
             const viewportCenterY = viewport.height * 0.5;
