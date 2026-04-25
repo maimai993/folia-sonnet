@@ -235,7 +235,7 @@ export const buildFumeBackgroundScene = ({
             rotation: mix(-Math.PI * 0.2, Math.PI * 0.2, seeded(`${localSeed}:rotation`)),
             rotationSpeed: mix(-0.045, 0.045, seeded(`${localSeed}:rotation-speed`)),
             strokeWidth: mix(0.95, 2.1, seeded(`${localSeed}:stroke-width`)),
-            opacity: mix(0.042, 0.1, seeded(`${localSeed}:opacity`)),
+            opacity: mix(0.08, 0.16, seeded(`${localSeed}:opacity`)),
             colorMix: mix(0.18, 0.62, seeded(`${localSeed}:color-mix`)),
             depth: seeded(`${localSeed}:depth`),
             ringGapStart: kind === 'ring'
