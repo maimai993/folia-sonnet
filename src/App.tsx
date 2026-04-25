@@ -10,10 +10,7 @@ import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from './services/
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from './services/onlinePlayback';
 import { buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong } from './services/playbackAdapters';
 import { getPrefetchedData, prefetchNearbySongs, invalidateAndRefetch } from './services/prefetchService';
-import Visualizer from './components/visualizer/Visualizer';
-import VisualizerCadenza from './components/visualizer/VisualizerCadenza';
-import VisualizerPartita from './components/visualizer/VisualizerPartita';
-import VisualizerFume from './components/visualizer/VisualizerFume';
+import VisualizerRenderer from './components/visualizer/VisualizerRenderer';
 import DevDebugOverlay from './components/DevDebugOverlay';
 import ProgressBar from './components/ProgressBar';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
@@ -2750,10 +2747,6 @@ export default function App() {
         backgroundColor: visualizerBackgroundColor,
     }), [lyricsCustomFontFamily, lyricsFontStyle, theme, visualizerBackgroundColor]);
     const visualizerGeometrySeed = currentSong?.id ?? `geometry-${visualizerMode}`;
-    const effectiveCadenzaTuning = useMemo(() => ({
-        ...cadenzaTuning,
-        fontScale: cadenzaTuning.fontScale * lyricsFontScale,
-    }), [cadenzaTuning, lyricsFontScale]);
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
     const debugCurrentTimeValue = currentTime.get();
     const debugActiveLine = lyrics && currentLineIndex >= 0 ? lyrics.lines[currentLineIndex] ?? null : null;
@@ -2967,78 +2960,26 @@ export default function App() {
                 className="absolute inset-0 z-0"
                 onClick={handleContainerClick}
             >
-                {visualizerMode === 'cadenza' ? (
-                    <VisualizerCadenza
-                        currentTime={currentTime}
-                        currentLineIndex={currentLineIndex}
-                        lines={lyrics?.lines || []}
-                        theme={visualizerTheme}
-                        audioPower={audioPower}
-                        audioBands={audioBands}
-                        coverUrl={getCoverUrl()}
-                        showText={currentView === 'player'}
-                        useCoverColorBg={useCoverColorBg}
-                        seed={visualizerGeometrySeed}
-                        staticMode={staticMode}
-                        backgroundOpacity={backgroundOpacity}
-                        cadenzaTuning={effectiveCadenzaTuning}
-                        lyricsFontScale={lyricsFontScale}
-                        onBack={navigateToHome}
-                    />
-                ) : visualizerMode === 'partita' ? (
-                    <VisualizerPartita
-                        currentTime={currentTime}
-                        currentLineIndex={currentLineIndex}
-                        lines={lyrics?.lines || []}
-                        theme={visualizerTheme}
-                        audioPower={audioPower}
-                        audioBands={audioBands}
-                        coverUrl={getCoverUrl()}
-                        showText={currentView === 'player'}
-                        useCoverColorBg={useCoverColorBg}
-                        seed={visualizerGeometrySeed}
-                        staticMode={staticMode}
-                        backgroundOpacity={backgroundOpacity}
-                        partitaTuning={partitaTuning}
-                        lyricsFontScale={lyricsFontScale}
-                        onBack={navigateToHome}
-                    />
-                ) : visualizerMode === 'fume' ? (
-                    <VisualizerFume
-                        currentTime={currentTime}
-                        currentLineIndex={currentLineIndex}
-                        lines={lyrics?.lines || []}
-                        theme={visualizerTheme}
-                        audioPower={audioPower}
-                        audioBands={audioBands}
-                        coverUrl={getCoverUrl()}
-                        showText={currentView === 'player'}
-                        useCoverColorBg={useCoverColorBg}
-                        seed={visualizerGeometrySeed}
-                        staticMode={staticMode}
-                        backgroundOpacity={backgroundOpacity}
-                        lyricsFontScale={lyricsFontScale}
-                        fumeTuning={fumeTuning}
-                        onBack={navigateToHome}
-                    />
-                ) : (
-                    <Visualizer
-                        currentTime={currentTime}
-                        currentLineIndex={currentLineIndex}
-                        lines={lyrics?.lines || []}
-                        theme={visualizerTheme}
-                        audioPower={audioPower}
-                        audioBands={audioBands}
-                        coverUrl={getCoverUrl()}
-                        showText={currentView === 'player'}
-                        useCoverColorBg={useCoverColorBg}
-                        seed={visualizerGeometrySeed}
-                        staticMode={staticMode}
-                        backgroundOpacity={backgroundOpacity}
-                        lyricsFontScale={lyricsFontScale}
-                        onBack={navigateToHome}
-                    />
-                )}
+                <VisualizerRenderer
+                    mode={visualizerMode}
+                    currentTime={currentTime}
+                    currentLineIndex={currentLineIndex}
+                    lines={lyrics?.lines || []}
+                    theme={visualizerTheme}
+                    audioPower={audioPower}
+                    audioBands={audioBands}
+                    coverUrl={getCoverUrl()}
+                    showText={currentView === 'player'}
+                    useCoverColorBg={useCoverColorBg}
+                    seed={visualizerGeometrySeed}
+                    staticMode={staticMode}
+                    backgroundOpacity={backgroundOpacity}
+                    lyricsFontScale={lyricsFontScale}
+                    cadenzaTuning={cadenzaTuning}
+                    partitaTuning={partitaTuning}
+                    fumeTuning={fumeTuning}
+                    onBack={navigateToHome}
+                />
             </div>
 
             {/* --- HOME VIEW (Overlay) --- */}

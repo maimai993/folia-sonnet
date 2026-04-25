@@ -364,7 +364,22 @@ export default VisualizerFoo;
 - 新增 `FooTuning`
 - 新增 `DEFAULT_FOO_TUNING`
 
-### 2. `src/hooks/useAppPreferences.ts`
+### 2. `src/components/visualizer/registry.tsx`
+
+这是新增模式的主注册入口。
+
+至少补下面这些元数据：
+
+- `mode`
+- `labelKey`
+- `previewSeed`
+- `previewStartOffset`
+- `tuningKind`
+- `render`
+
+播放器、预览器、主题预览器当前都通过这里拿模式信息和渲染入口。
+
+### 3. `src/hooks/useAppPreferences.ts`
 
 如果新模式需要用户可调参数：
 
@@ -372,32 +387,44 @@ export default VisualizerFoo;
 - 提供 `handleSetFooTuning`
 - 提供 `handleResetFooTuning`
 
-### 3. `src/App.tsx`
+### 4. `src/components/visualizer/VisualizerRenderer.tsx`
 
-播放器实际渲染入口在这里。需要：
+这里是统一渲染入口。正常情况下，不需要再去 `App.tsx` / `VisPlayground.tsx` / `ThemePark.tsx` 里分别手写模式分支。
 
-- import 新组件
-- 在 visualizer 分支里接入新组件
-- 把专属 tuning 透传下去
+如果 registry 已经注册完成，这里通常只需要确认：
 
-### 4. `src/components/visualizer/VisPlayground.tsx`
+- 共享 props 是否足够
+- 新模式的专属 tuning 是否已经透传
+- 模式专属解释逻辑是否放在统一渲染层，而不是散落到各页面
 
-预览面板入口在这里。需要：
+### 5. `src/components/visualizer/VisPlayground.tsx`
 
-- import 新组件
-- 增加模式分支
+预览面板入口仍然可能需要改，但重点不再是“注册组件”，而是：
+
 - 增加预览调参 UI
-- 把字体缩放和独有 tuning 一起传进去
+- 确认是否需要针对新模式补额外控制项
+- 复用 registry 提供的模式标签和 preview seed / offset
 
-### 5. `src/components/modal/HelpModal.tsx`
+### 6. `src/components/modal/HelpModal.tsx`
 
-如果设置面板需要打开预览器，通常这里也要透传新的 tuning props 到 `VisPlayground`。
+如果设置面板需要打开预览器，通常这里还要：
 
-### 6. `src/components/Home.tsx`
+- 透传新的 tuning props 到 `VisPlayground`
+- 如果新增了新的调参能力，补设置入口
+
+模式按钮列表当前由 registry 生成，不应再手写一排 `classic / cadenza / partita / fume` 分支。
+
+### 7. `src/components/modal/ThemePark.tsx`
+
+主题预览器也会复用同一套 renderer。
+
+如果你的模式会在主题预览中明显受益于专属 tuning，这里也要确认对应 props 已经透传。
+
+### 8. `src/components/Home.tsx`
 
 如果 `HelpModal` 的 props 发生变化，这里通常也要同步透传。
 
-### 7. 文案文件
+### 9. 文案文件
 
 至少同步：
 
@@ -431,7 +458,7 @@ export default VisualizerFoo;
 
 - 在 `types.ts` 定义 tuning
 - 在 `useAppPreferences.ts` 持久化
-- 在 `App.tsx` 和 `VisPlayground.tsx` 传入
+- 在统一 renderer 和对应设置入口中传入
 
 ### 4. 尽量保持背景层行为一致
 
@@ -470,8 +497,10 @@ export default VisualizerFoo;
 - 是否支持 `showText = false`
 - 是否正确使用 `lyricsFontScale`
 - 是否在 `staticMode` 下关闭重背景动画
-- 是否已经接入 `App.tsx`
-- 是否已经接入 `VisPlayground.tsx`
+- 是否已经在 `registry.tsx` 中注册
+- 是否经过统一 renderer 验证
+- 是否已经接入 `VisPlayground.tsx` 的专属设置面板（如果需要）
+- 是否已经接入 `ThemePark.tsx`（如果需要专属 tuning）
 - 是否补充了中英文文案
 - 如果有调参，是否完成本地存储和重置逻辑
 

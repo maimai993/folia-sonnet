@@ -3,16 +3,15 @@ import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
 import { ChevronLeft, Palette, RotateCcw, Sun, Moon, Check } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import { useTranslation } from 'react-i18next';
-import Visualizer from '../visualizer/Visualizer';
-import VisualizerCadenza from '../visualizer/VisualizerCadenza';
-import VisualizerPartita from '../visualizer/VisualizerPartita';
-import VisualizerFume from '../visualizer/VisualizerFume';
+import VisualizerRenderer from '../visualizer/VisualizerRenderer';
 import {
     DEFAULT_CADENZA_TUNING,
+    DEFAULT_FUME_TUNING,
     DEFAULT_PARTITA_TUNING,
     AudioBands,
     CadenzaTuning,
     DualTheme,
+    FumeTuning,
     PartitaTuning,
     Theme,
     VisualizerMode,
@@ -23,6 +22,7 @@ import {
     VIS_PLAYGROUND_PREVIEW_LINES,
     VIS_PLAYGROUND_PREVIEW_LOOP_DURATION,
 } from '../visualizer/PreviewPlaceholder';
+import { getVisualizerModeLabel, getVisualizerScopedSeed } from '../visualizer/registry';
 
 interface ThemeParkProps {
     initialTheme: DualTheme;
@@ -32,6 +32,7 @@ interface ThemeParkProps {
     backgroundOpacity?: number;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
+    fumeTuning?: FumeTuning;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
     lyricsCustomFontFamily?: string | null;
@@ -77,6 +78,7 @@ const ThemePreviewLayer: React.FC<{
     backgroundOpacity: number;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
+    fumeTuning: FumeTuning;
     lyricsFontScale: number;
     currentTime: ReturnType<typeof useMotionValue<number>>;
     currentLineIndex: number;
@@ -94,6 +96,7 @@ const ThemePreviewLayer: React.FC<{
     backgroundOpacity,
     cadenzaTuning,
     partitaTuning,
+    fumeTuning,
     lyricsFontScale,
     currentTime,
     currentLineIndex,
@@ -119,65 +122,23 @@ const ThemePreviewLayer: React.FC<{
             }}
         >
             <div className="absolute inset-0">
-                {visualizerMode === 'classic' ? (
-                    <Visualizer
-                        currentTime={currentTime}
-                        currentLineIndex={currentLineIndex}
-                        lines={VIS_PLAYGROUND_PREVIEW_LINES}
-                        theme={theme}
-                        audioPower={audioPower}
-                        audioBands={audioBands}
-                        showText
-                        staticMode={staticMode}
-                        backgroundOpacity={backgroundOpacity}
-                        lyricsFontScale={lyricsFontScale}
-                        seed={`theme-park-${mode}-classic`}
-                    />
-                ) : visualizerMode === 'cadenza' ? (
-                    <VisualizerCadenza
-                        currentTime={currentTime}
-                        currentLineIndex={currentLineIndex}
-                        lines={VIS_PLAYGROUND_PREVIEW_LINES}
-                        theme={theme}
-                        audioPower={audioPower}
-                        audioBands={audioBands}
-                        showText
-                        staticMode={staticMode}
-                        backgroundOpacity={backgroundOpacity}
-                        cadenzaTuning={cadenzaTuning}
-                        lyricsFontScale={lyricsFontScale}
-                        seed={`theme-park-${mode}-cadenza`}
-                    />
-                ) : visualizerMode === 'partita' ? (
-                    <VisualizerPartita
-                        currentTime={currentTime}
-                        currentLineIndex={currentLineIndex}
-                        lines={VIS_PLAYGROUND_PREVIEW_LINES}
-                        theme={theme}
-                        audioPower={audioPower}
-                        audioBands={audioBands}
-                        showText
-                        staticMode={staticMode}
-                        backgroundOpacity={backgroundOpacity}
-                        partitaTuning={partitaTuning}
-                        lyricsFontScale={lyricsFontScale}
-                        seed={`theme-park-${mode}-partita`}
-                    />
-                ) : (
-                    <VisualizerFume
-                        currentTime={currentTime}
-                        currentLineIndex={currentLineIndex}
-                        lines={VIS_PLAYGROUND_PREVIEW_LINES}
-                        theme={theme}
-                        audioPower={audioPower}
-                        audioBands={audioBands}
-                        showText
-                        staticMode={staticMode}
-                        backgroundOpacity={backgroundOpacity}
-                        lyricsFontScale={lyricsFontScale}
-                        seed={`theme-park-${mode}-fume`}
-                    />
-                )}
+                <VisualizerRenderer
+                    mode={visualizerMode}
+                    currentTime={currentTime}
+                    currentLineIndex={currentLineIndex}
+                    lines={VIS_PLAYGROUND_PREVIEW_LINES}
+                    theme={theme}
+                    audioPower={audioPower}
+                    audioBands={audioBands}
+                    showText
+                    staticMode={staticMode}
+                    backgroundOpacity={backgroundOpacity}
+                    lyricsFontScale={lyricsFontScale}
+                    cadenzaTuning={cadenzaTuning}
+                    partitaTuning={partitaTuning}
+                    fumeTuning={fumeTuning}
+                    seed={getVisualizerScopedSeed(visualizerMode, `theme-park-${mode}`)}
+                />
             </div>
 
             <div className={`relative z-10 flex h-full p-4 pointer-events-none ${overlayPositionClass}`}>
@@ -231,6 +192,7 @@ const DiagonalThemePreview: React.FC<{
     backgroundOpacity: number;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
+    fumeTuning: FumeTuning;
     lyricsFontScale: number;
     currentTime: ReturnType<typeof useMotionValue<number>>;
     currentLineIndex: number;
@@ -247,6 +209,7 @@ const DiagonalThemePreview: React.FC<{
     backgroundOpacity,
     cadenzaTuning,
     partitaTuning,
+    fumeTuning,
     lyricsFontScale,
     currentTime,
     currentLineIndex,
@@ -286,6 +249,7 @@ const DiagonalThemePreview: React.FC<{
                 backgroundOpacity={backgroundOpacity}
                 cadenzaTuning={cadenzaTuning}
                 partitaTuning={partitaTuning}
+                fumeTuning={fumeTuning}
                 lyricsFontScale={lyricsFontScale}
                 currentTime={currentTime}
                 currentLineIndex={currentLineIndex}
@@ -304,6 +268,7 @@ const DiagonalThemePreview: React.FC<{
                 backgroundOpacity={backgroundOpacity}
                 cadenzaTuning={cadenzaTuning}
                 partitaTuning={partitaTuning}
+                fumeTuning={fumeTuning}
                 lyricsFontScale={lyricsFontScale}
                 currentTime={currentTime}
                 currentLineIndex={currentLineIndex}
@@ -325,6 +290,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     backgroundOpacity = 0.75,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
     partitaTuning = DEFAULT_PARTITA_TUNING,
+    fumeTuning = DEFAULT_FUME_TUNING,
     lyricsFontStyle,
     lyricsFontScale,
     lyricsCustomFontFamily,
@@ -396,13 +362,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
     const controlCardBg = isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)';
     const overlayBackground = isDaylight ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.65)';
-    const visualizerModeLabel = visualizerMode === 'classic'
-        ? (t('ui.visualizerClassic') || '流光')
-        : visualizerMode === 'cadenza'
-            ? (t('ui.visualizerCadenze') || '心象')
-            : visualizerMode === 'partita'
-                ? (t('ui.visualizerPartita') || '云阶')
-                : (t('ui.visualizerFume') || '浮名');
+    const visualizerModeLabel = getVisualizerModeLabel(visualizerMode, t);
     const activeTheme = draftTheme[pickerState.mode];
     const activeColor = activeTheme[pickerState.key];
     const pickerField = COLOR_FIELDS.find(field => field.key === pickerState.key) ?? COLOR_FIELDS[0];

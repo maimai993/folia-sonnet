@@ -3,10 +3,7 @@ import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
 import { ChevronLeft, Loader2, RotateCcw, Search, Sparkles, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { List, useListRef } from 'react-window';
-import Visualizer from './Visualizer';
-import VisualizerCadenza from './VisualizerCadenza';
-import VisualizerPartita from './VisualizerPartita';
-import VisualizerFume from './VisualizerFume';
+import VisualizerRenderer from './VisualizerRenderer';
 import {
     DEFAULT_CADENZA_TUNING,
     DEFAULT_FUME_TUNING,
@@ -25,6 +22,7 @@ import {
     VIS_PLAYGROUND_PREVIEW_LINES,
     VIS_PLAYGROUND_PREVIEW_LOOP_DURATION,
 } from './PreviewPlaceholder';
+import { getVisualizerModeLabel, getVisualizerRegistryEntry, getVisualizerScopedSeed } from './registry';
 
 interface VisPlaygroundProps {
     theme?: Theme;
@@ -225,10 +223,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         fontStyle,
         fontFamily: customFontFamily ?? undefined,
     }), [baseTheme, customFontFamily, fontStyle]);
-    const effectiveCadenzaTuning = useMemo<CadenzaTuning>(() => ({
-        ...cadenzaTuning,
-        fontScale: cadenzaTuning.fontScale * normalizedFontScale,
-    }), [cadenzaTuning, normalizedFontScale]);
     const resolvedPartitaTuning = useMemo<PartitaTuning>(() => {
         const rawMin = clampPartitaStagger(partitaTuning.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
         const rawMax = clampPartitaStagger(partitaTuning.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
@@ -302,13 +296,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         setCurrentLineIndex(prev => (prev === nextIndex ? prev : nextIndex));
     });
 
-    const modeLabel = visualizerMode === 'classic'
-        ? (t('ui.visualizerClassic') || '流光')
-        : visualizerMode === 'cadenza'
-            ? (t('ui.visualizerCadenze') || '心象')
-            : visualizerMode === 'partita'
-                ? (t('ui.visualizerPartita') || '云阶')
-                : (t('ui.visualizerFume') || '浮名');
+    const visualizerEntry = getVisualizerRegistryEntry(visualizerMode);
+    const modeLabel = getVisualizerModeLabel(visualizerMode, t);
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
     const tabSwitcherBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
@@ -320,10 +309,10 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         onCustomFontChange(null);
         onFontStyleChange('sans');
         onFontScaleChange(1);
-        if (visualizerMode === 'partita') {
+        if (visualizerEntry.tuningKind === 'partita') {
             onResetPartitaTuning?.();
         }
-        if (visualizerMode === 'fume') {
+        if (visualizerEntry.tuningKind === 'fume') {
             setDraftFumeTuning(DEFAULT_FUME_TUNING);
             onResetFumeTuning?.();
         }
@@ -534,66 +523,23 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         </div>
 
                         <div className="absolute inset-0">
-                            {visualizerMode === 'classic' ? (
-                                <Visualizer
-                                    currentTime={currentTime}
-                                    currentLineIndex={currentLineIndex}
-                                    lines={VIS_PLAYGROUND_PREVIEW_LINES}
-                                    theme={previewTheme}
-                                    audioPower={audioPower}
-                                    audioBands={audioBands}
-                                    showText
-                                    staticMode={staticMode}
-                                    backgroundOpacity={backgroundOpacity}
-                                    lyricsFontScale={normalizedFontScale}
-                                    seed="vis-playground-classic"
-                                />
-                            ) : visualizerMode === 'cadenza' ? (
-                                <VisualizerCadenza
-                                    currentTime={currentTime}
-                                    currentLineIndex={currentLineIndex}
-                                    lines={VIS_PLAYGROUND_PREVIEW_LINES}
-                                    theme={previewTheme}
-                                    audioPower={audioPower}
-                                    audioBands={audioBands}
-                                    showText
-                                    staticMode={staticMode}
-                                    backgroundOpacity={backgroundOpacity}
-                                    cadenzaTuning={effectiveCadenzaTuning}
-                                    lyricsFontScale={normalizedFontScale}
-                                    seed="vis-playground-cadenza"
-                                />
-                            ) : visualizerMode === 'partita' ? (
-                                <VisualizerPartita
-                                    currentTime={currentTime}
-                                    currentLineIndex={currentLineIndex}
-                                    lines={VIS_PLAYGROUND_PREVIEW_LINES}
-                                    theme={previewTheme}
-                                    audioPower={audioPower}
-                                    audioBands={audioBands}
-                                    showText
-                                    staticMode={staticMode}
-                                    backgroundOpacity={backgroundOpacity}
-                                    partitaTuning={resolvedPartitaTuning}
-                                    lyricsFontScale={normalizedFontScale}
-                                    seed="vis-playground-partita"
-                                />
-                            ) : (
-                                <VisualizerFume
-                                    currentTime={currentTime}
-                                    currentLineIndex={currentLineIndex}
-                                    lines={VIS_PLAYGROUND_PREVIEW_LINES}
-                                    theme={previewTheme}
-                                    audioPower={audioPower}
-                                    audioBands={audioBands}
-                                    showText
-                                    staticMode={staticMode}
-                                    backgroundOpacity={backgroundOpacity}
-                                    lyricsFontScale={normalizedFontScale}
-                                    fumeTuning={resolvedFumeTuning}
-                                    seed="vis-playground-fume"
-                                />
-                            )}
+                            <VisualizerRenderer
+                                mode={visualizerMode}
+                                currentTime={currentTime}
+                                currentLineIndex={currentLineIndex}
+                                lines={VIS_PLAYGROUND_PREVIEW_LINES}
+                                theme={previewTheme}
+                                audioPower={audioPower}
+                                audioBands={audioBands}
+                                showText
+                                staticMode={staticMode}
+                                backgroundOpacity={backgroundOpacity}
+                                lyricsFontScale={normalizedFontScale}
+                                cadenzaTuning={cadenzaTuning}
+                                partitaTuning={resolvedPartitaTuning}
+                                fumeTuning={resolvedFumeTuning}
+                                seed={getVisualizerScopedSeed(visualizerMode, 'vis-playground')}
+                            />
                         </div>
                     </div>
 
@@ -654,7 +600,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 </div>
                             </div>
 
-                            {visualizerMode === 'partita' && (
+                            {visualizerEntry.tuningKind === 'partita' && (
                                 <div
                                     className="rounded-[24px] border border-white/10 p-4 space-y-4"
                                     style={{ backgroundColor: controlCardBg }}
@@ -714,7 +660,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 </div>
                             )}
 
-                            {visualizerMode === 'fume' && (
+                            {visualizerEntry.tuningKind === 'fume' && (
                                 <div
                                     className="rounded-[24px] border border-white/10 p-4 space-y-4"
                                     style={{ backgroundColor: controlCardBg }}

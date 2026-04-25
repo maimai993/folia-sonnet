@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, ChevronRight, HelpCircle, ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, LocalLibraryGroup, LocalPlaylist, DualTheme, ThemeMode, type CadenzaTuning, type PartitaTuning, type VisualizerMode } from '../types';
+import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, LocalLibraryGroup, LocalPlaylist, DualTheme, ThemeMode, type CadenzaTuning, type FumeTuning, type PartitaTuning, type VisualizerMode } from '../types';
 import { NavidromeSong, NavidromeViewSelection } from '../types/navidrome';
 import { isNavidromeEnabled } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
@@ -86,9 +86,12 @@ interface HomeProps {
     visualizerMode: VisualizerMode;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
+    fumeTuning: FumeTuning;
     onVisualizerModeChange: (mode: VisualizerMode) => void;
     onPartitaTuningChange: (patch: Partial<PartitaTuning>) => void;
     onResetPartitaTuning: () => void;
+    onFumeTuningChange: (patch: Partial<FumeTuning>) => void;
+    onResetFumeTuning: () => void;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
     lyricsCustomFontFamily: string | null;
@@ -155,9 +158,12 @@ const Home: React.FC<HomeProps> = ({
     visualizerMode,
     cadenzaTuning,
     partitaTuning,
+    fumeTuning,
     onVisualizerModeChange,
     onPartitaTuningChange,
     onResetPartitaTuning,
+    onFumeTuningChange,
+    onResetFumeTuning,
     lyricsFontStyle,
     lyricsFontScale,
     lyricsCustomFontFamily,
@@ -864,9 +870,12 @@ const Home: React.FC<HomeProps> = ({
                                 visualizerMode={visualizerMode}
                                 cadenzaTuning={cadenzaTuning}
                                 partitaTuning={partitaTuning}
+                                fumeTuning={fumeTuning}
                                 onVisualizerModeChange={onVisualizerModeChange}
                                 onPartitaTuningChange={onPartitaTuningChange}
                                 onResetPartitaTuning={onResetPartitaTuning}
+                                onFumeTuningChange={onFumeTuningChange}
+                                onResetFumeTuning={onResetFumeTuning}
                                 lyricsFontStyle={lyricsFontStyle}
                                 lyricsFontScale={lyricsFontScale}
                                 lyricsCustomFontFamily={lyricsCustomFontFamily}

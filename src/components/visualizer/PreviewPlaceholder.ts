@@ -1,5 +1,6 @@
 import { type Line, type VisualizerMode } from '../../types';
 import { getLineRenderEndTime } from '../../utils/lyrics/renderHints';
+import { getVisualizerPreviewStartOffset } from './registry';
 
 const createCharacterWords = (text: string, startTime: number, endTime: number) => {
     const chars = Array.from(text);
@@ -68,10 +69,8 @@ export const VIS_PLAYGROUND_PREVIEW_LINES: Line[] = [
 
 export const VIS_PLAYGROUND_PREVIEW_LOOP_DURATION = 14.4;
 
-const FUME_PREVIEW_START_OFFSET = 18.4;
-
 export const getPreviewPlaceholderStartOffset = (mode: VisualizerMode, loopDuration: number) =>
-    mode === 'fume' ? FUME_PREVIEW_START_OFFSET % loopDuration : 0;
+    getVisualizerPreviewStartOffset(mode, loopDuration);
 
 export const findPreviewPlaceholderLineIndex = (lines: Line[], time: number) => {
     for (let index = lines.length - 1; index >= 0; index -= 1) {

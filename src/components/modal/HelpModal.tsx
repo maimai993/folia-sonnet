@@ -7,6 +7,7 @@ import { DualTheme, Theme, ThemeMode, type CadenzaTuning, type FumeTuning, type 
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
 import VisPlayground from '../visualizer/VisPlayground';
+import { VISUALIZER_REGISTRY, getVisualizerModeLabel } from '../visualizer/registry';
 import ThemePark from './ThemePark';
 import meowImageUrl from '../../../build/miao.png';
 
@@ -335,6 +336,10 @@ const HelpModal: React.FC<HelpModalProps> = ({
         animate: { opacity: 1, x: 0 },
         exit: { opacity: 0, x: -18 },
     };
+    const visualizerModeOptions = VISUALIZER_REGISTRY.map(entry => ({
+        mode: entry.mode,
+        label: getVisualizerModeLabel(entry.mode, t),
+    }));
 
     return (
         <motion.div
@@ -585,54 +590,21 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             </button>
                                         </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                            <button
-                                                onClick={() => onVisualizerModeChange?.('classic')}
-                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
-                                                style={{
-                                                    borderColor: visualizerMode === 'classic' ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
-                                                    backgroundColor: visualizerMode === 'classic' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
-                                                }}
-                                            >
-                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                    {t('ui.visualizerClassic')}
-                                                </span>
-                                            </button>
-                                            <button
-                                                onClick={() => onVisualizerModeChange?.('cadenza')}
-                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
-                                                style={{
-                                                    borderColor: visualizerMode === 'cadenza' ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
-                                                    backgroundColor: visualizerMode === 'cadenza' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
-                                                }}
-                                            >
-                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                    {t('ui.visualizerCadenze')}
-                                                </span>
-                                            </button>
-                                            <button
-                                                onClick={() => onVisualizerModeChange?.('partita')}
-                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
-                                                style={{
-                                                    borderColor: visualizerMode === 'partita' ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
-                                                    backgroundColor: visualizerMode === 'partita' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
-                                                }}
-                                            >
-                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                    {t('ui.visualizerPartita')}
-                                                </span>
-                                            </button>
-                                            <button
-                                                onClick={() => onVisualizerModeChange?.('fume')}
-                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
-                                                style={{
-                                                    borderColor: visualizerMode === 'fume' ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
-                                                    backgroundColor: visualizerMode === 'fume' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
-                                                }}
-                                            >
-                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                    {t('ui.visualizerFume')}
-                                                </span>
-                                            </button>
+                                            {visualizerModeOptions.map(option => (
+                                                <button
+                                                    key={option.mode}
+                                                    onClick={() => onVisualizerModeChange?.(option.mode)}
+                                                    className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
+                                                    style={{
+                                                        borderColor: visualizerMode === option.mode ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
+                                                        backgroundColor: visualizerMode === option.mode ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
+                                                    }}
+                                                >
+                                                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                        {option.label}
+                                                    </span>
+                                                </button>
+                                            ))}
                                         </div>
                                     </div>
 
@@ -1108,6 +1080,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                         backgroundOpacity={backgroundOpacity}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
+                        fumeTuning={fumeTuning}
                         lyricsFontStyle={lyricsFontStyle}
                         lyricsFontScale={lyricsFontScale}
                         lyricsCustomFontFamily={lyricsCustomFontFamily}

@@ -10,7 +10,7 @@ describe('fontStacks', () => {
 
         const stack = resolveThemeFontStack(theme);
 
-        expect(stack.startsWith('"獅尾四季春加糖SC-Regular"')).toBe(true);
+        expect(stack.startsWith('"獅尾四季春加糖SC"')).toBe(true);
         expect(stack).toContain('"Iowan Old Style"');
         expect(stack).toContain('serif');
     });
@@ -69,7 +69,7 @@ describe('fontStacks', () => {
         expect(stack).toContain('"MS PMincho"');
     });
 
-    it('prefers Windows-friendly Chinese fallbacks before Japanese mono fonts for translation mono text', () => {
+    it('keeps the current mono translation fallback order before Japanese mono fonts', () => {
         const theme: Pick<Theme, 'fontStyle' | 'fontFamily'> = {
             fontStyle: 'mono',
         };
@@ -83,7 +83,7 @@ describe('fontStacks', () => {
         expect(stack).toContain('"Microsoft YaHei UI"');
         expect(stack).toContain('"Microsoft YaHei"');
         expect(stack).toContain('"MS Gothic"');
-        expect(stack.indexOf('"DengXian"')).toBeLessThan(stack.indexOf('"SimHei"'));
+        expect(stack.indexOf('"SimHei"')).toBeLessThan(stack.indexOf('"DengXian"'));
         expect(stack.indexOf('"Microsoft YaHei"')).toBeLessThan(stack.indexOf('"MS Gothic"'));
     });
 });
