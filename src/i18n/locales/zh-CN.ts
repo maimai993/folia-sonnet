@@ -265,8 +265,10 @@ export default {
     "useSystemProxyAI": "为AI使用系统代理",
     "useSystemProxyAIDesc": "仅将AI相关的网络请求通过系统代理路由。",
     "geminiApiKey": "Gemini 密钥",
-    "openaiApiKey": "OpenAI 密钥",
-    "openaiApiUrl": "OpenAI 代理链接",
+    "openaiApiKey": "密钥",
+    "openaiApiUrl": "OpenAI 接口链接",
+    "openaiApiModel": "模型",
+    "openaiApiModelDesc": "例如 gpt-4o、gpt-4.1-mini、deepseek-v4-flash。",
     "geminiApiKeyDesc": "网易云 API 服务本地运行中",
     "save": "保存"
   },

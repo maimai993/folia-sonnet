@@ -118,8 +118,9 @@ vercel env pull .env.local
 | `VITE_NETEASE_API_BASE` | 网易云音乐 API 实例地址 | 是 |
 | `VITE_AI_PROVIDER` | AI 提供商，`google` 或 `openai` | 是 |
 | `GEMINI_API_KEY` | Gemini API Key | 使用 Gemini 时需要 |
-| `openai_api_key` | OpenAI 兼容 API Key | 使用 OpenAI 时需要 |
-| `openai_api_url` | OpenAI 兼容接口地址 | 使用 OpenAI 时需要 |
+| `OPENAI_API_KEY` | OpenAI 兼容 API Key | 使用 OpenAI兼容接口 时需要 |
+| `OPENAI_API_URL` | OpenAI 兼容接口地址，可填 base URL 或完整 `chat/completions` 地址 | 使用 OpenAI兼容接口 时需要 |
+| `OPENAI_API_MODEL` | 模型名，例如 `gpt-4o`、`gpt-4.1-mini`、`deepseek-v4-flash` | 使用 OpenAI兼容接口 时需要 |
 
 Gemini 示例：
 
@@ -134,8 +135,19 @@ OpenAI 兼容接口示例：
 ```env
 VITE_NETEASE_API_BASE=http://localhost:3000
 VITE_AI_PROVIDER=openai
-openai_api_key=your_api_key
-openai_api_url=https://api.deepseek.com/v1/chat/completions
+OPENAI_API_KEY=your_api_key
+OPENAI_API_URL=https://api.deepseek.com
+OPENAI_API_MODEL=deepseek-v4-flash
+```
+
+如果你使用的是 OpenAI 官方接口，也可以这样写：
+
+```env
+VITE_NETEASE_API_BASE=http://localhost:3000
+VITE_AI_PROVIDER=openai
+OPENAI_API_KEY=your_api_key
+OPENAI_API_URL=https://api.openai.com/v1
+OPENAI_API_MODEL=gpt-4o
 ```
 
 #### 3. 启动开发环境

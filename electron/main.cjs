@@ -461,6 +461,294 @@ async function generateGeminiTheme({ apiKey, promptText, customFetch }) {
   return JSON.parse(jsonText);
 }
 
+const DEFAULT_OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
+const DEFAULT_OPENAI_MODEL = 'gpt-4o';
+const DEEPSEEK_DEFAULT_MODEL = 'deepseek-v4-flash';
+const THEME_JSON_SCHEMA_NAME = 'dual_theme';
+const THEME_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    light: {
+      type: 'object',
+      additionalProperties: false,
+      description: 'Theme optimized for light/daylight mode',
+      properties: {
+        name: { type: 'string', description: 'A creative name for this light theme' },
+        backgroundColor: { type: 'string', description: 'Hex code for light background' },
+        primaryColor: { type: 'string', description: 'Hex code for main text (dark)' },
+        accentColor: { type: 'string', description: 'Hex code for highlighted text/effects' },
+        secondaryColor: { type: 'string', description: 'Hex code for secondary elements' },
+        wordColors: {
+          type: 'array',
+          description: 'List of exact emotional words or phrases from the source text and their specific colors',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              word: { type: 'string' },
+              color: { type: 'string' },
+            },
+            required: ['word', 'color'],
+          },
+        },
+        lyricsIcons: {
+          type: 'array',
+          description: 'List of Lucide icon names related to the source text',
+          items: { type: 'string' }
+        },
+      },
+      required: ['name', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons'],
+    },
+    dark: {
+      type: 'object',
+      additionalProperties: false,
+      description: 'Theme optimized for dark/midnight mode',
+      properties: {
+        name: { type: 'string', description: 'A creative name for this dark theme' },
+        backgroundColor: { type: 'string', description: 'Hex code for dark background' },
+        primaryColor: { type: 'string', description: 'Hex code for main text (light)' },
+        accentColor: { type: 'string', description: 'Hex code for highlighted text/effects' },
+        secondaryColor: { type: 'string', description: 'Hex code for secondary elements' },
+        wordColors: {
+          type: 'array',
+          description: 'List of exact emotional words or phrases from the source text and their specific colors',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              word: { type: 'string' },
+              color: { type: 'string' },
+            },
+            required: ['word', 'color'],
+          },
+        },
+        lyricsIcons: {
+          type: 'array',
+          description: 'List of Lucide icon names related to the source text',
+          items: { type: 'string' }
+        },
+      },
+      required: ['name', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons'],
+    },
+  },
+  required: ['light', 'dark'],
+};
+
+function normalizeOpenAIChatCompletionsUrl(rawUrl) {
+  const trimmedUrl = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!trimmedUrl) {
+    return DEFAULT_OPENAI_CHAT_COMPLETIONS_URL;
+  }
+
+  try {
+    const parsed = new URL(trimmedUrl);
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+
+    if (!normalizedPath || normalizedPath === '/') {
+      parsed.pathname = '/v1/chat/completions';
+      return parsed.toString();
+    }
+
+    if (/\/v\d+$/.test(normalizedPath)) {
+      parsed.pathname = `${normalizedPath}/chat/completions`;
+      return parsed.toString();
+    }
+
+    parsed.pathname = normalizedPath;
+    return parsed.toString();
+  } catch {
+    return trimmedUrl.replace(/\/+$/, '');
+  }
+}
+
+function resolveOpenAICompatibleModel(apiUrl, configuredModel) {
+  const trimmedModel = typeof configuredModel === 'string' ? configuredModel.trim() : '';
+  if (trimmedModel) {
+    return trimmedModel;
+  }
+
+  try {
+    const hostname = new URL(apiUrl).hostname.toLowerCase();
+    if (hostname === 'api.deepseek.com' || hostname.endsWith('.deepseek.com')) {
+      return DEEPSEEK_DEFAULT_MODEL;
+    }
+  } catch {
+    // Fall back to the generic OpenAI default when URL parsing fails.
+  }
+
+  return DEFAULT_OPENAI_MODEL;
+}
+
+function detectOpenAICompatibleProvider(apiUrl, model) {
+  const normalizedModel = model.trim().toLowerCase();
+  if (normalizedModel.startsWith('deepseek-')) {
+    return 'deepseek';
+  }
+
+  try {
+    const hostname = new URL(apiUrl).hostname.toLowerCase();
+    if (hostname === 'api.deepseek.com' || hostname.endsWith('.deepseek.com')) {
+      return 'deepseek';
+    }
+    if (hostname === 'api.openai.com' || hostname.endsWith('.openai.com')) {
+      return 'openai';
+    }
+  } catch {
+    // Fall through to generic provider handling.
+  }
+
+  if (/^(gpt|o[1-9]|o[1-9]-|chatgpt-)/.test(normalizedModel)) {
+    return 'openai';
+  }
+
+  return 'generic';
+}
+
+function providerSupportsStructuredOutputs(provider) {
+  return provider === 'openai';
+}
+
+function extractProviderErrorMessage(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const error = payload.error;
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error === 'object' && typeof error.message === 'string') {
+    return error.message;
+  }
+
+  return typeof payload.message === 'string' ? payload.message : null;
+}
+
+async function formatOpenAICompatibleError(response) {
+  const rawText = await response.text();
+  let detail = rawText.trim();
+
+  try {
+    const parsed = JSON.parse(rawText);
+    detail = extractProviderErrorMessage(parsed) || detail;
+  } catch {
+    // Leave non-JSON responses as-is.
+  }
+
+  return detail
+    ? `OpenAI compatible API error (${response.status}): ${detail}`
+    : `OpenAI compatible API error (${response.status}): ${response.statusText}`;
+}
+
+function buildThemePrompt(snippet, isPureMusic, songTitle, includeSchemaText = false) {
+  const basePrompt = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.
+
+DUAL THEME REQUIREMENTS:
+1. Generate TWO complete themes: one optimized for LIGHT/DAYLIGHT mode, one for DARK/MIDNIGHT mode.
+2. Both themes should capture the SAME emotional essence of the source text, but with appropriate color palettes for their respective modes.
+3. The theme names should reflect both the mood AND the mode.
+
+SOURCE MODE:
+1. If 'Pure instrumental' is yes, the source text below is the song title of a pure instrumental track, not lyrics.
+2. If 'Pure instrumental' is no, the source text below is a lyrics snippet.
+3. Base your mood inference only on the provided source text.
+
+LIGHT THEME RULES:
+- Use LIGHT backgrounds.
+- Ensure text/icons are dark enough for contrast.
+- 'accentColor' must be visible.
+
+DARK THEME RULES:
+- Use DARK backgrounds.
+- Ensure text/icons are light enough for contrast.
+
+SHARED RULES:
+1. 'secondaryColor': MUST have sufficient contrast against 'backgroundColor'.
+2. 'wordColors' and 'lyricsIcons' should be the SAME for both themes (they represent the source text's meaning).
+
+IMPORTANT for 'wordColors':
+1. Identify 5-10 key emotional words or phrases from the source text.
+2. If the source text is a very short pure-instrumental title, you may return fewer entries.
+3. Assign a specific color to each word.
+4. CRITICAL: The 'word' field MUST match the EXACT text in the source snippet (case-insensitive). If the pure-instrumental title is very short, using the exact full title as a phrase is allowed.
+
+IMPORTANT for 'lyricsIcons':
+1. Identify 3-5 visual concepts/objects mentioned in or strongly implied by the source text.
+2. Return them as valid Lucide React icon names (PascalCase).
+
+Pure instrumental: ${isPureMusic ? 'yes' : 'no'}
+${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
+${snippet}`;
+
+  if (!includeSchemaText) {
+    return basePrompt;
+  }
+
+  return `${basePrompt}
+
+Response MUST be a valid JSON object. Do not include markdown formatting like \`\`\`json. Just the raw JSON.
+
+JSON Schema:
+${JSON.stringify(THEME_JSON_SCHEMA, null, 2)}`;
+}
+
+function buildOpenAICompatibleRequestBody(model, provider, promptText) {
+  const messages = [
+    { role: 'system', content: 'You are a helpful assistant that generates JSON themes for music players.' },
+    { role: 'user', content: promptText }
+  ];
+
+  if (providerSupportsStructuredOutputs(provider)) {
+    return {
+      model,
+      messages,
+      temperature: 0.7,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: THEME_JSON_SCHEMA_NAME,
+          strict: true,
+          schema: THEME_JSON_SCHEMA,
+        },
+      },
+    };
+  }
+
+  return {
+    model,
+    messages,
+    temperature: 0.7,
+    response_format: { type: 'json_object' },
+  };
+}
+
+function extractResponseContentText(message) {
+  if (!message) {
+    return null;
+  }
+
+  if (typeof message.refusal === 'string' && message.refusal.trim()) {
+    throw new Error(`Model refused request: ${message.refusal}`);
+  }
+
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+
+  if (Array.isArray(message.content)) {
+    const text = message.content
+      .filter((part) => part && typeof part === 'object')
+      .filter((part) => part.type === 'text' && typeof part.text === 'string')
+      .map((part) => part.text)
+      .join('');
+    return text || null;
+  }
+
+  return null;
+}
+
 // Provide Netease API unblock parameter as requested
 process.env.ENABLE_GENERAL_UNBLOCK = 'false';
 
@@ -855,37 +1143,19 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
     const customFetch = (url, options) => fetchWithOptionalSystemProxy(url, options, useSystemProxy);
     const snippet = lyricsText.slice(0, 2000);
 
-    const promptText = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.\n\n` +
-      `DUAL THEME REQUIREMENTS:\n` +
-      `1. Generate TWO complete themes: one optimized for LIGHT/DAYLIGHT mode, one for DARK/MIDNIGHT mode.\n` +
-      `2. Both themes should capture the SAME emotional essence of the source text, but with appropriate color palettes for their respective modes.\n` +
-      `3. The theme names should reflect both the mood AND the mode.\n\n` +
-      `SOURCE MODE:\n` +
-      `1. If 'Pure instrumental' is yes, the source text below is the song title of a pure instrumental track, not lyrics.\n` +
-      `2. If 'Pure instrumental' is no, the source text below is a lyrics snippet.\n` +
-      `3. Base your mood inference only on the provided source text.\n\n` +
-      `LIGHT THEME RULES:\n- Use LIGHT backgrounds.\n- Ensure text/icons are dark enough for contrast.\n- 'accentColor' must be visible.\n\n` +
-      `DARK THEME RULES:\n- Use DARK backgrounds.\n- Ensure text/icons are light enough for contrast.\n\n` +
-      `SHARED RULES:\n` +
-      `1. 'secondaryColor': MUST have sufficient contrast against 'backgroundColor'.\n` +
-      `2. 'wordColors' and 'lyricsIcons' should be the SAME for both themes (they represent the source text's meaning).\n\n` +
-      `IMPORTANT for 'wordColors':\n` +
-      `1. Identify 5-10 key emotional words or phrases from the source text.\n` +
-      `2. If the source text is a very short pure-instrumental title, you may return fewer entries.\n` +
-      `3. Assign a specific color to each word.\n` +
-      `4. CRITICAL: The 'word' field MUST match the EXACT text in the source snippet (case-insensitive). If the pure-instrumental title is very short, using the exact full title as a phrase is allowed.\n\n` +
-      `IMPORTANT for 'lyricsIcons':\n` +
-      `1. Identify 3-5 visual concepts/objects mentioned in or strongly implied by the source text.\n` +
-      `2. Return them as valid Lucide React icon names (PascalCase).\n\n` +
-      `Pure instrumental: ${isPureMusic ? 'yes' : 'no'}\n` +
-      `${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}` +
-      `Source snippet:\n${snippet}`;
-
     let dualTheme = null;
 
     if (provider === 'openai') {
         const apiKey = store.get('OPENAI_API_KEY');
-        const apiUrl = store.get('OPENAI_API_URL') || "https://api.openai.com/v1/chat/completions";
+        const apiUrl = normalizeOpenAIChatCompletionsUrl(store.get('OPENAI_API_URL'));
+        const model = resolveOpenAICompatibleModel(apiUrl, store.get('OPENAI_API_MODEL'));
+        const openAICompatibleProvider = detectOpenAICompatibleProvider(apiUrl, model);
+        const promptText = buildThemePrompt(
+          snippet,
+          isPureMusic,
+          songTitle,
+          !providerSupportsStructuredOutputs(openAICompatibleProvider)
+        );
         
         if (!apiKey) {
            throw new Error("OPENAI_API_KEY is not configured in settings");
@@ -897,24 +1167,15 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${apiKey}`,
             },
-            body: JSON.stringify({
-                model: "gpt-4o",
-                messages: [
-                    { role: "system", content: "You are a helpful assistant that generates JSON themes for music players." },
-                    { role: "user", content: promptText + "\n\nResponse MUST be exactly raw JSON matching { light: {...}, dark: {...} } structure, with no markdown wrappers." }
-                ],
-                temperature: 0.7,
-                response_format: { type: "json_object" }
-            }),
+            body: JSON.stringify(buildOpenAICompatibleRequestBody(model, openAICompatibleProvider, promptText)),
         });
 
         if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`OpenAI API error: ${response.statusText}`);
+            throw new Error(await formatOpenAICompatibleError(response));
         }
 
         const data = await response.json();
-        const content = data.choices[0]?.message?.content;
+        const content = extractResponseContentText(data.choices[0]?.message);
         if (!content) throw new Error("Failed to generate theme JSON");
         
         let jsonStr = content.trim();
@@ -931,6 +1192,7 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
         if (!apiKey) {
             throw new Error("GEMINI_API_KEY is not configured in settings");
         }
+        const promptText = buildThemePrompt(snippet, isPureMusic, songTitle, false);
         dualTheme = await generateGeminiTheme({
             apiKey,
             promptText,

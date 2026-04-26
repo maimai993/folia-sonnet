@@ -267,6 +267,8 @@ export default {
     "geminiApiKey": "Gemini API Key",
     "openaiApiKey": "OpenAI API Key",
     "openaiApiUrl": "OpenAI API URL",
+    "openaiApiModel": "OpenAI Model",
+    "openaiApiModelDesc": "Required by many OpenAI-compatible providers. Examples: gpt-4o, gpt-4.1-mini, deepseek-v4-flash.",
     "geminiApiKeyDesc": "Netease API backend runs locally.",
     "save": "Save"
   },

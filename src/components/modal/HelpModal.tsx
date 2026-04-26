@@ -113,6 +113,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
         GEMINI_API_KEY: '',
         OPENAI_API_KEY: '',
         OPENAI_API_URL: '',
+        OPENAI_API_MODEL: '',
         AI_PROVIDER: 'gemini',
         USE_SYSTEM_PROXY_FOR_AI: false
     });
@@ -198,6 +199,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
             await (window as any).electron.saveSettings('GEMINI_API_KEY', electronSettings.GEMINI_API_KEY);
             await (window as any).electron.saveSettings('OPENAI_API_KEY', electronSettings.OPENAI_API_KEY);
             await (window as any).electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
+            await (window as any).electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
             await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
             await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
             setElectronSaveStatus('saved');
@@ -933,10 +935,28 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                                 type="text"
                                                                 value={electronSettings.OPENAI_API_URL || ''}
                                                                 onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_URL: e.target.value })}
-                                                                placeholder="https://api.openai.com/v1/chat/completions"
+                                                                placeholder="https://api.openai.com/v1 or https://api.deepseek.com"
                                                                 className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors"
                                                                 style={{ color: 'var(--text-primary)' }}
                                                             />
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                            {t('options.openaiApiModel') || "OpenAI Model"}
+                                                        </label>
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={electronSettings.OPENAI_API_MODEL || ''}
+                                                                onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_MODEL: e.target.value })}
+                                                                placeholder="gpt-4o / gpt-4.1-mini / deepseek-v4-flash"
+                                                                className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors"
+                                                                style={{ color: 'var(--text-primary)' }}
+                                                            />
+                                                        </div>
+                                                        <div className="text-[10px] opacity-40" style={{ color: 'var(--text-secondary)' }}>
+                                                            {t('options.openaiApiModelDesc') || "Required for many OpenAI-compatible providers. DeepSeek models like deepseek-v4-flash must be filled explicitly if auto-detection does not apply."}
                                                         </div>
                                                     </div>
                                                     <div className="space-y-2">
