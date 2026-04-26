@@ -187,7 +187,7 @@ const LAYOUT_REBUILD_DEBOUNCE_MS = 96;
 const FUME_BACKGROUND_PARALLAX_X = 0.9;
 const FUME_BACKGROUND_PARALLAX_Y = 0.74;
 const FUME_BACKGROUND_SCALE_FACTOR = 0.94;
-const FUME_BACKGROUND_VERTICAL_OFFSET_RATIO = 0.12;
+const FUME_BACKGROUND_VERTICAL_OFFSET_RATIO = 0.22;
 
 const parseColorChannels = (color: string) => {
     if (color.startsWith('#')) {
