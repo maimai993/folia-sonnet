@@ -49,6 +49,14 @@ const ONLINE_AUDIO_URL_TTL_MS = 1200 * 1000;
 const ONLINE_AUDIO_URL_REFRESH_BUFFER_MS = 60 * 1000;
 const clampMediaVolume = (value: number) => Math.min(1, Math.max(0, value));
 
+type PlaybackNavigationOptions = {
+    shouldNavigateToPlayer?: boolean;
+};
+
+type NextTrackOptions = PlaybackNavigationOptions & {
+    allowStopOnMissing?: boolean;
+};
+
 const findLatestActiveLineIndex = (lines: LyricData['lines'], time: number) => {
     for (let index = lines.length - 1; index >= 0; index -= 1) {
         const line = lines[index];
@@ -1456,7 +1464,12 @@ export default function App() {
     };
 
     // --- Navidrome Playback ---
-    const onPlayNavidromeSong = async (navidromeSong: NavidromeSong, queue: NavidromeSong[] = []) => {
+    const onPlayNavidromeSong = async (
+        navidromeSong: NavidromeSong,
+        queue: NavidromeSong[] = [],
+        options: PlaybackNavigationOptions = {}
+    ) => {
+        const shouldNavigateToPlayer = options.shouldNavigateToPlayer ?? true;
         const config = getNavidromeConfig();
         if (!config) {
             setStatusMsg({ type: 'error', text: 'Navidrome not configured' });
@@ -1598,8 +1611,9 @@ export default function App() {
 
             saveToCache('last_song', unifiedSong);
 
-            // Navigate to player
-            navigateToPlayer();
+            if (shouldNavigateToPlayer) {
+                navigateToPlayer();
+            }
             setPlayerState(PlayerState.IDLE);
             setStatusMsg({ type: 'success', text: 'Navidrome 歌曲已加载' });
         } catch (e) {
@@ -1661,8 +1675,14 @@ export default function App() {
         }
     };
 
-    const playSong = async (song: SongResult, queue: SongResult[] = [], isFmCall: boolean = false) => {
+    const playSong = async (
+        song: SongResult,
+        queue: SongResult[] = [],
+        isFmCall: boolean = false,
+        options: PlaybackNavigationOptions = {}
+    ) => {
         console.log("[App] playSong initiated:", song.name, song.id, "isFm:", isFmCall);
+        const shouldNavigateToPlayer = options.shouldNavigateToPlayer ?? true;
         setIsFmMode(isFmCall);
         if (isFmCall && !isFmMode) {
             // Only auto-open panel when first entering FM mode
@@ -1707,8 +1727,9 @@ export default function App() {
         saveToCache('last_song', song);
         saveToCache('last_queue', newQueue);
 
-        // Navigate to Player with History
-        navigateToPlayer();
+        if (shouldNavigateToPlayer) {
+            navigateToPlayer();
+        }
         setPlayerState(PlayerState.IDLE);
 
         // Check if it is a local song
@@ -1732,7 +1753,7 @@ export default function App() {
                     .map(queuedSong => resolveNavidromePlaybackCarrier(queuedSong))
                     .filter((queuedSong): queuedSong is NavidromeSong => Boolean(queuedSong));
 
-            await onPlayNavidromeSong(navidromeSong, navidromeQueue);
+            await onPlayNavidromeSong(navidromeSong, navidromeQueue, { shouldNavigateToPlayer: false });
             return;
         }
 
@@ -2062,9 +2083,10 @@ export default function App() {
         }
     }, [handleAlbumSelect, hideSearchOverlay, openLocalAlbumByName, setHomeViewTab]);
 
-    const handleNextTrack = useCallback(async (options?: { allowStopOnMissing?: boolean; }) => {
+    const handleNextTrack = useCallback(async (options?: NextTrackOptions) => {
         if (!currentSong || playQueue.length === 0) return;
 
+        const shouldNavigateToPlayer = options?.shouldNavigateToPlayer ?? true;
         const currentIndex = playQueue.findIndex(s => s.id === currentSong.id);
 
         // --- FM Mode Auto-fetch ---
@@ -2074,7 +2096,7 @@ export default function App() {
                 if (fmRes.data && fmRes.data.length > 0) {
                     const newQueue = [...playQueue, ...fmRes.data];
                     setPlayQueue(newQueue);
-                    playSong(newQueue[currentIndex + 1], newQueue, true);
+                    playSong(newQueue[currentIndex + 1], newQueue, true, { shouldNavigateToPlayer });
                     return;
                 }
             } catch (e) {
@@ -2092,7 +2114,7 @@ export default function App() {
         }
 
         if (nextIndex >= 0) {
-            playSong(playQueue[nextIndex], playQueue, isFmMode);
+            playSong(playQueue[nextIndex], playQueue, isFmMode, { shouldNavigateToPlayer });
         } else if (options?.allowStopOnMissing) {
             if (audioRef.current) {
                 audioRef.current.pause();
@@ -2895,7 +2917,7 @@ export default function App() {
                     // If single loop is active, native loop handles it.
                     // If not, we handle queue logic.
                     if (loopMode !== 'one') {
-                        void handleNextTrack({ allowStopOnMissing: true });
+                        void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
                     }
                 }}
                 onLoadedMetadata={(e) => {
@@ -2941,7 +2963,7 @@ export default function App() {
                             if (!recovered) {
                                 setStatusMsg({ type: 'error', text: t('status.playbackError') });
                                 setTimeout(() => {
-                                    void handleNextTrack({ allowStopOnMissing: true });
+                                    void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
                                 }, 2000);
                             }
                         })();
@@ -2950,7 +2972,7 @@ export default function App() {
 
                     setStatusMsg({ type: 'error', text: t('status.playbackError') });
                     setTimeout(() => {
-                        void handleNextTrack({ allowStopOnMissing: true });
+                        void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
                     }, 2000);
                 }}
             />

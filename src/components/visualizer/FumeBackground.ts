@@ -10,7 +10,9 @@ interface WorldSize {
     height: number;
 }
 
-type FumeBackgroundShapeKind = 'ring' | 'square' | 'cross';
+type FumeBackgroundShapeKind = 'ring' | 'square' | 'cross' | 'spark';
+type FumeBackgroundAudioBand = 'bass' | 'lowMid' | 'mid' | 'vocal' | 'treble';
+type FumeBackgroundShapeColor = 'secondary' | 'accent';
 
 interface FumeBackgroundShape {
     id: string;
@@ -23,8 +25,9 @@ interface FumeBackgroundShape {
     rotationSpeed: number;
     strokeWidth: number;
     opacity: number;
-    colorMix: number;
+    color: FumeBackgroundShapeColor;
     depth: number;
+    audioBand?: FumeBackgroundAudioBand;
     ringGapStart?: number;
     ringGapSize?: number;
 }
@@ -34,6 +37,10 @@ export interface FumeBackgroundScene {
     height: number;
     shapes: FumeBackgroundShape[];
 }
+
+export type FumeBackgroundAudioLevels = Partial<Record<FumeBackgroundAudioBand, number>> & {
+    power?: number;
+};
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const mix = (from: number, to: number, amount: number) => from + (to - from) * amount;
@@ -83,53 +90,6 @@ const colorWithAlpha = (color: string, alpha: number) => {
     return color;
 };
 
-const parseColorChannels = (color: string) => {
-    if (color.startsWith('#')) {
-        const hex = color.slice(1);
-        const parse = (value: string) => Number.parseInt(value, 16);
-
-        if (hex.length === 3) {
-            return {
-                r: parse(hex[0] + hex[0]),
-                g: parse(hex[1] + hex[1]),
-                b: parse(hex[2] + hex[2]),
-            };
-        }
-
-        if (hex.length === 6) {
-            return {
-                r: parse(hex.slice(0, 2)),
-                g: parse(hex.slice(2, 4)),
-                b: parse(hex.slice(4, 6)),
-            };
-        }
-    }
-
-    const rgbMatch = color.match(/^rgba?\(([^)]+)\)$/);
-    if (rgbMatch) {
-        const [r = '255', g = '255', b = '255'] = rgbMatch[1].split(',').slice(0, 3).map(part => part.trim());
-        return {
-            r: Number.parseFloat(r),
-            g: Number.parseFloat(g),
-            b: Number.parseFloat(b),
-        };
-    }
-
-    return null;
-};
-
-const mixColors = (from: string, to: string, amount: number, alpha = 1) => {
-    const normalizedAmount = clamp(amount, 0, 1);
-    const fromChannels = parseColorChannels(from);
-    const toChannels = parseColorChannels(to);
-
-    if (!fromChannels || !toChannels) {
-        return colorWithAlpha(normalizedAmount >= 0.5 ? to : from, alpha);
-    }
-
-    return `rgba(${Math.round(mix(fromChannels.r, toChannels.r, normalizedAmount))}, ${Math.round(mix(fromChannels.g, toChannels.g, normalizedAmount))}, ${Math.round(mix(fromChannels.b, toChannels.b, normalizedAmount))}, ${clamp(alpha, 0, 1)})`;
-};
-
 const traceShape = (
     context: CanvasRenderingContext2D,
     shape: FumeBackgroundShape,
@@ -156,7 +116,7 @@ const traceShape = (
         const size = shape.width;
         if (shape.kind === 'square') {
             context.rect(-size * 0.5, -size * 0.5, size, size);
-        } else {
+        } else if (shape.kind === 'cross') {
             const arm = size * 0.3;
             context.moveTo(-arm, -size * 0.5);
             context.lineTo(arm, -size * 0.5);
@@ -170,6 +130,18 @@ const traceShape = (
             context.lineTo(-size * 0.5, arm);
             context.lineTo(-size * 0.5, -arm);
             context.lineTo(-arm, -arm);
+            context.closePath();
+        } else {
+            const outer = size * 0.5;
+            const inner = size * 0.13;
+            context.moveTo(0, -outer);
+            context.lineTo(inner, -inner);
+            context.lineTo(outer, 0);
+            context.lineTo(inner, inner);
+            context.lineTo(0, outer);
+            context.lineTo(-inner, inner);
+            context.lineTo(-outer, 0);
+            context.lineTo(-inner, -inner);
             context.closePath();
         }
     }
@@ -213,8 +185,20 @@ export const buildFumeBackgroundScene = ({
     const baseUnit = clamp(Math.min(viewport.width, viewport.height) * 0.72, 320, 760);
     const shapeKinds: FumeBackgroundShapeKind[] = ['ring', 'square', 'cross', 'ring', 'square', 'cross'];
     const shapeCount = worldWidth > worldHeight ? 8 : 7;
+    const sparkBands: FumeBackgroundAudioBand[] = ['treble', 'vocal', 'mid', 'treble', 'lowMid'];
+    const sparkCount = worldWidth > worldHeight ? 12 : 9;
+    const sparkAreaLeft = worldWidth * 0.2;
+    const sparkAreaRight = worldWidth * 0.8;
+    const sparkAreaTop = worldHeight * 0.18;
+    const sparkAreaBottom = worldHeight * 0.82;
+    const sparkAreaWidth = sparkAreaRight - sparkAreaLeft;
+    const sparkAreaHeight = sparkAreaBottom - sparkAreaTop;
+    const sparkColumns = Math.ceil(Math.sqrt(sparkCount * (worldWidth / Math.max(worldHeight, 1))));
+    const sparkRows = Math.ceil(sparkCount / sparkColumns);
+    const sparkCellWidth = sparkAreaWidth / sparkColumns;
+    const sparkCellHeight = sparkAreaHeight / sparkRows;
 
-    const shapes = Array.from({ length: shapeCount }).map((_, index) => {
+    const baseShapes = Array.from({ length: shapeCount }).map((_, index) => {
         const localSeed = `${seed ?? 'fume'}:${worldWidth}:${worldHeight}:${index}`;
         const kind = shapeKinds[index % shapeKinds.length]!;
         const width = baseUnit * mix(0.82, 1.36, seeded(`${localSeed}:size`));
@@ -236,7 +220,7 @@ export const buildFumeBackgroundScene = ({
             rotationSpeed: mix(-0.045, 0.045, seeded(`${localSeed}:rotation-speed`)),
             strokeWidth: mix(0.25, 2.1, seeded(`${localSeed}:stroke-width`)),
             opacity: mix(0.01, 0.16, seeded(`${localSeed}:opacity`)),
-            colorMix: mix(0.18, 0.62, seeded(`${localSeed}:color-mix`)),
+            color: seeded(`${localSeed}:color`) > 0.5 ? 'accent' : 'secondary',
             depth: seeded(`${localSeed}:depth`),
             ringGapStart: kind === 'ring'
                 ? mix(-Math.PI, Math.PI, seeded(`${localSeed}:gap-start`))
@@ -245,7 +229,36 @@ export const buildFumeBackgroundScene = ({
                 ? mix(Math.PI * 0.12, Math.PI * 0.24, seeded(`${localSeed}:gap-size`))
                 : undefined,
         };
-    }).sort((left, right) => left.depth - right.depth);
+    });
+
+    const sparkShapes = Array.from({ length: sparkCount }).map((_, index) => {
+        const localSeed = `${seed ?? 'fume'}:${worldWidth}:${worldHeight}:spark:${index}`;
+        const width = baseUnit * mix(0.1, 0.24, seeded(`${localSeed}:size`));
+        const column = index % sparkColumns;
+        const row = Math.floor(index / sparkColumns);
+        const jitterX = mix(-0.32, 0.32, seeded(`${localSeed}:jitter-x`)) * sparkCellWidth;
+        const jitterY = mix(-0.32, 0.32, seeded(`${localSeed}:jitter-y`)) * sparkCellHeight;
+        const x = clamp(sparkAreaLeft + (column + 0.5) * sparkCellWidth + jitterX, sparkAreaLeft, sparkAreaRight);
+        const y = clamp(sparkAreaTop + (row + 0.5) * sparkCellHeight + jitterY, sparkAreaTop, sparkAreaBottom);
+
+        return {
+            id: `fume-spark-${index}`,
+            kind: 'spark' as const,
+            x,
+            y,
+            width,
+            height: width,
+            rotation: mix(-Math.PI, Math.PI, seeded(`${localSeed}:rotation`)),
+            rotationSpeed: mix(-0.18, 0.18, seeded(`${localSeed}:rotation-speed`)),
+            strokeWidth: mix(0.75, 1.7, seeded(`${localSeed}:stroke-width`)),
+            opacity: mix(0.08, 0.22, seeded(`${localSeed}:opacity`)),
+            color: seeded(`${localSeed}:color`) > 0.5 ? 'accent' : 'secondary',
+            depth: seeded(`${localSeed}:depth`),
+            audioBand: sparkBands[index % sparkBands.length],
+        };
+    });
+
+    const shapes = [...baseShapes, ...sparkShapes].sort((left, right) => left.depth - right.depth);
 
     return {
         width: worldWidth,
@@ -259,25 +272,37 @@ export const drawFumeBackground = ({
     scene,
     theme,
     time = 0,
+    audioLevels,
 }: {
     context: CanvasRenderingContext2D;
     scene: FumeBackgroundScene;
     theme: Theme;
     time?: number;
+    audioLevels?: FumeBackgroundAudioLevels;
 }) => {
     for (const shape of scene.shapes) {
+        const bandValue = shape.audioBand ? audioLevels?.[shape.audioBand] : undefined;
+        const audioScale = bandValue === undefined
+            ? 1
+            : mix(0.95, 1.45, clamp((bandValue - 10) / 190, 0, 1));
+        const audioOpacityBoost = bandValue === undefined
+            ? 1
+            : mix(0.85, 1.55, clamp((bandValue - 10) / 190, 0, 1));
+
         context.save();
         context.lineWidth = shape.strokeWidth;
-        context.strokeStyle = mixColors(
-            theme.secondaryColor,
-            theme.accentColor,
-            shape.colorMix,
-            shape.opacity,
-        );
-        context.shadowBlur = shape.kind === 'cross' ? 6 : 8;
-        context.shadowColor = colorWithAlpha(theme.accentColor, shape.opacity * 0.65);
+        const shapeColor = shape.color === 'accent' ? theme.accentColor : theme.secondaryColor;
+        context.strokeStyle = colorWithAlpha(shapeColor, clamp(shape.opacity * audioOpacityBoost, 0, 0.42));
+        context.shadowBlur = shape.kind === 'spark'
+            ? 10 * audioScale
+            : shape.kind === 'cross'
+                ? 6
+                : 8;
+        context.shadowColor = colorWithAlpha(shapeColor, shape.opacity * audioOpacityBoost * 0.75);
         traceShape(context, {
             ...shape,
+            width: shape.width * audioScale,
+            height: shape.height * audioScale,
             rotation: shape.rotation + time * shape.rotationSpeed,
         });
         context.restore();

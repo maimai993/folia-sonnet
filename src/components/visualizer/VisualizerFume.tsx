@@ -5,7 +5,7 @@ import { Hourglass } from 'lucide-react';
 import { AudioBands, DEFAULT_FUME_TUNING, FumeTuning, Line, Theme, Word as WordType } from '../../types';
 import { resolveThemeFontStack } from '../../utils/fontStacks';
 import { getLineRenderEndTime, getLineRenderHints, getLineTransitionTiming } from '../../utils/lyrics/renderHints';
-import { buildFumeBackgroundScene, drawFumeBackground } from './FumeBackground';
+import { buildFumeBackgroundScene, drawFumeBackground, type FumeBackgroundAudioLevels } from './FumeBackground';
 import { getRecentCompletedLine, getUpcomingLines } from './runtime';
 import VisualizerShell from './VisualizerShell';
 import VisualizerSubtitleOverlay from './VisualizerSubtitleOverlay';
@@ -1178,6 +1178,7 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
     }, [currentLineIndex, lines]);
     const resolvedFumeTuning = useMemo<FumeTuning>(() => ({
         hidePrintSymbols: fumeTuning?.hidePrintSymbols ?? DEFAULT_FUME_TUNING.hidePrintSymbols,
+        disableGeometricBackground: fumeTuning?.disableGeometricBackground ?? DEFAULT_FUME_TUNING.disableGeometricBackground,
         cameraSpeed: clamp(fumeTuning?.cameraSpeed ?? DEFAULT_FUME_TUNING.cameraSpeed, 0.55, 1.85),
         glowIntensity: clamp(fumeTuning?.glowIntensity ?? DEFAULT_FUME_TUNING.glowIntensity, 0, 1.8),
         heroScale: clamp(fumeTuning?.heroScale ?? DEFAULT_FUME_TUNING.heroScale, 0.82, 1.32),
@@ -1290,11 +1291,7 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
         context.setTransform(dpr, 0, 0, dpr, 0, 0);
         context.clearRect(0, 0, width, height);
 
-        if (!article) {
-            return;
-        }
-
-        if (!cameraInitializedRef.current) {
+        if (article && !cameraInitializedRef.current) {
             cameraRef.current = {
                 x: article.width * 0.5,
                 y: article.height * 0.5,
@@ -1307,13 +1304,15 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                 focusScale: 1.18,
             };
             cameraInitializedRef.current = true;
-        } else {
+        } else if (article) {
             cameraRef.current.x = clamp(cameraRef.current.x, 0, article.width);
             cameraRef.current.y = clamp(cameraRef.current.y, 0, article.height);
             cameraRef.current.focusX = clamp(cameraRef.current.focusX, 0, article.width);
             cameraRef.current.focusY = clamp(cameraRef.current.focusY, 0, article.height);
             cameraRef.current.scale = clamp(cameraRef.current.scale, CAMERA_SCALE_MIN, CAMERA_SCALE_MAX);
             cameraRef.current.focusScale = clamp(cameraRef.current.focusScale, CAMERA_SCALE_MIN, CAMERA_SCALE_MAX);
+        } else {
+            cameraInitializedRef.current = false;
         }
         let frameId = 0;
         let lastFrameAt: number | null = null;
@@ -1340,6 +1339,35 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
             context.clearRect(0, 0, currentWidth, currentHeight);
 
             const time = currentTime.get();
+            const viewportCenterX = viewport.width * 0.5;
+            const viewportCenterY = viewport.height * 0.5;
+            const fumeBackgroundAudioLevels: FumeBackgroundAudioLevels = {
+                power: audioPower.get(),
+                bass: audioBands.bass.get(),
+                lowMid: audioBands.lowMid.get(),
+                mid: audioBands.mid.get(),
+                vocal: audioBands.vocal.get(),
+                treble: audioBands.treble.get(),
+            };
+
+            if (!article) {
+                if (!staticMode) {
+                    context.save();
+                    context.translate(viewportCenterX, viewportCenterY);
+                    context.translate(-backgroundScene.width * 0.5, -backgroundScene.height * 0.5);
+                    drawFumeBackground({
+                        context,
+                        scene: backgroundScene,
+                        theme,
+                        time: time + now * 0.00018,
+                        audioLevels: fumeBackgroundAudioLevels,
+                    });
+                    context.restore();
+                }
+
+                frameId = window.requestAnimationFrame(draw);
+                return;
+            }
 
             // One-shot detection: once any block starts printing, flip hasPrintedContent
             if (!hasPrintedContentRef.current) {
@@ -1529,8 +1557,6 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
             cameraRef.current.scale = clamp(cameraRef.current.scale, CAMERA_SCALE_MIN, CAMERA_SCALE_MAX);
             }
 
-            const viewportCenterX = viewport.width * 0.5;
-            const viewportCenterY = viewport.height * 0.5;
             const screenScale = cameraRef.current.scale;
 
             if (!staticMode) {
@@ -1566,6 +1592,7 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                     scene: backgroundScene,
                     theme,
                     time,
+                    audioLevels: fumeBackgroundAudioLevels,
                 });
                 context.restore();
             }
@@ -1882,16 +1909,17 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
             useCoverColorBg={useCoverColorBg}
             seed={seed}
             staticMode={staticMode}
+            disableGeometricBackground={resolvedFumeTuning.disableGeometricBackground}
             backgroundOpacity={backgroundOpacity}
             onBack={onBack}
         >
             <div ref={viewportRef} className="relative z-10 h-full w-full pointer-events-none">
-                {article && (
+                {(article || lines.length === 0) && (
                     <motion.div
                         initial={false}
                         animate={{
-                            opacity: showText ? (hasPrintedContent ? 1 : 0) : 1,
-                            scale: showText ? (hasPrintedContent ? 1 : 0.985) : 1,
+                            opacity: article && showText ? (hasPrintedContent ? 1 : 0) : 1,
+                            scale: article && showText ? (hasPrintedContent ? 1 : 0.985) : 1,
                         }}
                         transition={{ duration: 0.45, ease: 'easeOut' }}
                         className="absolute left-1/2 top-0 -translate-x-1/2"

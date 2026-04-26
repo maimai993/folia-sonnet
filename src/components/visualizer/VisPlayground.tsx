@@ -235,6 +235,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     }, [partitaTuning]);
     const resolvedFumeTuning = useMemo<FumeTuning>(() => ({
         hidePrintSymbols: draftFumeTuning.hidePrintSymbols,
+        disableGeometricBackground: draftFumeTuning.disableGeometricBackground,
         cameraSpeed: clampFumeCameraSpeed(draftFumeTuning.cameraSpeed),
         glowIntensity: clampFumeGlowIntensity(draftFumeTuning.glowIntensity),
         heroScale: clampFumeHeroScale(draftFumeTuning.heroScale),
@@ -679,6 +680,14 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                         value={resolvedFumeTuning.hidePrintSymbols}
                                         options={visibilityOptions}
                                         onChange={(next) => handleFumeTuningChange({ hidePrintSymbols: next })}
+                                        isDaylight={isDaylight}
+                                    />
+
+                                    <PresetGroup
+                                        label={t('options.fumeGeometricBackground') || '通用几何图形'}
+                                        value={resolvedFumeTuning.disableGeometricBackground}
+                                        options={visibilityOptions}
+                                        onChange={(next) => handleFumeTuningChange({ disableGeometricBackground: next })}
                                         isDaylight={isDaylight}
                                     />
 

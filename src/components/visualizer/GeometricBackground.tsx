@@ -8,9 +8,10 @@ interface GeometricBackgroundProps {
   audioPower: MotionValue<number>;
   audioBands?: AudioBands;
   seed?: string | number;
+  hideShapes?: boolean;
 }
 
-const GeometricLayer: React.FC<GeometricBackgroundProps> = ({ theme, audioPower, audioBands, seed }) => {
+const GeometricLayer: React.FC<GeometricBackgroundProps> = ({ theme, audioPower, audioBands, seed, hideShapes = false }) => {
   const shapes = useMemo(() => {
     const shapeTypes = ['circle', 'square', 'triangle', 'cross'];
     const availableIcons = theme.lyricsIcons || [];
@@ -77,118 +78,123 @@ const GeometricLayer: React.FC<GeometricBackgroundProps> = ({ theme, audioPower,
       exit={{ opacity: 0 }}
       transition={{ duration: 0.6, ease: 'easeInOut' }}
     >
-      {shapes.map(shape => {
-        if (shape.type === 'icon' && shape.iconName) {
-          const IconComponent = LucideIcons[shape.iconName as keyof typeof LucideIcons] as LucideIcons.LucideIcon | undefined;
+      {!hideShapes && (
+        <>
+          {shapes.map(shape => {
+            if (shape.type === 'icon' && shape.iconName) {
+              const IconComponent = LucideIcons[shape.iconName as keyof typeof LucideIcons] as LucideIcons.LucideIcon | undefined;
 
-          if (IconComponent) {
+              if (IconComponent) {
+                return (
+                  <motion.div
+                    key={shape.id}
+                    className="absolute flex items-center justify-center"
+                    style={{
+                      left: `${shape.initialX}%`,
+                      top: `${shape.initialY}%`,
+                      width: shape.size,
+                      height: shape.size,
+                      color: theme.secondaryColor,
+                      scale: scales.vocal,
+                    }}
+                    animate={{
+                      y: shape.reverse ? [-30, 30, -30] : [30, -30, 30],
+                      x: shape.reverse ? [15, -15, 15] : [-15, 15, -15],
+                      rotate: [shape.initialRotation, shape.initialRotation + 360],
+                      opacity: [0, shape.opacity * 3, 0],
+                    }}
+                    transition={{
+                      duration: shape.duration,
+                      repeat: Infinity,
+                      ease: 'linear',
+                      delay: shape.delay,
+                      opacity: {
+                        duration: shape.duration * 0.5,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                        delay: shape.delay,
+                      },
+                    }}
+                  >
+                    <IconComponent size={shape.size} strokeWidth={1} absoluteStrokeWidth />
+                  </motion.div>
+                );
+              }
+            }
+
+            const isCircleOrSquare = shape.type === 'circle' || shape.type === 'square';
+            const useStroke = isCircleOrSquare && !shape.filled;
+
             return (
               <motion.div
                 key={shape.id}
-                className="absolute flex items-center justify-center"
+                className="absolute"
                 style={{
                   left: `${shape.initialX}%`,
                   top: `${shape.initialY}%`,
                   width: shape.size,
                   height: shape.size,
-                  color: theme.secondaryColor,
-                  scale: scales.vocal,
+                  border: useStroke ? `1px solid ${theme.secondaryColor}` : 'none',
+                  backgroundColor: !useStroke ? theme.secondaryColor : 'transparent',
+                  borderRadius: shape.type === 'circle' ? '50%' : '0%',
+                  opacity: shape.opacity,
+                  scale: shape.type === 'circle'
+                    ? scales.bass
+                    : shape.type === 'square'
+                      ? scales.lowMid
+                      : shape.type === 'triangle'
+                        ? scales.mid
+                        : shape.type === 'cross'
+                          ? scales.treble
+                          : scales.default,
+                  clipPath: shape.type === 'triangle'
+                    ? 'polygon(50% 0%, 0% 100%, 100% 100%)'
+                    : shape.type === 'cross'
+                      ? 'polygon(20% 0%, 0% 20%, 30% 50%, 0% 80%, 20% 100%, 50% 70%, 80% 100%, 100% 80%, 70% 50%, 100% 20%, 80% 0%, 50% 30%)'
+                      : 'none',
                 }}
                 animate={{
                   y: shape.reverse ? [-30, 30, -30] : [30, -30, 30],
                   x: shape.reverse ? [15, -15, 15] : [-15, 15, -15],
                   rotate: [shape.initialRotation, shape.initialRotation + 360],
-                  opacity: [0, shape.opacity * 3, 0],
                 }}
                 transition={{
                   duration: shape.duration,
                   repeat: Infinity,
                   ease: 'linear',
                   delay: shape.delay,
-                  opacity: {
-                    duration: shape.duration * 0.5,
-                    repeat: Infinity,
-                    ease: 'easeInOut',
-                    delay: shape.delay,
-                  },
                 }}
-              >
-                <IconComponent size={shape.size} strokeWidth={1} absoluteStrokeWidth />
-              </motion.div>
+              />
             );
           }
-        }
+          )}
 
-        const isCircleOrSquare = shape.type === 'circle' || shape.type === 'square';
-        const useStroke = isCircleOrSquare && !shape.filled;
-
-        return (
-          <motion.div
-            key={shape.id}
-            className="absolute"
-            style={{
-              left: `${shape.initialX}%`,
-              top: `${shape.initialY}%`,
-              width: shape.size,
-              height: shape.size,
-              border: useStroke ? `1px solid ${theme.secondaryColor}` : 'none',
-              backgroundColor: !useStroke ? theme.secondaryColor : 'transparent',
-              borderRadius: shape.type === 'circle' ? '50%' : '0%',
-              opacity: shape.opacity,
-              scale: shape.type === 'circle'
-                ? scales.bass
-                : shape.type === 'square'
-                  ? scales.lowMid
-                  : shape.type === 'triangle'
-                    ? scales.mid
-                    : shape.type === 'cross'
-                      ? scales.treble
-                      : scales.default,
-              clipPath: shape.type === 'triangle'
-                ? 'polygon(50% 0%, 0% 100%, 100% 100%)'
-                : shape.type === 'cross'
-                  ? 'polygon(20% 0%, 0% 20%, 30% 50%, 0% 80%, 20% 100%, 50% 70%, 80% 100%, 100% 80%, 70% 50%, 100% 20%, 80% 0%, 50% 30%)'
-                  : 'none',
-            }}
-            animate={{
-              y: shape.reverse ? [-30, 30, -30] : [30, -30, 30],
-              x: shape.reverse ? [15, -15, 15] : [-15, 15, -15],
-              rotate: [shape.initialRotation, shape.initialRotation + 360],
-            }}
-            transition={{
-              duration: shape.duration,
-              repeat: Infinity,
-              ease: 'linear',
-              delay: shape.delay,
-            }}
-          />
-        );
-      })}
-
-      {particles.map(particle => (
-        <motion.div
-          key={`p-${particle.id}`}
-          className="absolute rounded-full"
-          style={{
-            backgroundColor: theme.accentColor,
-            width: particle.size,
-            height: particle.size,
-            left: `${particle.left}%`,
-            top: `${particle.top}%`,
-            opacity: particle.opacity,
-          }}
-          animate={{
-            y: [0, -100],
-            opacity: [0, particle.opacity, 0],
-          }}
-          transition={{
-            duration: particle.duration,
-            repeat: Infinity,
-            ease: 'linear',
-            delay: particle.delay,
-          }}
-        />
-      ))}
+          {particles.map(particle => (
+            <motion.div
+              key={`p-${particle.id}`}
+              className="absolute rounded-full"
+              style={{
+                backgroundColor: theme.accentColor,
+                width: particle.size,
+                height: particle.size,
+                left: `${particle.left}%`,
+                top: `${particle.top}%`,
+                opacity: particle.opacity,
+              }}
+              animate={{
+                y: [0, -100],
+                opacity: [0, particle.opacity, 0],
+              }}
+              transition={{
+                duration: particle.duration,
+                repeat: Infinity,
+                ease: 'linear',
+                delay: particle.delay,
+              }}
+            />
+          ))}
+        </>
+      )}
 
       <div
         className="absolute inset-0 pointer-events-none"
@@ -216,6 +222,7 @@ const GeometricBackground: React.FC<GeometricBackgroundProps> = React.memo((prop
 }, (prevProps, nextProps) => {
   if (prevProps.seed !== nextProps.seed) return false;
   if (prevProps.audioPower !== nextProps.audioPower) return false;
+  if (prevProps.hideShapes !== nextProps.hideShapes) return false;
 
   const previousBands = prevProps.audioBands;
   const nextBands = nextProps.audioBands;

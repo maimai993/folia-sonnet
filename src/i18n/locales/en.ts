@@ -218,6 +218,7 @@ export default {
     "fumeSettings": "Fume Tuning",
     "fumeSettingsDesc": "Tune print-stamp visibility, camera pacing, glow, and hero scale.",
     "fumeHidePrintSymbols": "Hide Print Stamp",
+    "fumeGeometricBackground": "Geometric Shapes",
     "fumeCameraSpeed": "Camera Speed",
     "fumeGlowIntensity": "Active Glow",
     "fumeHeroScale": "Hero Scale",

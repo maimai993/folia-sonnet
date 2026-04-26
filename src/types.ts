@@ -78,6 +78,7 @@ export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
 
 export interface FumeTuning {
   hidePrintSymbols: boolean;
+  disableGeometricBackground: boolean;
   cameraSpeed: number;
   glowIntensity: number;
   heroScale: number;
@@ -85,6 +86,7 @@ export interface FumeTuning {
 
 export const DEFAULT_FUME_TUNING: FumeTuning = {
   hidePrintSymbols: false,
+  disableGeometricBackground: true,
   cameraSpeed: 1,
   glowIntensity: 1,
   heroScale: 1,

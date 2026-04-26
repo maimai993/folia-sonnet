@@ -106,9 +106,15 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
                 style={{ backgroundColor: theme.backgroundColor, opacity: useCoverColorBg ? backgroundOpacity : 1 }}
             />
 
-            {!staticMode && !disableGeometricBackground && (
+            {!staticMode && (
                 <div className="absolute inset-0 z-0">
-                    <GeometricBackground theme={theme} audioPower={audioPower} audioBands={audioBands} seed={seed} />
+                    <GeometricBackground
+                        theme={theme}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        seed={seed}
+                        hideShapes={disableGeometricBackground}
+                    />
                 </div>
             )}
 
