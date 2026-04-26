@@ -22,6 +22,37 @@ declare global {
     count: number;
   }
 
+  type ElectronUpdateStatusValue =
+    | 'disabled'
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'latest'
+    | 'error'
+    | 'downloading'
+    | 'downloaded'
+    | 'unsupported';
+
+  interface ElectronUpdateStatus {
+    status: ElectronUpdateStatusValue;
+    supported: boolean;
+    updateCheckSupported: boolean;
+    updateCheckEnabled: boolean;
+    autoUpdateEnabled: boolean;
+    currentVersion: string;
+    availableVersion: string | null;
+    updateUrl: string | null;
+    error: string | null;
+    lastCheckedAt: number | null;
+    lastSeenVersion: string | null;
+    updateSeen: boolean;
+    downloadProgress?: {
+      percent: number;
+      transferred?: number;
+      total?: number;
+    } | null;
+  }
+
   interface Window {
     electron?: {
       getSettings: () => Promise<any>;
@@ -29,6 +60,13 @@ declare global {
       getCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
       chooseCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
       resetCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
+      getUpdateStatus: () => Promise<ElectronUpdateStatus>;
+      checkForUpdates: () => Promise<ElectronUpdateStatus>;
+      markUpdateSeen: (version?: string | null) => Promise<ElectronUpdateStatus>;
+      openUpdateReleasePage: (version?: string | null) => Promise<boolean>;
+      downloadUpdate: () => Promise<ElectronUpdateStatus>;
+      quitAndInstallUpdate: () => Promise<boolean>;
+      onUpdateStatusChanged: (callback: (status: ElectronUpdateStatus) => void) => () => void;
       getAudioCache: (cacheKey: string) => Promise<ElectronAudioCacheEntry>;
       hasAudioCache: (cacheKey: string) => Promise<boolean>;
       saveAudioCache: (cacheKey: string, data: ArrayBuffer, mimeType?: string) => Promise<boolean>;

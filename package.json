@@ -34,6 +34,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "chthollyphile",
+        "repo": "folia-major"
+      }
+    ],
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -93,6 +100,7 @@
     "blueimp-md5": "^2.19.0",
     "buffer": "^6.0.3",
     "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.3",
     "framer-motion": "^12.38.0",
     "i18next": "^25.6.3",
     "i18next-browser-languagedetector": "^8.2.0",

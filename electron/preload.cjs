@@ -6,6 +6,17 @@ contextBridge.exposeInMainWorld('electron', {
     getCacheDirectory: () => ipcRenderer.invoke('get-cache-directory'),
     chooseCacheDirectory: () => ipcRenderer.invoke('choose-cache-directory'),
     resetCacheDirectory: () => ipcRenderer.invoke('reset-cache-directory'),
+    getUpdateStatus: () => ipcRenderer.invoke('updates-get-status'),
+    checkForUpdates: () => ipcRenderer.invoke('updates-check'),
+    markUpdateSeen: (version) => ipcRenderer.invoke('updates-mark-seen', version),
+    openUpdateReleasePage: (version) => ipcRenderer.invoke('updates-open-release-page', version),
+    downloadUpdate: () => ipcRenderer.invoke('updates-download'),
+    quitAndInstallUpdate: () => ipcRenderer.invoke('updates-quit-and-install'),
+    onUpdateStatusChanged: (callback) => {
+        const listener = (_event, status) => callback(status);
+        ipcRenderer.on('update-status-changed', listener);
+        return () => ipcRenderer.removeListener('update-status-changed', listener);
+    },
     getAudioCache: (cacheKey) => ipcRenderer.invoke('get-audio-cache', cacheKey),
     hasAudioCache: (cacheKey) => ipcRenderer.invoke('has-audio-cache', cacheKey),
     saveAudioCache: (cacheKey, data, mimeType) => ipcRenderer.invoke('save-audio-cache', cacheKey, data, mimeType),

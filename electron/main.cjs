@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, session, screen, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, session, screen, dialog, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store').default || require('electron-store');
 const crypto = require('crypto');
+const { autoUpdater } = require('electron-updater');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
 const isAppImageRuntime =
   process.platform === 'linux' &&
@@ -40,6 +41,11 @@ const DEFAULT_WINDOW_BOUNDS = {
   height: 800,
 };
 const CACHE_DIRECTORY_SETTING_KEY = 'CACHE_DIRECTORY';
+const ENABLE_UPDATE_CHECK_SETTING_KEY = 'ENABLE_UPDATE_CHECK';
+const ENABLE_AUTO_UPDATE_SETTING_KEY = 'ENABLE_AUTO_UPDATE';
+const LAST_SEEN_UPDATE_VERSION_SETTING_KEY = 'LAST_SEEN_UPDATE_VERSION';
+const FOLIA_RELEASES_URL = 'https://github.com/chthollyphile/folia-major/releases';
+const FOLIA_LATEST_RELEASE_API_URL = 'https://api.github.com/repos/chthollyphile/folia-major/releases/latest';
 
 function getStoredWindowState() {
   const storedBounds = store.get('WINDOW_BOUNDS');
@@ -355,6 +361,278 @@ async function fetchWithOptionalSystemProxy(url, options, useSystemProxy) {
   const proxy = await ses.resolveProxy(typeof url === 'string' ? url : url.url);
   console.log('[AI Proxy] resolved proxy for request:', proxy);
   return ses.fetch(url, options);
+}
+
+function getUpdateCheckEnabled() {
+  const configured = store.get(ENABLE_UPDATE_CHECK_SETTING_KEY);
+  return configured === undefined ? true : Boolean(configured);
+}
+
+function getAutoUpdateEnabled() {
+  return Boolean(store.get(ENABLE_AUTO_UPDATE_SETTING_KEY));
+}
+
+function isUpdateCheckSupported() {
+  return process.platform === 'win32';
+}
+
+function isAutoUpdaterSupported() {
+  return (
+    process.platform === 'win32' &&
+    app.isPackaged &&
+    process.env.ELECTRON_DEV !== 'true' &&
+    process.env.NODE_ENV !== 'development'
+  );
+}
+
+function normalizeVersion(value) {
+  return typeof value === 'string' ? value.trim().replace(/^v/i, '') : '';
+}
+
+function compareVersions(a, b) {
+  const left = normalizeVersion(a).split(/[.+-]/).map((part) => Number.parseInt(part, 10) || 0);
+  const right = normalizeVersion(b).split(/[.+-]/).map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(left.length, right.length, 3);
+
+  for (let index = 0; index < length; index += 1) {
+    const diff = (left[index] || 0) - (right[index] || 0);
+    if (diff !== 0) {
+      return diff > 0 ? 1 : -1;
+    }
+  }
+
+  return 0;
+}
+
+const updateState = {
+  status: 'idle',
+  currentVersion: normalizeVersion(app.getVersion()),
+  availableVersion: null,
+  updateUrl: FOLIA_RELEASES_URL,
+  error: null,
+  lastCheckedAt: null,
+  downloadProgress: null,
+};
+
+function getUpdateStatus() {
+  const availableVersion = updateState.availableVersion;
+
+  return {
+    ...updateState,
+    supported: isAutoUpdaterSupported(),
+    updateCheckSupported: isUpdateCheckSupported(),
+    updateCheckEnabled: getUpdateCheckEnabled(),
+    autoUpdateEnabled: getAutoUpdateEnabled(),
+    lastSeenVersion: store.get(LAST_SEEN_UPDATE_VERSION_SETTING_KEY) || null,
+    updateSeen: Boolean(
+      availableVersion &&
+      store.get(LAST_SEEN_UPDATE_VERSION_SETTING_KEY) === availableVersion
+    ),
+  };
+}
+
+function publishUpdateStatus() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.webContents.send('update-status-changed', getUpdateStatus());
+}
+
+function setUpdateState(patch) {
+  Object.assign(updateState, patch);
+  publishUpdateStatus();
+}
+
+async function fetchLatestReleaseMetadata() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  if (process.env.FOLIA_MOCK_UPDATE === 'true') {
+    return {
+      tag_name: 'v99.99.99',
+      html_url: 'https://github.com/chthollyphile/folia-major/releases/tag/v99.99.99',
+    };
+  }
+
+  try {
+    const ses = await ensureSystemProxySession();
+    const response = await ses.fetch(FOLIA_LATEST_RELEASE_API_URL, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': `Folia/${app.getVersion()}`,
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub release check failed: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = false;
+  autoUpdater.allowPrerelease = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  autoUpdater.on('download-progress', (progress) => {
+    setUpdateState({
+      status: 'downloading',
+      error: null,
+      downloadProgress: {
+        percent: typeof progress.percent === 'number' ? progress.percent : 0,
+        transferred: progress.transferred,
+        total: progress.total,
+      },
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    setUpdateState({
+      status: 'downloaded',
+      availableVersion: normalizeVersion(info?.version) || updateState.availableVersion,
+      error: null,
+      downloadProgress: null,
+    });
+  });
+
+  autoUpdater.on('error', (error) => {
+    setUpdateState({
+      status: 'error',
+      error: error instanceof Error ? error.message : String(error),
+      downloadProgress: null,
+    });
+  });
+}
+
+async function downloadAvailableUpdate() {
+  if (!isAutoUpdaterSupported()) {
+    setUpdateState({ status: 'unsupported', error: null });
+    return getUpdateStatus();
+  }
+
+  if (!updateState.availableVersion) {
+    await checkForUpdates({ manual: true });
+  }
+
+  if (!updateState.availableVersion) {
+    return getUpdateStatus();
+  }
+
+  try {
+    setUpdateState({ status: 'downloading', error: null, downloadProgress: null });
+    autoUpdater.autoDownload = true;
+    await autoUpdater.checkForUpdates();
+  } catch (error) {
+    setUpdateState({
+      status: 'error',
+      error: error instanceof Error ? error.message : String(error),
+      downloadProgress: null,
+    });
+  }
+
+  return getUpdateStatus();
+}
+
+async function checkForUpdates({ manual = false } = {}) {
+  if (!getUpdateCheckEnabled() && !manual) {
+    setUpdateState({ status: 'disabled', error: null, downloadProgress: null });
+    return getUpdateStatus();
+  }
+
+  if (!isUpdateCheckSupported()) {
+    setUpdateState({ status: 'unsupported', error: null, downloadProgress: null });
+    return getUpdateStatus();
+  }
+
+  setUpdateState({ status: 'checking', error: null, downloadProgress: null });
+
+  try {
+    const release = await fetchLatestReleaseMetadata();
+    const latestVersion = normalizeVersion(release?.tag_name || release?.name);
+    const releaseUrl = typeof release?.html_url === 'string' ? release.html_url : FOLIA_RELEASES_URL;
+
+    if (!latestVersion) {
+      throw new Error('Latest release did not include a version tag.');
+    }
+
+    const hasUpdate = compareVersions(latestVersion, app.getVersion()) > 0;
+    setUpdateState({
+      status: hasUpdate ? 'available' : 'latest',
+      availableVersion: hasUpdate ? latestVersion : null,
+      updateUrl: releaseUrl,
+      error: null,
+      lastCheckedAt: Date.now(),
+      downloadProgress: null,
+    });
+
+    if (hasUpdate && getAutoUpdateEnabled() && isAutoUpdaterSupported()) {
+      autoUpdater.autoDownload = true;
+      await autoUpdater.checkForUpdates();
+    }
+  } catch (error) {
+    setUpdateState({
+      status: 'error',
+      error: error instanceof Error ? error.message : String(error),
+      lastCheckedAt: Date.now(),
+      downloadProgress: null,
+    });
+  }
+
+  return getUpdateStatus();
+}
+
+function markUpdateSeen(version) {
+  const normalizedVersion = normalizeVersion(version || updateState.availableVersion);
+
+  if (normalizedVersion) {
+    store.set(LAST_SEEN_UPDATE_VERSION_SETTING_KEY, normalizedVersion);
+  }
+
+  publishUpdateStatus();
+  return getUpdateStatus();
+}
+
+async function openUpdateReleasePage(version) {
+  const normalizedVersion = normalizeVersion(version || updateState.availableVersion);
+  const url = normalizedVersion
+    ? `${FOLIA_RELEASES_URL}/tag/v${normalizedVersion}`
+    : updateState.updateUrl || FOLIA_RELEASES_URL;
+
+  await shell.openExternal(url);
+  return true;
+}
+
+function scheduleStartupUpdateCheck() {
+  if (!getUpdateCheckEnabled()) {
+    setUpdateState({ status: 'disabled', error: null });
+    return;
+  }
+
+  if (!isUpdateCheckSupported()) {
+    setUpdateState({ status: 'unsupported', error: null });
+    return;
+  }
+
+  if (!isAutoUpdaterSupported()) {
+    setUpdateState({ status: 'idle', error: null });
+    return;
+  }
+
+  setTimeout(() => {
+    checkForUpdates().catch((error) => {
+      setUpdateState({
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, 4500);
 }
 
 function getGeminiResponseSchema() {
@@ -978,9 +1256,11 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   setupFileSystemAccessPermissionHandlers();
+  setupAutoUpdater();
   await startApi();
   createWindow();
   focusMainWindow();
+  scheduleStartupUpdateCheck();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -1004,6 +1284,32 @@ ipcMain.handle('get-settings', () => {
 
 ipcMain.handle('save-settings', (event, key, value) => {
   store.set(key, value);
+
+  if (key === ENABLE_UPDATE_CHECK_SETTING_KEY) {
+    if (Boolean(value)) {
+      checkForUpdates().catch((error) => {
+        setUpdateState({
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    } else {
+      setUpdateState({ status: 'disabled', error: null, availableVersion: null, downloadProgress: null });
+    }
+  }
+
+  if (key === ENABLE_AUTO_UPDATE_SETTING_KEY) {
+    publishUpdateStatus();
+    if (Boolean(value) && updateState.availableVersion) {
+      downloadAvailableUpdate().catch((error) => {
+        setUpdateState({
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+  }
+
   return store.store;
 });
 
@@ -1053,6 +1359,35 @@ ipcMain.handle('reset-cache-directory', () => {
     path: getConfiguredCacheDirectory(),
     isDefault: true,
   };
+});
+
+ipcMain.handle('updates-get-status', () => {
+  return getUpdateStatus();
+});
+
+ipcMain.handle('updates-check', () => {
+  return checkForUpdates({ manual: true });
+});
+
+ipcMain.handle('updates-mark-seen', (event, version) => {
+  return markUpdateSeen(version);
+});
+
+ipcMain.handle('updates-open-release-page', (event, version) => {
+  return openUpdateReleasePage(version);
+});
+
+ipcMain.handle('updates-download', () => {
+  return downloadAvailableUpdate();
+});
+
+ipcMain.handle('updates-quit-and-install', () => {
+  if (!isAutoUpdaterSupported() || updateState.status !== 'downloaded') {
+    return false;
+  }
+
+  autoUpdater.quitAndInstall(false, true);
+  return true;
 });
 
 ipcMain.handle('get-audio-cache', async (event, cacheKey) => {

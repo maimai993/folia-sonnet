@@ -213,6 +213,7 @@ const Home: React.FC<HomeProps> = ({
     // UI State
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
+    const [updateStatus, setUpdateStatus] = useState<ElectronUpdateStatus | null>(null);
     const [navidromeEnabled, setNavidromeEnabled] = useState(isNavidromeEnabled());
     const [scanProgress, setScanProgress] = useState<{
         active: boolean;
@@ -238,6 +239,39 @@ const Home: React.FC<HomeProps> = ({
             setHomeViewTab('local');
         }
     };
+
+    useEffect(() => {
+        if (!window.electron?.getUpdateStatus) {
+            return;
+        }
+
+        let disposed = false;
+
+        window.electron.getUpdateStatus().then((status) => {
+            if (!disposed) {
+                setUpdateStatus(status);
+            }
+        }).catch(() => {
+            if (!disposed) {
+                setUpdateStatus(null);
+            }
+        });
+
+        const unsubscribe = window.electron.onUpdateStatusChanged?.((status) => {
+            setUpdateStatus(status);
+        });
+
+        return () => {
+            disposed = true;
+            unsubscribe?.();
+        };
+    }, []);
+
+    const showUpdateIndicator = Boolean(
+        updateStatus?.updateCheckEnabled &&
+        updateStatus.availableVersion &&
+        !updateStatus.updateSeen
+    );
 
     const [searchNavidromeSelection, setSearchNavidromeSelection] = useState<NavidromeViewSelection | null>(null);
 
@@ -472,10 +506,13 @@ const Home: React.FC<HomeProps> = ({
                                 </h1>
                                 <button
                                     onClick={() => setShowHelpModal(true)}
-                                    className="p-2 rounded-full hover:bg-white/10 opacity-40 hover:opacity-100 transition-all ml-4"
+                                    className="relative p-2 rounded-full hover:bg-white/10 opacity-40 hover:opacity-100 transition-all ml-4"
                                     title="Help & About"
                                 >
                                     <HelpCircle size={20} style={{ color: 'var(--text-primary)' }} />
+                                    {showUpdateIndicator && (
+                                        <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-red-400 ring-2 ring-black/20" />
+                                    )}
                                 </button>
                                 {scanProgress?.active && (
                                     <div

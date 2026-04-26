@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle, Palette, FolderOpen, Pencil, FlaskConical, ChevronLeft, ChevronRight, RotateCcw, GamepadDirectional } from 'lucide-react';
+import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle, Palette, FolderOpen, Pencil, FlaskConical, ChevronLeft, ChevronRight, RotateCcw, GamepadDirectional, RefreshCw, Download, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
 import { DualTheme, Theme, ThemeMode, type CadenzaTuning, type FumeTuning, type PartitaTuning, type VisualizerMode } from '../../types';
@@ -115,9 +115,12 @@ const HelpModal: React.FC<HelpModalProps> = ({
         OPENAI_API_URL: '',
         OPENAI_API_MODEL: '',
         AI_PROVIDER: 'gemini',
-        USE_SYSTEM_PROXY_FOR_AI: false
+        USE_SYSTEM_PROXY_FOR_AI: false,
+        ENABLE_UPDATE_CHECK: true,
+        ENABLE_AUTO_UPDATE: false
     });
     const [electronSaveStatus, setElectronSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+    const [updateStatus, setUpdateStatus] = useState<ElectronUpdateStatus | null>(null);
     const [cacheDirectory, setCacheDirectory] = useState<string>('');
     const [cacheDirectoryIsDefault, setCacheDirectoryIsDefault] = useState(true);
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
@@ -138,8 +141,31 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     setCacheDirectoryIsDefault(result.isDefault);
                 }
             });
+            (window as any).electron.getUpdateStatus?.().then((status: ElectronUpdateStatus) => {
+                setUpdateStatus(status);
+            });
         }
     }, []);
+
+    useEffect(() => {
+        if (!window.electron?.onUpdateStatusChanged) {
+            return;
+        }
+
+        return window.electron.onUpdateStatusChanged((status) => {
+            setUpdateStatus(status);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!updateStatus?.availableVersion || updateStatus.updateSeen || !window.electron?.markUpdateSeen) {
+            return;
+        }
+
+        window.electron.markUpdateSeen(updateStatus.availableVersion).then(setUpdateStatus).catch(() => {
+            // Seeing the settings panel should never fail the panel itself.
+        });
+    }, [updateStatus?.availableVersion, updateStatus?.updateSeen]);
 
     const copyText = async (text: string) => {
         if (navigator.clipboard?.writeText && window.isSecureContext) {
@@ -202,9 +228,72 @@ const HelpModal: React.FC<HelpModalProps> = ({
             await (window as any).electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
             await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
             await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
+            await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
+            await (window as any).electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
             setElectronSaveStatus('saved');
             setTimeout(() => setElectronSaveStatus('idle'), 2000);
         }
+    };
+
+    const handleToggleUpdateCheck = async () => {
+        if (!window.electron?.saveSettings) {
+            return;
+        }
+
+        const nextEnabled = !electronSettings.ENABLE_UPDATE_CHECK;
+        const nextSettings = {
+            ...electronSettings,
+            ENABLE_UPDATE_CHECK: nextEnabled,
+            ENABLE_AUTO_UPDATE: nextEnabled ? electronSettings.ENABLE_AUTO_UPDATE : false,
+        };
+
+        setElectronSettings(nextSettings);
+        await window.electron.saveSettings('ENABLE_UPDATE_CHECK', nextSettings.ENABLE_UPDATE_CHECK);
+        if (!nextSettings.ENABLE_AUTO_UPDATE) {
+            await window.electron.saveSettings('ENABLE_AUTO_UPDATE', false);
+        }
+
+        const status = await window.electron.getUpdateStatus?.();
+        if (status) {
+            setUpdateStatus(status);
+        }
+    };
+
+    const handleToggleAutoUpdate = async () => {
+        if (!window.electron?.saveSettings || !electronSettings.ENABLE_UPDATE_CHECK || !updateStatus?.supported) {
+            return;
+        }
+
+        const nextEnabled = !electronSettings.ENABLE_AUTO_UPDATE;
+        setElectronSettings({ ...electronSettings, ENABLE_AUTO_UPDATE: nextEnabled });
+        await window.electron.saveSettings('ENABLE_AUTO_UPDATE', nextEnabled);
+
+        const status = await window.electron.getUpdateStatus?.();
+        if (status) {
+            setUpdateStatus(status);
+        }
+    };
+
+    const handleCheckForUpdates = async () => {
+        if (!window.electron?.checkForUpdates) {
+            return;
+        }
+
+        const status = await window.electron.checkForUpdates();
+        setUpdateStatus(status);
+    };
+
+    const handleDownloadUpdate = async () => {
+        if (!window.electron?.downloadUpdate) {
+            return;
+        }
+
+        const status = await window.electron.downloadUpdate();
+        setUpdateStatus(status);
+    };
+
+    const handleInstallUpdate = async () => {
+        await window.electron?.quitAndInstallUpdate?.();
     };
 
     // Navidrome Settings State
@@ -342,6 +431,48 @@ const HelpModal: React.FC<HelpModalProps> = ({
         mode: entry.mode,
         label: getVisualizerModeLabel(entry.mode, t),
     }));
+    const updateBadgeLabel = (() => {
+        if (!electronSettings.ENABLE_UPDATE_CHECK || updateStatus?.status === 'disabled') {
+            return t('options.updateCheckDisabled') || 'Disabled';
+        }
+
+        if (updateStatus?.status === 'checking') {
+            return t('options.updateChecking') || 'Checking...';
+        }
+
+        if (updateStatus?.availableVersion) {
+            return `${t('options.updateAvailable') || 'Found'} v${updateStatus.availableVersion}`;
+        }
+
+        if (updateStatus?.status === 'latest') {
+            return t('options.updateLatest') || 'Up to date';
+        }
+
+        if (updateStatus?.status === 'error') {
+            return t('options.updateCheckFailed') || 'Check failed';
+        }
+
+        if (updateStatus?.status === 'unsupported') {
+            return t('options.updateUnsupported') || 'Unavailable';
+        }
+
+        return t('options.updateLatest') || 'Up to date';
+    })();
+    const updateBadgeIcon = updateStatus?.status === 'checking'
+        ? <Loader2 size={13} className="animate-spin" />
+        : updateStatus?.availableVersion
+            ? <Download size={13} />
+            : updateStatus?.status === 'error'
+                ? <AlertCircle size={13} />
+                : <Check size={13} />;
+    const canDownloadUpdate = Boolean(
+        electronSettings.ENABLE_UPDATE_CHECK &&
+        updateStatus?.supported &&
+        updateStatus?.availableVersion &&
+        updateStatus.status !== 'downloading' &&
+        updateStatus.status !== 'downloaded'
+    );
+    const canEnableAutoUpdate = Boolean(electronSettings.ENABLE_UPDATE_CHECK && updateStatus?.supported);
 
     return (
         <motion.div
@@ -490,6 +621,22 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         ? '已复制'
                                         : `folia-major v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`}
                                 </button>
+                                {updateStatus?.availableVersion && (
+                                    <div className="mt-1 flex items-center justify-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                        <span className="opacity-60">
+                                            {(t('options.updateAvailable') || 'Found')} v{updateStatus.availableVersion}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
+                                            className="inline-flex items-center gap-1 opacity-50 transition-opacity hover:opacity-90"
+                                            style={{ color: 'var(--text-primary)' }}
+                                        >
+                                            <ExternalLink size={12} />
+                                            {t('options.openReleasePage') || 'Open Release Page'}
+                                        </button>
+                                    </div>
+                                )}
                                 <p className="text-xs font-mono opacity-30 mb-2" style={{ color: 'var(--text-secondary)' }}>
                                     AI Service: {aiServiceLabel}
                                 </p>
@@ -877,6 +1024,106 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 </div>
                             </section>
 
+                            {/* Update Settings */}
+                            {isElectron && (
+                                <section>
+                                    <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center justify-between gap-3" style={{ color: 'var(--text-secondary)' }}>
+                                        <span className="flex items-center gap-2">
+                                            <RefreshCw size={14} /> {t('options.updateCheck') || "Update Check"}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={handleCheckForUpdates}
+                                            disabled={!electronSettings.ENABLE_UPDATE_CHECK || updateStatus?.status === 'checking'}
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium normal-case tracking-normal transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                            style={{ color: 'var(--text-primary)' }}
+                                        >
+                                            {updateBadgeIcon}
+                                            <span>{updateBadgeLabel}</span>
+                                        </button>
+                                    </h3>
+                                    <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-4">
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="space-y-1">
+                                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('options.enableUpdateCheck') || "Enable Update Check"}
+                                                </div>
+                                                <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
+                                                    {t('options.enableUpdateCheckDesc') || "Check GitHub releases through the system proxy when the desktop app starts."}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={handleToggleUpdateCheck}
+                                                className={`w-12 h-6 rounded-full p-1 transition-colors ${!electronSettings.ENABLE_UPDATE_CHECK ? 'bg-white/10' : ''}`}
+                                                style={{ backgroundColor: electronSettings.ENABLE_UPDATE_CHECK ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                            >
+                                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${electronSettings.ENABLE_UPDATE_CHECK ? 'translate-x-6' : 'translate-x-0'}`} />
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center justify-between gap-4 pt-3 border-t border-white/10">
+                                            <div className="space-y-1">
+                                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('options.enableAutoUpdate') || "Enable Auto Update"}
+                                                </div>
+                                                <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
+                                                    {t('options.enableAutoUpdateDesc') || "Automatically download updates after a new version is found."}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={handleToggleAutoUpdate}
+                                                disabled={!canEnableAutoUpdate}
+                                                className={`w-12 h-6 rounded-full p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${!electronSettings.ENABLE_AUTO_UPDATE ? 'bg-white/10' : ''}`}
+                                                style={{ backgroundColor: electronSettings.ENABLE_AUTO_UPDATE ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                            >
+                                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${electronSettings.ENABLE_AUTO_UPDATE ? 'translate-x-6' : 'translate-x-0'}`} />
+                                            </button>
+                                        </div>
+
+                                        <div className="text-[10px] opacity-45" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.autoUpdateGithubNotice') || "Auto update needs access to GitHub; if the network is unstable, keep a system proxy enabled."}
+                                        </div>
+
+                                        {updateStatus?.availableVersion && (
+                                            <div className="flex flex-wrap gap-2 pt-3 border-t border-white/10">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
+                                                    className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-medium transition-colors hover:bg-white/15"
+                                                    style={{ color: 'var(--text-primary)' }}
+                                                >
+                                                    <ExternalLink size={14} />
+                                                    {t('options.openReleasePage') || "Open Release Page"}
+                                                </button>
+                                                {!electronSettings.ENABLE_AUTO_UPDATE && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleDownloadUpdate}
+                                                        disabled={!canDownloadUpdate}
+                                                        className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-medium transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
+                                                        style={{ color: 'var(--text-primary)' }}
+                                                    >
+                                                        <Download size={14} />
+                                                        {t('options.downloadUpdate') || "Download Update"}
+                                                    </button>
+                                                )}
+                                                {updateStatus.status === 'downloaded' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleInstallUpdate}
+                                                        className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-medium transition-colors hover:bg-white/15"
+                                                        style={{ color: 'var(--text-primary)' }}
+                                                    >
+                                                        <RefreshCw size={14} />
+                                                        {t('options.restartToInstallUpdate') || "Restart to Install"}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
+
                             {/* Electron Settings */}
                             {isElectron && (
                                 <section>
@@ -893,15 +1140,17 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                 <div className="flex bg-white/5 rounded-lg border border-white/10 p-1">
                                                     <button
                                                         onClick={() => setElectronSettings({ ...electronSettings, AI_PROVIDER: 'gemini' })}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${electronSettings.AI_PROVIDER !== 'openai' ? 'bg-white/10 text-white shadow-sm' : 'opacity-50 hover:opacity-100'
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${electronSettings.AI_PROVIDER !== 'openai' ? 'bg-white/10 shadow-sm' : 'opacity-50 hover:opacity-100'
                                                             }`}
+                                                        style={{ color: 'var(--text-primary)' }}
                                                     >
                                                         Gemini
                                                     </button>
                                                     <button
                                                         onClick={() => setElectronSettings({ ...electronSettings, AI_PROVIDER: 'openai' })}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${electronSettings.AI_PROVIDER === 'openai' ? 'bg-white/10 text-white shadow-sm' : 'opacity-50 hover:opacity-100'
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${electronSettings.AI_PROVIDER === 'openai' ? 'bg-white/10 shadow-sm' : 'opacity-50 hover:opacity-100'
                                                             }`}
+                                                        style={{ color: 'var(--text-primary)' }}
                                                     >
                                                         OpenAI
                                                     </button>
