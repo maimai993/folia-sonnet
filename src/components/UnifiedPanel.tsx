@@ -93,6 +93,7 @@ interface UnifiedPanelProps {
     onOpenCurrentNavidromeAlbum: () => void;
     onOpenCurrentNavidromeArtist: () => void;
     showOpenPanelCloseButton: boolean;
+    hideToggleButton?: boolean;
 }
 
 const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
@@ -167,6 +168,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     onOpenCurrentNavidromeAlbum,
     onOpenCurrentNavidromeArtist,
     showOpenPanelCloseButton,
+    hideToggleButton = false,
 }) => {
     const { t } = useTranslation();
     const coverAreaRef = React.useRef<HTMLDivElement>(null);
@@ -661,7 +663,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             </div>
 
             {/* Toggle Button */}
-            {(!isOpen || showOpenPanelCloseButton) && (
+            {!hideToggleButton && (!isOpen || showOpenPanelCloseButton) && (
                 <div className="pointer-events-auto fixed bottom-8 right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end">
                     <button
                         onClick={onToggle}

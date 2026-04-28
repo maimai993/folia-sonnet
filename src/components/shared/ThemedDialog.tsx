@@ -35,6 +35,7 @@ const ThemedDialog: React.FC<ThemedDialogProps> = ({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
+                    data-folia-keyboard-window="true"
                     className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
                     onClick={onClose}
                 >

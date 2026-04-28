@@ -345,6 +345,7 @@ export default function App() {
     const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi'>('cover');
+    const [isPlayerChromeHidden, setIsPlayerChromeHidden] = useState(false);
     const [isDevDebugOverlayVisible, setIsDevDebugOverlayVisible] = useState(false);
 
     // Player State
@@ -2818,6 +2819,10 @@ export default function App() {
                 return;
             }
 
+            const hasBlockingWindow = () => Boolean(
+                document.querySelector('[data-folia-keyboard-window="true"]')
+            );
+
             if (isDev && e.altKey && e.shiftKey && e.code === 'KeyD') {
                 e.preventDefault();
                 setIsDevDebugOverlayVisible(prev => !prev);
@@ -2864,12 +2869,18 @@ export default function App() {
                         audioRef.current.currentTime = Math.min(audioRef.current.duration || 0, audioRef.current.currentTime + 5);
                     }
                     break;
+                case 'KeyH':
+                    if (currentView !== 'player' || isPanelOpen || hasBlockingWindow()) return;
+                    if (e.ctrlKey || e.altKey || e.metaKey) return;
+                    e.preventDefault();
+                    setIsPlayerChromeHidden(prev => !prev);
+                    break;
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [audioSrc, currentSong, currentView, handleNextTrack, handlePrevTrack, isDev, playerState]);
+    }, [audioSrc, currentSong, currentView, handleNextTrack, handlePrevTrack, isDev, isPanelOpen, playerState]);
 
     const toggleLoop = (e?: React.MouseEvent) => {
         e?.stopPropagation();
@@ -3594,6 +3605,7 @@ export default function App() {
                         secondaryColor="var(--text-secondary)"
                         theme={theme}
                         isDaylight={isDaylight}
+                        isHidden={currentView === 'player' && isPlayerChromeHidden}
                     />
                 )
             }
@@ -3673,6 +3685,7 @@ export default function App() {
                         onOpenCurrentNavidromeAlbum={openCurrentNavidromeAlbum}
                         onOpenCurrentNavidromeArtist={openCurrentNavidromeArtist}
                         showOpenPanelCloseButton={showOpenPanelCloseButton}
+                        hideToggleButton={isPlayerChromeHidden}
                     />
                 )
             }

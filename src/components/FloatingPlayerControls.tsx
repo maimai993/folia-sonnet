@@ -34,6 +34,7 @@ interface FloatingPlayerControlsProps {
     secondaryColor?: string;
     theme?: Theme;
     isDaylight: boolean;
+    isHidden?: boolean;
 }
 
 
@@ -54,7 +55,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     primaryColor = 'var(--text-primary)',
     secondaryColor = 'var(--text-secondary)',
     theme,
-    isDaylight
+    isDaylight,
+    isHidden = false
 }) => {
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBgExpanded = isDaylight ? 'bg-white/60 border border-white/20 shadow-xl' : 'bg-black/40 border border-white/5';
@@ -123,6 +125,10 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             onNavigateToPlayer();
         }
     };
+
+    if (isHidden) {
+        return null;
+    }
 
     return (
         <>

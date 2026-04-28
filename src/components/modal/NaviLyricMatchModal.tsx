@@ -170,7 +170,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
     const coverUrl = song.album?.picUrl || song.al?.picUrl || song.navidromeData?.coverArtUrl || null;
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xl flex items-center justify-center p-6">
+        <div data-folia-keyboard-window="true" className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xl flex items-center justify-center p-6">
             <div className={`${bgClass} border rounded-2xl max-w-5xl w-full max-h-[80vh] flex flex-col shadow-2xl backdrop-blur-md`}>
                 {/* Header */}
                 <div className={`px-6 py-4 border-b ${borderColor} flex items-center justify-between`}>

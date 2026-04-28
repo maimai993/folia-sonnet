@@ -480,6 +480,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={shellTransition}
+            data-folia-keyboard-window="true"
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4"
         >
             <motion.div
@@ -569,26 +570,20 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">Space</kbd>
                                     </li>
                                     <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                        <span>{t('help.previousTrack')}</span>
-                                        <div className="flex gap-1">
+                                        <span>{t('help.previousTrack')} / {t('help.nextTrack')}</span>
+                                        <div className="flex items-center gap-1">
                                             <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">Ctrl</kbd>
-                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">←</kbd>
+                                            <span className="text-xs opacity-50">+</span>
+                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">← / →</kbd>
                                         </div>
                                     </li>
                                     <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                        <span>{t('help.nextTrack')}</span>
-                                        <div className="flex gap-1">
-                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">Ctrl</kbd>
-                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">→</kbd>
-                                        </div>
+                                        <span>{t('help.seekBackward')} / {t('help.seekForward')}</span>
+                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">← / →</kbd>
                                     </li>
                                     <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                        <span>{t('help.seekBackward')}</span>
-                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">←</kbd>
-                                    </li>
-                                    <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                        <span>{t('help.seekForward')}</span>
-                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">→</kbd>
+                                        <span>{t('help.hidePlayerChrome')}</span>
+                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">H</kbd>
                                     </li>
                                 </ul>
                             </div>
