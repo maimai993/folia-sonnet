@@ -185,6 +185,7 @@ export default {
     "seekForward": "Seek Forward 5s",
     "seekBackward": "Seek Backward 5s",
     "hidePlayerChrome": "Hide progress bar and lower-right button",
+    "browserFullscreen": "Fullscreen",
     "madeBy": "Made by",
     "version": "version"
   },

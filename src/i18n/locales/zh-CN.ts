@@ -185,6 +185,7 @@ export default {
     "seekForward": "快进 5 秒",
     "seekBackward": "倒退 5 秒",
     "hidePlayerChrome": "隐藏进度条和右下角按钮",
+    "browserFullscreen": "全屏",
     "madeBy": "作者",
     "version": "版本"
   },

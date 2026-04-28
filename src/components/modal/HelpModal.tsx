@@ -585,6 +585,10 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         <span>{t('help.hidePlayerChrome')}</span>
                                         <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">H</kbd>
                                     </li>
+                                    <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
+                                        <span>{t('help.browserFullscreen')}</span>
+                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">F11</kbd>
+                                    </li>
                                 </ul>
                             </div>
 
