@@ -108,7 +108,6 @@ interface FumeLayoutAttemptOptions {
     densityScale: number;
     seedKey: string;
     mode?: 'measure' | 'render';
-    measurePrecision?: 'estimate' | 'exact';
     timing?: FumeLayoutAttemptTiming;
 }
 
@@ -492,8 +491,12 @@ const buildWordRangeIndexByOffset = (
     return indices;
 };
 
-const chooseBlockVariant = (line: Line, index: number, total: number) => {
-    const graphemeCount = splitGraphemes(line.fullText).filter(value => value.trim().length > 0).length;
+const countRenderableGraphemes = (text: string) => (
+    splitGraphemes(text).filter(value => value.trim().length > 0).length
+);
+
+const chooseNaturalBlockVariant = (line: Line, index: number, total: number) => {
+    const graphemeCount = countRenderableGraphemes(line.fullText);
     if (graphemeCount === 0) {
         return 'body' as const;
     }
@@ -510,6 +513,80 @@ const chooseBlockVariant = (line: Line, index: number, total: number) => {
         : 'body';
 };
 
+const chooseFallbackHeroBlockIndex = (
+    entries: Array<{ line: Line; index: number; }>,
+) => {
+    if (entries.length === 0) {
+        return -1;
+    }
+
+    const hasNaturalHero = entries.some(({ line }, blockIndex) => (
+        chooseNaturalBlockVariant(line, blockIndex, entries.length) === 'hero'
+    ));
+    if (hasNaturalHero) {
+        return -1;
+    }
+
+    let bestIndex = -1;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    entries.forEach(({ line }, blockIndex) => {
+        const graphemeCount = countRenderableGraphemes(line.fullText);
+        if (graphemeCount === 0) {
+            return;
+        }
+
+        const isComfortableHeroLength = graphemeCount >= 4 && graphemeCount <= 28;
+        const isAcceptableFallbackLength = graphemeCount <= 36;
+        if (!isComfortableHeroLength && !isAcceptableFallbackLength) {
+            return;
+        }
+
+        const centered = Math.abs(blockIndex - entries.length / 2) / Math.max(entries.length, 1);
+        const centerScore = 1 - centered;
+        const lengthScore = graphemeCount >= 6 && graphemeCount <= 22
+            ? 1
+            : graphemeCount <= 28
+                ? 0.72
+                : 0.36;
+        const chorusScore = line.isChorus ? 0.28 : 0;
+        const stableJitter = seeded(`${line.fullText}:${blockIndex}:fallback-hero`) * 0.04;
+        const score = centerScore * 0.62 + lengthScore * 0.34 + chorusScore + stableJitter;
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestIndex = blockIndex;
+        }
+    });
+
+    if (bestIndex >= 0) {
+        return bestIndex;
+    }
+
+    let shortestIndex = -1;
+    let shortestCount = Number.POSITIVE_INFINITY;
+    entries.forEach(({ line }, blockIndex) => {
+        const graphemeCount = countRenderableGraphemes(line.fullText);
+        if (graphemeCount > 0 && graphemeCount < shortestCount) {
+            shortestCount = graphemeCount;
+            shortestIndex = blockIndex;
+        }
+    });
+
+    return shortestIndex;
+};
+
+const chooseBlockVariant = (
+    line: Line,
+    index: number,
+    total: number,
+    forcedHeroIndex: number,
+) => (
+    index === forcedHeroIndex
+        ? 'hero'
+        : chooseNaturalBlockVariant(line, index, total)
+);
+
 const chooseFontPx = (
     line: Line,
     variant: 'body' | 'hero',
@@ -517,7 +594,7 @@ const chooseFontPx = (
     lyricsFontScale: number,
     densityScale: number,
 ) => {
-    const graphemeCount = Math.max(splitGraphemes(line.fullText).filter(value => value.trim().length > 0).length, 1);
+    const graphemeCount = Math.max(countRenderableGraphemes(line.fullText), 1);
     const density = graphemeCount + line.words.length * 1.4;
     const base = variant === 'hero'
         ? width / Math.max(Math.sqrt(density) * 1.5, 4.5)
@@ -582,36 +659,10 @@ const buildPreparedSingleLine = (
     };
 };
 
-const buildMeasuredSingleLine = (
-    line: Line,
-    fontFamily: string,
-    width: number,
-    variant: 'body' | 'hero',
-    lyricsFontScale: number,
-    densityScale: number,
-    heroScale: number,
-) => {
-    const fontPx = chooseFontPx(
-        line,
-        variant,
-        width,
-        lyricsFontScale,
-        densityScale,
-    ) * (variant === 'hero' ? heroScale : 1);
-    const prepared = prepareWithSegments(line.fullText, `700 ${fontPx}px ${fontFamily}`);
-    const layout = layoutWithLines(prepared, width, Math.round(fontPx * (variant === 'hero' ? 1.02 : 1.06)));
-
-    return {
-        fontPx,
-        prepared,
-        layout,
-    };
-};
-
 const buildLayoutCacheKey = (
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
 ) => {
@@ -627,6 +678,7 @@ const buildLayoutCacheKey = (
         Math.round(viewport.height),
         layoutTheme.fontStyle,
         layoutTheme.fontFamily ?? '',
+        layoutTheme.name,
         lyricsFontScale.toFixed(4),
         fumeTuning.heroScale.toFixed(4),
         lines.length,
@@ -688,7 +740,7 @@ const resolvePrintedGraphemeCount = (
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
     options: FumeLayoutAttemptOptions & { mode: 'measure' },
@@ -696,7 +748,7 @@ function buildArticleLayoutAttempt(
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
     options: FumeLayoutAttemptOptions & { mode?: 'render' },
@@ -704,7 +756,7 @@ function buildArticleLayoutAttempt(
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
     options: FumeLayoutAttemptOptions,
@@ -721,11 +773,9 @@ function buildArticleLayoutAttempt(
         densityScale,
         seedKey,
         mode = 'render',
-        measurePrecision = 'estimate',
         timing,
     } = options;
     const shouldBuildRenderDetails = mode === 'render';
-    const shouldUseExactLineLayout = shouldBuildRenderDetails || measurePrecision === 'exact';
     const horizontalMargin = Math.max(viewport.width * 0.86, 280);
     const verticalMargin = Math.max(viewport.height * 0.82, 220);
     const columnWidth = (paperWidth - gap * (columns - 1)) / columns;
@@ -743,10 +793,11 @@ function buildArticleLayoutAttempt(
     const columnHeights = Array.from({ length: columns }, () => verticalMargin);
     let bodyColumnTieCursor = 0;
     let heroPlacementTieCursor = 0;
+    const forcedHeroIndex = chooseFallbackHeroBlockIndex(filteredLines);
 
     filteredLines.forEach(({ line, index }, blockIndex) => {
         timing && (timing.lines += 1);
-        const variant = chooseBlockVariant(line, blockIndex, filteredLines.length);
+        const variant = chooseBlockVariant(line, blockIndex, filteredLines.length, forcedHeroIndex);
         const heroSpanColumns = variant === 'hero'
             ? Math.min(columns, columns <= 1 ? 1 : 2)
             : 1;
@@ -764,25 +815,15 @@ function buildArticleLayoutAttempt(
         const paddingY = 0;
         const innerWidth = Math.max(blockWidth - paddingX * 2, 120);
         const prepareLayoutStart = timing ? nowMs() : 0;
-        const preparedSingleLine = shouldUseExactLineLayout
-            ? buildPreparedSingleLine(
-                line.fullText,
-                fontFamily,
-                innerWidth,
-                variant,
-                lyricsFontScale,
-                densityScale,
-                fumeTuning.heroScale,
-            )
-            : buildMeasuredSingleLine(
-                line,
-                fontFamily,
-                innerWidth,
-                variant,
-                lyricsFontScale,
-                densityScale,
-                fumeTuning.heroScale,
-            );
+        const preparedSingleLine = buildPreparedSingleLine(
+            line.fullText,
+            fontFamily,
+            innerWidth,
+            variant,
+            lyricsFontScale,
+            densityScale,
+            fumeTuning.heroScale,
+        );
         if (timing) {
             timing.prepareLayoutMs += nowMs() - prepareLayoutStart;
         }
@@ -939,7 +980,7 @@ function buildArticleLayoutAttempt(
 const buildArticleLayout = (
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
 ): FumeArticleLayout | null => {
@@ -951,7 +992,7 @@ const buildArticleLayout = (
     const viewportHeight = Math.max(viewport.height, 240);
     const maxColumns = paperWidth >= 1120 ? 4 : paperWidth >= 760 ? 3 : paperWidth >= 500 ? 2 : 1;
     const targetHeight = viewportHeight * 2.45;
-    const layoutSeedKey = `${layoutTheme.fontStyle}:${layoutTheme.fontFamily ?? ''}`;
+    const layoutSeedKey = layoutTheme.name;
 
     let bestOptions: (FumeLayoutAttemptOptions & { mode: 'render' }) | null = null;
     let bestScore = Number.POSITIVE_INFINITY;
@@ -959,11 +1000,8 @@ const buildArticleLayout = (
     const totalStart = nowMs();
     const measureTiming = createFumeLayoutTiming();
     const renderTiming = createFumeLayoutTiming();
-    const calibrationTiming = createFumeLayoutTiming();
     const measureColumnTimings = new Map<number, FumeLayoutAttemptTiming>();
     let measureAttemptCount = 0;
-    let calibrationAttemptCount = 0;
-    let skippedBinarySearchColumns = 0;
 
     for (let columns = maxColumns; columns >= 1; columns -= 1) {
         let low = 0.82;
@@ -971,48 +1009,6 @@ const buildArticleLayout = (
         const gap = clamp(Math.round(paperWidth * (columns >= 4 ? 0.0065 : columns === 3 ? 0.0085 : 0.0115)), 6, 14);
         const columnTiming = createFumeLayoutTiming();
         measureColumnTimings.set(columns, columnTiming);
-        const lowDensityOptions: FumeLayoutAttemptOptions & { mode: 'measure' } = {
-            paperWidth,
-            viewportHeight,
-            columns,
-            gap,
-            densityScale: low,
-            seedKey: `${layoutSeedKey}:${columns}:${paperWidth}`,
-            mode: 'measure',
-            timing: columnTiming,
-        };
-        measureAttemptCount += 1;
-        const lowDensityLayout = buildArticleLayoutAttempt(lines, viewport, layoutTheme, lyricsFontScale, fumeTuning, lowDensityOptions);
-
-        if (lowDensityLayout) {
-            const coveragePenalty = Math.abs(lowDensityLayout.height - targetHeight);
-            const overflowPenalty = lowDensityLayout.height < targetHeight ? 0 : (lowDensityLayout.height - targetHeight) * 0.14;
-            const score = coveragePenalty + overflowPenalty;
-
-            if (score < bestScore) {
-                bestScore = score;
-                bestHeight = lowDensityLayout.height;
-                bestOptions = {
-                    paperWidth,
-                    viewportHeight,
-                    columns,
-                    gap,
-                    densityScale: low,
-                    seedKey: `${layoutSeedKey}:${columns}:${paperWidth}`,
-                    mode: 'render',
-                    timing: renderTiming,
-                };
-            }
-
-            if (lowDensityLayout.height >= targetHeight) {
-                skippedBinarySearchColumns += 1;
-                measureTiming.lines += columnTiming.lines;
-                measureTiming.prepareLayoutMs += columnTiming.prepareLayoutMs;
-                measureTiming.placementMs += columnTiming.placementMs;
-                measureTiming.renderDetailsMs += columnTiming.renderDetailsMs;
-                continue;
-            }
-        }
 
         for (let iteration = 0; iteration < 8; iteration += 1) {
             const densityScale = (low + high) / 2;
@@ -1065,63 +1061,6 @@ const buildArticleLayout = (
         measureTiming.renderDetailsMs += columnTiming.renderDetailsMs;
     }
 
-    if (bestOptions && bestHeight < targetHeight * 1.18 && skippedBinarySearchColumns < maxColumns) {
-        const estimatedBestOptions = bestOptions;
-        let calibrationBestOptions: (FumeLayoutAttemptOptions & { mode: 'render' }) | null = null;
-        let calibrationBestHeight = 0;
-        let calibrationBestScore = Number.POSITIVE_INFINITY;
-        let low = clamp(estimatedBestOptions.densityScale - 0.28, 0.82, 1.42);
-        let high = clamp(estimatedBestOptions.densityScale + 0.08, 0.82, 1.42);
-
-        for (let iteration = 0; iteration < 5; iteration += 1) {
-            const densityScale = (low + high) / 2;
-            calibrationAttemptCount += 1;
-            const calibrationOptions: FumeLayoutAttemptOptions & { mode: 'measure' } = {
-                paperWidth,
-                viewportHeight,
-                columns: estimatedBestOptions.columns,
-                gap: estimatedBestOptions.gap,
-                densityScale,
-                seedKey: estimatedBestOptions.seedKey,
-                mode: 'measure',
-                measurePrecision: 'exact',
-                timing: calibrationTiming,
-            };
-            const layout = buildArticleLayoutAttempt(lines, viewport, layoutTheme, lyricsFontScale, fumeTuning, calibrationOptions);
-
-            if (!layout) {
-                continue;
-            }
-
-            const coveragePenalty = Math.abs(layout.height - targetHeight);
-            const overflowPenalty = layout.height < targetHeight ? 0 : (layout.height - targetHeight) * 0.14;
-            const score = coveragePenalty + overflowPenalty;
-
-            if (score < calibrationBestScore) {
-                calibrationBestScore = score;
-                calibrationBestHeight = layout.height;
-                calibrationBestOptions = {
-                    ...estimatedBestOptions,
-                    densityScale,
-                    mode: 'render',
-                    timing: renderTiming,
-                };
-            }
-
-            if (layout.height < targetHeight) {
-                low = densityScale;
-            } else {
-                high = densityScale;
-            }
-        }
-
-        if (calibrationBestOptions) {
-            bestScore = calibrationBestScore;
-            bestHeight = calibrationBestHeight;
-            bestOptions = calibrationBestOptions;
-        }
-    }
-
     const renderStart = nowMs();
     const article = bestOptions
         ? buildArticleLayoutAttempt(lines, viewport, layoutTheme, lyricsFontScale, fumeTuning, bestOptions)
@@ -1135,13 +1074,11 @@ const buildArticleLayout = (
             measureMs: roundMs(measureTiming.prepareLayoutMs + measureTiming.placementMs),
             renderMs: roundMs(renderMs),
             attempts: measureAttemptCount,
-            calibrationAttempts: calibrationAttemptCount,
-            skippedBinarySearchColumns,
             measuredLines: measureTiming.lines,
-            calibratedLines: calibrationTiming.lines,
             renderedLines: renderTiming.lines,
             inputLines: lines.length,
             blocks: article?.blocks.length ?? 0,
+            heroBlocks: article?.blocks.filter(block => block.variant === 'hero').length ?? 0,
             viewport: `${Math.round(viewport.width)}x${Math.round(viewport.height)}`,
             paperWidth: Math.round(paperWidth),
             targetHeight: Math.round(targetHeight),
@@ -1159,11 +1096,6 @@ const buildArticleLayout = (
                 prepareLayoutMs: roundMs(renderTiming.prepareLayoutMs),
                 placementMs: roundMs(renderTiming.placementMs),
                 renderDetailsMs: roundMs(renderTiming.renderDetailsMs),
-            },
-            calibrationBreakdown: {
-                prepareLayoutMs: roundMs(calibrationTiming.prepareLayoutMs),
-                placementMs: roundMs(calibrationTiming.placementMs),
-                renderDetailsMs: roundMs(calibrationTiming.renderDetailsMs),
             },
             measureByColumns: Array.from(measureColumnTimings.entries()).map(([columns, timing]) => ({
                 columns,
@@ -1521,10 +1453,11 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
     }), [fumeTuning]);
     const layoutTheme = useMemo(
         () => ({
+            name: theme.name,
             fontStyle: theme.fontStyle,
             fontFamily: theme.fontFamily,
         }),
-        [theme.fontFamily, theme.fontStyle],
+        [theme.fontFamily, theme.fontStyle, theme.name],
     );
     const layoutFumeTuning = useMemo<FumeTuning>(() => ({
         ...DEFAULT_FUME_TUNING,
@@ -1947,6 +1880,13 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                     theme,
                     time,
                     audioLevels: fumeBackgroundAudioLevels,
+                    parallax: {
+                        cameraX: backgroundCameraX,
+                        cameraY: backgroundCameraY,
+                        originX: backgroundCenterX,
+                        originY: backgroundCenterY,
+                        strength: 0.72,
+                    },
                 });
                 context.restore();
             }

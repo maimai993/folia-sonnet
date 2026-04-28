@@ -42,6 +42,14 @@ export type FumeBackgroundAudioLevels = Partial<Record<FumeBackgroundAudioBand, 
     power?: number;
 };
 
+interface FumeBackgroundParallax {
+    cameraX: number;
+    cameraY: number;
+    originX: number;
+    originY: number;
+    strength?: number;
+}
+
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const mix = (from: number, to: number, amount: number) => from + (to - from) * amount;
 
@@ -220,7 +228,7 @@ export const buildFumeBackgroundScene = ({
             rotationSpeed: mix(-0.045, 0.045, seeded(`${localSeed}:rotation-speed`)),
             strokeWidth: mix(0.25, 2.1, seeded(`${localSeed}:stroke-width`)),
             opacity: mix(0.01, 0.16, seeded(`${localSeed}:opacity`)),
-            color: seeded(`${localSeed}:color`) > 0.5 ? 'accent' : 'secondary',
+            color: (seeded(`${localSeed}:color`) > 0.5 ? 'accent' : 'secondary') as FumeBackgroundShapeColor,
             depth: seeded(`${localSeed}:depth`),
             ringGapStart: kind === 'ring'
                 ? mix(-Math.PI, Math.PI, seeded(`${localSeed}:gap-start`))
@@ -252,7 +260,7 @@ export const buildFumeBackgroundScene = ({
             rotationSpeed: mix(-0.18, 0.18, seeded(`${localSeed}:rotation-speed`)),
             strokeWidth: mix(0.75, 1.7, seeded(`${localSeed}:stroke-width`)),
             opacity: mix(0.08, 0.22, seeded(`${localSeed}:opacity`)),
-            color: seeded(`${localSeed}:color`) > 0.5 ? 'accent' : 'secondary',
+            color: (seeded(`${localSeed}:color`) > 0.5 ? 'accent' : 'secondary') as FumeBackgroundShapeColor,
             depth: seeded(`${localSeed}:depth`),
             audioBand: sparkBands[index % sparkBands.length],
         };
@@ -273,12 +281,14 @@ export const drawFumeBackground = ({
     theme,
     time = 0,
     audioLevels,
+    parallax,
 }: {
     context: CanvasRenderingContext2D;
     scene: FumeBackgroundScene;
     theme: Theme;
     time?: number;
     audioLevels?: FumeBackgroundAudioLevels;
+    parallax?: FumeBackgroundParallax;
 }) => {
     for (const shape of scene.shapes) {
         const bandValue = shape.audioBand ? audioLevels?.[shape.audioBand] : undefined;
@@ -292,6 +302,15 @@ export const drawFumeBackground = ({
         context.save();
         context.lineWidth = shape.strokeWidth;
         const shapeColor = shape.color === 'accent' ? theme.accentColor : theme.secondaryColor;
+        const layerResponse = mix(0.58, 1.16, shape.depth);
+        const parallaxStrength = parallax?.strength ?? 1;
+        const parallaxOffsetX = parallax
+            ? (parallax.cameraX - parallax.originX) * (1 - layerResponse) * parallaxStrength
+            : 0;
+        const parallaxOffsetY = parallax
+            ? (parallax.cameraY - parallax.originY) * (1 - layerResponse) * parallaxStrength
+            : 0;
+
         context.strokeStyle = colorWithAlpha(shapeColor, clamp(shape.opacity * audioOpacityBoost, 0, 0.42));
         context.shadowBlur = shape.kind === 'spark'
             ? 10 * audioScale
@@ -301,6 +320,8 @@ export const drawFumeBackground = ({
         context.shadowColor = colorWithAlpha(shapeColor, shape.opacity * audioOpacityBoost * 0.75);
         traceShape(context, {
             ...shape,
+            x: shape.x + parallaxOffsetX,
+            y: shape.y + parallaxOffsetY,
             width: shape.width * audioScale,
             height: shape.height * audioScale,
             rotation: shape.rotation + time * shape.rotationSpeed,
