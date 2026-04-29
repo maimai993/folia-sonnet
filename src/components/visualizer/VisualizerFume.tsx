@@ -81,12 +81,20 @@ interface FumeBlock {
     renderLines: RenderLineSlice[];
 }
 
+interface FumePaperBounds {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+}
+
 interface FumeArticleLayout {
     width: number;
     height: number;
     viewportHeight: number;
     columns: number;
     gap: number;
+    paperBounds: FumePaperBounds;
     blocks: FumeBlock[];
 }
 
@@ -96,6 +104,7 @@ interface FumeArticleLayoutMetrics {
     viewportHeight: number;
     columns: number;
     gap: number;
+    paperBounds: FumePaperBounds;
 }
 
 interface StaticBlockSnapshot {
@@ -1080,6 +1089,12 @@ function buildArticleLayoutAttempt(
         viewportHeight,
         columns,
         gap,
+        paperBounds: {
+            left: horizontalMargin,
+            top: verticalMargin,
+            right: horizontalMargin + paperWidth,
+            bottom: Math.max(articleHeight - verticalMargin, verticalMargin),
+        },
     };
 
     if (!shouldBuildRenderDetails) {
@@ -1687,9 +1702,10 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                 width: article?.width ?? Math.max(viewport.width * 1.8, viewport.width),
                 height: article?.height ?? Math.max(viewport.height * 1.8, viewport.height),
             },
+            paperBounds: article?.paperBounds,
             seed: `${seed ?? 'fume'}:${theme.name}`,
         }),
-        [article?.height, article?.width, seed, theme.name, viewport],
+        [article?.height, article?.paperBounds, article?.width, seed, theme.name, viewport],
     );
     const overviewCamera = useMemo(
         () => (article ? resolveArticleOverviewCamera(article, viewport) : null),
