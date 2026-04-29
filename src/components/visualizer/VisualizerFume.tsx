@@ -197,8 +197,6 @@ let lastFumePassedFadeDurationCache: {
     duration: number;
 } | null = null;
 
-let lastLoggedFumePassedFadeDuration: number | null = null;
-
 const isCJK = (text: string) => /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(text);
 
 const colorWithAlpha = (color: string, alpha: number) => {
@@ -1701,17 +1699,10 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
     const glowIntensity = resolvedFumeTuning.glowIntensity;
     const showPrintStamp = !resolvedFumeTuning.hidePrintSymbols;
     const textHoldRatio = resolvedFumeTuning.textHoldRatio;
-    const passedFadeDuration = useMemo(() => {
-        const duration = resolveFumePassedFadeDuration(lines, textHoldRatio);
-        if (
-            lastLoggedFumePassedFadeDuration === null
-            || Math.abs(lastLoggedFumePassedFadeDuration - duration) > 0.001
-        ) {
-            console.log('[VisualizerFume] passed fade duration:', duration);
-            lastLoggedFumePassedFadeDuration = duration;
-        }
-        return duration;
-    }, [lines, textHoldRatio]);
+    const passedFadeDuration = useMemo(
+        () => resolveFumePassedFadeDuration(lines, textHoldRatio),
+        [lines, textHoldRatio],
+    );
     const translationFontSize = `clamp(${(1.05 * lyricsFontScale).toFixed(3)}rem, ${(2.2 * lyricsFontScale).toFixed(3)}vw, ${(1.2 * lyricsFontScale).toFixed(3)}rem)`;
     const upcomingFontSize = `clamp(${(0.875 * lyricsFontScale).toFixed(3)}rem, ${(1.8 * lyricsFontScale).toFixed(3)}vw, ${(1 * lyricsFontScale).toFixed(3)}rem)`;
 
