@@ -102,6 +102,11 @@ const clampFumeCameraSpeed = (value: number) => Math.min(1.85, Math.max(0.55, va
 const clampFumeGlowIntensity = (value: number) => Math.min(1.8, Math.max(0, value));
 const clampFumeHeroScale = (value: number) => Math.min(1.32, Math.max(0.82, value));
 const clampFumeTextHoldRatio = (value: number) => Math.min(1, Math.max(0, value));
+const resolveFumeCameraTrackingMode = (value: FumeTuning['cameraTrackingMode'] | undefined): FumeTuning['cameraTrackingMode'] => (
+    value === 'stepped' || value === 'smooth'
+        ? value
+        : DEFAULT_FUME_TUNING.cameraTrackingMode
+);
 
 const PresetGroup = <T,>({
     label,
@@ -238,6 +243,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         hidePrintSymbols: draftFumeTuning.hidePrintSymbols,
         disableGeometricBackground: draftFumeTuning.disableGeometricBackground,
         textHoldRatio: clampFumeTextHoldRatio(draftFumeTuning.textHoldRatio ?? DEFAULT_FUME_TUNING.textHoldRatio),
+        cameraTrackingMode: resolveFumeCameraTrackingMode(draftFumeTuning.cameraTrackingMode),
         cameraSpeed: clampFumeCameraSpeed(draftFumeTuning.cameraSpeed),
         glowIntensity: clampFumeGlowIntensity(draftFumeTuning.glowIntensity),
         heroScale: clampFumeHeroScale(draftFumeTuning.heroScale),
@@ -254,6 +260,10 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const visibilityOptions: PresetOption<boolean>[] = useMemo(() => ([
         { value: false, label: t('options.partitaGuideLinesOn') || '显示' },
         { value: true, label: t('options.partitaGuideLinesOff') || '隐藏' },
+    ]), [t]);
+    const fumeCameraTrackingOptions: PresetOption<FumeTuning['cameraTrackingMode']>[] = useMemo(() => ([
+        { value: 'stepped', label: t('options.fumeCameraTrackingStepped') || '定格' },
+        { value: 'smooth', label: t('options.fumeCameraTrackingSmooth') || '平滑' },
     ]), [t]);
     const filteredSystemFonts = useMemo(() => {
         const query = fontSearchQuery.trim().toLocaleLowerCase();
@@ -736,6 +746,14 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                             className={rangeInputClass}
                                         />
                                     </div>
+
+                                    <PresetGroup
+                                        label={t('options.fumeCameraTrackingMode') || '摄影机追焦方式'}
+                                        value={resolvedFumeTuning.cameraTrackingMode}
+                                        options={fumeCameraTrackingOptions}
+                                        onChange={(next) => handleFumeTuningChange({ cameraTrackingMode: next })}
+                                        isDaylight={isDaylight}
+                                    />
 
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>

@@ -80,6 +80,7 @@ export interface FumeTuning {
   hidePrintSymbols: boolean;
   disableGeometricBackground: boolean;
   textHoldRatio: number;
+  cameraTrackingMode: 'stepped' | 'smooth';
   cameraSpeed: number;
   glowIntensity: number;
   heroScale: number;
@@ -89,6 +90,7 @@ export const DEFAULT_FUME_TUNING: FumeTuning = {
   hidePrintSymbols: false,
   disableGeometricBackground: true,
   textHoldRatio: 1,
+  cameraTrackingMode: 'smooth',
   cameraSpeed: 1,
   glowIntensity: 1,
   heroScale: 1,

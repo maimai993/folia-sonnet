@@ -85,6 +85,12 @@ const clampFumeTextHoldRatio = (value: number, fallback: number) => {
     return Math.min(1, Math.max(0, value));
 };
 
+const resolveFumeCameraTrackingMode = (value: FumeTuning['cameraTrackingMode'] | undefined) => (
+    value === 'stepped' || value === 'smooth'
+        ? value
+        : DEFAULT_FUME_TUNING.cameraTrackingMode
+);
+
 const readStoredFumeTuning = (): FumeTuning => {
     const saved = localStorage.getItem('fume_tuning');
     if (!saved) return DEFAULT_FUME_TUNING;
@@ -98,6 +104,7 @@ const readStoredFumeTuning = (): FumeTuning => {
             hidePrintSymbols: parsed.hidePrintSymbols ?? DEFAULT_FUME_TUNING.hidePrintSymbols,
             disableGeometricBackground: parsed.disableGeometricBackground ?? DEFAULT_FUME_TUNING.disableGeometricBackground,
             textHoldRatio: clampFumeTextHoldRatio(parsed.textHoldRatio ?? migratedTextHoldRatio, DEFAULT_FUME_TUNING.textHoldRatio),
+            cameraTrackingMode: resolveFumeCameraTrackingMode(parsed.cameraTrackingMode),
             cameraSpeed: clampFumeCameraSpeed(parsed.cameraSpeed ?? DEFAULT_FUME_TUNING.cameraSpeed, DEFAULT_FUME_TUNING.cameraSpeed),
             glowIntensity: clampFumeGlowIntensity(parsed.glowIntensity ?? DEFAULT_FUME_TUNING.glowIntensity, DEFAULT_FUME_TUNING.glowIntensity),
             heroScale: clampFumeHeroScale(parsed.heroScale ?? DEFAULT_FUME_TUNING.heroScale, DEFAULT_FUME_TUNING.heroScale),
@@ -291,6 +298,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
                 hidePrintSymbols: patch.hidePrintSymbols ?? prev.hidePrintSymbols,
                 disableGeometricBackground: patch.disableGeometricBackground ?? prev.disableGeometricBackground,
                 textHoldRatio: clampFumeTextHoldRatio(patch.textHoldRatio ?? prev.textHoldRatio, prev.textHoldRatio),
+                cameraTrackingMode: resolveFumeCameraTrackingMode(patch.cameraTrackingMode ?? prev.cameraTrackingMode),
                 cameraSpeed: clampFumeCameraSpeed(patch.cameraSpeed ?? prev.cameraSpeed, prev.cameraSpeed),
                 glowIntensity: clampFumeGlowIntensity(patch.glowIntensity ?? prev.glowIntensity, prev.glowIntensity),
                 heroScale: clampFumeHeroScale(patch.heroScale ?? prev.heroScale, prev.heroScale),

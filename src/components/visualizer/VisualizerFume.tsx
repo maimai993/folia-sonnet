@@ -859,6 +859,56 @@ const resolvePrintedGraphemeCount = (
     return clamp(printed, 0, graphemeCount);
 };
 
+const resolvePrintedGraphemeProgress = (
+    line: Line,
+    variant: 'body' | 'hero',
+    wordRanges: WordRange[],
+    graphemeCount: number,
+    currentTimeValue: number,
+) => {
+    if (graphemeCount === 0) {
+        return 0;
+    }
+
+    if (currentTimeValue < line.startTime) {
+        return 0;
+    }
+
+    if (variant === 'hero') {
+        const lineDuration = Math.max(getLineRenderEndTime(line) - line.startTime, 0.18);
+        const stampDuration = clamp(lineDuration * 0.94, 0.24, lineDuration);
+        const progress = clamp((currentTimeValue - line.startTime) / stampDuration, 0, 1);
+        return clamp(progress * graphemeCount, 0, graphemeCount);
+    }
+
+    if (wordRanges.length === 0) {
+        const duration = Math.max(getLineRenderEndTime(line) - line.startTime, 0.12);
+        const progress = clamp((currentTimeValue - line.startTime) / duration, 0, 1);
+        return clamp(progress * graphemeCount, 0, graphemeCount);
+    }
+
+    let printed = 0;
+    for (let index = 0; index < wordRanges.length; index += 1) {
+        const range = wordRanges[index]!;
+        const duration = Math.max(range.word.endTime - range.word.startTime, 0.08);
+
+        if (currentTimeValue >= range.word.endTime) {
+            printed = range.end;
+            continue;
+        }
+
+        if (currentTimeValue >= range.word.startTime) {
+            const progress = clamp((currentTimeValue - range.word.startTime) / duration, 0, 1);
+            const length = Math.max(range.end - range.start, 1);
+            return clamp(range.start + progress * length, 0, graphemeCount);
+        }
+
+        return clamp(printed, 0, graphemeCount);
+    }
+
+    return clamp(printed, 0, graphemeCount);
+};
+
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
@@ -1239,7 +1289,7 @@ const buildArticleLayout = (
     return article;
 };
 
-const resolveBlockFocusPoint = (
+const resolveSteppedBlockFocusPoint = (
     block: FumeBlock,
     printedCount: number,
 ) => {
@@ -1267,6 +1317,81 @@ const resolveBlockFocusPoint = (
         x: clamp(minX + progressWidth, minX, maxX),
         y: block.y + targetLine.top + block.lineHeight * 0.5,
     };
+};
+
+const resolveSmoothBlockFocusPoint = (
+    block: FumeBlock,
+    printedProgress: number,
+) => {
+    if (block.renderLines.length === 0) {
+        return {
+            x: block.x + block.width * 0.5,
+            y: block.y + block.height * 0.5,
+        };
+    }
+
+    const effectiveOffset = clamp(printedProgress, 0, block.graphemes.length);
+    const findRenderLineIndex = (offset: number) => {
+        const exactIndex = block.renderLines.findIndex(renderLine => offset <= renderLine.end);
+        return exactIndex >= 0 ? exactIndex : block.renderLines.length - 1;
+    };
+
+    const resolvePointOnRenderLine = (lineIndex: number, offset: number) => {
+        const targetLine = block.renderLines[lineIndex] ?? block.renderLines[block.renderLines.length - 1]!;
+        const clampedOffset = clamp(offset, targetLine.start, targetLine.end);
+        const baseOffset = Math.floor(clampedOffset);
+        const fractionalOffset = clampedOffset - baseOffset;
+        const baseWidth = widthBetweenOffsets(
+            block.prepared,
+            block.segmentMetas,
+            targetLine.start,
+            baseOffset,
+        );
+        const localGlyphIndex = baseOffset - targetLine.start;
+        const glyphAdvance = localGlyphIndex >= 0 && localGlyphIndex < targetLine.graphemes.length
+            ? resolveGlyphAdvance(targetLine, localGlyphIndex)
+            : 0;
+        const minX = block.x + targetLine.left;
+        const maxX = minX + targetLine.width;
+
+        return {
+            x: clamp(minX + baseWidth + glyphAdvance * fractionalOffset, minX, maxX),
+            y: block.y + targetLine.top + block.lineHeight * 0.5,
+        };
+    };
+
+    const targetLineIndex = findRenderLineIndex(effectiveOffset);
+    let point = resolvePointOnRenderLine(targetLineIndex, effectiveOffset);
+    const currentLine = block.renderLines[targetLineIndex]!;
+    const crossLineBlendWindow = 0.7;
+
+    if (targetLineIndex > 0 && effectiveOffset < currentLine.start + crossLineBlendWindow) {
+        const previousLine = block.renderLines[targetLineIndex - 1]!;
+        const blend = easeInOutCubic(clamp(
+            1 - ((effectiveOffset - previousLine.end) / crossLineBlendWindow),
+            0,
+            1,
+        ));
+        const previousPoint = resolvePointOnRenderLine(targetLineIndex - 1, previousLine.end);
+        point = {
+            x: mix(point.x, previousPoint.x, blend),
+            y: mix(point.y, previousPoint.y, blend),
+        };
+    } else if (targetLineIndex < block.renderLines.length - 1 && effectiveOffset > currentLine.end - crossLineBlendWindow) {
+        const nextLine = block.renderLines[targetLineIndex + 1]!;
+        const blend = easeInOutCubic(clamp(
+            (effectiveOffset - (currentLine.end - crossLineBlendWindow)) / crossLineBlendWindow,
+            0,
+            1,
+        ));
+        const nextPoint = resolvePointOnRenderLine(targetLineIndex + 1, nextLine.start);
+        point = {
+            x: mix(point.x, nextPoint.x, blend),
+            y: mix(point.y, nextPoint.y, blend),
+        };
+    }
+
+    return point;
 };
 
 const resolveBlockEntryFocusPoint = (
@@ -1614,6 +1739,9 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
         hidePrintSymbols: fumeTuning?.hidePrintSymbols ?? DEFAULT_FUME_TUNING.hidePrintSymbols,
         disableGeometricBackground: fumeTuning?.disableGeometricBackground ?? DEFAULT_FUME_TUNING.disableGeometricBackground,
         textHoldRatio: clamp(fumeTuning?.textHoldRatio ?? DEFAULT_FUME_TUNING.textHoldRatio, 0, 1),
+        cameraTrackingMode: fumeTuning?.cameraTrackingMode === 'stepped' || fumeTuning?.cameraTrackingMode === 'smooth'
+            ? fumeTuning.cameraTrackingMode
+            : DEFAULT_FUME_TUNING.cameraTrackingMode,
         cameraSpeed: clamp(fumeTuning?.cameraSpeed ?? DEFAULT_FUME_TUNING.cameraSpeed, 0.55, 1.85),
         glowIntensity: clamp(fumeTuning?.glowIntensity ?? DEFAULT_FUME_TUNING.glowIntensity, 0, 1.8),
         heroScale: clamp(fumeTuning?.heroScale ?? DEFAULT_FUME_TUNING.heroScale, 0.82, 1.32),
@@ -1864,14 +1992,27 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                     didRetargetThisFrame = true;
                 }
             } else if (focusBlock) {
-                const focusPrintedCount = resolvePrintedGraphemeCount(
-                    focusBlock.line,
-                    focusBlock.variant,
-                    focusBlock.wordRanges,
-                    focusBlock.graphemes.length,
-                    time,
-                );
-                const focusPoint = resolveBlockFocusPoint(focusBlock, focusPrintedCount);
+                const focusPoint = resolvedFumeTuning.cameraTrackingMode === 'stepped'
+                    ? resolveSteppedBlockFocusPoint(
+                        focusBlock,
+                        resolvePrintedGraphemeCount(
+                            focusBlock.line,
+                            focusBlock.variant,
+                            focusBlock.wordRanges,
+                            focusBlock.graphemes.length,
+                            time,
+                        ),
+                    )
+                    : resolveSmoothBlockFocusPoint(
+                        focusBlock,
+                        resolvePrintedGraphemeProgress(
+                            focusBlock.line,
+                            focusBlock.variant,
+                            focusBlock.wordRanges,
+                            focusBlock.graphemes.length,
+                            time,
+                        ),
+                    );
                 entryFocusPoint = resolveBlockEntryFocusPoint(focusBlock);
                 targetCameraX = focusPoint.x;
                 targetCameraY = focusPoint.y;
@@ -1925,13 +2066,13 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
 
             if (!staticMode) {
                 const floatConfig = theme.animationIntensity === 'chaotic'
-                    ? { distance: 10, duration: 5.8, scaleAmplitude: 0.008 }
+                    ? { distance: 24, duration: 5.8, scaleAmplitude: 0.014 }
                     : theme.animationIntensity === 'calm'
-                        ? { distance: 5.5, duration: 8.5, scaleAmplitude: 0.0045 }
-                        : { distance: 7.5, duration: 7, scaleAmplitude: 0.006 };
+                        ? { distance: 14, duration: 8.5, scaleAmplitude: 0.008 }
+                        : { distance: 18, duration: 7, scaleAmplitude: 0.011 };
                 const floatPhase = (now / 1000 / floatConfig.duration) * Math.PI * 2;
                 const overviewAttenuation = shouldShowOverview ? 0.36 : 1;
-                const screenFloatX = Math.sin(floatPhase * 0.74 + 0.8) * floatConfig.distance * 0.2;
+                const screenFloatX = Math.sin(floatPhase * 0.74 + 0.8) * floatConfig.distance * 0.34;
                 const screenFloatY = (
                     Math.sin(floatPhase) * floatConfig.distance
                     + Math.sin(floatPhase * 0.5 + 1.1) * floatConfig.distance * 0.22
@@ -2007,20 +2148,20 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                 20,
                 54,
             );
-            const targetCatchUp = 1 - Math.exp(-dt * mix(8.4, boostedCatchUpRate, retargetBoost));
+            const targetCatchUp = 1 - Math.exp(-dt * mix(11.2, boostedCatchUpRate, retargetBoost));
             cameraRef.current.focusX += (targetCameraX - cameraRef.current.focusX) * targetCatchUp;
             cameraRef.current.focusY += (targetCameraY - cameraRef.current.focusY) * targetCatchUp;
             cameraRef.current.focusScale += (targetCameraScale - cameraRef.current.focusScale)
-                * (1 - Math.exp(-dt * mix(4.2, 11.8, retargetBoost)));
+                * (1 - Math.exp(-dt * mix(5.4, 12.8, retargetBoost)));
 
             const springStrength = mix(
-                152,
+                208,
                 clamp(15.8 / Math.max(cameraRetargetRef.current.duration * cameraRetargetRef.current.duration, 0.0064), 260, 780),
                 retargetBoost,
             );
             const damping = mix(
-                20.5,
-                clamp(Math.sqrt(springStrength) * 1.34, 23, 38),
+                24,
+                clamp(Math.sqrt(springStrength) * 1.36, 24, 40),
                 retargetBoost,
             );
             const accelX = (cameraRef.current.focusX - cameraRef.current.x) * springStrength - cameraRef.current.velocityX * damping;
