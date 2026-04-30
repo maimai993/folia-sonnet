@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { DEFAULT_CADENZA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, type CadenzaTuning, type FumeTuning, type PartitaTuning, type StatusMessage, type Theme, type VisualizerMode } from '../types';
+import { getLyricFilterError } from '../utils/lyrics/filtering';
 
 type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 type AudioQuality = 'exhigh' | 'lossless' | 'hires';
@@ -147,6 +148,8 @@ const readStoredCustomLyricsFont = (): StoredCustomLyricsFont | null => {
     }
 };
 
+const readStoredLyricFilterPattern = (): string => localStorage.getItem('lyrics_filter_pattern')?.trim() || '';
+
 export function useAppPreferences(setStatusMsg: StatusSetter) {
     const [audioQuality, setAudioQuality] = useState<AudioQuality>(() => {
         const saved = localStorage.getItem('default_audio_quality');
@@ -179,6 +182,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
     const [lyricsFontStyle, setLyricsFontStyle] = useState<Theme['fontStyle']>(readStoredLyricsFontStyle);
     const [lyricsFontScale, setLyricsFontScale] = useState<number>(readStoredLyricsFontScale);
     const [lyricsCustomFont, setLyricsCustomFont] = useState<StoredCustomLyricsFont | null>(readStoredCustomLyricsFont);
+    const [lyricFilterPattern, setLyricFilterPattern] = useState<string>(readStoredLyricFilterPattern);
     const [showOpenPanelCloseButton, setShowOpenPanelCloseButton] = useState(() => getStoredBoolean('show_open_panel_close_button', true));
     const [volume, setVolume] = useState(() => {
         const saved = localStorage.getItem('player_volume');
@@ -345,6 +349,17 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         localStorage.setItem('lyrics_custom_font', JSON.stringify(next));
     }, []);
 
+    const handleSetLyricFilterPattern = useCallback((pattern: string) => {
+        const next = pattern.trim();
+        setLyricFilterPattern(next);
+
+        if (next) {
+            localStorage.setItem('lyrics_filter_pattern', next);
+        } else {
+            localStorage.removeItem('lyrics_filter_pattern');
+        }
+    }, []);
+
     const handleToggleOpenPanelCloseButton = useCallback((enable: boolean) => {
         setShowOpenPanelCloseButton(enable);
         localStorage.setItem('show_open_panel_close_button', String(enable));
@@ -381,6 +396,8 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         lyricsFontScale,
         lyricsCustomFontFamily: lyricsCustomFont?.family ?? null,
         lyricsCustomFontLabel: lyricsCustomFont?.label ?? null,
+        lyricFilterPattern,
+        lyricFilterPatternError: getLyricFilterError(lyricFilterPattern),
         showOpenPanelCloseButton,
         handleToggleCoverColorBg,
         handleToggleStaticMode,
@@ -397,6 +414,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         handleSetLyricsFontStyle,
         handleSetLyricsFontScale,
         handleSetLyricsCustomFont,
+        handleSetLyricFilterPattern,
         handleToggleOpenPanelCloseButton,
         volume,
         isMuted,
