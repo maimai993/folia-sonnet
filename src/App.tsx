@@ -2597,6 +2597,8 @@ export default function App() {
     const mediaSessionPauseRef = useRef(pausePlayback);
     const mediaSessionPrevRef = useRef(handlePrevTrack);
     const mediaSessionNextRef = useRef(handleNextTrack);
+    const taskbarHasTrackRef = useRef(Boolean(currentSong));
+    const taskbarPlayerStateRef = useRef(playerState);
 
     useEffect(() => {
         mediaSessionPlayRef.current = resumePlayback;
@@ -2613,6 +2615,66 @@ export default function App() {
     useEffect(() => {
         mediaSessionNextRef.current = handleNextTrack;
     }, [handleNextTrack]);
+
+    useEffect(() => {
+        taskbarHasTrackRef.current = Boolean(currentSong);
+    }, [currentSong]);
+
+    useEffect(() => {
+        taskbarPlayerStateRef.current = playerState;
+    }, [playerState]);
+
+    useEffect(() => {
+        if (!window.electron?.onTaskbarControl) {
+            return;
+        }
+
+        return window.electron.onTaskbarControl((action) => {
+            if (!audioRef.current || !taskbarHasTrackRef.current) {
+                return;
+            }
+
+            if (action === 'previous') {
+                mediaSessionPrevRef.current();
+                return;
+            }
+
+            if (action === 'next') {
+                void mediaSessionNextRef.current();
+                return;
+            }
+
+            if (taskbarPlayerStateRef.current === PlayerState.PLAYING) {
+                mediaSessionPauseRef.current();
+            } else {
+                void mediaSessionPlayRef.current();
+            }
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!window.electron?.updateTaskbarControls) {
+            return;
+        }
+
+        const hasActiveTrack = Boolean(currentSong);
+        const currentIndex = currentSong ? playQueue.findIndex(song => song.id === currentSong.id) : -1;
+        const canGoPrevious = currentIndex > 0 || (loopMode === 'all' && playQueue.length > 1);
+        const canGoNext = hasActiveTrack && (
+            isFmMode ||
+            currentIndex >= 0 && currentIndex < playQueue.length - 1 ||
+            (loopMode === 'all' && playQueue.length > 1)
+        );
+
+        void window.electron.updateTaskbarControls({
+            hasActiveTrack,
+            canGoPrevious,
+            canGoNext,
+            isPlaying: hasActiveTrack && playerState === PlayerState.PLAYING,
+        }).catch((error) => {
+            console.warn('[Electron] Failed to update Windows taskbar controls', error);
+        });
+    }, [currentSong, isFmMode, loopMode, playQueue, playerState]);
 
     const handleFmTrash = async () => {
         if (currentSong && isFmMode) {

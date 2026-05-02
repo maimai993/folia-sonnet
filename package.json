@@ -45,7 +45,8 @@
       "dist/**/*",
       "electron/**/*",
       "package.json",
-      "build/miao.png"
+      "build/miao.png",
+      "build/thumbar/*.png"
     ],
     "extraResources": [
       {
