@@ -105,13 +105,57 @@ const colorWithAlpha = (color: string, alpha: number) => {
     return color;
 };
 
-const traceShape = (
+const parseColorChannels = (color: string) => {
+    if (color.startsWith('#')) {
+        const hex = color.slice(1);
+        const parse = (value: string) => Number.parseInt(value, 16);
+
+        if (hex.length === 3) {
+            return {
+                r: parse(hex[0] + hex[0]),
+                g: parse(hex[1] + hex[1]),
+                b: parse(hex[2] + hex[2]),
+            };
+        }
+
+        if (hex.length === 6) {
+            return {
+                r: parse(hex.slice(0, 2)),
+                g: parse(hex.slice(2, 4)),
+                b: parse(hex.slice(4, 6)),
+            };
+        }
+    }
+
+    const rgbMatch = color.match(/^rgba?\(([^)]+)\)$/);
+    if (rgbMatch) {
+        const [r = '255', g = '255', b = '255'] = rgbMatch[1].split(',').slice(0, 3).map(part => part.trim());
+        return {
+            r: Number.parseFloat(r),
+            g: Number.parseFloat(g),
+            b: Number.parseFloat(b),
+        };
+    }
+
+    return null;
+};
+
+const mixColors = (from: string, to: string, amount: number, alpha = 1) => {
+    const normalizedAmount = clamp(amount, 0, 1);
+    const fromChannels = parseColorChannels(from);
+    const toChannels = parseColorChannels(to);
+
+    if (!fromChannels || !toChannels) {
+        return colorWithAlpha(normalizedAmount >= 0.5 ? to : from, alpha);
+    }
+
+    return `rgba(${Math.round(mix(fromChannels.r, toChannels.r, normalizedAmount))}, ${Math.round(mix(fromChannels.g, toChannels.g, normalizedAmount))}, ${Math.round(mix(fromChannels.b, toChannels.b, normalizedAmount))}, ${clamp(alpha, 0, 1)})`;
+};
+
+const buildShapePath = (
     context: CanvasRenderingContext2D,
     shape: FumeBackgroundShape,
 ) => {
-    context.save();
-    context.translate(shape.x, shape.y);
-    context.rotate(shape.rotation);
     context.beginPath();
 
     if (shape.kind === 'ring') {
@@ -160,7 +204,16 @@ const traceShape = (
             context.closePath();
         }
     }
+};
 
+const traceShape = (
+    context: CanvasRenderingContext2D,
+    shape: FumeBackgroundShape,
+) => {
+    context.save();
+    context.translate(shape.x, shape.y);
+    context.rotate(shape.rotation);
+    buildShapePath(context, shape);
     context.stroke();
     context.restore();
 };
@@ -399,6 +452,40 @@ export const drawFumeBackground = ({
     audioLevels?: FumeBackgroundAudioLevels;
     parallax?: FumeBackgroundParallax;
 }) => {
+    const createLineGradient = (
+        shape: FumeBackgroundShape,
+        opacity: number,
+    ) => {
+        const gradient = context.createLinearGradient(-shape.width * 0.55, -shape.height * 0.28, shape.width * 0.55, shape.height * 0.28);
+        gradient.addColorStop(0, colorWithAlpha(theme.secondaryColor, opacity * 0.18));
+        gradient.addColorStop(0.28, colorWithAlpha(mixColors(theme.secondaryColor, theme.accentColor, 0.24), opacity * 0.58));
+        gradient.addColorStop(0.54, colorWithAlpha(mixColors(theme.secondaryColor, theme.accentColor, 0.62), opacity * 0.92));
+        gradient.addColorStop(1, colorWithAlpha(theme.accentColor, opacity * 0.7));
+        return gradient;
+    };
+
+    const drawGradientGeometry = (
+        shape: FumeBackgroundShape,
+        opacity: number,
+    ) => {
+        const baseWidth = Math.max(shape.strokeWidth * 0.28, 0.14);
+        const topWidth = Math.max(shape.strokeWidth * 0.92, 0.78);
+
+        buildShapePath(context, shape);
+        context.strokeStyle = createLineGradient(shape, opacity * 0.56);
+        context.lineWidth = baseWidth;
+        context.shadowBlur = 0;
+        context.shadowColor = 'transparent';
+        context.stroke();
+
+        buildShapePath(context, shape);
+        context.strokeStyle = createLineGradient(shape, opacity);
+        context.lineWidth = topWidth;
+        context.shadowBlur = 0;
+        context.shadowColor = 'transparent';
+        context.stroke();
+    };
+
     for (const shape of scene.shapes) {
         const bandValue = shape.audioBand ? audioLevels?.[shape.audioBand] : undefined;
         const audioScale = bandValue === undefined
@@ -420,21 +507,26 @@ export const drawFumeBackground = ({
             ? (parallax.cameraY - parallax.originY) * (1 - layerResponse) * parallaxStrength
             : 0;
 
-        context.strokeStyle = colorWithAlpha(shapeColor, clamp(shape.opacity * audioOpacityBoost, 0, 0.42));
-        context.shadowBlur = shape.kind === 'spark'
-            ? 10 * audioScale
-            : shape.kind === 'cross'
-                ? 6
-                : 8;
-        context.shadowColor = colorWithAlpha(shapeColor, shape.opacity * audioOpacityBoost * 0.75);
-        traceShape(context, {
+        const renderedShape = {
             ...shape,
             x: shape.x + parallaxOffsetX,
             y: shape.y + parallaxOffsetY,
             width: shape.width * audioScale,
             height: shape.height * audioScale,
             rotation: shape.rotation + time * shape.rotationSpeed,
-        });
+        };
+
+        if (shape.kind === 'spark') {
+            context.strokeStyle = colorWithAlpha(shapeColor, clamp(shape.opacity * audioOpacityBoost, 0, 0.42));
+            context.lineWidth = shape.strokeWidth;
+            context.shadowBlur = 10 * audioScale;
+            context.shadowColor = colorWithAlpha(shapeColor, shape.opacity * audioOpacityBoost * 0.75);
+            traceShape(context, renderedShape);
+        } else {
+            context.translate(renderedShape.x, renderedShape.y);
+            context.rotate(renderedShape.rotation);
+            drawGradientGeometry(renderedShape, clamp(shape.opacity * audioOpacityBoost, 0, 0.42));
+        }
         context.restore();
     }
 };
