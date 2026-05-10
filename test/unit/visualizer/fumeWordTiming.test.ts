@@ -91,6 +91,36 @@ describe('VisualizerFume word timing helpers', () => {
         });
     });
 
+    it('attaches inter-word whitespace when words omit spaces but fullText keeps them', () => {
+        const line = makeLine('baby boy your hands and habit and love and love', [
+            { text: 'baby', startTime: 0, endTime: 0.5 },
+            { text: 'boy', startTime: 0.5, endTime: 1 },
+            { text: 'your', startTime: 1, endTime: 1.5 },
+            { text: 'hands', startTime: 1.5, endTime: 2 },
+            { text: 'and', startTime: 2, endTime: 2.5 },
+            { text: 'habit', startTime: 2.5, endTime: 3 },
+            { text: 'and', startTime: 3, endTime: 3.5 },
+            { text: 'love', startTime: 3.5, endTime: 4 },
+            { text: 'and', startTime: 4, endTime: 4.5 },
+            { text: 'love', startTime: 4.5, endTime: 5 },
+        ]);
+
+        const ranges = buildWordRangesFromWords(line, Array.from(line.fullText));
+
+        expect(ranges.map(range => line.fullText.slice(range.start, range.end))).toEqual([
+            'baby ',
+            'boy ',
+            'your ',
+            'hands ',
+            'and ',
+            'habit ',
+            'and ',
+            'love ',
+            'and ',
+            'love',
+        ]);
+    });
+
     it('supports overlapping word times while keeping printed count as the maximum continuous prefix', () => {
         const line = makeLine('ABCD', [
             { text: 'AB', startTime: 0, endTime: 1 },

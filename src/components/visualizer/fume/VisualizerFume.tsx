@@ -457,7 +457,14 @@ export const buildWordRangesFromWords = (line: Line, graphemes: string[]) => {
         const word = rangedWords[wordIndex]!;
         const wordGraphemes = splitGraphemes(word.text);
         const start = clamp(cursor, 0, graphemes.length);
-        const end = clamp(start + wordGraphemes.length, start, graphemes.length);
+        let end = clamp(start + wordGraphemes.length, start, graphemes.length);
+
+        // Some lyric payloads omit inter-word spaces from word.text while fullText keeps them.
+        // In that case, keep the visual stream contiguous by attaching immediately following
+        // whitespace to the current word range instead of shifting every later word left.
+        while (end < graphemes.length && /\s/.test(graphemes[end] ?? '')) {
+            end += 1;
+        }
 
         ranges.push({
             wordIndex,
