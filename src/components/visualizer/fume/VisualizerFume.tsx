@@ -33,6 +33,7 @@ interface VisualizerProps {
     backgroundOpacity?: number;
     lyricsFontScale?: number;
     fumeTuning?: FumeTuning;
+    isPlayerChromeHidden?: boolean;
     onBack?: () => void;
 }
 
@@ -1709,6 +1710,7 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
     backgroundOpacity = 0.75,
     lyricsFontScale = 1,
     fumeTuning,
+    isPlayerChromeHidden = false,
     onBack,
 }) => {
     const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -2778,6 +2780,7 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
                 opacity={0.48}
+                isPlayerChromeHidden={isPlayerChromeHidden}
             />
         </VisualizerShell>
     );

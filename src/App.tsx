@@ -3514,6 +3514,7 @@ export default function App() {
                     staticMode={staticMode}
                     backgroundOpacity={backgroundOpacity}
                     lyricsFontScale={lyricsFontScale}
+                    isPlayerChromeHidden={isPlayerChromeHidden}
                     cadenzaTuning={cadenzaTuning}
                     partitaTuning={partitaTuning}
                     fumeTuning={fumeTuning}
