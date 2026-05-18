@@ -154,11 +154,75 @@ jobs:
           ELECTRON: "true"
         run: npm run build
 
-      - name: Package and Publish Electron Release
+      - name: Package Electron Release
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --publish never
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.blockmap
+            release/latest*.yml
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
+            build/release-notes.md
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    name: Publish release
+    needs: [check-version, prepare-release, release]
+    if: needs.check-version.outputs.changed == 'true' && github.event.inputs.publish_aur_only != 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: release-artifacts
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          NOTES_FILE=$(find release-artifacts -type f -name 'release-notes.md' | head -n 1)
+          if [ -z "${NOTES_FILE}" ]; then
+            echo "Unable to locate release notes artifact"
+            exit 1
+          fi
+          cp "${NOTES_FILE}" release-notes.md
+
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --publish always
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+        shell: bash
+        run: |
+          mapfile -d '' files < <(find release-artifacts -type f ! -name 'release-notes.md' -print0)
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" \
+              "${files[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+            gh release edit "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --notes-file release-notes.md \
+              --title "${RELEASE_TAG}"
+          else
+            gh release create "${RELEASE_TAG}" \
+              "${files[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${RELEASE_TAG}" \
+              --notes-file release-notes.md \
+              --target "${GITHUB_SHA}"
+          fi
 
   publish-aur:
     name: Publish AUR package
