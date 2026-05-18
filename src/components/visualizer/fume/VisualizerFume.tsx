@@ -121,6 +121,10 @@ interface FumeArticleLayout {
     gap: number;
     paperBounds: FumePaperBounds;
     blocks: FumeBlock[];
+    blockBySourceLineIndex: Map<number, FumeBlock>;
+    chronologicalBlocks: FumeBlock[];
+    firstRenderableStartTime: number;
+    lastChronologicalRenderEndTime: number;
 }
 
 interface FumeArticleLayoutMetrics {
@@ -1329,9 +1333,23 @@ function buildArticleLayoutAttempt(
         return metrics;
     }
 
+    const chronologicalBlocks = [...blocks].sort((left, right) => left.sourceLineIndex - right.sourceLineIndex);
+    const blockBySourceLineIndex = new Map<number, FumeBlock>();
+    for (const block of chronologicalBlocks) {
+        blockBySourceLineIndex.set(block.sourceLineIndex, block);
+    }
+    const firstRenderableStartTime = chronologicalBlocks[0]?.line.startTime ?? Number.POSITIVE_INFINITY;
+    const lastChronologicalRenderEndTime = chronologicalBlocks.length > 0
+        ? getLineRenderEndTime(chronologicalBlocks[chronologicalBlocks.length - 1]!.line)
+        : Number.NEGATIVE_INFINITY;
+
     return {
         ...metrics,
         blocks,
+        blockBySourceLineIndex,
+        chronologicalBlocks,
+        firstRenderableStartTime,
+        lastChronologicalRenderEndTime,
     };
 }
 
@@ -1884,24 +1902,20 @@ const resolveFocusBlock = (
     currentTimeValue: number,
 ) => {
     if (currentLineIndex >= 0) {
-        const active = article.blocks.find(block => block.sourceLineIndex === currentLineIndex);
+        const active = article.blockBySourceLineIndex.get(currentLineIndex) ?? null;
         if (active) {
             return active;
         }
     }
 
-    const chronologicalLastBlock = article.blocks.reduce<FumeBlock | null>((latest, block) => {
-        if (!latest || block.sourceLineIndex > latest.sourceLineIndex) {
-            return block;
-        }
-        return latest;
-    }, null);
+    const chronologicalLastBlock = article.chronologicalBlocks[article.chronologicalBlocks.length - 1] ?? null;
 
-    if (chronologicalLastBlock && currentTimeValue >= getLineRenderEndTime(chronologicalLastBlock.line)) {
+    if (chronologicalLastBlock && currentTimeValue >= article.lastChronologicalRenderEndTime) {
         return chronologicalLastBlock;
     }
 
-    const latestPrintedBlock = article.blocks.reduce<FumeBlock | null>((latest, block) => {
+    for (let index = article.chronologicalBlocks.length - 1; index >= 0; index -= 1) {
+        const block = article.chronologicalBlocks[index]!;
         const printedCount = resolvePrintedGraphemeCount(
             block.line,
             block.wordRanges,
@@ -1909,29 +1923,12 @@ const resolveFocusBlock = (
             currentTimeValue,
         );
 
-        if (printedCount <= 0) {
-            return latest;
-        }
-
-        if (!latest || block.sourceLineIndex > latest.sourceLineIndex) {
+        if (printedCount > 0) {
             return block;
         }
-
-        return latest;
-    }, null);
-
-    if (latestPrintedBlock) {
-        return latestPrintedBlock;
     }
 
-    const chronologicalFirstBlock = article.blocks.reduce<FumeBlock | null>((earliest, block) => {
-        if (!earliest || block.sourceLineIndex < earliest.sourceLineIndex) {
-            return block;
-        }
-        return earliest;
-    }, null);
-
-    return chronologicalFirstBlock;
+    return article.chronologicalBlocks[0] ?? null;
 };
 
 const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
@@ -2165,6 +2162,11 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
     ]);
 
     useEffect(() => {
+        hasPrintedContentRef.current = false;
+        setHasPrintedContent(false);
+    }, [article]);
+
+    useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) {
             return;
@@ -2271,12 +2273,9 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
             }
 
             // One-shot detection: once any block starts printing, flip hasPrintedContent
-            if (!hasPrintedContentRef.current) {
-                const anyPrinted = article.blocks.some(block => time >= block.line.startTime);
-                if (anyPrinted) {
-                    hasPrintedContentRef.current = true;
-                    setHasPrintedContent(true);
-                }
+            if (!hasPrintedContentRef.current && time >= article.firstRenderableStartTime) {
+                hasPrintedContentRef.current = true;
+                setHasPrintedContent(true);
             }
 
             const focusBlock = resolveFocusBlock(article, currentLineIndexRef.current, time);
