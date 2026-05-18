@@ -177,7 +177,7 @@ jobs:
           retention-days: 14
 
   publish-release:
-    name: Publish release
+    name: Publish draft release
     needs: [check-version, prepare-release, release]
     if: needs.check-version.outputs.changed == 'true' && github.event.inputs.publish_aur_only != 'true'
     runs-on: ubuntu-latest
@@ -198,7 +198,7 @@ jobs:
           fi
           cp "${NOTES_FILE}" release-notes.md
 
-      - name: Publish GitHub release
+      - name: Publish GitHub draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
@@ -221,7 +221,8 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --title "${RELEASE_TAG}" \
               --notes-file release-notes.md \
-              --target "${GITHUB_SHA}"
+              --target "${GITHUB_SHA}" \
+              --draft
           fi
 
   publish-aur:
