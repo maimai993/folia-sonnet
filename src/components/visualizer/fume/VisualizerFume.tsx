@@ -2154,7 +2154,15 @@ const VisualizerFume: React.FC<VisualizerProps & { staticMode?: boolean; }> = ({
 
     useEffect(() => {
         staticBlockSnapshotCacheRef.current.clear();
-    }, [article, theme]);
+    }, [
+        article,
+        theme.name,
+        theme.primaryColor,
+        theme.secondaryColor,
+        theme.accentColor,
+        theme.fontStyle,
+        theme.fontFamily,
+    ]);
 
     useEffect(() => {
         const canvas = canvasRef.current;

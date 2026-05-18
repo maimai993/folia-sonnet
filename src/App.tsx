@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { loadCachedOrFetchCover } from './services/coverCache';
@@ -111,13 +111,18 @@ export default function App() {
 
     // Audio Analysis State
     const audioPower = useMotionValue(0);
-    const audioBands = {
-        bass: useMotionValue(0),
-        lowMid: useMotionValue(0),
-        mid: useMotionValue(0),
-        vocal: useMotionValue(0),
-        treble: useMotionValue(0)
-    };
+    const bass = useMotionValue(0);
+    const lowMid = useMotionValue(0);
+    const mid = useMotionValue(0);
+    const vocal = useMotionValue(0);
+    const treble = useMotionValue(0);
+    const audioBands = useMemo(() => ({
+        bass,
+        lowMid,
+        mid,
+        vocal,
+        treble,
+    }), [bass, lowMid, mid, vocal, treble]);
 
     // Refs
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -211,7 +216,10 @@ export default function App() {
         handleToggleLoopMode,
     } = useAppPreferences(setStatusMsg);
 
-    const setLyrics = createLyricsSetter(setLyricsState, lyricFilterPattern);
+    const setLyrics = useMemo(
+        () => createLyricsSetter(setLyricsState, lyricFilterPattern),
+        [lyricFilterPattern],
+    );
 
     const effectiveLoopMode: StageLoopMode = loopMode;
 
@@ -268,7 +276,7 @@ export default function App() {
     const {
         shouldRefreshCurrentOnlineAudioSource,
         recoverOnlinePlaybackSource,
-    } = createOnlineRecoveryController({
+    } = useMemo(() => createOnlineRecoveryController({
         audioQuality,
         currentSong,
         audioSrc,
@@ -283,9 +291,12 @@ export default function App() {
         setAudioSrc,
         onlineAudioUrlTtlMs: ONLINE_AUDIO_URL_TTL_MS,
         onlineAudioUrlRefreshBufferMs: ONLINE_AUDIO_URL_REFRESH_BUFFER_MS,
-    });
+    }), [audioQuality, audioSrc, audioRef, blobUrlRef, currentOnlineAudioUrlFetchedAtRef, currentSong, currentSongRef, lastAudioRecoverySourceRef, onlinePlaybackRecoveryRef, pendingResumeTimeRef, setAudioSrc, shouldAutoPlay]);
 
-    const getCoverUrl = createCoverUrlResolver(cachedCoverUrl, currentSong);
+    const getCoverUrl = useMemo(
+        () => createCoverUrlResolver(cachedCoverUrl, currentSong),
+        [cachedCoverUrl, currentSong],
+    );
 
     const coverUrl = getCoverUrl();
 
@@ -832,21 +843,21 @@ export default function App() {
         syncStageLyricsClock,
     });
 
-    const appStyle = buildAppStyle({
+    const appStyle = useMemo(() => buildAppStyle({
         bgMode,
         isDaylight,
         theme,
         daylightTheme: DAYLIGHT_THEME,
         defaultTheme: DEFAULT_THEME,
-    });
-    const { visualizerTheme, visualizerGeometrySeed } = buildVisualizerTheme({
+    }), [bgMode, isDaylight, theme]);
+    const { visualizerTheme, visualizerGeometrySeed } = useMemo(() => buildVisualizerTheme({
         appStyle,
         theme,
         lyricsFontStyle,
         lyricsCustomFontFamily,
         currentSongId: currentSong?.id,
         visualizerMode,
-    });
+    }), [appStyle, currentSong?.id, lyricsCustomFontFamily, lyricsFontStyle, theme, visualizerMode]);
     const isNowPlayingControlDisabled = isNowPlayingStageActive;
     const {
         isPlayerView,
@@ -855,7 +866,7 @@ export default function App() {
         shouldHidePlayerTranslationSubtitle,
         shouldHidePlayerRightPanelButton,
         canToggleCurrentPlayback,
-    } = buildPlayerViewFlags({
+    } = useMemo(() => buildPlayerViewFlags({
         currentView,
         disableHomeDynamicBackground,
         hidePlayerProgressBar,
@@ -866,10 +877,48 @@ export default function App() {
         stageActiveEntryKind,
         audioSrc,
         duration,
-    });
+    }), [
+        activePlaybackContext,
+        audioSrc,
+        currentView,
+        disableHomeDynamicBackground,
+        duration,
+        hidePlayerProgressBar,
+        hidePlayerRightPanelButton,
+        hidePlayerTranslationSubtitle,
+        isNowPlayingControlDisabled,
+        stageActiveEntryKind,
+    ]);
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
-    const devDebugSnapshot = isDev
-        ? buildDebugSnapshot({
+    const nowPlayingDebugSnapshot = useMemo(() => (
+        stageSource === 'now-playing'
+            ? {
+                connectionStatus: nowPlayingConnectionStatus,
+                isActive: isNowPlayingStageActive,
+                paused: nowPlayingPaused,
+                progressMs: nowPlayingProgressMs,
+                progressQuality: nowPlayingProgressQuality,
+                trackTitle: nowPlayingTrack?.title ?? nowPlayingLyricPayload?.title ?? null,
+                durationSec: (nowPlayingTrack?.durationMs ?? nowPlayingLyricPayload?.durationMs ?? 0) / 1000,
+                ...nowPlayingDebugInfo,
+            }
+            : null
+    ), [
+        isNowPlayingStageActive,
+        nowPlayingConnectionStatus,
+        nowPlayingDebugInfo,
+        nowPlayingLyricPayload?.durationMs,
+        nowPlayingLyricPayload?.title,
+        nowPlayingPaused,
+        nowPlayingProgressMs,
+        nowPlayingProgressQuality,
+        nowPlayingTrack?.durationMs,
+        nowPlayingTrack?.title,
+        stageSource,
+    ]);
+    const devDebugSnapshot = useMemo(() => (
+        isDev
+            ? buildDebugSnapshot({
             shortcutLabel: DEV_DEBUG_SHORTCUT_LABEL,
             currentSong,
             currentView,
@@ -880,19 +929,39 @@ export default function App() {
             currentTimeValue: currentTime.get(),
             audioSrc,
             coverUrl,
-            nowPlayingDebug: stageSource === 'now-playing' ? {
-                connectionStatus: nowPlayingConnectionStatus,
-                isActive: isNowPlayingStageActive,
-                paused: nowPlayingPaused,
-                progressMs: nowPlayingProgressMs,
-                progressQuality: nowPlayingProgressQuality,
-                trackTitle: nowPlayingTrack?.title ?? nowPlayingLyricPayload?.title ?? null,
-                durationSec: (nowPlayingTrack?.durationMs ?? nowPlayingLyricPayload?.durationMs ?? 0) / 1000,
-                ...nowPlayingDebugInfo,
-            } : null,
+            nowPlayingDebug: nowPlayingDebugSnapshot,
         })
-        : null;
-    const homeModel = buildHomeModel({
+            : null
+    ), [
+        audioSrc,
+        coverUrl,
+        currentLineIndex,
+        currentSong,
+        currentTime,
+        currentView,
+        isDev,
+        nowPlayingDebugSnapshot,
+        playerState,
+        lyrics,
+        visualizerMode,
+    ]);
+    const themeParkSeedTheme = useMemo(() => getThemeParkSeedTheme(), [getThemeParkSeedTheme]);
+    const generateCurrentSongTheme = useCallback(() => {
+        void generateAITheme(lyrics, currentSong);
+    }, [currentSong, generateAITheme, lyrics]);
+    const toggleDaylightMode = useCallback(() => {
+        handleToggleDaylight(!isDaylight);
+    }, [handleToggleDaylight, isDaylight]);
+    const seekMainAudio = useCallback((time: number) => {
+        if (audioRef.current) {
+            audioRef.current.currentTime = time;
+            if (audioRef.current.paused) {
+                void audioRef.current.play();
+                setPlayerState(PlayerState.PLAYING);
+            }
+        }
+    }, []);
+    const homeModel = useMemo(() => buildHomeModel({
         playSong,
         navigateToPlayer,
         refreshUserData,
@@ -960,7 +1029,7 @@ export default function App() {
         bgMode,
         applyDefaultTheme,
         hasCustomTheme,
-        getThemeParkSeedTheme: getThemeParkSeedTheme(),
+        getThemeParkSeedTheme: themeParkSeedTheme,
         isCustomThemePreferred,
         saveCustomDualTheme,
         applyCustomTheme,
@@ -987,8 +1056,100 @@ export default function App() {
         loadCurrentSongLyricPreview,
         handleSaveLyricFilterPattern,
         handleToggleOpenPanelCloseButton,
-    });
-    const playerPanelModel = buildPlayerPanelModel({
+    }), [
+        activePlaybackContext,
+        addNavidromeSongsToQueue,
+        applyCustomTheme,
+        applyDefaultTheme,
+        backgroundOpacity,
+        bgMode,
+        cadenzaTuning,
+        clearPersistedStagePlaybackCache,
+        clearStagePlaybackSession,
+        cloudPlaylist,
+        currentSong,
+        disableHomeDynamicBackground,
+        enableMediaCache,
+        enableNowPlayingStage,
+        focusedFavoriteAlbumIndex,
+        focusedPlaylistIndex,
+        focusedRadioIndex,
+        fumeTuning,
+        handleAlbumSelect,
+        handleArtistSelect,
+        handleCustomThemePreferenceChange,
+        handleHomeMatchSong,
+        handleSaveLyricFilterPattern,
+        handleSetBackgroundOpacity,
+        handleSetFumeTuning,
+        handleSetLyricsCustomFont,
+        handleSetLyricsFontScale,
+        handleSetLyricsFontStyle,
+        handleSetPartitaTuning,
+        handleSetVisualizerMode,
+        handleToggleDisableHomeDynamicBackground,
+        handleToggleHidePlayerProgressBar,
+        handleToggleHidePlayerRightPanelButton,
+        handleToggleHidePlayerTranslationSubtitle,
+        handleToggleMediaCache,
+        handleToggleNowPlayingStage,
+        handleToggleOpenPanelCloseButton,
+        handleToggleStaticMode,
+        handleResetFumeTuning,
+        handleResetPartitaTuning,
+        hidePlayerProgressBar,
+        hidePlayerRightPanelButton,
+        hidePlayerTranslationSubtitle,
+        isCustomThemePreferred,
+        isDaylight,
+        leaveStagePlayback,
+        loadCurrentSongLyricPreview,
+        loadStageSessionIntoPlayback,
+        localMusicState,
+        localPlaylists,
+        localSongs,
+        lyricsCustomFontFamily,
+        lyricsCustomFontLabel,
+        lyricsFontScale,
+        lyricsFontStyle,
+        lyricFilterPattern,
+        navigateToPlayer,
+        navigateToSearch,
+        navidromeFocusedAlbumIndex,
+        nowPlayingConnectionStatus,
+        onMatchNavidromeSong,
+        onPlayLocalSong,
+        onPlayNavidromeSong,
+        onRefreshLocalSongs,
+        openLocalAlbumByName,
+        openLocalArtistByName,
+        openStagePlayer,
+        partitaTuning,
+        pendingNavidromeSelection,
+        pendingOpenSettings,
+        playerState,
+        playlists,
+        playSong,
+        refreshUserData,
+        saveCustomDualTheme,
+        setFocusedFavoriteAlbumIndex,
+        setFocusedPlaylistIndex,
+        setFocusedRadioIndex,
+        setLocalMusicState,
+        setNavidromeFocusedAlbumIndex,
+        setPendingNavidromeSelection,
+        setPendingOpenSettings,
+        setStageStatus,
+        showOpenPanelCloseButton,
+        stageSource,
+        stageStatus,
+        staticMode,
+        theme,
+        themeParkSeedTheme,
+        user,
+        visualizerMode,
+    ]);
+    const playerPanelModel = useMemo(() => buildPlayerPanelModel({
         isPanelOpen,
         setIsPanelOpen,
         panelTab,
@@ -1003,7 +1164,7 @@ export default function App() {
         toggleLoop,
         handleLike,
         isLiked: currentSong ? (isLocalPlaybackSong(currentSong) ? isLocalSongLiked(currentSong) : likedSongIds.has(currentSong.id)) : false,
-        generateAITheme: () => generateAITheme(lyrics, currentSong),
+        generateAITheme: generateCurrentSongTheme,
         isGeneratingTheme,
         hasLyrics: !!lyrics,
         canGenerateAITheme,
@@ -1065,15 +1226,87 @@ export default function App() {
         useCoverColorBg,
         handleToggleCoverColorBg,
         isDaylight,
-        handleToggleDaylight: () => handleToggleDaylight(!isDaylight),
+        handleToggleDaylight: toggleDaylightMode,
         navigateToHomeForSettings: navigateToHome,
-    });
-    const appOverlaysModel = buildAppOverlaysModel({
+    }), [
+        activePlaybackContext,
+        addCurrentSongToLocalPlaylist,
+        addCurrentSongToNavidromePlaylist,
+        addCurrentSongToNeteasePlaylist,
+        audioQuality,
+        cacheSize,
+        canGenerateAITheme,
+        coverUrl,
+        createCurrentLocalPlaylist,
+        createCurrentNavidromePlaylist,
+        currentSong,
+        effectiveLoopMode,
+        generateCurrentSongTheme,
+        handleAlbumSelect,
+        handleArtistSelect,
+        handleBgModeChange,
+        handleChangeLyricsSource,
+        handleClearCache,
+        handleLike,
+        handleLogout,
+        handleManualMatchOnline,
+        handleNextTrack,
+        handlePreviewVolume,
+        handlePrevTrack,
+        handleResetTheme,
+        handleSetVisualizerMode,
+        handleSetVolume,
+        handleSyncData,
+        handleToggleCoverColorBg,
+        handleToggleMute,
+        handleToggleDaylight,
+        handleUpdateLocalLyrics,
+        hasCustomTheme,
+        isDaylight,
+        isFmMode,
+        isGeneratingTheme,
+        isMuted,
+        isNowPlayingControlDisabled,
+        isPanelOpen,
+        isSyncing,
+        likedSongIds,
+        localPlaylists,
+        lyrics,
+        navigateToHome,
+        openCurrentLocalAlbum,
+        openCurrentLocalArtist,
+        openCurrentNavidromeAlbum,
+        openCurrentNavidromeArtist,
+        panelTab,
+        playQueue,
+        playSong,
+        playerState,
+        playlists,
+        queueScrollRef,
+        replayGainMode,
+        saveCurrentQueueAsLocalPlaylist,
+        setAudioQuality,
+        setIsPanelOpen,
+        setPanelTab,
+        setPendingOpenSettings,
+        setTheme,
+        showOpenPanelCloseButton,
+        shuffleQueue,
+        theme,
+        toggleLoop,
+        togglePlay,
+        useCoverColorBg,
+        user,
+        visualizerMode,
+        volume,
+    ]);
+    const homeContent = useMemo(() => <Home model={homeModel} />, [homeModel]);
+    const appOverlaysModel = useMemo(() => buildAppOverlaysModel({
         currentView,
         isOverlayVisible,
         topOverlay,
         overlayStack,
-        homeContent: <Home model={homeModel} />,
+        homeContent,
         theme,
         isDaylight,
         closeSearchView,
@@ -1114,18 +1347,57 @@ export default function App() {
         navigateToPlayer,
         isPlayerChromeHidden,
         shouldHidePlayerProgressBar,
-        onSeekMainAudio: (time) => {
-            if (audioRef.current) {
-                audioRef.current.currentTime = time;
-                if (audioRef.current.paused) {
-                    void audioRef.current.play();
-                    setPlayerState(PlayerState.PLAYING);
-                }
-            }
-        },
+        onSeekMainAudio: seekMainAudio,
         noTrackText: t('ui.noTrack'),
-    });
-    const appDialogsModel = buildAppDialogsModel({
+    }), [
+        activePlaybackContext,
+        addNeteaseSongToQueue,
+        addNeteaseSongsToQueue,
+        audioSrc,
+        canToggleCurrentPlayback,
+        closeSearchView,
+        currentSong,
+        currentTime,
+        currentView,
+        devDebugSnapshot,
+        duration,
+        effectiveLoopMode,
+        handleAlbumSelect,
+        handleArtistSelect,
+        handleSearchLoadMore,
+        handleSearchOverlaySubmit,
+        handleSearchResultAlbumSelect,
+        handleSearchResultArtistSelect,
+        handleSearchResultPlay,
+        homeContent,
+        isDaylight,
+        isDev,
+        isDevDebugOverlayVisible,
+        isNowPlayingControlDisabled,
+        isOverlayVisible,
+        isPlayerChromeHidden,
+        lyrics,
+        navigateToPlayer,
+        overlayStack,
+        playerState,
+        playlists,
+        playOnlineQueueFromStart,
+        playSong,
+        popOverlay,
+        refreshUserData,
+        seekMainAudio,
+        setPlayerState,
+        shouldHidePlayerProgressBar,
+        stageActiveEntryKind,
+        stageLyricsClockRef,
+        syncStageLyricsClock,
+        theme,
+        toggleLoop,
+        togglePlay,
+        topOverlay,
+        user?.userId,
+    ]);
+    const appDialogsModel = useMemo(() => buildAppDialogsModel({
         statusMsg,
         isDaylight,
         showLyricMatchModal,
@@ -1138,7 +1410,20 @@ export default function App() {
         pendingUnavailableReplacement,
         setPendingUnavailableReplacement,
         handleUnavailableReplacementConfirm,
-    });
+    }), [
+        currentSong,
+        handleLyricMatchComplete,
+        handleNaviLyricMatchComplete,
+        handleUnavailableReplacementConfirm,
+        isDaylight,
+        pendingUnavailableReplacement,
+        setPendingUnavailableReplacement,
+        setShowLyricMatchModal,
+        setShowNaviLyricMatchModal,
+        showLyricMatchModal,
+        showNaviLyricMatchModal,
+        statusMsg,
+    ]);
 
     useEffect(() => {
         isNowPlayingControlDisabledRef.current = isNowPlayingControlDisabled;

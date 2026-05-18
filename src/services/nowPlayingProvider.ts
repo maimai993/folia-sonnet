@@ -51,6 +51,34 @@ export type NowPlayingProviderSnapshot = {
     progressMs: number;
 };
 
+const areTracksEqual = (
+    left: NowPlayingTrackSnapshot | null,
+    right: NowPlayingTrackSnapshot | null,
+) => (
+    left?.id === right?.id
+    && left?.title === right?.title
+    && left?.artist === right?.artist
+    && left?.album === right?.album
+    && left?.coverUrl === right?.coverUrl
+    && left?.durationMs === right?.durationMs
+);
+
+const areLyricsEqual = (
+    left: NowPlayingLyricPayload | null,
+    right: NowPlayingLyricPayload | null,
+) => (
+    left?.source === right?.source
+    && left?.title === right?.title
+    && left?.artist === right?.artist
+    && left?.durationMs === right?.durationMs
+    && left?.hasLyric === right?.hasLyric
+    && left?.hasTranslatedLyric === right?.hasTranslatedLyric
+    && left?.hasKaraokeLyric === right?.hasKaraokeLyric
+    && left?.lrc === right?.lrc
+    && left?.translatedLyric === right?.translatedLyric
+    && left?.karaokeLyric === right?.karaokeLyric
+);
+
 const decodeXmlEntities = (value: string): string => {
     return value
         .replace(/&quot;/g, '"')
@@ -77,6 +105,7 @@ const extractQrcLyricContent = (value: string): string => {
 };
 
 type NowPlayingProviderCallbacks = {
+    debug?: boolean;
     onConnectionStatusChange?: (status: NowPlayingConnectionStatus) => void;
     onTrack?: (track: NowPlayingTrackSnapshot | null) => void;
     onLyric?: (lyric: NowPlayingLyricPayload | null) => void;
@@ -203,6 +232,7 @@ export const normalizeNowPlayingLyricPayload = (raw: unknown): NowPlayingLyricPa
 
 export class NowPlayingProvider {
     private readonly callbacks: NowPlayingProviderCallbacks;
+    private readonly debug: boolean;
     private socket: WebSocket | null = null;
     private reconnectTimer: number | null = null;
     private stopped = true;
@@ -218,6 +248,7 @@ export class NowPlayingProvider {
 
     constructor(callbacks: NowPlayingProviderCallbacks = {}) {
         this.callbacks = callbacks;
+        this.debug = callbacks.debug === true;
     }
 
     getSnapshot(): NowPlayingProviderSnapshot {
@@ -295,7 +326,9 @@ export class NowPlayingProvider {
 
     private handleMessage(rawData: unknown) {
         if (typeof rawData !== 'string') {
-            console.log('[NowPlaying][ws] Received non-string payload:', rawData);
+            if (this.debug) {
+                console.log('[NowPlaying][ws] Received non-string payload:', rawData);
+            }
             return;
         }
 
@@ -304,16 +337,25 @@ export class NowPlayingProvider {
             payload = JSON.parse(rawData) as NowPlayingWsEnvelope;
         } catch (error) {
             console.warn('[NowPlaying] Failed to parse websocket payload', error);
-            console.log('[NowPlaying][ws] Raw payload text:', rawData);
+            if (this.debug) {
+                console.log('[NowPlaying][ws] Raw payload text:', rawData);
+            }
             return;
         }
 
-        console.log('[NowPlaying][ws] Incoming event:', payload.event, payload.data);
+        if (this.debug) {
+            console.log('[NowPlaying][ws] Incoming event:', payload.event, payload.data);
+        }
 
         switch (payload.event) {
             case 'Track': {
                 const track = normalizeNowPlayingTrack(payload.data);
-                console.log('[NowPlaying][ws] Normalized track:', track);
+                if (this.debug) {
+                    console.log('[NowPlaying][ws] Normalized track:', track);
+                }
+                if (areTracksEqual(this.snapshot.track, track)) {
+                    break;
+                }
                 this.snapshot = {
                     ...this.snapshot,
                     track,
@@ -325,7 +367,12 @@ export class NowPlayingProvider {
             }
             case 'Lyric': {
                 const lyric = normalizeNowPlayingLyricPayload(payload.data);
-                console.log('[NowPlaying][ws] Normalized lyric payload:', lyric);
+                if (this.debug) {
+                    console.log('[NowPlaying][ws] Normalized lyric payload:', lyric);
+                }
+                if (areLyricsEqual(this.snapshot.lyric, lyric)) {
+                    break;
+                }
                 this.snapshot = {
                     ...this.snapshot,
                     lyric,
@@ -347,13 +394,15 @@ export class NowPlayingProvider {
                 const progressMs = hasRecentPreciseProgress
                     ? this.lastPreciseProgressMs
                     : coarseProgressMs;
-                console.log('[NowPlaying][ws] Pause state update:', {
-                    raw: playerState,
-                    isPaused,
-                    coarseProgressMs,
-                    usedRecentPreciseProgress: hasRecentPreciseProgress,
-                    progressMs,
-                });
+                if (this.debug) {
+                    console.log('[NowPlaying][ws] Pause state update:', {
+                        raw: playerState,
+                        isPaused,
+                        coarseProgressMs,
+                        usedRecentPreciseProgress: hasRecentPreciseProgress,
+                        progressMs,
+                    });
+                }
                 this.snapshot = {
                     ...this.snapshot,
                     isPaused,
@@ -372,10 +421,12 @@ export class NowPlayingProvider {
                 const progressMs = clampProgressMs(data?.progress);
                 this.lastPreciseProgressMs = progressMs;
                 this.lastPreciseProgressAtMs = Date.now();
-                console.log('[NowPlaying][ws] Progress update:', {
-                    raw: data,
-                    progressMs,
-                });
+                if (this.debug) {
+                    console.log('[NowPlaying][ws] Progress update:', {
+                        raw: data,
+                        progressMs,
+                    });
+                }
                 this.snapshot = {
                     ...this.snapshot,
                     progressMs,
@@ -384,7 +435,9 @@ export class NowPlayingProvider {
                 break;
             }
             case 'PlayerProgressReplay': {
-                console.log('[NowPlaying][ws] Replay progress reset');
+                if (this.debug) {
+                    console.log('[NowPlaying][ws] Replay progress reset');
+                }
                 this.lastPreciseProgressMs = 0;
                 this.lastPreciseProgressAtMs = Date.now();
                 this.snapshot = {
@@ -395,7 +448,9 @@ export class NowPlayingProvider {
                 break;
             }
             default:
-                console.log('[NowPlaying][ws] Unhandled event:', payload.event, payload.data);
+                if (this.debug) {
+                    console.log('[NowPlaying][ws] Unhandled event:', payload.event, payload.data);
+                }
                 break;
         }
     }
@@ -416,7 +471,9 @@ export class NowPlayingProvider {
     }
 
     private updateConnectionStatus(status: NowPlayingConnectionStatus) {
-        console.log('[NowPlaying][ws] Connection status:', status);
+        if (this.debug) {
+            console.log('[NowPlaying][ws] Connection status:', status);
+        }
         this.snapshot = {
             ...this.snapshot,
             connectionStatus: status,
