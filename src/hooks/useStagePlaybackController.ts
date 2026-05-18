@@ -169,7 +169,17 @@ export function useStagePlaybackController({
     const nowPlayingContentLoadKeyRef = useRef<string | null>(null);
     const nowPlayingContentLoadRequestIdRef = useRef(0);
     const nowPlayingPreciseQueryRequestIdRef = useRef(0);
+    const nowPlayingTrackRef = useRef<NowPlayingTrackSnapshot | null>(null);
+    const nowPlayingLyricPayloadRef = useRef<NowPlayingLyricPayload | null>(null);
+    const nowPlayingProgressMsRef = useRef(0);
+    const nowPlayingProgressQualityRef = useRef<'precise' | 'coarse'>('coarse');
     const nowPlayingPausedRef = useRef(nowPlayingPaused);
+    const applyNowPlayingPreciseAnchorRef = useRef<((
+        progressMs: number,
+        paused: boolean,
+        options: { rttMs?: number; onlyIfDrifted?: boolean; source: NowPlayingDebugInfo['lastQuerySource']; }
+    ) => boolean) | null>(null);
+    const shouldPublishNowPlayingStateRef = useRef(false);
     const lastNowPlayingPauseStateRef = useRef(nowPlayingPaused);
     const currentLineIndexRef = useRef(currentLineIndex);
 
@@ -183,6 +193,8 @@ export function useStagePlaybackController({
         ? (stageStatus?.modeEnabled ? (stageStatus?.source ?? 'stage-api') : null)
         : (enableNowPlayingStage ? 'now-playing' : null);
     const isNowPlayingStageActive = activePlaybackContext === 'stage' && stageSource === 'now-playing';
+    const shouldPublishNowPlayingState = isDev || isNowPlayingStageActive;
+    shouldPublishNowPlayingStateRef.current = shouldPublishNowPlayingState;
 
     const buildPlaybackSnapshot = useCallback((): PlaybackSnapshot => ({
         currentSong,
@@ -445,6 +457,7 @@ export function useStagePlaybackController({
         syncNowPlayingClock,
         syncNowPlayingDisplaySurface,
     ]);
+    applyNowPlayingPreciseAnchorRef.current = applyNowPlayingPreciseAnchor;
 
     const queryNowPlayingPreciseProgress = useCallback(async (
         paused: boolean,
@@ -786,13 +799,18 @@ export function useStagePlaybackController({
             clearMainPlaybackContext();
             stagePlaybackSnapshotRef.current = null;
             setActivePlaybackContext('stage');
-            if (nowPlayingTrack || nowPlayingLyricPayload) {
+            if (shouldPublishNowPlayingState) {
+                setNowPlayingTrack(nowPlayingTrackRef.current);
+                setNowPlayingLyricPayload(nowPlayingLyricPayloadRef.current);
+                setNowPlayingPaused(nowPlayingPausedRef.current);
+            }
+            if (nowPlayingTrackRef.current || nowPlayingLyricPayloadRef.current) {
                 const requestId = nowPlayingContentLoadRequestIdRef.current + 1;
                 nowPlayingContentLoadRequestIdRef.current = requestId;
-                void loadNowPlayingIntoPlayback(nowPlayingTrack, nowPlayingLyricPayload, requestId);
+                void loadNowPlayingIntoPlayback(nowPlayingTrackRef.current, nowPlayingLyricPayloadRef.current, requestId);
             }
             navigateToPlayer();
-            if (!nowPlayingTrack && !nowPlayingLyricPayload) {
+            if (!nowPlayingTrackRef.current && !nowPlayingLyricPayloadRef.current) {
                 setStatusMsg({ type: 'info', text: '等待本地 Now Playing 服务输入' });
             }
             return;
@@ -834,14 +852,13 @@ export function useStagePlaybackController({
         loadStageLyricsIntoPlayback,
         loadStageSessionIntoPlayback,
         navigateToPlayer,
-        nowPlayingLyricPayload,
-        nowPlayingTrack,
         setActivePlaybackContext,
         setStatusMsg,
         stageActiveEntryKind,
         stageLyricsSession,
         stageMediaSession,
         stageSource,
+        shouldPublishNowPlayingState,
         syncStageLyricsClock,
         t,
     ]);
@@ -924,6 +941,9 @@ export function useStagePlaybackController({
             nowPlayingContentLoadKeyRef.current = null;
             nowPlayingContentLoadRequestIdRef.current = 0;
             nowPlayingPreciseQueryRequestIdRef.current = 0;
+            nowPlayingTrackRef.current = null;
+            nowPlayingLyricPayloadRef.current = null;
+            nowPlayingPausedRef.current = true;
             setNowPlayingConnectionStatus('disabled');
             setNowPlayingTrack(null);
             setNowPlayingLyricPayload(null);
@@ -945,13 +965,41 @@ export function useStagePlaybackController({
         }
 
         const provider = new NowPlayingProvider({
+            debug: isDev,
             onConnectionStatusChange: setNowPlayingConnectionStatus,
-            onTrack: setNowPlayingTrack,
-            onLyric: setNowPlayingLyricPayload,
-            onPauseState: setNowPlayingPaused,
+            onTrack: (track) => {
+                nowPlayingTrackRef.current = track;
+                if (shouldPublishNowPlayingStateRef.current) {
+                    setNowPlayingTrack(track);
+                }
+            },
+            onLyric: (lyric) => {
+                nowPlayingLyricPayloadRef.current = lyric;
+                if (shouldPublishNowPlayingStateRef.current) {
+                    setNowPlayingLyricPayload(lyric);
+                }
+            },
+            onPauseState: (isPaused) => {
+                nowPlayingPausedRef.current = isPaused;
+                if (shouldPublishNowPlayingStateRef.current) {
+                    setNowPlayingPaused(isPaused);
+                }
+            },
             onProgress: ({ progressMs, quality }) => {
-                setNowPlayingProgressMs(progressMs);
-                setNowPlayingProgressQuality(quality);
+                nowPlayingProgressMsRef.current = progressMs;
+                nowPlayingProgressQualityRef.current = quality;
+
+                if (quality === 'precise' && stageSource === 'now-playing') {
+                    void applyNowPlayingPreciseAnchorRef.current?.(progressMs, nowPlayingPausedRef.current, {
+                        onlyIfDrifted: true,
+                        source: 'progress',
+                    });
+                }
+
+                if (isDev) {
+                    setNowPlayingProgressMs(progressMs);
+                    setNowPlayingProgressQuality(quality);
+                }
             },
         });
 
@@ -964,24 +1012,22 @@ export function useStagePlaybackController({
                 nowPlayingProviderRef.current = null;
             }
         };
-    }, [resetNowPlayingClock, stageSource, updateNowPlayingDebugInfo]);
+    }, [isDev, resetNowPlayingClock, stageSource, updateNowPlayingDebugInfo]);
 
     useEffect(() => {
-        if (stageSource !== 'now-playing') {
+        if (stageSource !== 'now-playing' || !shouldPublishNowPlayingState) {
             return;
         }
 
-        if (nowPlayingProgressQuality !== 'precise') {
-            return;
-        }
+        setNowPlayingTrack(nowPlayingTrackRef.current);
+        setNowPlayingLyricPayload(nowPlayingLyricPayloadRef.current);
+        setNowPlayingPaused(nowPlayingPausedRef.current);
 
-        void applyNowPlayingPreciseAnchor(nowPlayingProgressMs, nowPlayingPausedRef.current, { source: 'progress' });
-    }, [
-        applyNowPlayingPreciseAnchor,
-        nowPlayingProgressMs,
-        nowPlayingProgressQuality,
-        stageSource,
-    ]);
+        if (isDev) {
+            setNowPlayingProgressMs(nowPlayingProgressMsRef.current);
+            setNowPlayingProgressQuality(nowPlayingProgressQualityRef.current);
+        }
+    }, [isDev, shouldPublishNowPlayingState, stageSource]);
 
     useEffect(() => {
         if (activePlaybackContext === 'main') {
@@ -1104,7 +1150,7 @@ export function useStagePlaybackController({
             return;
         }
 
-        if (!nowPlayingTrack && !nowPlayingLyricPayload && nowPlayingProgressMs === 0) {
+        if (!nowPlayingTrack && !nowPlayingLyricPayload && nowPlayingProgressMsRef.current === 0) {
             return;
         }
 
@@ -1114,19 +1160,10 @@ export function useStagePlaybackController({
     }, [
         nowPlayingLyricPayload,
         nowPlayingPaused,
-        nowPlayingProgressMs,
         nowPlayingTrack,
         queryNowPlayingPreciseProgress,
         stageSource,
     ]);
-
-    useEffect(() => {
-        if (!isNowPlayingStageActive) {
-            return;
-        }
-
-        syncNowPlayingDisplaySurface(getNowPlayingDisplayTime());
-    }, [getNowPlayingDisplayTime, isNowPlayingStageActive, nowPlayingLyricPayload, nowPlayingTrack, syncNowPlayingDisplaySurface]);
 
     useEffect(() => {
         if (!isNowPlayingStageActive || nowPlayingPaused) {
