@@ -1,0 +1,188 @@
+name: Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Base version (e.g. 0.4.3). Leave empty to use package.json version.'
+        required: false
+        type: string
+      rc_number:
+        description: 'RC number (e.g. 1 -> vX.Y.Z-rc.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-candidate-${{ github.ref }}-${{ github.event.inputs.rc_number }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    name: Prepare RC metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      rc_label: ${{ steps.meta.outputs.rc_label }}
+      tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Determine RC version
+        id: meta
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(jq -r .version package.json)
+          fi
+
+          RC_LABEL="rc.${{ github.event.inputs.rc_number }}"
+          TAG="v${VERSION}-${RC_LABEL}"
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "rc_label=${RC_LABEL}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Clean up orphaned RC release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists, deleting it so the draft can be recreated."
+            gh release delete "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes
+          fi
+
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Found orphaned tag ${RELEASE_TAG}, deleting it."
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}"
+          else
+            echo "No orphaned tag found for ${RELEASE_TAG}."
+          fi
+
+  build:
+    name: Build RC on ${{ matrix.os }}
+    needs: prepare-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Update package.json version for RC build
+        run: npm version ${{ needs.prepare-release.outputs.version }} --no-git-tag-version
+
+      - name: Generate RC release notes from template
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          RC_LABEL: ${{ needs.prepare-release.outputs.rc_label }}
+          TARGET_REF: ${{ github.sha }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const templatePath = path.join('.github', 'release-candidate-template.md');
+          const outputPath = path.join('build', 'release-candidate-notes.md');
+          let template = fs.readFileSync(templatePath, 'utf8');
+
+          const replacements = {
+            VERSION: process.env.RELEASE_VERSION || '',
+            TAG: process.env.RELEASE_TAG || '',
+            RC_LABEL: process.env.RC_LABEL || '',
+            TARGET_REF: process.env.TARGET_REF || '',
+          };
+
+          for (const [key, value] of Object.entries(replacements)) {
+            template = template.split(`{{${key}}}`).join(value);
+          }
+
+          fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+          fs.writeFileSync(outputPath, `${template.trim()}\n`);
+          NODE
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Web App for Electron
+        env:
+          ELECTRON: "true"
+        run: npm run build
+
+      - name: Package Electron App
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --publish never
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: rc-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.blockmap
+            release/latest*.yml
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
+            build/release-candidate-notes.md
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish RC draft release
+    runs-on: ubuntu-latest
+    needs: [prepare-release, build]
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: rc-artifacts
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          NOTES_FILE=$(find rc-artifacts -type f -name 'release-candidate-notes.md' | head -n 1)
+          if [ -z "${NOTES_FILE}" ]; then
+            echo "Unable to locate RC release notes artifact"
+            exit 1
+          fi
+          cp "${NOTES_FILE}" release-candidate-notes.md
+
+      - name: Publish RC draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+        shell: bash
+        run: |
+          mapfile -d '' files < <(find rc-artifacts -type f ! -name 'release-candidate-notes.md' -print0)
+          gh release create "${RELEASE_TAG}" \
+            "${files[@]}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Release Candidate ${RELEASE_TAG}" \
+            --notes-file release-candidate-notes.md \
+            --target "${GITHUB_SHA}" \
+            --draft \
+            --prerelease
