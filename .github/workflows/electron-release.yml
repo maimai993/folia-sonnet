@@ -10,10 +10,6 @@ on:
         description: 'Version (e.g. 1.0.1). Leave empty to use package.json version.'
         required: false
         type: string
-      release_notes:
-        description: 'Release notes (Markdown supported)'
-        required: false
-        type: string
       publish_aur_only:
         description: 'Skip desktop builds and only publish the AUR package'
         required: false
@@ -123,12 +119,32 @@ jobs:
         if: github.event.inputs.version != ''
         run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
 
-      - name: Generate Release Notes file
-        if: github.event.inputs.release_notes != ''
+      - name: Generate Release Notes from template
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ github.event.inputs.version != '' && github.event.inputs.version || needs.prepare-release.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
-          mkdir -p build
-          echo "${{ github.event.inputs.release_notes }}" > build/release-notes.md
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const templatePath = path.join('.github', 'release-draft-template.md');
+          const outputPath = path.join('build', 'release-notes.md');
+          let template = fs.readFileSync(templatePath, 'utf8');
+
+          const replacements = {
+            VERSION: process.env.RELEASE_VERSION || '',
+            TAG: process.env.RELEASE_TAG || '',
+          };
+
+          for (const [key, value] of Object.entries(replacements)) {
+            template = template.split(`{{${key}}}`).join(value);
+          }
+
+          fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+          fs.writeFileSync(outputPath, `${template.trim()}\n`);
+          NODE
 
       - name: Install Dependencies
         run: npm ci

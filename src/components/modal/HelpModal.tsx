@@ -240,7 +240,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
     };
 
     const handleCopyVersionInfo = async () => {
-        const versionInfo = `folia-major v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`;
+        const versionInfo = `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`;
 
         try {
             await copyText(versionInfo);
@@ -711,7 +711,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 >
                                     {versionCopied
                                         ? '已复制'
-                                        : `folia-major v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`}
+                                        : `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`}
                                 </button>
                                 {updateStatus?.availableVersion && (
                                     <div className="mt-1 flex items-center justify-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>

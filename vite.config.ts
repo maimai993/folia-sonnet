@@ -56,6 +56,8 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
     }
   }
 
+  const appVersionLabel = process.env.APP_VERSION_LABEL?.trim() || 'folia-major';
+
   return {
     base: process.env.ELECTRON === 'true' ? './' : '/',
     worker: {
@@ -104,7 +106,8 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       '__COMMIT_HASH__': JSON.stringify(commitHash + commitSuffix),
       '__GIT_BRANCH__': JSON.stringify(gitBranch),
-      '__APP_VERSION__': JSON.stringify(JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version)
+      '__APP_VERSION__': JSON.stringify(JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version),
+      '__APP_VERSION_LABEL__': JSON.stringify(appVersionLabel)
     },
     resolve: {
       alias: {

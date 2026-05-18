@@ -4,6 +4,7 @@ declare global {
   const __COMMIT_HASH__: string;
   const __GIT_BRANCH__: string;
   const __APP_VERSION__: string;
+  const __APP_VERSION_LABEL__: string;
 
   interface ElectronCacheDirectoryResult {
     path: string;
