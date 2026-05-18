@@ -771,6 +771,11 @@ export function useStagePlaybackController({
     }, []);
 
     const openStagePlayer = useCallback(async () => {
+        if (stageSource === 'now-playing' && activePlaybackContext === 'stage') {
+            navigateToPlayer();
+            return;
+        }
+
         if (activePlaybackContext === 'main') {
             mainPlaybackSnapshotRef.current = buildPlaybackSnapshot();
         } else {
