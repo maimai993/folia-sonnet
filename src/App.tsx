@@ -868,28 +868,30 @@ export default function App() {
         duration,
     });
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
-    const devDebugSnapshot = buildDebugSnapshot({
-        shortcutLabel: DEV_DEBUG_SHORTCUT_LABEL,
-        currentSong,
-        currentView,
-        playerState,
-        visualizerMode,
-        lyrics,
-        currentLineIndex,
-        currentTimeValue: currentTime.get(),
-        audioSrc,
-        coverUrl,
-        nowPlayingDebug: stageSource === 'now-playing' ? {
-            connectionStatus: nowPlayingConnectionStatus,
-            isActive: isNowPlayingStageActive,
-            paused: nowPlayingPaused,
-            progressMs: nowPlayingProgressMs,
-            progressQuality: nowPlayingProgressQuality,
-            trackTitle: nowPlayingTrack?.title ?? nowPlayingLyricPayload?.title ?? null,
-            durationSec: (nowPlayingTrack?.durationMs ?? nowPlayingLyricPayload?.durationMs ?? 0) / 1000,
-            ...nowPlayingDebugInfo,
-        } : null,
-    });
+    const devDebugSnapshot = isDev
+        ? buildDebugSnapshot({
+            shortcutLabel: DEV_DEBUG_SHORTCUT_LABEL,
+            currentSong,
+            currentView,
+            playerState,
+            visualizerMode,
+            lyrics,
+            currentLineIndex,
+            currentTimeValue: currentTime.get(),
+            audioSrc,
+            coverUrl,
+            nowPlayingDebug: stageSource === 'now-playing' ? {
+                connectionStatus: nowPlayingConnectionStatus,
+                isActive: isNowPlayingStageActive,
+                paused: nowPlayingPaused,
+                progressMs: nowPlayingProgressMs,
+                progressQuality: nowPlayingProgressQuality,
+                trackTitle: nowPlayingTrack?.title ?? nowPlayingLyricPayload?.title ?? null,
+                durationSec: (nowPlayingTrack?.durationMs ?? nowPlayingLyricPayload?.durationMs ?? 0) / 1000,
+                ...nowPlayingDebugInfo,
+            } : null,
+        })
+        : null;
     const homeModel = buildHomeModel({
         playSong,
         navigateToPlayer,

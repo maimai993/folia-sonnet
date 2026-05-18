@@ -363,6 +363,18 @@ export function useStagePlaybackController({
         return Math.max(0, (nowPlayingTrack?.durationMs ?? nowPlayingLyricPayload?.durationMs ?? 0) / 1000);
     }, [nowPlayingLyricPayload?.durationMs, nowPlayingTrack?.durationMs]);
 
+    const updateNowPlayingDebugInfo = useCallback((
+        nextValue:
+            | NowPlayingDebugInfo
+            | ((current: NowPlayingDebugInfo) => NowPlayingDebugInfo)
+    ) => {
+        if (!isDev) {
+            return;
+        }
+
+        setNowPlayingDebugInfo(nextValue);
+    }, [isDev]);
+
     const syncNowPlayingDisplaySurface = useCallback((timeSec: number, nextLyrics: LyricData | null = lyrics) => {
         const durationSec = getNowPlayingDurationSec();
         const safeTime = clampNowPlayingTimeSec(timeSec, durationSec || timeSec);
@@ -396,7 +408,7 @@ export function useStagePlaybackController({
         const shouldApply = !options.onlyIfDrifted || shouldApplyNowPlayingProgressCorrection(displayTimeSec, candidateTimeSec);
         const driftSec = candidateTimeSec - displayTimeSec;
 
-        setNowPlayingDebugInfo({
+        updateNowPlayingDebugInfo({
             lastQuerySource: options.source,
             lastQueryStatus: shouldApply ? 'applied' : 'skipped',
             lastResponseProgressMs: progressMs,
@@ -441,7 +453,7 @@ export function useStagePlaybackController({
         const requestId = nowPlayingPreciseQueryRequestIdRef.current + 1;
         nowPlayingPreciseQueryRequestIdRef.current = requestId;
         const requestStartedAt = performance.now();
-        setNowPlayingDebugInfo(current => ({
+        updateNowPlayingDebugInfo(current => ({
             ...current,
             lastQuerySource: options.source,
             lastQueryStatus: 'pending',
@@ -472,7 +484,7 @@ export function useStagePlaybackController({
             });
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            setNowPlayingDebugInfo(current => ({
+            updateNowPlayingDebugInfo(current => ({
                 ...current,
                 lastQuerySource: options.source,
                 lastQueryStatus: 'failed',
@@ -485,7 +497,7 @@ export function useStagePlaybackController({
             });
             return false;
         }
-    }, [applyNowPlayingPreciseAnchor, isDev]);
+    }, [applyNowPlayingPreciseAnchor, isDev, updateNowPlayingDebugInfo]);
 
     const buildStageLyricsPlaybackSong = useCallback((session: StageLyricsSession, lyricData: LyricData): SongResult => ({
         id: -Math.max(1, Math.floor(session.updatedAt || Date.now())),
@@ -913,7 +925,7 @@ export function useStagePlaybackController({
             setNowPlayingProgressMs(0);
             setNowPlayingProgressQuality('coarse');
             setNowPlayingPaused(true);
-            setNowPlayingDebugInfo({
+            updateNowPlayingDebugInfo({
                 lastQuerySource: 'idle',
                 lastQueryStatus: 'idle',
                 lastResponseProgressMs: null,
@@ -947,7 +959,7 @@ export function useStagePlaybackController({
                 nowPlayingProviderRef.current = null;
             }
         };
-    }, [resetNowPlayingClock, stageSource]);
+    }, [resetNowPlayingClock, stageSource, updateNowPlayingDebugInfo]);
 
     useEffect(() => {
         if (stageSource !== 'now-playing') {
