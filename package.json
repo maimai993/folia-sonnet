@@ -7,7 +7,7 @@
     "email": "chthollyphile@users.noreply.github.com"
   },
   "private": true,
-  "version": "0.4.6",
+  "version": "0.4.7",
   "license": "AGPL-3.0",
   "type": "module",
   "main": "electron/main.cjs",
@@ -70,6 +70,7 @@
       "icon": "build/icon.png"
     },
     "win": {
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "target": [
         "nsis"
       ],
