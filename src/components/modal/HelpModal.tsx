@@ -2184,9 +2184,9 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     { id: 'cover', label: t('options.covers') || "Covers", size: cacheSizes.cover, icon: DiscIcon },
                                     { id: 'media', label: t('options.mediaFiles') || "Media Files", size: cacheSizes.media, icon: PlayCircle },
                                 ].map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
+                                    <div key={item.id} className={`flex items-center justify-between p-3 rounded-xl border ${settingsCardClass}`}>
                                         <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-white/5 rounded-lg opacity-60">
+                                            <div className={`p-2 rounded-lg opacity-60 ${settingsIconClass}`}>
                                                 <item.icon size={16} />
                                             </div>
                                             <div>
@@ -2211,7 +2211,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                             <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
                                 <Database size={14} /> {t('options.mediaCache') || "Media Cache"}
                             </h3>
-                            <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-4">
+                            <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -2288,7 +2288,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
                                     <Server size={14} /> {t('options.stageMode') || 'Stage Mode'}
                                 </h3>
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-4">
+                                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="space-y-1">
                                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -2336,7 +2336,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             </div>
 
                                             {stageSource === 'now-playing' ? (
-                                                <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+                                                <div className={`rounded-xl border p-3 space-y-2 ${settingsCardClass}`}>
                                                     <div className="text-[10px] uppercase tracking-[0.16em] opacity-40" style={{ color: 'var(--text-secondary)' }}>
                                                         Now Playing
                                                     </div>
@@ -2349,7 +2349,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-3">
+                                                    <div className={`rounded-xl border p-3 space-y-3 ${settingsCardClass}`}>
                                                         <div>
                                                             <div className="text-[10px] uppercase tracking-[0.16em] opacity-40 mb-2" style={{ color: 'var(--text-secondary)' }}>
                                                                 {t('options.stageAddress') || 'Stage Address'}
@@ -2373,7 +2373,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                         </div>
                                                     </div>
 
-                                                    <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-3">
+                                                    <div className={`rounded-xl border p-3 space-y-3 ${settingsCardClass}`}>
                                                         <div>
                                                             <div className="text-[10px] uppercase tracking-[0.16em] opacity-40 mb-2" style={{ color: 'var(--text-secondary)' }}>
                                                                 {t('options.stageToken') || 'Bearer Token'}
@@ -2425,7 +2425,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
                                     <Server size={14} /> 舞台
                                 </h3>
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-4">
+                                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="space-y-1">
                                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -2444,7 +2444,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         </button>
                                     </div>
                                     {enableNowPlayingStage && (
-                                        <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+                                        <div className={`rounded-xl border p-3 space-y-2 ${settingsCardClass}`}>
                                             <div className="text-[10px] uppercase tracking-[0.16em] opacity-40" style={{ color: 'var(--text-secondary)' }}>
                                                 Now Playing
                                             </div>
@@ -2835,7 +2835,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowLabSettings(false)}
-                                    className="h-10 w-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center transition-colors hover:bg-white/10"
+                                    className={`h-10 w-10 rounded-full border flex items-center justify-center transition-colors ${utilityGhostButtonClass}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     <ChevronLeft size={18} />
@@ -2859,7 +2859,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     onToggleHidePlayerRightPanelButton?.(false);
                                     onToggleOpenPanelCloseButton(true);
                                 }}
-                                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm transition-colors hover:bg-white/10"
+                                className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${utilityGhostButtonClass}`}
                                 style={{ color: 'var(--text-primary)' }}
                             >
                                 <RotateCcw size={14} />
@@ -2869,7 +2869,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6">
                             <div className="space-y-4">
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 flex items-center justify-between gap-4">
+                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                             <Monitor size={14} />
@@ -2891,7 +2891,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     </button>
                                 </div>
 
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 flex items-center justify-between gap-4">
+                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                             <PlayCircle size={14} />
@@ -2913,7 +2913,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     </button>
                                 </div>
 
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+                                <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                             <Settings2 size={14} />
@@ -2927,7 +2927,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => onToggleHidePlayerProgressBar?.(!hidePlayerProgressBar)}
-                                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${hidePlayerProgressBar ? 'bg-white/12 border-white/20' : 'bg-white/5 border-white/10 hover:bg-white/8'}`}
+                                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${hidePlayerProgressBar ? 'bg-white/12 border-white/20' : utilityGhostButtonClass}`}
                                             style={{ color: 'var(--text-primary)' }}
                                         >
                                             <span className={`flex h-4 w-4 items-center justify-center rounded-sm border ${hidePlayerProgressBar ? 'border-white/30 bg-white/15' : 'border-white/20 bg-transparent'}`}>
@@ -2939,7 +2939,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => onToggleHidePlayerTranslationSubtitle?.(!hidePlayerTranslationSubtitle)}
-                                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${hidePlayerTranslationSubtitle ? 'bg-white/12 border-white/20' : 'bg-white/5 border-white/10 hover:bg-white/8'}`}
+                                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${hidePlayerTranslationSubtitle ? 'bg-white/12 border-white/20' : utilityGhostButtonClass}`}
                                             style={{ color: 'var(--text-primary)' }}
                                         >
                                             <span className={`flex h-4 w-4 items-center justify-center rounded-sm border ${hidePlayerTranslationSubtitle ? 'border-white/30 bg-white/15' : 'border-white/20 bg-transparent'}`}>
@@ -2951,7 +2951,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => onToggleHidePlayerRightPanelButton?.(!hidePlayerRightPanelButton)}
-                                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${hidePlayerRightPanelButton ? 'bg-white/12 border-white/20' : 'bg-white/5 border-white/10 hover:bg-white/8'}`}
+                                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${hidePlayerRightPanelButton ? 'bg-white/12 border-white/20' : utilityGhostButtonClass}`}
                                             style={{ color: 'var(--text-primary)' }}
                                         >
                                             <span className={`flex h-4 w-4 items-center justify-center rounded-sm border ${hidePlayerRightPanelButton ? 'border-white/30 bg-white/15' : 'border-white/20 bg-transparent'}`}>
@@ -2961,7 +2961,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         </button>
                                     </div>
                                 </div>
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 flex items-center justify-between gap-4">
+                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                             <GamepadDirectional size={14} />
@@ -2986,7 +2986,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowLyricFilterSettings(true)}
-                                    className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8 text-left"
+                                    className={`w-full p-4 rounded-xl border transition-colors hover:bg-white/8 text-left ${settingsCardInteractiveClass}`}
                                 >
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="space-y-1">
