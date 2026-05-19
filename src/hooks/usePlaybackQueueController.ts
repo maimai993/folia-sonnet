@@ -6,6 +6,7 @@ import { hasCachedAudio } from '../services/audioCache';
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from '../services/onlinePlayback';
 import { getOnlineSongCacheKey, isSongMarkedUnavailable, neteaseApi } from '../services/netease';
 import { getPrefetchedData, invalidateAndRefetch, prefetchNearbySongs } from '../services/prefetchService';
+import type { ThemeCacheSongKey } from '../services/themeCache';
 import { PlayerState, type HomeViewTab } from '../types';
 import type { LocalSong, SongResult, StatusMessage, UnifiedSong } from '../types';
 import type { NextTrackOptions, PlaybackNavigationOptions, SkipPromptMessageKey, UnavailableReplacementRequest } from '../types/appPlayback';
@@ -71,7 +72,7 @@ type UsePlaybackQueueControllerParams = {
     openLocalArtistByName: (artistName: string) => void;
     openLocalAlbumByName: (albumName: string) => void;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
-    restoreCachedThemeForSong: (songId: number, options?: {
+    restoreCachedThemeForSong: (songId: ThemeCacheSongKey, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
     }) => Promise<unknown>;

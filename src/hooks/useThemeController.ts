@@ -2,7 +2,17 @@ import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from
 import { generateThemeFromLyrics, isMissingAiApiKeyError } from '../services/gemini';
 import { saveToCache } from '../services/db';
 import { DualTheme, LyricData, SongResult, StatusMessage, Theme, ThemeMode } from '../types';
-import { getCachedThemeState, getLastDualTheme } from '../services/themeCache';
+import { getCachedThemeState, getLastDualTheme, getLastLegacyTheme, type ThemeCacheSongKey } from '../services/themeCache';
+import {
+    applyStoredAnimationIntensityToDualTheme,
+    applyStoredAnimationIntensityToTheme,
+    isThemeAnimationIntensity,
+    readStoredLastAppliedThemePointer,
+    readStoredThemeAutoSwitchEnabled,
+    saveStoredAnimationIntensity,
+    saveStoredLastAppliedThemePointer,
+    saveStoredThemeAutoSwitchEnabled,
+} from '../services/themePreferences';
 import { extractColors } from '../utils/colorExtractor';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import {
@@ -43,10 +53,10 @@ const readStoredCustomTheme = (): DualTheme | null => {
             return null;
         }
 
-        return {
+        return applyStoredAnimationIntensityToDualTheme({
             light: parsed.light,
             dark: parsed.dark,
-        };
+        });
     } catch {
         return null;
     }
@@ -91,12 +101,14 @@ export function useThemeController({
     const getBaseTheme = () => getBaseThemeForMode({ defaultTheme, daylightTheme, isDaylight });
     const initialCustomTheme = useMemo(readStoredCustomTheme, []);
     const initialCustomPreferred = useMemo(readStoredCustomPreferred, []);
+    const initialSongThemeAutoSwitchEnabled = useMemo(readStoredThemeAutoSwitchEnabled, []);
 
-    const [theme, setTheme] = useState<Theme>(() => getBaseTheme());
+    const [theme, setTheme] = useState<Theme>(() => applyStoredAnimationIntensityToTheme(getBaseTheme()));
     const [aiTheme, setAiTheme] = useState<DualTheme | null>(null);
     const [legacyTheme, setLegacyTheme] = useState<Theme | null>(null);
     const [customTheme, setCustomTheme] = useState<DualTheme | null>(initialCustomTheme);
     const [isCustomThemePreferred, setIsCustomThemePreferred] = useState(initialCustomPreferred);
+    const [songThemeAutoSwitchEnabled, setSongThemeAutoSwitchEnabled] = useState(initialSongThemeAutoSwitchEnabled);
     const [bgMode, setBgMode] = useState<ThemeMode>(() => (
         initialCustomTheme && initialCustomPreferred ? 'custom' : 'default'
     ));
@@ -115,37 +127,56 @@ export function useThemeController({
     }, [customTheme, isCustomThemePreferred]);
 
     useEffect(() => {
+        saveStoredAnimationIntensity(theme.animationIntensity);
+    }, [theme.animationIntensity]);
+
+    useEffect(() => {
+        saveStoredThemeAutoSwitchEnabled(songThemeAutoSwitchEnabled);
+    }, [songThemeAutoSwitchEnabled]);
+
+    useEffect(() => {
+        const pointer = bgMode === 'custom' && customTheme
+            ? 'custom'
+            : bgMode === 'ai' && (aiTheme || legacyTheme)
+                ? 'ai'
+                : 'default';
+        saveStoredLastAppliedThemePointer(pointer);
+    }, [aiTheme, bgMode, customTheme, legacyTheme]);
+
+    useEffect(() => {
         setTheme(previousTheme => {
+            const normalizeTheme = (nextTheme: Theme) => applyStoredAnimationIntensityToTheme(nextTheme);
+
             if (bgMode === 'custom' && customTheme) {
-                return getSelectedDualTheme(customTheme, isDaylight);
+                return normalizeTheme(getSelectedDualTheme(customTheme, isDaylight));
             }
 
             if (bgMode === 'ai') {
                 if (aiTheme) {
-                    return getSelectedDualTheme(aiTheme, isDaylight);
+                    return normalizeTheme(getSelectedDualTheme(aiTheme, isDaylight));
                 }
 
                 if (legacyTheme) {
-                    return legacyTheme;
+                    return normalizeTheme(legacyTheme);
                 }
             }
 
             const baseTheme = getBaseTheme();
             if (legacyTheme) {
-                return {
+                return normalizeTheme({
                     ...legacyTheme,
                     backgroundColor: baseTheme.backgroundColor,
-                };
+                });
             }
 
-            return resolveBgModeTheme({
+            return normalizeTheme(resolveBgModeTheme({
                 mode: bgMode === 'custom' ? 'default' : bgMode,
                 aiTheme,
                 isDaylight,
                 defaultTheme,
                 daylightTheme,
                 previousTheme,
-            });
+            }));
         });
     }, [aiTheme, bgMode, customTheme, daylightTheme, defaultTheme, isDaylight, legacyTheme]);
 
@@ -177,18 +208,30 @@ export function useThemeController({
         });
     };
 
-    const applyDualTheme = (dualTheme: DualTheme) => {
+    const applyDualTheme = (
+        dualTheme: DualTheme,
+        options?: { respectCustomPreference?: boolean }
+    ) => {
+        const normalizedDualTheme = applyStoredAnimationIntensityToDualTheme(dualTheme);
         setLegacyTheme(null);
-        setAiTheme(dualTheme);
-        if (!isCustomThemePreferred) {
+        setAiTheme(normalizedDualTheme);
+        void saveToCache('last_dual_theme', normalizedDualTheme);
+        const respectCustomPreference = options?.respectCustomPreference ?? true;
+        if (!respectCustomPreference || !isCustomThemePreferred) {
             setBgMode('ai');
         }
     };
 
-    const applyLegacyTheme = (nextLegacyTheme: Theme) => {
+    const applyLegacyTheme = (
+        nextLegacyTheme: Theme,
+        options?: { respectCustomPreference?: boolean }
+    ) => {
+        const normalizedLegacyTheme = applyStoredAnimationIntensityToTheme(nextLegacyTheme);
         setAiTheme(null);
-        setLegacyTheme(nextLegacyTheme);
-        if (!isCustomThemePreferred) {
+        setLegacyTheme(normalizedLegacyTheme);
+        void saveToCache('last_theme', normalizedLegacyTheme);
+        const respectCustomPreference = options?.respectCustomPreference ?? true;
+        if (!respectCustomPreference || !isCustomThemePreferred) {
             setBgMode('ai');
         }
     };
@@ -210,7 +253,7 @@ export function useThemeController({
             return aiTheme;
         }
 
-        const baseDualTheme: DualTheme = {
+        const baseDualTheme = applyStoredAnimationIntensityToDualTheme({
             light: {
                 ...daylightTheme,
                 wordColors: [],
@@ -221,7 +264,7 @@ export function useThemeController({
                 wordColors: [],
                 lyricsIcons: [],
             },
-        };
+        });
 
         if (legacyTheme) {
             if (isDaylight) {
@@ -242,7 +285,7 @@ export function useThemeController({
     };
 
     const saveCustomDualTheme = (dualTheme: DualTheme) => {
-        const sanitized = sanitizeCustomDualTheme(dualTheme);
+        const sanitized = applyStoredAnimationIntensityToDualTheme(sanitizeCustomDualTheme(dualTheme));
         setCustomTheme(sanitized);
         setBgMode('custom');
         setStatusMsg({
@@ -280,19 +323,73 @@ export function useThemeController({
         });
     };
 
+    const handleSongThemeAutoSwitchChange = (enabled: boolean) => {
+        setSongThemeAutoSwitchEnabled(enabled);
+        setStatusMsg({
+            type: 'info',
+            text: enabled ? '已开启主题自动切换' : '已关闭主题自动切换',
+        });
+    };
+
+    const restoreThemeFromLastAppliedPointer = async () => {
+        const pointer = readStoredLastAppliedThemePointer();
+
+        if (pointer === 'custom' && customTheme) {
+            setBgMode('custom');
+            return 'restored' as const;
+        }
+
+        if (pointer === 'ai') {
+            const lastDualTheme = await getLastDualTheme();
+            if (lastDualTheme) {
+                applyDualTheme({
+                    light: {
+                        ...lastDualTheme.light,
+                        wordColors: [],
+                        lyricsIcons: [],
+                    },
+                    dark: {
+                        ...lastDualTheme.dark,
+                        wordColors: [],
+                        lyricsIcons: [],
+                    },
+                }, { respectCustomPreference: false });
+                return 'fallback-dual' as const;
+            }
+
+            const lastLegacyTheme = await getLastLegacyTheme();
+            if (lastLegacyTheme) {
+                applyLegacyTheme(lastLegacyTheme, { respectCustomPreference: false });
+                return 'legacy' as const;
+            }
+        }
+
+        setAiTheme(null);
+        setLegacyTheme(null);
+        setBgMode('default');
+        return 'restored' as const;
+    };
+
     const restoreCachedThemeForSong = async (
-        songId: number,
+        songId: ThemeCacheSongKey,
         options?: { allowLastUsedFallback?: boolean; preserveCurrentOnMiss?: boolean }
     ) => {
+        if (!songThemeAutoSwitchEnabled) {
+            if (options?.allowLastUsedFallback) {
+                return restoreThemeFromLastAppliedPointer();
+            }
+            return 'restored' as const;
+        }
+
         const cachedTheme = await getCachedThemeState(songId);
 
         if (cachedTheme.kind === 'dual') {
-            applyDualTheme(cachedTheme.theme);
+            applyDualTheme(cachedTheme.theme, { respectCustomPreference: false });
             return 'dual' as const;
         }
 
         if (cachedTheme.kind === 'legacy') {
-            applyLegacyTheme(cachedTheme.theme);
+            applyLegacyTheme(cachedTheme.theme, { respectCustomPreference: false });
             return 'legacy' as const;
         }
 
@@ -310,8 +407,14 @@ export function useThemeController({
                         wordColors: [],
                         lyricsIcons: [],
                     },
-                });
+                }, { respectCustomPreference: false });
                 return 'fallback-dual' as const;
+            }
+
+            const lastLegacyTheme = await getLastLegacyTheme();
+            if (lastLegacyTheme) {
+                applyLegacyTheme(lastLegacyTheme, { respectCustomPreference: false });
+                return 'legacy' as const;
             }
         }
 
@@ -343,13 +446,10 @@ export function useThemeController({
                 isPureMusic,
                 songTitle: songTitle || undefined,
             });
-            setLegacyTheme(null);
-            setAiTheme(dualTheme);
-            if (!isCustomThemePreferred) {
-                setBgMode('ai');
-            }
+            const normalizedDualTheme = applyStoredAnimationIntensityToDualTheme(dualTheme);
+            applyDualTheme(normalizedDualTheme);
 
-            const selectedTheme = getSelectedDualTheme(dualTheme, isDaylight);
+            const selectedTheme = getSelectedDualTheme(normalizedDualTheme, isDaylight);
             setStatusMsg({
                 type: 'success',
                 text: bgMode === 'custom' && customTheme
@@ -358,24 +458,18 @@ export function useThemeController({
             });
 
             if (currentSong) {
-                saveToCache(`dual_theme_${currentSong.id}`, dualTheme);
+                saveToCache(`dual_theme_${currentSong.id}`, normalizedDualTheme);
             }
-            saveToCache('last_dual_theme', dualTheme);
         } catch (error: unknown) {
             console.error(error);
             if (isMissingAiApiKeyError(error)) {
                 const coverColors = coverUrl ? await extractColors(coverUrl, 5) : [];
-                const fallbackTheme = buildBuiltinDualTheme({ coverColors });
-                setLegacyTheme(null);
-                setAiTheme(fallbackTheme);
-            if (!isCustomThemePreferred) {
-                setBgMode('ai');
-            }
+                const fallbackTheme = applyStoredAnimationIntensityToDualTheme(buildBuiltinDualTheme({ coverColors }));
+                applyDualTheme(fallbackTheme);
 
                 if (currentSong) {
                     saveToCache(`dual_theme_${currentSong.id}`, fallbackTheme);
                 }
-                saveToCache('last_dual_theme', fallbackTheme);
                 setStatusMsg({
                     type: 'info',
                     text: bgMode === 'custom' && customTheme
@@ -392,12 +486,18 @@ export function useThemeController({
 
     return {
         theme,
-        setTheme,
+        setTheme: (nextTheme: Theme) => {
+            if (isThemeAnimationIntensity(nextTheme.animationIntensity)) {
+                saveStoredAnimationIntensity(nextTheme.animationIntensity);
+            }
+            setTheme(applyStoredAnimationIntensityToTheme(nextTheme));
+        },
         aiTheme,
         setAiTheme,
         customTheme,
         hasCustomTheme: Boolean(customTheme),
         isCustomThemePreferred,
+        songThemeAutoSwitchEnabled,
         bgMode,
         setBgMode,
         isGeneratingTheme,
@@ -414,5 +514,6 @@ export function useThemeController({
         saveCustomDualTheme,
         applyCustomTheme,
         handleCustomThemePreferenceChange,
+        handleSongThemeAutoSwitchChange,
     };
 }

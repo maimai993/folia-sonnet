@@ -318,6 +318,8 @@ export default {
     "saveAndApplyCustomTheme": "保存并应用",
     "preferCustomTheme": "优先使用自定义主题",
     "preferCustomThemeDesc": "优先使用自定义主题而不是AI主题。",
+    "autoSwitchSongTheme": "主题自动切换",
+    "autoSwitchSongThemeDesc": "当切换到的歌曲曾经生成过 AI 主题的时候，自动应用 AI 主题。",
     "updatePreferredCustomTheme": "更新首选自定义主题",
     "lightTheme": "亮色主题",
     "darkTheme": "暗色主题",

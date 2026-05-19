@@ -1,4 +1,5 @@
 import { DualTheme, Theme } from '../types';
+import { applyStoredAnimationIntensityToDualTheme } from '../services/themePreferences';
 
 interface RgbColor {
     r: number;
@@ -280,7 +281,7 @@ export const buildBuiltinDualTheme = ({
     const darkSecondaryBase = mixColors(palette.secondary, dominantColor, 0.25);
     const lightSecondaryBase = mixColors(palette.secondary, dominantColor, 0.15);
 
-    return {
+    return applyStoredAnimationIntensityToDualTheme({
         light: {
             name: `${palette.name} Built-in`,
             backgroundColor: lightBackground,
@@ -305,5 +306,5 @@ export const buildBuiltinDualTheme = ({
             lyricsIcons: [],
             provider: 'Built-in'
         }
-    };
+    });
 };

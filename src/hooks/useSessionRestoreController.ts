@@ -7,6 +7,7 @@ import { getCachedCoverUrl } from '../services/coverCache';
 import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from '../services/localMusicService';
 import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from '../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
+import type { ThemeCacheSongKey } from '../services/themeCache';
 import { hydrateNavidromeLyricPayload, resolvePreferredNavidromeLyrics } from '../utils/appNavidromeLyrics';
 import { hasRenderableLyrics } from '../utils/appPlaybackHelpers';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } from '../utils/appPlaybackGuards';
@@ -31,7 +32,7 @@ type UseSessionRestoreControllerParams = {
     setAudioSrc: SetState<string | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
     setStatusMsg: SetState<StatusMessage | null>;
-    restoreCachedThemeForSong: (songId: number, options?: {
+    restoreCachedThemeForSong: (songId: ThemeCacheSongKey, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
     }) => Promise<'legacy' | 'dual' | 'fallback-dual' | 'restored' | 'none'>;

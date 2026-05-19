@@ -146,10 +146,8 @@ export default async function handler(req: any, res: any) {
     // Force fixed properties for both themes
     dualTheme.light.fontStyle = 'sans';
     dualTheme.light.provider = 'Google Gemini';
-    dualTheme.light.animationIntensity = 'normal';
     dualTheme.dark.fontStyle = 'sans';
     dualTheme.dark.provider = 'Google Gemini';
-    dualTheme.dark.animationIntensity = 'normal';
 
     return res.status(200).json(dualTheme);
 

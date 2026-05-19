@@ -87,9 +87,11 @@ interface HomeProps {
     hasCustomTheme: boolean;
     themeParkInitialTheme: DualTheme;
     isCustomThemePreferred: boolean;
+    songThemeAutoSwitchEnabled: boolean;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
     onApplyCustomTheme: () => void;
     onToggleCustomThemePreferred: (enabled: boolean) => void;
+    onToggleSongThemeAutoSwitch: (enabled: boolean) => void;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
     cadenzaTuning: CadenzaTuning;
@@ -185,9 +187,11 @@ const Home: React.FC<HomeProps> = ({
     hasCustomTheme,
     themeParkInitialTheme,
     isCustomThemePreferred,
+    songThemeAutoSwitchEnabled,
     onSaveCustomTheme,
     onApplyCustomTheme,
     onToggleCustomThemePreferred,
+    onToggleSongThemeAutoSwitch,
     isDaylight,
     visualizerMode,
     cadenzaTuning,
@@ -980,9 +984,11 @@ const Home: React.FC<HomeProps> = ({
                                 hasCustomTheme={hasCustomTheme}
                                 themeParkInitialTheme={themeParkInitialTheme}
                                 isCustomThemePreferred={isCustomThemePreferred}
+                                songThemeAutoSwitchEnabled={songThemeAutoSwitchEnabled}
                                 onSaveCustomTheme={onSaveCustomTheme}
                                 onApplyCustomTheme={onApplyCustomTheme}
                                 onToggleCustomThemePreferred={onToggleCustomThemePreferred}
+                                onToggleSongThemeAutoSwitch={onToggleSongThemeAutoSwitch}
                                 isDaylight={isDaylight}
                                 onToggleNavidrome={handleToggleNavidrome}
                                 visualizerMode={visualizerMode}

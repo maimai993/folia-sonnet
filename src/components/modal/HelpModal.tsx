@@ -36,9 +36,11 @@ interface HelpModalProps {
     hasCustomTheme: boolean;
     themeParkInitialTheme: DualTheme;
     isCustomThemePreferred: boolean;
+    songThemeAutoSwitchEnabled: boolean;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
     onApplyCustomTheme: () => void;
     onToggleCustomThemePreferred: (enabled: boolean) => void;
+    onToggleSongThemeAutoSwitch: (enabled: boolean) => void;
     isDaylight: boolean;
     onToggleNavidrome?: (enabled: boolean) => void;
     visualizerMode?: VisualizerMode;
@@ -97,9 +99,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
     hasCustomTheme,
     themeParkInitialTheme,
     isCustomThemePreferred,
+    songThemeAutoSwitchEnabled,
     onSaveCustomTheme,
     onApplyCustomTheme,
     onToggleCustomThemePreferred,
+    onToggleSongThemeAutoSwitch,
     isDaylight,
     onToggleNavidrome,
     visualizerMode = 'classic',
@@ -805,6 +809,23 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                 style={{ backgroundColor: isCustomThemePreferred ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
                                             >
                                                 <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isCustomThemePreferred ? 'translate-x-6' : 'translate-x-0'}`} />
+                                            </button>
+                                        </div>
+                                        <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
+                                            <div className="space-y-1">
+                                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                    {t('options.autoSwitchSongTheme') || '主题自动切换'}
+                                                </div>
+                                                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                                    {t('options.autoSwitchSongThemeDesc') || '当切换到的歌曲曾经生成过 AI 主题的时候，自动应用 AI 主题。'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => onToggleSongThemeAutoSwitch(!songThemeAutoSwitchEnabled)}
+                                                className={`w-12 h-6 rounded-full p-1 transition-colors ${!songThemeAutoSwitchEnabled ? toggleOffBackgroundClass : ''}`}
+                                                style={{ backgroundColor: songThemeAutoSwitchEnabled ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                            >
+                                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${songThemeAutoSwitchEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
                                             </button>
                                         </div>
                                     </div>

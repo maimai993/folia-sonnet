@@ -39,7 +39,12 @@ describe('nowPlayingClock', () => {
     });
 
     it('only applies low-frequency corrections when drift exceeds the threshold', () => {
-        expect(shouldApplyNowPlayingProgressCorrection(10, 10.5)).toBe(false);
+        expect(
+            shouldApplyNowPlayingProgressCorrection(
+                10,
+                10 + NOW_PLAYING_PROGRESS_CORRECTION_THRESHOLD_SEC - 0.01
+            )
+        ).toBe(false);
         expect(
             shouldApplyNowPlayingProgressCorrection(
                 10,

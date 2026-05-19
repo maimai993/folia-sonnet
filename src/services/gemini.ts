@@ -1,4 +1,5 @@
 import { DualTheme } from "../types";
+import { applyStoredAnimationIntensityToDualTheme } from "./themePreferences";
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) {
@@ -40,7 +41,7 @@ export const generateThemeFromLyrics = async (
     }
 
     const dualTheme = await response.json();
-    return dualTheme as DualTheme;
+    return applyStoredAnimationIntensityToDualTheme(dualTheme as DualTheme);
   } catch (error) {
     console.error("Failed to generate theme via API:", error);
     throw error;

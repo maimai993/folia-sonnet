@@ -379,10 +379,8 @@ export default async function handler(req: Request) {
         // Force fixed properties for both themes
         dualTheme.light.fontStyle = 'sans';
         dualTheme.light.provider = 'OpenAI Compatible';
-        dualTheme.light.animationIntensity = 'normal';
         dualTheme.dark.fontStyle = 'sans';
         dualTheme.dark.provider = 'OpenAI Compatible';
-        dualTheme.dark.animationIntensity = 'normal';
 
         return new Response(JSON.stringify(dualTheme), {
             status: 200,

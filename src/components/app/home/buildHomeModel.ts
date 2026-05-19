@@ -80,9 +80,11 @@ type BuildHomeModelParams = {
     hasCustomTheme: LegacyHomeProps['hasCustomTheme'];
     getThemeParkSeedTheme: LegacyHomeProps['themeParkInitialTheme'];
     isCustomThemePreferred: LegacyHomeProps['isCustomThemePreferred'];
+    songThemeAutoSwitchEnabled: LegacyHomeProps['songThemeAutoSwitchEnabled'];
     saveCustomDualTheme: LegacyHomeProps['onSaveCustomTheme'];
     applyCustomTheme: LegacyHomeProps['onApplyCustomTheme'];
     handleCustomThemePreferenceChange: LegacyHomeProps['onToggleCustomThemePreferred'];
+    handleSongThemeAutoSwitchChange: LegacyHomeProps['onToggleSongThemeAutoSwitch'];
     isDaylight: LegacyHomeProps['isDaylight'];
     visualizerMode: LegacyHomeProps['visualizerMode'];
     cadenzaTuning: LegacyHomeProps['cadenzaTuning'];
@@ -178,9 +180,11 @@ export const buildHomeModel = ({
     hasCustomTheme,
     getThemeParkSeedTheme,
     isCustomThemePreferred,
+    songThemeAutoSwitchEnabled,
     saveCustomDualTheme,
     applyCustomTheme,
     handleCustomThemePreferenceChange,
+    handleSongThemeAutoSwitchChange,
     isDaylight,
     visualizerMode,
     cadenzaTuning,
@@ -314,9 +318,11 @@ export const buildHomeModel = ({
             hasCustomTheme,
             themeParkInitialTheme: getThemeParkSeedTheme,
             isCustomThemePreferred,
+            songThemeAutoSwitchEnabled,
             onSaveCustomTheme: saveCustomDualTheme,
             onApplyCustomTheme: applyCustomTheme,
             onToggleCustomThemePreferred: handleCustomThemePreferenceChange,
+            onToggleSongThemeAutoSwitch: handleSongThemeAutoSwitchChange,
             isDaylight,
             visualizerMode,
             cadenzaTuning,

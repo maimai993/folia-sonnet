@@ -8,6 +8,7 @@ import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from '../services
 import { addSongsToLocalPlaylist, createLocalPlaylist, getLocalPlaylists, setLocalSongFavorite } from '../services/localPlaylistService';
 import { buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong } from '../services/playbackAdapters';
 import { getPrefetchedData } from '../services/prefetchService';
+import type { ThemeCacheSongKey } from '../services/themeCache';
 import { extractCloudLyricText, hasRenderableLyrics } from '../utils/appPlaybackHelpers';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
 import { hydrateNavidromeLyricPayload, resolvePreferredNavidromeLyrics } from '../utils/appNavidromeLyrics';
@@ -50,7 +51,7 @@ type UseLibraryPlaybackControllerParams = {
     setLikedSongIds: Dispatch<SetStateAction<Set<number>>>;
     navigateToPlayer: () => void;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
-    restoreCachedThemeForSong: (songId: number, options?: {
+    restoreCachedThemeForSong: (songId: ThemeCacheSongKey, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
     }) => Promise<unknown>;
@@ -467,6 +468,9 @@ export function useLibraryPlaybackController({
         navigateToPlayer();
         setPlayerState(PlayerState.IDLE);
         setStatusMsg({ type: 'success', text: '本地音乐已加载' });
+        void restoreCachedThemeForSong(initialMeta.unifiedSong.id).catch((error) => {
+            console.warn('Theme load error', error);
+        });
         prewarmNearbyLocalSongs(preparedLocalSong, queue);
 
         handleLocalSongMatch(preparedLocalSong).then(async ({ updatedLocalSong, matchedSongResult }) => {
@@ -486,6 +490,10 @@ export function useLibraryPlaybackController({
             } else if (!updatedMeta.coverUrl) {
                 setCachedCoverUrl(null);
             }
+
+            void restoreCachedThemeForSong(updatedMeta.unifiedSong.id).catch((error) => {
+                console.warn('Theme load error', error);
+            });
         });
     }, [
         blobUrlRef,
@@ -496,6 +504,7 @@ export function useLibraryPlaybackController({
         navigateToPlayer,
         persistLastPlaybackCache,
         prewarmNearbyLocalSongs,
+        restoreCachedThemeForSong,
         resolveLocalMetadataUI,
         setAudioSrc,
         setCachedCoverUrl,
@@ -536,7 +545,6 @@ export function useLibraryPlaybackController({
             let nextLyrics: LyricData | null = null;
             let coverUrl: string | undefined;
             let showedLoadingToast = false;
-
             if (matchData) {
                 if (matchData.lyricsSource === 'online' && matchData.matchedLyrics) {
                     nextLyrics = matchData.matchedLyrics;
@@ -641,6 +649,9 @@ export function useLibraryPlaybackController({
             }
             setPlayerState(PlayerState.IDLE);
             setStatusMsg({ type: 'success', text: 'Navidrome 歌曲已加载' });
+            void restoreCachedThemeForSong(unifiedSong.id).catch((error) => {
+                console.warn('Theme load error', error);
+            });
         } catch (error) {
             console.error('[App] Failed to play Navidrome song:', error);
             setStatusMsg({ type: 'error', text: '播放失败' });
@@ -652,6 +663,7 @@ export function useLibraryPlaybackController({
         interruptStagePlaybackForMainTransition,
         navigateToPlayer,
         persistLastPlaybackCache,
+        restoreCachedThemeForSong,
         setAudioSrc,
         setCachedCoverUrl,
         setCurrentLineIndex,

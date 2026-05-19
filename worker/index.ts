@@ -8,6 +8,7 @@ type Env = {
   GEMINI_API_KEY?: string;
   OPENAI_API_KEY?: string;
   OPENAI_API_URL?: string;
+  OPENAI_API_MODEL?: string;
 };
 
 export default {

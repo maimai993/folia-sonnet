@@ -316,6 +316,8 @@ export default {
     "saveAndApplyCustomTheme": "Save and Apply Custom Theme",
     "preferCustomTheme": "Prefer Custom Theme",
     "preferCustomThemeDesc": "After saving, future theme changes will prefer keeping the custom theme.",
+    "autoSwitchSongTheme": "Auto Switch Theme",
+    "autoSwitchSongThemeDesc": "Automatically apply an AI theme when the song already has one cached.",
     "updatePreferredCustomTheme": "Update Preferred Custom Theme",
     "lightTheme": "Light Theme",
     "darkTheme": "Dark Theme",
