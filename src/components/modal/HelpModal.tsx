@@ -540,6 +540,32 @@ const HelpModal: React.FC<HelpModalProps> = ({
     const errorBgColor = isDaylight ? 'bg-red-500/10' : 'bg-red-500/10';
     const overlayBackground = isDaylight ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.65)';
     const toggleOffBackgroundClass = isDaylight ? 'bg-zinc-300/90' : 'bg-white/10';
+    const accentOutlineColor = theme?.accentColor || (isDaylight ? '#44403c' : '#f4f4f5');
+    const settingsCardClass = isDaylight
+        ? 'bg-black/[0.025] border-black/10'
+        : 'bg-white/5 border-white/5';
+    const settingsCardInteractiveClass = isDaylight
+        ? 'bg-black/[0.025] border-black/10 hover:bg-black/[0.055]'
+        : 'bg-white/5 border-white/5 hover:bg-white/8';
+    const settingsIconClass = isDaylight
+        ? 'bg-black/[0.04] border-black/10'
+        : 'bg-white/8 border-white/10';
+    const utilityGhostButtonClass = isDaylight
+        ? 'border-black/10 bg-black/[0.025] hover:bg-black/[0.055]'
+        : 'border-white/10 bg-white/5 hover:bg-white/10';
+    const unselectedOptionStyle = {
+        borderColor: isDaylight ? 'rgba(24, 24, 27, 0.10)' : 'rgba(255, 255, 255, 0.10)',
+        backgroundColor: isDaylight ? 'rgba(24, 24, 27, 0.035)' : 'rgba(255, 255, 255, 0.04)',
+    };
+    const getAccentOptionStyle = (selected: boolean) => (
+        selected
+            ? {
+                borderColor: accentOutlineColor,
+                boxShadow: `inset 0 0 0 1px ${accentOutlineColor}`,
+                backgroundColor: isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`,
+            }
+            : unselectedOptionStyle
+    );
     const rangeInputClass = [
         'w-full h-1.5 rounded-full appearance-none cursor-pointer',
         '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:hover:scale-125 [&::-webkit-slider-thumb]:transition-transform',
@@ -853,11 +879,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowAppearanceSettings(true)}
-                                    className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8"
+                                    className={`w-full p-4 rounded-xl border transition-colors ${settingsCardInteractiveClass}`}
                                 >
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex items-start gap-3 text-left">
-                                            <div className="w-10 h-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0" style={{ color: 'var(--text-primary)' }}>
+                                            <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
                                                 <Sparkles size={18} />
                                             </div>
                                             <div className="space-y-1">
@@ -876,11 +902,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowPlaybackSettings(true)}
-                                    className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8"
+                                    className={`w-full p-4 rounded-xl border transition-colors ${settingsCardInteractiveClass}`}
                                 >
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex items-start gap-3 text-left">
-                                            <div className="w-10 h-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0" style={{ color: 'var(--text-primary)' }}>
+                                            <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
                                                 <PlayCircle size={18} />
                                             </div>
                                             <div className="space-y-1">
@@ -899,11 +925,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowIntegrationSettings(true)}
-                                    className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8"
+                                    className={`w-full p-4 rounded-xl border transition-colors ${settingsCardInteractiveClass}`}
                                 >
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex items-start gap-3 text-left">
-                                            <div className="w-10 h-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0" style={{ color: 'var(--text-primary)' }}>
+                                            <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
                                                 <Server size={18} />
                                             </div>
                                             <div className="space-y-1">
@@ -947,11 +973,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowStorageSettings(true)}
-                                    className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8"
+                                    className={`w-full p-4 rounded-xl border transition-colors ${settingsCardInteractiveClass}`}
                                 >
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex items-start gap-3 text-left">
-                                            <div className="w-10 h-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0" style={{ color: 'var(--text-primary)' }}>
+                                            <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
                                                 <Database size={18} />
                                             </div>
                                             <div className="space-y-1">
@@ -971,11 +997,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => setShowDesktopSettings(true)}
-                                        className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8"
+                                        className={`w-full p-4 rounded-xl border transition-colors ${settingsCardInteractiveClass}`}
                                     >
                                         <div className="flex items-center justify-between gap-4">
                                             <div className="flex items-start gap-3 text-left">
-                                                <div className="w-10 h-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0" style={{ color: 'var(--text-primary)' }}>
+                                                <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
                                                     <Command size={18} />
                                                 </div>
                                                 <div className="space-y-1">
@@ -995,11 +1021,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowLabSettings(true)}
-                                    className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8"
+                                    className={`w-full p-4 rounded-xl border transition-colors ${settingsCardInteractiveClass}`}
                                 >
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex items-start gap-3 text-left">
-                                            <div className="w-10 h-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0" style={{ color: 'var(--text-primary)' }}>
+                                            <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
                                                 <FlaskConical size={18} />
                                             </div>
                                             <div className="space-y-1">
@@ -1220,7 +1246,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
                                     <Database size={14} /> {t('options.mediaCache') || "Media Cache"}
                                 </h3>
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-4">
+                                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-1">
                                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -1434,7 +1460,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         </span>
                                     )}
                                 </h3>
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-4">
+                                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                                     {/* Enable Toggle */}
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -1826,11 +1852,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowLabSettings(true)}
-                                    className="w-full bg-white/5 p-4 rounded-xl border border-white/5 transition-colors hover:bg-white/8"
+                                    className={`w-full p-4 rounded-xl border transition-colors ${settingsCardInteractiveClass}`}
                                 >
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex items-start gap-3 text-left">
-                                            <div className="w-10 h-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0" style={{ color: 'var(--text-primary)' }}>
+                                            <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
                                                 <FlaskConical size={18} />
                                             </div>
                                             <div className="space-y-1">
@@ -1931,7 +1957,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                         <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
                             <PlayCircle size={14} /> 播放队列
                         </h3>
-                        <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-4">
+                        <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                             <div className="space-y-1">
                                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                     加入队列的默认位置
@@ -1951,7 +1977,8 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             key={option.value}
                                             type="button"
                                             onClick={() => onQueueAddBehaviorChange(option.value)}
-                                            className={`rounded-xl border px-3 py-3 text-left transition-colors ${selected ? 'bg-white/12 border-white/20' : 'bg-white/5 border-white/10 hover:bg-white/8'}`}
+                                            className="rounded-xl border px-3 py-3 text-left transition-colors"
+                                            style={getAccentOptionStyle(selected)}
                                         >
                                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                                 {option.label}
@@ -1979,7 +2006,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                 <Sparkles size={14} /> {t('options.visualSettings') || "Visual Settings"}
                             </h3>
                             <div className="space-y-4">
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+                                <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                             {t('options.themePresets') || "Theme Presets"}
@@ -1987,7 +2014,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => setShowThemePark(true)}
-                                            className="shrink-0 w-9 h-9 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center"
+                                                className={`shrink-0 w-9 h-9 rounded-full border transition-colors flex items-center justify-center ${utilityGhostButtonClass}`}
                                             style={{ color: 'var(--text-primary)' }}
                                             title={t('options.openThemePark') || '打开 Theme Park'}
                                             aria-label={t('options.openThemePark') || '打开 Theme Park'}
@@ -1998,10 +2025,12 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
                                             onClick={onApplyDefaultTheme}
-                                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
+                                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
                                             style={{
-                                                borderColor: bgMode === 'default' ? theme?.accentColor || 'transparent' : 'transparent',
-                                                backgroundColor: isDaylight ? 'rgba(245, 245, 244, 0.8)' : 'rgba(9, 9, 11, 0.5)'
+                                                ...getAccentOptionStyle(bgMode === 'default'),
+                                                backgroundColor: bgMode === 'default'
+                                                    ? (isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`)
+                                                    : (isDaylight ? 'rgba(24, 24, 27, 0.035)' : 'rgba(9, 9, 11, 0.5)'),
                                             }}
                                         >
                                             <div className="w-6 h-6 rounded-full shadow-sm" style={{ background: `linear-gradient(135deg, ${themeParkInitialTheme.light.backgroundColor}, ${themeParkInitialTheme.dark.backgroundColor})`, borderColor: isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.15)' }} />
@@ -2010,17 +2039,19 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         <button
                                             onClick={() => onApplyCustomTheme()}
                                             disabled={!hasCustomTheme}
-                                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                                             style={{
-                                                borderColor: bgMode === 'custom' ? theme?.accentColor || 'transparent' : 'transparent',
-                                                backgroundColor: isDaylight ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.08)'
+                                                ...getAccentOptionStyle(bgMode === 'custom'),
+                                                backgroundColor: bgMode === 'custom'
+                                                    ? (isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`)
+                                                    : (isDaylight ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.08)'),
                                             }}
                                         >
                                             <div className="w-6 h-6 rounded-full" style={{ background: hasCustomTheme ? `linear-gradient(135deg, ${themeParkInitialTheme.light.accentColor}, ${themeParkInitialTheme.dark.accentColor})` : 'rgba(114,119,134,0.4)' }} />
                                             <span className="text-xs opacity-80" style={{ color: 'var(--text-primary)' }}>{t('options.customTheme') || "Custom"}</span>
                                         </button>
                                     </div>
-                                    <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
+                                        <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
                                         <div className="space-y-1">
                                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                                 {t('options.preferCustomTheme') || '优先使用自定义主题'}
@@ -2038,7 +2069,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isCustomThemePreferred ? 'translate-x-6' : 'translate-x-0'}`} />
                                         </button>
                                     </div>
-                                    <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
+                                        <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
                                         <div className="space-y-1">
                                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                                 {t('options.autoSwitchSongTheme') || '主题自动切换'}
@@ -2057,7 +2088,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     </div>
                                 </div>
 
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+                                    <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="space-y-1">
                                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -2070,7 +2101,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => setShowVisPlayground(true)}
-                                            className="shrink-0 w-9 h-9 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center"
+                                                className={`shrink-0 w-9 h-9 rounded-full border transition-colors flex items-center justify-center ${utilityGhostButtonClass}`}
                                             style={{ color: 'var(--text-primary)' }}
                                             title={t('options.openLyricsStyleSettings') || '打开歌词样式设置'}
                                             aria-label={t('options.openLyricsStyleSettings') || '打开歌词样式设置'}
@@ -2083,12 +2114,11 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             <button
                                                 key={option.mode}
                                                 onClick={() => onVisualizerModeChange?.(option.mode)}
-                                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all hover:bg-white/5"
-                                                style={{
-                                                    borderColor: visualizerMode === option.mode ? theme?.accentColor || 'var(--text-accent)' : 'transparent',
-                                                    backgroundColor: visualizerMode === option.mode ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'
-                                                }}
-                                            >
+                                                    className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
+                                                    style={{
+                                                        ...getAccentOptionStyle(visualizerMode === option.mode),
+                                                    }}
+                                                >
                                                 <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                                     {option.label}
                                                 </span>
@@ -2097,7 +2127,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     </div>
                                 </div>
 
-                                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+                                    <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                                     <div className="flex justify-between items-center">
                                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                             {t('options.backgroundOpacity') || "Background Opacity"}
@@ -2280,7 +2310,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                     </div>
                                     {(stageStatus.modeEnabled ?? false) && (
                                         <div className="space-y-3">
-                                            <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-3">
+                                            <div className={`rounded-xl border p-3 space-y-3 ${settingsCardClass}`}>
                                                 <div className="text-[10px] uppercase tracking-[0.16em] opacity-40" style={{ color: 'var(--text-secondary)' }}>
                                                     舞台来源
                                                 </div>
@@ -2295,8 +2325,8 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                                 key={option.value}
                                                                 type="button"
                                                                 onClick={() => void onStageSourceChange?.(option.value)}
-                                                                className={`rounded-xl border px-3 py-3 text-sm transition-colors ${selected ? 'bg-white/12 border-white/20' : 'bg-white/5 border-white/10 hover:bg-white/8'}`}
-                                                                style={{ color: 'var(--text-primary)' }}
+                                                                className="rounded-xl border px-3 py-3 text-sm transition-colors"
+                                                                style={{ ...getAccentOptionStyle(selected), color: 'var(--text-primary)' }}
                                                             >
                                                                 {option.label}
                                                             </button>
