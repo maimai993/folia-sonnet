@@ -33,7 +33,7 @@ export const createQueueMutations = ({
 
         const unifiedSongs = buildNavidromeQueue(songs);
         const baseQueue = playQueue.length > 0 ? playQueue : (currentSong ? [currentSong] : []);
-        const { nextQueue, addedSongs } = applyQueueAddBehavior({
+        const { nextQueue, affectedSongs, changed } = applyQueueAddBehavior({
             queue: baseQueue,
             songs: unifiedSongs,
             currentSong,
@@ -43,10 +43,12 @@ export const createQueueMutations = ({
         setPlayQueue(nextQueue);
         void persistLastPlaybackCache(currentSong, nextQueue);
 
-        if (addedSongs.length > 0) {
+        if (changed && affectedSongs.length > 0) {
             setStatusMsg({
                 type: 'success',
                 text: queueAddBehavior === 'next' ? '已插入到下一首' : (t('status.queueUpdated') || '已添加到播放队列'),
+                nonce: Date.now(),
+                durationMs: 1200,
             });
         }
     };

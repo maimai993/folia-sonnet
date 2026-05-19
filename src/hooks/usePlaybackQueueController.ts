@@ -185,7 +185,7 @@ export function usePlaybackQueueController({
         const existingQueue = mainSnapshot?.playQueue ?? (activePlaybackContext === 'main' ? playQueue : []);
         const baseQueue = existingQueue.length > 0 ? existingQueue : (queueAnchorSong ? [queueAnchorSong] : []);
         const queueableSongs = songs.filter(song => !isSongMarkedUnavailable(song));
-        const { nextQueue, addedSongs } = applyQueueAddBehavior({
+        const { nextQueue, affectedSongs, changed } = applyQueueAddBehavior({
             queue: baseQueue,
             songs: queueableSongs,
             currentSong: queueAnchorSong,
@@ -211,11 +211,13 @@ export function usePlaybackQueueController({
             setPlayQueue(nextQueue);
         }
 
-        if (addedSongs.length > 0) {
+        if (changed && affectedSongs.length > 0) {
             void persistLastPlaybackCache(queueAnchorSong, nextQueue);
             setStatusMsg({
                 type: 'success',
                 text: queueAddBehavior === 'next' ? '已插入到下一首' : (t('status.queueUpdated') || '已添加到播放队列'),
+                nonce: Date.now(),
+                durationMs: 1200,
             });
             return true;
         }

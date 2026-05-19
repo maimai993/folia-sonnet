@@ -259,6 +259,8 @@ export enum PlayerState {
 export interface StatusMessage {
   type: 'error' | 'success' | 'info';
   text: string;
+  nonce?: number;
+  durationMs?: number;
   actionLabel?: string;
   onAction?: () => void;
   cancelLabel?: string;

@@ -19,6 +19,7 @@ const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
             <AnimatePresence>
                 {statusToast && (
                     <motion.div
+                        key={statusToast.toastKey}
                         initial={{ opacity: 0, y: -20, x: '-50%' }}
                         animate={{ opacity: 1, y: 30, x: '-50%' }}
                         exit={{ opacity: 0, y: -20, x: '-50%' }}

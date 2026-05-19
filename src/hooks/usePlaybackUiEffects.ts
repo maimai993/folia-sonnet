@@ -64,7 +64,7 @@ export const usePlaybackUiEffects = ({
 
         const timer = window.setTimeout(() => {
             setStatusMsg(null);
-        }, 3000);
+        }, statusMsg.durationMs ?? 3000);
         return () => window.clearTimeout(timer);
     }, [setStatusMsg, statusMsg]);
 

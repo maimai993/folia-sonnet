@@ -374,14 +374,14 @@ export function useLibraryPlaybackController({
         const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
         const { unifiedSong } = await resolveLocalMetadataUI(preparedLocalSong, null);
         const baseQueue = playQueue.length > 0 ? playQueue : (currentSong ? [currentSong] : []);
-        const { nextQueue, addedSongs } = applyQueueAddBehavior({
+        const { nextQueue, affectedSongs, changed } = applyQueueAddBehavior({
             queue: baseQueue,
             songs: [unifiedSong],
             currentSong,
             behavior: queueAddBehavior,
         });
 
-        if (addedSongs.length === 0) {
+        if (!changed || affectedSongs.length === 0) {
             return;
         }
 
@@ -390,6 +390,8 @@ export function useLibraryPlaybackController({
         setStatusMsg({
             type: 'success',
             text: queueAddBehavior === 'next' ? '已插入到下一首' : (t('status.queueUpdated') || '已添加到播放队列'),
+            nonce: Date.now(),
+            durationMs: 1200,
         });
     }, [currentSong, persistLastPlaybackCache, playQueue, queueAddBehavior, resolveLocalMetadataUI, setPlayQueue, setStatusMsg, t]);
 

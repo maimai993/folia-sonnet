@@ -12,6 +12,7 @@ type UnavailableReplacementDialogProps = React.ComponentProps<typeof Unavailable
 
 type AppStatusToast = StatusMessage & {
     isDaylight: boolean;
+    toastKey: string;
 };
 
 export type AppDialogsModel = {
@@ -55,7 +56,13 @@ export const buildAppDialogsModel = ({
     setPendingUnavailableReplacement,
     handleUnavailableReplacementConfirm,
 }: BuildAppDialogsModelParams): AppDialogsModel => ({
-    statusToast: statusMsg ? { ...statusMsg, isDaylight } : null,
+    statusToast: statusMsg
+        ? {
+            ...statusMsg,
+            isDaylight,
+            toastKey: `${statusMsg.type}:${statusMsg.text}:${statusMsg.nonce ?? 0}`,
+        }
+        : null,
     lyricMatchDialog: showLyricMatchModal && currentSong && (currentSong as SongResult & { localData?: LocalSong }).localData
         ? {
             song: (currentSong as SongResult & { localData: LocalSong }).localData,
