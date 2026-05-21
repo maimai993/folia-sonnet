@@ -44,7 +44,8 @@ export interface DualTheme {
 
 export type ThemeMode = 'default' | 'ai' | 'custom';
 
-export type VisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume';
+export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume';
+export type VisualizerMode = BuiltinVisualizerMode | (string & {});
 
 export type HomeViewTab = 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio';
 
@@ -249,6 +250,31 @@ export const DEFAULT_FUME_TUNING: FumeTuning = {
   glowIntensity: 1,
   heroScale: 1,
 };
+
+export type CappellaEmojiPackSource = 'builtin' | 'custom';
+
+export interface CappellaTuning {
+  showEmoMessages: boolean;
+  emojiPackSource: CappellaEmojiPackSource;
+}
+
+export const DEFAULT_CAPPELLA_TUNING: CappellaTuning = {
+  showEmoMessages: true,
+  emojiPackSource: 'builtin',
+};
+
+export interface StoredCappellaEmojiImage {
+  id: string;
+  name: string;
+  mimeType: string;
+  blob: Blob;
+}
+
+export interface CappellaEmojiImage {
+  id: string;
+  name: string;
+  url: string;
+}
 
 export enum PlayerState {
   IDLE = 'IDLE',

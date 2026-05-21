@@ -92,11 +92,20 @@ type BuildHomeModelParams = {
     cadenzaTuning: LegacyHomeProps['cadenzaTuning'];
     partitaTuning: LegacyHomeProps['partitaTuning'];
     fumeTuning: LegacyHomeProps['fumeTuning'];
+    cappellaTuning: LegacyHomeProps['cappellaTuning'];
+    cappellaCustomEmojiImages: LegacyHomeProps['cappellaCustomEmojiImages'];
     handleSetVisualizerMode: LegacyHomeProps['onVisualizerModeChange'];
     handleSetPartitaTuning: LegacyHomeProps['onPartitaTuningChange'];
     handleResetPartitaTuning: LegacyHomeProps['onResetPartitaTuning'];
     handleSetFumeTuning: LegacyHomeProps['onFumeTuningChange'];
     handleResetFumeTuning: LegacyHomeProps['onResetFumeTuning'];
+    handleSetCappellaTuning: LegacyHomeProps['onCappellaTuningChange'];
+    handleResetCappellaTuning: LegacyHomeProps['onResetCappellaTuning'];
+    handleImportCappellaCustomEmojiPack: LegacyHomeProps['onImportCappellaCustomEmojiPack'];
+    handleClearCappellaCustomEmojiPack: LegacyHomeProps['onClearCappellaCustomEmojiPack'];
+    isLoadingCappellaCustomEmojiPack: LegacyHomeProps['isLoadingCappellaCustomEmojiPack'];
+    audioOutputDeviceId: LegacyHomeProps['audioOutputDeviceId'];
+    handleAudioOutputDeviceChange: LegacyHomeProps['onAudioOutputDeviceChange'];
     lyricsFontStyle: LegacyHomeProps['lyricsFontStyle'];
     lyricsFontScale: LegacyHomeProps['lyricsFontScale'];
     lyricsCustomFontFamily: LegacyHomeProps['lyricsCustomFontFamily'];
@@ -194,11 +203,20 @@ export const buildHomeModel = ({
     cadenzaTuning,
     partitaTuning,
     fumeTuning,
+    cappellaTuning,
+    cappellaCustomEmojiImages,
     handleSetVisualizerMode,
     handleSetPartitaTuning,
     handleResetPartitaTuning,
     handleSetFumeTuning,
     handleResetFumeTuning,
+    handleSetCappellaTuning,
+    handleResetCappellaTuning,
+    handleImportCappellaCustomEmojiPack,
+    handleClearCappellaCustomEmojiPack,
+    isLoadingCappellaCustomEmojiPack,
+    audioOutputDeviceId,
+    handleAudioOutputDeviceChange,
     lyricsFontStyle,
     lyricsFontScale,
     lyricsCustomFontFamily,
@@ -334,11 +352,20 @@ export const buildHomeModel = ({
             cadenzaTuning,
             partitaTuning,
             fumeTuning,
+            cappellaTuning,
+            cappellaCustomEmojiImages,
             onVisualizerModeChange: handleSetVisualizerMode,
             onPartitaTuningChange: handleSetPartitaTuning,
             onResetPartitaTuning: handleResetPartitaTuning,
             onFumeTuningChange: handleSetFumeTuning,
             onResetFumeTuning: handleResetFumeTuning,
+            onCappellaTuningChange: handleSetCappellaTuning,
+            onResetCappellaTuning: handleResetCappellaTuning,
+            onImportCappellaCustomEmojiPack: handleImportCappellaCustomEmojiPack,
+            onClearCappellaCustomEmojiPack: handleClearCappellaCustomEmojiPack,
+            isLoadingCappellaCustomEmojiPack,
+            audioOutputDeviceId,
+            onAudioOutputDeviceChange: handleAudioOutputDeviceChange,
             lyricsFontStyle,
             lyricsFontScale,
             lyricsCustomFontFamily,
