@@ -82,7 +82,7 @@ const isTimedMessage = (m: CappellaMessage): m is CappellaTimedMessage =>
 // const isCJK = (text: string) => /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/.test(text);
 
 const SHORT_LINE_CHAR_LIMIT = 12;
-const MAX_VISIBLE_MESSAGES = 10;
+const MAX_VISIBLE_MESSAGES = 20;
 const AVATAR_GRID_SIZE = 3;
 const LEFT_AVATAR_INDICES = [0, 3, 6, 1, 4];
 const RIGHT_AVATAR_INDEX = 8;
