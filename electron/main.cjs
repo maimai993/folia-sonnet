@@ -1358,7 +1358,6 @@ function createRemoteControlWindow() {
   }
 
   const win = new BrowserWindow({
-    parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined,
     modal: false,
     width: 450,
     height: 230,
