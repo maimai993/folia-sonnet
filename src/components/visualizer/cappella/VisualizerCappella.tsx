@@ -985,6 +985,7 @@ const CappellaBubbleGlow: React.FC<{
     }
 
     const glowAlpha = isRight ? motionConfig.glowRightAlpha : motionConfig.glowLeftAlpha;
+    const glowColor = `rgba(255,255,255,${glowAlpha})`;
 
     return (
         <div
@@ -992,8 +993,8 @@ const CappellaBubbleGlow: React.FC<{
             style={{
                 width: '200%',
                 opacity: motionConfig.glowOpacity,
-                // The repeated half-period makes translateX(0) and translateX(-50%) visually identical.
-                background: `repeating-linear-gradient(105deg, transparent 0%, transparent 18%, rgba(255,255,255,${glowAlpha}) 30%, transparent 42%, transparent 50%)`,
+                // Duplicate one broad sweep in each half so translateX(0) and translateX(-50%) match exactly.
+                background: `linear-gradient(105deg, transparent 0%, ${glowColor} 23%, transparent 34%, transparent 50%, transparent 50%, ${glowColor} 73%, transparent 84%, transparent 100%)`,
                 animation: `cappella-bubble-glow-pan ${motionConfig.glowDuration}s linear infinite`,
                 willChange: 'transform',
             }}
