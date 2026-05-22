@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValueEvent, type MotionValue } from 'framer-motion';
+import { AnimatePresence, motion, useMotionValueEvent, type MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
 import { DEFAULT_CAPPELLA_TUNING, type AudioBands, type CappellaEmojiImage, type CappellaTuning, type Line, type Theme, type Word } from '../../../types';
@@ -112,6 +112,9 @@ interface CappellaIntensityConfig {
         rowEnterY: number;
         rowEnterScale: number;
         rowEnterDuration: number;
+        rowExitY: number;
+        rowExitScale: number;
+        rowExitDuration: number;
         avatarSpring: { stiffness: number; damping: number; mass: number };
         activeScale: number;
         passedScale: number;
@@ -184,6 +187,9 @@ const getCappellaIntensityConfig = (animationIntensity: Theme['animationIntensit
                 rowEnterY: 14,
                 rowEnterScale: 0.992,
                 rowEnterDuration: 0.28,
+                rowExitY: -10,
+                rowExitScale: 0.985,
+                rowExitDuration: 0.22,
                 avatarSpring: { stiffness: 280, damping: 30, mass: 0.78 },
                 activeScale: 1.07,
                 passedScale: 0.96,
@@ -224,6 +230,9 @@ const getCappellaIntensityConfig = (animationIntensity: Theme['animationIntensit
                 rowEnterY: 30,
                 rowEnterScale: 0.968,
                 rowEnterDuration: 0.38,
+                rowExitY: -26,
+                rowExitScale: 0.94,
+                rowExitDuration: 0.28,
                 avatarSpring: { stiffness: 360, damping: 24, mass: 0.68 },
                 activeScale: 1.18,
                 passedScale: 0.88,
@@ -263,6 +272,9 @@ const getCappellaIntensityConfig = (animationIntensity: Theme['animationIntensit
             rowEnterY: 22,
             rowEnterScale: 0.98,
             rowEnterDuration: 0.32,
+            rowExitY: -18,
+            rowExitScale: 0.965,
+            rowExitDuration: 0.24,
             avatarSpring: { stiffness: 340, damping: 28, mass: 0.72 },
             activeScale: 1.12,
             passedScale: 0.92,
@@ -972,23 +984,24 @@ const CappellaBubbleGlow: React.FC<{
         return null;
     }
 
+    const glowAlpha = isRight ? motionConfig.glowRightAlpha : motionConfig.glowLeftAlpha;
+
     return (
-        <motion.div
-            className="pointer-events-none absolute inset-0"
+        <div
+            className="pointer-events-none absolute inset-y-0 left-0"
             style={{
+                width: '200%',
                 opacity: motionConfig.glowOpacity,
-                background: isRight
-                    ? `linear-gradient(105deg, transparent 0%, rgba(255,255,255,${motionConfig.glowRightAlpha}) 46%, transparent 68%)`
-                    : `linear-gradient(105deg, transparent 0%, rgba(255,255,255,${motionConfig.glowLeftAlpha}) 46%, transparent 68%)`,
-                backgroundSize: '240% 100%',
+                // The repeated half-period makes translateX(0) and translateX(-50%) visually identical.
+                background: `repeating-linear-gradient(105deg, transparent 0%, transparent 18%, rgba(255,255,255,${glowAlpha}) 30%, transparent 42%, transparent 50%)`,
+                animation: `cappella-bubble-glow-pan ${motionConfig.glowDuration}s linear infinite`,
+                willChange: 'transform',
             }}
-            animate={{ backgroundPosition: ['160% 0%', '-80% 0%'] }}
-            transition={{ duration: motionConfig.glowDuration, ease: 'linear', repeat: Infinity }}
         />
     );
 };
 
-const CappellaMessageRow: React.FC<{
+interface CappellaMessageRowProps {
     message: CappellaMessage;
     currentTime: MotionValue<number>;
     currentLineIndex: number;
@@ -998,7 +1011,9 @@ const CappellaMessageRow: React.FC<{
     maxTextWidth: number;
     metricsCache: React.MutableRefObject<Map<string, PreparedBubbleMetrics>>;
     intensityConfig: CappellaIntensityConfig;
-}> = ({
+}
+
+const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowProps>(({
     message,
     currentTime,
     currentLineIndex,
@@ -1008,7 +1023,7 @@ const CappellaMessageRow: React.FC<{
     maxTextWidth,
     metricsCache,
     intensityConfig,
-}) => {
+}, ref) => {
     const isRight = message.side === 'right';
     const timedData: CappellaTimedMessage | null = isTimedMessage(message) ? message : null;
     const timedState = timedData ? getTimedMessageState(timedData, currentTime.get(), currentLineIndex) : null;
@@ -1132,8 +1147,16 @@ const CappellaMessageRow: React.FC<{
 
     return (
         <motion.div
+            ref={ref}
+            layout="position"
             initial={{ opacity: 0, y: motionConfig.rowEnterY, scale: motionConfig.rowEnterScale }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{
+                opacity: 0,
+                y: motionConfig.rowExitY,
+                scale: motionConfig.rowExitScale,
+                transition: { duration: motionConfig.rowExitDuration, ease: 'easeIn' },
+            }}
             transition={{ duration: motionConfig.rowEnterDuration, ease: 'easeOut' }}
             className={`flex w-full items-end gap-3 ${isRight ? 'justify-end' : 'justify-start'} ${isEmoMessage ? 'pt-12' : ''}`}
         >
@@ -1264,7 +1287,9 @@ const CappellaMessageRow: React.FC<{
             </motion.div>
         </motion.div>
     );
-};
+});
+
+CappellaMessageRow.displayName = 'CappellaMessageRow';
 
 const VisualizerCappella: React.FC<VisualizerCappellaProps> = ({
     currentTime,
@@ -1397,21 +1422,23 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = ({
         >
             {showText && (
                 <div className="relative z-10 flex h-full w-full items-start justify-center overflow-visible px-4 pb-36 pt-12 sm:px-8 sm:pb-40 sm:pt-16 lg:px-14 lg:pt-20">
-                    <div className="flex w-full max-w-4xl flex-col justify-start gap-3 overflow-visible">
-                        {visibleMessages.map((message) => (
-                            <CappellaMessageRow
-                                key={message.id}
-                                message={message}
-                                currentTime={currentTime}
-                                currentLineIndex={currentLineIndex}
-                                theme={theme}
-                                coverUrl={coverUrl}
-                                baseFontSize={baseFontSize}
-                                maxTextWidth={maxTextWidth}
-                                metricsCache={bubbleMetricsCacheRef}
-                                intensityConfig={intensityConfig}
-                            />
-                        ))}
+                    <div className="relative flex w-full max-w-4xl flex-col justify-start gap-3 overflow-visible">
+                        <AnimatePresence initial={false} mode="popLayout">
+                            {visibleMessages.map((message) => (
+                                <CappellaMessageRow
+                                    key={message.id}
+                                    message={message}
+                                    currentTime={currentTime}
+                                    currentLineIndex={currentLineIndex}
+                                    theme={theme}
+                                    coverUrl={coverUrl}
+                                    baseFontSize={baseFontSize}
+                                    maxTextWidth={maxTextWidth}
+                                    metricsCache={bubbleMetricsCacheRef}
+                                    intensityConfig={intensityConfig}
+                                />
+                            ))}
+                        </AnimatePresence>
                     </div>
                 </div>
             )}
@@ -1420,6 +1447,11 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = ({
                 @keyframes cappella-char-fade {
                     from { opacity: 0; }
                     to { opacity: 1; }
+                }
+
+                @keyframes cappella-bubble-glow-pan {
+                    from { transform: translateX(0); }
+                    to { transform: translateX(-50%); }
                 }
             `}</style>
 
