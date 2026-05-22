@@ -712,6 +712,15 @@ async function openUpdateReleasePage(version) {
   return true;
 }
 
+async function openExternalUrl(url) {
+  if (typeof url !== 'string' || !url.trim()) {
+    return false;
+  }
+
+  await shell.openExternal(url.trim());
+  return true;
+}
+
 function scheduleStartupUpdateCheck() {
   if (!getUpdateCheckEnabled()) {
     setUpdateState({ status: 'disabled', error: null });
@@ -1495,6 +1504,10 @@ ipcMain.handle('updates-mark-seen', (event, version) => {
 
 ipcMain.handle('updates-open-release-page', (event, version) => {
   return openUpdateReleasePage(version);
+});
+
+ipcMain.handle('open-external-url', (event, url) => {
+  return openExternalUrl(url);
 });
 
 ipcMain.handle('updates-download', () => {

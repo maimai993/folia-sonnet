@@ -98,6 +98,8 @@ interface MediaDevicesWithAudioOutput extends MediaDevices {
     selectAudioOutput?: (options?: { deviceId?: string; }) => Promise<{ deviceId: string; label?: string; }>;
 }
 
+const QUARK_DOWNLOAD_URL = 'https://pan.quark.cn/s/6e4c6fa3bc6f';
+
 const stopMediaStream = (stream: MediaStream | null) => {
     stream?.getTracks().forEach(track => track.stop());
 };
@@ -479,6 +481,15 @@ const HelpModal: React.FC<HelpModalProps> = ({
 
     const handleInstallUpdate = async () => {
         await window.electron?.quitAndInstallUpdate?.();
+    };
+
+    const handleOpenChinaDownload = async () => {
+        if (window.electron?.openExternalUrl) {
+            await window.electron.openExternalUrl(QUARK_DOWNLOAD_URL);
+            return;
+        }
+
+        window.open(QUARK_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
     };
 
     // Navidrome Settings State
@@ -982,6 +993,15 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                         >
                                             <ExternalLink size={12} />
                                             {t('options.openReleasePage') || 'Open Release Page'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleOpenChinaDownload}
+                                            className="inline-flex items-center gap-1 opacity-50 transition-opacity hover:opacity-90"
+                                            style={{ color: 'var(--text-primary)' }}
+                                        >
+                                            <ExternalLink size={12} />
+                                            {t('options.downloadChina') || 'CN Download'}
                                         </button>
                                     </div>
                                 )}
@@ -1764,6 +1784,15 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                                 >
                                                     <ExternalLink size={14} />
                                                     {t('options.openReleasePage') || "Open Release Page"}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleOpenChinaDownload}
+                                                    className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-medium transition-colors hover:bg-white/15"
+                                                    style={{ color: 'var(--text-primary)' }}
+                                                >
+                                                    <ExternalLink size={14} />
+                                                    {t('options.downloadChina') || "CN Download"}
                                                 </button>
                                                 {!electronSettings.ENABLE_AUTO_UPDATE && (
                                                     <button
@@ -2854,6 +2883,15 @@ const HelpModal: React.FC<HelpModalProps> = ({
                                             >
                                                 <ExternalLink size={14} />
                                                 {t('options.openReleasePage') || "Open Release Page"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleOpenChinaDownload}
+                                                className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-medium transition-colors hover:bg-white/15"
+                                                style={{ color: 'var(--text-primary)' }}
+                                            >
+                                                <ExternalLink size={14} />
+                                                {t('options.downloadChina') || "CN Download"}
                                             </button>
                                             {!electronSettings.ENABLE_AUTO_UPDATE && (
                                                 <button

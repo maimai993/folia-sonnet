@@ -225,6 +225,7 @@ export default {
     "enableAutoUpdateDesc": "Automatically download updates after a new version is found.",
     "autoUpdateGithubNotice": "Auto update needs access to GitHub; if the network is unstable, keep a system proxy enabled.",
     "openReleasePage": "Open Release Page",
+    "downloadChina": "CN Download",
     "downloadUpdate": "Download Update",
     "restartToInstallUpdate": "Restart to Install",
     "staticMode": "Static Mode",

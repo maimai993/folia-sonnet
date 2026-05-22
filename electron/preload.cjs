@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electron', {
     checkForUpdates: () => ipcRenderer.invoke('updates-check'),
     markUpdateSeen: (version) => ipcRenderer.invoke('updates-mark-seen', version),
     openUpdateReleasePage: (version) => ipcRenderer.invoke('updates-open-release-page', version),
+    openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
     downloadUpdate: () => ipcRenderer.invoke('updates-download'),
     quitAndInstallUpdate: () => ipcRenderer.invoke('updates-quit-and-install'),
     onUpdateStatusChanged: (callback) => {

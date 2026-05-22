@@ -64,6 +64,14 @@ https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
     <td align="center"><strong>心象</strong></td>
     <td align="center"><strong>云阶</strong></td>
   </tr>
+  <tr>
+    <td colspan="2">
+      <img src="./img/preview-cappella.jpg" alt="Cappella 主题预览" width="45%" />
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><strong>Cappella</strong></td>
+  </tr>
 </table>
 
 不同的歌词动画具有不同的排版氛围和可调参数，让全屏歌词拥有如同文字PV般的丰富视觉效果，同时又能兼顾响应式布局，自动适配不同窗口尺寸。

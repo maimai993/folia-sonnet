@@ -197,6 +197,7 @@ declare global {
       checkForUpdates: () => Promise<ElectronUpdateStatus>;
       markUpdateSeen: (version?: string | null) => Promise<ElectronUpdateStatus>;
       openUpdateReleasePage: (version?: string | null) => Promise<boolean>;
+      openExternalUrl: (url: string) => Promise<boolean>;
       downloadUpdate: () => Promise<ElectronUpdateStatus>;
       quitAndInstallUpdate: () => Promise<boolean>;
       onUpdateStatusChanged: (callback: (status: ElectronUpdateStatus) => void) => () => void;

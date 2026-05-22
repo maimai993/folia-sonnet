@@ -225,6 +225,7 @@ export default {
     "enableAutoUpdateDesc": "发现新版本后自动下载更新。",
     "autoUpdateGithubNotice": "自动更新需要能够访问 GitHub；网络不稳定时可能无法下载更新。",
     "openReleasePage": "打开发布页",
+    "downloadChina": "国内下载",
     "downloadUpdate": "下载更新",
     "restartToInstallUpdate": "重启安装",
     "staticMode": "静态模式",
