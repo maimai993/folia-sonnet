@@ -8,6 +8,9 @@
 - `cadenza/VisualizerCadenza.tsx`: 心象模式
 - `partita/VisualizerPartita.tsx`: 云阶模式
 - `fume/VisualizerFume.tsx`: 浮名模式
+- `cappella/VisualizerCappella.tsx`: 群唱模式
+- `definition.ts`: visualizer 共享契约、registry entry 定义
+- `settingsPanels.tsx`: 模式自带设置面板
 - `VisualizerShell.tsx`: 共享外层容器、背景层、返回按钮
 - `VisualizerSubtitleOverlay.tsx`: 共享底部翻译 / 下一句提示层
 - `runtime.ts`: 共享 runtime 工具与基础 hook（当前行、下一句、最近完成句、预热入口）
@@ -27,10 +30,10 @@
 
 ## 必须遵守的组件契约
 
-当前目录下的 visualizer 没有统一抽成共享 TypeScript 接口，但已经形成了一套事实标准。新实现建议直接兼容下面这组 props。
+当前目录下的 visualizer 已经统一收敛到 `definition.ts` 的共享接口。新实现建议直接兼容 `VisualizerSharedProps`。
 
 ```tsx
-interface VisualizerProps {
+interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
     currentLineIndex: number;
     lines: Line[];
@@ -38,19 +41,30 @@ interface VisualizerProps {
     audioPower: MotionValue<number>;
     audioBands: AudioBands;
     showText?: boolean;
+    songTitle?: string | null;
     coverUrl?: string | null;
     useCoverColorBg?: boolean;
     seed?: string | number;
+    staticMode?: boolean;
     backgroundOpacity?: number;
     lyricsFontScale?: number;
+    isPlayerChromeHidden?: boolean;
+    hideTranslationSubtitle?: boolean;
+    paused?: boolean;
+    isPreviewMode?: boolean;
     onBack?: () => void;
+    cadenzaTuning?: CadenzaTuning;
+    partitaTuning?: PartitaTuning;
+    fumeTuning?: FumeTuning;
+    cappellaTuning?: CappellaTuning;
+    cappellaCustomEmojiImages?: CappellaEmojiImage[];
 }
 ```
 
 组件导出形式也保持一致：
 
 ```tsx
-const VisualizerFoo: React.FC<VisualizerProps & { staticMode?: boolean; }> = (props) => {
+const VisualizerFoo: React.FC<VisualizerSharedProps> = (props) => {
     // ...
 };
 
@@ -62,6 +76,7 @@ export default VisualizerFoo;
 - `cadenzaTuning?: CadenzaTuning`
 - `partitaTuning?: PartitaTuning`
 - `fumeTuning?: FumeTuning`
+- `cappellaTuning?: CappellaTuning`
 
 不要把必须由外部传入的运行时配置写死在组件常量里，除非它确实不需要进入设置面板。
 
@@ -82,13 +97,18 @@ export default VisualizerFoo;
 ### 展示控制
 
 - `showText`: 是否显示歌词文字。预览和播放器里都可能传入。
+- `songTitle`: 当前歌曲标题，主要给会把整首歌词重组成新表现形式的模式使用，例如 `cappella`。
 - `coverUrl`: 封面 URL，主要给 `FluidBackground` 使用。
 - `useCoverColorBg`: 是否启用封面取色背景。
 - `backgroundOpacity`: 当启用封面背景时，叠加底色的透明度。
 - `lyricsFontScale`: 用户字号缩放。新 visualizer 应把它乘进最终字号，而不是忽略。
 - `staticMode`: 静态模式。约定为“禁用重资源背景动画”，不是关闭全部歌词动画。
+- `isPlayerChromeHidden`: 播放器外层 chrome 是否隐藏，适合做边距或字幕策略调整。
+- `hideTranslationSubtitle`: 关闭底部翻译字幕层时使用。
+- `paused`: 当前是否暂停，适合暂停持续性动效。
 - `onBack`: 返回按钮回调。播放器全屏/主视图里会用到。
 - `seed`: 背景或布局随机种子，保证同一歌曲下布局尽量稳定。
+- `isPreviewMode`: 当前是否处于 `VisPlayground` / `ThemePark` 预览模式。
 
 ## 新 visualizer 至少应该处理的场景
 
@@ -147,6 +167,8 @@ export default VisualizerFoo;
 
 ```text
 visualizer/
+├─ colorMix.ts
+├─ definition.ts
 ├─ FluidBackground.tsx
 ├─ FumeBackground.ts
 ├─ GeometricBackground.tsx
@@ -154,10 +176,13 @@ visualizer/
 ├─ README.md
 ├─ registry.tsx
 ├─ runtime.ts
+├─ settingsPanels.tsx
 ├─ VisPlayground.tsx
 ├─ VisualizerRenderer.tsx
 ├─ VisualizerShell.tsx
 ├─ VisualizerSubtitleOverlay.tsx
+├─ cappella/
+│  └─ VisualizerCappella.tsx
 ├─ classic/
 │  └─ Visualizer.tsx
 ├─ cadenza/
@@ -217,8 +242,74 @@ visualizer/
   DOM + Framer Motion 的分列 / 分块布局
 - `cadenza/VisualizerCadenza.tsx`
   canvas + DOM overlay 的重型排版 / 动画引擎
+- `fume/VisualizerFume.tsx`
+  文章式整页排版 + 摄影机追焦 + glyph 级 reveal
+- `cappella/VisualizerCappella.tsx`
+  聊天气泡 / 表情包叙事布局，靠离线测量稳定气泡尺寸
 
-不要把这三种 renderer 强行揉成一个统一组件。共享的是壳层、runtime、字幕层、预热入口，不是具体渲染算法。
+不要把这些 renderer 强行揉成一个统一组件。共享的是壳层、runtime、字幕层、预热入口，以及模式注册 / 设置面板挂载方式，不是具体渲染算法。
+
+## 设计提示
+
+这部分不是“应该怎么想象”，而是当前代码里已经在用的设计方式。
+
+### 视觉分层
+
+- 整体是 `VisualizerShell -> renderer -> VisualizerSubtitleOverlay` 三层。
+- `VisualizerShell` 负责稳定的沉浸式舞台：底色、封面取色流体背景、几何背景、返回按钮。
+- renderer 负责“当前模式独有的排版和动画语法”，例如自由散射、分栏、文章镜头、聊天气泡。
+- `VisualizerSubtitleOverlay` 负责翻译、最近完成句、下一句提示，不把这些辅助信息塞进每个 renderer 内部重写。
+
+这套分层的目的不是纯粹复用，而是把“舞台氛围”和“歌词叙事方式”拆开。切模式时，用户保留同一套播放器世界观，只切换歌词语言本身。
+
+### 动态组织方式
+
+- 当前 visualizer 普遍避免“整个界面跟着每个字一起抖”。更常见的做法是先稳定布局，再让文字、局部高光、镜头或小物件运动。
+- `theme.animationIntensity` 主要控制运动幅度和节奏，不应该改变一个模式最基本的排版逻辑。
+- `staticMode` 约定为关闭重背景、重几何、重绘制，不是把歌词动画全部杀掉。
+- 播放页和预览页尽量共用同一组件，只通过 `isPreviewMode`、seed、preview offset 控制体验差异，避免预览和真实播放脱节。
+
+### 当前在用的 trick
+
+#### 1. 预热 upcoming line，而不是等切句再临时算
+
+- 共享 runtime 只负责给出 `activeLine / upcomingLine / nextLines` 和 `shouldPreheatLine(...)` 这类轻量入口。
+- 真正的 prepare / cache 仍由各 renderer 决定。
+- `partita` 会缓存分栏布局，并在进入窗口时顺手准备下一句。
+- `cadenza` 和 `fume` 这种更重的模式，也都倾向于把“当前句准备”与“下一句预热”绑在同一条流水线里。
+
+这样切句时不会突然出现布局跳变或大块同步计算。
+
+#### 2. `pretext` 做离线测量，先知道尺寸，再决定怎么演
+
+- `cappella` 不依赖真实 DOM 先渲染一遍再读尺寸，而是用 `@chenglou/pretext` 的 `prepareWithSegments` + `layoutWithLines` 先离线测量文本。
+- 这让它在气泡真正进入画面前，就知道大概需要多少宽高，能先把头像、气泡、表情包位置排稳。
+- 它还会额外测到“当前可见字符数 + 少量 lookahead 字符”，避免逐字 reveal 时气泡每一帧都跟着重新长大。
+
+这个思路的重点不是绝对精准，而是“视觉上提前占位”，让聊天叙事看起来像一串已经准备好的消息，而不是正在疯狂 reflow 的 DOM。
+
+#### 3. 先定布局，再做 reveal
+
+- `partita` 的核心是先把列和块的位置定住，再让词在既有轨道内进入 `waiting / active / passed` 三态。
+- README 里原来提到的那句“layout should feel stable while the words are moving through it”，现在仍然是这个模式最重要的设计约束。
+- 这样用户感知到的是“词在穿过结构”，而不是“结构跟着词重新搭”。
+
+#### 4. Fume 走整篇文章级排版，不按单句临时拼
+
+- `fume` 会先构建 article layout，把整首歌词拆成 block / render line / grapheme 级结构。
+- 它会做多轮 measurement attempt，比较不同列数和排版结果，再选较优方案。
+- 每个 segment 会提前测 `measuredGlyphOffsets`，后续 reveal、clip、镜头追焦都直接复用这些偏移，而不是每次渲染再现算文本宽度。
+- `layoutBuildVersionRef` 这类版本号保护也在用，避免较慢的一次异步布局结果把较新的结果回写覆盖。
+
+这类模式的关键不是某个 motion 参数，而是把昂贵的“文本几何学”尽量前置到 layout build 阶段。
+
+#### 5. 模式设置面板跟模式入口绑定，而不是继续堆到全局预览器
+
+- 现在 registry entry 不只负责 `render`，还可以挂 `renderSettingsPanel` 和 `resetSettings`。
+- `settingsPanels.tsx` 是当前内置模式面板的收敛位置。
+- 这能避免 `VisPlayground.tsx` 继续膨胀成“所有模式逻辑的大分支文件”。
+
+如果以后新增模式也需要复杂视觉调参，优先延续这条链路。
 
 ## 推荐的内部结构
 
@@ -450,6 +541,14 @@ export default defineVisualizer({
 renderSettingsPanel: props => <FooSettingsPanel {...props} />
 ```
 
+如果还需要提供“恢复默认参数”能力，也沿用当前 entry 接口：
+
+```tsx
+resetSettings: props => {
+    props.resetFooTuning?.();
+}
+```
+
 ### 仍然可能需要同步的文件
 
 #### `src/types.ts`
@@ -571,7 +670,7 @@ renderSettingsPanel: props => <FooSettingsPanel {...props} />
 新增一个 visualizer 后，提交前至少检查下面几项：
 
 - 是否默认导出组件
-- 是否兼容 `VisualizerProps & { staticMode?: boolean }`
+- 是否兼容 `VisualizerSharedProps`
 - 是否处理 `activeLine` 不存在的情况
 - 是否支持 `showText = false`
 - 是否正确使用 `lyricsFontScale`

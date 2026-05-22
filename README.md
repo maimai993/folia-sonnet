@@ -66,11 +66,11 @@ https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
   </tr>
   <tr>
     <td colspan="2">
-      <img src="./img/preview-cappella.jpg" alt="Cappella 主题预览" width="45%" />
+      <img src="./img/preview-cappella.jpg" alt="群唱 主题预览" width="45%" />
     </td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><strong>Cappella</strong></td>
+    <td colspan="2" align="center"><strong>群唱</strong></td>
   </tr>
 </table>
 
