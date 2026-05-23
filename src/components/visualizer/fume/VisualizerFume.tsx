@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, MotionValue } from 'framer-motion';
-import { layoutWithLines, prepareWithSegments, type PreparedTextWithSegments, type LayoutCursor } from '@chenglou/pretext';
+import { layoutWithLines, prepareWithSegments, type PreparedTextWithSegments, type LayoutCursor, type PrepareOptions } from '@chenglou/pretext';
 import { Hourglass } from 'lucide-react';
 import { AudioBands, DEFAULT_FUME_TUNING, FumeTuning, Line, Theme, Word as WordType } from '../../../types';
 import { resolveThemeFontStack } from '../../../utils/fontStacks';
@@ -44,6 +44,8 @@ interface ViewportSize {
     width: number;
     height: number;
 }
+
+const FUME_PRETEXT_OPTIONS = { whiteSpace: 'pre-wrap' } satisfies PrepareOptions;
 
 interface SegmentMeta {
     graphemeStart: number;
@@ -848,7 +850,7 @@ const buildPreparedSingleLine = (
             * densityScale
             * (variant === 'hero' ? heroScale : 1);
         const fontSpec = buildFontSpec(candidateFontPx, variant, fontFamily);
-        const prepared = prepareWithSegments(text, fontSpec);
+        const prepared = prepareWithSegments(text, fontSpec, FUME_PRETEXT_OPTIONS);
         const layout = layoutWithLines(prepared, width, Math.round(candidateFontPx * (variant === 'hero' ? 1.02 : 1.06)));
 
         if (layout.lineCount <= 1) {
@@ -872,7 +874,7 @@ const buildPreparedSingleLine = (
         * densityScale
         * (variant === 'hero' ? heroScale : 1);
     const fontSpec = buildFontSpec(fallbackFontPx, variant, fontFamily);
-    const prepared = prepareWithSegments(text, fontSpec);
+    const prepared = prepareWithSegments(text, fontSpec, FUME_PRETEXT_OPTIONS);
     return {
         fontPx: fallbackFontPx,
         prepared,
