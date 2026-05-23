@@ -147,6 +147,9 @@ export default function App() {
     const onlinePlaybackRecoveryRef = useRef<Promise<boolean> | null>(null);
     const lastAudioRecoverySourceRef = useRef<string | null>(null);
     const currentOnlineAudioUrlFetchedAtRef = useRef<number | null>(null);
+    // Buffer progress debug helper. Uncomment this ref, the reset effect below,
+    // and the audio `onProgress` handler to log buffered percent again.
+    // const lastBufferedPercentLogRef = useRef<number | null>(null);
     const [isLyricsLoading, setIsLyricsLoading] = useState(false);
     const isNowPlayingControlDisabledRef = useRef(false);
 
@@ -1621,6 +1624,12 @@ export default function App() {
         isNowPlayingControlDisabledRef.current = isNowPlayingControlDisabled;
     }, [isNowPlayingControlDisabled]);
 
+    // Buffer progress debug helper reset. Keep commented out unless
+    // buffered percent logging is explicitly needed during troubleshooting.
+    // useEffect(() => {
+    //     lastBufferedPercentLogRef.current = null;
+    // }, [audioSrc]);
+
     return (
         <AppShell
             appStyle={appStyle}
@@ -1630,6 +1639,7 @@ export default function App() {
             audioElement={<audio
                 ref={audioRef}
                 src={audioSrc || undefined}
+                preload="auto"
                 crossOrigin="anonymous"
                 loop={effectiveLoopMode === 'one'}
                 onPlay={(e) => {
@@ -1660,6 +1670,32 @@ export default function App() {
                 onSeeked={(e) => {
                     currentTime.set(e.currentTarget.currentTime);
                 }}
+                // Buffer progress debug helper. Uncomment to inspect how much of
+                // the current source the browser has actually buffered.
+                // onProgress={(e) => {
+                //     const audioElement = e.currentTarget;
+                //     const buffered = audioElement.buffered;
+                //     const source = audioElement.currentSrc || audioSrc;
+                //     if (!source || buffered.length === 0 || !Number.isFinite(audioElement.duration) || audioElement.duration <= 0) {
+                //         return;
+                //     }
+                //
+                //     const bufferedEnd = buffered.end(buffered.length - 1);
+                //     const bufferedPercent = Math.max(
+                //         0,
+                //         Math.min(100, Math.round((bufferedEnd / audioElement.duration) * 100))
+                //     );
+                //     if (lastBufferedPercentLogRef.current !== bufferedPercent) {
+                //         lastBufferedPercentLogRef.current = bufferedPercent;
+                //         console.log('[Audio] buffered percent', {
+                //             src: source,
+                //             currentTime: audioElement.currentTime,
+                //             bufferedEnd,
+                //             duration: audioElement.duration,
+                //             bufferedPercent,
+                //         });
+                //     }
+                // }}
                 onEnded={() => {
                     // Cache if playing fully
                     if (audioSrc && !audioSrc.startsWith('blob:') && currentSong && !isStagePlaybackSong(currentSong)) {
