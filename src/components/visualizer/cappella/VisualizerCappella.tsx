@@ -9,6 +9,7 @@ import { mixColors } from '../colorMix';
 import { shouldPreheatLine, useVisualizerRuntime, type VisualizerPreheatWindow } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
+import { builtinAvatarImages, resolveCappellaAvatarUrl } from './avatarImages';
 import { builtinEmoImages } from './emoImages';
 
 // src/components/visualizer/cappella/VisualizerCappella.tsx
@@ -839,12 +840,14 @@ const getOrBuildBubbleMetrics = (
 };
 
 const CappellaAvatar: React.FC<{
-    coverUrl?: string | null;
+    avatarUrl?: string | null;
     avatarIndex: number;
     theme: Theme;
     side: ChatSide;
-}> = ({ coverUrl, avatarIndex, theme, side }) => {
+    useAvatarGridCrop: boolean;
+}> = ({ avatarUrl, avatarIndex, theme, side, useAvatarGridCrop }) => {
     const avatarPosition = getAvatarPosition(avatarIndex);
+    const shouldUseAvatarGridCrop = useAvatarGridCrop || !avatarUrl;
 
     return (
         <motion.div
@@ -855,10 +858,13 @@ const CappellaAvatar: React.FC<{
             style={{
                 borderColor: 'rgba(255,255,255,0.24)',
                 backgroundColor: theme.secondaryColor,
-                backgroundImage: coverUrl
-                    ? `url("${coverUrl}")`
+                backgroundImage: avatarUrl
+                    ? `url("${avatarUrl}")`
                     : `linear-gradient(135deg, ${theme.primaryColor}, ${theme.accentColor})`,
-                ...avatarPosition,
+                backgroundClip: 'padding-box',
+                backgroundPosition: shouldUseAvatarGridCrop ? avatarPosition.backgroundPosition : 'center',
+                backgroundRepeat: 'no-repeat',
+                backgroundSize: shouldUseAvatarGridCrop ? avatarPosition.backgroundSize : 'cover',
             }}
         />
     );
@@ -1008,6 +1014,7 @@ interface CappellaMessageRowProps {
     currentLineIndex: number;
     theme: Theme;
     coverUrl?: string | null;
+    cappellaTuning: CappellaTuning;
     baseFontSize: number;
     maxTextWidth: number;
     metricsCache: React.MutableRefObject<Map<string, PreparedBubbleMetrics>>;
@@ -1020,6 +1027,7 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
     currentLineIndex,
     theme,
     coverUrl,
+    cappellaTuning,
     baseFontSize,
     maxTextWidth,
     metricsCache,
@@ -1040,6 +1048,14 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
     const bubblePaddingX = isActiveMessage ? motionConfig.activePaddingX : motionConfig.inactivePaddingX;
     const bubblePaddingY = isActiveMessage ? motionConfig.activePaddingY : motionConfig.inactivePaddingY;
     const bubbleColors = getBubbleColors(message, theme);
+    const avatarUrl = resolveCappellaAvatarUrl({
+        avatarSource: cappellaTuning.avatarSource,
+        coverUrl,
+        avatarIndex: message.avatarIndex,
+        side: message.side,
+        avatars: builtinAvatarImages,
+    });
+    const useAvatarGridCrop = cappellaTuning.avatarSource === 'cover' && Boolean(coverUrl);
     const [visibleCharacterCount, setVisibleCharacterCount] = useState(() => (
         message.kind === 'lyric' ? getVisibleCharacterCount(message.line, currentTime.get()) : 0
     ));
@@ -1118,11 +1134,16 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
         theme,
         visibleCharacterCount,
     ]);
-    // scale(origin=bottom) 的视觉上溢量，作为同元素的 marginTop 补偿
+    // scale(origin=bottom) 的视觉上溢量，作为同元素的 marginTop 补偿。
+    // 使用完整文本的最终高度而非逐字变化的 targetSize，避免逐帧触发 marginTop 布局重排。
     const scaleOverflow = isActiveMessage && motionConfig.activeScale > 1
         ? Math.ceil(
             Math.max(
-                isEmoMessage ? emoImageSize : (targetSize?.height ?? motionConfig.activeMinHeight),
+                isEmoMessage
+                    ? emoImageSize
+                    : (message.kind === 'lyric' && preparedMetrics
+                        ? (preparedMetrics.sizes[preparedMetrics.sizes.length - 1]?.height ?? motionConfig.activeMinHeight)
+                        : motionConfig.activeMinHeight),
                 40
             ) * (motionConfig.activeScale - 1)
         )
@@ -1177,16 +1198,18 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
                     marginTop: scaleOverflow,
                 }}
                 transition={{ type: 'spring', ...motionConfig.avatarSpring }}
-                className={`flex max-w-[78%] items-end gap-3 sm:max-w-[68%] ${isRight ? 'flex-row-reverse' : 'flex-row'}`}
+                // w-full 用于防止右侧气泡宽度变化导致的次像素抖动
+                className={`flex w-full max-w-[78%] items-end gap-3 sm:max-w-[68%] ${isRight ? 'flex-row-reverse' : 'flex-row'}`}
                 style={{
                     transformOrigin: isRight ? '100% 100%' : '0% 100%',
                 }}
             >
                 <CappellaAvatar
-                    coverUrl={coverUrl}
+                    avatarUrl={avatarUrl}
                     avatarIndex={message.avatarIndex}
                     theme={theme}
                     side={message.side}
+                    useAvatarGridCrop={useAvatarGridCrop}
                 />
                 {isEmoMessage
                     ? (
@@ -1343,7 +1366,12 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = ({
                 ? 'custom'
                 : DEFAULT_CAPPELLA_TUNING.emojiPackSource
         ),
-    }), [cappellaCustomEmojiImages.length, cappellaTuning.emojiPackSource, cappellaTuning.showEmoMessages]);
+        avatarSource: (
+            cappellaTuning.avatarSource === 'builtin' || cappellaTuning.avatarSource === 'color' || cappellaTuning.avatarSource === 'cover'
+                ? cappellaTuning.avatarSource
+                : DEFAULT_CAPPELLA_TUNING.avatarSource
+        ),
+    }), [cappellaCustomEmojiImages.length, cappellaTuning.avatarSource, cappellaTuning.emojiPackSource, cappellaTuning.showEmoMessages]);
     const activeEmoImages = useMemo(
         () => resolvedCappellaTuning.emojiPackSource === 'custom' && cappellaCustomEmojiImages.length > 0
             ? cappellaCustomEmojiImages
@@ -1443,6 +1471,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = ({
                                     currentLineIndex={currentLineIndex}
                                     theme={theme}
                                     coverUrl={coverUrl}
+                                    cappellaTuning={resolvedCappellaTuning}
                                     baseFontSize={baseFontSize}
                                     maxTextWidth={maxTextWidth}
                                     metricsCache={bubbleMetricsCacheRef}

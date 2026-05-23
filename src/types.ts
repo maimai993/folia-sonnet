@@ -252,15 +252,18 @@ export const DEFAULT_FUME_TUNING: FumeTuning = {
 };
 
 export type CappellaEmojiPackSource = 'builtin' | 'custom';
+export type CappellaAvatarSource = 'cover' | 'builtin' | 'color';
 
 export interface CappellaTuning {
   showEmoMessages: boolean;
   emojiPackSource: CappellaEmojiPackSource;
+  avatarSource: CappellaAvatarSource;
 }
 
 export const DEFAULT_CAPPELLA_TUNING: CappellaTuning = {
   showEmoMessages: true,
   emojiPackSource: 'builtin',
+  avatarSource: 'cover',
 };
 
 export interface StoredCappellaEmojiImage {

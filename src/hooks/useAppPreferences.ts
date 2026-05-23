@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type Theme, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, type CadenzaTuning, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type Theme, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, getCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, MAX_CAPPELLA_CUSTOM_EMOJI_IMAGES, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
@@ -143,16 +143,25 @@ const readStoredFumeTuning = (): FumeTuning => {
     }
 };
 
+const resolveCappellaAvatarSource = (source: CappellaAvatarSource | undefined): CappellaAvatarSource => (
+    source === 'builtin' || source === 'color' || source === 'cover'
+        ? source
+        : DEFAULT_CAPPELLA_TUNING.avatarSource
+);
+
+export const resolveStoredCappellaTuning = (parsed: Partial<CappellaTuning>): CappellaTuning => ({
+    showEmoMessages: parsed.showEmoMessages ?? DEFAULT_CAPPELLA_TUNING.showEmoMessages,
+    emojiPackSource: parsed.emojiPackSource === 'custom' ? 'custom' : 'builtin',
+    avatarSource: resolveCappellaAvatarSource(parsed.avatarSource),
+});
+
 const readStoredCappellaTuning = (): CappellaTuning => {
     const saved = localStorage.getItem('cappella_tuning');
     if (!saved) return DEFAULT_CAPPELLA_TUNING;
 
     try {
         const parsed = JSON.parse(saved) as Partial<CappellaTuning>;
-        return {
-            showEmoMessages: parsed.showEmoMessages ?? DEFAULT_CAPPELLA_TUNING.showEmoMessages,
-            emojiPackSource: parsed.emojiPackSource === 'custom' ? 'custom' : 'builtin',
-        };
+        return resolveStoredCappellaTuning(parsed);
     } catch {
         return DEFAULT_CAPPELLA_TUNING;
     }
@@ -483,6 +492,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
                 emojiPackSource: patch.emojiPackSource === 'custom' && storedCappellaEmojiPack.length === 0
                     ? 'builtin'
                     : (patch.emojiPackSource ?? prev.emojiPackSource),
+                avatarSource: resolveCappellaAvatarSource(patch.avatarSource ?? prev.avatarSource),
             };
 
             localStorage.setItem('cappella_tuning', JSON.stringify(next));

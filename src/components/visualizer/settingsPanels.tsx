@@ -327,6 +327,9 @@ const resolveCappellaTuning = (
     emojiPackSource: tuning?.emojiPackSource === 'custom' && hasCustomEmojiPack
         ? 'custom'
         : 'builtin',
+    avatarSource: tuning?.avatarSource === 'builtin' || tuning?.avatarSource === 'color' || tuning?.avatarSource === 'cover'
+        ? tuning.avatarSource
+        : DEFAULT_CAPPELLA_TUNING.avatarSource,
 });
 
 export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
@@ -349,6 +352,11 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     const emojiSourceOptions: PresetOption<CappellaTuning['emojiPackSource']>[] = useMemo(() => ([
         { value: 'builtin', label: t('options.cappellaEmojiSourceBuiltin') || '内置' },
         { value: 'custom', label: t('options.cappellaEmojiSourceCustom') || '自定义' },
+    ]), [t]);
+    const avatarSourceOptions: PresetOption<CappellaTuning['avatarSource']>[] = useMemo(() => ([
+        { value: 'cover', label: t('options.cappellaAvatarSourceCover') || '封面' },
+        { value: 'builtin', label: t('options.cappellaAvatarSourceBuiltin') || '内置头像' },
+        { value: 'color', label: t('options.cappellaAvatarSourceColor') || '色块' },
     ]), [t]);
 
     const handleImportClick = () => {
@@ -411,6 +419,14 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     { value: false, label: t('options.partitaGuideLinesOff') || '隐藏' },
                 ]}
                 onChange={(next) => onCappellaTuningChange?.({ showEmoMessages: next })}
+                isDaylight={isDaylight}
+            />
+
+            <PresetGroup
+                label={t('options.cappellaAvatarSource') || '头像来源'}
+                value={resolvedTuning.avatarSource}
+                options={avatarSourceOptions}
+                onChange={(next) => onCappellaTuningChange?.({ avatarSource: next })}
                 isDaylight={isDaylight}
             />
 
