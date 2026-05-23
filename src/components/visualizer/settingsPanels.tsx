@@ -69,12 +69,17 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     const rawMax = clampPartitaStagger(partitaTuning.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
     const resolvedPartitaTuning: PartitaTuning = {
         showGuideLines: partitaTuning.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+        useSemanticLayout: partitaTuning.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
         staggerMin: Math.min(rawMin, rawMax),
         staggerMax: Math.max(rawMin, rawMax),
     };
     const guideLineOptions: PresetOption<boolean>[] = useMemo(() => ([
         { value: true, label: t('options.partitaGuideLinesOn') || '显示' },
         { value: false, label: t('options.partitaGuideLinesOff') || '隐藏' },
+    ]), [t]);
+    const semanticLayoutOptions: PresetOption<boolean>[] = useMemo(() => ([
+        { value: true, label: t('options.partitaSemanticLayoutOn') || '启用' },
+        { value: false, label: t('options.partitaSemanticLayoutOff') || '关闭' },
     ]), [t]);
     const handlePartitaMinChange = (next: number) => {
         const clampedNext = clampPartitaStagger(next);
@@ -110,6 +115,14 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 value={resolvedPartitaTuning.showGuideLines}
                 options={guideLineOptions}
                 onChange={(enabled) => onPartitaTuningChange?.({ showGuideLines: enabled })}
+                isDaylight={isDaylight}
+            />
+
+            <PresetGroup
+                label={t('options.partitaSemanticLayout') || '语义排列'}
+                value={resolvedPartitaTuning.useSemanticLayout}
+                options={semanticLayoutOptions}
+                onChange={(enabled) => onPartitaTuningChange?.({ useSemanticLayout: enabled })}
                 isDaylight={isDaylight}
             />
 

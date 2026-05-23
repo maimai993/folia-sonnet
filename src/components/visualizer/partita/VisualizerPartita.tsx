@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_PARTITA_TUNING, Line, Theme, Word as WordType, AudioBands, type PartitaTuning } from '../../../types';
+import { buildCjkSemanticLayoutUnits, createSingleWordLayoutUnits, type LyricLayoutUnit } from '../../../utils/lyrics/cjkSemanticLayout';
 import { getLineRenderEndTime, getLineRenderHints } from '../../../utils/lyrics/renderHints';
 import { shouldPreheatLine, useVisualizerRuntime, type VisualizerPreheatWindow } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
@@ -66,6 +67,7 @@ interface PartitaLineRenderProfile {
 interface PartitaColumn {
     id: string;
     words: Array<{
+        chunkUnits: LyricLayoutUnit[];
         chunkWords: WordType[];
         config: WordLayoutConfig;
         order: number;
@@ -118,6 +120,7 @@ const resolvePartitaTuning = (tuning?: PartitaTuning): PartitaTuning => {
 
     return {
         showGuideLines: tuning?.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+        useSemanticLayout: tuning?.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
         staggerMin: Math.min(rawMin, rawMax),
         staggerMax: Math.max(rawMin, rawMax),
     };
@@ -233,6 +236,9 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
     const isChaotic = intensity === 'chaotic';
     const isCalm = intensity === 'calm';
     const totalGraphemes = Math.max(splitGraphemes(line.fullText.replace(/\s+/g, '')).length, line.words.length, 1);
+    const layoutUnits = tuning.useSemanticLayout
+        ? buildCjkSemanticLayoutUnits(line)
+        : createSingleWordLayoutUnits(line.words);
 
     const columns: PartitaColumn[] = [];
     let currentWords: PartitaColumn['words'] = [];
@@ -240,7 +246,7 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
     const baseRowHeight = 100;
     const availableHeight = windowHeight * 0.65;
     const targetRowCount = Math.max(1, Math.floor(availableHeight / baseRowHeight));
-    const actualRowCount = Math.min(line.words.length, targetRowCount);
+    const actualRowCount = Math.min(layoutUnits.length, targetRowCount);
 
     let seed = line.startTime;
     const random = () => {
@@ -248,20 +254,20 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
         return x - Math.floor(x);
     };
 
-    const chunks: WordType[][] = [];
-    let remainingWords = line.words.length;
+    const chunks: LyricLayoutUnit[][] = [];
+    let remainingUnits = layoutUnits.length;
     let remainingChunks = actualRowCount;
-    let wordIndex = 0;
+    let unitIndex = 0;
 
     for (let c = 0; c < actualRowCount; c++) {
         // Chunk lengths are intentionally uneven.
         // Perfectly even splitting looked too mechanical and killed the handwritten score vibe.
         const isLastChunk = c === actualRowCount - 1;
-        const avg = remainingWords / remainingChunks;
+        const avg = remainingUnits / remainingChunks;
 
         let chunkLength = 1;
         if (isLastChunk) {
-            chunkLength = remainingWords;
+            chunkLength = remainingUnits;
         } else {
             const max = Math.ceil(avg * 1.5);
             const min = 1;
@@ -269,15 +275,16 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
             chunkLength = Math.max(min, Math.min(max, Math.round(avg + (randVal - 0.5) * avg)));
         }
 
-        chunkLength = Math.max(1, Math.min(chunkLength, remainingWords - (remainingChunks - 1)));
+        chunkLength = Math.max(1, Math.min(chunkLength, remainingUnits - (remainingChunks - 1)));
 
-        chunks.push(line.words.slice(wordIndex, wordIndex + chunkLength));
-        wordIndex += chunkLength;
-        remainingWords -= chunkLength;
+        chunks.push(layoutUnits.slice(unitIndex, unitIndex + chunkLength));
+        unitIndex += chunkLength;
+        remainingUnits -= chunkLength;
         remainingChunks--;
     }
 
-    chunks.forEach((chunkWords, rowIndex) => {
+    chunks.forEach((chunkUnits, rowIndex) => {
+        const chunkWords = chunkUnits.flatMap(unit => unit.words);
         if (chunkWords.length === 0) return;
 
         const mergedTextForConfig = chunkWords.map(w => w.text.trim()).join('');
@@ -296,6 +303,7 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
         const staggerScale = isCalm ? 1 : 0.8 + random() * 0.9;
 
         currentWords.push({
+            chunkUnits,
             chunkWords,
             order: rowIndex,
             rowIndex,
@@ -339,6 +347,7 @@ const buildPartitaLayoutCacheKey = (
 ) => {
     const windowHeightBucket = Math.round(windowHeight / 24);
     return [
+        'semantic-layout-v1',
         line.startTime,
         line.endTime,
         line.words.length,
@@ -348,6 +357,7 @@ const buildPartitaLayoutCacheKey = (
         tuning.staggerMin,
         tuning.staggerMax,
         tuning.showGuideLines ? 1 : 0,
+        tuning.useSemanticLayout ? 1 : 0,
     ].join('|');
 };
 

@@ -62,6 +62,7 @@ const readStoredPartitaTuning = (): PartitaTuning => {
 
         return {
             showGuideLines: parsed.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+            useSemanticLayout: parsed.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
             staggerMin: Math.min(rawMin, rawMax),
             staggerMax: Math.max(rawMin, rawMax),
         };
@@ -429,6 +430,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
             const rawMax = clampPartitaStagger(patch.staggerMax ?? prev.staggerMax, prev.staggerMax);
             const next = {
                 showGuideLines: patch.showGuideLines ?? prev.showGuideLines,
+                useSemanticLayout: patch.useSemanticLayout ?? prev.useSemanticLayout,
                 staggerMin: Math.min(rawMin, rawMax),
                 staggerMax: Math.max(rawMin, rawMax),
             };

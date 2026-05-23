@@ -253,6 +253,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
         return {
             showGuideLines: partitaTuning.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+            useSemanticLayout: partitaTuning.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
             staggerMin: Math.min(rawMin, rawMax),
             staggerMax: Math.max(rawMin, rawMax),
         };

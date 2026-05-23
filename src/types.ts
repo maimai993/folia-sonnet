@@ -219,12 +219,14 @@ export const DEFAULT_CADENZA_TUNING: CadenzaTuning = {
 
 export interface PartitaTuning {
   showGuideLines: boolean;
+  useSemanticLayout: boolean;
   staggerMin: number;
   staggerMax: number;
 }
 
 export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
   showGuideLines: true,
+  useSemanticLayout: true,
   staggerMin: 20,
   staggerMax: 100,
 };
