@@ -664,18 +664,11 @@ const getPartialSegmentWidth = (
         return prepared.widths[segmentIndex] ?? 0;
     }
 
-    const prefixWidths = prepared.breakablePrefixWidths[segmentIndex];
-    if (prefixWidths && prefixWidths.length > 0) {
-        const endWidth = prefixWidths[localEnd - 1] ?? 0;
-        const startWidth = localStart > 0 ? (prefixWidths[localStart - 1] ?? 0) : 0;
-        return endWidth - startWidth;
-    }
-
-    const breakableWidths = prepared.breakableWidths[segmentIndex];
-    if (breakableWidths && breakableWidths.length > 0) {
+    const breakableFitAdvances = prepared.breakableFitAdvances[segmentIndex];
+    if (breakableFitAdvances && breakableFitAdvances.length > 0) {
         let width = 0;
         for (let i = localStart; i < localEnd; i++) {
-            width += breakableWidths[i] ?? 0;
+            width += breakableFitAdvances[i] ?? 0;
         }
         return width;
     }
