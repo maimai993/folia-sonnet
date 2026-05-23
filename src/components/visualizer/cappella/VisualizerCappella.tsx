@@ -146,7 +146,15 @@ interface PreparedBubbleMetrics {
     sizes: BubbleSize[];
 }
 
+interface CharacterRevealPlan {
+    characters: string[];
+    fadeDurationsMs: number[];
+}
+
 const INTERLUDE_TEXT = '......';
+const DEFAULT_CHAR_FADE_MS = 220;
+const MIN_CHAR_FADE_MS = 40;
+const LATIN_REVEAL_UNIT_RE = /^[\p{Script=Latin}\p{Number}'’_-]+$/u;
 
 const countCompactChars = (text: string) => Array.from(text.replace(/\s/g, '')).length;
 
@@ -552,6 +560,54 @@ const getVisibleLineText = (line: Line, currentTime: number) => {
 
 const getVisibleCharacterCount = (line: Line, currentTime: number) =>
     Array.from(getVisibleLineText(line, currentTime)).length;
+
+const getWordRevealUnitCount = (wordText: string) => {
+    const trimmed = wordText.trim();
+    if (!trimmed) {
+        return 1;
+    }
+
+    const characters = Array.from(wordText);
+    if (!LATIN_REVEAL_UNIT_RE.test(trimmed)) {
+        return 1;
+    }
+
+    const revealCharacters = characters.filter(character => character.trim().length > 0);
+    return Math.max(revealCharacters.length, 1);
+};
+
+// Builds per-character fade durations while keeping the existing reveal order and entry timing.
+const getCharacterRevealPlan = (line: Line): CharacterRevealPlan => {
+    const characters = Array.from(line.fullText);
+    const fadeDurationsMs = characters.map(() => DEFAULT_CHAR_FADE_MS);
+    const ranges = getWordTextRanges(line);
+
+    line.words.forEach((word, index) => {
+        const range = ranges[index];
+        if (!range) {
+            return;
+        }
+
+        const startCharacterIndex = Array.from(line.fullText.slice(0, range.start)).length;
+        const wordCharacters = Array.from(word.text);
+        const unitCount = getWordRevealUnitCount(word.text);
+        const fadeDurationMs = Math.max(
+            ((word.endTime - word.startTime) / unitCount) * 1000,
+            MIN_CHAR_FADE_MS
+        );
+
+        for (let characterIndex = 0; characterIndex < wordCharacters.length; characterIndex += 1) {
+            const targetIndex = startCharacterIndex + characterIndex;
+            if (targetIndex >= fadeDurationsMs.length) {
+                break;
+            }
+
+            fadeDurationsMs[targetIndex] = fadeDurationMs;
+        }
+    });
+
+    return { characters, fadeDurationsMs };
+};
 
 // Disabled for now: AI semantic word coloring reduced bubble-text readability in cappella.
 // const getActiveColor = (wordText: string, theme: Theme) => {
@@ -966,7 +1022,9 @@ const ActiveCappellaText: React.FC<{
     line: Line;
     visibleCharacterCount: number;
 }> = ({ line, visibleCharacterCount }) => {
-    const visibleCharacters = Array.from(line.fullText).slice(0, Math.max(0, visibleCharacterCount));
+    const revealPlan = useMemo(() => getCharacterRevealPlan(line), [line]);
+    const visibleCharacters = revealPlan.characters.slice(0, Math.max(0, visibleCharacterCount));
+    const visibleFadeDurations = revealPlan.fadeDurationsMs.slice(0, Math.max(0, visibleCharacterCount));
 
     return (
         <span className="inline-flex flex-wrap items-baseline">
@@ -976,7 +1034,9 @@ const ActiveCappellaText: React.FC<{
                     className="inline-block"
                     style={{
                         whiteSpace: character.trim() ? 'pre' : 'pre-wrap',
-                        animation: 'cappella-char-fade 220ms ease-out',
+                        animationName: 'cappella-char-fade',
+                        animationDuration: `${visibleFadeDurations[index] ?? DEFAULT_CHAR_FADE_MS}ms`,
+                        animationTimingFunction: 'ease-out',
                     }}
                 >
                     {character}
