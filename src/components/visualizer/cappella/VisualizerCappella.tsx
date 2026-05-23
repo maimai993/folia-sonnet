@@ -1118,6 +1118,15 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
         theme,
         visibleCharacterCount,
     ]);
+    // scale(origin=bottom) 的视觉上溢量，作为同元素的 marginTop 补偿
+    const scaleOverflow = isActiveMessage && motionConfig.activeScale > 1
+        ? Math.ceil(
+            Math.max(
+                isEmoMessage ? emoImageSize : (targetSize?.height ?? motionConfig.activeMinHeight),
+                40
+            ) * (motionConfig.activeScale - 1)
+        )
+        : 0;
     useEffect(() => {
         if (message.kind !== 'lyric' && message.kind !== 'emo') {
             return;
@@ -1165,6 +1174,7 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
                 animate={{
                     opacity: isPassedMessage ? motionConfig.passedOpacity : 1,
                     scale: isActiveMessage ? motionConfig.activeScale : isPassedMessage ? motionConfig.passedScale : 1,
+                    marginTop: scaleOverflow,
                 }}
                 transition={{ type: 'spring', ...motionConfig.avatarSpring }}
                 className={`flex max-w-[78%] items-end gap-3 sm:max-w-[68%] ${isRight ? 'flex-row-reverse' : 'flex-row'}`}
