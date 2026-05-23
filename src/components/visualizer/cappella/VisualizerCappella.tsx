@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValueEvent, type MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
+import { layoutWithLines, prepareWithSegments, type PrepareOptions } from '@chenglou/pretext';
 import { DEFAULT_CAPPELLA_TUNING, type AudioBands, type CappellaEmojiImage, type CappellaTuning, type Line, type Theme, type Word } from '../../../types';
 import { resolveThemeFontStack } from '../../../utils/fontStacks';
 import { getLineRenderEndTime, getLineRenderHints } from '../../../utils/lyrics/renderHints';
@@ -93,6 +93,7 @@ const CAPPELLA_PREHEAT_WINDOW: VisualizerPreheatWindow = {
 };
 const CAPPELLA_LAYOUT_CACHE_LIMIT = 32;
 const CAPPELLA_LOOKAHEAD_CHARACTERS = 2;
+const CAPPELLA_BUBBLE_TEXT_OPTIONS = { whiteSpace: 'pre-wrap' } satisfies PrepareOptions;
 
 interface BubbleSize {
     width: number;
@@ -728,7 +729,11 @@ const measureBubbleText = ({
 }) => {
     const bubbleBorderWidth = 1;
     const safeText = text || ' ';
-    const prepared = prepareWithSegments(safeText, `640 ${fontSize}px ${resolveThemeFontStack(theme)}`);
+    const prepared = prepareWithSegments(
+        safeText,
+        `640 ${fontSize}px ${resolveThemeFontStack(theme)}`,
+        CAPPELLA_BUBBLE_TEXT_OPTIONS
+    );
     const layout = layoutWithLines(prepared, Math.max(1, maxTextWidth), Math.round(lineHeightPx));
     const textWidth = Math.max(...layout.lines.map(line => line.width), fontSize);
     const textHeight = Math.max(layout.lines.length, 1) * lineHeightPx;

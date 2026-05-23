@@ -97,7 +97,7 @@
     }
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.4",
+    "@chenglou/pretext": "^0.0.7",
     "@google/genai": "^1.46.0",
     "@neteasecloudmusicapienhanced/api": "^4.32.1",
     "axios": "^1.13.1",
