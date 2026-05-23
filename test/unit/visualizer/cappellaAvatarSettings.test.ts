@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveCappellaAvatarUrl, type CappellaAvatarImage } from '@/components/visualizer/cappella/avatarImages';
+import { pickStableBuiltinAvatarImage, resolveCappellaAvatarUrl, type CappellaAvatarImage } from '@/components/visualizer/cappella/avatarImages';
 import { resolveStoredCappellaTuning } from '@/hooks/useAppPreferences';
 import type { CappellaTuning } from '@/types';
 
@@ -50,13 +50,16 @@ describe('Cappella avatar URL resolution', () => {
     });
 
     it('uses a stable built-in avatar for builtin source even when cover exists', () => {
-        expect(resolveCappellaAvatarUrl({
+        const resolved = resolveCappellaAvatarUrl({
             avatarSource: 'builtin',
             coverUrl: '/cover.jpg',
             avatarIndex: 1,
             side: 'left',
             avatars,
-        })).toBe('/avatar-b.png');
+        });
+
+        expect(avatars.map(avatar => avatar.url)).toContain(resolved);
+        expect(resolved).not.toBe('/cover.jpg');
     });
 
     it('uses color blocks when color source is selected', () => {
@@ -76,5 +79,26 @@ describe('Cappella avatar URL resolution', () => {
             side: 'right',
             avatars: [],
         })).toBeNull();
+    });
+
+    it('keeps the right-side built-in avatar fixed for the same song seed', () => {
+        const first = pickStableBuiltinAvatarImage(avatars, 0, 'right', 'song-a');
+        const second = pickStableBuiltinAvatarImage(avatars, 8, 'right', 'song-a');
+
+        expect(first).toEqual(second);
+    });
+
+    it('excludes the right-side built-in avatar from the left-side pool when possible', () => {
+        const avatarPool: CappellaAvatarImage[] = [
+            { id: 'avatar-a', name: 'A', url: '/avatar-a.png' },
+            { id: 'avatar-b', name: 'B', url: '/avatar-b.png' },
+            { id: 'avatar-c', name: 'C', url: '/avatar-c.png' },
+        ];
+        const rightAvatar = pickStableBuiltinAvatarImage(avatarPool, 8, 'right', 'song-b');
+        const leftAvatars = Array.from({ length: 8 }, (_, index) => (
+            pickStableBuiltinAvatarImage(avatarPool, index, 'left', 'song-b')
+        ));
+
+        expect(leftAvatars.every(avatar => avatar?.id !== rightAvatar?.id)).toBe(true);
     });
 });

@@ -1015,6 +1015,7 @@ interface CappellaMessageRowProps {
     theme: Theme;
     coverUrl?: string | null;
     cappellaTuning: CappellaTuning;
+    avatarSeed?: string | number;
     baseFontSize: number;
     maxTextWidth: number;
     metricsCache: React.MutableRefObject<Map<string, PreparedBubbleMetrics>>;
@@ -1028,6 +1029,7 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
     theme,
     coverUrl,
     cappellaTuning,
+    avatarSeed,
     baseFontSize,
     maxTextWidth,
     metricsCache,
@@ -1053,6 +1055,7 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
         coverUrl,
         avatarIndex: message.avatarIndex,
         side: message.side,
+        seed: avatarSeed,
         avatars: builtinAvatarImages,
     });
     const useAvatarGridCrop = cappellaTuning.avatarSource === 'cover' && Boolean(coverUrl);
@@ -1358,6 +1361,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = ({
     const [visibleLineIndex, setVisibleLineIndex] = useState(() => getVisibleLineIndexAtTime(lines, currentTime.get()));
     const visibleLineIndexRef = useRef(visibleLineIndex);
     const titleText = songTitle?.trim() || t('ui.noTrack');
+    const avatarSeed = seed ?? titleText;
     const intensityConfig = useMemo(() => getCappellaIntensityConfig(theme.animationIntensity), [theme.animationIntensity]);
     const resolvedCappellaTuning = useMemo<CappellaTuning>(() => ({
         showEmoMessages: cappellaTuning.showEmoMessages ?? DEFAULT_CAPPELLA_TUNING.showEmoMessages,
@@ -1472,6 +1476,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = ({
                                     theme={theme}
                                     coverUrl={coverUrl}
                                     cappellaTuning={resolvedCappellaTuning}
+                                    avatarSeed={avatarSeed}
                                     baseFontSize={baseFontSize}
                                     maxTextWidth={maxTextWidth}
                                     metricsCache={bubbleMetricsCacheRef}

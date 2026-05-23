@@ -15,6 +15,7 @@ interface ResolveCappellaAvatarUrlInput {
     coverUrl?: string | null;
     avatarIndex: number;
     side: CappellaAvatarSide;
+    seed?: string | number;
     avatars?: CappellaAvatarImage[];
 }
 
@@ -38,18 +39,41 @@ const toStableAvatarImages = (): CappellaAvatarImage[] =>
 
 export const builtinAvatarImages = toStableAvatarImages();
 
+const hashString = (input: string) => {
+    let hash = 2166136261;
+    for (let index = 0; index < input.length; index += 1) {
+        hash ^= input.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+};
+
+const getSeededIndex = (seed: string | number, side: CappellaAvatarSide, length: number) =>
+    hashString(`${seed}|${side}|${length}`) % length;
+
 export const pickStableBuiltinAvatarImage = (
     avatars: CappellaAvatarImage[],
     avatarIndex: number,
     side: CappellaAvatarSide,
+    seed: string | number = 'cappella',
 ): CappellaAvatarImage | null => {
     if (avatars.length === 0) {
         return null;
     }
 
-    const sideOffset = side === 'right' ? 37 : 0;
-    const resolvedIndex = Math.abs(Math.trunc(avatarIndex + sideOffset)) % avatars.length;
-    return avatars[resolvedIndex] ?? null;
+    const rightAvatarIndex = getSeededIndex(seed, 'right', avatars.length);
+    if (side === 'right') {
+        return avatars[rightAvatarIndex] ?? null;
+    }
+
+    const leftAvatarPool = avatars.filter((_, index) => index !== rightAvatarIndex);
+    if (leftAvatarPool.length === 0) {
+        return avatars[rightAvatarIndex] ?? null;
+    }
+
+    const leftSeedOffset = getSeededIndex(seed, 'left', leftAvatarPool.length);
+    const resolvedLeftIndex = Math.abs(Math.trunc(avatarIndex + leftSeedOffset)) % leftAvatarPool.length;
+    return leftAvatarPool[resolvedLeftIndex] ?? null;
 };
 
 export const resolveCappellaAvatarUrl = ({
@@ -57,6 +81,7 @@ export const resolveCappellaAvatarUrl = ({
     coverUrl,
     avatarIndex,
     side,
+    seed,
     avatars = builtinAvatarImages,
 }: ResolveCappellaAvatarUrlInput): string | null => {
     if (avatarSource === 'color') {
@@ -67,5 +92,5 @@ export const resolveCappellaAvatarUrl = ({
         return coverUrl;
     }
 
-    return pickStableBuiltinAvatarImage(avatars, avatarIndex, side)?.url ?? null;
+    return pickStableBuiltinAvatarImage(avatars, avatarIndex, side, seed)?.url ?? null;
 };
