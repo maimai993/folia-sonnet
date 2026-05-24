@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, ChevronRight, Settings , ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, LocalLibraryGroup, LocalPlaylist, DualTheme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type LyricData, type PartitaTuning, type QueueAddBehavior, type VisualizerMode, type StageStatus, type StageSource, type NowPlayingConnectionStatus } from '../types';
+import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, LocalLibraryGroup, LocalPlaylist, DualTheme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type LyricData, type PartitaTuning, type QueueAddBehavior, type StoredCustomLyricsFont, type VisualizerMode, type StageStatus, type StageSource, type NowPlayingConnectionStatus } from '../types';
 import { NavidromeSong, NavidromeViewSelection } from '../types/navidrome';
 import { isNavidromeEnabled } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
@@ -118,7 +118,8 @@ interface HomeProps {
     showOpenPanelCloseButton: boolean;
     onLyricsFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
     onLyricsFontScaleChange: (fontScale: number) => void;
-    onLyricsCustomFontChange: (font: { family: string; label?: string | null; } | null) => void;
+    onLyricsCustomFontChange: (font: StoredCustomLyricsFont | null) => void;
+    onLyricsCustomFontUpload: (file: File) => Promise<{ ok: boolean; error?: string; }>;
     loadLyricFilterPreview: () => Promise<LyricData | null>;
     onSaveLyricFilterPattern: (pattern: string) => Promise<void> | void;
     onToggleOpenPanelCloseButton: (enable: boolean) => void;
@@ -230,6 +231,7 @@ const Home: React.FC<HomeProps> = ({
     onLyricsFontStyleChange,
     onLyricsFontScaleChange,
     onLyricsCustomFontChange,
+    onLyricsCustomFontUpload,
     loadLyricFilterPreview,
     onSaveLyricFilterPattern,
     onToggleOpenPanelCloseButton,
@@ -1039,6 +1041,7 @@ const Home: React.FC<HomeProps> = ({
                                 onLyricsFontStyleChange={onLyricsFontStyleChange}
                                 onLyricsFontScaleChange={onLyricsFontScaleChange}
                                 onLyricsCustomFontChange={onLyricsCustomFontChange}
+                                onLyricsCustomFontUpload={onLyricsCustomFontUpload}
                                 loadLyricFilterPreview={loadLyricFilterPreview}
                                 onSaveLyricFilterPattern={onSaveLyricFilterPattern}
                                 onToggleOpenPanelCloseButton={onToggleOpenPanelCloseButton}

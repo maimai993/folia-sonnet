@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle, Palette, FolderOpen, Pencil, FlaskConical, ChevronLeft, ChevronRight, RotateCcw, GamepadDirectional, RefreshCw, Download, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
-import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type QueueAddBehavior, type VisualizerMode } from '../../types';
+import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type QueueAddBehavior, type StoredCustomLyricsFont, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
 import VisPlayground from '../visualizer/VisPlayground';
@@ -69,7 +69,8 @@ interface HelpModalProps {
     showOpenPanelCloseButton: boolean;
     onLyricsFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
     onLyricsFontScaleChange: (fontScale: number) => void;
-    onLyricsCustomFontChange: (font: { family: string; label?: string | null; } | null) => void;
+    onLyricsCustomFontChange: (font: StoredCustomLyricsFont | null) => void;
+    onLyricsCustomFontUpload: (file: File) => Promise<{ ok: boolean; error?: string; }>;
     loadLyricFilterPreview: () => Promise<LyricData | null>;
     currentSongTitle?: string | null;
     onSaveLyricFilterPattern: (pattern: string) => Promise<void> | void;
@@ -159,6 +160,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
     onLyricsFontStyleChange,
     onLyricsFontScaleChange,
     onLyricsCustomFontChange,
+    onLyricsCustomFontUpload,
     loadLyricFilterPreview,
     currentSongTitle,
     onSaveLyricFilterPattern,
@@ -2070,6 +2072,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                         onFontStyleChange={onLyricsFontStyleChange}
                         onFontScaleChange={onLyricsFontScaleChange}
                         onCustomFontChange={onLyricsCustomFontChange}
+                        onUploadCustomFont={onLyricsCustomFontUpload}
                         onPartitaTuningChange={onPartitaTuningChange}
                         onResetPartitaTuning={onResetPartitaTuning}
                         onFumeTuningChange={onFumeTuningChange}

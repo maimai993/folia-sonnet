@@ -115,6 +115,7 @@ type BuildHomeModelParams = {
     handleSetLyricsFontStyle: LegacyHomeProps['onLyricsFontStyleChange'];
     handleSetLyricsFontScale: LegacyHomeProps['onLyricsFontScaleChange'];
     handleSetLyricsCustomFont: LegacyHomeProps['onLyricsCustomFontChange'];
+    handleUploadLyricsCustomFont: LegacyHomeProps['onLyricsCustomFontUpload'];
     loadCurrentSongLyricPreview: LegacyHomeProps['loadLyricFilterPreview'];
     handleSaveLyricFilterPattern: LegacyHomeProps['onSaveLyricFilterPattern'];
     handleToggleOpenPanelCloseButton: LegacyHomeProps['onToggleOpenPanelCloseButton'];
@@ -226,6 +227,7 @@ export const buildHomeModel = ({
     handleSetLyricsFontStyle,
     handleSetLyricsFontScale,
     handleSetLyricsCustomFont,
+    handleUploadLyricsCustomFont,
     loadCurrentSongLyricPreview,
     handleSaveLyricFilterPattern,
     handleToggleOpenPanelCloseButton,
@@ -376,6 +378,7 @@ export const buildHomeModel = ({
             onLyricsFontStyleChange: handleSetLyricsFontStyle,
             onLyricsFontScaleChange: handleSetLyricsFontScale,
             onLyricsCustomFontChange: handleSetLyricsCustomFont,
+            onLyricsCustomFontUpload: handleUploadLyricsCustomFont,
             loadLyricFilterPreview: loadCurrentSongLyricPreview,
             onSaveLyricFilterPattern: handleSaveLyricFilterPattern,
             onToggleOpenPanelCloseButton: handleToggleOpenPanelCloseButton,

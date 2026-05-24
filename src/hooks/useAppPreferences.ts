@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, type CadenzaTuning, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type Theme, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, type CadenzaTuning, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type Theme, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, getCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, MAX_CAPPELLA_CUSTOM_EMOJI_IMAGES, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
+import { clearUploadedLyricsFont, restoreUploadedLyricsFont, uploadAndRegisterLyricsFont } from '../services/customLyricsFont';
 
 type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 type AudioQuality = 'exhigh' | 'lossless' | 'hires';
-type StoredCustomLyricsFont = { family: string; label?: string | null; };
 
 const getStoredBoolean = (key: string, fallback: boolean) => {
     const saved = localStorage.getItem(key);
@@ -183,19 +183,39 @@ const readStoredLyricsFontScale = (): number => {
     return Math.min(1.4, Math.max(0.85, parsed));
 };
 
+export const resolveStoredCustomLyricsFont = (parsed: Partial<StoredCustomLyricsFont>): StoredCustomLyricsFont | null => {
+    const family = parsed.family?.trim();
+    if (!family) return null;
+
+    const source = parsed.source === 'uploaded' ? 'uploaded' : 'system';
+    const label = parsed.label?.trim() || family;
+
+    if (source === 'uploaded') {
+        const fontId = parsed.fontId?.trim();
+        if (!fontId) return null;
+
+        return {
+            source,
+            family,
+            label,
+            fontId,
+        };
+    }
+
+    return {
+        source,
+        family,
+        label,
+    };
+};
+
 const readStoredCustomLyricsFont = (): StoredCustomLyricsFont | null => {
     const saved = localStorage.getItem('lyrics_custom_font');
     if (!saved) return null;
 
     try {
         const parsed = JSON.parse(saved) as Partial<StoredCustomLyricsFont>;
-        const family = parsed.family?.trim();
-        if (!family) return null;
-
-        return {
-            family,
-            label: parsed.label?.trim() || family,
-        };
+        return resolveStoredCustomLyricsFont(parsed);
     } catch {
         return null;
     }
@@ -299,6 +319,49 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
             isCancelled = true;
         };
     }, []);
+
+    useEffect(() => {
+        if (lyricsCustomFont?.source !== 'uploaded' || !lyricsCustomFont.fontId) {
+            return;
+        }
+
+        let isCancelled = false;
+
+        const restoreUploadedFont = async () => {
+            try {
+                const restoredFont = await restoreUploadedLyricsFont(lyricsCustomFont.fontId!);
+                if (isCancelled) {
+                    return;
+                }
+
+                if (!restoredFont) {
+                    setLyricsCustomFont(null);
+                    localStorage.removeItem('lyrics_custom_font');
+                    setStatusMsg({
+                        type: 'info',
+                        text: '上传字体不可用，已恢复内置字体'
+                    });
+                }
+            } catch (error) {
+                console.warn('[Preferences] Failed to restore uploaded lyrics font:', error);
+                if (isCancelled) {
+                    return;
+                }
+
+                setLyricsCustomFont(null);
+                localStorage.removeItem('lyrics_custom_font');
+                setStatusMsg({
+                    type: 'error',
+                    text: '加载上传字体失败，已恢复内置字体'
+                });
+            }
+        };
+
+        void restoreUploadedFont();
+        return () => {
+            isCancelled = true;
+        };
+    }, [lyricsCustomFont?.fontId, lyricsCustomFont?.source, setStatusMsg]);
 
     useEffect(() => {
         const nextImages = storedCappellaEmojiPack.map(image => ({
@@ -573,17 +636,49 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         if (!font?.family?.trim()) {
             setLyricsCustomFont(null);
             localStorage.removeItem('lyrics_custom_font');
+            void clearUploadedLyricsFont();
             return;
         }
 
-        const next = {
-            family: font.family.trim(),
-            label: font.label?.trim() || font.family.trim(),
-        };
+        const next = resolveStoredCustomLyricsFont(font);
+        if (!next) {
+            setLyricsCustomFont(null);
+            localStorage.removeItem('lyrics_custom_font');
+            void clearUploadedLyricsFont();
+            return;
+        }
+
+        if (next.source !== 'uploaded') {
+            void clearUploadedLyricsFont();
+        }
 
         setLyricsCustomFont(next);
         localStorage.setItem('lyrics_custom_font', JSON.stringify(next));
     }, []);
+
+    const handleUploadLyricsCustomFont = useCallback(async (file: File): Promise<{ ok: boolean; error?: string; }> => {
+        try {
+            const { meta } = await uploadAndRegisterLyricsFont(file);
+            setLyricsCustomFont(meta);
+            localStorage.setItem('lyrics_custom_font', JSON.stringify(meta));
+            setStatusMsg({
+                type: 'success',
+                text: `已启用上传字体：${meta.label || meta.family}`
+            });
+
+            return { ok: true };
+        } catch (error) {
+            const message = error instanceof Error && error.message
+                ? error.message
+                : '上传字体失败。';
+            setStatusMsg({
+                type: 'error',
+                text: message
+            });
+
+            return { ok: false, error: message };
+        }
+    }, [setStatusMsg]);
 
     const handleSetLyricFilterPattern = useCallback((pattern: string) => {
         const next = pattern.trim();
@@ -708,6 +803,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         handleSetLyricsFontStyle,
         handleSetLyricsFontScale,
         handleSetLyricsCustomFont,
+        handleUploadLyricsCustomFont,
         handleSetLyricFilterPattern,
         handleToggleOpenPanelCloseButton,
         handleToggleNowPlayingStage,

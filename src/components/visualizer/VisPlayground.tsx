@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
-import { ChevronLeft, Loader2, RotateCcw, Search, Sparkles, X } from 'lucide-react';
+import { ChevronLeft, Loader2, RotateCcw, Search, Sparkles, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { List, useListRef } from 'react-window';
 import VisualizerRenderer from './VisualizerRenderer';
@@ -15,6 +15,7 @@ import {
     type CadenzaTuning,
     type FumeTuning,
     type PartitaTuning,
+    type StoredCustomLyricsFont,
     type Theme,
     type VisualizerMode,
 } from '../../types';
@@ -44,7 +45,8 @@ interface VisPlaygroundProps {
     customFontLabel: string | null;
     onFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
     onFontScaleChange: (fontScale: number) => void;
-    onCustomFontChange: (font: { family: string; label?: string | null; } | null) => void;
+    onCustomFontChange: (font: StoredCustomLyricsFont | null) => void;
+    onUploadCustomFont?: (file: File) => Promise<{ ok: boolean; error?: string; }>;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     onResetPartitaTuning?: () => void;
     onFumeTuningChange?: (patch: Partial<FumeTuning>) => void;
@@ -113,6 +115,36 @@ const clampFumeGlowIntensity = (value: number) => Math.min(1.8, Math.max(0, valu
 const clampFumeBackgroundObjectOpacity = (value: number) => Math.min(1, Math.max(0, value));
 const clampFumeHeroScale = (value: number) => Math.min(1.32, Math.max(0.82, value));
 const clampFumeTextHoldRatio = (value: number) => Math.min(1, Math.max(0, value));
+const isMobileBrowser = () => {
+    if (typeof navigator === 'undefined') {
+        return false;
+    }
+
+    const userAgent = navigator.userAgent;
+    const platform = navigator.platform;
+    const maxTouchPoints = navigator.maxTouchPoints ?? 0;
+    const userAgentData = (navigator as Navigator & { userAgentData?: { mobile?: boolean; }; }).userAgentData;
+    if (typeof userAgentData?.mobile === 'boolean') {
+        return userAgentData.mobile;
+    }
+
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(userAgent)) {
+        return true;
+    }
+
+    if (/Macintosh/i.test(userAgent) && /Mac/i.test(platform) && maxTouchPoints > 1) {
+        return true;
+    }
+
+    const hasCoarsePointer = typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(pointer: coarse)').matches;
+    const compactTouchScreen = typeof screen !== 'undefined'
+        && Math.min(screen.width, screen.height) <= 820
+        && maxTouchPoints > 0;
+
+    return hasCoarsePointer && compactTouchScreen;
+};
 const resolveFumeCameraTrackingMode = (value: FumeTuning['cameraTrackingMode'] | undefined): FumeTuning['cameraTrackingMode'] => (
     value === 'stepped' || value === 'smooth'
         ? value
@@ -197,6 +229,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onFontStyleChange,
     onFontScaleChange,
     onCustomFontChange,
+    onUploadCustomFont,
     onPartitaTuningChange,
     onResetPartitaTuning,
     onFumeTuningChange,
@@ -223,9 +256,11 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [fontSearchQuery, setFontSearchQuery] = useState('');
     const [fontPickerError, setFontPickerError] = useState<string | null>(null);
     const [fontListHeight, setFontListHeight] = useState(420);
+    const [isUploadingCustomFont, setIsUploadingCustomFont] = useState(false);
     const [draftFumeTuning, setDraftFumeTuning] = useState<FumeTuning>(fumeTuning);
     const fontListRef = React.useRef<HTMLDivElement>(null);
     const fontVirtualListRef = useListRef(null);
+    const fontUploadInputRef = React.useRef<HTMLInputElement>(null);
 
     const audioBands = useMemo<AudioBands>(() => ({
         bass,
@@ -283,6 +318,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
         return systemFonts.filter(font => font.label.toLocaleLowerCase().includes(query));
     }, [fontSearchQuery, systemFonts]);
+    const canQueryLocalFonts = typeof window !== 'undefined' && Boolean((window as QueryLocalFontsWindow).queryLocalFonts);
+    const shouldShowUploadedFontFallback = !canQueryLocalFonts && isMobileBrowser() && Boolean(onUploadCustomFont);
 
     useEffect(() => {
         setDraftFumeTuning(fumeTuning);
@@ -363,6 +400,10 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
         const localFontWindow = window as QueryLocalFontsWindow;
         if (!localFontWindow.queryLocalFonts) {
+            if (shouldShowUploadedFontFallback) {
+                return;
+            }
+
             setFontPickerError(t('options.systemFontUnsupported') || '当前环境无法读取本机字体。');
             return;
         }
@@ -389,10 +430,33 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
     const handleChooseSystemFont = (font: LocalFontEntry) => {
         onCustomFontChange({
+            source: 'system',
             family: font.family,
             label: font.label,
         });
         setIsFontPickerOpen(false);
+    };
+
+    const handleUploadFontFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+
+        if (!file || !onUploadCustomFont) {
+            return;
+        }
+
+        setFontPickerError(null);
+        setIsUploadingCustomFont(true);
+        try {
+            const result = await onUploadCustomFont(file);
+            if (result.ok) {
+                setIsFontPickerOpen(false);
+            } else {
+                setFontPickerError(result.error || (t('options.uploadFontFailed') || '上传字体失败。'));
+            }
+        } finally {
+            setIsUploadingCustomFont(false);
+        }
     };
 
     useEffect(() => {
@@ -643,10 +707,14 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                             <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
                                 <div className="min-w-0">
                                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.chooseSystemFont') || '选择自定义字体'}
+                                        {shouldShowUploadedFontFallback
+                                            ? (t('options.uploadCustomFont') || '上传自定义字体')
+                                            : (t('options.chooseSystemFont') || '选择自定义字体')}
                                     </div>
                                     <div className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.chooseSystemFontDesc') || '从当前系统已安装字体中选择一个字体。'}
+                                        {shouldShowUploadedFontFallback
+                                            ? (t('options.uploadCustomFontDesc') || '当前移动浏览器无法读取系统字体，可上传一个字体文件作为 fallback。')
+                                            : (t('options.chooseSystemFontDesc') || '从当前系统已安装字体中选择一个字体。')}
                                     </div>
                                 </div>
                                 <button
@@ -659,22 +727,77 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 </button>
                             </div>
 
-                            <div className="border-b border-white/10 px-5 py-4">
-                                <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                                    <Search size={16} style={{ color: 'var(--text-secondary)' }} />
-                                    <input
-                                        type="text"
-                                        value={fontSearchQuery}
-                                        onChange={(event) => setFontSearchQuery(event.target.value)}
-                                        placeholder={t('options.searchSystemFont') || '搜索字体'}
-                                        className="w-full bg-transparent text-sm outline-none placeholder:opacity-40"
-                                        style={{ color: 'var(--text-primary)' }}
-                                    />
-                                </label>
-                            </div>
+                            {!shouldShowUploadedFontFallback && (
+                                <div className="border-b border-white/10 px-5 py-4">
+                                    <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                                        <Search size={16} style={{ color: 'var(--text-secondary)' }} />
+                                        <input
+                                            type="text"
+                                            value={fontSearchQuery}
+                                            onChange={(event) => setFontSearchQuery(event.target.value)}
+                                            placeholder={t('options.searchSystemFont') || '搜索字体'}
+                                            className="w-full bg-transparent text-sm outline-none placeholder:opacity-40"
+                                            style={{ color: 'var(--text-primary)' }}
+                                        />
+                                    </label>
+                                </div>
+                            )}
 
                             <div ref={fontListRef} className="min-h-0 flex-1 overflow-hidden p-5">
-                                {isLoadingSystemFonts ? (
+                                {shouldShowUploadedFontFallback ? (
+                                    <div className="space-y-4">
+                                        <input
+                                            ref={fontUploadInputRef}
+                                            type="file"
+                                            accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf,application/font-woff,application/font-woff2,application/x-font-ttf,application/x-font-otf,application/vnd.ms-opentype"
+                                            className="hidden"
+                                            onChange={handleUploadFontFile}
+                                        />
+                                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                                {t('options.currentFont') || '当前字体'}
+                                            </div>
+                                            <div className="mt-1 text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                {customFontFamily
+                                                    ? currentFontLabel
+                                                    : (t('options.systemFontInactive') || '未启用')}
+                                            </div>
+                                        </div>
+                                        {fontPickerError && (
+                                            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm leading-6 text-red-200">
+                                                {fontPickerError}
+                                            </div>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => fontUploadInputRef.current?.click()}
+                                            disabled={isUploadingCustomFont}
+                                            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 text-sm font-semibold text-zinc-950 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-45"
+                                        >
+                                            {isUploadingCustomFont ? (
+                                                <Loader2 size={17} className="animate-spin" />
+                                            ) : (
+                                                <Upload size={17} />
+                                            )}
+                                            {isUploadingCustomFont
+                                                ? (t('options.uploadingCustomFont') || '上传中...')
+                                                : (t('options.uploadCustomFont') || '上传自定义字体')}
+                                        </button>
+                                        {customFontFamily && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    onCustomFontChange(null);
+                                                    setIsFontPickerOpen(false);
+                                                }}
+                                                className="flex h-11 w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-medium transition hover:bg-white/10"
+                                                style={{ color: 'var(--text-primary)' }}
+                                            >
+                                                {t('options.clearSystemFont') || '恢复内置字体'}
+                                            </button>
+                                        )}
+                                    </div>
+                                ) : isLoadingSystemFonts ? (
                                     <div className="h-full flex items-center justify-center text-sm gap-3" style={{ color: 'var(--text-secondary)' }}>
                                         <Loader2 size={18} className="animate-spin" />
                                         <span>{t('options.loadingSystemFonts') || '正在读取系统字体...'}</span>

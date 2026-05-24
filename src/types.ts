@@ -37,6 +37,15 @@ export interface Theme {
   provider?: string;
 }
 
+export type CustomLyricsFontSource = 'system' | 'uploaded';
+
+export interface StoredCustomLyricsFont {
+  source: CustomLyricsFontSource;
+  family: string;
+  label?: string | null;
+  fontId?: string;
+}
+
 export interface DualTheme {
   light: Theme;
   dark: Theme;
