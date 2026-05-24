@@ -1,0 +1,500 @@
+import React, { useMemo, useState, useCallback } from 'react';
+import { motion, AnimatePresence, MotionValue, useMotionValueEvent } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
+import { Line, Theme, AudioBands, type TiltColorScheme, type TiltTuning, DEFAULT_TILT_TUNING } from '../../../types';
+import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
+import { resolveThemeFontStack } from '../../../utils/fontStacks';
+import { useVisualizerRuntime } from '../runtime';
+import VisualizerShell from '../VisualizerShell';
+import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
+
+// src/components/visualizer/tilt/VisualizerTilt.tsx
+// Tilt visualizer: splits lyrics into 1-4 lines with probabilistic layout,
+// featuring two typography modes (normal horizontal vs large italic staggered).
+// Lines are revealed sequentially in time order; tilt chars have up-down alternating offsets.
+
+interface VisualizerTiltProps {
+    currentTime: MotionValue<number>;
+    currentLineIndex: number;
+    lines: Line[];
+    theme: Theme;
+    audioPower: MotionValue<number>;
+    audioBands: AudioBands;
+    showText?: boolean;
+    songTitle?: string | null;
+    coverUrl?: string | null;
+    useCoverColorBg?: boolean;
+    seed?: string | number;
+    staticMode?: boolean;
+    backgroundOpacity?: number;
+    lyricsFontScale?: number;
+    isPlayerChromeHidden?: boolean;
+    hideTranslationSubtitle?: boolean;
+    paused?: boolean;
+    isPreviewMode?: boolean;
+    onBack?: () => void;
+    tiltTuning?: TiltTuning;
+}
+
+interface TiltSegment {
+    text: string;
+    isTilt: boolean;
+    isShortLastLine: boolean;
+}
+
+interface TiltLayout {
+    segments: TiltSegment[];
+    scaleMultiplier: number;
+}
+
+const SEMANTIC_DELIMITERS = /[，。！？、；：""''（）【】…—]+/;
+const REM_PX = 16;
+const NORMAL_BASE_REM = 2.8;
+const TILT_BASE_REM = 3.8;
+const RESPLIT_THRESHOLD = 1.6;
+const SCALE_FLOOR_NORMAL = 0.55;
+const SCALE_FLOOR_TILT = 0.5;
+
+const getAvailableWidth = (): number => {
+    if (typeof window === 'undefined') return 1200;
+    return Math.max(320, window.innerWidth) * 0.85;
+};
+
+const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+const measureAtSize = (text: string, pxSize: number, fontSpec: string): number => {
+    const prepared = prepareWithSegments(text, fontSpec);
+    const layout = layoutWithLines(prepared, 99999, pxSize * 1.4);
+    return layout.lines[0]?.width ?? text.length * pxSize * 0.6;
+};
+
+const seededRandom = (seed: number, offset: number): number => {
+    const x = Math.sin(seed * 1000 + offset) * 10000;
+    return x - Math.floor(x);
+};
+
+const splitTextSemantic = (text: string, maxParts: number): string[] => {
+    if (text.length <= 4) return [text];
+    const trimmed = text.trim();
+    if (trimmed.length <= 4) return [trimmed];
+
+    const parts = trimmed.split(SEMANTIC_DELIMITERS).filter(s => s.length > 0);
+    if (parts.length <= 1) {
+        const bySpace = trimmed.split(/\s+/).filter(s => s.length > 0);
+        if (bySpace.length > maxParts) {
+            const result: string[] = [];
+            const targetLen = Math.ceil(trimmed.length / maxParts);
+            let current = '';
+            for (const word of bySpace) {
+                if (current.length + word.length >= targetLen && result.length < maxParts - 1 && current.length > 0) {
+                    result.push(current);
+                    current = word;
+                } else {
+                    current += (current.length ? ' ' : '') + word;
+                }
+            }
+            if (current.length) result.push(current);
+            return result.slice(0, maxParts);
+        }
+        return bySpace;
+    }
+
+    if (parts.length >= maxParts) {
+        return parts.slice(0, maxParts);
+    }
+
+    const result: string[] = [];
+    const targetLen = Math.ceil(trimmed.length / maxParts);
+    let current = '';
+    for (const part of parts) {
+        if (current.length + part.length >= targetLen && result.length < maxParts - 1) {
+            if (current.length > 0) result.push(current);
+            current = part;
+        } else {
+            current += (current.length > 0 ? ' ' : '') + part;
+        }
+    }
+    if (current.length > 0) result.push(current);
+
+    if (result.length >= maxParts) return result.slice(0, maxParts);
+
+    const expanded: string[] = [];
+    for (const seg of result) {
+        if (expanded.length >= maxParts - 1) {
+            expanded.push(seg);
+            continue;
+        }
+        const subParts = seg.split(/\s+/).filter(s => s.length > 0);
+        if (subParts.length <= 1 || expanded.length + subParts.length > maxParts) {
+            expanded.push(seg);
+        } else {
+            for (const sp of subParts) {
+                if (expanded.length >= maxParts) break;
+                expanded.push(sp);
+            }
+        }
+    }
+    return expanded.slice(0, maxParts);
+};
+
+const buildTiltLayout = (fullText: string, lineSeed: number, tuning: TiltTuning, theme: Theme, fontScale: number): TiltLayout => {
+    const fontStack = resolveThemeFontStack(theme);
+    const normalBasePx = NORMAL_BASE_REM * REM_PX * fontScale;
+    const tiltBasePx = TILT_BASE_REM * REM_PX * fontScale;
+    const normalFontSpec = `400 ${normalBasePx}px ${fontStack}`;
+    const tiltFontSpec = `300 ${tiltBasePx}px ${fontStack} italic`;
+    const availableWidth = getAvailableWidth();
+
+    const splitRoll = seededRandom(lineSeed, 1);
+    let numLines: number;
+    if (splitRoll < tuning.splitProbability * 0.33) {
+        numLines = 4;
+    } else if (splitRoll < tuning.splitProbability * 0.66) {
+        numLines = 3;
+    } else if (splitRoll < tuning.splitProbability) {
+        numLines = 2;
+    } else {
+        numLines = 1;
+    }
+
+    const mergedSegments = splitTextSemantic(fullText, numLines);
+
+    const candidates: number[] = [];
+    mergedSegments.forEach((_, i) => {
+        const lineRoll = seededRandom(lineSeed, 100 + i);
+        if (lineRoll < tuning.tiltStyleProbability) candidates.push(i);
+    });
+
+    let finalTiltIndex = -1;
+    if (candidates.length > 0) {
+        finalTiltIndex = candidates[Math.floor(seededRandom(lineSeed, 200) * candidates.length)];
+    }
+
+    const segments: TiltSegment[] = mergedSegments.map((text, i) => ({
+        text,
+        isTilt: i === finalTiltIndex,
+        isShortLastLine: false,
+    }));
+
+    let scaleMultiplier = 1;
+    const tiltWithWidth = segments.filter(s => s.isTilt).map(s => ({ text: s.text, width: measureAtSize(s.text, tiltBasePx, tiltFontSpec) }));
+    const normalWithWidth = segments.filter(s => !s.isTilt).map(s => ({ text: s.text, width: measureAtSize(s.text, normalBasePx, normalFontSpec) }));
+
+    const widestTiltEntry = tiltWithWidth.sort((a, b) => b.width - a.width)[0];
+    const widestNormalEntry = normalWithWidth.sort((a, b) => b.width - a.width)[0];
+
+    const tiltWidth = widestTiltEntry?.width ?? 0;
+    const normalWidth = widestNormalEntry?.width ?? 0;
+
+    const tiltOverflow = tiltWidth > 0 ? tiltWidth / availableWidth : 0;
+    const normalOverflow = normalWidth > 0 ? normalWidth / availableWidth : 0;
+    const maxOverflow = Math.max(tiltOverflow, normalOverflow);
+
+    const markShortLastLine = (segs: TiltSegment[]): TiltSegment[] => {
+        if (segs.length < 2) return segs;
+        const last = segs[segs.length - 1];
+        if (last.isTilt || last.text.trim().length > 2) return segs;
+        const prev = segs[segs.length - 2];
+        const lastWidth = measureAtSize(last.text.trim(), normalBasePx, normalFontSpec);
+        const prevWidth = measureAtSize(prev.text, normalBasePx, normalFontSpec);
+        if (lastWidth < prevWidth) {
+            segs[segs.length - 1] = { ...last, isShortLastLine: true };
+        }
+        return segs;
+    };
+
+    if (maxOverflow > 1) {
+        if (maxOverflow >= RESPLIT_THRESHOLD) {
+            const targetWidth = availableWidth * (RESPLIT_THRESHOLD - 0.15);
+            const totalEstWidth = measureAtSize(fullText, normalBasePx, normalFontSpec);
+            const extraSplitsNeeded = Math.min(4, Math.max(segments.length + 1, Math.ceil(totalEstWidth / targetWidth)));
+            if (extraSplitsNeeded > segments.length) {
+                const reSplit = splitTextSemantic(fullText, extraSplitsNeeded);
+                const newSegments: TiltSegment[] = reSplit.map(text => ({ text, isTilt: false, isShortLastLine: false }));
+                if (newSegments.length > 0) {
+                    const resplitTiltRoll = seededRandom(lineSeed, 300);
+                    if (resplitTiltRoll < tuning.tiltStyleProbability) {
+                        const picked = Math.floor(seededRandom(lineSeed, 301) * newSegments.length);
+                        newSegments[picked].isTilt = true;
+                    }
+                }
+
+                const postWidestTilt = newSegments.filter(s => s.isTilt)[0];
+                const postNormalWithWidth = newSegments.filter(s => !s.isTilt)
+                    .map(s => ({ text: s.text, width: measureAtSize(s.text, normalBasePx, normalFontSpec) }));
+                const postWidestNormal = postNormalWithWidth.sort((a, b) => b.width - a.width)[0];
+
+                let postScale = 1;
+                if (postWidestTilt) {
+                    const w = measureAtSize(postWidestTilt.text, tiltBasePx, tiltFontSpec);
+                    if (w > availableWidth) postScale = Math.max(SCALE_FLOOR_TILT, availableWidth / w);
+                } else if (postWidestNormal) {
+                    const w = measureAtSize(postWidestNormal.text, normalBasePx, normalFontSpec);
+                    if (w > availableWidth) postScale = Math.max(SCALE_FLOOR_NORMAL, availableWidth / w);
+                }
+
+                return { segments: markShortLastLine(newSegments), scaleMultiplier: postScale };
+            }
+        }
+
+        if (tiltOverflow >= normalOverflow && widestTiltEntry) {
+            scaleMultiplier = Math.max(SCALE_FLOOR_TILT, availableWidth / tiltWidth);
+        } else if (widestNormalEntry) {
+            scaleMultiplier = Math.max(SCALE_FLOOR_NORMAL, availableWidth / normalWidth);
+        }
+    }
+
+    return { segments: markShortLastLine(segments), scaleMultiplier };
+};
+
+const TiltLine: React.FC<{
+    segment: TiltSegment;
+    theme: Theme;
+    fontScale: number;
+    scaleMultiplier: number;
+    visible: boolean;
+    colorScheme?: TiltColorScheme;
+}> = ({ segment, theme, fontScale, scaleMultiplier, visible, colorScheme = 'default' }) => {
+    const baseFontScale = fontScale * scaleMultiplier;
+    const shortLastBoost = segment.isShortLastLine ? 1.18 : 1;
+    const normalFontSize = `clamp(${(1.6 * baseFontScale * shortLastBoost).toFixed(3)}rem, ${(3.5 * baseFontScale * shortLastBoost).toFixed(3)}vw, ${(2.8 * baseFontScale * shortLastBoost).toFixed(3)}rem)`;
+    const tiltFontSize = `clamp(${(2.0 * baseFontScale).toFixed(3)}rem, ${(4.8 * baseFontScale).toFixed(3)}vw, ${(3.8 * baseFontScale).toFixed(3)}rem)`;
+
+    const getColors = () => {
+        switch (colorScheme) {
+            case 'swap':
+                return { normal: theme.accentColor || theme.primaryColor, tilt: theme.primaryColor };
+            case 'accentAll':
+                return { normal: theme.accentColor || theme.primaryColor, tilt: theme.accentColor || theme.primaryColor };
+            case 'primaryAll':
+                return { normal: theme.primaryColor, tilt: theme.primaryColor };
+            default:
+                return { normal: theme.primaryColor, tilt: theme.accentColor || theme.primaryColor };
+        }
+    };
+
+    const colors = getColors();
+
+    if (!segment.isTilt) {
+        return (
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={visible ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="whitespace-nowrap"
+                style={{
+                    fontSize: normalFontSize,
+                    color: colors.normal,
+                    fontFamily: 'inherit',
+                    lineHeight: 1.35,
+                    fontWeight: 400,
+                    letterSpacing: '0.08em',
+                }}
+            >
+                {segment.text}
+            </motion.div>
+        );
+    }
+
+    const graphemes = [...GRAPHEME_SEGMENTER.segment(segment.text)];
+    let visualIndex = 0;
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.92 }}
+            animate={visible ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 24, scale: 0.92 }}
+            exit={{ opacity: 0, y: -16, scale: 0.95 }}
+            transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="whitespace-nowrap"
+            style={{
+                fontSize: tiltFontSize,
+                color: colors.tilt,
+                fontFamily: 'inherit',
+                fontStyle: 'italic',
+                lineHeight: 1.25,
+                fontWeight: 300,
+                letterSpacing: '0.15em',
+            }}
+        >
+            {graphemes.map((seg, ti) => {
+                const isSpace = /^\s+$/.test(seg.segment);
+                const isEven = visualIndex % 2 === 0;
+                const yStagger = isEven ? -1 : 1;
+                const ci = visualIndex;
+                if (!isSpace) visualIndex += 1;
+
+                return (
+                    <motion.span
+                        key={ti}
+                        initial={{
+                            opacity: 0,
+                            y: isSpace ? 0 : yStagger * 20,
+                        }}
+                        animate={visible ? {
+                            opacity: 1,
+                            y: isSpace ? 0 : yStagger * 8,
+                        } : {
+                            opacity: 0,
+                            y: isSpace ? 0 : yStagger * 20,
+                        }}
+                        transition={{
+                            duration: 0.5,
+                            delay: visible && !isSpace ? ci * 0.05 : 0,
+                            ease: [0.25, 0.46, 0.45, 0.94],
+                        }}
+                        className="inline-block"
+                        style={isSpace ? { minWidth: '0.35em' } : undefined}
+                    >
+                        {isSpace ? '\u00A0' : seg.segment}
+                    </motion.span>
+                );
+            })}
+        </motion.div>
+    );
+};
+
+const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> = ({
+    currentTime,
+    currentLineIndex,
+    lines,
+    theme,
+    audioPower,
+    audioBands,
+    showText = true,
+    coverUrl,
+    useCoverColorBg = false,
+    seed,
+    staticMode = false,
+    backgroundOpacity = 0.75,
+    lyricsFontScale = 1,
+    isPlayerChromeHidden = false,
+    hideTranslationSubtitle = false,
+    paused = false,
+    onBack,
+    tiltTuning = DEFAULT_TILT_TUNING,
+}) => {
+    const { t } = useTranslation();
+    const [visibleSegmentIndex, setVisibleSegmentIndex] = useState(-1);
+
+    const {
+        activeLine,
+        recentCompletedLine,
+        nextLines,
+    } = useVisualizerRuntime({
+        currentTime,
+        currentLineIndex,
+        lines,
+        getLineEndTime: getLineRenderEndTime,
+    });
+
+    const layout = useMemo<TiltLayout | null>(() => {
+        if (!activeLine?.fullText) return null;
+        return buildTiltLayout(activeLine.fullText, activeLine.startTime, tiltTuning, theme, lyricsFontScale);
+    }, [activeLine?.fullText, activeLine?.startTime, tiltTuning, theme, lyricsFontScale]);
+
+    const segmentTimings = useMemo(() => {
+        if (!activeLine || !layout) return null;
+        const start = activeLine.startTime;
+        const end = getLineRenderEndTime(activeLine);
+        const totalDuration = Math.max(end - start, 0.5);
+        const segCount = layout.segments.length;
+        const segDuration = totalDuration / segCount;
+        return layout.segments.map((_, i) => ({
+            start: start + i * segDuration,
+            end: start + (i + 1) * segDuration,
+        }));
+    }, [activeLine, layout]);
+
+    const handleTimeChange = useCallback((latest: number) => {
+        if (!segmentTimings || !activeLine) {
+            setVisibleSegmentIndex(-1);
+            return;
+        }
+
+        let targetIndex = -1;
+        for (let i = 0; i < segmentTimings.length; i++) {
+            if (latest >= segmentTimings[i].start - 0.25) {
+                targetIndex = i;
+            }
+        }
+
+        if (latest < activeLine.startTime - 0.1 || latest > getLineRenderEndTime(activeLine)) {
+            targetIndex = -1;
+        }
+
+        setVisibleSegmentIndex(prev => (prev !== targetIndex ? targetIndex : prev));
+    }, [segmentTimings, activeLine]);
+
+    useMotionValueEvent(currentTime, 'change', handleTimeChange);
+
+    const translationFontSize = `clamp(${(1.125 * lyricsFontScale).toFixed(3)}rem, ${(2.6 * lyricsFontScale).toFixed(3)}vw, ${(1.25 * lyricsFontScale).toFixed(3)}rem)`;
+    const upcomingFontSize = `clamp(${(0.875 * lyricsFontScale).toFixed(3)}rem, ${(2 * lyricsFontScale).toFixed(3)}vw, ${(1 * lyricsFontScale).toFixed(3)}rem)`;
+
+    return (
+        <VisualizerShell
+            theme={theme}
+            audioPower={audioPower}
+            audioBands={audioBands}
+            coverUrl={coverUrl}
+            useCoverColorBg={useCoverColorBg}
+            seed={seed}
+            staticMode={staticMode}
+            backgroundOpacity={backgroundOpacity}
+            paused={paused}
+            onBack={onBack}
+        >
+            <div className="relative z-10 w-full h-[70vh] flex items-center justify-center p-8 pointer-events-none">
+                <AnimatePresence mode='popLayout'>
+                    {showText && activeLine && layout ? (
+                        <motion.div
+                            key={`tilt-${activeLine.startTime}`}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0, transition: { duration: 0.45, ease: 'easeInOut' } }}
+                            className="flex flex-col items-center justify-center gap-y-3 sm:gap-y-4"
+                        >
+                            {layout.segments.map((segment, si) => (
+                                <TiltLine
+                                    key={`seg-${si}-${segment.text}`}
+                                    segment={segment}
+                                    theme={theme}
+                                    fontScale={lyricsFontScale}
+                                    scaleMultiplier={layout.scaleMultiplier}
+                                    visible={si <= visibleSegmentIndex}
+                                    colorScheme={tiltTuning?.colorScheme}
+                                />
+                            ))}
+                        </motion.div>
+                    ) : showText && !activeLine ? (
+                        <motion.div
+                            key="tilt-empty"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="text-2xl opacity-50 absolute"
+                            style={{ color: theme.secondaryColor }}
+                        >
+                            {t('ui.waitingForMusic')}
+                        </motion.div>
+                    ) : null}
+                </AnimatePresence>
+            </div>
+
+            <VisualizerSubtitleOverlay
+                showText={showText}
+                activeLine={activeLine}
+                recentCompletedLine={recentCompletedLine}
+                nextLines={nextLines}
+                theme={theme}
+                translationFontSize={translationFontSize}
+                upcomingFontSize={upcomingFontSize}
+                isPlayerChromeHidden={isPlayerChromeHidden}
+                hideTranslationSubtitle={hideTranslationSubtitle}
+            />
+        </VisualizerShell>
+    );
+};
+
+export default VisualizerTilt;

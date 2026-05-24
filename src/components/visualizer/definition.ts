@@ -9,12 +9,13 @@ import {
     type Line,
     type PartitaTuning,
     type Theme,
+    type TiltTuning,
     type VisualizerMode,
 } from '../../types';
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
-export type VisualizerTuningKind = 'none' | 'cadenza' | 'partita' | 'fume' | 'cappella';
+export type VisualizerTuningKind = 'none' | 'cadenza' | 'partita' | 'fume' | 'cappella' | 'tilt';
 
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
@@ -41,6 +42,7 @@ export interface VisualizerSharedProps {
     fumeTuning?: FumeTuning;
     cappellaTuning?: CappellaTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
+    tiltTuning?: TiltTuning;
 }
 
 export interface VisualizerSettingsPanelProps {
@@ -60,12 +62,15 @@ export interface VisualizerSettingsPanelProps {
     isCappellaCustomEmojiPackLoading?: boolean;
     onImportCappellaCustomEmojiPack?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
+    tiltTuning?: TiltTuning;
+    onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
 }
 
 export interface VisualizerSettingsResetProps {
     resetPartitaTuning?: () => void;
     resetFumeTuning?: () => void;
     resetCappellaTuning?: () => void;
+    resetTiltTuning?: () => void;
     setDraftFumeTuning?: (tuning: FumeTuning) => void;
 }
 

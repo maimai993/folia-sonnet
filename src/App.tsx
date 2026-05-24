@@ -184,6 +184,7 @@ export default function App() {
         partitaTuning,
         fumeTuning,
         cappellaTuning,
+        tiltTuning,
         cappellaCustomEmojiImages,
         isLoadingCappellaCustomEmojiPack,
         lyricsFontStyle,
@@ -214,6 +215,8 @@ export default function App() {
         handleResetFumeTuning,
         handleSetCappellaTuning,
         handleResetCappellaTuning,
+        handleSetTiltTuning,
+        handleResetTiltTuning,
         handleImportCustomCappellaEmojiPack,
         handleClearCustomCappellaEmojiPack,
         handleSetLyricsFontStyle,
@@ -1213,6 +1216,7 @@ export default function App() {
         partitaTuning,
         fumeTuning,
         cappellaTuning,
+        tiltTuning,
         cappellaCustomEmojiImages,
         handleSetVisualizerMode,
         handleSetPartitaTuning,
@@ -1221,6 +1225,8 @@ export default function App() {
         handleResetFumeTuning,
         handleSetCappellaTuning,
         handleResetCappellaTuning,
+        handleSetTiltTuning,
+        handleResetTiltTuning,
         handleImportCappellaCustomEmojiPack: handleImportCustomCappellaEmojiPack,
         handleClearCappellaCustomEmojiPack: handleClearCustomCappellaEmojiPack,
         isLoadingCappellaCustomEmojiPack,
@@ -1789,6 +1795,7 @@ export default function App() {
                     partitaTuning={partitaTuning}
                     fumeTuning={fumeTuning}
                     cappellaTuning={cappellaTuning}
+                    tiltTuning={tiltTuning}
                     cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                     onBack={navigateToHome}
                 />

@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, type CappellaTuning, type FumeTuning, type PartitaTuning } from '../../types';
+import { DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CappellaTuning, type FumeTuning, type PartitaTuning, type TiltColorScheme, type TiltTuning } from '../../types';
 import { type VisualizerSettingsPanelProps } from './definition';
 
 // src/components/visualizer/settingsPanels.tsx
@@ -555,6 +555,92 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     {feedback}
                 </div>
             )}
+        </div>
+    );
+};
+
+export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
+    t,
+    isDaylight,
+    controlCardBg,
+    rangeInputClass,
+    tiltTuning = DEFAULT_TILT_TUNING,
+    onTiltTuningChange,
+}) => {
+    const resolvedTuning: TiltTuning = {
+        splitProbability: Math.min(1, Math.max(0, tiltTuning.splitProbability ?? DEFAULT_TILT_TUNING.splitProbability)),
+        tiltStyleProbability: Math.min(1, Math.max(0, tiltTuning.tiltStyleProbability ?? DEFAULT_TILT_TUNING.tiltStyleProbability)),
+        colorScheme: tiltTuning?.colorScheme ?? DEFAULT_TILT_TUNING.colorScheme ?? 'default',
+    };
+
+    const colorSchemeOptions: PresetOption<TiltColorScheme>[] = useMemo(() => ([
+        { label: t('options.tiltColorSchemeDefault') || '双色1', value: 'default' },
+        { label: t('options.tiltColorSchemeSwap') || '双色2', value: 'swap' },
+        { label: t('options.tiltColorSchemeAccentAll') || '单色1', value: 'accentAll' },
+        { label: t('options.tiltColorSchemePrimaryAll') || '单色2', value: 'primaryAll' },
+    ]), [t]);
+
+    const handleTiltTuningChange = (patch: Partial<TiltTuning>) => {
+        onTiltTuningChange?.(patch);
+    };
+
+    return (
+        <div
+            className="rounded-[24px] border border-white/10 p-4 space-y-4"
+            style={{ backgroundColor: controlCardBg }}
+        >
+            <div className="space-y-1">
+                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {t('options.tiltSettings') || '倾诉参数'}
+                </div>
+                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.tiltSettingsDesc') || '控制歌词分行概率和斜体强调样式的出现频率。'}
+                </div>
+            </div>
+
+            <PresetGroup<TiltColorScheme>
+                label={t('options.tiltColorScheme') || '配色方案'}
+                value={resolvedTuning.colorScheme}
+                options={colorSchemeOptions}
+                onChange={(next) => handleTiltTuningChange({ colorScheme: next })}
+                isDaylight={isDaylight}
+            />
+
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.tiltSplitProbability') || '分行概率'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {Math.round(resolvedTuning.splitProbability * 100)}%
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={resolvedTuning.splitProbability}
+                    onChange={(event) => handleTiltTuningChange({ splitProbability: parseFloat(event.target.value) })}
+                    className={rangeInputClass}
+                />
+            </div>
+
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.tiltStyleProbability') || '斜体强调概率'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {Math.round(resolvedTuning.tiltStyleProbability * 100)}%
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={resolvedTuning.tiltStyleProbability}
+                    onChange={(event) => handleTiltTuningChange({ tiltStyleProbability: parseFloat(event.target.value) })}
+                    className={rangeInputClass}
+                />
+            </div>
         </div>
     );
 };

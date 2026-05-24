@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, type CadenzaTuning, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type Theme, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type Theme, type TiltTuning, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, getCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, MAX_CAPPELLA_CUSTOM_EMOJI_IMAGES, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
@@ -168,6 +168,22 @@ const readStoredCappellaTuning = (): CappellaTuning => {
     }
 };
 
+const readStoredTiltTuning = (): TiltTuning => {
+    const saved = localStorage.getItem('tilt_tuning');
+    if (!saved) return DEFAULT_TILT_TUNING;
+
+    try {
+        const parsed = JSON.parse(saved) as Partial<TiltTuning>;
+        return {
+            splitProbability: Math.min(1, Math.max(0, parsed.splitProbability ?? DEFAULT_TILT_TUNING.splitProbability)),
+            tiltStyleProbability: Math.min(1, Math.max(0, parsed.tiltStyleProbability ?? DEFAULT_TILT_TUNING.tiltStyleProbability)),
+            colorScheme: parsed.colorScheme ?? DEFAULT_TILT_TUNING.colorScheme,
+        };
+    } catch {
+        return DEFAULT_TILT_TUNING;
+    }
+};
+
 const readStoredLyricsFontStyle = (): Theme['fontStyle'] => {
     const saved = localStorage.getItem('lyrics_font_style');
     return saved === 'serif' || saved === 'mono' ? saved : 'sans';
@@ -243,6 +259,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
     const [partitaTuning, setPartitaTuning] = useState<PartitaTuning>(readStoredPartitaTuning);
     const [fumeTuning, setFumeTuning] = useState<FumeTuning>(readStoredFumeTuning);
     const [cappellaTuning, setCappellaTuning] = useState<CappellaTuning>(readStoredCappellaTuning);
+    const [tiltTuning, setTiltTuning] = useState<TiltTuning>(readStoredTiltTuning);
     const [storedCappellaEmojiPack, setStoredCappellaEmojiPack] = useState<StoredCappellaEmojiImage[]>([]);
     const [cappellaCustomEmojiImages, setCappellaCustomEmojiImages] = useState<CappellaEmojiImage[]>([]);
     const [isLoadingCappellaCustomEmojiPack, setIsLoadingCappellaCustomEmojiPack] = useState(true);
@@ -511,6 +528,27 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         });
     }, [setStatusMsg]);
 
+    const handleSetTiltTuning = useCallback((patch: Partial<TiltTuning>) => {
+        setTiltTuning(prev => {
+            const next = {
+                splitProbability: Math.min(1, Math.max(0, patch.splitProbability ?? prev.splitProbability)),
+                tiltStyleProbability: Math.min(1, Math.max(0, patch.tiltStyleProbability ?? prev.tiltStyleProbability)),
+                colorScheme: patch.colorScheme ?? prev.colorScheme,
+            };
+            localStorage.setItem('tilt_tuning', JSON.stringify(next));
+            return next;
+        });
+    }, []);
+
+    const handleResetTiltTuning = () => {
+        setTiltTuning(DEFAULT_TILT_TUNING);
+        localStorage.setItem('tilt_tuning', JSON.stringify(DEFAULT_TILT_TUNING));
+        setStatusMsg({
+            type: 'info',
+            text: '倾诉参数已重置'
+        });
+    };
+
     const handleImportCustomCappellaEmojiPack = useCallback(async (files: File[]) => {
         if (files.length === 0) {
             return { ok: false, error: '请选择图片文件。' };
@@ -672,6 +710,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         partitaTuning,
         fumeTuning,
         cappellaTuning,
+        tiltTuning,
         cappellaCustomEmojiImages,
         isLoadingCappellaCustomEmojiPack,
         lyricsFontStyle,
@@ -703,6 +742,8 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         handleResetFumeTuning,
         handleSetCappellaTuning,
         handleResetCappellaTuning,
+        handleSetTiltTuning,
+        handleResetTiltTuning,
         handleImportCustomCappellaEmojiPack,
         handleClearCustomCappellaEmojiPack,
         handleSetLyricsFontStyle,

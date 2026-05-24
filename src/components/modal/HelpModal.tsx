@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle, Palette, FolderOpen, Pencil, FlaskConical, ChevronLeft, ChevronRight, RotateCcw, GamepadDirectional, RefreshCw, Download, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
-import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type QueueAddBehavior, type VisualizerMode } from '../../types';
+import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type QueueAddBehavior, type TiltTuning, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
 import VisPlayground from '../visualizer/VisPlayground';
@@ -50,6 +50,7 @@ interface HelpModalProps {
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
     cappellaTuning?: CappellaTuning;
+    tiltTuning?: TiltTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     onVisualizerModeChange?: (mode: VisualizerMode) => void;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
@@ -58,6 +59,8 @@ interface HelpModalProps {
     onResetFumeTuning?: () => void;
     onCappellaTuningChange?: (patch: Partial<CappellaTuning>) => void;
     onResetCappellaTuning?: () => void;
+    onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
+    onResetTiltTuning?: () => void;
     onImportCappellaCustomEmojiPack?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
     isLoadingCappellaCustomEmojiPack?: boolean;
@@ -139,6 +142,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
     partitaTuning,
     fumeTuning,
     cappellaTuning,
+    tiltTuning,
     cappellaCustomEmojiImages,
     onVisualizerModeChange,
     onPartitaTuningChange,
@@ -147,6 +151,8 @@ const HelpModal: React.FC<HelpModalProps> = ({
     onResetFumeTuning,
     onCappellaTuningChange,
     onResetCappellaTuning,
+    onTiltTuningChange,
+    onResetTiltTuning,
     onImportCappellaCustomEmojiPack,
     onClearCappellaCustomEmojiPack,
     isLoadingCappellaCustomEmojiPack = false,
@@ -2062,6 +2068,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                         partitaTuning={partitaTuning}
                         fumeTuning={fumeTuning}
                         cappellaTuning={cappellaTuning}
+                        tiltTuning={tiltTuning}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         fontStyle={lyricsFontStyle}
                         fontScale={lyricsFontScale}
@@ -2076,6 +2083,8 @@ const HelpModal: React.FC<HelpModalProps> = ({
                         onResetFumeTuning={onResetFumeTuning}
                         onCappellaTuningChange={onCappellaTuningChange}
                         onResetCappellaTuning={onResetCappellaTuning}
+                        onTiltTuningChange={onTiltTuningChange}
+                        onResetTiltTuning={onResetTiltTuning}
                         onImportCappellaCustomEmojiPack={onImportCappellaCustomEmojiPack}
                         onClearCappellaCustomEmojiPack={onClearCappellaCustomEmojiPack}
                         isLoadingCappellaCustomEmojiPack={isLoadingCappellaCustomEmojiPack}

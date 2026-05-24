@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, ChevronRight, Settings , ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, LocalLibraryGroup, LocalPlaylist, DualTheme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type LyricData, type PartitaTuning, type QueueAddBehavior, type VisualizerMode, type StageStatus, type StageSource, type NowPlayingConnectionStatus } from '../types';
+import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, Theme, LocalLibraryGroup, LocalPlaylist, DualTheme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type LyricData, type PartitaTuning, type QueueAddBehavior, type TiltTuning, type VisualizerMode, type StageStatus, type StageSource, type NowPlayingConnectionStatus } from '../types';
 import { NavidromeSong, NavidromeViewSelection } from '../types/navidrome';
 import { isNavidromeEnabled } from '../services/navidromeService';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
@@ -98,6 +98,7 @@ interface HomeProps {
     partitaTuning: PartitaTuning;
     fumeTuning: FumeTuning;
     cappellaTuning: CappellaTuning;
+    tiltTuning: TiltTuning;
     cappellaCustomEmojiImages: CappellaEmojiImage[];
     onVisualizerModeChange: (mode: VisualizerMode) => void;
     onPartitaTuningChange: (patch: Partial<PartitaTuning>) => void;
@@ -106,6 +107,8 @@ interface HomeProps {
     onResetFumeTuning: () => void;
     onCappellaTuningChange: (patch: Partial<CappellaTuning>) => void;
     onResetCappellaTuning: () => void;
+    onTiltTuningChange: (patch: Partial<TiltTuning>) => void;
+    onResetTiltTuning: () => void;
     onImportCappellaCustomEmojiPack: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearCappellaCustomEmojiPack: () => Promise<void> | void;
     isLoadingCappellaCustomEmojiPack: boolean;
@@ -209,6 +212,7 @@ const Home: React.FC<HomeProps> = ({
     partitaTuning,
     fumeTuning,
     cappellaTuning,
+    tiltTuning,
     cappellaCustomEmojiImages,
     onVisualizerModeChange,
     onPartitaTuningChange,
@@ -217,6 +221,8 @@ const Home: React.FC<HomeProps> = ({
     onResetFumeTuning,
     onCappellaTuningChange,
     onResetCappellaTuning,
+    onTiltTuningChange,
+    onResetTiltTuning,
     onImportCappellaCustomEmojiPack,
     onClearCappellaCustomEmojiPack,
     isLoadingCappellaCustomEmojiPack,
@@ -1018,6 +1024,7 @@ const Home: React.FC<HomeProps> = ({
                                 partitaTuning={partitaTuning}
                                 fumeTuning={fumeTuning}
                                 cappellaTuning={cappellaTuning}
+                                tiltTuning={tiltTuning}
                                 cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                                 onVisualizerModeChange={onVisualizerModeChange}
                                 onPartitaTuningChange={onPartitaTuningChange}
@@ -1026,6 +1033,8 @@ const Home: React.FC<HomeProps> = ({
                                 onResetFumeTuning={onResetFumeTuning}
                                 onCappellaTuningChange={onCappellaTuningChange}
                                 onResetCappellaTuning={onResetCappellaTuning}
+                                onTiltTuningChange={onTiltTuningChange}
+                                onResetTiltTuning={onResetTiltTuning}
                                 onImportCappellaCustomEmojiPack={onImportCappellaCustomEmojiPack}
                                 onClearCappellaCustomEmojiPack={onClearCappellaCustomEmojiPack}
                                 isLoadingCappellaCustomEmojiPack={isLoadingCappellaCustomEmojiPack}

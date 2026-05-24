@@ -268,6 +268,20 @@ export const DEFAULT_CAPPELLA_TUNING: CappellaTuning = {
   avatarSource: 'cover',
 };
 
+export type TiltColorScheme = 'default' | 'swap' | 'accentAll' | 'primaryAll';
+
+export interface TiltTuning {
+  splitProbability: number;
+  tiltStyleProbability: number;
+  colorScheme?: TiltColorScheme;
+}
+
+export const DEFAULT_TILT_TUNING: TiltTuning = {
+  splitProbability: 0.75,
+  tiltStyleProbability: 0.35,
+  colorScheme: 'default',
+};
+
 export interface StoredCappellaEmojiImage {
   id: string;
   name: string;
