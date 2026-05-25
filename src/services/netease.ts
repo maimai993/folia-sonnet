@@ -21,6 +21,19 @@ const getElectronBridge = () => {
 const isElectronRuntime = () =>
   Boolean(getElectronBridge() && typeof getElectronBridge()?.getNeteasePort === 'function');
 
+const getConfiguredApiBase = () => {
+  const viteEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
+  if (viteEnv && typeof viteEnv.VITE_NETEASE_API_BASE === 'string' && viteEnv.VITE_NETEASE_API_BASE) {
+    return viteEnv.VITE_NETEASE_API_BASE;
+  }
+
+  if (typeof process !== 'undefined' && typeof process.env.VITE_NETEASE_API_BASE === 'string' && process.env.VITE_NETEASE_API_BASE) {
+    return process.env.VITE_NETEASE_API_BASE;
+  }
+
+  return null;
+};
+
 const getApiBase = async () => {
   if (API_BASE) return API_BASE;
 
@@ -30,17 +43,13 @@ const getApiBase = async () => {
     return API_BASE;
   }
 
-  try {
-    const env = (import.meta as any).env;
-    if (env && env.VITE_NETEASE_API_BASE) {
-      API_BASE = env.VITE_NETEASE_API_BASE;
-      return API_BASE;
-    } else {
-      throw new Error("VITE_NETEASE_API_BASE is not defined. Please set it in your environment variables.");
-    }
-  } catch (e) {
-    throw new Error("Failed to access environment variables for API base. Please configure VITE_NETEASE_API_BASE.");
+  const configuredApiBase = getConfiguredApiBase();
+  if (configuredApiBase) {
+    API_BASE = configuredApiBase;
+    return API_BASE;
   }
+
+  throw new Error("Failed to access environment variables for API base. Please configure VITE_NETEASE_API_BASE.");
 };
 
 const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {

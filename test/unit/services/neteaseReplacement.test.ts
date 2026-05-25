@@ -29,6 +29,7 @@ describe('netease unavailable song replacement', () => {
     beforeEach(() => {
         vi.resetModules();
         vi.restoreAllMocks();
+        vi.stubEnv('VITE_NETEASE_API_BASE', 'http://127.0.0.1:3000');
         vi.stubGlobal('localStorage', {
             getItem: vi.fn(() => null),
         });
@@ -37,6 +38,7 @@ describe('netease unavailable song replacement', () => {
     });
 
     afterEach(() => {
+        vi.unstubAllEnvs();
         vi.unstubAllGlobals();
     });
 
