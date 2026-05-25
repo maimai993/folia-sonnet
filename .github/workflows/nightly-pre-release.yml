@@ -131,6 +131,8 @@ jobs:
 
           Source commit: https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}
           Published at: ${published_at}
+
+          _Organ²/ASLSP 是一首由实验音乐家约翰·凯奇创作的史上最慢的乐曲，使用自动管风琴连续演奏，预计演奏时间为639年，直到2640年9月5日结束。_
           EOF
 
           gh release create nightly \
