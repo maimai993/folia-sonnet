@@ -440,6 +440,7 @@ class SentenceLayout implements LyricLayoutUnit {
     }
 
     private static secondarySplit(sentences: SentenceLayout[], targetCount: number): SentenceLayout[] {
+        const Segmenter = Intl?.Segmenter;
         while (sentences.length < targetCount) {
             const candidates = sentences.filter(s => s.text.length > 2);
             if (candidates.length === 0) break;
@@ -452,14 +453,69 @@ class SentenceLayout implements LyricLayoutUnit {
             const seed = Date.now() + sentences.length;
             const randomIndex = Math.floor(pseudoRandom(seed) * candidates.length);
             const selectedCandidate = candidates[randomIndex];
-
             const candidateIndex = sentences.indexOf(selectedCandidate);
-            const midPoint = Math.floor(selectedCandidate.text.length / 2);
 
-            const firstHalf = selectedCandidate.text.slice(0, midPoint);
-            const secondHalf = selectedCandidate.text.slice(midPoint);
+            let firstHalf: string;
+            let secondHalf: string;
 
-            sentences.splice(candidateIndex, 1, 
+            if (Segmenter) {
+                try {
+                    const segments = Array.from(new Segmenter(undefined, { granularity: 'word' }).segment(selectedCandidate.text));
+                    const midChar = selectedCandidate.text.length / 2;
+                    let splitAfter = -1;
+                    let accumulated = 0;
+                    for (let i = 0; i < segments.length; i++) {
+                        accumulated += segments[i].segment.length;
+                        if (accumulated >= midChar) {
+                            splitAfter = i;
+                            break;
+                        }
+                    }
+                    if (splitAfter > 0 && splitAfter < segments.length) {
+                        const wordPositions: { start: number; end: number }[] = [];
+                        let offset = 0;
+                        for (const s of segments) {
+                            if (s.isWordLike) {
+                                wordPositions.push({ start: offset, end: offset + s.segment.length });
+                            }
+                            offset += s.segment.length;
+                        }
+                        if (wordPositions.length >= 2) {
+                            const midChar = selectedCandidate.text.length / 2;
+                            let bestGapIdx = 1;
+                            let bestDist = Infinity;
+                            for (let g = 1; g < wordPositions.length; g++) {
+                                const dist = Math.abs(wordPositions[g].start - midChar);
+                                if (dist < bestDist) {
+                                    bestDist = dist;
+                                    bestGapIdx = g;
+                                }
+                            }
+                            const splitPos = wordPositions[bestGapIdx].start;
+                            firstHalf = selectedCandidate.text.slice(0, splitPos);
+                            secondHalf = selectedCandidate.text.slice(splitPos);
+                        } else {
+                            const midPoint = Math.floor(selectedCandidate.text.length / 2);
+                            firstHalf = selectedCandidate.text.slice(0, midPoint);
+                            secondHalf = selectedCandidate.text.slice(midPoint);
+                        }
+                    } else {
+                        const midPoint = Math.floor(selectedCandidate.text.length / 2);
+                        firstHalf = selectedCandidate.text.slice(0, midPoint);
+                        secondHalf = selectedCandidate.text.slice(midPoint);
+                    }
+                } catch {
+                    const midPoint = Math.floor(selectedCandidate.text.length / 2);
+                    firstHalf = selectedCandidate.text.slice(0, midPoint);
+                    secondHalf = selectedCandidate.text.slice(midPoint);
+                }
+            } else {
+                const midPoint = Math.floor(selectedCandidate.text.length / 2);
+                firstHalf = selectedCandidate.text.slice(0, midPoint);
+                secondHalf = selectedCandidate.text.slice(midPoint);
+            }
+
+            sentences.splice(candidateIndex, 1,
                 new SentenceLayout(firstHalf),
                 new SentenceLayout(secondHalf)
             );

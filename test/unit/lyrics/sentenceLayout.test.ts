@@ -72,6 +72,18 @@ describe('SentenceLayout', () => {
     });
 
 
+    it('splits english to 2 sentences (targetCount = 2)', () => {
+        const text = 'Oh Ah Oh';
+        const result = SentenceLayout.splitIntoSentences(text, 2);
+        
+        expect(result.length).toBe(2);
+        const texts = result.map(r => r.text);
+        const reconstructed = texts.join('');
+        expect(reconstructed).toBe(text);
+        expect(texts).toContain('Oh');
+        expect(texts).toContain('Ah');        
+    });
+
     it('splits by level 2 (targetCount = 2)', () => {
         const text = '『Ⅲ A Nice Derangement of Epitaphs 』エンディングテーマ';
         const result = SentenceLayout.splitIntoSentences(text, 2);

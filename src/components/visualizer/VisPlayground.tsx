@@ -389,6 +389,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             resetPartitaTuning: onResetPartitaTuning,
             resetFumeTuning: onResetFumeTuning,
             resetCappellaTuning: onResetCappellaTuning,
+            resetTiltTuning: onResetTiltTuning,
             setDraftFumeTuning,
         });
     };
