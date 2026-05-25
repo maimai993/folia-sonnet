@@ -39,6 +39,7 @@ const store = new Store();
 let mainWindow = null;
 let remoteControlWindow = null;
 let latestRemoteControlSnapshot = null;
+let remoteControlAlwaysOnTop = false;
 let videoExportWindowRestoreState = null;
 const DEFAULT_WINDOW_BOUNDS = {
   width: 1200,
@@ -1352,6 +1353,7 @@ function sendRemoteControlSnapshot(snapshot) {
 
 function createRemoteControlWindow() {
   if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
+    remoteControlWindow.setAlwaysOnTop(remoteControlAlwaysOnTop, 'screen-saver');
     remoteControlWindow.show();
     remoteControlWindow.focus();
     return remoteControlWindow;
@@ -1374,7 +1376,7 @@ function createRemoteControlWindow() {
     resizable: false,
     minimizable: true,
     maximizable: false,
-    alwaysOnTop: false,
+    alwaysOnTop: remoteControlAlwaysOnTop,
     icon: APP_ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -1783,6 +1785,32 @@ ipcMain.handle('remote-control-close', (event) => {
   return true;
 });
 
+ipcMain.handle('remote-control-get-always-on-top', (event) => {
+  if (!isTrustedRemoteControlContents(event.sender) && !isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to read remote control always-on-top state.');
+  }
+
+  if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
+    remoteControlAlwaysOnTop = remoteControlWindow.isAlwaysOnTop();
+  }
+
+  return remoteControlAlwaysOnTop;
+});
+
+ipcMain.handle('remote-control-set-always-on-top', (event, nextAlwaysOnTop) => {
+  if (!isTrustedRemoteControlContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to update remote control always-on-top state.');
+  }
+
+  remoteControlAlwaysOnTop = Boolean(nextAlwaysOnTop);
+
+  if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
+    remoteControlWindow.setAlwaysOnTop(remoteControlAlwaysOnTop, 'screen-saver');
+  }
+
+  return remoteControlAlwaysOnTop;
+});
+
 ipcMain.handle('remote-control-publish-snapshot', (event, snapshot) => {
   if (!isTrustedMainWindowContents(event.sender)) {
     throw new Error('Untrusted renderer attempted to publish remote control state.');
@@ -1816,7 +1844,7 @@ ipcMain.handle('remote-control-send-command', (event, command) => {
   return true;
 });
 
-ipcMain.handle('video-export-choose-path', async (event, defaultName) => {
+ipcMain.handle('video-export-choose-path', async (event, defaultName, extension, displayName) => {
   if (!isTrustedMainWindowContents(event.sender)) {
     throw new Error('Untrusted renderer attempted to choose a video export path.');
   }
@@ -1825,13 +1853,20 @@ ipcMain.handle('video-export-choose-path', async (event, defaultName) => {
     return { canceled: true, filePath: null };
   }
 
+  const safeExtension = extension === 'mp4' ? 'mp4' : 'webm';
+  const safeDisplayName = typeof displayName === 'string' && displayName.trim()
+    ? displayName.trim()
+    : (safeExtension === 'mp4' ? 'MP4 Video' : 'WebM Video');
   const safeDefaultName = typeof defaultName === 'string' && defaultName.trim()
     ? defaultName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-    : 'folia-export.webm';
+    : `folia-export.${safeExtension}`;
+  const defaultFileName = safeDefaultName.endsWith(`.${safeExtension}`)
+    ? safeDefaultName
+    : `${safeDefaultName.replace(/\.[^.]+$/, '')}.${safeExtension}`;
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Save video export',
-    defaultPath: path.join(app.getPath('videos'), safeDefaultName.endsWith('.webm') ? safeDefaultName : `${safeDefaultName}.webm`),
-    filters: [{ name: 'WebM Video', extensions: ['webm'] }],
+    defaultPath: path.join(app.getPath('videos'), defaultFileName),
+    filters: [{ name: safeDisplayName, extensions: [safeExtension] }],
   });
 
   return {

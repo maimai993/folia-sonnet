@@ -283,12 +283,18 @@ declare global {
       onTaskbarControl: (callback: (action: ElectronTaskbarControlAction) => void) => () => void;
       openRemoteControl: () => Promise<boolean>;
       closeRemoteControl: () => Promise<boolean>;
+      getRemoteControlAlwaysOnTop: () => Promise<boolean>;
+      setRemoteControlAlwaysOnTop: (alwaysOnTop: boolean) => Promise<boolean>;
       publishRemoteControlSnapshot: (snapshot: ElectronRemoteControlSnapshot) => Promise<boolean>;
       getRemoteControlSnapshot: () => Promise<ElectronRemoteControlSnapshot | null>;
       sendRemoteControlCommand: (command: ElectronRemoteControlCommand) => Promise<boolean>;
       onRemoteControlCommand: (callback: (command: ElectronRemoteControlCommand) => void) => () => void;
       onRemoteControlSnapshot: (callback: (snapshot: ElectronRemoteControlSnapshot) => void) => () => void;
-      chooseVideoExportPath: (defaultName?: string) => Promise<ElectronSaveDialogResult>;
+      chooseVideoExportPath: (
+        defaultName?: string,
+        extension?: 'mp4' | 'webm',
+        displayName?: string,
+      ) => Promise<ElectronSaveDialogResult>;
       getMainWindowCaptureSource: () => Promise<ElectronWindowCaptureSource | null>;
       prepareVideoExportWindow: (size: { width: number; height: number }) => Promise<boolean>;
       restoreVideoExportWindow: () => Promise<boolean>;

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Word } from '@/types';
-import { buildCjkSemanticLayoutUnits } from '@/utils/lyrics/cjkSemanticLayout';
+import {
+    buildCjkSemanticLayoutUnits,
+    buildDisplayWordsFromLayoutUnits,
+    buildPostLyricLayoutUnits,
+    createSingleWordLayoutUnits,
+} from '@/utils/lyrics/cjkSemanticLayout';
 
 // test/unit/lyrics/cjkSemanticLayout.test.ts
 // Verifies CJK layout grouping while preserving original word timing.
@@ -90,5 +95,138 @@ describe('buildCjkSemanticLayoutUnits', () => {
 
         expect(units.map(unit => unit.text)).toEqual(['世', '界']);
         expect(units.every(unit => unit.words.length === 1 && !unit.isSemantic)).toBe(true);
+    });
+});
+
+describe('buildPostLyricLayoutUnits', () => {
+    it('keeps single-word units by default', () => {
+        const words = createTokenWords(['Weave', 'that', 'poem']);
+        const units = buildPostLyricLayoutUnits({
+            fullText: 'Weave that poem',
+            words,
+        });
+
+        expect(units).toEqual(createSingleWordLayoutUnits(words));
+    });
+
+    it('keeps CJK semantic grouping when semantic is enabled without sticky punctuation', () => {
+        const words = createCharacterWords('世界');
+        const units = buildPostLyricLayoutUnits({ fullText: '世界', words }, {
+            semantic: true,
+            sticky: false,
+        });
+
+        expect(units).toHaveLength(1);
+        expect(units[0]).toMatchObject({
+            text: '世界',
+            isSemantic: true,
+        });
+        expect(units[0].isSticky).toBeUndefined();
+        expect(units[0].words).toEqual(words);
+    });
+
+    it('keeps split latin apostrophe suffixes in one sticky unit', () => {
+        const words = createTokenWords(['It', '’', 's', 'unbelievable']);
+        const units = buildPostLyricLayoutUnits({
+            fullText: 'It’s unbelievable',
+            words,
+        }, {
+            semantic: false,
+            sticky: true,
+        });
+        const displayWords = buildDisplayWordsFromLayoutUnits(units);
+
+        expect(units.map(unit => unit.text)).toEqual(['It’s', 'unbelievable']);
+        expect(units[0]).toMatchObject({
+            text: 'It’s',
+            isSemantic: false,
+            isSticky: true,
+            startTime: 0,
+            endTime: 2.5,
+        });
+        expect(displayWords.map(word => word.text)).toEqual(['It’s', 'unbelievable']);
+    });
+
+    it('attaches latin trailing punctuation to the previous sticky unit', () => {
+        const words = createTokenWords(['Hello', ',', 'world']);
+        const units = buildPostLyricLayoutUnits({
+            fullText: 'Hello, world',
+            words,
+        }, {
+            sticky: true,
+        });
+
+        expect(units.map(unit => unit.text)).toEqual(['Hello,', 'world']);
+        expect(units[0].isSticky).toBe(true);
+        expect(buildDisplayWordsFromLayoutUnits(units).map(word => word.text)).toEqual(['Hello,', 'world']);
+    });
+
+    it('attaches CJK trailing punctuation through the same sticky rule', () => {
+        const words = createTokenWords(['世界', '。', '继续']);
+        const units = buildPostLyricLayoutUnits({
+            fullText: '世界。继续',
+            words,
+        }, {
+            sticky: true,
+        });
+
+        expect(units.map(unit => unit.text)).toEqual(['世界。', '继续']);
+        expect(units[0].isSticky).toBe(true);
+        expect(buildDisplayWordsFromLayoutUnits(units).map(word => word.text)).toEqual(['世界。', '继续']);
+    });
+
+    it('applies sticky punctuation after CJK semantic grouping', () => {
+        const words = createCharacterWords('世界。');
+        const units = buildPostLyricLayoutUnits({
+            fullText: '世界。',
+            words,
+        }, {
+            semantic: true,
+            sticky: true,
+        });
+
+        expect(units.map(unit => unit.text)).toEqual(['世界。']);
+        expect(units[0]).toMatchObject({
+            isSemantic: true,
+            isSticky: true,
+        });
+        expect(units[0].words.map(word => word.text)).toEqual(['世', '界', '。']);
+    });
+
+    it('keeps semantic units split into original words for display timing', () => {
+        const words = createCharacterWords('世界');
+        const units = buildPostLyricLayoutUnits({ fullText: '世界', words }, {
+            semantic: true,
+            sticky: false,
+        });
+        const displayWords = buildDisplayWordsFromLayoutUnits(units);
+
+        expect(units[0].isSemantic).toBe(true);
+        expect(displayWords).toEqual(words);
+    });
+
+    it('keeps split latin contractions together in mixed CJK and English lines', () => {
+        const words = createTokenWords(['这', '是', ' ', 'It', '’', 's ', 'unbelievable']);
+        const units = buildPostLyricLayoutUnits({
+            fullText: '这是 It’s unbelievable',
+            words,
+        }, {
+            semantic: true,
+            sticky: true,
+        });
+        const displayWords = buildDisplayWordsFromLayoutUnits(units);
+
+        expect(units.map(unit => unit.text)).toEqual(['这', '是', ' ', 'It’s ', 'unbelievable']);
+        expect(units[3]).toMatchObject({
+            text: 'It’s ',
+            isSemantic: false,
+            isSticky: true,
+        });
+        expect(displayWords.map(word => word.text)).toEqual(['这', '是', ' ', 'It’s ', 'unbelievable']);
+        expect(displayWords[3]).toMatchObject({
+            text: 'It’s ',
+            startTime: 3,
+            endTime: 5.5,
+        });
     });
 });

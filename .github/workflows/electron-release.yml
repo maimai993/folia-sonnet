@@ -117,7 +117,17 @@ jobs:
 
       - name: Update package.json version
         if: github.event.inputs.version != ''
-        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
+        shell: bash
+        env:
+          TARGET_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          CURRENT_VERSION=$(jq -r .version package.json)
+          if [ "${CURRENT_VERSION}" = "${TARGET_VERSION}" ]; then
+            echo "package.json version already set to ${TARGET_VERSION}; skipping npm version."
+            exit 0
+          fi
+
+          npm version "${TARGET_VERSION}" --no-git-tag-version
 
       - name: Generate Release Notes from template
         shell: bash

@@ -11,7 +11,7 @@ import {
     getAudioElementCaptureStream,
     getMainWindowVideoCaptureStream,
     getVideoExportRecorderOptions,
-    getSupportedVideoExportMimeType,
+    getSupportedVideoExportFormat,
     installVideoExportCursorGuard,
     stopMediaStream,
     wait,
@@ -101,7 +101,16 @@ export const useElectronVideoExportController = ({
         const previousTime = audioElement.currentTime;
 
         try {
-            const saveResult = await electron.chooseVideoExportPath(buildDefaultVideoExportFileName(currentSong, preset));
+            const exportFormat = getSupportedVideoExportFormat();
+            if (!exportFormat) {
+                throw new Error('当前系统不支持可用的视频导出编码。');
+            }
+
+            const saveResult = await electron.chooseVideoExportPath(
+                buildDefaultVideoExportFileName(currentSong, preset, exportFormat.extension),
+                exportFormat.extension,
+                exportFormat.displayName,
+            );
             if (saveResult.canceled || !saveResult.filePath) {
                 setExportState(idleVideoExportState());
                 return;
@@ -164,8 +173,7 @@ export const useElectronVideoExportController = ({
             }
 
             const chunks: Blob[] = [];
-            const mimeType = getSupportedVideoExportMimeType();
-            const recorder = new MediaRecorder(combinedStream, getVideoExportRecorderOptions(preset, mimeType));
+            const recorder = new MediaRecorder(combinedStream, getVideoExportRecorderOptions(preset, exportFormat));
             recorderRef.current = recorder;
             const stopped = new Promise<void>((resolve, reject) => {
                 recorder.ondataavailable = event => {
@@ -173,7 +181,7 @@ export const useElectronVideoExportController = ({
                         chunks.push(event.data);
                     }
                 };
-                recorder.onerror = () => reject(recorder.error ?? new Error('录制器发生未知错误。'));
+                recorder.onerror = () => reject(new Error('录制器发生未知错误。'));
                 recorder.onstop = () => resolve();
             });
             const requestStop = () => {
@@ -225,7 +233,7 @@ export const useElectronVideoExportController = ({
                 progress: 1,
                 elapsed: exportDuration,
             }));
-            const blob = new Blob(chunks, { type: mimeType || 'video/webm' });
+            const blob = new Blob(chunks, { type: exportFormat.mimeType });
             await electron.writeVideoExportFile(saveResult.filePath, await toArrayBuffer(blob));
             setExportState(prev => ({
                 ...prev,

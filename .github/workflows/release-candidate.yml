@@ -87,7 +87,17 @@ jobs:
           cache: npm
 
       - name: Update package.json version for RC build
-        run: npm version ${{ needs.prepare-release.outputs.version }} --no-git-tag-version
+        shell: bash
+        env:
+          TARGET_VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          CURRENT_VERSION=$(jq -r .version package.json)
+          if [ "${CURRENT_VERSION}" = "${TARGET_VERSION}" ]; then
+            echo "package.json version already set to ${TARGET_VERSION}; skipping npm version."
+            exit 0
+          fi
+
+          npm version "${TARGET_VERSION}" --no-git-tag-version
 
       - name: Generate RC release notes from template
         shell: bash
