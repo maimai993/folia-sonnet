@@ -1844,7 +1844,7 @@ ipcMain.handle('remote-control-send-command', (event, command) => {
   return true;
 });
 
-ipcMain.handle('video-export-choose-path', async (event, defaultName) => {
+ipcMain.handle('video-export-choose-path', async (event, defaultName, extension, displayName) => {
   if (!isTrustedMainWindowContents(event.sender)) {
     throw new Error('Untrusted renderer attempted to choose a video export path.');
   }
@@ -1853,13 +1853,20 @@ ipcMain.handle('video-export-choose-path', async (event, defaultName) => {
     return { canceled: true, filePath: null };
   }
 
+  const safeExtension = extension === 'mp4' ? 'mp4' : 'webm';
+  const safeDisplayName = typeof displayName === 'string' && displayName.trim()
+    ? displayName.trim()
+    : (safeExtension === 'mp4' ? 'MP4 Video' : 'WebM Video');
   const safeDefaultName = typeof defaultName === 'string' && defaultName.trim()
     ? defaultName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-    : 'folia-export.webm';
+    : `folia-export.${safeExtension}`;
+  const defaultFileName = safeDefaultName.endsWith(`.${safeExtension}`)
+    ? safeDefaultName
+    : `${safeDefaultName.replace(/\.[^.]+$/, '')}.${safeExtension}`;
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Save video export',
-    defaultPath: path.join(app.getPath('videos'), safeDefaultName.endsWith('.webm') ? safeDefaultName : `${safeDefaultName}.webm`),
-    filters: [{ name: 'WebM Video', extensions: ['webm'] }],
+    defaultPath: path.join(app.getPath('videos'), defaultFileName),
+    filters: [{ name: safeDisplayName, extensions: [safeExtension] }],
   });
 
   return {

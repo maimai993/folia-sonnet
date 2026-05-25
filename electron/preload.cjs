@@ -53,7 +53,7 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.on('remote-control-snapshot', listener);
         return () => ipcRenderer.removeListener('remote-control-snapshot', listener);
     },
-    chooseVideoExportPath: (defaultName) => ipcRenderer.invoke('video-export-choose-path', defaultName),
+    chooseVideoExportPath: (defaultName, extension, displayName) => ipcRenderer.invoke('video-export-choose-path', defaultName, extension, displayName),
     getMainWindowCaptureSource: () => ipcRenderer.invoke('video-export-get-main-window-source'),
     prepareVideoExportWindow: (size) => ipcRenderer.invoke('video-export-prepare-window', size),
     restoreVideoExportWindow: () => ipcRenderer.invoke('video-export-restore-window'),

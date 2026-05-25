@@ -290,7 +290,11 @@ declare global {
       sendRemoteControlCommand: (command: ElectronRemoteControlCommand) => Promise<boolean>;
       onRemoteControlCommand: (callback: (command: ElectronRemoteControlCommand) => void) => () => void;
       onRemoteControlSnapshot: (callback: (snapshot: ElectronRemoteControlSnapshot) => void) => () => void;
-      chooseVideoExportPath: (defaultName?: string) => Promise<ElectronSaveDialogResult>;
+      chooseVideoExportPath: (
+        defaultName?: string,
+        extension?: 'mp4' | 'webm',
+        displayName?: string,
+      ) => Promise<ElectronSaveDialogResult>;
       getMainWindowCaptureSource: () => Promise<ElectronWindowCaptureSource | null>;
       prepareVideoExportWindow: (size: { width: number; height: number }) => Promise<boolean>;
       restoreVideoExportWindow: () => Promise<boolean>;
