@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_PARTITA_TUNING, Line, Theme, Word as WordType, AudioBands, type PartitaTuning } from '../../../types';
-import { buildCjkSemanticLayoutUnits, createSingleWordLayoutUnits, type LyricLayoutUnit } from '../../../utils/lyrics/cjkSemanticLayout';
+import { buildDisplayWordsFromLayoutUnits, buildPostLyricLayoutUnits, type LyricLayoutUnit } from '../../../utils/lyrics/cjkSemanticLayout';
 import { getLineRenderEndTime, getLineRenderHints } from '../../../utils/lyrics/renderHints';
 import { shouldPreheatLine, useVisualizerRuntime, type VisualizerPreheatWindow } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
@@ -69,6 +69,7 @@ interface PartitaColumn {
     words: Array<{
         chunkUnits: LyricLayoutUnit[];
         chunkWords: WordType[];
+        displayWords: WordType[];
         config: WordLayoutConfig;
         order: number;
         rowIndex: number;
@@ -236,9 +237,10 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
     const isChaotic = intensity === 'chaotic';
     const isCalm = intensity === 'calm';
     const totalGraphemes = Math.max(splitGraphemes(line.fullText.replace(/\s+/g, '')).length, line.words.length, 1);
-    const layoutUnits = tuning.useSemanticLayout
-        ? buildCjkSemanticLayoutUnits(line)
-        : createSingleWordLayoutUnits(line.words);
+    const layoutUnits = buildPostLyricLayoutUnits(line, {
+        semantic: tuning.useSemanticLayout,
+        sticky: true,
+    });
 
     const columns: PartitaColumn[] = [];
     let currentWords: PartitaColumn['words'] = [];
@@ -285,6 +287,7 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
 
     chunks.forEach((chunkUnits, rowIndex) => {
         const chunkWords = chunkUnits.flatMap(unit => unit.words);
+        const displayWords = buildDisplayWordsFromLayoutUnits(chunkUnits);
         if (chunkWords.length === 0) return;
 
         const mergedTextForConfig = chunkWords.map(w => w.text.trim()).join('');
@@ -305,6 +308,7 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
         currentWords.push({
             chunkUnits,
             chunkWords,
+            displayWords,
             order: rowIndex,
             rowIndex,
             config: {
@@ -495,6 +499,7 @@ const PartitaWord: React.FC<{
 // It does not own lyric timing directly; it mostly exists so guide lines and grouped word offsets have a place to live.
 const PartitaChunk: React.FC<{
     chunkWords: WordType[];
+    displayWords: WordType[];
     config: WordLayoutConfig;
     guideIndex: number;
     currentTime: MotionValue<number>;
@@ -507,7 +512,7 @@ const PartitaChunk: React.FC<{
     isChorus?: boolean;
     showGuideLines: boolean;
     fontSize: string;
-}> = ({ chunkWords, config, guideIndex, currentTime, theme, layoutVariants, bodyVariants, glowVariants, baseColor, renderProfile, isChorus, showGuideLines, fontSize }) => {
+}> = ({ chunkWords, displayWords, config, guideIndex, currentTime, theme, layoutVariants, bodyVariants, glowVariants, baseColor, renderProfile, isChorus, showGuideLines, fontSize }) => {
     const [chunkStatus, setChunkStatus] = useState<'waiting' | 'active' | 'passed'>('waiting');
 
     const chunkStartTime = chunkWords[0].startTime;
@@ -523,7 +528,7 @@ const PartitaChunk: React.FC<{
         if (newStatus !== chunkStatus) setChunkStatus(newStatus);
     });
 
-    const activeColor = getActiveColor(chunkWords.map(w => w.text).join(' '), theme);
+    const activeColor = getActiveColor(displayWords.map(w => w.text).join(' '), theme);
     const guidePosition = guideIndex % 2 === 0 ? 'left' : 'right';
 
     return (
@@ -645,9 +650,9 @@ const PartitaChunk: React.FC<{
                 </>
             )}
 
-            {chunkWords.map((w, idx) => {
+            {displayWords.map((w, idx) => {
                 // Per-word random offset only (chunk position is on the container)
-                const wordSeed = chunkWords[0].startTime + idx * 7.13;
+                const wordSeed = displayWords[0].startTime + idx * 7.13;
                 const random = (offset: number) => {
                     const x = Math.sin(wordSeed + offset) * 10000;
                     return x - Math.floor(x);
@@ -978,10 +983,11 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps & { staticMode?: boolea
                                         className="relative flex min-h-[24rem] min-w-[3.8rem] items-center justify-center px-3"
                                     >
                                         <div className="relative z-10 flex flex-col items-center justify-start">
-                                            {column.words.map(({ chunkWords, config, order, rowIndex }) => (
+                                            {column.words.map(({ chunkWords, displayWords, config, order, rowIndex }) => (
                                                 <PartitaChunk
                                                     key={`${config.id}`}
                                                     chunkWords={chunkWords}
+                                                    displayWords={displayWords}
                                                     config={config}
                                                     guideIndex={rowIndex}
                                                     currentTime={currentTime}
