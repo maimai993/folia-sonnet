@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { motion, AnimatePresence, MotionValue, useMotionValueEvent } from 'framer-motion';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
+import { motion, AnimatePresence, MotionValue, useMotionValueEvent, motionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
 import { Line, Theme, AudioBands, type TiltColorScheme, type TiltTuning, DEFAULT_TILT_TUNING } from '../../../types';
@@ -56,6 +56,7 @@ interface TiltSegment {
     text: string;
     isTilt: boolean;
     isShortLastLine: boolean;
+    charOffset: number;
 }
 
 interface TiltLayout {
@@ -81,9 +82,9 @@ interface CharTiming {
     endTime: number;
 }
 
-const findSegmentWordRange = (segmentText: string, fullText: string, words: Array<{ text: string; startTime: number; endTime: number }>): { startWordIndex: number; endWordIndex: number } => {
-    const segmentStart = fullText.indexOf(segmentText);
-    if (segmentStart === -1) return { startWordIndex: 0, endWordIndex: words.length };
+const findSegmentWordRange = (charOffset: number, segmentText: string, fullText: string, words: Array<{ text: string; startTime: number; endTime: number }>): { startWordIndex: number; endWordIndex: number } => {
+    const segmentStart = charOffset;
+    if (segmentStart < 0 || segmentStart >= fullText.length) return { startWordIndex: 0, endWordIndex: words.length };
 
     let charCursor = 0;
     let startWordIndex = 0;
@@ -104,7 +105,7 @@ const findSegmentWordRange = (segmentText: string, fullText: string, words: Arra
     return { startWordIndex, endWordIndex };
 };
 
-const buildCharTimings = (segmentText: string, segmentStartTime: number, segmentEndTime: number, activeLine: Line | null): CharTiming[] => {
+const buildCharTimings = (charOffset: number, segmentText: string, segmentStartTime: number, segmentEndTime: number, activeLine: Line | null): CharTiming[] => {
     const graphemes = [...GRAPHEME_SEGMENTER.segment(segmentText)];
     if (!activeLine || graphemes.length === 0) return [];
 
@@ -112,7 +113,7 @@ const buildCharTimings = (segmentText: string, segmentStartTime: number, segment
     if (nonSpaceGraphemes.length === 0) return [];
 
     const totalDuration = Math.max(segmentEndTime - segmentStartTime, 0.3);
-    const { startWordIndex, endWordIndex } = findSegmentWordRange(segmentText, activeLine.fullText, activeLine.words);
+    const { startWordIndex, endWordIndex } = findSegmentWordRange(charOffset, segmentText, activeLine.fullText, activeLine.words);
     const segmentWords = activeLine.words.slice(startWordIndex, endWordIndex);
 
     let currentCharIndex = 0;
@@ -182,10 +183,10 @@ const buildCharTimings = (segmentText: string, segmentStartTime: number, segment
 const getCharPulseIntensity = (currentTime: number, charTiming: CharTiming): number => {
     const { startTime, endTime } = charTiming;
     const rawDuration = Math.max(endTime - startTime, 0.05);
-    const duration = Math.min(rawDuration, 0.35);
+    const duration = Math.min(rawDuration, 0.9);
     const elapsed = currentTime - startTime;
 
-    if (elapsed < 0 || elapsed > duration * 1.5) return 0;
+    if (elapsed < 0 || elapsed > duration * 2.2) return 0;
 
     const progress = Math.min(elapsed / duration, 1);
     const pulseValue = Math.sin(progress * Math.PI);
@@ -237,11 +238,17 @@ const buildTiltLayout = (fullText: string, lineSeed: number, tuning: TiltTuning,
         finalTiltIndex = candidates[Math.floor(seededRandom(lineSeed, 200) * candidates.length)];
     }
 
-    const segments: TiltSegment[] = mergedSegments.map((text, i) => ({
-        text,
-        isTilt: i === finalTiltIndex,
-        isShortLastLine: false,
-    }));
+    let offsetAccum = 0;
+    const segments: TiltSegment[] = mergedSegments.map((text, i) => {
+        const seg = {
+            text,
+            isTilt: i === finalTiltIndex,
+            isShortLastLine: false,
+            charOffset: offsetAccum,
+        };
+        offsetAccum += text.length;
+        return seg;
+    });
 
     let scaleMultiplier = 1;
     const tiltWithWidth = segments.filter(s => s.isTilt).map(s => ({ text: s.text, width: measureAtSize(s.text, tiltBasePx, tiltFontSpec) }));
@@ -275,7 +282,12 @@ const buildTiltLayout = (fullText: string, lineSeed: number, tuning: TiltTuning,
             const extraSplitsNeeded = Math.min(4, Math.max(segments.length + 1, Math.ceil(totalEstWidth / targetWidth)));
             if (extraSplitsNeeded > segments.length) {
                 const reSplitUnits = SentenceLayout.splitIntoSentences(fullText, extraSplitsNeeded, lineSeed);
-                const newSegments: TiltSegment[] = reSplitUnits.map(u => ({ text: u.text, isTilt: false, isShortLastLine: false }));
+                let reSplitOffset = 0;
+                const newSegments: TiltSegment[] = reSplitUnits.map(u => {
+                    const seg = { text: u.text, isTilt: false, isShortLastLine: false, charOffset: reSplitOffset };
+                    reSplitOffset += u.text.length;
+                    return seg;
+                });
                 if (newSegments.length > 0) {
                     const resplitTiltRoll = seededRandom(lineSeed, 300);
                     if (resplitTiltRoll < tuning.tiltStyleProbability) {
@@ -352,10 +364,13 @@ const TiltLine: React.FC<{
 
     const charTimings = useMemo(() => {
         if (!visible || !activeLine) return [];
-        return buildCharTimings(segment.text, segmentStartTime, segmentEndTime, activeLine);
-    }, [visible, activeLine, segment.text, segmentStartTime, segmentEndTime]);
+        return buildCharTimings(segment.charOffset, segment.text, segmentStartTime, segmentEndTime, activeLine);
+    }, [visible, activeLine, segment.charOffset, segment.text, segmentStartTime, segmentEndTime]);
 
-    const [pulseIntensities, setPulseIntensities] = useState<number[]>(() => new Array(graphemes.length).fill(0));
+    const charScaleMvs = useRef<MotionValue<number>[]>([]);
+    useEffect(() => {
+        charScaleMvs.current = graphemes.map(() => motionValue(1));
+    }, [graphemes.length]);
 
     const charIndexMap = useMemo(() => {
         let idx = 0;
@@ -367,23 +382,28 @@ const TiltLine: React.FC<{
     }, [graphemes]);
 
     useMotionValueEvent(currentTime, 'change', (latest) => {
+        const mvs = charScaleMvs.current;
+        if (mvs.length !== graphemes.length) return;
         if (!charTimings || charTimings.length === 0) {
-            setPulseIntensities(new Array(graphemes.length).fill(0));
+            for (let i = 0; i < mvs.length; i++) mvs[i].set(1);
             return;
         }
 
-        const newIntensities = graphemes.map((seg, ti) => {
-            const isSpace = /^\s+$/.test(seg.segment);
-            if (isSpace) return 0;
-
+        for (let ti = 0; ti < graphemes.length; ti++) {
+            const seg = graphemes[ti];
+            if (/^\s+$/.test(seg.segment)) {
+                mvs[ti].set(1);
+                continue;
+            }
             const ci = charIndexMap[ti];
             const charTiming = charTimings[ci];
-            if (!charTiming) return 0;
-
-            return getCharPulseIntensity(latest, charTiming);
-        });
-
-        setPulseIntensities(newIntensities);
+            if (!charTiming) {
+                mvs[ti].set(1);
+                continue;
+            }
+            const intensity = getCharPulseIntensity(latest, charTiming);
+            mvs[ti].set(1 + intensity * (segment.isTilt ? 0.18 : 0.15));
+        }
     });
 
     if (!segment.isTilt) {
@@ -408,9 +428,6 @@ const TiltLine: React.FC<{
                     const ci = visualIndex;
                     if (!isSpace) visualIndex += 1;
 
-                    const pulseIntensity = pulseIntensities[ti] || 0;
-                    const scaleValue = 1 + pulseIntensity * 0.15;
-
                     return (
                         <motion.span
                             key={ti}
@@ -427,7 +444,7 @@ const TiltLine: React.FC<{
                             }}
                             className="inline-block"
                             style={{
-                                transform: `scale(${scaleValue})`,
+                                scale: charScaleMvs.current[ti],
                                 transition: 'transform 0.06s ease-out',
                                 ...(isSpace ? { minWidth: '0.25em' } : {}),
                             }}
@@ -464,9 +481,6 @@ const TiltLine: React.FC<{
                 const ci = visualIndex;
                 if (!isSpace) visualIndex += 1;
 
-                const pulseIntensity = pulseIntensities[ti] || 0;
-                const scaleValue = 1 + pulseIntensity * 0.18;
-
                 return (
                     <motion.span
                         key={ti}
@@ -487,17 +501,13 @@ const TiltLine: React.FC<{
                             ease: [0.25, 0.46, 0.45, 0.94],
                         }}
                         className="inline-block"
-                        style={isSpace ? { minWidth: '0.35em' } : undefined}
+                        style={{
+                            scale: charScaleMvs.current[ti],
+                            transition: 'transform 0.06s ease-out',
+                            ...(isSpace ? { minWidth: '0.35em' } : {}),
+                        }}
                     >
-                        <span
-                            style={{
-                                display: 'inline-block',
-                                transform: `scale(${scaleValue})`,
-                                transition: 'transform 0.06s ease-out',
-                            }}
-                        >
-                            {isSpace ? '\u00A0' : seg.segment}
-                        </span>
+                        {isSpace ? '\u00A0' : seg.segment}
                     </motion.span>
                 );
             })}

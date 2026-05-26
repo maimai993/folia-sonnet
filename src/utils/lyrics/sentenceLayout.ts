@@ -10,6 +10,31 @@ interface SentenceSplitOptions {
     targetCount: number;
 }
 
+interface PairedSymbolDef {
+    open?: RegExp;
+    close?: RegExp;
+    openStr?: string;
+    closeStr?: string;
+}
+
+interface OutermostMatch {
+    openStart: number;
+    openEnd: number;
+    closeStart: number;
+    closeEnd: number;
+}
+
+function findRegexMatch(regex: RegExp, text: string, fromIndex = 0): { start: number; end: number } | null {
+    regex.lastIndex = fromIndex;
+    const match = regex.exec(text);
+    return match ? { start: match.index, end: match.index + match[0].length } : null;
+}
+
+function findStringMatch(str: string, text: string, fromIndex = 0): { start: number; end: number } | null {
+    const idx = text.indexOf(str, fromIndex);
+    return idx === -1 ? null : { start: idx, end: idx + str.length };
+}
+
 class SentenceLayout implements LyricLayoutUnit {
     text: string;
     words: { text: string; startTime: number; endTime: number }[] = [];
@@ -212,122 +237,82 @@ class SentenceLayout implements LyricLayoutUnit {
     }
 
     private static splitByBracketsQuotes(text: string): string[] {
-        const pairedBrackets: [RegExp, RegExp][] = [
-            [/\(/g, /\)/g],
-            [/（/g, /）/g],
-            [/\[/g, /]/g],
-            [/［/g, /］/g],
-            [/【/g, /】/g],
-            [/｛/g, /｝/g],
-            [/「/g, /」/g],
-            [/『/g, /』/g],
-            [/《/g, /》/g],
+        const allPairedSymbols: PairedSymbolDef[] = [
+            { open: /「/, close: /」/ },
+            { open: /『/, close: /』/ },
+            { open: /《/, close: /》/ },
+            { open: /【/, close: /】/ },
+            { open: /｛/, close: /｝/ },
+            { open: /［/, close: /］/ },
+            { open: /\[/, close: /\]/ },
+            { open: /（/, close: /）/ },
+            { open: /\(/, close: /\)/ },
+            { openStr: '"', closeStr: '"' },
+            { openStr: "'", closeStr: "'" },
         ];
 
-        const quoteTypes: [string, string][] = [
-            ['"', '"'],
-            ["'", "'"],
-        ];
-
-        let result = [text];
-
-        for (const [openRegex, closeRegex] of pairedBrackets) {
-            const newResult: string[] = [];
-            
-            for (const segment of result) {
-                const parts = SentenceLayout.extractPairedBracket(segment, openRegex, closeRegex);
-                newResult.push(...parts);
-            }
-            
-            result = newResult;
-        }
-
-        for (const [openQuote, closeQuote] of quoteTypes) {
-            const newResult: string[] = [];
-            
-            for (const segment of result) {
-                const parts = SentenceLayout.extractPairedQuotes(segment, openQuote, closeQuote);
-                newResult.push(...parts);
-            }
-            
-            result = newResult;
-        }
-
+        const result = SentenceLayout.extractOutermostPairs(text, allPairedSymbols);
         return result.length > 1 ? result : [text];
     }
 
-    private static extractPairedBracket(text: string, openRegex: RegExp, closeRegex: RegExp): string[] {
-        const parts: string[] = [];
-        let remaining = text;
+    private static extractOutermostPairs(text: string, defs: PairedSymbolDef[]): string[] {
+        const best = SentenceLayout.findOutermostPair(text, defs);
 
-        while (true) {
-            openRegex.lastIndex = 0;
-            const openMatch = openRegex.exec(remaining);
-            
-            if (!openMatch) {
-                if (remaining.length > 0) {
-                    parts.push(remaining);
-                }
-                break;
-            }
-
-            const beforeBracket = remaining.slice(0, openMatch.index);
-            if (beforeBracket.length > 0) {
-                parts.push(beforeBracket);
-            }
-
-            closeRegex.lastIndex = 0;
-            const afterOpen = remaining.slice(openMatch.index + openMatch[0].length);
-            const closeMatch = closeRegex.exec(afterOpen);
-            
-            if (closeMatch) {
-                const content = remaining.slice(openMatch.index, openMatch.index + openMatch[0].length + closeMatch.index + closeMatch[0].length);
-                parts.push(content);
-                remaining = afterOpen.slice(closeMatch.index + closeMatch[0].length);
-            } else {
-                parts.push(remaining.slice(openMatch.index));
-                break;
-            }
+        if (!best) {
+            return [text];
         }
 
-        return parts.filter(p => p.length > 0);
+        const before = text.slice(0, best.openStart);
+        const pairedContent = text.slice(best.openStart, best.closeEnd);
+        const remainder = text.slice(best.closeEnd);
+
+        const result: string[] = [];
+
+        if (before.length > 0) {
+            result.push(...SentenceLayout.extractOutermostPairs(before, defs));
+        }
+
+        result.push(pairedContent);
+
+        if (remainder.length > 0) {
+            result.push(...SentenceLayout.extractOutermostPairs(remainder, defs));
+        }
+
+        return result.filter(p => p.length > 0);
     }
 
-    private static extractPairedQuotes(text: string, openQuote: string, closeQuote: string): string[] {
-        const parts: string[] = [];
-        let remaining = text;
-        let searchFrom = 0;
+    private static findOutermostPair(text: string, defs: PairedSymbolDef[]): OutermostMatch | null {
+        let best: OutermostMatch | null = null;
 
-        while (searchFrom < remaining.length) {
-            const openIndex = remaining.indexOf(openQuote, searchFrom);
-            
-            if (openIndex === -1) {
-                break;
+        for (const def of defs) {
+            const openMatch = def.openStr !== undefined
+                ? findStringMatch(def.openStr!, text)
+                : findRegexMatch(def.open!, text);
+
+            if (!openMatch) continue;
+
+            const searchFrom = openMatch.end;
+            const closeMatch = def.closeStr !== undefined
+                ? findStringMatch(def.closeStr!, text, searchFrom)
+                : findRegexMatch(def.close!, text, searchFrom);
+
+            if (!closeMatch) continue;
+
+            const candidate: OutermostMatch = {
+                openStart: openMatch.start,
+                openEnd: openMatch.end,
+                closeStart: closeMatch.start,
+                closeEnd: closeMatch.end,
+            };
+
+            if (!best || candidate.openStart < best.openStart) {
+                best = candidate;
+            } else if (candidate.openStart === best.openStart && candidate.closeEnd > best.closeEnd) {
+                best = candidate;
             }
-
-            const closeIndex = remaining.indexOf(closeQuote, openIndex + 1);
-            
-            if (closeIndex === -1 || closeIndex === openIndex + 1) {
-                searchFrom = openIndex + 1;
-                continue;
-            }
-
-            if (openIndex > 0) {
-                parts.push(remaining.slice(0, openIndex));
-            }
-
-            const content = remaining.slice(openIndex, closeIndex + 1);
-            parts.push(content);
-            
-            remaining = remaining.slice(closeIndex + 1);
-            searchFrom = 0;
         }
 
-        if (remaining.length > 0) {
-            parts.push(remaining);
-        }
-
-        return parts.filter(p => p.length > 0);
+        return best;
     }
 
     private static splitCJKBySpace(text: string): string[] {

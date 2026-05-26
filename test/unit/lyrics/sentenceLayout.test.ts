@@ -84,6 +84,16 @@ describe('SentenceLayout', () => {
         expect(texts.some(t => t.includes('Ah'))).toBe(true);        
     });
 
+    it('splits by level 2 (targetCount = 3)', () => {
+        const text = '「０（ぜろ）」が去（く）で 「１（いち）」が未来（みらい） 「今（いま）」は何処（どこ）にもない';
+        const result = SentenceLayout.splitIntoSentences(text, 3);
+        
+        expect(result.length).toBeGreaterThan(2);
+        const texts = result.map(r => r.text);
+        const reconstructed = texts.join('');
+        expect(reconstructed).toBe(text);
+        expect(texts.every(t => !t.startsWith('」') && !t.startsWith(' '))).toBe(true);
+    });
     it('splits by level 2 (targetCount = 2)', () => {
         const text = '『Ⅲ A Nice Derangement of Epitaphs 』エンディングテーマ';
         const result = SentenceLayout.splitIntoSentences(text, 2);
