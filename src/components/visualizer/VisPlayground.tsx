@@ -9,6 +9,7 @@ import {
     DEFAULT_CAPPELLA_TUNING,
     DEFAULT_FUME_TUNING,
     DEFAULT_PARTITA_TUNING,
+    DEFAULT_TILT_TUNING,
     type AudioBands,
     type CappellaEmojiImage,
     type CappellaTuning,
@@ -17,6 +18,7 @@ import {
     type PartitaTuning,
     type StoredCustomLyricsFont,
     type Theme,
+    type TiltTuning,
     type VisualizerMode,
 } from '../../types';
 import { resolveThemeFontStack } from '../../utils/fontStacks';
@@ -38,6 +40,7 @@ interface VisPlaygroundProps {
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
     cappellaTuning?: CappellaTuning;
+    tiltTuning?: TiltTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     fontStyle: Theme['fontStyle'];
     fontScale: number;
@@ -53,6 +56,8 @@ interface VisPlaygroundProps {
     onResetFumeTuning?: () => void;
     onCappellaTuningChange?: (patch: Partial<CappellaTuning>) => void;
     onResetCappellaTuning?: () => void;
+    onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
+    onResetTiltTuning?: () => void;
     onImportCappellaCustomEmojiPack?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
     isLoadingCappellaCustomEmojiPack?: boolean;
@@ -221,6 +226,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     partitaTuning = DEFAULT_PARTITA_TUNING,
     fumeTuning = DEFAULT_FUME_TUNING,
     cappellaTuning = DEFAULT_CAPPELLA_TUNING,
+    tiltTuning = DEFAULT_TILT_TUNING,
     cappellaCustomEmojiImages = [],
     fontStyle,
     fontScale,
@@ -236,6 +242,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onResetFumeTuning,
     onCappellaTuningChange,
     onResetCappellaTuning,
+    onTiltTuningChange,
+    onResetTiltTuning,
     onImportCappellaCustomEmojiPack,
     onClearCappellaCustomEmojiPack,
     isLoadingCappellaCustomEmojiPack = false,
@@ -381,6 +389,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             resetPartitaTuning: onResetPartitaTuning,
             resetFumeTuning: onResetFumeTuning,
             resetCappellaTuning: onResetCappellaTuning,
+            resetTiltTuning: onResetTiltTuning,
             setDraftFumeTuning,
         });
     };
@@ -615,6 +624,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 partitaTuning={resolvedPartitaTuning}
                                 fumeTuning={resolvedFumeTuning}
                                 cappellaTuning={cappellaTuning}
+                                tiltTuning={tiltTuning}
                                 cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                                 seed={getVisualizerScopedSeed(visualizerMode, 'vis-playground')}
                             />
@@ -695,6 +705,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 isCappellaCustomEmojiPackLoading: isLoadingCappellaCustomEmojiPack,
                                 onImportCappellaCustomEmojiPack,
                                 onClearCappellaCustomEmojiPack,
+                                tiltTuning,
+                                onTiltTuningChange,
                             })}
 
                         </div>

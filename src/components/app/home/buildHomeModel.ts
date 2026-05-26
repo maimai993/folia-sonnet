@@ -105,6 +105,7 @@ type BuildHomeModelParams = {
     partitaTuning: LegacyHomeProps['partitaTuning'];
     fumeTuning: LegacyHomeProps['fumeTuning'];
     cappellaTuning: LegacyHomeProps['cappellaTuning'];
+    tiltTuning: LegacyHomeProps['tiltTuning'];
     cappellaCustomEmojiImages: LegacyHomeProps['cappellaCustomEmojiImages'];
     handleSetVisualizerMode: LegacyHomeProps['onVisualizerModeChange'];
     handleSetPartitaTuning: LegacyHomeProps['onPartitaTuningChange'];
@@ -113,6 +114,8 @@ type BuildHomeModelParams = {
     handleResetFumeTuning: LegacyHomeProps['onResetFumeTuning'];
     handleSetCappellaTuning: LegacyHomeProps['onCappellaTuningChange'];
     handleResetCappellaTuning: LegacyHomeProps['onResetCappellaTuning'];
+    handleSetTiltTuning: LegacyHomeProps['onTiltTuningChange'];
+    handleResetTiltTuning: LegacyHomeProps['onResetTiltTuning'];
     handleImportCappellaCustomEmojiPack: LegacyHomeProps['onImportCappellaCustomEmojiPack'];
     handleClearCappellaCustomEmojiPack: LegacyHomeProps['onClearCappellaCustomEmojiPack'];
     isLoadingCappellaCustomEmojiPack: LegacyHomeProps['isLoadingCappellaCustomEmojiPack'];
@@ -229,6 +232,7 @@ export const buildHomeModel = ({
     partitaTuning,
     fumeTuning,
     cappellaTuning,
+    tiltTuning,
     cappellaCustomEmojiImages,
     handleSetVisualizerMode,
     handleSetPartitaTuning,
@@ -237,6 +241,8 @@ export const buildHomeModel = ({
     handleResetFumeTuning,
     handleSetCappellaTuning,
     handleResetCappellaTuning,
+    handleSetTiltTuning,
+    handleResetTiltTuning,
     handleImportCappellaCustomEmojiPack,
     handleClearCappellaCustomEmojiPack,
     isLoadingCappellaCustomEmojiPack,
@@ -391,6 +397,7 @@ export const buildHomeModel = ({
             partitaTuning,
             fumeTuning,
             cappellaTuning,
+            tiltTuning,
             cappellaCustomEmojiImages,
             onVisualizerModeChange: handleSetVisualizerMode,
             onPartitaTuningChange: handleSetPartitaTuning,
@@ -399,6 +406,8 @@ export const buildHomeModel = ({
             onResetFumeTuning: handleResetFumeTuning,
             onCappellaTuningChange: handleSetCappellaTuning,
             onResetCappellaTuning: handleResetCappellaTuning,
+            onTiltTuningChange: handleSetTiltTuning,
+            onResetTiltTuning: handleResetTiltTuning,
             onImportCappellaCustomEmojiPack: handleImportCappellaCustomEmojiPack,
             onClearCappellaCustomEmojiPack: handleClearCappellaCustomEmojiPack,
             isLoadingCappellaCustomEmojiPack,
