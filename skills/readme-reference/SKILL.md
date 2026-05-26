@@ -1,11 +1,11 @@
 ---
 name: readme-reference
-description: Use when making code, workflow, testing, or documentation changes in this repository and you need to consult project-specific facts from README files before editing, especially root README.md and src/README.md.
+description: Use when making code, workflow, testing, or documentation changes in this repository and you need targeted project-specific facts from README files before editing. Read only relevant snippets from root README.md or src/README.md; do not load whole README files unless the user explicitly asks for a full document review.
 ---
 
 # README Reference
 
-这个 skill 用于在修改前先从仓库内 README 提取仍然有效的信息，避免脱离项目约定瞎改。
+这个 skill 用于在修改前从仓库内 README 定位仍然有效的项目上下文，但必须控制读取范围，避免把长 README 整段灌入上下文。
 
 ## When To Use
 
@@ -19,10 +19,35 @@ description: Use when making code, workflow, testing, or documentation changes i
 
 ## Primary Sources
 
-优先读取这两个文件：
+优先在这两个文件里定位片段：
 
 - `README.md`
 - `src/README.md`
+
+不要默认完整读取这两个文件。除非用户明确要求全文审阅，否则每次只读取和当前任务直接相关的小片段。
+
+## Read Budget
+
+默认读取预算：
+
+- 先用 `rg -n` 定位标题、关键词、脚本名、文件名或模块名。
+- 每个 README 单次只打开 20-80 行相关片段。
+- 同一任务通常不要从 README 读取超过 160 行。
+- 如果片段不够，再追加下一个最相关片段，而不是整文件打开。
+
+推荐命令模式：
+
+```bash
+rg -n "关键词|脚本名|模块名" README.md src/README.md
+sed -n '起始行,结束行p' README.md
+sed -n '起始行,结束行p' src/README.md
+```
+
+如果不确定关键词，先读目录或标题片段：
+
+```bash
+rg -n "^##|^###|components/visualizer|services/|utils/lyrics|部署|脚本" README.md src/README.md
+```
 
 ## How To Read Them
 
@@ -41,6 +66,12 @@ description: Use when making code, workflow, testing, or documentation changes i
 - 这个改动会不会影响既有运行方式
 - 某个脚本或部署流程是不是已经对外说明过
 
+读取方式：
+
+- 涉及脚本：先 `rg -n "npm run|常用脚本|部署与开发|build|test" README.md`
+- 涉及产品能力：先 `rg -n "核心能力|本地音乐|Navidrome|网易云|AI|Stage API" README.md`
+- 涉及 Electron / Vercel / API：先 `rg -n "Electron|Vercel|API|环境变量|部署" README.md`
+
 ### `src/README.md`
 
 主要提取这些信息：
@@ -56,6 +87,13 @@ description: Use when making code, workflow, testing, or documentation changes i
 - 某段逻辑更适合放 service、hook、component 还是 util
 - 某个现有模块是否已经承担类似职责
 
+读取方式：
+
+- 涉及模块归属：先 `rg -n "Module Boundaries|Where Changes Usually Belong|components/|hooks/|services/|utils/" src/README.md`
+- 涉及 visualizer：先 `rg -n "visualizer|歌词可视化|components/visualizer" src/README.md`
+- 涉及歌词解析：先 `rg -n "parserCore|lyrics|utils/lyrics|worker" src/README.md`
+- 涉及 app-level 装配：先 `rg -n "components/app|App.tsx|PlayerPanel|Home" src/README.md`
+
 ## Editing Rule
 
 如果 README 中的信息和代码现状明显不一致：
@@ -67,9 +105,10 @@ description: Use when making code, workflow, testing, or documentation changes i
 ## Practical Workflow
 
 1. 先判断任务是否涉及项目约定、架构边界或运行方式。
-2. 如果涉及，先读 `README.md` 或 `src/README.md` 中相关段落。
-3. 用 README 提供方向，用真实代码确认细节。
-4. 如果 README 失真，明确指出并补文档，而不是默默忽略。
+2. 如果涉及，先用 `rg -n` 在 `README.md` 和 `src/README.md` 中找关键词或标题。
+3. 只打开命中的相关行附近片段。
+4. 用 README 提供方向，用真实代码确认细节。
+5. 如果 README 失真，明确指出并补文档，而不是默默忽略。
 
 ## Repository-Specific Heuristics
 
@@ -80,6 +119,8 @@ description: Use when making code, workflow, testing, or documentation changes i
 
 ## What To Avoid
 
-- 不读 README 就直接重构模块边界
+- 不读相关 README 片段就直接重构模块边界
+- 为了“保险”完整读取 `README.md` 或 `src/README.md`
+- 在已经有具体文件线索时，仍然大范围读 README
 - 把 README 当成绝对真相，不核对实际代码
 - 明明发现 README 已经过时，却不说明也不修
