@@ -6,6 +6,7 @@ import { Line, Theme, AudioBands, type TiltColorScheme, type TiltTuning, DEFAULT
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { resolveThemeFontStack } from '../../../utils/fontStacks';
 import { SentenceLayout } from '../../../utils/lyrics/sentenceLayout';
+import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
@@ -29,28 +30,7 @@ const determineLineCount = (charCount: number, seed: number, splitProbability: n
 // featuring two typography modes (normal horizontal vs large italic staggered).
 // Lines are revealed sequentially in time order; tilt chars have up-down alternating offsets.
 
-interface VisualizerTiltProps {
-    currentTime: MotionValue<number>;
-    currentLineIndex: number;
-    lines: Line[];
-    theme: Theme;
-    audioPower: MotionValue<number>;
-    audioBands: AudioBands;
-    showText?: boolean;
-    songTitle?: string | null;
-    coverUrl?: string | null;
-    useCoverColorBg?: boolean;
-    seed?: string | number;
-    staticMode?: boolean;
-    backgroundOpacity?: number;
-    lyricsFontScale?: number;
-    isPlayerChromeHidden?: boolean;
-    hideTranslationSubtitle?: boolean;
-    paused?: boolean;
-    isPreviewMode?: boolean;
-    onBack?: () => void;
-    tiltTuning?: TiltTuning;
-}
+type VisualizerTiltProps = VisualizerSharedProps;
 
 interface TiltSegment {
     text: string;
@@ -548,26 +528,21 @@ const TiltLine: React.FC<{
     );
 };
 
-const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> = ({
-    currentTime,
-    currentLineIndex,
-    lines,
-    theme,
-    audioPower,
-    audioBands,
-    showText = true,
-    coverUrl,
-    useCoverColorBg = false,
-    seed,
-    staticMode = false,
-    backgroundOpacity = 0.75,
-    lyricsFontScale = 1,
-    isPlayerChromeHidden = false,
-    hideTranslationSubtitle = false,
-    paused = false,
-    onBack,
-    tiltTuning = DEFAULT_TILT_TUNING,
-}) => {
+const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> = (props) => {
+    const {
+        currentTime,
+        currentLineIndex,
+        lines,
+        theme,
+        audioPower,
+        audioBands,
+        showText = true,
+        staticMode = false,
+        lyricsFontScale = 1,
+        isPlayerChromeHidden = false,
+        hideTranslationSubtitle = false,
+        tiltTuning = DEFAULT_TILT_TUNING,
+    } = props;
     const { t } = useTranslation();
     const [visibleSegmentIndex, setVisibleSegmentIndex] = useState(-1);
 
@@ -643,13 +618,7 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
             theme={theme}
             audioPower={audioPower}
             audioBands={audioBands}
-            coverUrl={coverUrl}
-            useCoverColorBg={useCoverColorBg}
-            seed={seed}
-            staticMode={staticMode}
-            backgroundOpacity={backgroundOpacity}
-            paused={paused}
-            onBack={onBack}
+            sharedProps={props}
         >
             <div className="relative z-10 w-full h-[70vh] flex items-center justify-center p-8 pointer-events-none">
                 <AnimatePresence mode='popLayout'>
