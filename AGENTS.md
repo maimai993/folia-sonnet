@@ -27,6 +27,14 @@
   路径：`skills/file-modularization/SKILL.md`
   用于在新增或重构前端功能时约束文件长度、入口文件职责和模块拆分，避免继续把大量实现堆进 `App.tsx`、页面根组件或单个大文件。
 
+- `frontend-runtime-guardrails`
+  路径：`skills/frontend-runtime-guardrails/SKILL.md`
+  用于在新增、重构或审查前端运行时行为时约束高频动画、`useMotionValueEvent`、`requestAnimationFrame`、`ResizeObserver` 和 React state 更新频率，避免 visualizer 等路径引入高 CPU 或时序错位。
+
+- `reuse-project-utilities`
+  路径：`skills/reuse-project-utilities/SKILL.md`
+  用于在实现、重构或审查时提示优先复用仓库已有公共工具和常用库，例如 pretext 文本测量、visualizer runtime、歌词时序 helper、字体/颜色 helper、i18n、lucide 图标和虚拟列表，避免重复造轮子。
+
 全局沟通规则：
 
 - 不需要使用skills的时候，不要读取它们。
