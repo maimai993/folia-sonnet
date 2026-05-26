@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
-import { motion, AnimatePresence, MotionValue, useMotionValueEvent, motionValue } from 'framer-motion';
+import React, { useMemo, useState, useRef, useInsertionEffect } from 'react';
+import { motion, AnimatePresence, MotionValue, motionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
 import { Line, Theme, AudioBands, type TiltColorScheme, type TiltTuning, DEFAULT_TILT_TUNING } from '../../../types';
@@ -86,20 +86,33 @@ const findSegmentWordRange = (charOffset: number, segmentText: string, fullText:
     const segmentStart = charOffset;
     if (segmentStart < 0 || segmentStart >= fullText.length) return { startWordIndex: 0, endWordIndex: words.length };
 
-    let charCursor = 0;
+    const segmentEnd = segmentStart + segmentText.length;
+
+    let fullTextPos = 0;
     let startWordIndex = 0;
     let endWordIndex = words.length;
 
     for (let wi = 0; wi < words.length; wi++) {
-        const wordEnd = charCursor + words[wi].text.length;
-        if (charCursor <= segmentStart && wordEnd > segmentStart) {
+        const wordText = words[wi].text;
+        const wordFullStart = fullText.indexOf(wordText, fullTextPos);
+
+        if (wordFullStart === -1) {
+            fullTextPos += wordText.length;
+            continue;
+        }
+
+        const wordFullEnd = wordFullStart + wordText.length;
+
+        if (wordFullStart <= segmentStart && wordFullEnd > segmentStart) {
             startWordIndex = wi;
         }
-        if (charCursor < segmentStart + segmentText.length && wordEnd >= segmentStart + segmentText.length) {
+
+        if (wordFullStart < segmentEnd && wordFullEnd >= segmentEnd) {
             endWordIndex = wi + 1;
             break;
         }
-        charCursor = wordEnd;
+
+        fullTextPos = wordFullEnd;
     }
 
     return { startWordIndex, endWordIndex };
@@ -183,15 +196,21 @@ const buildCharTimings = (charOffset: number, segmentText: string, segmentStartT
 const getCharPulseIntensity = (currentTime: number, charTiming: CharTiming): number => {
     const { startTime, endTime } = charTiming;
     const rawDuration = Math.max(endTime - startTime, 0.05);
-    const duration = Math.min(rawDuration, 0.9);
+    const duration = Math.min(Math.max(rawDuration, 0.2), 0.9);
     const elapsed = currentTime - startTime;
 
-    if (elapsed < 0 || elapsed > duration * 2.2) return 0;
+    if (elapsed < 0) return 0;
 
-    const progress = Math.min(elapsed / duration, 1);
-    const pulseValue = Math.sin(progress * Math.PI);
+    if (elapsed <= duration) {
+        const progress = elapsed / duration;
+        return Math.sin(progress * Math.PI);
+    }
 
-    return Math.max(0, Math.min(1, pulseValue));
+    const afterElapsed = elapsed - duration;
+    const afterglowRamp = duration * 1.2;
+    if (afterElapsed >= afterglowRamp) return 0.25;
+
+    return 0.25 * (afterElapsed / afterglowRamp);
 };
 
 const measureAtSize = (text: string, pxSize: number, fontSpec: string): number => {
@@ -363,18 +382,21 @@ const TiltLine: React.FC<{
 
     const colors = getColors();
 
-    const graphemes = [...GRAPHEME_SEGMENTER.segment(segment.text)];
+    const graphemes = useMemo(
+        () => [...GRAPHEME_SEGMENTER.segment(segment.text)],
+        [segment.text]
+    );
     let visualIndex = 0;
 
     const charTimings = useMemo(() => {
-        if (!visible || !activeLine) return [];
+        if (!activeLine) return [];
         return buildCharTimings(segment.charOffset, segment.text, segmentStartTime, segmentEndTime, activeLine);
-    }, [visible, activeLine, segment.charOffset, segment.text, segmentStartTime, segmentEndTime]);
+    }, [activeLine, segment.charOffset, segment.text, segmentStartTime, segmentEndTime]);
 
     const charScaleMvs = useRef<MotionValue<number>[]>([]);
-    useEffect(() => {
+    if (charScaleMvs.current.length !== graphemes.length) {
         charScaleMvs.current = graphemes.map(() => motionValue(1));
-    }, [graphemes.length]);
+    }
 
     const charIndexMap = useMemo(() => {
         let idx = 0;
@@ -385,30 +407,37 @@ const TiltLine: React.FC<{
         });
     }, [graphemes]);
 
-    useMotionValueEvent(currentTime, 'change', (latest) => {
-        const mvs = charScaleMvs.current;
-        if (mvs.length !== graphemes.length) return;
-        if (!charTimings || charTimings.length === 0) {
-            for (let i = 0; i < mvs.length; i++) mvs[i].set(1);
-            return;
-        }
+    useInsertionEffect(() => {
+        const handler = (latest: number) => {
+            if (!visible) return;
+            const mvs = charScaleMvs.current;
+            if (mvs.length !== graphemes.length) return;
+            if (!charTimings || charTimings.length === 0) {
+                for (let i = 0; i < mvs.length; i++) mvs[i].set(1);
+                return;
+            }
 
-        for (let ti = 0; ti < graphemes.length; ti++) {
-            const seg = graphemes[ti];
-            if (/^\s+$/.test(seg.segment)) {
-                mvs[ti].set(1);
-                continue;
+            for (let ti = 0; ti < graphemes.length; ti++) {
+                const seg = graphemes[ti];
+                if (/^\s+$/.test(seg.segment)) {
+                    mvs[ti].set(1);
+                    continue;
+                }
+                const ci = charIndexMap[ti];
+                const charTiming = charTimings[ci];
+                if (!charTiming) {
+                    mvs[ti].set(1);
+                    continue;
+                }
+                const intensity = getCharPulseIntensity(latest, charTiming);
+
+                mvs[ti].set(1 + intensity * (segment.isTilt ? 0.18 : 0.15));
             }
-            const ci = charIndexMap[ti];
-            const charTiming = charTimings[ci];
-            if (!charTiming) {
-                mvs[ti].set(1);
-                continue;
-            }
-            const intensity = getCharPulseIntensity(latest, charTiming);
-            mvs[ti].set(1 + intensity * (segment.isTilt ? 0.18 : 0.15));
-        }
-    });
+        };
+        const unsubscribe = currentTime.on('change', handler);
+        handler(currentTime.get());
+        return unsubscribe;
+    }, [currentTime, graphemes, charTimings, segment, charIndexMap, visible]);
 
     if (!segment.isTilt) {
         return (
@@ -560,38 +589,51 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
 
     const segmentTimings = useMemo(() => {
         if (!activeLine || !layout) return null;
-        const start = activeLine.startTime;
-        const end = getLineRenderEndTime(activeLine);
-        const totalDuration = Math.max(end - start, 0.5);
-        const segCount = layout.segments.length;
-        const segDuration = totalDuration / segCount;
-        return layout.segments.map((_, i) => ({
-            start: start + i * segDuration,
-            end: start + (i + 1) * segDuration,
-        }));
+
+        return layout.segments.map(seg => {
+            const { startWordIndex, endWordIndex } = findSegmentWordRange(
+                seg.charOffset, seg.text, activeLine.fullText, activeLine.words
+            );
+            const segWords = activeLine.words.slice(startWordIndex, endWordIndex);
+
+            if (segWords.length > 0) {
+                return {
+                    start: segWords[0].startTime,
+                    end: segWords[segWords.length - 1].endTime,
+                };
+            }
+
+            return {
+                start: activeLine.startTime,
+                end: getLineRenderEndTime(activeLine),
+            };
+        });
     }, [activeLine, layout]);
 
-    const handleTimeChange = useCallback((latest: number) => {
-        if (!segmentTimings || !activeLine) {
-            setVisibleSegmentIndex(-1);
-            return;
-        }
-
-        let targetIndex = -1;
-        for (let i = 0; i < segmentTimings.length; i++) {
-            if (latest >= segmentTimings[i].start - 0.25) {
-                targetIndex = i;
+    useInsertionEffect(() => {
+        const handler = (latest: number) => {
+            if (!segmentTimings || !activeLine) {
+                setVisibleSegmentIndex(-1);
+                return;
             }
-        }
 
-        if (latest < activeLine.startTime - 0.1 || latest > getLineRenderEndTime(activeLine)) {
-            targetIndex = -1;
-        }
+            let targetIndex = -1;
+            for (let i = 0; i < segmentTimings.length; i++) {
+                if (latest >= segmentTimings[i].start - 0.25) {
+                    targetIndex = i;
+                }
+            }
 
-        setVisibleSegmentIndex(prev => (prev !== targetIndex ? targetIndex : prev));
-    }, [segmentTimings, activeLine]);
+            if (latest < activeLine.startTime - 0.1 || latest > getLineRenderEndTime(activeLine)) {
+                targetIndex = -1;
+            }
 
-    useMotionValueEvent(currentTime, 'change', handleTimeChange);
+            setVisibleSegmentIndex(prev => (prev !== targetIndex ? targetIndex : prev));
+        };
+        const unsubscribe = currentTime.on('change', handler);
+        handler(currentTime.get());
+        return unsubscribe;
+    }, [currentTime, segmentTimings, activeLine]);
 
     const translationFontSize = `clamp(${(1.125 * lyricsFontScale).toFixed(3)}rem, ${(2.6 * lyricsFontScale).toFixed(3)}vw, ${(1.25 * lyricsFontScale).toFixed(3)}rem)`;
     const upcomingFontSize = `clamp(${(0.875 * lyricsFontScale).toFixed(3)}rem, ${(2 * lyricsFontScale).toFixed(3)}vw, ${(1 * lyricsFontScale).toFixed(3)}rem)`;
