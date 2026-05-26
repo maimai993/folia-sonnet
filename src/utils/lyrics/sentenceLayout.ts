@@ -21,7 +21,7 @@ class SentenceLayout implements LyricLayoutUnit {
         this.text = text;
     }
 
-    static splitIntoSentences(text: string, targetCount: number): SentenceLayout[] {
+    static splitIntoSentences(text: string, targetCount: number, timeSeed?: number): SentenceLayout[] {
         if (targetCount <= 1 && targetCount >= 0) {
             return [new SentenceLayout(text)];
         }
@@ -49,7 +49,7 @@ class SentenceLayout implements LyricLayoutUnit {
         let result = sentences.map(s => new SentenceLayout(s));
 
         if (targetCount > 0 && result.length < targetCount) {
-            result = SentenceLayout.secondarySplit(result, targetCount);
+            result = SentenceLayout.secondarySplit(result, targetCount, timeSeed);
         }
 
         if (result.length > 1 && result.length > targetCount && targetCount > 0) {
@@ -442,7 +442,7 @@ class SentenceLayout implements LyricLayoutUnit {
         return result.filter(r => r.length > 0);
     }
 
-    private static secondarySplit(sentences: SentenceLayout[], targetCount: number): SentenceLayout[] {
+    private static secondarySplit(sentences: SentenceLayout[], targetCount: number, timeSeed?: number): SentenceLayout[] {
         const Segmenter = Intl?.Segmenter;
         while (sentences.length < targetCount) {
             const candidates = sentences.filter(s => s.text.length > 2);
@@ -453,7 +453,8 @@ class SentenceLayout implements LyricLayoutUnit {
                 return x - Math.floor(x);
             };
 
-            const seed = Date.now() + sentences.length;
+            const textHash = sentences.reduce((acc, s) => acc + s.text.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0), 0);
+            const seed = textHash + sentences.length + (timeSeed ?? 0);
             const randomIndex = Math.floor(pseudoRandom(seed) * candidates.length);
             const selectedCandidate = candidates[randomIndex];
             const candidateIndex = sentences.indexOf(selectedCandidate);

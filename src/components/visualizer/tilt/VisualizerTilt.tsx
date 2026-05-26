@@ -222,7 +222,7 @@ const buildTiltLayout = (fullText: string, lineSeed: number, tuning: TiltTuning,
         mergedSegments = [fullText];
     } else {
         const numLines = determineLineCount(charCount, lineSeed, tuning.splitProbability);
-        const layoutUnits = SentenceLayout.splitIntoSentences(fullText, numLines);
+        const layoutUnits = SentenceLayout.splitIntoSentences(fullText, numLines, lineSeed);
         mergedSegments = layoutUnits.map(u => u.text);
     }
 
@@ -274,7 +274,7 @@ const buildTiltLayout = (fullText: string, lineSeed: number, tuning: TiltTuning,
             const totalEstWidth = measureAtSize(fullText, normalBasePx, normalFontSpec);
             const extraSplitsNeeded = Math.min(4, Math.max(segments.length + 1, Math.ceil(totalEstWidth / targetWidth)));
             if (extraSplitsNeeded > segments.length) {
-                const reSplitUnits = SentenceLayout.splitIntoSentences(fullText, extraSplitsNeeded);
+                const reSplitUnits = SentenceLayout.splitIntoSentences(fullText, extraSplitsNeeded, lineSeed);
                 const newSegments: TiltSegment[] = reSplitUnits.map(u => ({ text: u.text, isTilt: false, isShortLastLine: false }));
                 if (newSegments.length > 0) {
                     const resplitTiltRoll = seededRandom(lineSeed, 300);
