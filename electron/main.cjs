@@ -1,8 +1,8 @@
 const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, nativeImage, desktopCapturer, Menu, Tray } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const Store = require('electron-store').default || require('electron-store');
 const crypto = require('crypto');
-const { autoUpdater } = require('electron-updater');
 const { createStageApi } = require('./stageApi.cjs');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
 const isAppImageRuntime =
@@ -35,7 +35,7 @@ if (process.platform === 'linux') {
   }
 }
 
-const store = new Store();
+const store = new Store({ projectName: 'Folia' });
 let mainWindow = null;
 let remoteControlWindow = null;
 let appTray = null;
@@ -45,6 +45,7 @@ let mainWindowClickThroughEnabled = false;
 let mainWindowClickThroughUnlockHover = false;
 let mainWindowSkipTaskbarEnabled = false;
 let videoExportWindowRestoreState = null;
+let autoUpdater = null;
 const DEFAULT_WINDOW_BOUNDS = {
   width: 1200,
   height: 800,
@@ -65,14 +66,29 @@ const FOLIA_RELEASES_URL = 'https://github.com/chthollyphile/folia-major/release
 const FOLIA_LATEST_RELEASE_API_URL = 'https://api.github.com/repos/chthollyphile/folia-major/releases/latest';
 const WINDOWS_APP_USER_MODEL_ID = 'top.izuna.foliamajor';
 const REMOTE_CONTROL_WINDOW_TITLE = 'Folia Remote';
-const APP_ICON_PATH = path.join(__dirname, '../build/icon.png');
+const bundledAppIconPath = path.join(__dirname, '../build/icon.png');
+const extraResourceIconPath = path.join(process.resourcesPath, 'icon.png');
+const APP_ICON_PATH = fs.existsSync(bundledAppIconPath) ? bundledAppIconPath : extraResourceIconPath;
 const THUMBAR_ICON_DIR = path.join(__dirname, '../build/thumbar');
+
+function loadThumbarIcon(name) {
+  if (!nativeImage || typeof nativeImage.createFromPath !== 'function') {
+    return null;
+  }
+
+  return nativeImage.createFromPath(path.join(THUMBAR_ICON_DIR, name)).resize({
+    width: 16,
+    height: 16,
+    quality: 'best',
+  });
+}
+
 const THUMBAR_BUTTON_ICONS = process.platform === 'win32'
   ? {
-      previous: nativeImage.createFromPath(path.join(THUMBAR_ICON_DIR, 'previous.png')).resize({ width: 16, height: 16, quality: 'best' }),
-      play: nativeImage.createFromPath(path.join(THUMBAR_ICON_DIR, 'play.png')).resize({ width: 16, height: 16, quality: 'best' }),
-      pause: nativeImage.createFromPath(path.join(THUMBAR_ICON_DIR, 'pause.png')).resize({ width: 16, height: 16, quality: 'best' }),
-      next: nativeImage.createFromPath(path.join(THUMBAR_ICON_DIR, 'next.png')).resize({ width: 16, height: 16, quality: 'best' }),
+      previous: loadThumbarIcon('previous.png'),
+      play: loadThumbarIcon('play.png'),
+      pause: loadThumbarIcon('pause.png'),
+      next: loadThumbarIcon('next.png'),
     }
   : null;
 
@@ -357,7 +373,13 @@ function ensureTray() {
     return appTray;
   }
 
-  appTray = new Tray(APP_ICON_PATH);
+  try {
+    appTray = new Tray(APP_ICON_PATH);
+  } catch (error) {
+    console.error('[Electron] Failed to create tray icon', error);
+    return null;
+  }
+
   appTray.on('click', () => {
     if (!isMainWindowVisible()) {
       focusMainWindow();
@@ -681,6 +703,22 @@ function setUpdateState(patch) {
   publishUpdateStatus();
 }
 
+// Load electron-updater lazily so updater failures don't block the main window.
+function ensureAutoUpdater() {
+  if (autoUpdater !== null) {
+    return autoUpdater;
+  }
+
+  try {
+    ({ autoUpdater } = require('electron-updater'));
+  } catch (error) {
+    console.error('[Updater] Failed to load electron-updater', error);
+    autoUpdater = false;
+  }
+
+  return autoUpdater || null;
+}
+
 async function fetchLatestReleaseMetadata() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
@@ -714,11 +752,21 @@ async function fetchLatestReleaseMetadata() {
 }
 
 function setupAutoUpdater() {
-  autoUpdater.autoDownload = false;
-  autoUpdater.allowPrerelease = false;
-  autoUpdater.autoInstallOnAppQuit = false;
+  const updater = ensureAutoUpdater();
+  if (!updater) {
+    setUpdateState({
+      status: isAutoUpdaterSupported() ? 'error' : 'idle',
+      error: isAutoUpdaterSupported() ? 'Failed to initialize auto updater.' : null,
+      downloadProgress: null,
+    });
+    return;
+  }
 
-  autoUpdater.on('download-progress', (progress) => {
+  updater.autoDownload = false;
+  updater.allowPrerelease = false;
+  updater.autoInstallOnAppQuit = false;
+
+  updater.on('download-progress', (progress) => {
     setUpdateState({
       status: 'downloading',
       error: null,
@@ -730,7 +778,7 @@ function setupAutoUpdater() {
     });
   });
 
-  autoUpdater.on('update-downloaded', (info) => {
+  updater.on('update-downloaded', (info) => {
     setUpdateState({
       status: 'downloaded',
       availableVersion: normalizeVersion(info?.version) || updateState.availableVersion,
@@ -739,7 +787,7 @@ function setupAutoUpdater() {
     });
   });
 
-  autoUpdater.on('error', (error) => {
+  updater.on('error', (error) => {
     setUpdateState({
       status: 'error',
       error: error instanceof Error ? error.message : String(error),
@@ -754,6 +802,16 @@ async function downloadAvailableUpdate() {
     return getUpdateStatus();
   }
 
+  const updater = ensureAutoUpdater();
+  if (!updater) {
+    setUpdateState({
+      status: 'error',
+      error: 'Failed to initialize auto updater.',
+      downloadProgress: null,
+    });
+    return getUpdateStatus();
+  }
+
   if (!updateState.availableVersion) {
     await checkForUpdates({ manual: true });
   }
@@ -764,8 +822,8 @@ async function downloadAvailableUpdate() {
 
   try {
     setUpdateState({ status: 'downloading', error: null, downloadProgress: null });
-    autoUpdater.autoDownload = true;
-    await autoUpdater.checkForUpdates();
+    updater.autoDownload = true;
+    await updater.checkForUpdates();
   } catch (error) {
     setUpdateState({
       status: 'error',
@@ -810,8 +868,17 @@ async function checkForUpdates({ manual = false } = {}) {
     });
 
     if (hasUpdate && getAutoUpdateEnabled() && isAutoUpdaterSupported()) {
-      autoUpdater.autoDownload = true;
-      await autoUpdater.checkForUpdates();
+      const updater = ensureAutoUpdater();
+      if (updater) {
+        updater.autoDownload = true;
+        await updater.checkForUpdates();
+      } else {
+        setUpdateState({
+          status: 'error',
+          error: 'Failed to initialize auto updater.',
+          downloadProgress: null,
+        });
+      }
     }
   } catch (error) {
     setUpdateState({
@@ -1278,7 +1345,6 @@ process.env.ENABLE_GENERAL_UNBLOCK = 'false';
 
 // Issue: Netease API module reads 'anonymous_token' synchronously from tmp dir upon require.
 // If not present, Electron crashes with ENOENT. We pre-create it safely.
-const fs = require('fs');
 const fsp = fs.promises;
 const os = require('os');
 const tokenPath = path.resolve(os.tmpdir(), 'anonymous_token');
@@ -1878,11 +1944,12 @@ ipcMain.handle('updates-download', () => {
 });
 
 ipcMain.handle('updates-quit-and-install', () => {
-  if (!isAutoUpdaterSupported() || updateState.status !== 'downloaded') {
+  const updater = ensureAutoUpdater();
+  if (!isAutoUpdaterSupported() || !updater || updateState.status !== 'downloaded') {
     return false;
   }
 
-  autoUpdater.quitAndInstall(false, true);
+  updater.quitAndInstall(false, true);
   return true;
 });
 

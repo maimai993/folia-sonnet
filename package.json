@@ -52,6 +52,10 @@
     "extraResources": [
       {
         "from": "build/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "build/icon.png",
         "to": "linux/icon.png"
       },
       {
