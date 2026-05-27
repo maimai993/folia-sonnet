@@ -1,6 +1,7 @@
 name: Canary Pre-Release
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - '**'
@@ -16,7 +17,7 @@ jobs:
   check-canary:
     name: Check for Canary marker
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, '[canary]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[canary]')
     outputs:
       should_build: ${{ steps.meta.outputs.should_build }}
       version: ${{ steps.meta.outputs.version }}
