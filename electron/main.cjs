@@ -1622,6 +1622,7 @@ function createRemoteControlWindow() {
     maxHeight: 230,
     frame: false,
     transparent: true,
+    hasShadow: false,
     backgroundColor: '#00000000',
     title: REMOTE_CONTROL_WINDOW_TITLE,
     name: 'folia-remote',

@@ -60,6 +60,7 @@ const RemoteControlApp: React.FC = () => {
     useEffect(() => {
         document.body.style.backgroundColor = 'transparent';
         document.documentElement.style.backgroundColor = 'transparent';
+        document.body.style.overflow = 'visible';
     }, []);
 
     useEffect(() => {
@@ -126,7 +127,6 @@ const RemoteControlApp: React.FC = () => {
 
     return (
         <main
-        // TODO: 这里有一个非常奇怪的边缘线框，不知道是什么原因导致的，需要进一步调查
             className={`h-screen w-screen bg-transparent p-1 select-none transition-colors duration-300 ${
                 isDaylight ? 'text-zinc-900' : 'text-white'
             }`}
