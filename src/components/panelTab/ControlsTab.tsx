@@ -339,19 +339,22 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                         <motion.div
                             layout
                             data-visualizer-panel="true"
-                            className={`hide-scrollbar relative max-h-[11.25rem] overflow-y-auto rounded-[1.15rem] border shadow-2xl ${overlaySurfaceClass}`}
+                            className={`relative max-h-[11.25rem] overflow-hidden rounded-[1.15rem] border shadow-2xl ${overlaySurfaceClass}`}
                             style={{
                                 boxShadow: isDaylight
                                     ? '0 18px 44px rgba(15, 23, 42, 0.14)'
                                     : '0 22px 60px rgba(0, 0, 0, 0.42)',
+                                backgroundColor: isDaylight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(0, 0, 0, 0.94)',
                             }}
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <div className="relative overflow-hidden px-1.5 py-1.5">
-                                <div
-                                    className="absolute inset-0"
-                                    style={{ backgroundColor: isDaylight ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.94)' }}
-                                />
+                            <div 
+                                className="visualizer-overlay-scrollbar max-h-[11.25rem] overflow-y-auto px-1.5 py-1.5 pr-1.5"
+                                style={{
+                                    ['--scrollbar-thumb-color' as any]: isDaylight ? 'rgba(0, 0, 0, 0.16)' : 'rgba(255, 255, 255, 0.22)',
+                                    ['--scrollbar-thumb-hover-color' as any]: isDaylight ? 'rgba(0, 0, 0, 0.28)' : 'rgba(255, 255, 255, 0.35)',
+                                }}
+                            >
                                 <div className="relative space-y-0.5">
                                     {VISUALIZER_REGISTRY.map((entry) => {
                                         const isActive = entry.mode === visualizerMode;

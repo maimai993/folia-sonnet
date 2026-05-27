@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock } from 'lucide-react';
+import { Lock, LockOpen } from 'lucide-react';
 import TitlebarDragZone from '../TitlebarDragZone';
 import WindowControls from '../WindowControls';
 
@@ -13,8 +13,9 @@ type AppShellProps = {
     showTransparentWindowBorder: boolean;
     isPlayerView: boolean;
     isTitlebarRevealed: boolean;
-    showClickThroughUnlockButton: boolean;
-    onDisableMainWindowClickThrough: () => void;
+    isMainWindowClickThroughEnabled: boolean;
+    showMainWindowClickThroughToggle: boolean;
+    onToggleMainWindowClickThrough: () => void;
     audioElement: React.ReactNode;
     children: React.ReactNode;
 };
@@ -27,8 +28,9 @@ const AppShell: React.FC<AppShellProps> = ({
     showTransparentWindowBorder,
     isPlayerView,
     isTitlebarRevealed,
-    showClickThroughUnlockButton,
-    onDisableMainWindowClickThrough,
+    isMainWindowClickThroughEnabled,
+    showMainWindowClickThroughToggle,
+    onToggleMainWindowClickThrough,
     audioElement,
     children,
 }) => {
@@ -89,22 +91,28 @@ const AppShell: React.FC<AppShellProps> = ({
                     )}
                     <div className="relative h-full">
                         <TitlebarDragZone active={usesCustomWindowChrome} />
-                        {showClickThroughUnlockButton && (
-                            <div
-                                className="pointer-events-auto absolute top-1 right-[180px] z-20"
-                                style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                        <div
+                            className="pointer-events-auto absolute top-1 right-[180px] z-20"
+                            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                        >
+                            <button
+                                type="button"
+                                aria-label={isMainWindowClickThroughEnabled ? 'Disable click-through' : 'Enable click-through'}
+                                title={isMainWindowClickThroughEnabled ? '关闭点击穿透' : '开启点击穿透'}
+                                onClick={onToggleMainWindowClickThrough}
+                                className={`flex h-7 w-7 items-center justify-center rounded-full border shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-md transition-all duration-200 ${
+                                    showMainWindowClickThroughToggle
+                                        ? 'pointer-events-auto opacity-100 translate-y-0'
+                                        : 'pointer-events-none opacity-0 -translate-y-1'
+                                } ${
+                                    isMainWindowClickThroughEnabled
+                                        ? 'border-amber-300/35 bg-black/55 text-amber-100 hover:bg-black/70'
+                                        : 'border-white/15 bg-transparent text-white/75 hover:bg-black/20 hover:text-white'
+                                }`}
                             >
-                                <button
-                                    type="button"
-                                    aria-label="Disable click-through"
-                                    title="解除点击穿透"
-                                    onClick={onDisableMainWindowClickThrough}
-                                    className="flex h-7 w-7 items-center justify-center rounded-full border border-amber-300/35 bg-black/55 text-amber-100 shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-md transition hover:bg-black/70"
-                                >
-                                    <Lock size={14} />
-                                </button>
-                            </div>
-                        )}
+                                {isMainWindowClickThroughEnabled ? <Lock size={14} /> : <LockOpen size={14} />}
+                            </button>
+                        </div>
                         <div className="pointer-events-auto absolute top-0 right-0 z-10 h-full">
                             <WindowControls revealed={isTitlebarRevealed} />
                         </div>

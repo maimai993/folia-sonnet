@@ -84,7 +84,7 @@ export default function App() {
     const [isTitlebarRevealed, setIsTitlebarRevealed] = useState(false);
     const [showTransparentWindowBorder, setShowTransparentWindowBorder] = useState(false);
     const [isMainWindowClickThroughEnabled, setIsMainWindowClickThroughEnabled] = useState(false);
-    const [isClickThroughUnlockHotspotActive, setIsClickThroughUnlockHotspotActive] = useState(false);
+    const [isClickThroughToggleHotspotActive, setIsClickThroughToggleHotspotActive] = useState(false);
 
     // Player Data
     const [audioSrc, setAudioSrc] = useState<string | null>(null);
@@ -1115,22 +1115,31 @@ export default function App() {
 
     useEffect(() => {
         if (!isElectronWindow || !isMainWindowClickThroughEnabled || !window.electron?.setMainWindowClickThroughUnlockHover) {
-            setIsClickThroughUnlockHotspotActive(false);
+            setIsClickThroughToggleHotspotActive(false);
             void window.electron?.setMainWindowClickThroughUnlockHover?.(false);
             return;
         }
 
-        const unlockHotspotWidth = 260;
-        const unlockHotspotHeight = 56;
+        const toggleHotspotWidth = 48;
+        const toggleHotspotHeight = 40;
+        const toggleHotspotRightInset = 176;
+        const toggleHotspotTopInset = 4;
 
-        const syncUnlockHotspot = (active: boolean) => {
-            setIsClickThroughUnlockHotspotActive(prev => (prev === active ? prev : active));
+        const syncToggleHotspot = (active: boolean) => {
+            setIsClickThroughToggleHotspotActive(prev => (prev === active ? prev : active));
             void window.electron!.setMainWindowClickThroughUnlockHover(active);
         };
 
         const handleMouseMove = (event: MouseEvent) => {
-            const withinHotspot = event.clientY <= unlockHotspotHeight && event.clientX >= window.innerWidth - unlockHotspotWidth;
-            setIsClickThroughUnlockHotspotActive(prev => {
+            const withinHorizontalBounds =
+                event.clientX >= window.innerWidth - toggleHotspotRightInset - toggleHotspotWidth
+                && event.clientX <= window.innerWidth - toggleHotspotRightInset;
+            const withinVerticalBounds =
+                event.clientY >= toggleHotspotTopInset
+                && event.clientY <= toggleHotspotTopInset + toggleHotspotHeight;
+            const withinHotspot = withinHorizontalBounds && withinVerticalBounds;
+
+            setIsClickThroughToggleHotspotActive(prev => {
                 if (prev === withinHotspot) {
                     return prev;
                 }
@@ -1141,7 +1150,7 @@ export default function App() {
         };
 
         const handleMouseLeave = () => {
-            syncUnlockHotspot(false);
+            syncToggleHotspot(false);
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -1150,7 +1159,7 @@ export default function App() {
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseleave', handleMouseLeave);
-            syncUnlockHotspot(false);
+            syncToggleHotspot(false);
         };
     }, [isElectronWindow, isMainWindowClickThroughEnabled]);
     const {
@@ -1799,10 +1808,17 @@ export default function App() {
             showTransparentWindowBorder={showTransparentWindowBorder}
             isPlayerView={isPlayerView}
             isTitlebarRevealed={isTitlebarRevealed}
-            showClickThroughUnlockButton={isMainWindowClickThroughEnabled && isClickThroughUnlockHotspotActive}
-            onDisableMainWindowClickThrough={() => {
-                setIsClickThroughUnlockHotspotActive(false);
-                void window.electron?.setMainWindowClickThroughEnabled?.(false);
+            isMainWindowClickThroughEnabled={isMainWindowClickThroughEnabled}
+            showMainWindowClickThroughToggle={isMainWindowClickThroughEnabled ? isClickThroughToggleHotspotActive : isTitlebarRevealed}
+            onToggleMainWindowClickThrough={() => {
+                const nextEnabled = !isMainWindowClickThroughEnabled;
+                if (!nextEnabled) {
+                    setIsClickThroughToggleHotspotActive(false);
+                }
+                void window.electron?.setMainWindowClickThroughEnabled?.(nextEnabled);
+                if (!nextEnabled) {
+                    void window.electron?.setMainWindowClickThroughUnlockHover?.(false);
+                }
             }}
             audioElement={<audio
                 ref={audioRef}
