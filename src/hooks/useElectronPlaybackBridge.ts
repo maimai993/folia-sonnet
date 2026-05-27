@@ -22,6 +22,7 @@ type UseElectronPlaybackBridgeOptions = {
     currentTime: MotionValue<number>;
     duration: number;
     currentSong: SongResult | null;
+    coverUrl: string | null;
     cachedCoverUrl: string | null;
     playerState: PlayerState;
     playQueue: SongResult[];
@@ -53,6 +54,7 @@ export const useElectronPlaybackBridge = ({
     currentTime,
     duration,
     currentSong,
+    coverUrl,
     cachedCoverUrl,
     playerState,
     playQueue,
@@ -83,7 +85,7 @@ export const useElectronPlaybackBridge = ({
             hasTrack: hasActiveTrack,
             title: currentSong?.name ?? null,
             artist: currentSong?.artists?.map(artist => artist.name).join(', ') || null,
-            coverUrl: cachedCoverUrl,
+            coverUrl: coverUrl || cachedCoverUrl,
             currentTime: audioRef.current?.currentTime ?? currentTime.get(),
             duration,
             playerState,
@@ -189,7 +191,7 @@ export const useElectronPlaybackBridge = ({
         const intervalId = window.setInterval(publish, 500);
         return () => window.clearInterval(intervalId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cachedCoverUrl, currentSong, duration, effectiveLoopMode, exportState, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground]);
+    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground]);
 
     useEffect(() => {
         if (!window.electron?.onRemoteControlCommand) {

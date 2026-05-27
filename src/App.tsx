@@ -964,6 +964,7 @@ export default function App() {
         currentTime,
         duration,
         currentSong,
+        coverUrl,
         cachedCoverUrl,
         playerState,
         playQueue,
