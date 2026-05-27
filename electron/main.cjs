@@ -60,6 +60,7 @@ const STAGE_API_TOKEN_SETTING_KEY = 'STAGE_API_TOKEN';
 const STAGE_API_PORT_SETTING_KEY = 'STAGE_API_PORT';
 const MINIMIZE_TO_TRAY_SETTING_KEY = 'MINIMIZE_TO_TRAY';
 const HIDE_TASKBAR_ICON_SETTING_KEY = 'HIDE_TASKBAR_ICON';
+const REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY = 'REMOTE_CONTROL_ALWAYS_ON_TOP';
 const TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY = 'TRANSPARENT_PLAYER_BACKGROUND';
 const DEFAULT_STAGE_API_PORT = 32107;
 const FOLIA_RELEASES_URL = 'https://github.com/chthollyphile/folia-major/releases';
@@ -92,7 +93,42 @@ const THUMBAR_BUTTON_ICONS = process.platform === 'win32'
     }
   : null;
 
-mainWindowSkipTaskbarEnabled = Boolean(store.get(HIDE_TASKBAR_ICON_SETTING_KEY));
+function readStoredBoolean(settingKey, fallback = false) {
+  const value = store.get(settingKey);
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+
+  return fallback;
+}
+
+function getPublicSettings() {
+  return {
+    ...store.store,
+    [MINIMIZE_TO_TRAY_SETTING_KEY]: readStoredBoolean(MINIMIZE_TO_TRAY_SETTING_KEY, false),
+    [HIDE_TASKBAR_ICON_SETTING_KEY]: readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false),
+    [REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true),
+    [TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY]: readStoredBoolean(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, false),
+  };
+}
+
+mainWindowSkipTaskbarEnabled = readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false);
+remoteControlAlwaysOnTop = readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true);
 
 const stageApi = createStageApi({
   app,
@@ -301,7 +337,7 @@ function toggleMainWindowVisibility() {
 }
 
 function isMinimizeToTrayEnabled() {
-  return Boolean(store.get(MINIMIZE_TO_TRAY_SETTING_KEY));
+  return readStoredBoolean(MINIMIZE_TO_TRAY_SETTING_KEY, false);
 }
 
 function setMainWindowSkipTaskbarEnabled(enabled) {
@@ -316,6 +352,18 @@ function setMainWindowSkipTaskbarEnabled(enabled) {
 function persistMainWindowSkipTaskbarEnabled(enabled) {
   store.set(HIDE_TASKBAR_ICON_SETTING_KEY, Boolean(enabled));
   return setMainWindowSkipTaskbarEnabled(enabled);
+}
+
+function applyRemoteControlAlwaysOnTop(win) {
+  if (!win || win.isDestroyed()) {
+    return false;
+  }
+
+  win.setAlwaysOnTop(remoteControlAlwaysOnTop, 'screen-saver');
+  if (remoteControlAlwaysOnTop && typeof win.moveTop === 'function') {
+    win.moveTop();
+  }
+  return remoteControlAlwaysOnTop;
 }
 
 function refreshTrayMenu() {
@@ -1606,7 +1654,7 @@ function sendRemoteControlSnapshot(snapshot) {
 
 function createRemoteControlWindow() {
   if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
-    remoteControlWindow.setAlwaysOnTop(remoteControlAlwaysOnTop, 'screen-saver');
+    applyRemoteControlAlwaysOnTop(remoteControlWindow);
     remoteControlWindow.show();
     remoteControlWindow.focus();
     return remoteControlWindow;
@@ -1642,9 +1690,11 @@ function createRemoteControlWindow() {
   });
 
   remoteControlWindow = win;
+  applyRemoteControlAlwaysOnTop(win);
   loadAppEntry(win, { remote: '1' });
 
   win.once('ready-to-show', () => {
+    applyRemoteControlAlwaysOnTop(win);
     if (latestRemoteControlSnapshot) {
       sendRemoteControlSnapshot(latestRemoteControlSnapshot);
     }
@@ -1828,14 +1878,24 @@ app.on('window-all-closed', () => {
 
 // Settings Management IPC
 ipcMain.handle('get-settings', () => {
-  return store.store;
+  return getPublicSettings();
 });
 
 ipcMain.handle('save-settings', (event, key, value) => {
-  store.set(key, value);
+  let nextValue = value;
+  if (
+    key === MINIMIZE_TO_TRAY_SETTING_KEY ||
+    key === HIDE_TASKBAR_ICON_SETTING_KEY ||
+    key === REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY ||
+    key === TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY
+  ) {
+    nextValue = Boolean(value);
+  }
+
+  store.set(key, nextValue);
 
   if (key === ENABLE_UPDATE_CHECK_SETTING_KEY) {
-    if (Boolean(value)) {
+    if (Boolean(nextValue)) {
       checkForUpdates().catch((error) => {
         setUpdateState({
           status: 'error',
@@ -1849,7 +1909,7 @@ ipcMain.handle('save-settings', (event, key, value) => {
 
   if (key === ENABLE_AUTO_UPDATE_SETTING_KEY) {
     publishUpdateStatus();
-    if (Boolean(value) && updateState.availableVersion) {
+    if (Boolean(nextValue) && updateState.availableVersion) {
       downloadAvailableUpdate().catch((error) => {
         setUpdateState({
           status: 'error',
@@ -1860,7 +1920,12 @@ ipcMain.handle('save-settings', (event, key, value) => {
   }
 
   if (key === HIDE_TASKBAR_ICON_SETTING_KEY) {
-    setMainWindowSkipTaskbarEnabled(value);
+    setMainWindowSkipTaskbarEnabled(nextValue);
+  }
+
+  if (key === REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY) {
+    remoteControlAlwaysOnTop = Boolean(nextValue);
+    applyRemoteControlAlwaysOnTop(remoteControlWindow);
   }
 
   if (key === STAGE_MODE_SOURCE_SETTING_KEY) {
@@ -1869,7 +1934,7 @@ ipcMain.handle('save-settings', (event, key, value) => {
     });
   }
 
-  return store.store;
+  return getPublicSettings();
 });
 
 ipcMain.handle('get-cache-directory', () => {
@@ -2154,10 +2219,9 @@ ipcMain.handle('remote-control-set-always-on-top', (event, nextAlwaysOnTop) => {
   }
 
   remoteControlAlwaysOnTop = Boolean(nextAlwaysOnTop);
+  store.set(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, remoteControlAlwaysOnTop);
 
-  if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
-    remoteControlWindow.setAlwaysOnTop(remoteControlAlwaysOnTop, 'screen-saver');
-  }
+  applyRemoteControlAlwaysOnTop(remoteControlWindow);
 
   return remoteControlAlwaysOnTop;
 });
