@@ -1654,6 +1654,7 @@ function sendRemoteControlSnapshot(snapshot) {
 
 function createRemoteControlWindow() {
   if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
+    remoteControlWindow.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
     applyRemoteControlAlwaysOnTop(remoteControlWindow);
     remoteControlWindow.show();
     remoteControlWindow.focus();
@@ -1690,10 +1691,15 @@ function createRemoteControlWindow() {
   });
 
   remoteControlWindow = win;
+  win.on('page-title-updated', (event) => {
+    event.preventDefault();
+    win.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
+  });
   applyRemoteControlAlwaysOnTop(win);
   loadAppEntry(win, { remote: '1' });
 
   win.once('ready-to-show', () => {
+    win.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
     applyRemoteControlAlwaysOnTop(win);
     if (latestRemoteControlSnapshot) {
       sendRemoteControlSnapshot(latestRemoteControlSnapshot);

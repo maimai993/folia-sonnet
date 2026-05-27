@@ -20,6 +20,8 @@ const formatTime = (seconds: number) => {
     return `${minutes}:${String(rest).padStart(2, '0')}`;
 };
 
+const REMOTE_CONTROL_DOCUMENT_TITLE = 'Folia Remote';
+
 const sendCommand = (command: RemoteControlCommand) => {
     void window.electron?.sendRemoteControlCommand(command);
 };
@@ -61,6 +63,7 @@ const RemoteControlApp: React.FC = () => {
         document.body.style.backgroundColor = 'transparent';
         document.documentElement.style.backgroundColor = 'transparent';
         document.body.style.overflow = 'visible';
+        document.title = REMOTE_CONTROL_DOCUMENT_TITLE;
     }, []);
 
     useEffect(() => {
