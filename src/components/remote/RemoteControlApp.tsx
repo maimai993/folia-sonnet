@@ -126,14 +126,15 @@ const RemoteControlApp: React.FC = () => {
 
     return (
         <main
-            className={`h-screen w-screen overflow-hidden bg-transparent p-1 select-none transition-colors duration-300 ${
+        // TODO: 这里有一个非常奇怪的边缘线框，不知道是什么原因导致的，需要进一步调查
+            className={`h-screen w-screen bg-transparent p-1 select-none transition-colors duration-300 ${
                 isDaylight ? 'text-zinc-900' : 'text-white'
             }`}
             style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
             onMouseEnter={() => setWindowControlsRevealed(true)}
             onMouseLeave={() => setWindowControlsRevealed(false)}
         >
-            <div className={`relative flex h-full w-full rounded-[20px] border p-4 shadow-2xl items-center justify-center overflow-hidden transition-colors duration-300 ${
+            <div className={`relative flex h-full w-full rounded-[20px] border p-4 items-center justify-center overflow-hidden transition-colors duration-300 ${
                 isDaylight ? 'border-black/10' : 'border-white/10'
             }`}>
                 {/* Blurry gradient background */}
