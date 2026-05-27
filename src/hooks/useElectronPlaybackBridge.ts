@@ -36,6 +36,7 @@ type UseElectronPlaybackBridgeOptions = {
     taskbarHasTrackRef: RefObject<boolean>;
     taskbarPlayerStateRef: RefObject<PlayerState>;
     exportState: VideoExportState;
+    isDaylight: boolean;
     onRemoteExportCommand?: (command: RemoteControlCommand) => boolean;
     onExternalPlayRequest?: (request: any) => Promise<void>;
 };
@@ -68,6 +69,7 @@ export const useElectronPlaybackBridge = ({
     taskbarHasTrackRef,
     taskbarPlayerStateRef,
     exportState,
+    isDaylight,
     onRemoteExportCommand,
     onExternalPlayRequest,
 }: UseElectronPlaybackBridgeOptions) => {
@@ -98,6 +100,7 @@ export const useElectronPlaybackBridge = ({
             mainWindowBorderVisible: showTransparentWindowBorder,
             playerChromeHidden: isPlayerChromeHidden,
             exportState,
+            isDaylight,
             updatedAt: Date.now(),
         };
     };
@@ -191,7 +194,7 @@ export const useElectronPlaybackBridge = ({
         const intervalId = window.setInterval(publish, 500);
         return () => window.clearInterval(intervalId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground]);
+    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground]);
 
     useEffect(() => {
         if (!window.electron?.onRemoteControlCommand) {

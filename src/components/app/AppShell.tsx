@@ -92,7 +92,7 @@ const AppShell: React.FC<AppShellProps> = ({
                     <div className="relative h-full">
                         <TitlebarDragZone active={usesCustomWindowChrome} />
                         <div
-                            className="pointer-events-auto absolute top-1 right-[180px] z-20"
+                            className="pointer-events-auto absolute top-0 right-[180px] z-20 h-full flex items-center"
                             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
                         >
                             <button

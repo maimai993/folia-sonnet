@@ -41,6 +41,7 @@ const emptySnapshot: RemoteControlSnapshot = {
     mainWindowBorderVisible: false,
     playerChromeHidden: false,
     exportState: idleVideoExportState(),
+    isDaylight: false,
     updatedAt: 0,
 };
 
@@ -95,6 +96,7 @@ const RemoteControlApp: React.FC = () => {
     const title = snapshot.title || 'Folia';
     const artist = snapshot.artist || (snapshot.hasTrack ? 'Unknown artist' : 'No active track');
     const exportState = snapshot.exportState ?? idleVideoExportState();
+    const isDaylight = Boolean(snapshot.isDaylight);
 
     const lastStatusRef = React.useRef(exportState.status);
     useEffect(() => {
@@ -124,22 +126,41 @@ const RemoteControlApp: React.FC = () => {
 
     return (
         <main
-            className="h-screen w-screen overflow-hidden bg-transparent text-white p-1 select-none"
+            className={`h-screen w-screen overflow-hidden bg-transparent p-1 select-none transition-colors duration-300 ${
+                isDaylight ? 'text-zinc-900' : 'text-white'
+            }`}
             style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
             onMouseEnter={() => setWindowControlsRevealed(true)}
             onMouseLeave={() => setWindowControlsRevealed(false)}
         >
-            <div className="relative flex h-full w-full rounded-[20px] border border-white/10 p-4 shadow-2xl items-center justify-center overflow-hidden">
+            <div className={`relative flex h-full w-full rounded-[20px] border p-4 shadow-2xl items-center justify-center overflow-hidden transition-colors duration-300 ${
+                isDaylight ? 'border-black/10' : 'border-white/10'
+            }`}>
                 {/* Blurry gradient background */}
                 <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-                    {/* Deep dark blue-black base */}
-                    <div className="absolute inset-0 bg-[#060814]" />
-                    {/* Deep blue blurry blob top-left */}
-                    <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full bg-blue-600/20 blur-[40px]" />
-                    {/* Dark indigo/purple blurry blob bottom-right */}
-                    <div className="absolute -bottom-16 -right-16 w-52 h-52 rounded-full bg-indigo-500/15 blur-[50px]" />
-                    {/* Soft cyan/sky center highlight */}
-                    <div className="absolute top-1/4 right-1/4 w-32 h-32 rounded-full bg-sky-500/10 blur-[30px]" />
+                    {/* Base layer */}
+                    <div className={`absolute inset-0 transition-colors duration-300 ${isDaylight ? 'bg-[#f5f5f4]' : 'bg-[#060814]'}`} />
+                    
+                    {/* Blurry blobs */}
+                    {isDaylight ? (
+                        <>
+                            {/* Soft orange blurry blob top-left */}
+                            <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full bg-orange-400/20 blur-[40px] transition-all duration-300" />
+                            {/* Soft rose/pink blurry blob bottom-right */}
+                            <div className="absolute -bottom-16 -right-16 w-52 h-52 rounded-full bg-rose-300/20 blur-[50px] transition-all duration-300" />
+                            {/* Soft sky center highlight */}
+                            <div className="absolute top-1/4 right-1/4 w-32 h-32 rounded-full bg-sky-300/20 blur-[30px] transition-all duration-300" />
+                        </>
+                    ) : (
+                        <>
+                            {/* Deep blue blurry blob top-left */}
+                            <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full bg-blue-600/20 blur-[40px] transition-all duration-300" />
+                            {/* Dark indigo/purple blurry blob bottom-right */}
+                            <div className="absolute -bottom-16 -right-16 w-52 h-52 rounded-full bg-indigo-500/15 blur-[50px] transition-all duration-300" />
+                            {/* Soft cyan/sky center highlight */}
+                            <div className="absolute top-1/4 right-1/4 w-32 h-32 rounded-full bg-sky-500/10 blur-[30px] transition-all duration-300" />
+                        </>
+                    )}
                 </div>
 
                 <div
@@ -156,7 +177,11 @@ const RemoteControlApp: React.FC = () => {
                         aria-pressed={alwaysOnTop}
                         tabIndex={windowControlsRevealed ? 0 : -1}
                         onClick={handleToggleAlwaysOnTop}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-white/30 transition hover:bg-white/10 hover:text-white/80"
+                        className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                            isDaylight
+                                ? 'text-black/30 hover:bg-black/10 hover:text-black/80'
+                                : 'text-white/30 hover:bg-white/10 hover:text-white/80'
+                        }`}
                     >
                         {alwaysOnTop ? <Pin size={13} /> : <PinOff size={13} />}
                     </button>
@@ -165,7 +190,11 @@ const RemoteControlApp: React.FC = () => {
                         title="Close"
                         tabIndex={windowControlsRevealed ? 0 : -1}
                         onClick={() => void window.electron?.closeRemoteControl?.()}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-white/30 transition hover:bg-white/10 hover:text-white/80"
+                        className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                            isDaylight
+                                ? 'text-black/30 hover:bg-black/10 hover:text-black/80'
+                                : 'text-white/30 hover:bg-white/10 hover:text-white/80'
+                        }`}
                     >
                         <X size={13} />
                     </button>
@@ -174,9 +203,13 @@ const RemoteControlApp: React.FC = () => {
                 <div className="w-full flex items-center" style={noDragStyle}>
                     <div className="grid grid-cols-[112px_1fr] gap-4 w-full items-center">
                         {/* Left Column: Cover Art with Hover Back Overlay */}
-                        <div className="relative h-[112px] w-[112px] shrink-0 overflow-hidden rounded-xl bg-zinc-800 bg-cover bg-center shadow-md border border-white/5 group">
+                        <div className={`relative h-[112px] w-[112px] shrink-0 overflow-hidden rounded-xl bg-cover bg-center shadow-md group transition-all duration-300 ${
+                            isDaylight ? 'bg-zinc-200 border border-black/5' : 'bg-zinc-800 border border-white/5'
+                        }`}>
                             {!snapshot.coverUrl && (
-                                <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-white/35">
+                                <div className={`flex h-full w-full items-center justify-center text-3xl font-bold transition-colors duration-300 ${
+                                    isDaylight ? 'text-black/35' : 'text-white/35'
+                                }`}>
                                     F
                                 </div>
                             )}
@@ -194,7 +227,9 @@ const RemoteControlApp: React.FC = () => {
                                         setActivePanel('playback');
                                         setPresetSelectorOpen(false);
                                     }}
-                                    className="absolute inset-0 flex items-center justify-center bg-zinc-950/65 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-xl backdrop-blur-sm"
+                                    className={`absolute inset-0 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-xl backdrop-blur-sm ${
+                                        isDaylight ? 'bg-stone-900/65 text-white' : 'bg-zinc-950/65 text-white'
+                                    }`}
                                 >
                                     <ChevronLeft size={24} strokeWidth={2.5} />
                                 </button>
@@ -207,7 +242,9 @@ const RemoteControlApp: React.FC = () => {
                                         animate={{ opacity: 1, scale: 1 }}
                                         exit={{ opacity: 0, scale: 1.8 }}
                                         transition={{ duration: 0.35, ease: 'easeOut' }}
-                                        className="absolute inset-0 flex items-center justify-center bg-zinc-950/80 rounded-xl backdrop-blur-[2px] z-30"
+                                        className={`absolute inset-0 flex items-center justify-center rounded-xl backdrop-blur-[2px] z-30 ${
+                                            isDaylight ? 'bg-stone-950/70' : 'bg-zinc-950/80'
+                                        }`}
                                     >
                                         <span className="text-4xl font-black text-white tracking-tighter tabular-nums drop-shadow-[0_0_12px_rgba(255,255,255,0.45)]">
                                             {exportState.countdown}
@@ -222,7 +259,9 @@ const RemoteControlApp: React.FC = () => {
                             {/* Static Title & Artist */}
                             <div className="min-w-0 pr-6">
                                 <div className="truncate text-[15px] font-bold leading-5 tracking-[-0.01em]">{title}</div>
-                                <div className="truncate text-xs font-medium text-white/40 mt-0.5">{artist}</div>
+                                <div className={`truncate text-xs font-medium mt-0.5 transition-colors ${
+                                    isDaylight ? 'text-black/50' : 'text-white/40'
+                                }`}>{artist}</div>
                             </div>
 
                             {/* Dynamic Panel with Framer Motion transitions */}
@@ -239,31 +278,46 @@ const RemoteControlApp: React.FC = () => {
                                         >
                                             {/* Progress Slider */}
                                             <div className="w-full">
-                                                <input
-                                                    aria-label="Seek"
-                                                    type="range"
-                                                    min={0}
-                                                    max={duration || 1}
-                                                    step={0.1}
-                                                    value={progressValue}
-                                                    disabled={primaryDisabled || duration <= 0}
-                                                    onChange={(event) => setPendingSeek(Number(event.currentTarget.value))}
-                                                    onPointerUp={() => {
-                                                        if (pendingSeek !== null) {
-                                                            sendCommand({ type: 'seek', time: pendingSeek });
-                                                        }
-                                                    }}
-                                                    onKeyUp={(event) => {
-                                                        if (event.key === 'Enter' && pendingSeek !== null) {
-                                                            sendCommand({ type: 'seek', time: pendingSeek });
-                                                        }
-                                                    }}
-                                                    className="h-[3px] w-full appearance-none rounded-full cursor-pointer focus:outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-0 [&::-webkit-slider-thumb]:h-0 [&::-moz-range-thumb]:w-0 [&::-moz-range-thumb]:h-0 [&::-webkit-slider-runnable-track]:bg-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    style={{
-                                                        background: `linear-gradient(to right, #ffffff 0%, #ffffff ${progressPercent}%, rgba(255, 255, 255, 0.15) ${progressPercent}%, rgba(255, 255, 255, 0.15) 100%)`
-                                                    }}
-                                                />
-                                                <div className="mt-1 flex justify-between text-[10px] tabular-nums text-white/30">
+                                                <div className="relative w-full h-5 flex items-center" style={noDragStyle}>
+                                                    {/* Visible Track Background */}
+                                                    <div className={`w-full h-[3px] rounded-full transition-colors overflow-hidden ${
+                                                        isDaylight ? 'bg-black/10' : 'bg-white/15'
+                                                    }`}>
+                                                        {/* Visible Progress Fill */}
+                                                        <div 
+                                                            className={`h-full rounded-full transition-all duration-75 ${
+                                                                isDaylight ? 'bg-[#1c1917]' : 'bg-white'
+                                                            }`}
+                                                            style={{ width: `${progressPercent}%` }}
+                                                        />
+                                                    </div>
+
+                                                    {/* Transparent Large Hitbox Input Range */}
+                                                    <input
+                                                        aria-label="Seek"
+                                                        type="range"
+                                                        min={0}
+                                                        max={duration || 1}
+                                                        step={0.1}
+                                                        value={progressValue}
+                                                        disabled={primaryDisabled || duration <= 0}
+                                                        onChange={(event) => setPendingSeek(Number(event.currentTarget.value))}
+                                                        onPointerUp={() => {
+                                                            if (pendingSeek !== null) {
+                                                                sendCommand({ type: 'seek', time: pendingSeek });
+                                                            }
+                                                        }}
+                                                        onKeyUp={(event) => {
+                                                            if (event.key === 'Enter' && pendingSeek !== null) {
+                                                                sendCommand({ type: 'seek', time: pendingSeek });
+                                                            }
+                                                        }}
+                                                        className="absolute inset-x-0 h-5 w-full appearance-none cursor-pointer bg-transparent opacity-0 z-10 disabled:cursor-not-allowed [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-transparent [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-transparent"
+                                                    />
+                                                </div>
+                                                <div className={`mt-1 flex justify-between text-[10px] tabular-nums transition-colors ${
+                                                    isDaylight ? 'text-black/35' : 'text-white/30'
+                                                }`}>
                                                     <span>{formatTime(progressValue)}</span>
                                                     <span>{formatTime(duration)}</span>
                                                 </div>
@@ -277,7 +331,11 @@ const RemoteControlApp: React.FC = () => {
                                                         title="Previous"
                                                         disabled={primaryDisabled || !snapshot.canGoPrevious}
                                                         onClick={() => sendCommand({ type: 'previous' })}
-                                                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                            isDaylight
+                                                                ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
+                                                                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                                                        }`}
                                                     >
                                                         <SkipBack size={16} strokeWidth={2} />
                                                     </button>
@@ -286,7 +344,11 @@ const RemoteControlApp: React.FC = () => {
                                                         title={isPlaying ? 'Pause' : 'Play'}
                                                         disabled={primaryDisabled}
                                                         onClick={() => sendCommand({ type: 'play-pause' })}
-                                                        className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-950 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-35"
+                                                        className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                            isDaylight
+                                                                ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                                                                : 'bg-white text-zinc-950 hover:bg-white/90'
+                                                        }`}
                                                     >
                                                         {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} className="translate-x-0.5" fill="currentColor" />}
                                                     </button>
@@ -295,7 +357,11 @@ const RemoteControlApp: React.FC = () => {
                                                         title="Next"
                                                         disabled={primaryDisabled || !snapshot.canGoNext}
                                                         onClick={() => sendCommand({ type: 'next' })}
-                                                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                            isDaylight
+                                                                ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
+                                                                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                                                        }`}
                                                     >
                                                         <SkipForward size={16} strokeWidth={2} />
                                                     </button>
@@ -309,9 +375,7 @@ const RemoteControlApp: React.FC = () => {
                                                             setActivePanel('transparent-controls');
                                                         }}
                                                         className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
-                                                            activePanel === 'transparent-controls'
-                                                                ? 'bg-white text-zinc-950'
-                                                                : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                                                            isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
                                                         }`}
                                                     >
                                                         <MirrorRectangular size={16} strokeWidth={2} />
@@ -323,10 +387,8 @@ const RemoteControlApp: React.FC = () => {
                                                         onClick={() => setActivePanel('export')}
                                                         className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
                                                             exportState.status === 'recording'
-                                                                ? 'bg-red-500/25 text-red-400 animate-pulse border border-red-500/30'
-                                                                : activePanel === 'export'
-                                                                    ? 'bg-white text-zinc-950'
-                                                                    : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                                                                ? (isDaylight ? 'bg-red-500/20 text-red-600 animate-pulse border border-red-500/25' : 'bg-red-500/25 text-red-400 animate-pulse border border-red-500/30')
+                                                                : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
                                                         }`}
                                                     >
                                                         <Video size={16} strokeWidth={2} />
@@ -348,6 +410,7 @@ const RemoteControlApp: React.FC = () => {
                                                 selectedPresetId={selectedPresetId}
                                                 startMode={startMode}
                                                 primaryDisabled={primaryDisabled}
+                                                isDaylight={isDaylight}
                                                 onOpenPresetSelector={() => setPresetSelectorOpen(true)}
                                                 onStartModeChange={setStartMode}
                                                 sendCommand={sendCommand}
@@ -364,12 +427,14 @@ const RemoteControlApp: React.FC = () => {
                                         >
                                             {/* Row 1: Regular/Transparent mode segment control and Player Chrome visibility */}
                                             <div className="grid grid-cols-2 gap-2.5">
-                                                <div className="flex h-8 rounded-xl bg-white/5 p-0.5">
+                                                <div className={`flex h-8 rounded-xl p-0.5 transition-colors ${isDaylight ? 'bg-black/5' : 'bg-white/5'}`}>
                                                     <button
                                                         type="button"
                                                         onClick={() => sendCommand({ type: 'set-transparent-mode-enabled', enabled: false })}
                                                         className={`flex-1 flex items-center justify-center rounded-lg text-[11px] font-bold transition ${
-                                                            !snapshot.transparentModeEnabled ? 'bg-white text-zinc-950 shadow-sm' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                                                            !snapshot.transparentModeEnabled
+                                                                ? (isDaylight ? 'bg-zinc-900 text-white shadow-sm' : 'bg-white text-zinc-950 shadow-sm')
+                                                                : (isDaylight ? 'text-black/70 hover:bg-black/5 hover:text-black' : 'text-white/70 hover:bg-white/5 hover:text-white')
                                                         }`}
                                                     >
                                                         常规
@@ -378,7 +443,9 @@ const RemoteControlApp: React.FC = () => {
                                                         type="button"
                                                         onClick={() => sendCommand({ type: 'set-transparent-mode-enabled', enabled: true })}
                                                         className={`flex-1 flex items-center justify-center rounded-lg text-[11px] font-bold transition ${
-                                                            snapshot.transparentModeEnabled ? 'bg-white text-zinc-950 shadow-sm' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                                                            snapshot.transparentModeEnabled
+                                                                ? (isDaylight ? 'bg-zinc-900 text-white shadow-sm' : 'bg-white text-zinc-950 shadow-sm')
+                                                                : (isDaylight ? 'text-black/70 hover:bg-black/5 hover:text-black' : 'text-white/70 hover:bg-white/5 hover:text-white')
                                                         }`}
                                                     >
                                                         透明
@@ -388,10 +455,10 @@ const RemoteControlApp: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => sendCommand({ type: 'set-player-chrome-hidden', hidden: !snapshot.playerChromeHidden })}
-                                                    className={`flex h-8 items-center justify-center rounded-xl text-[11px] font-bold transition border border-white/5 ${
+                                                    className={`flex h-8 items-center justify-center rounded-xl text-[11px] font-bold transition border ${
                                                         snapshot.playerChromeHidden
-                                                            ? 'bg-white text-zinc-950 shadow-sm'
-                                                            : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                                                            ? (isDaylight ? 'bg-zinc-900 border-zinc-900 text-white shadow-sm' : 'bg-white border-white text-zinc-950 shadow-sm')
+                                                            : (isDaylight ? 'bg-black/5 border-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10 hover:text-white')
                                                     }`}
                                                 >
                                                     {snapshot.playerChromeHidden ? '显示 UI' : '隐藏 UI'}
@@ -403,10 +470,10 @@ const RemoteControlApp: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => sendCommand({ type: 'set-main-window-border-visible', visible: !snapshot.mainWindowBorderVisible })}
-                                                    className={`flex h-8 items-center justify-center rounded-xl text-[11px] font-bold transition border border-white/5 ${
+                                                    className={`flex h-8 items-center justify-center rounded-xl text-[11px] font-bold transition border ${
                                                         snapshot.mainWindowBorderVisible
-                                                            ? 'bg-white text-zinc-950 shadow-sm'
-                                                            : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                                                            ? (isDaylight ? 'bg-zinc-900 border-zinc-900 text-white shadow-sm' : 'bg-white border-white text-zinc-950 shadow-sm')
+                                                            : (isDaylight ? 'bg-black/5 border-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10 hover:text-white')
                                                     }`}
                                                 >
                                                     {snapshot.mainWindowBorderVisible ? '隐藏边框' : '显示边框'}
@@ -416,10 +483,10 @@ const RemoteControlApp: React.FC = () => {
                                                     type="button"
                                                     disabled={!snapshot.transparentModeEnabled}
                                                     onClick={() => sendCommand({ type: 'set-main-window-click-through', enabled: !snapshot.mainWindowClickThroughEnabled })}
-                                                    className={`flex h-8 items-center justify-center rounded-xl text-[11px] font-bold transition border border-white/5 disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                    className={`flex h-8 items-center justify-center rounded-xl text-[11px] font-bold transition border disabled:cursor-not-allowed disabled:opacity-35 ${
                                                         snapshot.mainWindowClickThroughEnabled
-                                                            ? 'bg-white text-zinc-950 shadow-sm'
-                                                            : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                                                            ? (isDaylight ? 'bg-zinc-900 border-zinc-900 text-white shadow-sm' : 'bg-white border-white text-zinc-950 shadow-sm')
+                                                            : (isDaylight ? 'bg-black/5 border-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10 hover:text-white')
                                                     }`}
                                                 >
                                                     {snapshot.mainWindowClickThroughEnabled ? '关闭穿透' : '点击穿透'}
@@ -441,24 +508,42 @@ const RemoteControlApp: React.FC = () => {
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.95 }}
                             transition={{ duration: 0.15 }}
-                            className="absolute inset-0 z-50 flex flex-col p-4 rounded-[20px] shadow-2xl border border-white/10 overflow-hidden"
+                            className={`absolute inset-0 z-50 flex flex-col p-4 rounded-[20px] shadow-2xl border overflow-hidden transition-colors duration-300 ${
+                                isDaylight ? 'border-black/10' : 'border-white/10'
+                            }`}
                             style={noDragStyle}
                         >
                             {/* Blurry gradient background for modal */}
                             <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-                                {/* Deep dark blue-black base */}
-                                <div className="absolute inset-0 bg-[#060814]/95 backdrop-blur-md" />
-                                {/* Deep blue blurry blob top-left */}
-                                <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full bg-blue-600/20 blur-[40px]" />
-                                {/* Dark indigo/purple blurry blob bottom-right */}
-                                <div className="absolute -bottom-16 -right-16 w-52 h-52 rounded-full bg-indigo-500/15 blur-[50px]" />
+                                {/* Base */}
+                                <div className={`absolute inset-0 backdrop-blur-md transition-colors duration-300 ${
+                                    isDaylight ? 'bg-[#f5f5f4]/95' : 'bg-[#060814]/95'
+                                }`} />
+                                {/* Blurry blobs for modal */}
+                                {isDaylight ? (
+                                    <>
+                                        <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full bg-orange-400/20 blur-[40px]" />
+                                        <div className="absolute -bottom-16 -right-16 w-52 h-52 rounded-full bg-rose-300/20 blur-[50px]" />
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full bg-blue-600/20 blur-[40px]" />
+                                        <div className="absolute -bottom-16 -right-16 w-52 h-52 rounded-full bg-indigo-500/15 blur-[50px]" />
+                                    </>
+                                )}
                             </div>
                             <div className="flex items-center justify-between mb-2.5">
-                                <span className="text-[13px] font-bold text-white/90">选择导出预设</span>
+                                <span className={`text-[13px] font-bold transition-colors ${
+                                    isDaylight ? 'text-black/90' : 'text-white/90'
+                                }`}>选择导出预设</span>
                                 <button
                                     type="button"
                                     onClick={() => setPresetSelectorOpen(false)}
-                                    className="flex h-6 w-6 items-center justify-center rounded-full bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition"
+                                    className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                                        isDaylight
+                                            ? 'bg-black/5 text-black/50 hover:bg-black/10 hover:text-black'
+                                            : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
+                                    }`}
                                 >
                                     <X size={14} />
                                 </button>
@@ -478,8 +563,12 @@ const RemoteControlApp: React.FC = () => {
                                             }}
                                             className={`flex flex-col items-start justify-center rounded-xl p-2.5 px-3.5 border transition text-left cursor-pointer ${
                                                 isSelected
-                                                    ? 'bg-white border-white text-zinc-950 shadow-md font-bold'
-                                                    : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/10 font-medium'
+                                                    ? (isDaylight
+                                                        ? 'bg-zinc-900 border-zinc-900 text-white shadow-md font-bold'
+                                                        : 'bg-white border-white text-zinc-950 shadow-md font-bold')
+                                                    : (isDaylight
+                                                        ? 'bg-black/5 border-black/5 text-black/70 hover:bg-black/10 hover:text-black hover:border-black/10 font-medium'
+                                                        : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/10 font-medium')
                                             }`}
                                         >
                                             <span className="text-[9px] opacity-60 font-semibold mb-0.5 tracking-wide uppercase">

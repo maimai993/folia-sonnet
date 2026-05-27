@@ -778,7 +778,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={shellTransition}
-                    className="fixed inset-0 backdrop-blur-xl px-3 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-5"
+                    className="fixed inset-0 backdrop-blur-xl px-3 pt-3 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
                     style={{ backgroundColor: overlayBackground, zIndex }}
                     onClick={handleClose}
                 >
@@ -869,7 +869,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
             exit={{ opacity: 0 }}
             transition={shellTransition}
             data-folia-keyboard-window="true"
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
         >
             <motion.div
                 {...panelMotion}
@@ -3218,7 +3218,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={shellTransition}
-                    className="fixed inset-0 z-[136] backdrop-blur-xl px-3 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-5"
+                    className="fixed inset-0 z-[136] backdrop-blur-xl px-3 pt-3 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
                     style={{ backgroundColor: overlayBackground }}
                     onClick={() => setShowLabSettings(false)}
                 >

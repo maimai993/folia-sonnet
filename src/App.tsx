@@ -978,6 +978,7 @@ export default function App() {
         taskbarHasTrackRef,
         taskbarPlayerStateRef,
         exportState,
+        isDaylight,
         onRemoteExportCommand: handleExportCommand,
         onExternalPlayRequest: handleStageExternalPlayRequest,
     });

@@ -35,5 +35,7 @@ export interface RemoteControlSnapshot {
     mainWindowBorderVisible: boolean;
     playerChromeHidden: boolean;
     exportState: VideoExportState;
+    isDaylight?: boolean;
     updatedAt: number;
 }
+

@@ -104,6 +104,7 @@ declare global {
     mainWindowBorderVisible: boolean;
     playerChromeHidden: boolean;
     exportState: ElectronVideoExportState;
+    isDaylight?: boolean;
     updatedAt: number;
   }
 
