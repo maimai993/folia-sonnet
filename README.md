@@ -30,7 +30,7 @@ Folia是一个以全屏沉浸式歌词播放为核心的在线音乐播放器，
 如果希望能够在移动设备上使用，或在浏览器上体验云端多平台，可以选择一键部署到 Vercel 的 Web 版本，或自行部署到其他支持 Node.js 的平台。
 
 ## 展示
- 
+
 ### 演示视频
 
 https://github.com/user-attachments/assets/fd27f4f0-64b9-4c57-8c3b-10df767f934b

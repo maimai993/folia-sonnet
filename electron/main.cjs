@@ -69,6 +69,10 @@ const WINDOWS_APP_USER_MODEL_ID = 'top.izuna.foliamajor';
 const REMOTE_CONTROL_WINDOW_TITLE = 'Folia Remote';
 const bundledAppIconPath = path.join(__dirname, '../build/icon.png');
 const extraResourceIconPath = path.join(process.resourcesPath, 'icon.png');
+const bundledMacTrayIconPath = path.join(__dirname, '../build/trayTemplate.png');
+const bundledMacTrayIcon2xPath = path.join(__dirname, '../build/trayTemplate@2x.png');
+const extraResourceMacTrayIconPath = path.join(process.resourcesPath, 'trayTemplate.png');
+const extraResourceMacTrayIcon2xPath = path.join(process.resourcesPath, 'trayTemplate@2x.png');
 const APP_ICON_PATH = fs.existsSync(bundledAppIconPath) ? bundledAppIconPath : extraResourceIconPath;
 const THUMBAR_ICON_DIR = path.join(__dirname, '../build/thumbar');
 
@@ -92,6 +96,45 @@ const THUMBAR_BUTTON_ICONS = process.platform === 'win32'
       next: loadThumbarIcon('next.png'),
     }
   : null;
+
+// macOS menu bar icons should be monochrome template images with transparent backgrounds.
+function createTrayIconImage() {
+  if (process.platform !== 'darwin') {
+    return APP_ICON_PATH;
+  }
+
+  if (!nativeImage || typeof nativeImage.createFromPath !== 'function') {
+    return APP_ICON_PATH;
+  }
+
+  const trayImagePath = fs.existsSync(bundledMacTrayIconPath)
+    ? bundledMacTrayIconPath
+    : extraResourceMacTrayIconPath;
+  const trayImage2xPath = fs.existsSync(bundledMacTrayIcon2xPath)
+    ? bundledMacTrayIcon2xPath
+    : extraResourceMacTrayIcon2xPath;
+  const trayImage = nativeImage.createFromPath(trayImagePath);
+
+  if (trayImage.isEmpty()) {
+    return APP_ICON_PATH;
+  }
+
+  const retinaImage = nativeImage.createFromPath(trayImage2xPath);
+  if (!retinaImage.isEmpty()) {
+    trayImage.addRepresentation({
+      scaleFactor: 2.0,
+      width: 32,
+      height: 32,
+      buffer: retinaImage.toPNG(),
+    });
+  }
+
+  if (typeof trayImage.setTemplateImage === 'function') {
+    trayImage.setTemplateImage(true);
+  }
+
+  return trayImage;
+}
 
 function readStoredBoolean(settingKey, fallback = false) {
   const value = store.get(settingKey);
@@ -422,7 +465,7 @@ function ensureTray() {
   }
 
   try {
-    appTray = new Tray(APP_ICON_PATH);
+    appTray = new Tray(createTrayIconImage());
   } catch (error) {
     console.error('[Electron] Failed to create tray icon', error);
     return null;

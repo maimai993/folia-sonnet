@@ -59,6 +59,14 @@
         "to": "linux/icon.png"
       },
       {
+        "from": "build/trayTemplate.png",
+        "to": "trayTemplate.png"
+      },
+      {
+        "from": "build/trayTemplate@2x.png",
+        "to": "trayTemplate@2x.png"
+      },
+      {
         "from": "packaging/linux/folia-major.desktop",
         "to": "linux/folia-major.desktop"
       },
