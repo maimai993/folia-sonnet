@@ -429,9 +429,67 @@ class SentenceLayout implements LyricLayoutUnit {
 
     private static secondarySplit(sentences: SentenceLayout[], targetCount: number, timeSeed?: number): SentenceLayout[] {
         const Segmenter = Intl?.Segmenter;
+        const segmenter = Segmenter ? new Segmenter(undefined, { granularity: 'word' }) : null;
+
         while (sentences.length < targetCount) {
             const candidates = sentences.filter(s => s.text.length > 2);
             if (candidates.length === 0) break;
+
+            if (segmenter) {
+                const semanticCandidates: { sentence: SentenceLayout; index: number; splitPos: number; score: number }[] = [];
+
+                for (const s of candidates) {
+                    try {
+                        const segments = Array.from(
+                            segmenter.segment(s.text)
+                        );
+
+                        const wordPositions: { start: number; end: number }[] = [];
+                        let offset = 0;
+                        for (const seg of segments) {
+                            if (seg.isWordLike) {
+                                wordPositions.push({ start: offset, end: offset + seg.segment.length });
+                            }
+                            offset += seg.segment.length;
+                        }
+
+                        if (wordPositions.length >= 2) {
+                            const midChar = s.text.length / 2;
+                            let bestGapIdx = 1;
+                            let bestDist = Infinity;
+                            for (let g = 1; g < wordPositions.length; g++) {
+                                const dist = Math.abs(wordPositions[g].start - midChar);
+                                if (dist < bestDist) {
+                                    bestDist = dist;
+                                    bestGapIdx = g;
+                                }
+                            }
+
+                            const splitPos = wordPositions[bestGapIdx].start;
+                            const balanceScore = 1 - Math.abs(splitPos - midChar) / midChar;
+
+                            semanticCandidates.push({
+                                sentence: s,
+                                index: sentences.indexOf(s),
+                                splitPos,
+                                score: balanceScore * 10 + wordPositions.length,
+                            });
+                        }
+                    } catch { }
+                }
+
+                if (semanticCandidates.length > 0) {
+                    semanticCandidates.sort((a, b) => b.score - a.score);
+                    const best = semanticCandidates[0];
+                    const firstHalf = best.sentence.text.slice(0, best.splitPos);
+                    const secondHalf = best.sentence.text.slice(best.splitPos);
+                    sentences.splice(best.index, 1,
+                        new SentenceLayout(firstHalf),
+                        new SentenceLayout(secondHalf)
+                    );
+                    continue;
+                }
+            }
 
             const pseudoRandom = (seed: number) => {
                 const x = Math.sin(seed) * 10000;
@@ -444,65 +502,9 @@ class SentenceLayout implements LyricLayoutUnit {
             const selectedCandidate = candidates[randomIndex];
             const candidateIndex = sentences.indexOf(selectedCandidate);
 
-            let firstHalf: string;
-            let secondHalf: string;
-
-            if (Segmenter) {
-                try {
-                    const segments = Array.from(new Segmenter(undefined, { granularity: 'word' }).segment(selectedCandidate.text));
-                    const midChar = selectedCandidate.text.length / 2;
-                    let splitAfter = -1;
-                    let accumulated = 0;
-                    for (let i = 0; i < segments.length; i++) {
-                        accumulated += segments[i].segment.length;
-                        if (accumulated >= midChar) {
-                            splitAfter = i;
-                            break;
-                        }
-                    }
-                    if (splitAfter > 0 && splitAfter < segments.length) {
-                        const wordPositions: { start: number; end: number }[] = [];
-                        let offset = 0;
-                        for (const s of segments) {
-                            if (s.isWordLike) {
-                                wordPositions.push({ start: offset, end: offset + s.segment.length });
-                            }
-                            offset += s.segment.length;
-                        }
-                        if (wordPositions.length >= 2) {
-                            const midChar = selectedCandidate.text.length / 2;
-                            let bestGapIdx = 1;
-                            let bestDist = Infinity;
-                            for (let g = 1; g < wordPositions.length; g++) {
-                                const dist = Math.abs(wordPositions[g].start - midChar);
-                                if (dist < bestDist) {
-                                    bestDist = dist;
-                                    bestGapIdx = g;
-                                }
-                            }
-                            const splitPos = wordPositions[bestGapIdx].start;
-                            firstHalf = selectedCandidate.text.slice(0, splitPos);
-                            secondHalf = selectedCandidate.text.slice(splitPos);
-                        } else {
-                            const midPoint = Math.floor(selectedCandidate.text.length / 2);
-                            firstHalf = selectedCandidate.text.slice(0, midPoint);
-                            secondHalf = selectedCandidate.text.slice(midPoint);
-                        }
-                    } else {
-                        const midPoint = Math.floor(selectedCandidate.text.length / 2);
-                        firstHalf = selectedCandidate.text.slice(0, midPoint);
-                        secondHalf = selectedCandidate.text.slice(midPoint);
-                    }
-                } catch {
-                    const midPoint = Math.floor(selectedCandidate.text.length / 2);
-                    firstHalf = selectedCandidate.text.slice(0, midPoint);
-                    secondHalf = selectedCandidate.text.slice(midPoint);
-                }
-            } else {
-                const midPoint = Math.floor(selectedCandidate.text.length / 2);
-                firstHalf = selectedCandidate.text.slice(0, midPoint);
-                secondHalf = selectedCandidate.text.slice(midPoint);
-            }
+            const midPoint = Math.floor(selectedCandidate.text.length / 2);
+            const firstHalf = selectedCandidate.text.slice(0, midPoint);
+            const secondHalf = selectedCandidate.text.slice(midPoint);
 
             sentences.splice(candidateIndex, 1,
                 new SentenceLayout(firstHalf),
