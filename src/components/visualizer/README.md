@@ -421,48 +421,35 @@ visualizer 在这种情况下应当直接补完成当前句剩余的 pass / trai
 
 下面是一个推荐骨架，可以作为新文件起点。
 
+重点有两个：
+
+- renderer 组件本身直接接 `VisualizerSharedProps`，不要再单独定义一份过时的 `VisualizerFooProps`
+- 通用外层行为优先通过 `VisualizerShell` 的 `sharedProps={props}` 透传，只有模式真的需要覆写时才单独传字段
+
 ```tsx
 import React from 'react';
-import { MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { Line, Theme, AudioBands } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
+import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 
-interface VisualizerFooProps {
-    currentTime: MotionValue<number>;
-    currentLineIndex: number;
-    lines: Line[];
-    theme: Theme;
-    audioPower: MotionValue<number>;
-    audioBands: AudioBands;
-    showText?: boolean;
-    coverUrl?: string | null;
-    useCoverColorBg?: boolean;
-    seed?: string | number;
-    backgroundOpacity?: number;
-    lyricsFontScale?: number;
-    onBack?: () => void;
-}
+type VisualizerFooProps = VisualizerSharedProps;
 
-const VisualizerFoo: React.FC<VisualizerFooProps & { staticMode?: boolean; }> = ({
-    currentTime,
-    currentLineIndex,
-    lines,
-    theme,
-    audioPower,
-    audioBands,
-    showText = true,
-    coverUrl,
-    useCoverColorBg = false,
-    seed,
-    staticMode = false,
-    backgroundOpacity = 0.75,
-    lyricsFontScale = 1,
-    onBack,
-}) => {
+const VisualizerFoo: React.FC<VisualizerFooProps> = (props) => {
+    const {
+        currentTime,
+        currentLineIndex,
+        lines,
+        theme,
+        audioPower,
+        audioBands,
+        showText = true,
+        lyricsFontScale = 1,
+        isPlayerChromeHidden = false,
+        hideTranslationSubtitle = false,
+    } = props;
     const { t } = useTranslation();
     const { activeLine, recentCompletedLine, nextLines } = useVisualizerRuntime({
         currentTime,
@@ -476,16 +463,11 @@ const VisualizerFoo: React.FC<VisualizerFooProps & { staticMode?: boolean; }> = 
             theme={theme}
             audioPower={audioPower}
             audioBands={audioBands}
-            coverUrl={coverUrl}
-            useCoverColorBg={useCoverColorBg}
-            seed={seed}
-            staticMode={staticMode}
-            backgroundOpacity={backgroundOpacity}
-            onBack={onBack}
+            sharedProps={props}
         >
             <div className="relative z-10 w-full h-[70vh] flex items-center justify-center p-8 pointer-events-none">
                 {showText && activeLine ? (
-                    <div>{activeLine.fullText}</div>
+                    <div style={{ fontSize: `${3 * lyricsFontScale}rem` }}>{activeLine.fullText}</div>
                 ) : (
                     <div>{t('ui.waitingForMusic')}</div>
                 )}
@@ -499,6 +481,8 @@ const VisualizerFoo: React.FC<VisualizerFooProps & { staticMode?: boolean; }> = 
                 theme={theme}
                 translationFontSize="1rem"
                 upcomingFontSize="0.875rem"
+                isPlayerChromeHidden={isPlayerChromeHidden}
+                hideTranslationSubtitle={hideTranslationSubtitle}
             />
         </VisualizerShell>
     );
@@ -538,6 +522,8 @@ export default defineVisualizer({
     render: props => <VisualizerFoo {...props} />,
 });
 ```
+
+如果模式入口需要先调整 shared props，再喂给 renderer，也应该在 `entry.tsx` 做，而不是改“最小骨架”里的 renderer 签名。例如 `cadenza/entry.tsx` 当前会先把 `lyricsFontScale` 折算进 `cadenzaTuning.fontScale`，再渲染 `VisualizerCadenza`。
 
 `registry.tsx` 会通过 `import.meta.glob('./*/entry.tsx', { eager: true })` 自动发现所有入口。播放器、模式列表、预览面板和主题预览都继续读取同一份 registry，不需要再去手动 import 新组件或改 `VisualizerRenderer.tsx`。
 
