@@ -11,6 +11,7 @@ interface CoverTabProps {
     onOpenCurrentLocalArtist: () => void;
     onOpenCurrentNavidromeAlbum: () => void;
     onOpenCurrentNavidromeArtist: () => void;
+    onCopySongInfoSuccess: () => void;
 }
 
 const CoverTab: React.FC<CoverTabProps> = ({
@@ -21,6 +22,7 @@ const CoverTab: React.FC<CoverTabProps> = ({
     onOpenCurrentLocalArtist,
     onOpenCurrentNavidromeAlbum,
     onOpenCurrentNavidromeArtist,
+    onCopySongInfoSuccess,
 }) => {
     const { t } = useTranslation();
     const isLocalSong = Boolean(currentSong && (((currentSong as any).isLocal === true) || (currentSong as any).localData));
@@ -28,6 +30,54 @@ const CoverTab: React.FC<CoverTabProps> = ({
     const isStageSong = Boolean(currentSong && (currentSong as any).isStage === true);
     const displayArtists = currentSong?.ar?.length ? currentSong.ar : (currentSong?.artists || []);
     const displayAlbumName = currentSong?.al?.name || currentSong?.album?.name || '';
+    const displayArtistNames = displayArtists.map((artist) => artist.name).join(', ');
+    const copyTitleLine = currentSong
+        ? `${currentSong.name || ''} - ${displayArtistNames} - ${displayAlbumName}`
+        : '';
+    const neteaseSongId = isLocalSong
+        ? (currentSong as SongResult & { localData?: { matchedSongId?: number } })?.localData?.matchedSongId
+        : (!isNavidromeSong && !isStageSong ? currentSong?.id : undefined);
+    const copyPayload = copyTitleLine
+        ? [copyTitleLine, neteaseSongId ? `https://music.163.com/#/song?id=${neteaseSongId}` : ''].filter(Boolean).join('\n')
+        : '';
+    const canCopySongInfo = Boolean(copyPayload);
+
+    const copyText = async (text: string) => {
+        if (navigator.clipboard?.writeText && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        try {
+            document.execCommand('copy');
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    };
+
+    // Copies the current song summary and an optional Netease link from the unified playback model.
+    const handleSongTitleClick = () => {
+        if (!copyPayload) {
+            return;
+        }
+
+        void copyText(copyPayload)
+            .then(() => {
+                onCopySongInfoSuccess();
+            })
+            .catch((error) => {
+                console.error('Failed to copy current song info:', error);
+            });
+    };
 
     return (
         <motion.div
@@ -37,7 +87,14 @@ const CoverTab: React.FC<CoverTabProps> = ({
         >
             <div className="space-y-1 relative w-full">
                 <div className="flex items-start justify-center gap-2">
-                    <h2 className="text-2xl font-bold line-clamp-2">{currentSong?.name || t('ui.noTrack')}</h2>
+                    <h2
+                        className={canCopySongInfo
+                            ? 'text-2xl font-bold line-clamp-2 cursor-pointer hover:opacity-80 transition-opacity'
+                            : 'text-2xl font-bold line-clamp-2'}
+                        onClick={handleSongTitleClick}
+                    >
+                        {currentSong?.name || t('ui.noTrack')}
+                    </h2>
                 </div>
                 <div className="text-sm opacity-60 space-y-1">
                     <div className="font-medium">

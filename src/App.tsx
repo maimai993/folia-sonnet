@@ -7,6 +7,7 @@ import AppShell from './components/app/AppShell';
 import Home from './components/app/Home';
 import PlayerPanel from './components/app/PlayerPanel';
 import AppDialogs from './components/app/dialogs/AppDialogs';
+import { createCopySongInfoSuccessHandler } from './components/app/dialogs/createCopySongInfoSuccessHandler';
 import AppOverlays from './components/app/overlays/AppOverlays';
 import { buildAppDialogsModel } from './components/app/dialogs/buildAppDialogsModel';
 import { buildHomeModel } from './components/app/home/buildHomeModel';
@@ -1580,6 +1581,7 @@ export default function App() {
         openCurrentLocalArtist,
         openCurrentNavidromeAlbum,
         openCurrentNavidromeArtist,
+        handleCopySongInfoSuccess: createCopySongInfoSuccessHandler({ setStatusMsg, t }),
         user,
         handleLogout,
         audioQuality,
@@ -1660,6 +1662,7 @@ export default function App() {
         theme,
         toggleLoop,
         togglePlay,
+        t,
         useCoverColorBg,
         user,
         visualizerMode,

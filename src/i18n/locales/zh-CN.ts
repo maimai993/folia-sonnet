@@ -47,6 +47,7 @@ export default {
     "songUnavailableTag": "已下架",
     "queueShuffled": "播放队列已打乱",
     "queueUpdated": "已添加到播放队列",
+    "copiedSongInfo": "已复制歌曲信息",
   },
   "ui": {
     "noTrack": "无音轨",

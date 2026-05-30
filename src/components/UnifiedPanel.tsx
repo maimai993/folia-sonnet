@@ -102,6 +102,7 @@ type UnifiedPanelLibraryProps = {
     onOpenCurrentLocalArtist: () => void;
     onOpenCurrentNavidromeAlbum: () => void;
     onOpenCurrentNavidromeArtist: () => void;
+    onCopySongInfoSuccess: () => void;
 };
 
 type UnifiedPanelProps = {
@@ -183,6 +184,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         onOpenCurrentLocalArtist,
         onOpenCurrentNavidromeAlbum,
         onOpenCurrentNavidromeArtist,
+        onCopySongInfoSuccess,
     } = library;
     const {
         user,
@@ -504,6 +506,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 onOpenCurrentNavidromeArtist();
                                                 onToggle();
                                             }}
+                                            onCopySongInfoSuccess={onCopySongInfoSuccess}
                                         />
                                     )}
                                     {currentTab === 'controls' && (

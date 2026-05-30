@@ -47,6 +47,7 @@ export default {
     "songUnavailableTag": "Unavailable",
     "queueShuffled": "Queue shuffled",
     "queueUpdated": "Added to queue",
+    "copiedSongInfo": "Copied song info",
   },
   "ui": {
     "noTrack": "No Track",

@@ -76,6 +76,7 @@ type BuildPlayerPanelModelParams = {
     openCurrentLocalArtist: LegacyUnifiedPanelProps['library']['onOpenCurrentLocalArtist'];
     openCurrentNavidromeAlbum: LegacyUnifiedPanelProps['library']['onOpenCurrentNavidromeAlbum'];
     openCurrentNavidromeArtist: LegacyUnifiedPanelProps['library']['onOpenCurrentNavidromeArtist'];
+    handleCopySongInfoSuccess: LegacyUnifiedPanelProps['library']['onCopySongInfoSuccess'];
     user: LegacyUnifiedPanelProps['account']['user'];
     handleLogout: LegacyUnifiedPanelProps['account']['onLogout'];
     audioQuality: LegacyUnifiedPanelProps['account']['audioQuality'];
@@ -158,6 +159,7 @@ export const buildPlayerPanelModel = ({
     openCurrentLocalArtist,
     openCurrentNavidromeAlbum,
     openCurrentNavidromeArtist,
+    handleCopySongInfoSuccess,
     user,
     handleLogout,
     audioQuality,
@@ -246,6 +248,7 @@ export const buildPlayerPanelModel = ({
             onOpenCurrentLocalArtist: openCurrentLocalArtist,
             onOpenCurrentNavidromeAlbum: openCurrentNavidromeAlbum,
             onOpenCurrentNavidromeArtist: openCurrentNavidromeArtist,
+            onCopySongInfoSuccess: handleCopySongInfoSuccess,
         },
         account: {
             user,
