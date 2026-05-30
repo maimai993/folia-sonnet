@@ -397,10 +397,10 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
                                     {/* 左上角：打开设置 */}
                                     {onOpenSettings && (
-                                        <div className={`absolute left-3 top-3 pointer-events-auto transition-all duration-200 ${
+                                        <div className={`absolute left-3 top-3 transition-all duration-200 ${
                                             supportsHover
-                                                ? 'opacity-0 group-hover:opacity-100 -translate-x-3 -translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
-                                                : `${isCoverActionsVisible ? 'opacity-100 translate-x-0 translate-y-0' : 'opacity-0 -translate-x-3 -translate-y-3'}`
+                                                ? 'pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 -translate-x-3 -translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
+                                                : `${isCoverActionsVisible ? 'pointer-events-auto opacity-100 translate-x-0 translate-y-0' : 'pointer-events-none opacity-0 -translate-x-3 -translate-y-3'}`
                                         }`}>
                                             <button
                                                 type="button"
@@ -416,10 +416,10 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                         </div>
                                     )}
 
-                                    <div className={`absolute left-3 bottom-3 pointer-events-auto transition-all duration-200 ${
+                                    <div className={`absolute left-3 bottom-3 transition-all duration-200 ${
                                         supportsHover
-                                            ? 'opacity-0 group-hover:opacity-100 -translate-x-3 translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
-                                            : `${isCoverActionsVisible ? 'opacity-100 translate-x-0 translate-y-0' : 'opacity-0 -translate-x-3 translate-y-3'}`
+                                            ? 'pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 -translate-x-3 translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
+                                            : `${isCoverActionsVisible ? 'pointer-events-auto opacity-100 translate-x-0 translate-y-0' : 'pointer-events-none opacity-0 -translate-x-3 translate-y-3'}`
                                     }`}>
                                         <button
                                             type="button"
@@ -435,10 +435,10 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                     </div>
 
                                     {canAddCurrentSongToPlaylist && (
-                                        <div className={`absolute right-3 bottom-3 pointer-events-auto transition-all duration-200 ${
+                                        <div className={`absolute right-3 bottom-3 transition-all duration-200 ${
                                             supportsHover
-                                                ? 'opacity-0 group-hover:opacity-100 translate-x-3 translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
-                                                : `${isCoverActionsVisible ? 'opacity-100 translate-x-0 translate-y-0' : 'opacity-0 translate-x-3 translate-y-3'}`
+                                                ? 'pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 translate-x-3 translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
+                                                : `${isCoverActionsVisible ? 'pointer-events-auto opacity-100 translate-x-0 translate-y-0' : 'pointer-events-none opacity-0 translate-x-3 translate-y-3'}`
                                         }`}>
                                             <button
                                                 type="button"
