@@ -13,38 +13,14 @@ import LyricFilterSettingsModal from './LyricFilterSettingsModal';
 import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
 import { CustomSelect } from '../shared/CustomSelect';
+import { selectSettingsUiSnapshot, useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { useShallow } from 'zustand/react/shallow';
 
 
-interface HelpModalProps {
+interface SettingsModalProps {
     onClose: () => void;
     initialTab?: 'help' | 'options';
-    staticMode?: boolean;
-    disableHomeDynamicBackground?: boolean;
-    hidePlayerProgressBar?: boolean;
-    hidePlayerTranslationSubtitle?: boolean;
-    hidePlayerRightPanelButton?: boolean;
-    transparentPlayerBackground?: boolean;
-    disableVisualizerVignette?: boolean;
-    disableVisualizerGeometricBackground?: boolean;
-    minimizeToTray?: boolean;
-    hideTaskbarIcon?: boolean;
-    openPlayerOnLaunch?: boolean;
-    onToggleStaticMode?: (enable: boolean) => void;
-    onToggleDisableHomeDynamicBackground?: (disable: boolean) => void;
-    onToggleHidePlayerProgressBar?: (enable: boolean) => void;
-    onToggleHidePlayerTranslationSubtitle?: (enable: boolean) => void;
-    onToggleHidePlayerRightPanelButton?: (enable: boolean) => void;
-    onToggleTransparentPlayerBackground?: (enable: boolean) => void;
-    onToggleDisableVisualizerVignette?: (disable: boolean) => void;
-    onToggleDisableVisualizerGeometricBackground?: (disable: boolean) => void;
-    onToggleMinimizeToTray?: (enable: boolean) => void;
-    onToggleHideTaskbarIcon?: (enable: boolean) => void;
-    onToggleOpenPlayerOnLaunch?: (enable: boolean) => void;
-    enableMediaCache?: boolean;
-    onToggleMediaCache?: (enable: boolean) => void;
     theme?: Theme;
-    backgroundOpacity?: number;
-    setBackgroundOpacity?: (opacity: number) => void;
     bgMode: ThemeMode;
     onApplyDefaultTheme: () => void;
     hasCustomTheme: boolean;
@@ -55,53 +31,18 @@ interface HelpModalProps {
     onApplyCustomTheme: () => void;
     onToggleCustomThemePreferred: (enabled: boolean) => void;
     onToggleSongThemeAutoSwitch: (enabled: boolean) => void;
-    isDaylight: boolean;
     onToggleNavidrome?: (enabled: boolean) => void;
-    visualizerMode?: VisualizerMode;
-    cadenzaTuning?: CadenzaTuning;
-    partitaTuning?: PartitaTuning;
-    fumeTuning?: FumeTuning;
-    cappellaTuning?: CappellaTuning;
-    tiltTuning?: TiltTuning;
-    cappellaCustomEmojiImages?: CappellaEmojiImage[];
-    onVisualizerModeChange?: (mode: VisualizerMode) => void;
-    onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
-    onResetPartitaTuning?: () => void;
-    onFumeTuningChange?: (patch: Partial<FumeTuning>) => void;
-    onResetFumeTuning?: () => void;
-    onCappellaTuningChange?: (patch: Partial<CappellaTuning>) => void;
-    onResetCappellaTuning?: () => void;
-    onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
-    onResetTiltTuning?: () => void;
-    onImportCappellaCustomEmojiPack?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
-    onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
-    isLoadingCappellaCustomEmojiPack?: boolean;
-    lyricsFontStyle: Theme['fontStyle'];
-    lyricsFontScale: number;
-    lyricsCustomFontFamily: string | null;
-    lyricsCustomFontLabel: string | null;
-    lyricFilterPattern: string;
-    showOpenPanelCloseButton: boolean;
-    onLyricsFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
-    onLyricsFontScaleChange: (fontScale: number) => void;
-    onLyricsCustomFontChange: (font: StoredCustomLyricsFont | null) => void;
-    onLyricsCustomFontUpload: (file: File) => Promise<{ ok: boolean; error?: string; }>;
     loadLyricFilterPreview: () => Promise<LyricData | null>;
     currentSongTitle?: string | null;
     onSaveLyricFilterPattern: (pattern: string) => Promise<void> | void;
-    onToggleOpenPanelCloseButton: (enable: boolean) => void;
     stageStatus?: StageStatus | null;
     stageSource?: StageSource | null;
     onToggleStageMode?: (enabled: boolean) => Promise<void> | void;
     onStageSourceChange?: (source: StageSource) => Promise<void> | void;
     onRegenerateStageToken?: () => Promise<void> | void;
     onClearStageState?: () => Promise<void> | void;
-    enableNowPlayingStage?: boolean;
     onToggleNowPlayingStage?: (enabled: boolean) => Promise<void> | void;
     nowPlayingConnectionStatus?: NowPlayingConnectionStatus;
-    queueAddBehavior: QueueAddBehavior;
-    onQueueAddBehaviorChange: (behavior: QueueAddBehavior) => void;
-    audioOutputDeviceId: string;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
 }
 
@@ -120,36 +61,10 @@ const stopMediaStream = (stream: MediaStream | null) => {
     stream?.getTracks().forEach(track => track.stop());
 };
 
-const HelpModal: React.FC<HelpModalProps> = ({
+const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
     initialTab = 'help',
-    staticMode = false,
-    disableHomeDynamicBackground = false,
-    hidePlayerProgressBar = false,
-    hidePlayerTranslationSubtitle = false,
-    hidePlayerRightPanelButton = false,
-    transparentPlayerBackground = false,
-    disableVisualizerVignette = false,
-    disableVisualizerGeometricBackground = false,
-    minimizeToTray = false,
-    hideTaskbarIcon = false,
-    openPlayerOnLaunch = false,
-    onToggleStaticMode,
-    onToggleDisableHomeDynamicBackground,
-    onToggleHidePlayerProgressBar,
-    onToggleHidePlayerTranslationSubtitle,
-    onToggleHidePlayerRightPanelButton,
-    onToggleTransparentPlayerBackground,
-    onToggleDisableVisualizerVignette,
-    onToggleDisableVisualizerGeometricBackground,
-    onToggleMinimizeToTray,
-    onToggleHideTaskbarIcon,
-    onToggleOpenPlayerOnLaunch,
-    enableMediaCache = false,
-    onToggleMediaCache,
     theme,
-    backgroundOpacity = 0.75,
-    setBackgroundOpacity,
     bgMode,
     onApplyDefaultTheme,
     hasCustomTheme,
@@ -160,56 +75,85 @@ const HelpModal: React.FC<HelpModalProps> = ({
     onApplyCustomTheme,
     onToggleCustomThemePreferred,
     onToggleSongThemeAutoSwitch,
-    isDaylight,
     onToggleNavidrome,
-    visualizerMode = 'classic',
-    cadenzaTuning,
-    partitaTuning,
-    fumeTuning,
-    cappellaTuning,
-    tiltTuning,
-    cappellaCustomEmojiImages,
-    onVisualizerModeChange,
-    onPartitaTuningChange,
-    onResetPartitaTuning,
-    onFumeTuningChange,
-    onResetFumeTuning,
-    onCappellaTuningChange,
-    onResetCappellaTuning,
-    onTiltTuningChange,
-    onResetTiltTuning,
-    onImportCappellaCustomEmojiPack,
-    onClearCappellaCustomEmojiPack,
-    isLoadingCappellaCustomEmojiPack = false,
-    lyricsFontStyle,
-    lyricsFontScale,
-    lyricsCustomFontFamily,
-    lyricsCustomFontLabel,
-    lyricFilterPattern,
-    showOpenPanelCloseButton,
-    onLyricsFontStyleChange,
-    onLyricsFontScaleChange,
-    onLyricsCustomFontChange,
-    onLyricsCustomFontUpload,
     loadLyricFilterPreview,
     currentSongTitle,
     onSaveLyricFilterPattern,
-    onToggleOpenPanelCloseButton,
     stageStatus = null,
     stageSource = null,
     onToggleStageMode,
     onStageSourceChange,
     onRegenerateStageToken,
     onClearStageState,
-    enableNowPlayingStage = false,
     onToggleNowPlayingStage,
     nowPlayingConnectionStatus = 'disabled',
-    queueAddBehavior,
-    onQueueAddBehaviorChange,
-    audioOutputDeviceId,
     onAudioOutputDeviceChange,
 }) => {
     const { t } = useTranslation();
+    const {
+        staticMode,
+        disableHomeDynamicBackground,
+        hidePlayerProgressBar,
+        hidePlayerTranslationSubtitle,
+        hidePlayerRightPanelButton,
+        transparentPlayerBackground,
+        disableVisualizerVignette,
+        disableVisualizerGeometricBackground,
+        minimizeToTray,
+        hideTaskbarIcon,
+        openPlayerOnLaunch,
+        enableMediaCache,
+        backgroundOpacity,
+        isDaylight,
+        visualizerMode,
+        cadenzaTuning,
+        partitaTuning,
+        fumeTuning,
+        cappellaTuning,
+        tiltTuning,
+        cappellaCustomEmojiImages,
+        isLoadingCappellaCustomEmojiPack,
+        lyricsFontStyle,
+        lyricsFontScale,
+        lyricsCustomFontFamily,
+        lyricsCustomFontLabel,
+        lyricFilterPattern,
+        showOpenPanelCloseButton,
+        enableNowPlayingStage,
+        queueAddBehavior,
+        audioOutputDeviceId,
+        handleToggleStaticMode: onToggleStaticMode,
+        handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
+        handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
+        handleToggleHidePlayerTranslationSubtitle: onToggleHidePlayerTranslationSubtitle,
+        handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
+        handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackground,
+        handleToggleDisableVisualizerVignette: onToggleDisableVisualizerVignette,
+        handleToggleDisableVisualizerGeometricBackground: onToggleDisableVisualizerGeometricBackground,
+        handleToggleMinimizeToTray: onToggleMinimizeToTray,
+        handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
+        handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
+        handleToggleMediaCache: onToggleMediaCache,
+        handleSetBackgroundOpacity: setBackgroundOpacity,
+        handleSetVisualizerMode: onVisualizerModeChange,
+        handleSetPartitaTuning: onPartitaTuningChange,
+        handleResetPartitaTuning: onResetPartitaTuning,
+        handleSetFumeTuning: onFumeTuningChange,
+        handleResetFumeTuning: onResetFumeTuning,
+        handleSetCappellaTuning: onCappellaTuningChange,
+        handleResetCappellaTuning: onResetCappellaTuning,
+        handleSetTiltTuning: onTiltTuningChange,
+        handleResetTiltTuning: onResetTiltTuning,
+        handleImportCustomCappellaEmojiPack: onImportCappellaCustomEmojiPack,
+        handleClearCustomCappellaEmojiPack: onClearCappellaCustomEmojiPack,
+        handleSetLyricsFontStyle: onLyricsFontStyleChange,
+        handleSetLyricsFontScale: onLyricsFontScaleChange,
+        handleSetLyricsCustomFont: onLyricsCustomFontChange,
+        handleUploadLyricsCustomFont: onLyricsCustomFontUpload,
+        handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
+        handleSetQueueAddBehavior: onQueueAddBehaviorChange,
+    } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    const setIsSubSettingsViewOpen = useSettingsUiStore(state => state.setIsSubSettingsViewOpen);
     const [activeTab, setActiveTab] = useState<'help' | 'options'>(initialTab);
     const [showVisPlayground, setShowVisPlayground] = useState(false);
     const [showThemePark, setShowThemePark] = useState(false);
@@ -288,7 +232,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     permissionProbeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     devices = await navigator.mediaDevices.enumerateDevices();
                 } catch (permissionError) {
-                    console.warn('[HelpModal] Audio permission probe failed', permissionError);
+                    console.warn('[SettingsModal] Audio permission probe failed', permissionError);
                 }
             }
 
@@ -300,7 +244,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                 }));
             setAudioOutputDevices(outputs);
         } catch (error) {
-            console.error('[HelpModal] Failed to enumerate audio output devices', error);
+            console.error('[SettingsModal] Failed to enumerate audio output devices', error);
             setAudioOutputDevicesError(t('options.audioOutputLoadFailed') || '读取播放设备失败。');
         } finally {
             stopMediaStream(permissionProbeStream);
@@ -331,7 +275,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
                 setAudioOutputDevicesError(t('options.audioOutputSelectFailed') || '切换播放设备失败。');
             }
         } catch (error) {
-            console.error('[HelpModal] Failed to select audio output device', error);
+            console.error('[SettingsModal] Failed to select audio output device', error);
             setAudioOutputDevicesError(t('options.audioOutputSelectFailed') || '切换播放设备失败。');
         } finally {
             setIsSelectingAudioOutput(false);
@@ -697,13 +641,14 @@ const HelpModal: React.FC<HelpModalProps> = ({
 
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBg = isDaylight ? 'bg-white/82' : 'bg-zinc-900/95';
+    const subviewPanelBg = isDaylight ? 'bg-zinc-200' : 'bg-zinc-900';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
     const textColor = isDaylight ? 'text-zinc-800' : 'text-zinc-100';
     const successTextColor = isDaylight ? 'text-green-600' : 'text-green-400';
     const successBgColor = isDaylight ? 'bg-green-500/10' : 'bg-green-500/20';
     const errorTextColor = isDaylight ? 'text-red-600' : 'text-red-400';
     const errorBgColor = isDaylight ? 'bg-red-500/10' : 'bg-red-500/10';
-    const overlayBackground = isDaylight ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.65)';
+    const overlayBackground = isDaylight ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.5)';
     const toggleOffBackgroundClass = isDaylight ? 'bg-zinc-300/90' : 'bg-white/10';
     const accentOutlineColor = theme?.accentColor || (isDaylight ? '#44403c' : '#f4f4f5');
     const settingsCardClass = isDaylight
@@ -750,6 +695,33 @@ const HelpModal: React.FC<HelpModalProps> = ({
         animate: { opacity: 1, x: 0 },
         exit: { opacity: 0, x: -18 },
     };
+    // Close only the active overlay layer when its own backdrop is clicked.
+    const handleBackdropClose = (event: React.MouseEvent<HTMLDivElement>, onCloseOverlay: () => void) => {
+        if (event.target !== event.currentTarget) {
+            return;
+        }
+
+        event.stopPropagation();
+        onCloseOverlay();
+    };
+    const isSubSettingsViewOpen = showVisPlayground
+        || showThemePark
+        || showAppearanceSettings
+        || showPlaybackSettings
+        || showIntegrationSettings
+        || showStorageSettings
+        || showDesktopSettings
+        || showLabSettings
+        || showLyricFilterSettings;
+
+    useEffect(() => {
+        setIsSubSettingsViewOpen(isSubSettingsViewOpen);
+
+        return () => {
+            setIsSubSettingsViewOpen(false);
+        };
+    }, [isSubSettingsViewOpen, setIsSubSettingsViewOpen]);
+
     const visualizerModeOptions = VISUALIZER_REGISTRY.map(entry => ({
         mode: entry.mode,
         label: getVisualizerModeLabel(entry.mode, t),
@@ -803,14 +775,14 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={shellTransition}
-                    className="fixed inset-0 backdrop-blur-xl px-3 pt-3 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+                    className="fixed inset-0 backdrop-blur-xl p-3 sm:p-5"
                     style={{ backgroundColor: overlayBackground, zIndex }}
-                    onClick={handleClose}
+                    onClick={(event) => handleBackdropClose(event, handleClose)}
                 >
                     <motion.div
                         {...panelMotion}
                         transition={shellTransition}
-                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${glassBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
+                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${subviewPanelBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
                         onClick={(event) => event.stopPropagation()}
                     >
                         <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6">
@@ -894,12 +866,15 @@ const HelpModal: React.FC<HelpModalProps> = ({
             exit={{ opacity: 0 }}
             transition={shellTransition}
             data-folia-keyboard-window="true"
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+            className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-xl px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+            style={{ backgroundColor: overlayBackground }}
+            onClick={(event) => handleBackdropClose(event, onClose)}
         >
             <motion.div
                 {...panelMotion}
                 transition={shellTransition}
                 className={`${glassBg} border ${borderColor} p-8 rounded-3xl max-w-lg w-full relative shadow-2xl overflow-hidden flex flex-col max-h-[85vh]`}
+                onClick={(event) => event.stopPropagation()}
             >
                 <button
                     onClick={onClose}
@@ -3326,14 +3301,14 @@ const HelpModal: React.FC<HelpModalProps> = ({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={shellTransition}
-                    className="fixed inset-0 z-[136] backdrop-blur-xl px-3 pt-3 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+                    className="fixed inset-0 z-[136] backdrop-blur-xl p-3 sm:p-5"
                     style={{ backgroundColor: overlayBackground }}
                     onClick={() => setShowLabSettings(false)}
                 >
                     <motion.div
                         {...panelMotion}
                         transition={shellTransition}
-                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${glassBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
+                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${subviewPanelBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
                         onClick={(event) => event.stopPropagation()}
                     >
                         <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6">
@@ -3548,4 +3523,4 @@ const DiscIcon = ({ size, className }: { size: number, className?: string; }) =>
     </svg>
 );
 
-export default HelpModal;
+export default SettingsModal;

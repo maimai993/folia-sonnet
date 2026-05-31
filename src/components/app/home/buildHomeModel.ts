@@ -28,8 +28,7 @@ type BuildHomeModelParams = {
     setFocusedFavoriteAlbumIndex?: LegacyHomeProps['setFocusedFavoriteAlbumIndex'];
     focusedRadioIndex?: LegacyHomeProps['focusedRadioIndex'];
     setFocusedRadioIndex?: LegacyHomeProps['setFocusedRadioIndex'];
-    pendingOpenSettings?: LegacyHomeProps['pendingOpenSettings'];
-    setPendingOpenSettings: React.Dispatch<React.SetStateAction<boolean>>;
+    openSettings: NonNullable<LegacyHomeProps['onOpenSettings']>;
     navigateToSearch: (args: { query: string; sourceTab: HomeViewTab; replace?: boolean }) => void;
     openLocalAlbumByName?: LegacyHomeProps['onSelectLocalAlbum'];
     openLocalArtistByName?: LegacyHomeProps['onSelectLocalArtist'];
@@ -57,83 +56,8 @@ type BuildHomeModelParams = {
     clearStagePlaybackSession: () => void;
     clearPersistedStagePlaybackCache: () => Promise<void>;
     loadStageSessionIntoPlayback: (session: any) => Promise<void>;
-    enableNowPlayingStage?: LegacyHomeProps['enableNowPlayingStage'];
-    handleToggleNowPlayingStage: (enabled: boolean) => void;
-    nowPlayingConnectionStatus?: LegacyHomeProps['nowPlayingConnectionStatus'];
-    queueAddBehavior: LegacyHomeProps['queueAddBehavior'];
-    handleSetQueueAddBehavior: LegacyHomeProps['onQueueAddBehaviorChange'];
-    staticMode?: LegacyHomeProps['staticMode'];
-    disableHomeDynamicBackground?: LegacyHomeProps['disableHomeDynamicBackground'];
-    hidePlayerProgressBar?: LegacyHomeProps['hidePlayerProgressBar'];
-    hidePlayerTranslationSubtitle?: LegacyHomeProps['hidePlayerTranslationSubtitle'];
-    hidePlayerRightPanelButton?: LegacyHomeProps['hidePlayerRightPanelButton'];
-    transparentPlayerBackground?: LegacyHomeProps['transparentPlayerBackground'];
-    disableVisualizerVignette?: LegacyHomeProps['disableVisualizerVignette'];
-    disableVisualizerGeometricBackground?: LegacyHomeProps['disableVisualizerGeometricBackground'];
-    minimizeToTray?: LegacyHomeProps['minimizeToTray'];
-    hideTaskbarIcon?: LegacyHomeProps['hideTaskbarIcon'];
-    openPlayerOnLaunch?: LegacyHomeProps['openPlayerOnLaunch'];
-    handleToggleStaticMode?: LegacyHomeProps['onToggleStaticMode'];
-    handleToggleDisableHomeDynamicBackground?: LegacyHomeProps['onToggleDisableHomeDynamicBackground'];
-    handleToggleHidePlayerProgressBar?: LegacyHomeProps['onToggleHidePlayerProgressBar'];
-    handleToggleHidePlayerTranslationSubtitle?: LegacyHomeProps['onToggleHidePlayerTranslationSubtitle'];
-    handleToggleHidePlayerRightPanelButton?: LegacyHomeProps['onToggleHidePlayerRightPanelButton'];
-    handleToggleTransparentPlayerBackground?: LegacyHomeProps['onToggleTransparentPlayerBackground'];
-    handleToggleDisableVisualizerVignette?: LegacyHomeProps['onToggleDisableVisualizerVignette'];
-    handleToggleDisableVisualizerGeometricBackground?: LegacyHomeProps['onToggleDisableVisualizerGeometricBackground'];
-    handleToggleMinimizeToTray?: LegacyHomeProps['onToggleMinimizeToTray'];
-    handleToggleHideTaskbarIcon?: LegacyHomeProps['onToggleHideTaskbarIcon'];
-    handleToggleOpenPlayerOnLaunch?: LegacyHomeProps['onToggleOpenPlayerOnLaunch'];
-    enableMediaCache?: LegacyHomeProps['enableMediaCache'];
-    handleToggleMediaCache?: LegacyHomeProps['onToggleMediaCache'];
     theme: LegacyHomeProps['theme'];
-    backgroundOpacity: LegacyHomeProps['backgroundOpacity'];
-    handleSetBackgroundOpacity: LegacyHomeProps['setBackgroundOpacity'];
-    bgMode: LegacyHomeProps['bgMode'];
-    applyDefaultTheme: LegacyHomeProps['onApplyDefaultTheme'];
-    hasCustomTheme: LegacyHomeProps['hasCustomTheme'];
-    getThemeParkSeedTheme: LegacyHomeProps['themeParkInitialTheme'];
-    isCustomThemePreferred: LegacyHomeProps['isCustomThemePreferred'];
-    songThemeAutoSwitchEnabled: LegacyHomeProps['songThemeAutoSwitchEnabled'];
-    saveCustomDualTheme: LegacyHomeProps['onSaveCustomTheme'];
-    applyCustomTheme: LegacyHomeProps['onApplyCustomTheme'];
-    handleCustomThemePreferenceChange: LegacyHomeProps['onToggleCustomThemePreferred'];
-    handleSongThemeAutoSwitchChange: LegacyHomeProps['onToggleSongThemeAutoSwitch'];
-    isDaylight: LegacyHomeProps['isDaylight'];
-    visualizerMode: LegacyHomeProps['visualizerMode'];
-    cadenzaTuning: LegacyHomeProps['cadenzaTuning'];
-    partitaTuning: LegacyHomeProps['partitaTuning'];
-    fumeTuning: LegacyHomeProps['fumeTuning'];
-    cappellaTuning: LegacyHomeProps['cappellaTuning'];
-    tiltTuning: LegacyHomeProps['tiltTuning'];
-    cappellaCustomEmojiImages: LegacyHomeProps['cappellaCustomEmojiImages'];
-    handleSetVisualizerMode: LegacyHomeProps['onVisualizerModeChange'];
-    handleSetPartitaTuning: LegacyHomeProps['onPartitaTuningChange'];
-    handleResetPartitaTuning: LegacyHomeProps['onResetPartitaTuning'];
-    handleSetFumeTuning: LegacyHomeProps['onFumeTuningChange'];
-    handleResetFumeTuning: LegacyHomeProps['onResetFumeTuning'];
-    handleSetCappellaTuning: LegacyHomeProps['onCappellaTuningChange'];
-    handleResetCappellaTuning: LegacyHomeProps['onResetCappellaTuning'];
-    handleSetTiltTuning: LegacyHomeProps['onTiltTuningChange'];
-    handleResetTiltTuning: LegacyHomeProps['onResetTiltTuning'];
-    handleImportCappellaCustomEmojiPack: LegacyHomeProps['onImportCappellaCustomEmojiPack'];
-    handleClearCappellaCustomEmojiPack: LegacyHomeProps['onClearCappellaCustomEmojiPack'];
-    isLoadingCappellaCustomEmojiPack: LegacyHomeProps['isLoadingCappellaCustomEmojiPack'];
-    audioOutputDeviceId: LegacyHomeProps['audioOutputDeviceId'];
-    handleAudioOutputDeviceChange: LegacyHomeProps['onAudioOutputDeviceChange'];
-    lyricsFontStyle: LegacyHomeProps['lyricsFontStyle'];
-    lyricsFontScale: LegacyHomeProps['lyricsFontScale'];
-    lyricsCustomFontFamily: LegacyHomeProps['lyricsCustomFontFamily'];
-    lyricsCustomFontLabel: LegacyHomeProps['lyricsCustomFontLabel'];
-    lyricFilterPattern: LegacyHomeProps['lyricFilterPattern'];
-    showOpenPanelCloseButton: LegacyHomeProps['showOpenPanelCloseButton'];
-    handleSetLyricsFontStyle: LegacyHomeProps['onLyricsFontStyleChange'];
-    handleSetLyricsFontScale: LegacyHomeProps['onLyricsFontScaleChange'];
-    handleSetLyricsCustomFont: LegacyHomeProps['onLyricsCustomFontChange'];
-    handleUploadLyricsCustomFont: LegacyHomeProps['onLyricsCustomFontUpload'];
-    loadCurrentSongLyricPreview: LegacyHomeProps['loadLyricFilterPreview'];
-    handleSaveLyricFilterPattern: LegacyHomeProps['onSaveLyricFilterPattern'];
-    handleToggleOpenPanelCloseButton: LegacyHomeProps['onToggleOpenPanelCloseButton'];
+    navidromeEnabled: LegacyHomeProps['navidromeEnabled'];
 };
 
 // Builds the full Home model from raw app dependencies so App.tsx no longer assembles nested props inline.
@@ -155,8 +79,7 @@ export const buildHomeModel = ({
     setFocusedFavoriteAlbumIndex,
     focusedRadioIndex,
     setFocusedRadioIndex,
-    pendingOpenSettings,
-    setPendingOpenSettings,
+    openSettings,
     navigateToSearch,
     openLocalAlbumByName,
     openLocalArtistByName,
@@ -184,83 +107,8 @@ export const buildHomeModel = ({
     clearStagePlaybackSession,
     clearPersistedStagePlaybackCache,
     loadStageSessionIntoPlayback,
-    enableNowPlayingStage,
-    handleToggleNowPlayingStage,
-    nowPlayingConnectionStatus,
-    queueAddBehavior,
-    handleSetQueueAddBehavior,
-    staticMode,
-    disableHomeDynamicBackground,
-    hidePlayerProgressBar,
-    hidePlayerTranslationSubtitle,
-    hidePlayerRightPanelButton,
-    transparentPlayerBackground,
-    disableVisualizerVignette,
-    disableVisualizerGeometricBackground,
-    minimizeToTray,
-    hideTaskbarIcon,
-    openPlayerOnLaunch,
-    handleToggleStaticMode,
-    handleToggleDisableHomeDynamicBackground,
-    handleToggleHidePlayerProgressBar,
-    handleToggleHidePlayerTranslationSubtitle,
-    handleToggleHidePlayerRightPanelButton,
-    handleToggleTransparentPlayerBackground,
-    handleToggleDisableVisualizerVignette,
-    handleToggleDisableVisualizerGeometricBackground,
-    handleToggleMinimizeToTray,
-    handleToggleHideTaskbarIcon,
-    handleToggleOpenPlayerOnLaunch,
-    enableMediaCache,
-    handleToggleMediaCache,
     theme,
-    backgroundOpacity,
-    handleSetBackgroundOpacity,
-    bgMode,
-    applyDefaultTheme,
-    hasCustomTheme,
-    getThemeParkSeedTheme,
-    isCustomThemePreferred,
-    songThemeAutoSwitchEnabled,
-    saveCustomDualTheme,
-    applyCustomTheme,
-    handleCustomThemePreferenceChange,
-    handleSongThemeAutoSwitchChange,
-    isDaylight,
-    visualizerMode,
-    cadenzaTuning,
-    partitaTuning,
-    fumeTuning,
-    cappellaTuning,
-    tiltTuning,
-    cappellaCustomEmojiImages,
-    handleSetVisualizerMode,
-    handleSetPartitaTuning,
-    handleResetPartitaTuning,
-    handleSetFumeTuning,
-    handleResetFumeTuning,
-    handleSetCappellaTuning,
-    handleResetCappellaTuning,
-    handleSetTiltTuning,
-    handleResetTiltTuning,
-    handleImportCappellaCustomEmojiPack,
-    handleClearCappellaCustomEmojiPack,
-    isLoadingCappellaCustomEmojiPack,
-    audioOutputDeviceId,
-    handleAudioOutputDeviceChange,
-    lyricsFontStyle,
-    lyricsFontScale,
-    lyricsCustomFontFamily,
-    lyricsCustomFontLabel,
-    lyricFilterPattern,
-    showOpenPanelCloseButton,
-    handleSetLyricsFontStyle,
-    handleSetLyricsFontScale,
-    handleSetLyricsCustomFont,
-    handleUploadLyricsCustomFont,
-    loadCurrentSongLyricPreview,
-    handleSaveLyricFilterPattern,
-    handleToggleOpenPanelCloseButton,
+    navidromeEnabled,
 }: BuildHomeModelParams): HomeViewModel => {
     return {
         legacyProps: {
@@ -281,8 +129,7 @@ export const buildHomeModel = ({
             setFocusedFavoriteAlbumIndex,
             focusedRadioIndex,
             setFocusedRadioIndex,
-            pendingOpenSettings,
-            onPendingOpenSettingsHandled: () => setPendingOpenSettings(false),
+            onOpenSettings: openSettings,
             onSearchCommitted: (query, sourceTab, replace = false) => {
                 navigateToSearch({ query, sourceTab, replace });
             },
@@ -311,16 +158,20 @@ export const buildHomeModel = ({
             },
             stageStatus,
             onToggleStageMode: async (enabled) => {
-                const nextStatus = await window.electron?.setStageEnabled(enabled);
-                if (nextStatus) {
-                    setStageStatus(nextStatus);
-                    if (!enabled && activePlaybackContext === 'stage') {
-                        leaveStagePlayback();
+                try {
+                    const nextStatus = await window.electron?.setStageEnabled(enabled);
+                    if (nextStatus) {
+                        setStageStatus(nextStatus);
+                        if (!enabled && activePlaybackContext === 'stage') {
+                            leaveStagePlayback();
+                        }
+                        if (!enabled) {
+                            clearStagePlaybackSession();
+                            await clearPersistedStagePlaybackCache();
+                        }
                     }
-                    if (!enabled) {
-                        clearStagePlaybackSession();
-                        await clearPersistedStagePlaybackCache();
-                    }
+                } catch (error) {
+                    console.error('[buildHomeModel] Failed to toggle stage mode:', error);
                 }
             },
             onStageSourceChange: async (source) => {
@@ -344,89 +195,8 @@ export const buildHomeModel = ({
                     }
                 }
             },
-            enableNowPlayingStage,
-            onToggleNowPlayingStage: async (enabled) => {
-                handleToggleNowPlayingStage(enabled);
-                if (!enabled && activePlaybackContext === 'stage') {
-                    leaveStagePlayback();
-                }
-            },
-            nowPlayingConnectionStatus,
-            queueAddBehavior,
-            onQueueAddBehaviorChange: handleSetQueueAddBehavior,
-            staticMode,
-            disableHomeDynamicBackground,
-            hidePlayerProgressBar,
-            hidePlayerTranslationSubtitle,
-            hidePlayerRightPanelButton,
-            transparentPlayerBackground,
-            disableVisualizerVignette,
-            disableVisualizerGeometricBackground,
-            minimizeToTray,
-            hideTaskbarIcon,
-            openPlayerOnLaunch,
-            onToggleStaticMode: handleToggleStaticMode,
-            onToggleDisableHomeDynamicBackground: handleToggleDisableHomeDynamicBackground,
-            onToggleHidePlayerProgressBar: handleToggleHidePlayerProgressBar,
-            onToggleHidePlayerTranslationSubtitle: handleToggleHidePlayerTranslationSubtitle,
-            onToggleHidePlayerRightPanelButton: handleToggleHidePlayerRightPanelButton,
-            onToggleTransparentPlayerBackground: handleToggleTransparentPlayerBackground,
-            onToggleDisableVisualizerVignette: handleToggleDisableVisualizerVignette,
-            onToggleDisableVisualizerGeometricBackground: handleToggleDisableVisualizerGeometricBackground,
-            onToggleMinimizeToTray: handleToggleMinimizeToTray,
-            onToggleHideTaskbarIcon: handleToggleHideTaskbarIcon,
-            onToggleOpenPlayerOnLaunch: handleToggleOpenPlayerOnLaunch,
-            enableMediaCache,
-            onToggleMediaCache: handleToggleMediaCache,
             theme,
-            backgroundOpacity,
-            setBackgroundOpacity: handleSetBackgroundOpacity,
-            bgMode,
-            onApplyDefaultTheme: applyDefaultTheme,
-            hasCustomTheme,
-            themeParkInitialTheme: getThemeParkSeedTheme,
-            isCustomThemePreferred,
-            songThemeAutoSwitchEnabled,
-            onSaveCustomTheme: saveCustomDualTheme,
-            onApplyCustomTheme: applyCustomTheme,
-            onToggleCustomThemePreferred: handleCustomThemePreferenceChange,
-            onToggleSongThemeAutoSwitch: handleSongThemeAutoSwitchChange,
-            isDaylight,
-            visualizerMode,
-            cadenzaTuning,
-            partitaTuning,
-            fumeTuning,
-            cappellaTuning,
-            tiltTuning,
-            cappellaCustomEmojiImages,
-            onVisualizerModeChange: handleSetVisualizerMode,
-            onPartitaTuningChange: handleSetPartitaTuning,
-            onResetPartitaTuning: handleResetPartitaTuning,
-            onFumeTuningChange: handleSetFumeTuning,
-            onResetFumeTuning: handleResetFumeTuning,
-            onCappellaTuningChange: handleSetCappellaTuning,
-            onResetCappellaTuning: handleResetCappellaTuning,
-            onTiltTuningChange: handleSetTiltTuning,
-            onResetTiltTuning: handleResetTiltTuning,
-            onImportCappellaCustomEmojiPack: handleImportCappellaCustomEmojiPack,
-            onClearCappellaCustomEmojiPack: handleClearCappellaCustomEmojiPack,
-            isLoadingCappellaCustomEmojiPack,
-            audioOutputDeviceId,
-            onAudioOutputDeviceChange: handleAudioOutputDeviceChange,
-            lyricsFontStyle,
-            lyricsFontScale,
-            lyricsCustomFontFamily,
-            lyricsCustomFontLabel,
-            lyricFilterPattern,
-            currentSongTitle: currentSong?.name || null,
-            showOpenPanelCloseButton,
-            onLyricsFontStyleChange: handleSetLyricsFontStyle,
-            onLyricsFontScaleChange: handleSetLyricsFontScale,
-            onLyricsCustomFontChange: handleSetLyricsCustomFont,
-            onLyricsCustomFontUpload: handleUploadLyricsCustomFont,
-            loadLyricFilterPreview: loadCurrentSongLyricPreview,
-            onSaveLyricFilterPattern: handleSaveLyricFilterPattern,
-            onToggleOpenPanelCloseButton: handleToggleOpenPanelCloseButton,
+            navidromeEnabled,
         },
     };
 };
