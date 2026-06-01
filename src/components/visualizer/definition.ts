@@ -35,6 +35,7 @@ export interface VisualizerSharedProps {
     disableGeometricBackground?: boolean;
     disableVignette?: boolean;
     lyricsFontScale?: number;
+    subtitleOverlayOpacity?: number;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
     paused?: boolean;
@@ -51,6 +52,7 @@ export interface VisualizerSharedProps {
 export interface VisualizerSettingsPanelProps {
     t: (key: string) => string;
     isDaylight: boolean;
+    theme: Theme;
     controlCardBg: string;
     rangeInputClass: string;
     partitaTuning?: PartitaTuning;

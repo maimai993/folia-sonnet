@@ -91,6 +91,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
     const { t } = useTranslation();
     const {
+        useCoverColorBg,
         staticMode,
         disableHomeDynamicBackground,
         hidePlayerProgressBar,
@@ -104,6 +105,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         openPlayerOnLaunch,
         enableMediaCache,
         backgroundOpacity,
+        subtitleOverlayOpacity,
         isDaylight,
         visualizerMode,
         cadenzaTuning,
@@ -122,6 +124,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         enableNowPlayingStage,
         queueAddBehavior,
         audioOutputDeviceId,
+        handleToggleCoverColorBg: onToggleCoverColorBg,
         handleToggleStaticMode: onToggleStaticMode,
         handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
         handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
@@ -135,6 +138,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
         handleToggleMediaCache: onToggleMediaCache,
         handleSetBackgroundOpacity: setBackgroundOpacity,
+        handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
         handleSetVisualizerMode: onVisualizerModeChange,
         handleSetPartitaTuning: onPartitaTuningChange,
         handleResetPartitaTuning: onResetPartitaTuning,
@@ -2089,7 +2093,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         isDaylight={isDaylight}
                         visualizerMode={visualizerMode}
                         backgroundOpacity={backgroundOpacity}
+                        useCoverColorBg={useCoverColorBg}
                         staticMode={staticMode}
+                        transparentPlayerBackground={transparentPlayerBackground}
+                        disableVisualizerVignette={disableVisualizerVignette}
+                        disableVisualizerGeometricBackground={disableVisualizerGeometricBackground}
+                        hideTranslationSubtitle={hidePlayerTranslationSubtitle}
+                        subtitleOverlayOpacity={subtitleOverlayOpacity}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
                         fumeTuning={fumeTuning}
@@ -2104,6 +2114,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onFontScaleChange={onLyricsFontScaleChange}
                         onCustomFontChange={onLyricsCustomFontChange}
                         onUploadCustomFont={onLyricsCustomFontUpload}
+                        onVisualizerModeChange={onVisualizerModeChange}
+                        onBackgroundOpacityChange={setBackgroundOpacity}
+                        onToggleCoverColorBg={onToggleCoverColorBg}
+                        onToggleDisableVisualizerVignette={onToggleDisableVisualizerVignette}
+                        onToggleDisableVisualizerGeometricBackground={onToggleDisableVisualizerGeometricBackground}
+                        onToggleHideTranslationSubtitle={onToggleHidePlayerTranslationSubtitle}
+                        onSubtitleOverlayOpacityChange={setSubtitleOverlayOpacity}
                         onPartitaTuningChange={onPartitaTuningChange}
                         onResetPartitaTuning={onResetPartitaTuning}
                         onFumeTuningChange={onFumeTuningChange}
@@ -2360,44 +2377,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     </div>
                                 </div>
 
-                                    <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
-                                    <div className="flex items-start justify-between gap-3">
+                                    <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                                         <div className="space-y-1">
                                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                {t('options.lyricsRenderer') || "Lyrics Renderer"}
+                                                {t('options.lyricsRenderer') || '歌词渲染'}
                                             </div>
                                             <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                                {t('options.lyricsRendererDesc') || "Choose the lyrics rendering mode used on the playback page."}
+                                                {t('options.lyricsRendererDesc') || '选择播放页使用的歌词渲染模式。'}
                                             </div>
                                         </div>
                                         <button
                                             type="button"
                                             onClick={() => setShowVisPlayground(true)}
-                                                className={`shrink-0 w-9 h-9 rounded-full border transition-colors flex items-center justify-center ${utilityGhostButtonClass}`}
+                                            className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-medium transition-colors ${utilityGhostButtonClass}`}
                                             style={{ color: 'var(--text-primary)' }}
-                                            title={t('options.openLyricsStyleSettings') || '打开歌词样式设置'}
-                                            aria-label={t('options.openLyricsStyleSettings') || '打开歌词样式设置'}
                                         >
                                             <Settings2 size={16} />
+                                            <span>{t('options.lyricsAnimationAdjust') || '歌词动画调整'}</span>
                                         </button>
                                     </div>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                        {visualizerModeOptions.map(option => (
-                                            <button
-                                                key={option.mode}
-                                                onClick={() => onVisualizerModeChange?.(option.mode)}
-                                                    className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
-                                                    style={{
-                                                        ...getAccentOptionStyle(visualizerMode === option.mode),
-                                                    }}
-                                                >
-                                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                    {option.label}
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
 
                                     <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                                     <div className="flex justify-between items-center">

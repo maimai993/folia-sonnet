@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CappellaTuning, type FumeTuning, type PartitaTuning, type TiltColorScheme, type TiltTuning } from '../../types';
+import { colorWithAlpha } from './colorMix';
 import { type VisualizerSettingsPanelProps } from './definition';
 
 // src/components/visualizer/settingsPanels.tsx
@@ -15,6 +16,7 @@ interface PresetGroupProps<T> {
     options: PresetOption<T>[];
     onChange: (next: T) => void;
     isDaylight: boolean;
+    theme: VisualizerSettingsPanelProps['theme'];
 }
 
 const clampPartitaStagger = (value: number) => Math.min(180, Math.max(0, value));
@@ -25,9 +27,10 @@ const PresetGroup = <T,>({
     options,
     onChange,
     isDaylight,
+    theme,
 }: PresetGroupProps<T>) => (
     <div className="space-y-2.5">
-        <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: 'var(--text-secondary)' }}>
+        <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: theme.secondaryColor }}>
             {label}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -41,12 +44,12 @@ const PresetGroup = <T,>({
                         onClick={() => onChange(option.value)}
                         className="px-3 py-2 rounded-full text-sm transition-all border"
                         style={{
-                            color: 'var(--text-primary)',
-                            borderColor: isActive ? 'var(--text-accent)' : (isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)'),
+                            color: theme.primaryColor,
+                            borderColor: isActive ? theme.accentColor : colorWithAlpha(theme.secondaryColor, isDaylight ? 0.18 : 0.14),
                             backgroundColor: isActive
-                                ? (isDaylight ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.10)')
-                                : (isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)'),
-                            boxShadow: isActive ? '0 8px 22px rgba(0,0,0,0.14)' : 'none',
+                                ? colorWithAlpha(theme.accentColor, isDaylight ? 0.1 : 0.16)
+                                : colorWithAlpha(theme.backgroundColor, isDaylight ? 0.24 : 0.34),
+                            boxShadow: isActive ? `inset 0 0 0 1px ${theme.accentColor}` : 'none',
                         }}
                     >
                         {option.label}
@@ -60,6 +63,7 @@ const PresetGroup = <T,>({
 export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
     isDaylight,
+    theme,
     controlCardBg,
     rangeInputClass,
     partitaTuning = DEFAULT_PARTITA_TUNING,
@@ -116,6 +120,7 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 options={guideLineOptions}
                 onChange={(enabled) => onPartitaTuningChange?.({ showGuideLines: enabled })}
                 isDaylight={isDaylight}
+                theme={theme}
             />
 
             <PresetGroup
@@ -124,6 +129,7 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 options={semanticLayoutOptions}
                 onChange={(enabled) => onPartitaTuningChange?.({ useSemanticLayout: enabled })}
                 isDaylight={isDaylight}
+                theme={theme}
             />
 
             <div className="space-y-2">
@@ -174,6 +180,7 @@ const resolveFumeCameraTrackingMode = (value: FumeTuning['cameraTrackingMode'] |
 export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
     isDaylight,
+    theme,
     controlCardBg,
     rangeInputClass,
     fumeTuning = DEFAULT_FUME_TUNING,
@@ -221,6 +228,7 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 options={visibilityOptions}
                 onChange={(next) => handleFumeTuningChange({ hidePrintSymbols: next })}
                 isDaylight={isDaylight}
+                theme={theme}
             />
 
             <PresetGroup
@@ -229,6 +237,7 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 options={visibilityOptions}
                 onChange={(next) => handleFumeTuningChange({ disableGeometricBackground: next })}
                 isDaylight={isDaylight}
+                theme={theme}
             />
 
             <div className="space-y-2">
@@ -291,6 +300,7 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 options={fumeCameraTrackingOptions}
                 onChange={(next) => handleFumeTuningChange({ cameraTrackingMode: next })}
                 isDaylight={isDaylight}
+                theme={theme}
             />
 
             <div className="space-y-2">
@@ -348,6 +358,7 @@ const resolveCappellaTuning = (
 export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
     isDaylight,
+    theme,
     controlCardBg,
     cappellaTuning,
     cappellaCustomEmojiImages = [],
@@ -433,6 +444,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 ]}
                 onChange={(next) => onCappellaTuningChange?.({ showEmoMessages: next })}
                 isDaylight={isDaylight}
+                theme={theme}
             />
 
             <PresetGroup
@@ -441,6 +453,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 options={avatarSourceOptions}
                 onChange={(next) => onCappellaTuningChange?.({ avatarSource: next })}
                 isDaylight={isDaylight}
+                theme={theme}
             />
 
             <div className="space-y-2.5">
@@ -461,11 +474,11 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                                 className="px-3 py-2 rounded-full text-sm transition-all border disabled:cursor-not-allowed disabled:opacity-45"
                                 style={{
                                     color: 'var(--text-primary)',
-                                    borderColor: isActive ? 'var(--text-accent)' : (isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)'),
+                                    borderColor: isActive ? theme.accentColor : colorWithAlpha(theme.secondaryColor, isDaylight ? 0.18 : 0.14),
                                     backgroundColor: isActive
-                                        ? (isDaylight ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.10)')
-                                        : (isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)'),
-                                    boxShadow: isActive ? '0 8px 22px rgba(0,0,0,0.14)' : 'none',
+                                        ? colorWithAlpha(theme.accentColor, isDaylight ? 0.1 : 0.16)
+                                        : colorWithAlpha(theme.backgroundColor, isDaylight ? 0.24 : 0.34),
+                                    boxShadow: isActive ? `inset 0 0 0 1px ${theme.accentColor}` : 'none',
                                 }}
                             >
                                 {option.label}
@@ -562,6 +575,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
     isDaylight,
+    theme,
     controlCardBg,
     rangeInputClass,
     tiltTuning = DEFAULT_TILT_TUNING,
@@ -604,6 +618,7 @@ export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 options={colorSchemeOptions}
                 onChange={(next) => handleTiltTuningChange({ colorScheme: next })}
                 isDaylight={isDaylight}
+                theme={theme}
             />
 
             <div className="space-y-2">

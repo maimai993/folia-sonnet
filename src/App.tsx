@@ -213,6 +213,7 @@ export default function App() {
         openPlayerOnLaunch,
         enableMediaCache,
         backgroundOpacity,
+        subtitleOverlayOpacity,
         isDaylight,
         visualizerMode,
         cadenzaTuning,
@@ -1960,6 +1961,7 @@ export default function App() {
                     disableGeometricBackground={disableVisualizerGeometricBackground || isSettingsSubviewOpen}
                     disableVignette={disableVisualizerVignette}
                     lyricsFontScale={lyricsFontScale}
+                    subtitleOverlayOpacity={subtitleOverlayOpacity}
                     isPlayerChromeHidden={isPlayerChromeHidden}
                     hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
                     cadenzaTuning={cadenzaTuning}

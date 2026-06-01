@@ -22,6 +22,7 @@ import {
     type VisualizerMode,
 } from '../../types';
 import { resolveThemeFontStack } from '../../utils/fontStacks';
+import { colorWithAlpha } from './colorMix';
 import {
     findPreviewPlaceholderLineIndex,
     getPreviewPlaceholderStartOffset,
@@ -29,13 +30,21 @@ import {
     VIS_PLAYGROUND_PREVIEW_LOOP_DURATION,
 } from './PreviewPlaceholder';
 import { getVisualizerModeLabel, getVisualizerRegistryEntry, getVisualizerScopedSeed } from './registry';
+import VisPlaygroundPreviewHotspots, { type VisPlaygroundEditSection } from './VisPlaygroundPreviewHotspots';
+import VisPlaygroundSettingsPanel from './VisPlaygroundSettingsPanel';
 
 interface VisPlaygroundProps {
     theme?: Theme;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
     backgroundOpacity?: number;
+    useCoverColorBg?: boolean;
     staticMode?: boolean;
+    transparentPlayerBackground?: boolean;
+    disableVisualizerVignette?: boolean;
+    disableVisualizerGeometricBackground?: boolean;
+    hideTranslationSubtitle?: boolean;
+    subtitleOverlayOpacity?: number;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
@@ -50,6 +59,13 @@ interface VisPlaygroundProps {
     onFontScaleChange: (fontScale: number) => void;
     onCustomFontChange: (font: StoredCustomLyricsFont | null) => void;
     onUploadCustomFont?: (file: File) => Promise<{ ok: boolean; error?: string; }>;
+    onVisualizerModeChange?: (mode: VisualizerMode) => void;
+    onBackgroundOpacityChange?: (opacity: number) => void;
+    onToggleCoverColorBg?: (enabled: boolean) => void;
+    onToggleDisableVisualizerVignette?: (disabled: boolean) => void;
+    onToggleDisableVisualizerGeometricBackground?: (disabled: boolean) => void;
+    onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
+    onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     onResetPartitaTuning?: () => void;
     onFumeTuningChange?: (patch: Partial<FumeTuning>) => void;
@@ -67,15 +83,6 @@ interface VisPlaygroundProps {
 interface PresetOption<T> {
     label: string;
     value: T;
-}
-
-interface PresetGroupProps<T> {
-    label: string;
-    value: T;
-    options: PresetOption<T>[];
-    onChange: (next: T) => void;
-    isDaylight: boolean;
-    isOptionActive?: (option: PresetOption<T>) => boolean;
 }
 
 interface LocalFontDataLike {
@@ -156,45 +163,6 @@ const resolveFumeCameraTrackingMode = (value: FumeTuning['cameraTrackingMode'] |
         : DEFAULT_FUME_TUNING.cameraTrackingMode
 );
 
-const PresetGroup = <T,>({
-    label,
-    value,
-    options,
-    onChange,
-    isDaylight,
-    isOptionActive,
-}: PresetGroupProps<T>) => (
-    <div className="space-y-2.5">
-        <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: 'var(--text-secondary)' }}>
-            {label}
-        </div>
-        <div className="flex flex-wrap gap-2">
-            {options.map(option => {
-                const isActive = isOptionActive ? isOptionActive(option) : option.value === value;
-
-                return (
-                    <button
-                        key={String(option.value)}
-                        type="button"
-                        onClick={() => onChange(option.value)}
-                        className="px-3 py-2 rounded-full text-sm transition-all border"
-                        style={{
-                            color: 'var(--text-primary)',
-                            borderColor: isActive ? 'var(--text-accent)' : (isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)'),
-                            backgroundColor: isActive
-                                ? (isDaylight ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.10)')
-                                : (isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)'),
-                            boxShadow: isActive ? '0 8px 22px rgba(0,0,0,0.14)' : 'none',
-                        }}
-                    >
-                        {option.label}
-                    </button>
-                );
-            })}
-        </div>
-    </div>
-);
-
 const dedupeLocalFonts = (fonts: LocalFontDataLike[]) => {
     const entries = new Map<string, LocalFontEntry>();
 
@@ -221,7 +189,13 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     isDaylight,
     visualizerMode,
     backgroundOpacity = 0.75,
+    useCoverColorBg = false,
     staticMode = false,
+    transparentPlayerBackground = false,
+    disableVisualizerVignette = false,
+    disableVisualizerGeometricBackground = false,
+    hideTranslationSubtitle = false,
+    subtitleOverlayOpacity = 0.6,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
     partitaTuning = DEFAULT_PARTITA_TUNING,
     fumeTuning = DEFAULT_FUME_TUNING,
@@ -236,6 +210,13 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onFontScaleChange,
     onCustomFontChange,
     onUploadCustomFont,
+    onVisualizerModeChange,
+    onBackgroundOpacityChange,
+    onToggleCoverColorBg,
+    onToggleDisableVisualizerVignette,
+    onToggleDisableVisualizerGeometricBackground,
+    onToggleHideTranslationSubtitle,
+    onSubtitleOverlayOpacityChange,
     onPartitaTuningChange,
     onResetPartitaTuning,
     onFumeTuningChange,
@@ -266,6 +247,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [fontListHeight, setFontListHeight] = useState(420);
     const [isUploadingCustomFont, setIsUploadingCustomFont] = useState(false);
     const [draftFumeTuning, setDraftFumeTuning] = useState<FumeTuning>(fumeTuning);
+    const [activeEditSection, setActiveEditSection] = useState<VisPlaygroundEditSection>('visualizer');
     const fontListRef = React.useRef<HTMLDivElement>(null);
     const fontVirtualListRef = useListRef(null);
     const fontUploadInputRef = React.useRef<HTMLInputElement>(null);
@@ -368,9 +350,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const modeLabel = getVisualizerModeLabel(visualizerMode, t);
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
-    const tabSwitcherBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
-    const activeTabBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
-    const controlCardBg = isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)';
+    const controlCardBg = colorWithAlpha(previewTheme.backgroundColor, isDaylight ? 0.42 : 0.52);
     const overlayBackground = isDaylight ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.65)';
     const rangeInputClass = [
         'w-full h-1.5 rounded-full appearance-none cursor-pointer',
@@ -619,7 +599,13 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 staticMode={staticMode}
                                 isPreviewMode
                                 backgroundOpacity={backgroundOpacity}
+                                useCoverColorBg={useCoverColorBg}
+                                transparentBackground={transparentPlayerBackground}
+                                disableVignette={disableVisualizerVignette}
+                                disableGeometricBackground={disableVisualizerGeometricBackground}
                                 lyricsFontScale={normalizedFontScale}
+                                subtitleOverlayOpacity={subtitleOverlayOpacity}
+                                hideTranslationSubtitle={hideTranslationSubtitle}
                                 cadenzaTuning={cadenzaTuning}
                                 partitaTuning={resolvedPartitaTuning}
                                 fumeTuning={resolvedFumeTuning}
@@ -629,88 +615,60 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 seed={getVisualizerScopedSeed(visualizerMode, 'vis-playground')}
                             />
                         </div>
+                        <VisPlaygroundPreviewHotspots
+                            activeSection={activeEditSection}
+                            onSectionChange={setActiveEditSection}
+                            theme={previewTheme}
+                            labels={{
+                                background: t('options.previewBackgroundHotspot') || '背景设置',
+                                visualizer: t('options.previewVisualizerHotspot') || 'Visualizer 设置',
+                                subtitle: t('options.previewSubtitleHotspot') || '字幕设置',
+                            }}
+                        />
                     </div>
 
-                    <div className="min-h-0 flex flex-col gap-4">
-                        <div className={`inline-flex w-fit items-center gap-1 rounded-full p-1 ${tabSwitcherBg}`}>
-                            <div className={`rounded-full px-3 py-1.5 text-sm ${activeTabBg}`} style={{ color: 'var(--text-primary)' }}>
-                                {t('options.fontFamily') || '字体'}
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-4">
-                            <div
-                                className="rounded-[24px] border border-white/10 p-4 space-y-4"
-                                style={{ backgroundColor: controlCardBg }}
-                            >
-                                <div className="space-y-1">
-                                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.lyricsStyleSettings') || '歌词样式'}
-                                    </div>
-                                    <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.lyricsStyleSettingsDesc') || '字体、字号和当前渲染器附加参数'}
-                                    </div>
-                                </div>
-
-                                <PresetGroup
-                                    label={t('options.fontFamily') || '字体'}
-                                    value={customFontFamily ? 'custom' : fontStyle}
-                                    options={fontStyleOptions}
-                                    onChange={handleSelectFontStyle}
-                                    isDaylight={isDaylight}
-                                    isOptionActive={(option) => option.value === (customFontFamily ? 'custom' : fontStyle)}
-                                />
-
-                                <PresetGroup
-                                    label={t('options.fontSize') || '字号'}
-                                    value={normalizedFontScale}
-                                    options={FONT_SCALE_OPTIONS}
-                                    onChange={onFontScaleChange}
-                                    isDaylight={isDaylight}
-                                />
-
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                                        <span>{t('options.fontSize') || '字号'}</span>
-                                        <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
-                                            {Math.round(normalizedFontScale * 100)}%
-                                        </span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0.85"
-                                        max="1.4"
-                                        step="0.05"
-                                        value={normalizedFontScale}
-                                        onChange={(event) => onFontScaleChange(parseFloat(event.target.value))}
-                                        className={rangeInputClass}
-                                    />
-                                </div>
-                            </div>
-
-                            {visualizerEntry.renderSettingsPanel?.({
-                                t,
-                                isDaylight,
-                                controlCardBg,
-                                rangeInputClass,
-                                partitaTuning: resolvedPartitaTuning,
-                                onPartitaTuningChange,
-                                fumeTuning: resolvedFumeTuning,
-                                onFumeTuningChange: handleFumeTuningChange,
-                                cappellaTuning,
-                                cappellaCustomEmojiImages,
-                                onCappellaTuningChange,
-                                cappellaCustomEmojiCount: cappellaCustomEmojiImages.length,
-                                hasCappellaCustomEmojiPack: cappellaCustomEmojiImages.length > 0,
-                                isCappellaCustomEmojiPackLoading: isLoadingCappellaCustomEmojiPack,
-                                onImportCappellaCustomEmojiPack,
-                                onClearCappellaCustomEmojiPack,
-                                tiltTuning,
-                                onTiltTuningChange,
-                            })}
-
-                        </div>
-                    </div>
+                    <VisPlaygroundSettingsPanel
+                        activeSection={activeEditSection}
+                        onSectionChange={setActiveEditSection}
+                        t={t}
+                        isDaylight={isDaylight}
+                        theme={previewTheme}
+                        visualizerMode={visualizerMode}
+                        visualizerEntry={visualizerEntry}
+                        onVisualizerModeChange={onVisualizerModeChange}
+                        controlCardBg={controlCardBg}
+                        rangeInputClass={rangeInputClass}
+                        backgroundOpacity={backgroundOpacity}
+                        onBackgroundOpacityChange={onBackgroundOpacityChange}
+                        useCoverColorBg={useCoverColorBg}
+                        onToggleCoverColorBg={onToggleCoverColorBg}
+                        disableVisualizerVignette={disableVisualizerVignette}
+                        onToggleDisableVisualizerVignette={onToggleDisableVisualizerVignette}
+                        disableVisualizerGeometricBackground={disableVisualizerGeometricBackground}
+                        onToggleDisableVisualizerGeometricBackground={onToggleDisableVisualizerGeometricBackground}
+                        fontStyleValue={customFontFamily ? 'custom' : fontStyle}
+                        fontStyleOptions={fontStyleOptions}
+                        onFontStyleChange={handleSelectFontStyle}
+                        fontScale={normalizedFontScale}
+                        fontScaleOptions={FONT_SCALE_OPTIONS}
+                        onFontScaleChange={onFontScaleChange}
+                        partitaTuning={resolvedPartitaTuning}
+                        onPartitaTuningChange={onPartitaTuningChange}
+                        fumeTuning={resolvedFumeTuning}
+                        onFumeTuningChange={handleFumeTuningChange}
+                        cappellaTuning={cappellaTuning}
+                        cappellaCustomEmojiImages={cappellaCustomEmojiImages}
+                        onCappellaTuningChange={onCappellaTuningChange}
+                        isLoadingCappellaCustomEmojiPack={isLoadingCappellaCustomEmojiPack}
+                        onImportCappellaCustomEmojiPack={onImportCappellaCustomEmojiPack}
+                        onClearCappellaCustomEmojiPack={onClearCappellaCustomEmojiPack}
+                        tiltTuning={tiltTuning}
+                        onTiltTuningChange={onTiltTuningChange}
+                        hideTranslationSubtitle={hideTranslationSubtitle}
+                        onToggleHideTranslationSubtitle={onToggleHideTranslationSubtitle}
+                        subtitleOverlayOpacity={subtitleOverlayOpacity}
+                        onSubtitleOverlayOpacityChange={onSubtitleOverlayOpacityChange}
+                    />
                 </div>
 
                 {isFontPickerOpen && (

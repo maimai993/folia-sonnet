@@ -244,6 +244,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         audioBands,
         showText = true,
         lyricsFontScale = 1,
+        subtitleOverlayOpacity,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
     } = props;
@@ -604,6 +605,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                 theme={theme}
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
+                subtitleOverlayOpacity={subtitleOverlayOpacity}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
             />
