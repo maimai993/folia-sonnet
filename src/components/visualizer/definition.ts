@@ -69,6 +69,10 @@ export interface VisualizerSettingsPanelProps {
     onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
     tiltTuning?: TiltTuning;
     onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
+    /** Mark slider drag start so onChange only updates draft. */
+    onSliderPointerDown?: () => void;
+    /** Commit draft values to persistent store on slider release. */
+    onSliderCommit?: () => void;
 }
 
 export interface VisualizerSettingsResetProps {

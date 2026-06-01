@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
 import { ChevronLeft, Loader2, RotateCcw, Search, Sparkles, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -246,11 +246,18 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [fontPickerError, setFontPickerError] = useState<string | null>(null);
     const [fontListHeight, setFontListHeight] = useState(420);
     const [isUploadingCustomFont, setIsUploadingCustomFont] = useState(false);
+    const [draftBackgroundOpacity, setDraftBackgroundOpacity] = useState(backgroundOpacity);
+    const [draftSubtitleOverlayOpacity, setDraftSubtitleOverlayOpacity] = useState(subtitleOverlayOpacity);
+    const [draftFontScale, setDraftFontScale] = useState(fontScale);
+    const [draftPartitaTuning, setDraftPartitaTuning] = useState<PartitaTuning>(partitaTuning);
     const [draftFumeTuning, setDraftFumeTuning] = useState<FumeTuning>(fumeTuning);
+    const [draftTiltTuning, setDraftTiltTuning] = useState<TiltTuning>(tiltTuning);
     const [activeEditSection, setActiveEditSection] = useState<VisPlaygroundEditSection>('visualizer');
     const fontListRef = React.useRef<HTMLDivElement>(null);
     const fontVirtualListRef = useListRef(null);
     const fontUploadInputRef = React.useRef<HTMLInputElement>(null);
+    const isDraggingSlider = useRef(false);
+    const pendingCommitRef = useRef<(() => void) | null>(null);
 
     const audioBands = useMemo<AudioBands>(() => ({
         bass,
@@ -260,7 +267,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         treble,
     }), [bass, lowMid, mid, treble, vocal]);
 
-    const normalizedFontScale = clampFontScale(fontScale);
+    const normalizedFontScale = clampFontScale(draftFontScale);
     const builtinFontOptions: PresetOption<Theme['fontStyle']>[] = useMemo(() => ([
         { value: 'sans', label: t('options.fontSans') || '无衬线' },
         { value: 'serif', label: t('options.fontSerif') || '衬线' },
@@ -273,16 +280,16 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         fontFamily: customFontFamily ?? undefined,
     }), [baseTheme, customFontFamily, fontStyle]);
     const resolvedPartitaTuning = useMemo<PartitaTuning>(() => {
-        const rawMin = clampPartitaStagger(partitaTuning.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
-        const rawMax = clampPartitaStagger(partitaTuning.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
+        const rawMin = clampPartitaStagger(draftPartitaTuning.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
+        const rawMax = clampPartitaStagger(draftPartitaTuning.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
 
         return {
-            showGuideLines: partitaTuning.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
-            useSemanticLayout: partitaTuning.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
+            showGuideLines: draftPartitaTuning.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+            useSemanticLayout: draftPartitaTuning.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
             staggerMin: Math.min(rawMin, rawMax),
             staggerMax: Math.max(rawMin, rawMax),
         };
-    }, [partitaTuning]);
+    }, [draftPartitaTuning]);
     const resolvedFumeTuning = useMemo<FumeTuning>(() => ({
         hidePrintSymbols: draftFumeTuning.hidePrintSymbols,
         disableGeometricBackground: draftFumeTuning.disableGeometricBackground,
@@ -311,9 +318,12 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const canQueryLocalFonts = typeof window !== 'undefined' && Boolean((window as QueryLocalFontsWindow).queryLocalFonts);
     const shouldShowUploadedFontFallback = !canQueryLocalFonts && isMobileBrowser() && Boolean(onUploadCustomFont);
 
-    useEffect(() => {
-        setDraftFumeTuning(fumeTuning);
-    }, [fumeTuning]);
+    useEffect(() => { setDraftBackgroundOpacity(backgroundOpacity); }, [backgroundOpacity]);
+    useEffect(() => { setDraftSubtitleOverlayOpacity(subtitleOverlayOpacity); }, [subtitleOverlayOpacity]);
+    useEffect(() => { setDraftFontScale(fontScale); }, [fontScale]);
+    useEffect(() => { setDraftPartitaTuning(partitaTuning); }, [partitaTuning]);
+    useEffect(() => { setDraftFumeTuning(fumeTuning); }, [fumeTuning]);
+    useEffect(() => { setDraftTiltTuning(tiltTuning); }, [tiltTuning]);
 
     useEffect(() => {
         let frameId = 0;
@@ -348,6 +358,11 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
     const visualizerEntry = getVisualizerRegistryEntry(visualizerMode);
     const modeLabel = getVisualizerModeLabel(visualizerMode, t);
+    const hotspotLabels = useMemo<Record<VisPlaygroundEditSection, string>>(() => ({
+        background: t('options.previewBackgroundHotspot') || '背景设置',
+        visualizer: t('options.previewVisualizerHotspot') || 'Visualizer 设置',
+        subtitle: t('options.previewSubtitleHotspot') || '字幕设置',
+    }), [t]);
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
     const controlCardBg = colorWithAlpha(previewTheme.backgroundColor, isDaylight ? 0.42 : 0.52);
@@ -525,10 +540,73 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         handleSelectBuiltinFont(next);
     };
 
+    /** Update draft only during slider drag; commit immediately for buttons. */
     const handleFumeTuningChange = (patch: Partial<FumeTuning>) => {
         setDraftFumeTuning(previous => ({ ...previous, ...patch }));
-        onFumeTuningChange?.(patch);
+        if (!isDraggingSlider.current) {
+            onFumeTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onFumeTuningChange?.(patch);
+        }
     };
+
+    const handleBackgroundOpacityDraft = (opacity: number) => {
+        setDraftBackgroundOpacity(opacity);
+        if (!isDraggingSlider.current) {
+            onBackgroundOpacityChange?.(opacity);
+        } else {
+            pendingCommitRef.current = () => onBackgroundOpacityChange?.(opacity);
+        }
+    };
+
+    const handleSubtitleOverlayOpacityDraft = (opacity: number) => {
+        setDraftSubtitleOverlayOpacity(opacity);
+        if (!isDraggingSlider.current) {
+            onSubtitleOverlayOpacityChange?.(opacity);
+        } else {
+            pendingCommitRef.current = () => onSubtitleOverlayOpacityChange?.(opacity);
+        }
+    };
+
+    const handleFontScaleDraft = (scale: number) => {
+        setDraftFontScale(scale);
+        if (!isDraggingSlider.current) {
+            onFontScaleChange(scale);
+        } else {
+            pendingCommitRef.current = () => onFontScaleChange(scale);
+        }
+    };
+
+    const handlePartitaTuningDraft = (patch: Partial<PartitaTuning>) => {
+        setDraftPartitaTuning(prev => ({ ...prev, ...patch }));
+        if (!isDraggingSlider.current) {
+            onPartitaTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onPartitaTuningChange?.(patch);
+        }
+    };
+
+    const handleTiltTuningDraft = (patch: Partial<TiltTuning>) => {
+        setDraftTiltTuning(prev => ({ ...prev, ...patch }));
+        if (!isDraggingSlider.current) {
+            onTiltTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onTiltTuningChange?.(patch);
+        }
+    };
+
+    /** Mark slider drag start so onChange only updates local draft. */
+    const handleSliderPointerDown = useCallback(() => {
+        isDraggingSlider.current = true;
+    }, []);
+
+    /** Commit pending draft value to persistent store on slider release. */
+    const handleSliderCommit = useCallback(() => {
+        if (!isDraggingSlider.current) return;
+        isDraggingSlider.current = false;
+        pendingCommitRef.current?.();
+        pendingCommitRef.current = null;
+    }, []);
 
     return (
         <motion.div
@@ -598,19 +676,19 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 showText
                                 staticMode={staticMode}
                                 isPreviewMode
-                                backgroundOpacity={backgroundOpacity}
+                                backgroundOpacity={draftBackgroundOpacity}
                                 useCoverColorBg={useCoverColorBg}
                                 transparentBackground={transparentPlayerBackground}
                                 disableVignette={disableVisualizerVignette}
                                 disableGeometricBackground={disableVisualizerGeometricBackground}
                                 lyricsFontScale={normalizedFontScale}
-                                subtitleOverlayOpacity={subtitleOverlayOpacity}
+                                subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                                 hideTranslationSubtitle={hideTranslationSubtitle}
                                 cadenzaTuning={cadenzaTuning}
                                 partitaTuning={resolvedPartitaTuning}
                                 fumeTuning={resolvedFumeTuning}
                                 cappellaTuning={cappellaTuning}
-                                tiltTuning={tiltTuning}
+                                tiltTuning={draftTiltTuning}
                                 cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                                 seed={getVisualizerScopedSeed(visualizerMode, 'vis-playground')}
                             />
@@ -619,11 +697,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                             activeSection={activeEditSection}
                             onSectionChange={setActiveEditSection}
                             theme={previewTheme}
-                            labels={{
-                                background: t('options.previewBackgroundHotspot') || '背景设置',
-                                visualizer: t('options.previewVisualizerHotspot') || 'Visualizer 设置',
-                                subtitle: t('options.previewSubtitleHotspot') || '字幕设置',
-                            }}
+                            labels={hotspotLabels}
                         />
                     </div>
 
@@ -638,8 +712,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onVisualizerModeChange={onVisualizerModeChange}
                         controlCardBg={controlCardBg}
                         rangeInputClass={rangeInputClass}
-                        backgroundOpacity={backgroundOpacity}
-                        onBackgroundOpacityChange={onBackgroundOpacityChange}
+                        backgroundOpacity={draftBackgroundOpacity}
+                        onBackgroundOpacityChange={handleBackgroundOpacityDraft}
                         useCoverColorBg={useCoverColorBg}
                         onToggleCoverColorBg={onToggleCoverColorBg}
                         disableVisualizerVignette={disableVisualizerVignette}
@@ -651,9 +725,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onFontStyleChange={handleSelectFontStyle}
                         fontScale={normalizedFontScale}
                         fontScaleOptions={FONT_SCALE_OPTIONS}
-                        onFontScaleChange={onFontScaleChange}
+                        onFontScaleChange={handleFontScaleDraft}
                         partitaTuning={resolvedPartitaTuning}
-                        onPartitaTuningChange={onPartitaTuningChange}
+                        onPartitaTuningChange={handlePartitaTuningDraft}
                         fumeTuning={resolvedFumeTuning}
                         onFumeTuningChange={handleFumeTuningChange}
                         cappellaTuning={cappellaTuning}
@@ -662,12 +736,14 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         isLoadingCappellaCustomEmojiPack={isLoadingCappellaCustomEmojiPack}
                         onImportCappellaCustomEmojiPack={onImportCappellaCustomEmojiPack}
                         onClearCappellaCustomEmojiPack={onClearCappellaCustomEmojiPack}
-                        tiltTuning={tiltTuning}
-                        onTiltTuningChange={onTiltTuningChange}
+                        tiltTuning={draftTiltTuning}
+                        onTiltTuningChange={handleTiltTuningDraft}
                         hideTranslationSubtitle={hideTranslationSubtitle}
                         onToggleHideTranslationSubtitle={onToggleHideTranslationSubtitle}
-                        subtitleOverlayOpacity={subtitleOverlayOpacity}
-                        onSubtitleOverlayOpacityChange={onSubtitleOverlayOpacityChange}
+                        subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
+                        onSubtitleOverlayOpacityChange={handleSubtitleOverlayOpacityDraft}
+                        onSliderPointerDown={handleSliderPointerDown}
+                        onSliderCommit={handleSliderCommit}
                     />
                 </div>
 

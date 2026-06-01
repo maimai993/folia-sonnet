@@ -66,6 +66,8 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     theme,
     controlCardBg,
     rangeInputClass,
+    onSliderPointerDown,
+    onSliderCommit,
     partitaTuning = DEFAULT_PARTITA_TUNING,
     onPartitaTuningChange,
 }) => {
@@ -146,6 +148,8 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     step="5"
                     value={resolvedPartitaTuning.staggerMin}
                     onChange={(event) => handlePartitaMinChange(parseFloat(event.target.value))}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </div>
@@ -164,6 +168,8 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     step="5"
                     value={resolvedPartitaTuning.staggerMax}
                     onChange={(event) => handlePartitaMaxChange(parseFloat(event.target.value))}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </div>
@@ -183,6 +189,8 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     theme,
     controlCardBg,
     rangeInputClass,
+    onSliderPointerDown,
+    onSliderCommit,
     fumeTuning = DEFAULT_FUME_TUNING,
     onFumeTuningChange,
 }) => {
@@ -254,6 +262,8 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     step="0.05"
                     value={resolvedFumeTuning.backgroundObjectOpacity}
                     onChange={(event) => handleFumeTuningChange({ backgroundObjectOpacity: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </div>
@@ -272,6 +282,8 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     step="0.05"
                     value={resolvedFumeTuning.textHoldRatio}
                     onChange={(event) => handleFumeTuningChange({ textHoldRatio: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </div>
@@ -290,6 +302,8 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     step="0.05"
                     value={resolvedFumeTuning.cameraSpeed}
                     onChange={(event) => handleFumeTuningChange({ cameraSpeed: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </div>
@@ -317,6 +331,8 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     step="0.05"
                     value={resolvedFumeTuning.glowIntensity}
                     onChange={(event) => handleFumeTuningChange({ glowIntensity: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </div>
@@ -335,6 +351,8 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     step="0.02"
                     value={resolvedFumeTuning.heroScale}
                     onChange={(event) => handleFumeTuningChange({ heroScale: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </div>
@@ -578,6 +596,8 @@ export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     theme,
     controlCardBg,
     rangeInputClass,
+    onSliderPointerDown,
+    onSliderCommit,
     tiltTuning = DEFAULT_TILT_TUNING,
     onTiltTuningChange,
 }) => {
@@ -635,6 +655,8 @@ export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     step="0.05"
                     value={resolvedTuning.splitProbability}
                     onChange={(event) => handleTiltTuningChange({ splitProbability: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </div>
@@ -653,6 +675,8 @@ export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     step="0.05"
                     value={resolvedTuning.tiltStyleProbability}
                     onChange={(event) => handleTiltTuningChange({ tiltStyleProbability: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </div>

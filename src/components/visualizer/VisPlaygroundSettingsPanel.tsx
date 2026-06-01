@@ -79,6 +79,8 @@ interface VisPlaygroundSettingsPanelProps {
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
     subtitleOverlayOpacity: number;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
+    onSliderPointerDown?: () => void;
+    onSliderCommit?: () => void;
 }
 
 const SECTION_OPTIONS: VisPlaygroundEditSection[] = ['background', 'visualizer', 'subtitle'];
@@ -245,6 +247,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onToggleHideTranslationSubtitle,
         subtitleOverlayOpacity,
         onSubtitleOverlayOpacityChange,
+        onSliderPointerDown,
+        onSliderCommit,
     } = props;
 
     const modeOptions = useMemo(() => (
@@ -290,6 +294,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 step="0.05"
                                 value={backgroundOpacity}
                                 onChange={(event) => onBackgroundOpacityChange?.(parseFloat(event.target.value))}
+                                onPointerDown={onSliderPointerDown}
+                                onPointerUp={onSliderCommit}
                                 className={rangeInputClass}
                             />
                         </div>
@@ -383,6 +389,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     step="0.05"
                                     value={fontScale}
                                     onChange={(event) => onFontScaleChange(parseFloat(event.target.value))}
+                                    onPointerDown={onSliderPointerDown}
+                                    onPointerUp={onSliderCommit}
                                     className={rangeInputClass}
                                 />
                             </div>
@@ -408,6 +416,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             onClearCappellaCustomEmojiPack,
                             tiltTuning,
                             onTiltTuningChange,
+                            onSliderPointerDown,
+                            onSliderCommit,
                         })}
                     </>
                 )}
@@ -444,6 +454,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 step="0.05"
                                 value={subtitleOverlayOpacity}
                                 onChange={(event) => onSubtitleOverlayOpacityChange?.(parseFloat(event.target.value))}
+                                onPointerDown={onSliderPointerDown}
+                                onPointerUp={onSliderCommit}
                                 className={rangeInputClass}
                             />
                         </div>
