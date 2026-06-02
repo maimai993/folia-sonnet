@@ -35,13 +35,6 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
     const [isSearching, setIsSearching] = useState(false);
     const [isMatching, setIsMatching] = useState(false);
 
-    useEffect(() => {
-        const artist = song.ar?.map(item => item.name).join(', ') || song.artists?.map(item => item.name).join(', ') || '';
-        const initialQuery = `${song.name} ${artist}`.trim();
-        setSearchQuery(initialQuery);
-        void handleSearch(initialQuery);
-    }, [song.id]);
-
     const handleSearch = async (query = searchQuery) => {
         if (!query.trim()) {
             return;
@@ -63,6 +56,44 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
             setIsSearching(false);
         }
     };
+
+    useEffect(() => {
+        let isCurrent = true;
+
+        const artist = song.ar?.map(item => item.name).join(', ') || song.artists?.map(item => item.name).join(', ') || '';
+        const initialQuery = `${song.name} ${artist}`.trim();
+        setSearchQuery(initialQuery);
+        setIsSearching(true);
+        setSearchResults([]);
+        setSelectedResult(null);
+
+        void (async () => {
+            try {
+                const response = await neteaseApi.cloudSearch(initialQuery);
+                if (!isCurrent) {
+                    return;
+                }
+
+                const results = response.result?.songs ?? [];
+                setSearchResults(results);
+                if (results.length > 0) {
+                    setSelectedResult(results[0]);
+                }
+            } catch (error) {
+                if (isCurrent) {
+                    console.error('Online lyric search failed', error);
+                }
+            } finally {
+                if (isCurrent) {
+                    setIsSearching(false);
+                }
+            }
+        })();
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [song]);
 
     const handleConfirm = async () => {
         if (!selectedResult) {
