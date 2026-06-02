@@ -2378,7 +2378,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                             style={{ color: 'var(--text-primary)' }}
                                         >
                                             <Settings2 size={16} />
-                                            <span>{t('options.lyricsAnimationAdjust') || '歌词动画调整'}</span>
+                                            <span>{t('options.lyricsAnimationAdjust') || '歌词动画样式'}</span>
                                         </button>
                                     </div>
 

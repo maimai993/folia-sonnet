@@ -622,6 +622,15 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         onSubtitleOverlayOpacityChange?.(0.6);
     };
 
+    const handleResetCommonSettings = () => {
+        setDraftFontScale(1);
+        setDraftVisualizerOpacity(1);
+        onCustomFontChange(null);
+        onFontStyleChange('sans');
+        onFontScaleChange(1);
+        onVisualizerOpacityChange?.(1);
+    };
+
     /** Mark slider drag start so onChange only updates local draft. */
     const handleSliderPointerDown = useCallback(() => {
         isDraggingSlider.current = true;
@@ -750,6 +759,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         fontScale={normalizedFontScale}
                         fontScaleOptions={FONT_SCALE_OPTIONS}
                         onFontScaleChange={handleFontScaleDraft}
+                        onResetCommonSettings={handleResetCommonSettings}
                         partitaTuning={resolvedPartitaTuning}
                         onPartitaTuningChange={handlePartitaTuningDraft}
                         fumeTuning={resolvedFumeTuning}

@@ -67,6 +67,7 @@ interface VisPlaygroundSettingsPanelProps {
     fontScale: number;
     fontScaleOptions: PresetOption<number>[];
     onFontScaleChange: (fontScale: number) => void;
+    onResetCommonSettings?: () => void;
     partitaTuning: PartitaTuning;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     fumeTuning: FumeTuning;
@@ -262,6 +263,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         fontScale,
         fontScaleOptions,
         onFontScaleChange,
+        onResetCommonSettings,
         partitaTuning,
         onPartitaTuningChange,
         fumeTuning,
@@ -303,13 +305,20 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
             <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-4">
                 {activeSection === 'common' && (
                     <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
-                        <div className="space-y-1">
-                            <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
-                                {t('options.previewCommonSettings') || '通用设置'}
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
+                                    {t('options.previewCommonSettings') || '通用设置'}
+                                </div>
+                                <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
+                                    {t('options.previewCommonSettingsDesc') || '统一调整字体、字号等全局设置。'}
+                                </div>
                             </div>
-                            <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                                {t('options.previewCommonSettingsDesc') || '统一调整字体、字号和整个歌词动画层的透明度。'}
-                            </div>
+                            <ResetSectionButton
+                                label={t('ui.default') || '默认'}
+                                onClick={onResetCommonSettings}
+                                theme={theme}
+                            />
                         </div>
 
                         <PresetGroup
@@ -353,7 +362,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
-                                <span>{t('options.visualizerOpacity') || '歌词动画透明度'}</span>
+                                <span>{t('options.visualizerOpacity') || '整体透明度'}</span>
                                 <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
                                     {Math.round(visualizerOpacity * 100)}%
                                 </span>
