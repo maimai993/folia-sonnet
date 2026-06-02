@@ -159,7 +159,7 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                             disabled={isSearching}
                             className={`px-4 rounded-2xl text-sm font-medium transition-colors ${searchBtnBg}`}
                         >
-                            {isSearching ? <Loader2 size={16} className="animate-spin" /> : t('search')}
+                            {isSearching ? <Loader2 size={16} className="animate-spin" /> : t('localMusic.search')}
                         </button>
                     </div>
 
@@ -200,7 +200,7 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
 
                 <div className={`px-6 py-5 border-t ${borderColor} flex justify-end gap-3`}>
                     <button onClick={onClose} className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${cancelBtnBg} ${textPrimary}`}>
-                        {t('cancel')}
+                        {t('localMusic.cancel')}
                     </button>
                     <button
                         onClick={() => void handleConfirm()}
