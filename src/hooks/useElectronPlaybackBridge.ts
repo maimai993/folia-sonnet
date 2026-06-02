@@ -97,6 +97,7 @@ export const useElectronPlaybackBridge = ({
             isStageActive: isNowPlayingStageActive,
             transparentModeEnabled: transparentPlayerBackground,
             mainWindowClickThroughEnabled,
+            mainWindowAlwaysOnTop: false,
             mainWindowBorderVisible: showTransparentWindowBorder,
             playerChromeHidden: isPlayerChromeHidden,
             exportState,

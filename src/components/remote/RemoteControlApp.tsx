@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, Pause, Pin, PinOff, Play, SkipBack, SkipForward, Video, MirrorRectangular, X } from 'lucide-react';
+import { ChevronLeft, Lock, LockOpen, Pause, Pin, PinOff, Play, SkipBack, SkipForward, Video, MirrorRectangular, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayerState } from '../../types';
 import RemoteVideoExportPanel from './RemoteVideoExportPanel';
@@ -40,6 +40,7 @@ const emptySnapshot: RemoteControlSnapshot = {
     isStageActive: false,
     transparentModeEnabled: false,
     mainWindowClickThroughEnabled: false,
+    mainWindowAlwaysOnTop: false,
     mainWindowBorderVisible: false,
     playerChromeHidden: false,
     exportState: idleVideoExportState(),
@@ -483,18 +484,39 @@ const RemoteControlApp: React.FC = () => {
                                                     {snapshot.mainWindowBorderVisible ? '隐藏边框' : '显示边框'}
                                                 </button>
 
-                                                <button
-                                                    type="button"
-                                                    disabled={!snapshot.transparentModeEnabled}
-                                                    onClick={() => sendCommand({ type: 'set-main-window-click-through', enabled: !snapshot.mainWindowClickThroughEnabled })}
-                                                    className={`flex h-8 items-center justify-center rounded-xl text-[11px] font-bold transition border disabled:cursor-not-allowed disabled:opacity-35 ${
-                                                        snapshot.mainWindowClickThroughEnabled
-                                                            ? (isDaylight ? 'bg-zinc-900 border-zinc-900 text-white shadow-sm' : 'bg-white border-white text-zinc-950 shadow-sm')
-                                                            : (isDaylight ? 'bg-black/5 border-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10 hover:text-white')
-                                                    }`}
-                                                >
-                                                    {snapshot.mainWindowClickThroughEnabled ? '关闭穿透' : '点击穿透'}
-                                                </button>
+                                                <div className={`grid h-8 grid-cols-2 overflow-hidden rounded-xl border transition-colors ${
+                                                    isDaylight ? 'border-black/5 bg-black/5' : 'border-white/5 bg-white/5'
+                                                }`}>
+                                                    <button
+                                                        type="button"
+                                                        disabled={!snapshot.transparentModeEnabled}
+                                                        title={snapshot.mainWindowClickThroughEnabled ? '关闭点击穿透' : '点击穿透'}
+                                                        aria-pressed={snapshot.mainWindowClickThroughEnabled}
+                                                        onClick={() => sendCommand({ type: 'set-main-window-click-through', enabled: !snapshot.mainWindowClickThroughEnabled })}
+                                                        className={`flex h-full items-center justify-center gap-1 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                            snapshot.mainWindowClickThroughEnabled
+                                                                ? (isDaylight ? 'bg-zinc-900 text-white shadow-sm' : 'bg-white text-zinc-950 shadow-sm')
+                                                                : (isDaylight ? 'text-black/70 hover:bg-black/5 hover:text-black' : 'text-white/70 hover:bg-white/5 hover:text-white')
+                                                        }`}
+                                                    >
+                                                        {snapshot.mainWindowClickThroughEnabled ? <Lock size={12} /> : <LockOpen size={12} />}
+                                                        <span>穿透</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        title={snapshot.mainWindowAlwaysOnTop ? '取消主窗口置顶' : '置顶主窗口'}
+                                                        aria-pressed={snapshot.mainWindowAlwaysOnTop}
+                                                        onClick={() => sendCommand({ type: 'set-main-window-always-on-top', enabled: !snapshot.mainWindowAlwaysOnTop })}
+                                                        className={`flex h-full items-center justify-center gap-1 border-l text-[10px] font-bold transition ${
+                                                            snapshot.mainWindowAlwaysOnTop
+                                                                ? (isDaylight ? 'border-zinc-900 bg-zinc-900 text-white shadow-sm' : 'border-white bg-white text-zinc-950 shadow-sm')
+                                                                : (isDaylight ? 'border-black/5 text-black/70 hover:bg-black/5 hover:text-black' : 'border-white/5 text-white/70 hover:bg-white/5 hover:text-white')
+                                                        }`}
+                                                    >
+                                                        {snapshot.mainWindowAlwaysOnTop ? <Pin size={12} /> : <PinOff size={12} />}
+                                                        <span>置顶</span>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </motion.div>
                                     )}
