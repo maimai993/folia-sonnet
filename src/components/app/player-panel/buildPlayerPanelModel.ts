@@ -46,6 +46,7 @@ type BuildPlayerPanelModelParams = {
     handleImportOnlineLyrics: LegacyUnifiedPanelProps['playback']['onImportOnlineLyrics'];
     handleChangeOnlineLyricsSource: LegacyUnifiedPanelProps['playback']['onChangeOnlineLyricsSource'];
     handleMatchOnlineLyrics: LegacyUnifiedPanelProps['playback']['onMatchOnlineLyrics'];
+    handleClearOnlineLyricsState: () => void;
     replayGainMode: LegacyUnifiedPanelProps['playback']['replayGainMode'];
     handleChangeReplayGainMode: LegacyUnifiedPanelProps['playback']['onChangeReplayGainMode'];
     isFmMode: boolean;
@@ -132,6 +133,7 @@ export const buildPlayerPanelModel = ({
     handleImportOnlineLyrics,
     handleChangeOnlineLyricsSource,
     handleMatchOnlineLyrics,
+    handleClearOnlineLyricsState,
     replayGainMode,
     handleChangeReplayGainMode,
     isFmMode,
@@ -217,6 +219,7 @@ export const buildPlayerPanelModel = ({
             onImportOnlineLyrics: handleImportOnlineLyrics,
             onChangeOnlineLyricsSource: handleChangeOnlineLyricsSource,
             onMatchOnlineLyrics: handleMatchOnlineLyrics,
+            onClearOnlineLyricsState: handleClearOnlineLyricsState,
             replayGainMode,
             onChangeReplayGainMode: handleChangeReplayGainMode,
             isFmMode,

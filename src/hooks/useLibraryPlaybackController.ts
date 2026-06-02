@@ -24,7 +24,7 @@ import type { PlaybackSnapshot, PlaybackNavigationOptions } from '../types/appPl
 import type { NavidromeSong } from '../types/navidrome';
 import type { NavidromeMatchData } from '../components/modal/NaviLyricMatchModal';
 import { applyQueueAddBehavior } from '../utils/queueAddBehavior';
-import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState } from '../utils/onlineLyricsState';
+import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState, getOnlineLyricsStateCacheKey } from '../utils/onlineLyricsState';
 
 // src/hooks/useLibraryPlaybackController.ts
 
@@ -915,6 +915,31 @@ export function useLibraryPlaybackController({
         setStatusMsg({ type: 'success', text: 'Match successful' });
     }, [currentSong, lyrics, persistLastPlaybackCache, playQueue, resolveOnlineSongLyricsState, setCurrentLineIndex, setCurrentSong, setLyrics, setStatusMsg]);
 
+    const handleClearOnlineLyricsState = useCallback(async () => {
+        if (!currentSong || isStagePlaybackSong(currentSong) || isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
+            return;
+        }
+
+        try {
+            const key = getOnlineLyricsStateCacheKey(currentSong);
+            await removeFromCache(key);
+
+            const resolved = await resolveOnlineSongLyricsState(currentSong, null);
+            const updatedSong = {
+                ...currentSong,
+                onlineLyricsState: undefined,
+            };
+            setCurrentSong(prev => prev?.id === currentSong.id ? updatedSong : prev);
+            setLyrics(resolved.lyrics);
+            setCurrentLineIndex(-1);
+            await persistLastPlaybackCache(updatedSong, playQueue);
+            setStatusMsg({ type: 'success', text: '已清除手动匹配/上传的歌词' });
+        } catch (error) {
+            console.error('Failed to clear online lyrics state', error);
+            setStatusMsg({ type: 'error', text: '清除失败' });
+        }
+    }, [currentSong, persistLastPlaybackCache, playQueue, resolveOnlineSongLyricsState, setCurrentLineIndex, setCurrentSong, setLyrics, setStatusMsg]);
+
     const handleHomeMatchSong = useCallback(async (song: LocalSong) => {
         await loadLocalSongs();
 
@@ -1036,6 +1061,7 @@ export function useLibraryPlaybackController({
         handleLyricMatchComplete,
         handleNaviLyricMatchComplete,
         handleOnlineLyricMatchComplete,
+        handleClearOnlineLyricsState,
         handleHomeMatchSong,
         handleLike,
     };

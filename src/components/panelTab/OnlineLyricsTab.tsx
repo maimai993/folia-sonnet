@@ -1,35 +1,39 @@
 import React, { useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, RefreshCw, Upload } from 'lucide-react';
+import { FileText, Search, Upload, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { OnlineLyricsState, SongResult } from '../../types';
+import type { OnlineLyricsState } from '../../types';
 
 // src/components/panelTab/OnlineLyricsTab.tsx
 
 interface OnlineLyricsTabProps {
-    currentSong: SongResult;
     onlineLyricsState: OnlineLyricsState | null;
     onImportLyrics: (content: string, fileName: string) => void;
     onChangeLyricsSource: (source: 'online' | 'imported') => void;
     onMatchOnlineLyrics: () => void;
+    onClearOnlineLyricsState: () => void;
     isDaylight: boolean;
 }
 
 const OnlineLyricsTab: React.FC<OnlineLyricsTabProps> = ({
-    currentSong,
     onlineLyricsState,
     onImportLyrics,
     onChangeLyricsSource,
     onMatchOnlineLyrics,
+    onClearOnlineLyricsState,
     isDaylight,
 }) => {
     const { t } = useTranslation();
     const inputRef = useRef<HTMLInputElement>(null);
 
     const activeTabBg = isDaylight ? 'bg-blue-500/15 text-blue-600' : 'bg-blue-500/20 text-blue-300';
-    const inactiveTabBg = isDaylight ? 'bg-black/5 text-zinc-500 hover:bg-black/10' : 'bg-white/5 text-zinc-400 hover:bg-white/10';
+    const tabContainerBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
+    const activePillBg = isDaylight ? 'bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]' : 'bg-zinc-800/80 shadow-[0_2px_8px_rgba(0,0,0,0.2)]';
+    const activeTextColor = isDaylight ? 'text-blue-600 font-semibold' : 'text-blue-300 font-semibold';
+    const inactiveTextColor = isDaylight ? 'text-zinc-500 hover:text-zinc-800' : 'text-zinc-400 hover:text-zinc-200';
 
     const hasImportedLyrics = Boolean(onlineLyricsState?.importedLyrics);
+    const hasOverride = Boolean(onlineLyricsState?.hasOnlineOverride || onlineLyricsState?.importedLyrics);
     const activeSource = onlineLyricsState?.lyricsSource === 'imported' && hasImportedLyrics ? 'imported' : 'online';
     const availableSources = useMemo(
         () => (hasImportedLyrics
@@ -62,45 +66,28 @@ const OnlineLyricsTab: React.FC<OnlineLyricsTabProps> = ({
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex flex-col space-y-6 pt-4 px-2"
+            className="flex flex-col pt-0 px-2"
         >
-            <div className="space-y-3">
-                <h3 className="text-sm font-semibold opacity-50 uppercase tracking-wider flex items-center gap-2">
-                    <FileText size={14} /> {t('localMusic.lyrics')}
-                </h3>
-                <div className="bg-white/5 rounded-xl p-3 space-y-2 text-sm">
-                    <div className="flex justify-between gap-4">
-                        <span className="opacity-60">{t('localMusic.filename')}</span>
-                        <span className="text-xs opacity-80 truncate max-w-[160px]" title={currentSong.name}>
-                            {currentSong.name}
-                        </span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                        <span className="opacity-60">{t('localMusic.lyricsSource')}</span>
-                        <span className="text-xs opacity-80 truncate max-w-[160px]" title={activeSource === 'imported' ? t('localMusic.statusImported') : t('localMusic.statusOnline')}>
-                            {activeSource === 'imported' ? t('localMusic.statusImported') : t('localMusic.statusOnline')}
-                        </span>
-                    </div>
-                    {onlineLyricsState?.importedLyricsName && (
-                        <div className="flex justify-between gap-4">
-                            <span className="opacity-60">{t('localMusic.importedLyricsFile')}</span>
-                            <span className="text-xs opacity-80 truncate max-w-[160px]" title={onlineLyricsState.importedLyricsName}>
-                                {onlineLyricsState.importedLyricsName}
-                            </span>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div className="space-y-3">
+            <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold opacity-50 uppercase tracking-wider flex items-center gap-2">
-                        <FileText size={14} /> {t('localMusic.lyricsSource')}
-                    </h3>
                     <div className="flex items-center gap-1.5">
+                        <label className="text-[12px] font-bold opacity-40 uppercase tracking-widest flex items-center gap-1.5">
+                            {t('localMusic.lyrics')}
+                        </label>
+                        {hasOverride && (
+                            <button
+                                onClick={onClearOnlineLyricsState}
+                                className={`p-1 rounded-md transition-all opacity-40 hover:opacity-100 ${isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/5'}`}
+                                title={t('localMusic.delete') || '清除'}
+                            >
+                                <RotateCcw size={13} />
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-1">
                         <button
                             onClick={() => inputRef.current?.click()}
-                            className="p-1.5 hover:bg-white/10 rounded-md transition-colors"
+                            className={`p-1 rounded-md transition-all opacity-40 hover:opacity-100 ${isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/5'}`}
                             title={t('localMusic.importLyricsFile')}
                         >
                             <Upload size={14} />
@@ -114,31 +101,44 @@ const OnlineLyricsTab: React.FC<OnlineLyricsTabProps> = ({
                         />
                         <button
                             onClick={onMatchOnlineLyrics}
-                            className="px-3 py-1 bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors rounded-lg text-xs font-medium flex items-center gap-1.5"
+                            className={`p-1 rounded-md transition-all opacity-40 hover:opacity-100 ${isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/5'}`}
+                            title={t('localMusic.matchOnline')}
                         >
-                            <RefreshCw size={12} />
-                            {t('localMusic.matchOnline')}
+                            <Search size={14} />
                         </button>
                     </div>
                 </div>
 
                 {availableSources.length === 1 ? (
-                    <div className={`text-xs px-3 py-2 rounded-lg ${activeTabBg} font-medium`}>
-                        {availableSources[0].label}
+                    <div className={`relative flex p-0.5 ${tabContainerBg} rounded-lg`}>
+                        <div className={`flex-1 relative text-[10px] py-1 px-1.5 rounded-md font-medium text-center ${activeTextColor}`}>
+                            <span className={`absolute inset-0 rounded-md ${activePillBg}`} />
+                            <span className="relative z-10">{availableSources[0].label}</span>
+                        </div>
                     </div>
                 ) : (
-                    <div className="flex gap-1.5">
-                        {availableSources.map(source => (
-                            <button
-                                key={source.key}
-                                onClick={() => onChangeLyricsSource(source.key)}
-                                className={`flex-1 text-xs py-1.5 px-2 rounded-lg font-medium transition-all ${
-                                    activeSource === source.key ? activeTabBg : inactiveTabBg
-                                }`}
-                            >
-                                {source.label}
-                            </button>
-                        ))}
+                    <div className={`relative flex p-0.5 ${tabContainerBg} rounded-lg`}>
+                        {availableSources.map(source => {
+                            const isActive = activeSource === source.key;
+                            return (
+                                <button
+                                    key={source.key}
+                                    onClick={() => onChangeLyricsSource(source.key)}
+                                    className={`flex-1 relative text-[10px] py-1 px-1.5 rounded-md font-medium transition-colors duration-200 focus:outline-none ${
+                                        isActive ? activeTextColor : inactiveTextColor
+                                    }`}
+                                >
+                                    {isActive && (
+                                        <motion.span
+                                            layoutId="online-lyrics-active-pill"
+                                            className={`absolute inset-0 rounded-md ${activePillBg}`}
+                                            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                                        />
+                                    )}
+                                    <span className="relative z-10">{source.label}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
             </div>

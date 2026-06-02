@@ -128,7 +128,7 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                             disabled={isSearching}
                             className={`px-4 rounded-2xl text-sm font-medium transition-colors ${searchBtnBg}`}
                         >
-                            {isSearching ? <Loader2 size={16} className="animate-spin" /> : t('search')}
+                            {isSearching ? <Loader2 size={16} className="animate-spin" /> : t('localMusic.search')}
                         </button>
                     </div>
 
@@ -143,11 +143,19 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                                     className={`w-full text-left border rounded-2xl p-4 transition-colors ${isSelected ? resultItemSelected : resultItemBg}`}
                                 >
                                     <div className="flex items-start gap-4">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDaylight ? 'bg-black/5' : 'bg-white/5'}`}>
-                                            <Music size={18} className={textSecondary} />
+                                        <div className={`w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center ${isDaylight ? 'bg-black/5' : 'bg-white/5'} shrink-0`}>
+                                            {result.al?.picUrl || result.album?.picUrl ? (
+                                                <img
+                                                    src={result.al?.picUrl || result.album?.picUrl}
+                                                    alt="Cover"
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <Music size={18} className={textSecondary} />
+                                            )}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <div className={`text-sm font-medium truncate ${textPrimary}`}>{formatSongName(result.name, result.tns, result.alia)}</div>
+                                            <div className={`text-sm font-medium truncate ${textPrimary}`}>{formatSongName(result)}</div>
                                             <div className={`text-xs mt-1 truncate ${textSecondary}`}>{artist || '-'}</div>
                                             <div className={`text-xs mt-1 truncate ${textSecondary}`}>{result.al?.name || result.album?.name || '-'}</div>
                                         </div>
@@ -160,17 +168,17 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                 </div>
 
                 <div className={`px-6 py-5 border-t ${borderColor} flex justify-end gap-3`}>
-                    <button onClick={onClose} className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${cancelBtnBg} ${textPrimary}`}>
-                        {t('cancel')}
-                    </button>
-                    <button
-                        onClick={() => void handleConfirm()}
-                        disabled={!selectedResult || isMatching}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${searchBtnBg} disabled:opacity-50`}
-                    >
-                        {isMatching ? t('matching') : t('options.save')}
-                    </button>
-                </div>
+                                    <button onClick={onClose} className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${cancelBtnBg} ${textPrimary}`}>
+                                        {t('localMusic.cancel')}
+                                    </button>
+                                    <button
+                                        onClick={() => void handleConfirm()}
+                                        disabled={!selectedResult || isMatching}
+                                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${searchBtnBg} disabled:opacity-50`}
+                                    >
+                                        {isMatching ? t('localMusic.matching') : t('options.save')}
+                                    </button>
+                                </div>
             </div>
         </div>
     );

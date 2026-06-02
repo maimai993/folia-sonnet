@@ -695,6 +695,7 @@ export default function App() {
         handleLyricMatchComplete,
         handleNaviLyricMatchComplete,
         handleOnlineLyricMatchComplete,
+        handleClearOnlineLyricsState,
         handleHomeMatchSong,
         handleLike,
     } = useLibraryPlaybackController({
@@ -1508,6 +1509,7 @@ export default function App() {
         handleImportOnlineLyrics,
         handleChangeOnlineLyricsSource,
         handleMatchOnlineLyrics,
+        handleClearOnlineLyricsState,
         replayGainMode,
         handleChangeReplayGainMode,
         isFmMode,

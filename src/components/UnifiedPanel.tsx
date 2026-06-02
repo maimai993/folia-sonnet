@@ -53,6 +53,7 @@ type UnifiedPanelPlaybackProps = {
     onImportOnlineLyrics: (content: string, fileName: string) => void;
     onChangeOnlineLyricsSource: (source: 'online' | 'imported') => void;
     onMatchOnlineLyrics: () => void;
+    onClearOnlineLyricsState: () => void;
     replayGainMode: ReplayGainMode;
     onChangeReplayGainMode: (mode: ReplayGainMode) => void;
     isFmMode: boolean;
@@ -161,6 +162,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         onImportOnlineLyrics,
         onChangeOnlineLyricsSource,
         onMatchOnlineLyrics,
+        onClearOnlineLyricsState,
         replayGainMode,
         onChangeReplayGainMode,
         isFmMode,
@@ -488,7 +490,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
                                 {/* Tab Content */}
                                 <div
-                                    className={`flex-1 pr-1 ${currentTab === 'cover' ? '' : 'min-h-[120px]'}`}
+                                    className={`flex-1 pr-1 ${currentTab === 'cover' ? '' : 'min-h-[70px]'}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     {currentTab === 'cover' && (
@@ -625,11 +627,11 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                     )}
                                     {currentTab === 'onlineLyrics' && isNetease && currentSong && (
                                         <OnlineLyricsTab
-                                            currentSong={currentSong}
                                             onlineLyricsState={onlineLyricsState}
                                             onImportLyrics={onImportOnlineLyrics}
                                             onChangeLyricsSource={onChangeOnlineLyricsSource}
                                             onMatchOnlineLyrics={onMatchOnlineLyrics}
+                                            onClearOnlineLyricsState={onClearOnlineLyricsState}
                                             isDaylight={isDaylight}
                                         />
                                     )}
