@@ -1415,7 +1415,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
                 : DEFAULT_CAPPELLA_TUNING.emojiPackSource
         ),
         avatarSource: (
-            cappellaTuning.avatarSource === 'builtin' || cappellaTuning.avatarSource === 'color' || cappellaTuning.avatarSource === 'cover' || cappellaTuning.avatarSource === 'custom'
+            cappellaTuning.avatarSource === 'builtin' || cappellaTuning.avatarSource === 'color' || cappellaTuning.avatarSource === 'cover' || (cappellaTuning.avatarSource === 'custom' && cappellaCustomAvatarImages.length > 0)
                 ? cappellaTuning.avatarSource
                 : DEFAULT_CAPPELLA_TUNING.avatarSource
         ),
