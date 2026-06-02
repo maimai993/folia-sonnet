@@ -7,6 +7,7 @@ import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from '../services/onl
 import { getOnlineSongCacheKey, isSongMarkedUnavailable, neteaseApi } from '../services/netease';
 import { getPrefetchedData, invalidateAndRefetch, prefetchNearbySongs } from '../services/prefetchService';
 import type { ThemeCacheSongKey } from '../services/themeCache';
+import { loadOnlineLyricsState } from '../utils/onlineLyricsState';
 import { PlayerState, type HomeViewTab } from '../types';
 import type { LocalSong, QueueAddBehavior, SongResult, StatusMessage, UnifiedSong } from '../types';
 import type { NextTrackOptions, PlaybackNavigationOptions, SkipPromptMessageKey, UnavailableReplacementRequest } from '../types/appPlayback';
@@ -62,7 +63,7 @@ type UsePlaybackQueueControllerParams = {
     setIsLyricsLoading: SetState<boolean>;
     setStatusMsg: SetState<StatusMessage | null>;
     setIsFmMode: SetState<boolean>;
-    setPanelTab: SetState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi'>;
+    setPanelTab: SetState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>;
     setIsPanelOpen: SetState<boolean>;
     navigateToPlayer: () => void;
     navigateToSearch: (args: { query: string; sourceTab: HomeViewTab; replace?: boolean }) => void;
@@ -528,11 +529,13 @@ export function usePlaybackQueueController({
         lastAudioRecoverySourceRef.current = null;
         currentOnlineAudioUrlFetchedAtRef.current = null;
 
+        const onlineLyricsState = await loadOnlineLyricsState(song);
+
         setLyrics(null);
         setCurrentLineIndex(-1);
         currentTime.set(0);
         setDuration(0);
-        setCurrentSong(song);
+        setCurrentSong({ ...song, onlineLyricsState: onlineLyricsState ?? undefined });
         setCachedCoverUrl(null);
         setAudioSrc(null);
         setIsLyricsLoading(true);
@@ -546,7 +549,7 @@ export function usePlaybackQueueController({
             setPlayQueue(newQueue);
         }
 
-        void persistLastPlaybackCache(song, newQueue);
+        void persistLastPlaybackCache({ ...song, onlineLyricsState: onlineLyricsState ?? undefined }, newQueue);
 
         if (shouldNavigateToPlayer) {
             navigateToPlayer();
@@ -588,6 +591,9 @@ export function usePlaybackQueueController({
                 onLyrics: resolvedLyrics => setLyrics(resolvedLyrics),
                 onPureMusicChange: isPureMusic => {
                     setCurrentSong(prev => prev?.id === song.id ? { ...prev, isPureMusic } : prev);
+                },
+                onStateChange: state => {
+                    setCurrentSong(prev => prev?.id === song.id ? { ...prev, onlineLyricsState: state ?? undefined } : prev);
                 },
                 onDone: () => setIsLyricsLoading(false),
             });

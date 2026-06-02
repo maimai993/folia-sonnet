@@ -408,6 +408,17 @@ export interface SongResult {
   noCopyrightRcmd?: NoCopyrightRecommendation | null;
   resourceState?: boolean;
   privilege?: SongPrivilege;
+  onlineLyricsState?: OnlineLyricsState;
+}
+
+export interface OnlineLyricsState {
+  lyricsSource: 'online' | 'imported';
+  importedLyrics?: LyricData | null;
+  importedLyricsName?: string | null;
+  hasOnlineOverride?: boolean;
+  onlineOverrideLyrics?: LyricData | null;
+  matchedSongId?: number;
+  matchedIsPureMusic?: boolean;
 }
 
 export interface SearchResponse {

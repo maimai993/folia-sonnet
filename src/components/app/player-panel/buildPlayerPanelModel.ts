@@ -42,6 +42,10 @@ type BuildPlayerPanelModelParams = {
     handleManualMatchOnline: LegacyUnifiedPanelProps['playback']['onMatchOnline'];
     handleUpdateLocalLyrics: LegacyUnifiedPanelProps['playback']['onUpdateLocalLyrics'];
     handleChangeLyricsSource: LegacyUnifiedPanelProps['playback']['onChangeLyricsSource'];
+    onlineLyricsState: LegacyUnifiedPanelProps['playback']['onlineLyricsState'];
+    handleImportOnlineLyrics: LegacyUnifiedPanelProps['playback']['onImportOnlineLyrics'];
+    handleChangeOnlineLyricsSource: LegacyUnifiedPanelProps['playback']['onChangeOnlineLyricsSource'];
+    handleMatchOnlineLyrics: LegacyUnifiedPanelProps['playback']['onMatchOnlineLyrics'];
     replayGainMode: LegacyUnifiedPanelProps['playback']['replayGainMode'];
     handleChangeReplayGainMode: LegacyUnifiedPanelProps['playback']['onChangeReplayGainMode'];
     isFmMode: boolean;
@@ -124,6 +128,10 @@ export const buildPlayerPanelModel = ({
     handleManualMatchOnline,
     handleUpdateLocalLyrics,
     handleChangeLyricsSource,
+    onlineLyricsState,
+    handleImportOnlineLyrics,
+    handleChangeOnlineLyricsSource,
+    handleMatchOnlineLyrics,
     replayGainMode,
     handleChangeReplayGainMode,
     isFmMode,
@@ -205,6 +213,10 @@ export const buildPlayerPanelModel = ({
             onMatchOnline: handleManualMatchOnline,
             onUpdateLocalLyrics: handleUpdateLocalLyrics,
             onChangeLyricsSource: handleChangeLyricsSource,
+            onlineLyricsState,
+            onImportOnlineLyrics: handleImportOnlineLyrics,
+            onChangeOnlineLyricsSource: handleChangeOnlineLyricsSource,
+            onMatchOnlineLyrics: handleMatchOnlineLyrics,
             replayGainMode,
             onChangeReplayGainMode: handleChangeReplayGainMode,
             isFmMode,
