@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Monitor } from 'lucide-react';
+import { Monitor, RotateCcw } from 'lucide-react';
 import {
     type CappellaEmojiImage,
     type CappellaTuning,
@@ -47,16 +47,20 @@ interface VisPlaygroundSettingsPanelProps {
     visualizerMode: VisualizerMode;
     visualizerEntry: VisualizerRegistryEntry;
     onVisualizerModeChange?: (mode: VisualizerMode) => void;
+    onResetVisualizerTuning?: () => void;
     controlCardBg: string;
     rangeInputClass: string;
     backgroundOpacity: number;
     onBackgroundOpacityChange?: (opacity: number) => void;
+    visualizerOpacity: number;
+    onVisualizerOpacityChange?: (opacity: number) => void;
     useCoverColorBg: boolean;
     onToggleCoverColorBg?: (enabled: boolean) => void;
     disableVisualizerVignette: boolean;
     onToggleDisableVisualizerVignette?: (disabled: boolean) => void;
     disableVisualizerGeometricBackground: boolean;
     onToggleDisableVisualizerGeometricBackground?: (disabled: boolean) => void;
+    onResetBackgroundSettings?: () => void;
     fontStyleValue: Theme['fontStyle'] | 'custom';
     fontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[];
     onFontStyleChange: (fontStyle: Theme['fontStyle'] | 'custom') => void;
@@ -79,16 +83,18 @@ interface VisPlaygroundSettingsPanelProps {
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
     subtitleOverlayOpacity: number;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
+    onResetSubtitleSettings?: () => void;
     onSliderPointerDown?: () => void;
     onSliderCommit?: () => void;
 }
 
-const SECTION_OPTIONS: VisPlaygroundEditSection[] = ['background', 'visualizer', 'subtitle'];
+const SECTION_OPTIONS: VisPlaygroundEditSection[] = ['common', 'background', 'visualizer', 'subtitle'];
 
 const getSectionLabel = (section: VisPlaygroundEditSection, t: (key: string) => string) => {
+    if (section === 'common') return t('options.previewCommonSettings') || '通用';
     if (section === 'background') return t('options.previewBackgroundSettings') || '背景';
     if (section === 'subtitle') return t('options.previewSubtitleSettings') || '字幕';
-    return 'Visualizer';
+    return t('options.previewVisualizerSettings') || '歌词动画';
 };
 
 const getAccentOptionStyle = (selected: boolean, theme: Theme, isDaylight: boolean): React.CSSProperties => (
@@ -177,6 +183,27 @@ const ToggleRow: React.FC<ToggleRowProps> = ({
     </div>
 );
 
+const ResetSectionButton: React.FC<{
+    label: string;
+    onClick?: () => void;
+    theme: Theme;
+}> = ({ label, onClick, theme }) => (
+    <button
+        type="button"
+        onClick={onClick}
+        disabled={!onClick}
+        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+        style={{
+            color: theme.secondaryColor,
+            borderColor: colorWithAlpha(theme.secondaryColor, 0.16),
+            backgroundColor: colorWithAlpha(theme.backgroundColor, 0.22),
+        }}
+    >
+        <RotateCcw size={12} />
+        {label}
+    </button>
+);
+
 const SectionTabs: React.FC<Pick<VisPlaygroundSettingsPanelProps, 'activeSection' | 'onSectionChange' | 't' | 'theme' | 'isDaylight'>> = ({
     activeSection,
     onSectionChange,
@@ -215,16 +242,20 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         visualizerMode,
         visualizerEntry,
         onVisualizerModeChange,
+        onResetVisualizerTuning,
         controlCardBg,
         rangeInputClass,
         backgroundOpacity,
         onBackgroundOpacityChange,
+        visualizerOpacity,
+        onVisualizerOpacityChange,
         useCoverColorBg,
         onToggleCoverColorBg,
         disableVisualizerVignette,
         onToggleDisableVisualizerVignette,
         disableVisualizerGeometricBackground,
         onToggleDisableVisualizerGeometricBackground,
+        onResetBackgroundSettings,
         fontStyleValue,
         fontStyleOptions,
         onFontStyleChange,
@@ -247,6 +278,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onToggleHideTranslationSubtitle,
         subtitleOverlayOpacity,
         onSubtitleOverlayOpacityChange,
+        onResetSubtitleSettings,
         onSliderPointerDown,
         onSliderCommit,
     } = props;
@@ -269,15 +301,94 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
             />
 
             <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-4">
-                {activeSection === 'background' && (
+                {activeSection === 'common' && (
                     <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
                         <div className="space-y-1">
                             <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
-                                {t('options.previewBackgroundSettings') || '背景设置'}
+                                {t('options.previewCommonSettings') || '通用设置'}
                             </div>
                             <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                                {t('options.previewBackgroundSettingsDesc') || '调整播放页背景层、透明窗口和几何氛围。'}
+                                {t('options.previewCommonSettingsDesc') || '统一调整字体、字号和整个歌词动画层的透明度。'}
                             </div>
+                        </div>
+
+                        <PresetGroup
+                            label={t('options.fontFamily') || '字体'}
+                            value={fontStyleValue}
+                            options={fontStyleOptions}
+                            onChange={onFontStyleChange}
+                            isDaylight={isDaylight}
+                            theme={theme}
+                            isOptionActive={(option) => option.value === fontStyleValue}
+                        />
+
+                        <PresetGroup
+                            label={t('options.fontSize') || '字号'}
+                            value={fontScale}
+                            options={fontScaleOptions}
+                            onChange={onFontScaleChange}
+                            isDaylight={isDaylight}
+                            theme={theme}
+                        />
+
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
+                                <span>{t('options.fontSize') || '字号'}</span>
+                                <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
+                                    {Math.round(fontScale * 100)}%
+                                </span>
+                            </div>
+                            <input
+                                type="range"
+                                min="0.85"
+                                max="1.4"
+                                step="0.05"
+                                value={fontScale}
+                                onChange={(event) => onFontScaleChange(parseFloat(event.target.value))}
+                                onPointerDown={onSliderPointerDown}
+                                onPointerUp={onSliderCommit}
+                                className={rangeInputClass}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
+                                <span>{t('options.visualizerOpacity') || '歌词动画透明度'}</span>
+                                <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
+                                    {Math.round(visualizerOpacity * 100)}%
+                                </span>
+                            </div>
+                            <input
+                                type="range"
+                                min="0.2"
+                                max="1"
+                                step="0.05"
+                                value={visualizerOpacity}
+                                onChange={(event) => onVisualizerOpacityChange?.(parseFloat(event.target.value))}
+                                onPointerDown={onSliderPointerDown}
+                                onPointerUp={onSliderCommit}
+                                className={rangeInputClass}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {activeSection === 'background' && (
+                    <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
+                                    {t('options.previewBackgroundSettings') || '背景设置'}
+                                </div>
+                                <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
+                                    {t('options.previewBackgroundSettingsDesc') || '调整播放页背景层、透明窗口和几何氛围。'}
+                                </div>
+                            </div>
+                            <ResetSectionButton
+                                label={t('ui.default') || '默认'}
+                                onClick={onResetBackgroundSettings}
+                                theme={theme}
+                            />
                         </div>
 
                         <div className="space-y-2">
@@ -327,73 +438,30 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                 {activeSection === 'visualizer' && (
                     <>
                         <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
-                            <div className="space-y-1">
-                                <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
-                                    {t('options.lyricsRenderer') || 'Lyrics Renderer'}
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                    <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
+                                        {t('options.lyricsRenderer') || '歌词动画'}
+                                    </div>
+                                    <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
+                                        {t('options.lyricsRendererDesc') || '选择播放页使用的歌词渲染模式。'}
+                                    </div>
                                 </div>
-                                <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                                    {t('options.lyricsRendererDesc') || '选择播放页使用的歌词渲染模式。'}
-                                </div>
+                                <ResetSectionButton
+                                    label={t('ui.default') || '默认'}
+                                    onClick={visualizerEntry.resetSettings ? onResetVisualizerTuning : undefined}
+                                    theme={theme}
+                                />
                             </div>
 
                             <PresetGroup
-                                label={t('options.visualizerMode') || '模式'}
+                                label={t('options.visualizerMode') || '动画预设'}
                                 value={visualizerMode}
                                 options={modeOptions}
                                 onChange={(mode) => onVisualizerModeChange?.(mode)}
                                 isDaylight={isDaylight}
                                 theme={theme}
                             />
-                        </div>
-
-                        <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
-                            <div className="space-y-1">
-                                <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
-                                    {t('options.lyricsStyleSettings') || '歌词样式'}
-                                </div>
-                                <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                                    {t('options.lyricsStyleSettingsDesc') || '字体、字号和当前渲染器附加参数'}
-                                </div>
-                            </div>
-
-                            <PresetGroup
-                                label={t('options.fontFamily') || '字体'}
-                                value={fontStyleValue}
-                                options={fontStyleOptions}
-                                onChange={onFontStyleChange}
-                                isDaylight={isDaylight}
-                                theme={theme}
-                                isOptionActive={(option) => option.value === fontStyleValue}
-                            />
-
-                            <PresetGroup
-                                label={t('options.fontSize') || '字号'}
-                                value={fontScale}
-                                options={fontScaleOptions}
-                                onChange={onFontScaleChange}
-                                isDaylight={isDaylight}
-                                theme={theme}
-                            />
-
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
-                                    <span>{t('options.fontSize') || '字号'}</span>
-                                    <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
-                                        {Math.round(fontScale * 100)}%
-                                    </span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="0.85"
-                                    max="1.4"
-                                    step="0.05"
-                                    value={fontScale}
-                                    onChange={(event) => onFontScaleChange(parseFloat(event.target.value))}
-                                    onPointerDown={onSliderPointerDown}
-                                    onPointerUp={onSliderCommit}
-                                    className={rangeInputClass}
-                                />
-                            </div>
                         </div>
 
                         {visualizerEntry.renderSettingsPanel?.({
@@ -424,13 +492,20 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
                 {activeSection === 'subtitle' && (
                     <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
-                        <div className="space-y-1">
-                            <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
-                                {t('options.previewSubtitleSettings') || '字幕设置'}
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
+                                    {t('options.previewSubtitleSettings') || '字幕设置'}
+                                </div>
+                                <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
+                                    {t('options.previewSubtitleSettingsDesc') || '调整底部译文和下一句提示的显示方式。'}
+                                </div>
                             </div>
-                            <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                                {t('options.previewSubtitleSettingsDesc') || '调整底部译文和下一句提示的显示方式。'}
-                            </div>
+                            <ResetSectionButton
+                                label={t('ui.default') || '默认'}
+                                onClick={onResetSubtitleSettings}
+                                theme={theme}
+                            />
                         </div>
 
                         <ToggleRow

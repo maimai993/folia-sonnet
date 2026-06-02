@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
-import { ChevronLeft, Loader2, RotateCcw, Search, Sparkles, Upload, X } from 'lucide-react';
+import { ChevronLeft, Loader2, Search, Sparkles, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { List, useListRef } from 'react-window';
 import VisualizerRenderer from './VisualizerRenderer';
@@ -26,6 +26,7 @@ import { colorWithAlpha } from './colorMix';
 import {
     findPreviewPlaceholderLineIndex,
     getPreviewPlaceholderStartOffset,
+    VIS_PLAYGROUND_PREVIEW_COVER_URL,
     VIS_PLAYGROUND_PREVIEW_LINES,
     VIS_PLAYGROUND_PREVIEW_LOOP_DURATION,
 } from './PreviewPlaceholder';
@@ -38,6 +39,7 @@ interface VisPlaygroundProps {
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
     backgroundOpacity?: number;
+    visualizerOpacity?: number;
     useCoverColorBg?: boolean;
     staticMode?: boolean;
     transparentPlayerBackground?: boolean;
@@ -61,6 +63,7 @@ interface VisPlaygroundProps {
     onUploadCustomFont?: (file: File) => Promise<{ ok: boolean; error?: string; }>;
     onVisualizerModeChange?: (mode: VisualizerMode) => void;
     onBackgroundOpacityChange?: (opacity: number) => void;
+    onVisualizerOpacityChange?: (opacity: number) => void;
     onToggleCoverColorBg?: (enabled: boolean) => void;
     onToggleDisableVisualizerVignette?: (disabled: boolean) => void;
     onToggleDisableVisualizerGeometricBackground?: (disabled: boolean) => void;
@@ -189,6 +192,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     isDaylight,
     visualizerMode,
     backgroundOpacity = 0.75,
+    visualizerOpacity = 1,
     useCoverColorBg = false,
     staticMode = false,
     transparentPlayerBackground = false,
@@ -212,6 +216,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onUploadCustomFont,
     onVisualizerModeChange,
     onBackgroundOpacityChange,
+    onVisualizerOpacityChange,
     onToggleCoverColorBg,
     onToggleDisableVisualizerVignette,
     onToggleDisableVisualizerGeometricBackground,
@@ -247,12 +252,13 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [fontListHeight, setFontListHeight] = useState(420);
     const [isUploadingCustomFont, setIsUploadingCustomFont] = useState(false);
     const [draftBackgroundOpacity, setDraftBackgroundOpacity] = useState(backgroundOpacity);
+    const [draftVisualizerOpacity, setDraftVisualizerOpacity] = useState(visualizerOpacity);
     const [draftSubtitleOverlayOpacity, setDraftSubtitleOverlayOpacity] = useState(subtitleOverlayOpacity);
     const [draftFontScale, setDraftFontScale] = useState(fontScale);
     const [draftPartitaTuning, setDraftPartitaTuning] = useState<PartitaTuning>(partitaTuning);
     const [draftFumeTuning, setDraftFumeTuning] = useState<FumeTuning>(fumeTuning);
     const [draftTiltTuning, setDraftTiltTuning] = useState<TiltTuning>(tiltTuning);
-    const [activeEditSection, setActiveEditSection] = useState<VisPlaygroundEditSection>('visualizer');
+    const [activeEditSection, setActiveEditSection] = useState<VisPlaygroundEditSection>('common');
     const fontListRef = React.useRef<HTMLDivElement>(null);
     const fontVirtualListRef = useListRef(null);
     const fontUploadInputRef = React.useRef<HTMLInputElement>(null);
@@ -319,6 +325,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const shouldShowUploadedFontFallback = !canQueryLocalFonts && isMobileBrowser() && Boolean(onUploadCustomFont);
 
     useEffect(() => { setDraftBackgroundOpacity(backgroundOpacity); }, [backgroundOpacity]);
+    useEffect(() => { setDraftVisualizerOpacity(visualizerOpacity); }, [visualizerOpacity]);
     useEffect(() => { setDraftSubtitleOverlayOpacity(subtitleOverlayOpacity); }, [subtitleOverlayOpacity]);
     useEffect(() => { setDraftFontScale(fontScale); }, [fontScale]);
     useEffect(() => { setDraftPartitaTuning(partitaTuning); }, [partitaTuning]);
@@ -358,9 +365,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
     const visualizerEntry = getVisualizerRegistryEntry(visualizerMode);
     const modeLabel = getVisualizerModeLabel(visualizerMode, t);
-    const hotspotLabels = useMemo<Record<VisPlaygroundEditSection, string>>(() => ({
+    const hotspotLabels = useMemo<Record<Exclude<VisPlaygroundEditSection, 'common'>, string>>(() => ({
         background: t('options.previewBackgroundHotspot') || '背景设置',
-        visualizer: t('options.previewVisualizerHotspot') || 'Visualizer 设置',
+        visualizer: t('options.previewVisualizerHotspot') || '歌词动画设置',
         subtitle: t('options.previewSubtitleHotspot') || '字幕设置',
     }), [t]);
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
@@ -376,10 +383,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             : 'bg-white/10 [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:bg-white',
     ].join(' ');
 
-    const handleReset = () => {
-        onCustomFontChange(null);
-        onFontStyleChange('sans');
-        onFontScaleChange(1);
+    const handleResetVisualizerTuning = () => {
         visualizerEntry.resetSettings?.({
             resetPartitaTuning: onResetPartitaTuning,
             resetFumeTuning: onResetFumeTuning,
@@ -559,6 +563,15 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         }
     };
 
+    const handleVisualizerOpacityDraft = (opacity: number) => {
+        setDraftVisualizerOpacity(opacity);
+        if (!isDraggingSlider.current) {
+            onVisualizerOpacityChange?.(opacity);
+        } else {
+            pendingCommitRef.current = () => onVisualizerOpacityChange?.(opacity);
+        }
+    };
+
     const handleSubtitleOverlayOpacityDraft = (opacity: number) => {
         setDraftSubtitleOverlayOpacity(opacity);
         if (!isDraggingSlider.current) {
@@ -593,6 +606,20 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         } else {
             pendingCommitRef.current = () => onTiltTuningChange?.(patch);
         }
+    };
+
+    const handleResetBackgroundSettings = () => {
+        setDraftBackgroundOpacity(0.75);
+        onBackgroundOpacityChange?.(0.75);
+        onToggleCoverColorBg?.(false);
+        onToggleDisableVisualizerVignette?.(false);
+        onToggleDisableVisualizerGeometricBackground?.(false);
+    };
+
+    const handleResetSubtitleSettings = () => {
+        setDraftSubtitleOverlayOpacity(0.6);
+        onToggleHideTranslationSubtitle?.(false);
+        onSubtitleOverlayOpacityChange?.(0.6);
     };
 
     /** Mark slider drag start so onChange only updates local draft. */
@@ -642,15 +669,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                             </div>
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        onClick={handleReset}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm transition-colors hover:bg-white/10"
-                        style={{ color: 'var(--text-primary)' }}
-                    >
-                        <RotateCcw size={14} />
-                        <span>{t('ui.default') || '默认'}</span>
-                    </button>
                 </div>
 
                 <div className="grid min-h-0 flex-1 gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.25fr)_360px]">
@@ -677,6 +695,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 staticMode={staticMode}
                                 isPreviewMode
                                 backgroundOpacity={draftBackgroundOpacity}
+                                visualizerOpacity={draftVisualizerOpacity}
+                                coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
                                 useCoverColorBg={useCoverColorBg}
                                 transparentBackground={transparentPlayerBackground}
                                 disableVignette={disableVisualizerVignette}
@@ -710,16 +730,20 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         visualizerMode={visualizerMode}
                         visualizerEntry={visualizerEntry}
                         onVisualizerModeChange={onVisualizerModeChange}
+                        onResetVisualizerTuning={handleResetVisualizerTuning}
                         controlCardBg={controlCardBg}
                         rangeInputClass={rangeInputClass}
                         backgroundOpacity={draftBackgroundOpacity}
                         onBackgroundOpacityChange={handleBackgroundOpacityDraft}
+                        visualizerOpacity={draftVisualizerOpacity}
+                        onVisualizerOpacityChange={handleVisualizerOpacityDraft}
                         useCoverColorBg={useCoverColorBg}
                         onToggleCoverColorBg={onToggleCoverColorBg}
                         disableVisualizerVignette={disableVisualizerVignette}
                         onToggleDisableVisualizerVignette={onToggleDisableVisualizerVignette}
                         disableVisualizerGeometricBackground={disableVisualizerGeometricBackground}
                         onToggleDisableVisualizerGeometricBackground={onToggleDisableVisualizerGeometricBackground}
+                        onResetBackgroundSettings={handleResetBackgroundSettings}
                         fontStyleValue={customFontFamily ? 'custom' : fontStyle}
                         fontStyleOptions={fontStyleOptions}
                         onFontStyleChange={handleSelectFontStyle}
@@ -742,6 +766,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onToggleHideTranslationSubtitle={onToggleHideTranslationSubtitle}
                         subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                         onSubtitleOverlayOpacityChange={handleSubtitleOverlayOpacityDraft}
+                        onResetSubtitleSettings={handleResetSubtitleSettings}
                         onSliderPointerDown={handleSliderPointerDown}
                         onSliderCommit={handleSliderCommit}
                     />

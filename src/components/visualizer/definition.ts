@@ -31,6 +31,7 @@ export interface VisualizerSharedProps {
     seed?: string | number;
     staticMode?: boolean;
     backgroundOpacity?: number;
+    visualizerOpacity?: number;
     transparentBackground?: boolean;
     disableGeometricBackground?: boolean;
     disableVignette?: boolean;

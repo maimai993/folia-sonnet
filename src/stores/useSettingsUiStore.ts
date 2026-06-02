@@ -16,6 +16,7 @@ export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
 export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
+export const VISUALIZER_OPACITY_STORAGE_KEY = 'visualizer_opacity';
 
 const getStoredBoolean = (key: string, fallback: boolean) => {
     if (typeof window === 'undefined') {
@@ -77,6 +78,16 @@ const readStoredSubtitleOverlayOpacity = () => {
     const saved = localStorage.getItem(SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY);
     const parsed = saved ? parseFloat(saved) : 0.6;
     return Number.isFinite(parsed) ? Math.min(1, Math.max(0.2, parsed)) : 0.6;
+};
+
+const readStoredVisualizerOpacity = () => {
+    if (typeof window === 'undefined') {
+        return 1;
+    }
+
+    const saved = localStorage.getItem(VISUALIZER_OPACITY_STORAGE_KEY);
+    const parsed = saved ? parseFloat(saved) : 1;
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0.2, parsed)) : 1;
 };
 
 const readStoredVisualizerMode = (): VisualizerMode => {
@@ -396,6 +407,7 @@ type SettingsUiState = {
     enableMediaCache: boolean;
     backgroundOpacity: number;
     subtitleOverlayOpacity: number;
+    visualizerOpacity: number;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
     cadenzaTuning: CadenzaTuning;
@@ -443,6 +455,7 @@ type SettingsUiState = {
     handleToggleMediaCache: (enable: boolean) => void;
     handleSetBackgroundOpacity: (opacity: number) => void;
     handleSetSubtitleOverlayOpacity: (opacity: number) => void;
+    handleSetVisualizerOpacity: (opacity: number) => void;
     setDaylightPreference: (enabled: boolean) => void;
     handleSetVisualizerMode: (mode: VisualizerMode) => void;
     handleSetCadenzaTuning: (patch: Partial<CadenzaTuning>) => void;
@@ -493,6 +506,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     enableMediaCache: getStoredBoolean('enable_media_cache', false),
     backgroundOpacity: readStoredBackgroundOpacity(),
     subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
+    visualizerOpacity: readStoredVisualizerOpacity(),
     isDaylight: getStoredBoolean('default_theme_daylight', false),
     visualizerMode: readStoredVisualizerMode(),
     cadenzaTuning: readStoredCadenzaTuning(),
@@ -685,6 +699,13 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem(SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY, String(next));
         }
         set({ subtitleOverlayOpacity: next });
+    },
+    handleSetVisualizerOpacity: (opacity) => {
+        const next = Math.min(1, Math.max(0.2, opacity));
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(VISUALIZER_OPACITY_STORAGE_KEY, String(next));
+        }
+        set({ visualizerOpacity: next });
     },
     setDaylightPreference: (enabled) => {
         setStoredBoolean('default_theme_daylight', enabled);
@@ -1009,6 +1030,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     enableMediaCache: state.enableMediaCache,
     backgroundOpacity: state.backgroundOpacity,
     subtitleOverlayOpacity: state.subtitleOverlayOpacity,
+    visualizerOpacity: state.visualizerOpacity,
     isDaylight: state.isDaylight,
     visualizerMode: state.visualizerMode,
     cadenzaTuning: state.cadenzaTuning,
@@ -1044,6 +1066,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleMediaCache: state.handleToggleMediaCache,
     handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
     handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
+    handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
     setDaylightPreference: state.setDaylightPreference,
     handleSetVisualizerMode: state.handleSetVisualizerMode,
     handleSetCadenzaTuning: state.handleSetCadenzaTuning,

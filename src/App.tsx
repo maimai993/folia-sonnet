@@ -214,6 +214,7 @@ export default function App() {
         enableMediaCache,
         backgroundOpacity,
         subtitleOverlayOpacity,
+        visualizerOpacity,
         isDaylight,
         visualizerMode,
         cadenzaTuning,
@@ -1344,6 +1345,7 @@ export default function App() {
         applyCustomTheme,
         applyDefaultTheme,
         backgroundOpacity,
+        visualizerOpacity,
         bgMode,
         cadenzaTuning,
         cappellaCustomEmojiImages,
@@ -1957,6 +1959,7 @@ export default function App() {
                     staticMode={staticMode}
                     paused={shouldPauseVisualizerBackground}
                     backgroundOpacity={backgroundOpacity}
+                    visualizerOpacity={visualizerOpacity}
                     transparentBackground={currentView === 'player' && transparentPlayerBackground && !isSettingsModalOpen}
                     disableGeometricBackground={disableVisualizerGeometricBackground || isSettingsSubviewOpen}
                     disableVignette={disableVisualizerVignette}

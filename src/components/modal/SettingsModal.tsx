@@ -106,6 +106,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         enableMediaCache,
         backgroundOpacity,
         subtitleOverlayOpacity,
+        visualizerOpacity,
         isDaylight,
         visualizerMode,
         cadenzaTuning,
@@ -139,6 +140,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleMediaCache: onToggleMediaCache,
         handleSetBackgroundOpacity: setBackgroundOpacity,
         handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
+        handleSetVisualizerOpacity: setVisualizerOpacity,
         handleSetVisualizerMode: onVisualizerModeChange,
         handleSetPartitaTuning: onPartitaTuningChange,
         handleResetPartitaTuning: onResetPartitaTuning,
@@ -1310,10 +1312,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="space-y-1">
                                                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                    {t('options.lyricsRenderer') || "Lyrics Renderer"}
+                                                    {t('options.lyricsRenderer') || "歌词动画"}
                                                 </div>
                                                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                                    {t('options.lyricsRendererDesc') || "Choose the lyrics rendering mode used on the playback page."}
+                                                    {t('options.lyricsRendererDesc') || "选择播放页使用的歌词动画模式。"}
                                                 </div>
                                             </div>
                                             <button
@@ -1346,26 +1348,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* Opacity Slider */}
-                                    <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
-                                        <div className="flex justify-between items-center">
-                                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                {t('options.backgroundOpacity') || "Background Opacity"}
-                                            </div>
-                                            <div className="text-xs font-mono opacity-50">
-                                                {Math.round(backgroundOpacity * 100)}%
-                                            </div>
-                                        </div>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="1"
-                                            step="0.05"
-                                            value={backgroundOpacity}
-                                            onChange={(e) => setBackgroundOpacity?.(parseFloat(e.target.value))}
-                                            className={rangeInputClass}
-                                        />
-                                    </div>
                                 </div>
                             </section>
 
@@ -2093,6 +2075,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         isDaylight={isDaylight}
                         visualizerMode={visualizerMode}
                         backgroundOpacity={backgroundOpacity}
+                        visualizerOpacity={visualizerOpacity}
                         useCoverColorBg={useCoverColorBg}
                         staticMode={staticMode}
                         transparentPlayerBackground={transparentPlayerBackground}
@@ -2116,6 +2099,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onUploadCustomFont={onLyricsCustomFontUpload}
                         onVisualizerModeChange={onVisualizerModeChange}
                         onBackgroundOpacityChange={setBackgroundOpacity}
+                        onVisualizerOpacityChange={setVisualizerOpacity}
                         onToggleCoverColorBg={onToggleCoverColorBg}
                         onToggleDisableVisualizerVignette={onToggleDisableVisualizerVignette}
                         onToggleDisableVisualizerGeometricBackground={onToggleDisableVisualizerGeometricBackground}
@@ -2144,6 +2128,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         visualizerMode={visualizerMode}
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
+                        visualizerOpacity={visualizerOpacity}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
                         fumeTuning={fumeTuning}
@@ -2397,26 +2382,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         </button>
                                     </div>
 
-                                    <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
-                                    <div className="flex justify-between items-center">
-                                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                            {t('options.backgroundOpacity') || "Background Opacity"}
-                                        </div>
-                                        <div className="text-xs font-mono opacity-50">
-                                            {Math.round(backgroundOpacity * 100)}%
-                                        </div>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.05"
-                                        value={backgroundOpacity}
-                                        onChange={(e) => setBackgroundOpacity?.(parseFloat(e.target.value))}
-                                        className={rangeInputClass}
-                                    />
-                                </div>
-
                                 <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="space-y-1">
@@ -2434,52 +2399,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                             style={{ backgroundColor: transparentPlayerBackground ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
                                         >
                                             <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${transparentPlayerBackground ? 'translate-x-6' : 'translate-x-0'}`} />
-                                        </button>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        <button
-                                            type="button"
-                                            aria-pressed={disableVisualizerVignette}
-                                            onClick={() => onToggleDisableVisualizerVignette?.(!disableVisualizerVignette)}
-                                            className="flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-all"
-                                            style={{
-                                                borderColor: disableVisualizerVignette ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : 'rgba(255,255,255,0.08)',
-                                                backgroundColor: disableVisualizerVignette ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
-                                                color: 'var(--text-primary)',
-                                            }}
-                                        >
-                                            <span
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
-                                                style={{
-                                                    borderColor: disableVisualizerVignette ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : 'rgba(255,255,255,0.24)',
-                                                    backgroundColor: disableVisualizerVignette ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : 'transparent',
-                                                }}
-                                            >
-                                                {disableVisualizerVignette && <Check size={12} className="text-white" />}
-                                            </span>
-                                            {t('options.disableVisualizerVignette') || '禁用暗角'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            aria-pressed={disableVisualizerGeometricBackground}
-                                            onClick={() => onToggleDisableVisualizerGeometricBackground?.(!disableVisualizerGeometricBackground)}
-                                            className="flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-all"
-                                            style={{
-                                                borderColor: disableVisualizerGeometricBackground ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : 'rgba(255,255,255,0.08)',
-                                                backgroundColor: disableVisualizerGeometricBackground ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
-                                                color: 'var(--text-primary)',
-                                            }}
-                                        >
-                                            <span
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
-                                                style={{
-                                                    borderColor: disableVisualizerGeometricBackground ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : 'rgba(255,255,255,0.24)',
-                                                    backgroundColor: disableVisualizerGeometricBackground ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : 'transparent',
-                                                }}
-                                            >
-                                                {disableVisualizerGeometricBackground && <Check size={12} className="text-white" />}
-                                            </span>
-                                            {t('options.disableVisualizerGeometricBackground') || '隐藏通用几何背景'}
                                         </button>
                                     </div>
                                 </div>

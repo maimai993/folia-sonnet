@@ -22,6 +22,7 @@ import {
 import {
     findPreviewPlaceholderLineIndex,
     getPreviewPlaceholderStartOffset,
+    VIS_PLAYGROUND_PREVIEW_COVER_URL,
     VIS_PLAYGROUND_PREVIEW_LINES,
     VIS_PLAYGROUND_PREVIEW_LOOP_DURATION,
 } from '../visualizer/PreviewPlaceholder';
@@ -33,6 +34,7 @@ interface ThemeParkProps {
     visualizerMode: VisualizerMode;
     staticMode?: boolean;
     backgroundOpacity?: number;
+    visualizerOpacity?: number;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
@@ -81,6 +83,7 @@ const ThemePreviewLayer: React.FC<{
     visualizerModeLabel: string;
     staticMode: boolean;
     backgroundOpacity: number;
+    visualizerOpacity: number;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
     fumeTuning: FumeTuning;
@@ -101,6 +104,7 @@ const ThemePreviewLayer: React.FC<{
     visualizerModeLabel,
     staticMode,
     backgroundOpacity,
+    visualizerOpacity,
     cadenzaTuning,
     partitaTuning,
     fumeTuning,
@@ -144,6 +148,8 @@ const ThemePreviewLayer: React.FC<{
                     staticMode={staticMode}
                     isPreviewMode
                     backgroundOpacity={backgroundOpacity}
+                    visualizerOpacity={visualizerOpacity}
+                    coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
                     lyricsFontScale={lyricsFontScale}
                     cadenzaTuning={cadenzaTuning}
                     partitaTuning={partitaTuning}
@@ -203,6 +209,7 @@ const DiagonalThemePreview: React.FC<{
     visualizerModeLabel: string;
     staticMode: boolean;
     backgroundOpacity: number;
+    visualizerOpacity: number;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
     fumeTuning: FumeTuning;
@@ -222,6 +229,7 @@ const DiagonalThemePreview: React.FC<{
     visualizerModeLabel,
     staticMode,
     backgroundOpacity,
+    visualizerOpacity,
     cadenzaTuning,
     partitaTuning,
     fumeTuning,
@@ -264,6 +272,7 @@ const DiagonalThemePreview: React.FC<{
                 visualizerModeLabel={visualizerModeLabel}
                 staticMode={staticMode}
                 backgroundOpacity={backgroundOpacity}
+                visualizerOpacity={visualizerOpacity}
                 cadenzaTuning={cadenzaTuning}
                 partitaTuning={partitaTuning}
                 fumeTuning={fumeTuning}
@@ -285,6 +294,7 @@ const DiagonalThemePreview: React.FC<{
                 visualizerModeLabel={visualizerModeLabel}
                 staticMode={staticMode}
                 backgroundOpacity={backgroundOpacity}
+                visualizerOpacity={visualizerOpacity}
                 cadenzaTuning={cadenzaTuning}
                 partitaTuning={partitaTuning}
                 fumeTuning={fumeTuning}
@@ -309,6 +319,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     visualizerMode,
     staticMode = false,
     backgroundOpacity = 0.75,
+    visualizerOpacity = 1,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
     partitaTuning = DEFAULT_PARTITA_TUNING,
     fumeTuning = DEFAULT_FUME_TUNING,
@@ -490,6 +501,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                             visualizerModeLabel={visualizerModeLabel}
                             staticMode={staticMode}
                             backgroundOpacity={backgroundOpacity}
+                            visualizerOpacity={visualizerOpacity}
                             cadenzaTuning={cadenzaTuning}
                             partitaTuning={partitaTuning}
                             fumeTuning={fumeTuning}

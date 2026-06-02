@@ -4,10 +4,11 @@ import { colorWithAlpha } from './colorMix';
 
 // src/components/visualizer/VisPlaygroundPreviewHotspots.tsx
 // Transparent click targets that map preview regions to the right-side settings panel.
-export type VisPlaygroundEditSection = 'background' | 'visualizer' | 'subtitle';
+export type VisPlaygroundEditSection = 'common' | 'background' | 'visualizer' | 'subtitle';
+type VisPlaygroundHotspotSection = Exclude<VisPlaygroundEditSection, 'common'>;
 
 interface HotspotConfig {
-    section: VisPlaygroundEditSection;
+    section: VisPlaygroundHotspotSection;
     label: string;
     className: string;
     labelClassName: string;
@@ -17,7 +18,7 @@ interface VisPlaygroundPreviewHotspotsProps {
     activeSection: VisPlaygroundEditSection;
     onSectionChange: (section: VisPlaygroundEditSection) => void;
     theme: Theme;
-    labels: Record<VisPlaygroundEditSection, string>;
+    labels: Record<VisPlaygroundHotspotSection, string>;
 }
 
 const VisPlaygroundPreviewHotspots: React.FC<VisPlaygroundPreviewHotspotsProps> = ({
