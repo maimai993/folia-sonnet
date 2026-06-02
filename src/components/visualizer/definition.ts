@@ -2,6 +2,7 @@ import React from 'react';
 import { type MotionValue } from 'framer-motion';
 import {
     type AudioBands,
+    type CappellaAvatarImage,
     type CappellaEmojiImage,
     type CappellaTuning,
     type CadenzaTuning,
@@ -45,6 +46,7 @@ export interface VisualizerSharedProps {
     fumeTuning?: FumeTuning;
     cappellaTuning?: CappellaTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
+    cappellaCustomAvatarImages?: CappellaAvatarImage[];
     tiltTuning?: TiltTuning;
 }
 
@@ -65,6 +67,11 @@ export interface VisualizerSettingsPanelProps {
     isCappellaCustomEmojiPackLoading?: boolean;
     onImportCappellaCustomEmojiPack?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
+    cappellaCustomAvatarImages?: CappellaAvatarImage[];
+    onImportCappellaCustomAvatar?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
+    onClearCappellaCustomAvatar?: () => Promise<void> | void;
+    hasCappellaCustomAvatar?: boolean;
+    isCappellaCustomAvatarLoading?: boolean;
     tiltTuning?: TiltTuning;
     onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
 }

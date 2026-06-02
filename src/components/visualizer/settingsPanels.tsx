@@ -340,7 +340,7 @@ const resolveCappellaTuning = (
     emojiPackSource: tuning?.emojiPackSource === 'custom' && hasCustomEmojiPack
         ? 'custom'
         : 'builtin',
-    avatarSource: tuning?.avatarSource === 'builtin' || tuning?.avatarSource === 'color' || tuning?.avatarSource === 'cover'
+    avatarSource: tuning?.avatarSource === 'builtin' || tuning?.avatarSource === 'color' || tuning?.avatarSource === 'cover' || tuning?.avatarSource === 'custom'
         ? tuning.avatarSource
         : DEFAULT_CAPPELLA_TUNING.avatarSource,
 });
@@ -357,10 +357,17 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     isCappellaCustomEmojiPackLoading = false,
     onImportCappellaCustomEmojiPack,
     onClearCappellaCustomEmojiPack,
+    cappellaCustomAvatarImages = [],
+    onImportCappellaCustomAvatar,
+    onClearCappellaCustomAvatar,
+    hasCappellaCustomAvatar = false,
+    isCappellaCustomAvatarLoading = false,
 }) => {
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const emojiFileInputRef = useRef<HTMLInputElement | null>(null);
+    const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
     const [feedback, setFeedback] = useState<string | null>(null);
     const [isImporting, setIsImporting] = useState(false);
+    const [isImportingAvatar, setIsImportingAvatar] = useState(false);
     const resolvedTuning = resolveCappellaTuning(cappellaTuning, hasCappellaCustomEmojiPack);
     const emojiSourceOptions: PresetOption<CappellaTuning['emojiPackSource']>[] = useMemo(() => ([
         { value: 'builtin', label: t('options.cappellaEmojiSourceBuiltin') || '内置' },
@@ -370,11 +377,12 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         { value: 'cover', label: t('options.cappellaAvatarSourceCover') || '封面' },
         { value: 'builtin', label: t('options.cappellaAvatarSourceBuiltin') || '内置头像' },
         { value: 'color', label: t('options.cappellaAvatarSourceColor') || '色块' },
+        { value: 'custom', label: t('options.cappellaAvatarSourceCustom') || '自定义' },
     ]), [t]);
 
     const handleImportClick = () => {
         setFeedback(null);
-        fileInputRef.current?.click();
+        emojiFileInputRef.current?.click();
     };
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -408,6 +416,43 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         setFeedback(t('options.cappellaEmojiCleared') || '自定义表情包已清空。');
     };
 
+    const handleAvatarImportClick = () => {
+        setFeedback(null);
+        avatarFileInputRef.current?.click();
+    };
+
+    const handleAvatarFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(event.target.files ?? []);
+        event.target.value = '';
+        if (files.length === 0 || !onImportCappellaCustomAvatar) {
+            return;
+        }
+
+        setIsImportingAvatar(true);
+        setFeedback(null);
+        try {
+            const result = await onImportCappellaCustomAvatar(files);
+            if (result.ok) {
+                setFeedback(t('options.cappellaAvatarImportSuccess') || '自定义头像已更新。');
+            } else {
+                setFeedback(result.error || (t('options.cappellaAvatarImportFailed') || '导入失败。'));
+            }
+        } finally {
+            setIsImportingAvatar(false);
+        }
+    };
+
+    const handleClearCustomAvatar = async () => {
+        if (!onClearCappellaCustomAvatar) {
+            return;
+        }
+
+        setFeedback(null);
+        await onClearCappellaCustomAvatar();
+        setFeedback(t('options.cappellaAvatarCleared') || '自定义头像已清空。');
+    };
+
+    const avatarPreviewSlots = Array.from({ length: 5 }, (_, index) => cappellaCustomAvatarImages[index] ?? null);
     const previewSlots = Array.from({ length: 5 }, (_, index) => cappellaCustomEmojiImages[index] ?? null);
 
     return (
@@ -435,13 +480,112 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 isDaylight={isDaylight}
             />
 
-            <PresetGroup
-                label={t('options.cappellaAvatarSource') || '头像来源'}
-                value={resolvedTuning.avatarSource}
-                options={avatarSourceOptions}
-                onChange={(next) => onCappellaTuningChange?.({ avatarSource: next })}
-                isDaylight={isDaylight}
-            />
+            <div className="space-y-2.5">
+                <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.cappellaAvatarSource') || '头像来源'}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {avatarSourceOptions.map(option => {
+                        const isActive = option.value === resolvedTuning.avatarSource;
+                        const isDisabled = option.value === 'custom' && !hasCappellaCustomAvatar;
+
+                        return (
+                            <button
+                                key={option.value}
+                                type="button"
+                                disabled={isDisabled}
+                                onClick={() => onCappellaTuningChange?.({ avatarSource: option.value })}
+                                className="px-3 py-2 rounded-full text-sm transition-all border disabled:cursor-not-allowed disabled:opacity-45"
+                                style={{
+                                    color: 'var(--text-primary)',
+                                    borderColor: isActive ? 'var(--text-accent)' : (isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)'),
+                                    backgroundColor: isActive
+                                        ? (isDaylight ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.10)')
+                                        : (isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)'),
+                                    boxShadow: isActive ? '0 8px 22px rgba(0,0,0,0.14)' : 'none',
+                                }}
+                            >
+                                {option.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="space-y-2.5">
+                <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.cappellaAvatarPreview') || '自定义头像预览'}
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                    {avatarPreviewSlots.map((image, index) => (
+                        <div
+                            key={image?.id ?? `empty-${index}`}
+                            className="aspect-square rounded-full border overflow-hidden flex items-center justify-center text-[11px] text-center"
+                            style={{
+                                borderColor: isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)',
+                                backgroundColor: isDaylight ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.04)',
+                                color: 'var(--text-secondary)',
+                            }}
+                            title={image?.name ?? (t('options.cappellaEmojiEmptySlot') || '空槽位')}
+                        >
+                            {image ? (
+                                <img
+                                    src={image.url}
+                                    alt={image.name}
+                                    className="h-full w-full rounded-full object-cover"
+                                />
+                            ) : (
+                                <span className="opacity-45">{index + 1}</span>
+                            )}
+                        </div>
+                    ))}
+                </div>
+                <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                    {hasCappellaCustomAvatar
+                        ? `${t('options.cappellaEmojiCount') || '已上传'} ${cappellaCustomAvatarImages.length} / 5`
+                        : (t('options.cappellaAvatarUploadHint') || '还没有自定义头像，上传后可切换到自定义来源。')}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        onClick={handleAvatarImportClick}
+                        disabled={isImportingAvatar || isCappellaCustomAvatarLoading}
+                        className="px-3 py-2 rounded-full text-sm transition-all border disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{
+                            color: 'var(--text-primary)',
+                            borderColor: isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)',
+                            backgroundColor: isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)',
+                        }}
+                    >
+                        {isImportingAvatar
+                            ? (t('options.cappellaAvatarUploading') || '导入中...')
+                            : (t('options.cappellaAvatarUpload') || '上传自定义头像')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void handleClearCustomAvatar()}
+                        disabled={!hasCappellaCustomAvatar || isImportingAvatar || isCappellaCustomAvatarLoading}
+                        className="px-3 py-2 rounded-full text-sm transition-all border disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{
+                            color: 'var(--text-primary)',
+                            borderColor: isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)',
+                            backgroundColor: isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)',
+                        }}
+                    >
+                        {t('options.cappellaAvatarClear') || '清空自定义头像'}
+                    </button>
+                </div>
+
+                <input
+                    ref={avatarFileInputRef}
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.gif,.webp,.svg,image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => void handleAvatarFileChange(event)}
+                />
+            </div>
 
             <div className="space-y-2.5">
                 <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: 'var(--text-secondary)' }}>
@@ -473,11 +617,6 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                         );
                     })}
                 </div>
-                <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                    {hasCappellaCustomEmojiPack
-                        ? `${t('options.cappellaEmojiCount') || '已上传'} ${cappellaCustomEmojiCount} / 5`
-                        : (t('options.cappellaEmojiUploadHint') || '还没有自定义表情包，上传后才能切换到自定义。')}
-                </div>
             </div>
 
             <div className="space-y-2.5">
@@ -507,6 +646,11 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                             )}
                         </div>
                     ))}
+                </div>
+                <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                    {hasCappellaCustomEmojiPack
+                        ? `${t('options.cappellaEmojiCount') || '已上传'} ${cappellaCustomEmojiCount} / 5`
+                        : (t('options.cappellaEmojiUploadHint') || '还没有自定义表情包，上传后才能切换到自定义。')}
                 </div>
             </div>
 
@@ -542,7 +686,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             </div>
 
             <input
-                ref={fileInputRef}
+                ref={emojiFileInputRef}
                 type="file"
                 accept=".png,.jpg,.jpeg,.gif,.webp,.svg,image/*"
                 multiple

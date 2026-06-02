@@ -263,7 +263,7 @@ export const DEFAULT_FUME_TUNING: FumeTuning = {
 };
 
 export type CappellaEmojiPackSource = 'builtin' | 'custom';
-export type CappellaAvatarSource = 'cover' | 'builtin' | 'color';
+export type CappellaAvatarSource = 'cover' | 'builtin' | 'color' | 'custom';
 
 export interface CappellaTuning {
   showEmoMessages: boolean;
@@ -299,6 +299,19 @@ export interface StoredCappellaEmojiImage {
 }
 
 export interface CappellaEmojiImage {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export interface StoredCappellaAvatarImage {
+  id: string;
+  name: string;
+  mimeType: string;
+  blob: Blob;
+}
+
+export interface CappellaAvatarImage {
   id: string;
   name: string;
   url: string;

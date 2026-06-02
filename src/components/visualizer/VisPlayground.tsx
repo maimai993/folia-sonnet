@@ -11,6 +11,7 @@ import {
     DEFAULT_PARTITA_TUNING,
     DEFAULT_TILT_TUNING,
     type AudioBands,
+    type CappellaAvatarImage,
     type CappellaEmojiImage,
     type CappellaTuning,
     type CadenzaTuning,
@@ -42,6 +43,7 @@ interface VisPlaygroundProps {
     cappellaTuning?: CappellaTuning;
     tiltTuning?: TiltTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
+    cappellaCustomAvatarImages?: CappellaAvatarImage[];
     fontStyle: Theme['fontStyle'];
     fontScale: number;
     customFontFamily: string | null;
@@ -61,6 +63,9 @@ interface VisPlaygroundProps {
     onImportCappellaCustomEmojiPack?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
     isLoadingCappellaCustomEmojiPack?: boolean;
+    onImportCappellaCustomAvatar?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
+    onClearCappellaCustomAvatar?: () => Promise<void> | void;
+    isLoadingCappellaCustomAvatarPack?: boolean;
     onClose: () => void;
 }
 
@@ -228,6 +233,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     cappellaTuning = DEFAULT_CAPPELLA_TUNING,
     tiltTuning = DEFAULT_TILT_TUNING,
     cappellaCustomEmojiImages = [],
+    cappellaCustomAvatarImages = [],
     fontStyle,
     fontScale,
     customFontFamily,
@@ -247,6 +253,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onImportCappellaCustomEmojiPack,
     onClearCappellaCustomEmojiPack,
     isLoadingCappellaCustomEmojiPack = false,
+    onImportCappellaCustomAvatar,
+    onClearCappellaCustomAvatar,
+    isLoadingCappellaCustomAvatarPack = false,
     onClose,
 }) => {
     const { t } = useTranslation();
@@ -626,6 +635,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 cappellaTuning={cappellaTuning}
                                 tiltTuning={tiltTuning}
                                 cappellaCustomEmojiImages={cappellaCustomEmojiImages}
+                                cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                                 seed={getVisualizerScopedSeed(visualizerMode, 'vis-playground')}
                             />
                         </div>
@@ -705,6 +715,11 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 isCappellaCustomEmojiPackLoading: isLoadingCappellaCustomEmojiPack,
                                 onImportCappellaCustomEmojiPack,
                                 onClearCappellaCustomEmojiPack,
+                                cappellaCustomAvatarImages,
+                                onImportCappellaCustomAvatar,
+                                onClearCappellaCustomAvatar,
+                                hasCappellaCustomAvatar: cappellaCustomAvatarImages.length > 0,
+                                isCappellaCustomAvatarLoading: isLoadingCappellaCustomAvatarPack,
                                 tiltTuning,
                                 onTiltTuningChange,
                             })}
