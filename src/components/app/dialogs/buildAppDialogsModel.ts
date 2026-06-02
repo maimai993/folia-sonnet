@@ -5,6 +5,7 @@ import type OnlineLyricMatchModal from '../../modal/OnlineLyricMatchModal';
 import type UnavailableReplacementDialog from '../../modal/UnavailableReplacementDialog';
 import type SettingsModal from '../../modal/SettingsModal';
 import type { StatusMessage, SongResult, LocalSong } from '../../../types';
+import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } from '../../../utils/appPlaybackGuards';
 
 // src/components/app/dialogs/buildAppDialogsModel.ts
 
@@ -93,7 +94,7 @@ export const buildAppDialogsModel = ({
             isDaylight,
         }
         : null,
-    onlineLyricMatchDialog: showOnlineLyricMatchModal && currentSong && !(currentSong as SongResult & { isLocal?: boolean; isNavidrome?: boolean; isStage?: boolean }).isLocal && !(currentSong as SongResult & { isNavidrome?: boolean }).isNavidrome && !(currentSong as SongResult & { isStage?: boolean }).isStage
+    onlineLyricMatchDialog: showOnlineLyricMatchModal && currentSong && !isLocalPlaybackSong(currentSong) && !isNavidromePlaybackSong(currentSong) && !isStagePlaybackSong(currentSong)
         ? {
             song: currentSong,
             onClose: () => setShowOnlineLyricMatchModal(false),
