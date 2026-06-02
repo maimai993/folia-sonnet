@@ -217,6 +217,7 @@ export default function App() {
         visualizerOpacity,
         isDaylight,
         visualizerMode,
+        classicTuning,
         cadenzaTuning,
         partitaTuning,
         fumeTuning,
@@ -1967,6 +1968,7 @@ export default function App() {
                     subtitleOverlayOpacity={subtitleOverlayOpacity}
                     isPlayerChromeHidden={isPlayerChromeHidden}
                     hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
+                    classicTuning={classicTuning}
                     cadenzaTuning={cadenzaTuning}
                     partitaTuning={partitaTuning}
                     fumeTuning={fumeTuning}

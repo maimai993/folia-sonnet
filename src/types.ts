@@ -210,6 +210,16 @@ export interface NowPlayingLyricPayload {
   karaokeLyric: string | null;
 }
 
+export interface ClassicTuning {
+  enableWordRotation: boolean;
+  breathingFloatMultiplier: number;
+}
+
+export const DEFAULT_CLASSIC_TUNING: ClassicTuning = {
+  enableWordRotation: true,
+  breathingFloatMultiplier: 1,
+};
+
 export interface CadenzaTuning {
   fontScale: number;
   widthRatio: number;

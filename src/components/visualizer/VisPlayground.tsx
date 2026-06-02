@@ -7,6 +7,7 @@ import VisualizerRenderer from './VisualizerRenderer';
 import {
     DEFAULT_CADENZA_TUNING,
     DEFAULT_CAPPELLA_TUNING,
+    DEFAULT_CLASSIC_TUNING,
     DEFAULT_FUME_TUNING,
     DEFAULT_PARTITA_TUNING,
     DEFAULT_TILT_TUNING,
@@ -14,6 +15,7 @@ import {
     type CappellaEmojiImage,
     type CappellaTuning,
     type CadenzaTuning,
+    type ClassicTuning,
     type FumeTuning,
     type PartitaTuning,
     type StoredCustomLyricsFont,
@@ -47,6 +49,7 @@ interface VisPlaygroundProps {
     disableVisualizerGeometricBackground?: boolean;
     hideTranslationSubtitle?: boolean;
     subtitleOverlayOpacity?: number;
+    classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
@@ -69,6 +72,8 @@ interface VisPlaygroundProps {
     onToggleDisableVisualizerGeometricBackground?: (disabled: boolean) => void;
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
+    onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
+    onResetClassicTuning?: () => void;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     onResetPartitaTuning?: () => void;
     onFumeTuningChange?: (patch: Partial<FumeTuning>) => void;
@@ -166,6 +171,21 @@ const resolveFumeCameraTrackingMode = (value: FumeTuning['cameraTrackingMode'] |
         : DEFAULT_FUME_TUNING.cameraTrackingMode
 );
 
+const resolvePartitaTuningPatch = (
+    previous: PartitaTuning,
+    patch: Partial<PartitaTuning>
+): PartitaTuning => {
+    const rawMin = clampPartitaStagger(patch.staggerMin ?? previous.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
+    const rawMax = clampPartitaStagger(patch.staggerMax ?? previous.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
+
+    return {
+        showGuideLines: patch.showGuideLines ?? previous.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+        useSemanticLayout: patch.useSemanticLayout ?? previous.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
+        staggerMin: Math.min(rawMin, rawMax),
+        staggerMax: Math.max(rawMin, rawMax),
+    };
+};
+
 const dedupeLocalFonts = (fonts: LocalFontDataLike[]) => {
     const entries = new Map<string, LocalFontEntry>();
 
@@ -200,6 +220,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     disableVisualizerGeometricBackground = false,
     hideTranslationSubtitle = false,
     subtitleOverlayOpacity = 0.6,
+    classicTuning = DEFAULT_CLASSIC_TUNING,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
     partitaTuning = DEFAULT_PARTITA_TUNING,
     fumeTuning = DEFAULT_FUME_TUNING,
@@ -222,6 +243,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onToggleDisableVisualizerGeometricBackground,
     onToggleHideTranslationSubtitle,
     onSubtitleOverlayOpacityChange,
+    onClassicTuningChange,
+    onResetClassicTuning,
     onPartitaTuningChange,
     onResetPartitaTuning,
     onFumeTuningChange,
@@ -255,6 +278,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [draftVisualizerOpacity, setDraftVisualizerOpacity] = useState(visualizerOpacity);
     const [draftSubtitleOverlayOpacity, setDraftSubtitleOverlayOpacity] = useState(subtitleOverlayOpacity);
     const [draftFontScale, setDraftFontScale] = useState(fontScale);
+    const [draftClassicTuning, setDraftClassicTuning] = useState<ClassicTuning>(classicTuning);
     const [draftPartitaTuning, setDraftPartitaTuning] = useState<PartitaTuning>(partitaTuning);
     const [draftFumeTuning, setDraftFumeTuning] = useState<FumeTuning>(fumeTuning);
     const [draftTiltTuning, setDraftTiltTuning] = useState<TiltTuning>(tiltTuning);
@@ -328,6 +352,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     useEffect(() => { setDraftVisualizerOpacity(visualizerOpacity); }, [visualizerOpacity]);
     useEffect(() => { setDraftSubtitleOverlayOpacity(subtitleOverlayOpacity); }, [subtitleOverlayOpacity]);
     useEffect(() => { setDraftFontScale(fontScale); }, [fontScale]);
+    useEffect(() => { setDraftClassicTuning(classicTuning); }, [classicTuning]);
     useEffect(() => { setDraftPartitaTuning(partitaTuning); }, [partitaTuning]);
     useEffect(() => { setDraftFumeTuning(fumeTuning); }, [fumeTuning]);
     useEffect(() => { setDraftTiltTuning(tiltTuning); }, [tiltTuning]);
@@ -385,6 +410,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
     const handleResetVisualizerTuning = () => {
         visualizerEntry.resetSettings?.({
+            resetClassicTuning: onResetClassicTuning,
             resetPartitaTuning: onResetPartitaTuning,
             resetFumeTuning: onResetFumeTuning,
             resetCappellaTuning: onResetCappellaTuning,
@@ -590,12 +616,22 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         }
     };
 
-    const handlePartitaTuningDraft = (patch: Partial<PartitaTuning>) => {
-        setDraftPartitaTuning(prev => ({ ...prev, ...patch }));
+    const handleClassicTuningDraft = (patch: Partial<ClassicTuning>) => {
+        setDraftClassicTuning(prev => ({ ...prev, ...patch }));
         if (!isDraggingSlider.current) {
-            onPartitaTuningChange?.(patch);
+            onClassicTuningChange?.(patch);
         } else {
-            pendingCommitRef.current = () => onPartitaTuningChange?.(patch);
+            pendingCommitRef.current = () => onClassicTuningChange?.(patch);
+        }
+    };
+
+    const handlePartitaTuningDraft = (patch: Partial<PartitaTuning>) => {
+        const nextTuning = resolvePartitaTuningPatch(draftPartitaTuning, patch);
+        setDraftPartitaTuning(nextTuning);
+        if (!isDraggingSlider.current) {
+            onPartitaTuningChange?.(nextTuning);
+        } else {
+            pendingCommitRef.current = () => onPartitaTuningChange?.(nextTuning);
         }
     };
 
@@ -713,6 +749,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 lyricsFontScale={normalizedFontScale}
                                 subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                                 hideTranslationSubtitle={hideTranslationSubtitle}
+                                classicTuning={draftClassicTuning}
                                 cadenzaTuning={cadenzaTuning}
                                 partitaTuning={resolvedPartitaTuning}
                                 fumeTuning={resolvedFumeTuning}
@@ -760,6 +797,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         fontScaleOptions={FONT_SCALE_OPTIONS}
                         onFontScaleChange={handleFontScaleDraft}
                         onResetCommonSettings={handleResetCommonSettings}
+                        classicTuning={draftClassicTuning}
+                        onClassicTuningChange={handleClassicTuningDraft}
                         partitaTuning={resolvedPartitaTuning}
                         onPartitaTuningChange={handlePartitaTuningDraft}
                         fumeTuning={resolvedFumeTuning}

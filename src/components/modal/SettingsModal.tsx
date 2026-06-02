@@ -109,6 +109,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         visualizerOpacity,
         isDaylight,
         visualizerMode,
+        classicTuning,
         cadenzaTuning,
         partitaTuning,
         fumeTuning,
@@ -142,6 +143,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
         handleSetVisualizerOpacity: setVisualizerOpacity,
         handleSetVisualizerMode: onVisualizerModeChange,
+        handleSetClassicTuning: onClassicTuningChange,
+        handleResetClassicTuning: onResetClassicTuning,
         handleSetPartitaTuning: onPartitaTuningChange,
         handleResetPartitaTuning: onResetPartitaTuning,
         handleSetFumeTuning: onFumeTuningChange,
@@ -2083,6 +2086,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         disableVisualizerGeometricBackground={disableVisualizerGeometricBackground}
                         hideTranslationSubtitle={hidePlayerTranslationSubtitle}
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
+                        classicTuning={classicTuning}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
                         fumeTuning={fumeTuning}
@@ -2105,6 +2109,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onToggleDisableVisualizerGeometricBackground={onToggleDisableVisualizerGeometricBackground}
                         onToggleHideTranslationSubtitle={onToggleHidePlayerTranslationSubtitle}
                         onSubtitleOverlayOpacityChange={setSubtitleOverlayOpacity}
+                        onClassicTuningChange={onClassicTuningChange}
+                        onResetClassicTuning={onResetClassicTuning}
                         onPartitaTuningChange={onPartitaTuningChange}
                         onResetPartitaTuning={onResetPartitaTuning}
                         onFumeTuningChange={onFumeTuningChange}
@@ -2129,6 +2135,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
                         visualizerOpacity={visualizerOpacity}
+                        classicTuning={classicTuning}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
                         fumeTuning={fumeTuning}

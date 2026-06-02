@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CappellaTuning, type FumeTuning, type PartitaTuning, type TiltColorScheme, type TiltTuning } from '../../types';
+import { DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CappellaTuning, type ClassicTuning, type FumeTuning, type PartitaTuning, type TiltColorScheme, type TiltTuning } from '../../types';
 import { colorWithAlpha } from './colorMix';
 import { type VisualizerSettingsPanelProps } from './definition';
 
@@ -20,6 +20,7 @@ interface PresetGroupProps<T> {
 }
 
 const clampPartitaStagger = (value: number) => Math.min(180, Math.max(0, value));
+const clampClassicBreathingFloatMultiplier = (value: number) => Math.min(2, Math.max(0, value));
 
 const PresetGroup = <T,>({
     label,
@@ -59,6 +60,74 @@ const PresetGroup = <T,>({
         </div>
     </div>
 );
+
+export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
+    t,
+    isDaylight,
+    theme,
+    controlCardBg,
+    rangeInputClass,
+    onSliderPointerDown,
+    onSliderCommit,
+    classicTuning = DEFAULT_CLASSIC_TUNING,
+    onClassicTuningChange,
+}) => {
+    const resolvedClassicTuning: ClassicTuning = {
+        enableWordRotation: classicTuning.enableWordRotation ?? DEFAULT_CLASSIC_TUNING.enableWordRotation,
+        breathingFloatMultiplier: clampClassicBreathingFloatMultiplier(
+            classicTuning.breathingFloatMultiplier ?? DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
+        ),
+    };
+    const wordRotationOptions: PresetOption<boolean>[] = useMemo(() => ([
+        { value: true, label: t('options.classicWordRotationOn') || '启用' },
+        { value: false, label: t('options.classicWordRotationOff') || '关闭' },
+    ]), [t]);
+
+    return (
+        <div
+            className="rounded-[24px] border border-white/10 p-4 space-y-4"
+            style={{ backgroundColor: controlCardBg }}
+        >
+            <div className="space-y-1">
+                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {t('options.classicSettings') || '流光参数'}
+                </div>
+                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.classicSettingsDesc') || '控制逐字旋转和整行呼吸浮动范围。'}
+                </div>
+            </div>
+
+            <PresetGroup
+                label={t('options.classicWordRotation') || '逐字旋转'}
+                value={resolvedClassicTuning.enableWordRotation}
+                options={wordRotationOptions}
+                onChange={(enabled) => onClassicTuningChange?.({ enableWordRotation: enabled })}
+                isDaylight={isDaylight}
+                theme={theme}
+            />
+
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.classicBreathingFloatMultiplier') || '呼吸浮动范围'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {resolvedClassicTuning.breathingFloatMultiplier.toFixed(2)}x
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.05"
+                    value={resolvedClassicTuning.breathingFloatMultiplier}
+                    onChange={(event) => onClassicTuningChange?.({ breathingFloatMultiplier: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+        </div>
+    );
+};
 
 export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,

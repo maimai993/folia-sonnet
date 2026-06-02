@@ -3,6 +3,7 @@ import { Monitor, RotateCcw } from 'lucide-react';
 import {
     type CappellaEmojiImage,
     type CappellaTuning,
+    type ClassicTuning,
     type FumeTuning,
     type PartitaTuning,
     type Theme,
@@ -68,6 +69,8 @@ interface VisPlaygroundSettingsPanelProps {
     fontScaleOptions: PresetOption<number>[];
     onFontScaleChange: (fontScale: number) => void;
     onResetCommonSettings?: () => void;
+    classicTuning: ClassicTuning;
+    onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
     partitaTuning: PartitaTuning;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     fumeTuning: FumeTuning;
@@ -264,6 +267,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         fontScaleOptions,
         onFontScaleChange,
         onResetCommonSettings,
+        classicTuning,
+        onClassicTuningChange,
         partitaTuning,
         onPartitaTuningChange,
         fumeTuning,
@@ -419,8 +424,23 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
                         <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
                             <div className="space-y-2">
+                                    <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
+                                        {t('options.previewCoverBackgroundSettings') || '封面背景'}
+                                    </div>
+                                    <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
+                                        {t('options.previewCoverBackgroundSettingsDesc') || '将歌曲封面色彩叠加到背景中'}
+                                    </div>
+                                    
+                                <ToggleRow
+                                    label={t('theme.addCoverColor') || '添加封面色彩'}
+                                    description={t('options.coverColorBackgroundDesc') || '使用当前歌曲封面生成背景色彩。'}
+                                    checked={useCoverColorBg}
+                                    onChange={onToggleCoverColorBg}
+                                    theme={theme}
+                                />
+
                                 <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
-                                    <span>{t('options.backgroundOpacity') || '背景透明度'}</span>
+                                    <span>{t('options.previewCoverBackgroundOpacity') || '叠层透明度'}</span>
                                     <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
                                         {Math.round(backgroundOpacity * 100)}%
                                     </span>
@@ -437,14 +457,6 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     className={rangeInputClass}
                                 />
                             </div>
-
-                            <ToggleRow
-                                label={t('theme.addCoverColor') || '添加封面色彩'}
-                                description={t('options.coverColorBackgroundDesc') || '使用当前歌曲封面生成背景色彩。'}
-                                checked={useCoverColorBg}
-                                onChange={onToggleCoverColorBg}
-                                theme={theme}
-                            />
                         </div>
                     </>
                 )}
@@ -484,6 +496,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             theme,
                             controlCardBg,
                             rangeInputClass,
+                            classicTuning,
+                            onClassicTuningChange,
                             partitaTuning,
                             onPartitaTuningChange,
                             fumeTuning,

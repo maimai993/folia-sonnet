@@ -1,5 +1,6 @@
 import React from 'react';
 import { defineVisualizer } from '../definition';
+import { ClassicSettingsPanel } from '../settingsPanels';
 import Visualizer from './Visualizer';
 
 // src/components/visualizer/classic/entry.tsx
@@ -11,6 +12,10 @@ export default defineVisualizer({
     labelFallback: '流光',
     previewSeed: 'classic',
     previewStartOffset: 0,
-    tuningKind: 'none',
+    tuningKind: 'classic',
     render: props => <Visualizer {...props} />,
+    renderSettingsPanel: props => <ClassicSettingsPanel {...props} />,
+    resetSettings: ({ resetClassicTuning }) => {
+        resetClassicTuning?.();
+    },
 });

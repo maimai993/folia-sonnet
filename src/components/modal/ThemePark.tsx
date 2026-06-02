@@ -7,12 +7,14 @@ import VisualizerRenderer from '../visualizer/VisualizerRenderer';
 import {
     DEFAULT_CADENZA_TUNING,
     DEFAULT_CAPPELLA_TUNING,
+    DEFAULT_CLASSIC_TUNING,
     DEFAULT_FUME_TUNING,
     DEFAULT_PARTITA_TUNING,
     AudioBands,
     CappellaEmojiImage,
     CappellaTuning,
     CadenzaTuning,
+    ClassicTuning,
     DualTheme,
     FumeTuning,
     PartitaTuning,
@@ -35,6 +37,7 @@ interface ThemeParkProps {
     staticMode?: boolean;
     backgroundOpacity?: number;
     visualizerOpacity?: number;
+    classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
@@ -84,6 +87,7 @@ const ThemePreviewLayer: React.FC<{
     staticMode: boolean;
     backgroundOpacity: number;
     visualizerOpacity: number;
+    classicTuning: ClassicTuning;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
     fumeTuning: FumeTuning;
@@ -105,6 +109,7 @@ const ThemePreviewLayer: React.FC<{
     staticMode,
     backgroundOpacity,
     visualizerOpacity,
+    classicTuning,
     cadenzaTuning,
     partitaTuning,
     fumeTuning,
@@ -151,6 +156,7 @@ const ThemePreviewLayer: React.FC<{
                     visualizerOpacity={visualizerOpacity}
                     coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
                     lyricsFontScale={lyricsFontScale}
+                    classicTuning={classicTuning}
                     cadenzaTuning={cadenzaTuning}
                     partitaTuning={partitaTuning}
                     fumeTuning={fumeTuning}
@@ -210,6 +216,7 @@ const DiagonalThemePreview: React.FC<{
     staticMode: boolean;
     backgroundOpacity: number;
     visualizerOpacity: number;
+    classicTuning: ClassicTuning;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
     fumeTuning: FumeTuning;
@@ -230,6 +237,7 @@ const DiagonalThemePreview: React.FC<{
     staticMode,
     backgroundOpacity,
     visualizerOpacity,
+    classicTuning,
     cadenzaTuning,
     partitaTuning,
     fumeTuning,
@@ -273,6 +281,7 @@ const DiagonalThemePreview: React.FC<{
                 staticMode={staticMode}
                 backgroundOpacity={backgroundOpacity}
                 visualizerOpacity={visualizerOpacity}
+                classicTuning={classicTuning}
                 cadenzaTuning={cadenzaTuning}
                 partitaTuning={partitaTuning}
                 fumeTuning={fumeTuning}
@@ -295,6 +304,7 @@ const DiagonalThemePreview: React.FC<{
                 staticMode={staticMode}
                 backgroundOpacity={backgroundOpacity}
                 visualizerOpacity={visualizerOpacity}
+                classicTuning={classicTuning}
                 cadenzaTuning={cadenzaTuning}
                 partitaTuning={partitaTuning}
                 fumeTuning={fumeTuning}
@@ -320,6 +330,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     staticMode = false,
     backgroundOpacity = 0.75,
     visualizerOpacity = 1,
+    classicTuning = DEFAULT_CLASSIC_TUNING,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
     partitaTuning = DEFAULT_PARTITA_TUNING,
     fumeTuning = DEFAULT_FUME_TUNING,
@@ -502,6 +513,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                             staticMode={staticMode}
                             backgroundOpacity={backgroundOpacity}
                             visualizerOpacity={visualizerOpacity}
+                            classicTuning={classicTuning}
                             cadenzaTuning={cadenzaTuning}
                             partitaTuning={partitaTuning}
                             fumeTuning={fumeTuning}

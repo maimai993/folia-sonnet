@@ -5,6 +5,7 @@ import {
     type CappellaEmojiImage,
     type CappellaTuning,
     type CadenzaTuning,
+    type ClassicTuning,
     type FumeTuning,
     type Line,
     type PartitaTuning,
@@ -15,7 +16,7 @@ import {
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
-export type VisualizerTuningKind = 'none' | 'cadenza' | 'partita' | 'fume' | 'cappella' | 'tilt';
+export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'cappella' | 'tilt';
 
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
@@ -42,6 +43,7 @@ export interface VisualizerSharedProps {
     paused?: boolean;
     onBack?: () => void;
     isPreviewMode?: boolean;
+    classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
@@ -56,6 +58,8 @@ export interface VisualizerSettingsPanelProps {
     theme: Theme;
     controlCardBg: string;
     rangeInputClass: string;
+    classicTuning?: ClassicTuning;
+    onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
     partitaTuning?: PartitaTuning;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     fumeTuning?: FumeTuning;
@@ -77,6 +81,7 @@ export interface VisualizerSettingsPanelProps {
 }
 
 export interface VisualizerSettingsResetProps {
+    resetClassicTuning?: () => void;
     resetPartitaTuning?: () => void;
     resetFumeTuning?: () => void;
     resetCappellaTuning?: () => void;

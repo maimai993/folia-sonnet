@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type React from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type Theme, type TiltTuning, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type Theme, type TiltTuning, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, MAX_CAPPELLA_CUSTOM_EMOJI_IMAGES, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
@@ -101,6 +101,36 @@ const readStoredVisualizerMode = (): VisualizerMode => {
     }
 
     return hasVisualizerMode(saved) ? saved : DEFAULT_VISUALIZER_MODE;
+};
+
+const clampClassicBreathingFloatMultiplier = (value: number, fallback: number) => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(2, Math.max(0, value));
+};
+
+const readStoredClassicTuning = (): ClassicTuning => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_CLASSIC_TUNING;
+    }
+
+    const saved = localStorage.getItem('classic_tuning');
+    if (!saved) return DEFAULT_CLASSIC_TUNING;
+
+    try {
+        const parsed = JSON.parse(saved) as Partial<ClassicTuning>;
+        return {
+            enableWordRotation: parsed.enableWordRotation ?? DEFAULT_CLASSIC_TUNING.enableWordRotation,
+            breathingFloatMultiplier: clampClassicBreathingFloatMultiplier(
+                parsed.breathingFloatMultiplier ?? DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
+                DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
+            ),
+        };
+    } catch {
+        return DEFAULT_CLASSIC_TUNING;
+    }
 };
 
 const readStoredCadenzaTuning = (): CadenzaTuning => {
@@ -410,6 +440,7 @@ type SettingsUiState = {
     visualizerOpacity: number;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
+    classicTuning: ClassicTuning;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
     fumeTuning: FumeTuning;
@@ -458,6 +489,8 @@ type SettingsUiState = {
     handleSetVisualizerOpacity: (opacity: number) => void;
     setDaylightPreference: (enabled: boolean) => void;
     handleSetVisualizerMode: (mode: VisualizerMode) => void;
+    handleSetClassicTuning: (patch: Partial<ClassicTuning>) => void;
+    handleResetClassicTuning: () => void;
     handleSetCadenzaTuning: (patch: Partial<CadenzaTuning>) => void;
     handleResetCadenzaTuning: () => void;
     handleSetPartitaTuning: (patch: Partial<PartitaTuning>) => void;
@@ -509,6 +542,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     visualizerOpacity: readStoredVisualizerOpacity(),
     isDaylight: getStoredBoolean('default_theme_daylight', false),
     visualizerMode: readStoredVisualizerMode(),
+    classicTuning: readStoredClassicTuning(),
     cadenzaTuning: readStoredCadenzaTuning(),
     partitaTuning: readStoredPartitaTuning(),
     fumeTuning: readStoredFumeTuning(),
@@ -721,6 +755,27 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             type: 'info',
             text: `已切换到${entry.labelFallback}歌词`,
         });
+    },
+    handleSetClassicTuning: (patch) => {
+        const prev = get().classicTuning;
+        const next = {
+            enableWordRotation: patch.enableWordRotation ?? prev.enableWordRotation,
+            breathingFloatMultiplier: clampClassicBreathingFloatMultiplier(
+                patch.breathingFloatMultiplier ?? prev.breathingFloatMultiplier,
+                prev.breathingFloatMultiplier,
+            ),
+        };
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('classic_tuning', JSON.stringify(next));
+        }
+        set({ classicTuning: next });
+    },
+    handleResetClassicTuning: () => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('classic_tuning', JSON.stringify(DEFAULT_CLASSIC_TUNING));
+        }
+        set({ classicTuning: DEFAULT_CLASSIC_TUNING });
+        notify(get, { type: 'info', text: '流光参数已重置' });
     },
     handleSetCadenzaTuning: (patch) => {
         const next = { ...get().cadenzaTuning, ...patch, beamIntensity: 0 };
@@ -1033,6 +1088,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     visualizerOpacity: state.visualizerOpacity,
     isDaylight: state.isDaylight,
     visualizerMode: state.visualizerMode,
+    classicTuning: state.classicTuning,
     cadenzaTuning: state.cadenzaTuning,
     partitaTuning: state.partitaTuning,
     fumeTuning: state.fumeTuning,
@@ -1069,6 +1125,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
     setDaylightPreference: state.setDaylightPreference,
     handleSetVisualizerMode: state.handleSetVisualizerMode,
+    handleSetClassicTuning: state.handleSetClassicTuning,
+    handleResetClassicTuning: state.handleResetClassicTuning,
     handleSetCadenzaTuning: state.handleSetCadenzaTuning,
     handleResetCadenzaTuning: state.handleResetCadenzaTuning,
     handleSetPartitaTuning: state.handleSetPartitaTuning,
