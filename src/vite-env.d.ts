@@ -39,6 +39,7 @@ declare global {
     | { type: 'seek'; time: number }
     | { type: 'set-main-window-border-visible'; visible: boolean }
     | { type: 'set-main-window-click-through'; enabled: boolean }
+    | { type: 'set-main-window-always-on-top'; enabled: boolean }
     | { type: 'set-transparent-mode-enabled'; enabled: boolean }
     | { type: 'disable-transparent-mode' }
     | { type: 'set-player-chrome-hidden'; hidden: boolean }
@@ -101,6 +102,7 @@ declare global {
     isStageActive: boolean;
     transparentModeEnabled: boolean;
     mainWindowClickThroughEnabled: boolean;
+    mainWindowAlwaysOnTop: boolean;
     mainWindowBorderVisible: boolean;
     playerChromeHidden: boolean;
     exportState: ElectronVideoExportState;
@@ -298,6 +300,8 @@ declare global {
       getMainWindowClickThroughEnabled: () => Promise<boolean>;
       setMainWindowClickThroughEnabled: (enabled: boolean) => Promise<boolean>;
       setMainWindowClickThroughUnlockHover: (active: boolean) => Promise<boolean>;
+      getMainWindowAlwaysOnTop: () => Promise<boolean>;
+      setMainWindowAlwaysOnTop: (enabled: boolean) => Promise<boolean>;
       onMainWindowClickThroughChanged: (callback: (state: ElectronMainWindowClickThroughState) => void) => () => void;
       updateTaskbarControls: (state: ElectronTaskbarControlState) => Promise<boolean>;
       onTaskbarControl: (callback: (action: ElectronTaskbarControlAction) => void) => () => void;

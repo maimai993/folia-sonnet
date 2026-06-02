@@ -210,6 +210,16 @@ export interface NowPlayingLyricPayload {
   karaokeLyric: string | null;
 }
 
+export interface ClassicTuning {
+  enableWordRotation: boolean;
+  breathingFloatMultiplier: number;
+}
+
+export const DEFAULT_CLASSIC_TUNING: ClassicTuning = {
+  enableWordRotation: true,
+  breathingFloatMultiplier: 1,
+};
+
 export interface CadenzaTuning {
   fontScale: number;
   widthRatio: number;
@@ -398,6 +408,17 @@ export interface SongResult {
   noCopyrightRcmd?: NoCopyrightRecommendation | null;
   resourceState?: boolean;
   privilege?: SongPrivilege;
+  onlineLyricsState?: OnlineLyricsState;
+}
+
+export interface OnlineLyricsState {
+  lyricsSource: 'online' | 'imported';
+  importedLyrics?: LyricData | null;
+  importedLyricsName?: string | null;
+  hasOnlineOverride?: boolean;
+  onlineOverrideLyrics?: LyricData | null;
+  matchedSongId?: number;
+  matchedIsPureMusic?: boolean;
 }
 
 export interface SearchResponse {

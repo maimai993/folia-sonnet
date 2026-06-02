@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import LyricMatchModal from '../../modal/LyricMatchModal';
 import NaviLyricMatchModal from '../../modal/NaviLyricMatchModal';
+import OnlineLyricMatchModal from '../../modal/OnlineLyricMatchModal';
 import UnavailableReplacementDialog from '../../modal/UnavailableReplacementDialog';
 import SettingsModal from '../../modal/SettingsModal';
 import type { AppDialogsModel } from './buildAppDialogsModel';
@@ -13,7 +14,7 @@ type AppDialogsProps = {
 };
 
 const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
-    const { statusToast, lyricMatchDialog, naviLyricMatchDialog, unavailableReplacementDialog, settingsDialog } = model;
+    const { statusToast, lyricMatchDialog, naviLyricMatchDialog, onlineLyricMatchDialog, unavailableReplacementDialog, settingsDialog } = model;
 
     return (
         <>
@@ -56,6 +57,7 @@ const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
 
             {lyricMatchDialog && <LyricMatchModal {...lyricMatchDialog} />}
             {naviLyricMatchDialog && <NaviLyricMatchModal {...naviLyricMatchDialog} />}
+            {onlineLyricMatchDialog && <OnlineLyricMatchModal {...onlineLyricMatchDialog} />}
             {unavailableReplacementDialog && <UnavailableReplacementDialog {...unavailableReplacementDialog} />}
             <AnimatePresence>
                 {settingsDialog && <SettingsModal {...settingsDialog} />}

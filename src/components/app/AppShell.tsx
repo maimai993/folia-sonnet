@@ -67,6 +67,10 @@ const AppShell: React.FC<AppShellProps> = ({
     }, [useCustomWindowRadius]);
 
     const shouldApplyWindowRadius = useCustomWindowRadius && !isWindowMaximized;
+    const shouldRenderTitlebarBackdrop = !isPlayerView || (useCustomWindowRadius && !isMainWindowClickThroughEnabled);
+    const titlebarBackdropClassName = `absolute inset-0 backdrop-blur-sm ${
+        isPlayerView ? 'bg-black/[0.18] border-b border-white/10 shadow-[0_8px_28px_rgba(0,0,0,0.20)]' : ''
+    }`;
 
     return (
         <div
@@ -79,14 +83,14 @@ const AppShell: React.FC<AppShellProps> = ({
         >
             {usesCustomWindowChrome && (
                 <div className="absolute top-0 left-0 right-0 z-[9999] h-8 pointer-events-none">
-                    {!isPlayerView && (
+                    {shouldRenderTitlebarBackdrop && (
                         <motion.div
                             initial={false}
                             animate={{
                                 opacity: isTitlebarRevealed ? 1 : 0,
                             }}
                             transition={{ duration: 0.18, ease: 'easeOut' }}
-                            className="absolute inset-0 backdrop-blur-sm"
+                            className={titlebarBackdropClassName}
                         />
                     )}
                     <div className="relative h-full">

@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
-import { ChevronLeft, Loader2, RotateCcw, Search, Sparkles, Upload, X } from 'lucide-react';
+import { ChevronLeft, Loader2, Search, Sparkles, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { List, useListRef } from 'react-window';
 import VisualizerRenderer from './VisualizerRenderer';
 import {
     DEFAULT_CADENZA_TUNING,
     DEFAULT_CAPPELLA_TUNING,
+    DEFAULT_CLASSIC_TUNING,
     DEFAULT_FUME_TUNING,
     DEFAULT_PARTITA_TUNING,
     DEFAULT_TILT_TUNING,
@@ -14,6 +15,7 @@ import {
     type CappellaEmojiImage,
     type CappellaTuning,
     type CadenzaTuning,
+    type ClassicTuning,
     type FumeTuning,
     type PartitaTuning,
     type StoredCustomLyricsFont,
@@ -22,20 +24,32 @@ import {
     type VisualizerMode,
 } from '../../types';
 import { resolveThemeFontStack } from '../../utils/fontStacks';
+import { colorWithAlpha } from './colorMix';
 import {
     findPreviewPlaceholderLineIndex,
     getPreviewPlaceholderStartOffset,
+    VIS_PLAYGROUND_PREVIEW_COVER_URL,
     VIS_PLAYGROUND_PREVIEW_LINES,
     VIS_PLAYGROUND_PREVIEW_LOOP_DURATION,
 } from './PreviewPlaceholder';
 import { getVisualizerModeLabel, getVisualizerRegistryEntry, getVisualizerScopedSeed } from './registry';
+import VisPlaygroundPreviewHotspots, { type VisPlaygroundEditSection } from './VisPlaygroundPreviewHotspots';
+import VisPlaygroundSettingsPanel from './VisPlaygroundSettingsPanel';
 
 interface VisPlaygroundProps {
     theme?: Theme;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
     backgroundOpacity?: number;
+    visualizerOpacity?: number;
+    useCoverColorBg?: boolean;
     staticMode?: boolean;
+    transparentPlayerBackground?: boolean;
+    disableVisualizerVignette?: boolean;
+    disableVisualizerGeometricBackground?: boolean;
+    hideTranslationSubtitle?: boolean;
+    subtitleOverlayOpacity?: number;
+    classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
@@ -50,6 +64,16 @@ interface VisPlaygroundProps {
     onFontScaleChange: (fontScale: number) => void;
     onCustomFontChange: (font: StoredCustomLyricsFont | null) => void;
     onUploadCustomFont?: (file: File) => Promise<{ ok: boolean; error?: string; }>;
+    onVisualizerModeChange?: (mode: VisualizerMode) => void;
+    onBackgroundOpacityChange?: (opacity: number) => void;
+    onVisualizerOpacityChange?: (opacity: number) => void;
+    onToggleCoverColorBg?: (enabled: boolean) => void;
+    onToggleDisableVisualizerVignette?: (disabled: boolean) => void;
+    onToggleDisableVisualizerGeometricBackground?: (disabled: boolean) => void;
+    onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
+    onSubtitleOverlayOpacityChange?: (opacity: number) => void;
+    onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
+    onResetClassicTuning?: () => void;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     onResetPartitaTuning?: () => void;
     onFumeTuningChange?: (patch: Partial<FumeTuning>) => void;
@@ -67,15 +91,6 @@ interface VisPlaygroundProps {
 interface PresetOption<T> {
     label: string;
     value: T;
-}
-
-interface PresetGroupProps<T> {
-    label: string;
-    value: T;
-    options: PresetOption<T>[];
-    onChange: (next: T) => void;
-    isDaylight: boolean;
-    isOptionActive?: (option: PresetOption<T>) => boolean;
 }
 
 interface LocalFontDataLike {
@@ -156,44 +171,20 @@ const resolveFumeCameraTrackingMode = (value: FumeTuning['cameraTrackingMode'] |
         : DEFAULT_FUME_TUNING.cameraTrackingMode
 );
 
-const PresetGroup = <T,>({
-    label,
-    value,
-    options,
-    onChange,
-    isDaylight,
-    isOptionActive,
-}: PresetGroupProps<T>) => (
-    <div className="space-y-2.5">
-        <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: 'var(--text-secondary)' }}>
-            {label}
-        </div>
-        <div className="flex flex-wrap gap-2">
-            {options.map(option => {
-                const isActive = isOptionActive ? isOptionActive(option) : option.value === value;
+const resolvePartitaTuningPatch = (
+    previous: PartitaTuning,
+    patch: Partial<PartitaTuning>
+): PartitaTuning => {
+    const rawMin = clampPartitaStagger(patch.staggerMin ?? previous.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
+    const rawMax = clampPartitaStagger(patch.staggerMax ?? previous.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
 
-                return (
-                    <button
-                        key={String(option.value)}
-                        type="button"
-                        onClick={() => onChange(option.value)}
-                        className="px-3 py-2 rounded-full text-sm transition-all border"
-                        style={{
-                            color: 'var(--text-primary)',
-                            borderColor: isActive ? 'var(--text-accent)' : (isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.08)'),
-                            backgroundColor: isActive
-                                ? (isDaylight ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.10)')
-                                : (isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)'),
-                            boxShadow: isActive ? '0 8px 22px rgba(0,0,0,0.14)' : 'none',
-                        }}
-                    >
-                        {option.label}
-                    </button>
-                );
-            })}
-        </div>
-    </div>
-);
+    return {
+        showGuideLines: patch.showGuideLines ?? previous.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+        useSemanticLayout: patch.useSemanticLayout ?? previous.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
+        staggerMin: Math.min(rawMin, rawMax),
+        staggerMax: Math.max(rawMin, rawMax),
+    };
+};
 
 const dedupeLocalFonts = (fonts: LocalFontDataLike[]) => {
     const entries = new Map<string, LocalFontEntry>();
@@ -221,7 +212,15 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     isDaylight,
     visualizerMode,
     backgroundOpacity = 0.75,
+    visualizerOpacity = 1,
+    useCoverColorBg = false,
     staticMode = false,
+    transparentPlayerBackground = false,
+    disableVisualizerVignette = false,
+    disableVisualizerGeometricBackground = false,
+    hideTranslationSubtitle = false,
+    subtitleOverlayOpacity = 0.6,
+    classicTuning = DEFAULT_CLASSIC_TUNING,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
     partitaTuning = DEFAULT_PARTITA_TUNING,
     fumeTuning = DEFAULT_FUME_TUNING,
@@ -236,6 +235,16 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onFontScaleChange,
     onCustomFontChange,
     onUploadCustomFont,
+    onVisualizerModeChange,
+    onBackgroundOpacityChange,
+    onVisualizerOpacityChange,
+    onToggleCoverColorBg,
+    onToggleDisableVisualizerVignette,
+    onToggleDisableVisualizerGeometricBackground,
+    onToggleHideTranslationSubtitle,
+    onSubtitleOverlayOpacityChange,
+    onClassicTuningChange,
+    onResetClassicTuning,
     onPartitaTuningChange,
     onResetPartitaTuning,
     onFumeTuningChange,
@@ -265,10 +274,20 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [fontPickerError, setFontPickerError] = useState<string | null>(null);
     const [fontListHeight, setFontListHeight] = useState(420);
     const [isUploadingCustomFont, setIsUploadingCustomFont] = useState(false);
+    const [draftBackgroundOpacity, setDraftBackgroundOpacity] = useState(backgroundOpacity);
+    const [draftVisualizerOpacity, setDraftVisualizerOpacity] = useState(visualizerOpacity);
+    const [draftSubtitleOverlayOpacity, setDraftSubtitleOverlayOpacity] = useState(subtitleOverlayOpacity);
+    const [draftFontScale, setDraftFontScale] = useState(fontScale);
+    const [draftClassicTuning, setDraftClassicTuning] = useState<ClassicTuning>(classicTuning);
+    const [draftPartitaTuning, setDraftPartitaTuning] = useState<PartitaTuning>(partitaTuning);
     const [draftFumeTuning, setDraftFumeTuning] = useState<FumeTuning>(fumeTuning);
+    const [draftTiltTuning, setDraftTiltTuning] = useState<TiltTuning>(tiltTuning);
+    const [activeEditSection, setActiveEditSection] = useState<VisPlaygroundEditSection>('common');
     const fontListRef = React.useRef<HTMLDivElement>(null);
     const fontVirtualListRef = useListRef(null);
     const fontUploadInputRef = React.useRef<HTMLInputElement>(null);
+    const isDraggingSlider = useRef(false);
+    const pendingCommitRef = useRef<(() => void) | null>(null);
 
     const audioBands = useMemo<AudioBands>(() => ({
         bass,
@@ -278,7 +297,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         treble,
     }), [bass, lowMid, mid, treble, vocal]);
 
-    const normalizedFontScale = clampFontScale(fontScale);
+    const normalizedFontScale = clampFontScale(draftFontScale);
     const builtinFontOptions: PresetOption<Theme['fontStyle']>[] = useMemo(() => ([
         { value: 'sans', label: t('options.fontSans') || '无衬线' },
         { value: 'serif', label: t('options.fontSerif') || '衬线' },
@@ -291,16 +310,16 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         fontFamily: customFontFamily ?? undefined,
     }), [baseTheme, customFontFamily, fontStyle]);
     const resolvedPartitaTuning = useMemo<PartitaTuning>(() => {
-        const rawMin = clampPartitaStagger(partitaTuning.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
-        const rawMax = clampPartitaStagger(partitaTuning.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
+        const rawMin = clampPartitaStagger(draftPartitaTuning.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
+        const rawMax = clampPartitaStagger(draftPartitaTuning.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
 
         return {
-            showGuideLines: partitaTuning.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
-            useSemanticLayout: partitaTuning.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
+            showGuideLines: draftPartitaTuning.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
+            useSemanticLayout: draftPartitaTuning.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
             staggerMin: Math.min(rawMin, rawMax),
             staggerMax: Math.max(rawMin, rawMax),
         };
-    }, [partitaTuning]);
+    }, [draftPartitaTuning]);
     const resolvedFumeTuning = useMemo<FumeTuning>(() => ({
         hidePrintSymbols: draftFumeTuning.hidePrintSymbols,
         disableGeometricBackground: draftFumeTuning.disableGeometricBackground,
@@ -329,9 +348,14 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const canQueryLocalFonts = typeof window !== 'undefined' && Boolean((window as QueryLocalFontsWindow).queryLocalFonts);
     const shouldShowUploadedFontFallback = !canQueryLocalFonts && isMobileBrowser() && Boolean(onUploadCustomFont);
 
-    useEffect(() => {
-        setDraftFumeTuning(fumeTuning);
-    }, [fumeTuning]);
+    useEffect(() => { setDraftBackgroundOpacity(backgroundOpacity); }, [backgroundOpacity]);
+    useEffect(() => { setDraftVisualizerOpacity(visualizerOpacity); }, [visualizerOpacity]);
+    useEffect(() => { setDraftSubtitleOverlayOpacity(subtitleOverlayOpacity); }, [subtitleOverlayOpacity]);
+    useEffect(() => { setDraftFontScale(fontScale); }, [fontScale]);
+    useEffect(() => { setDraftClassicTuning(classicTuning); }, [classicTuning]);
+    useEffect(() => { setDraftPartitaTuning(partitaTuning); }, [partitaTuning]);
+    useEffect(() => { setDraftFumeTuning(fumeTuning); }, [fumeTuning]);
+    useEffect(() => { setDraftTiltTuning(tiltTuning); }, [tiltTuning]);
 
     useEffect(() => {
         let frameId = 0;
@@ -366,11 +390,14 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
     const visualizerEntry = getVisualizerRegistryEntry(visualizerMode);
     const modeLabel = getVisualizerModeLabel(visualizerMode, t);
+    const hotspotLabels = useMemo<Record<Exclude<VisPlaygroundEditSection, 'common'>, string>>(() => ({
+        background: t('options.previewBackgroundHotspot') || '背景设置',
+        visualizer: t('options.previewVisualizerHotspot') || '歌词动画设置',
+        subtitle: t('options.previewSubtitleHotspot') || '字幕设置',
+    }), [t]);
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-zinc-950/88';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
-    const tabSwitcherBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
-    const activeTabBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
-    const controlCardBg = isDaylight ? 'rgba(255,255,255,0.56)' : 'rgba(255,255,255,0.04)';
+    const controlCardBg = colorWithAlpha(previewTheme.backgroundColor, isDaylight ? 0.42 : 0.52);
     const overlayBackground = isDaylight ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.65)';
     const rangeInputClass = [
         'w-full h-1.5 rounded-full appearance-none cursor-pointer',
@@ -381,11 +408,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             : 'bg-white/10 [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:bg-white',
     ].join(' ');
 
-    const handleReset = () => {
-        onCustomFontChange(null);
-        onFontStyleChange('sans');
-        onFontScaleChange(1);
+    const handleResetVisualizerTuning = () => {
         visualizerEntry.resetSettings?.({
+            resetClassicTuning: onResetClassicTuning,
             resetPartitaTuning: onResetPartitaTuning,
             resetFumeTuning: onResetFumeTuning,
             resetCappellaTuning: onResetCappellaTuning,
@@ -545,10 +570,115 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         handleSelectBuiltinFont(next);
     };
 
+    /** Update draft only during slider drag; commit immediately for buttons. */
     const handleFumeTuningChange = (patch: Partial<FumeTuning>) => {
         setDraftFumeTuning(previous => ({ ...previous, ...patch }));
-        onFumeTuningChange?.(patch);
+        if (!isDraggingSlider.current) {
+            onFumeTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onFumeTuningChange?.(patch);
+        }
     };
+
+    const handleBackgroundOpacityDraft = (opacity: number) => {
+        setDraftBackgroundOpacity(opacity);
+        if (!isDraggingSlider.current) {
+            onBackgroundOpacityChange?.(opacity);
+        } else {
+            pendingCommitRef.current = () => onBackgroundOpacityChange?.(opacity);
+        }
+    };
+
+    const handleVisualizerOpacityDraft = (opacity: number) => {
+        setDraftVisualizerOpacity(opacity);
+        if (!isDraggingSlider.current) {
+            onVisualizerOpacityChange?.(opacity);
+        } else {
+            pendingCommitRef.current = () => onVisualizerOpacityChange?.(opacity);
+        }
+    };
+
+    const handleSubtitleOverlayOpacityDraft = (opacity: number) => {
+        setDraftSubtitleOverlayOpacity(opacity);
+        if (!isDraggingSlider.current) {
+            onSubtitleOverlayOpacityChange?.(opacity);
+        } else {
+            pendingCommitRef.current = () => onSubtitleOverlayOpacityChange?.(opacity);
+        }
+    };
+
+    const handleFontScaleDraft = (scale: number) => {
+        setDraftFontScale(scale);
+        if (!isDraggingSlider.current) {
+            onFontScaleChange(scale);
+        } else {
+            pendingCommitRef.current = () => onFontScaleChange(scale);
+        }
+    };
+
+    const handleClassicTuningDraft = (patch: Partial<ClassicTuning>) => {
+        setDraftClassicTuning(prev => ({ ...prev, ...patch }));
+        if (!isDraggingSlider.current) {
+            onClassicTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onClassicTuningChange?.(patch);
+        }
+    };
+
+    const handlePartitaTuningDraft = (patch: Partial<PartitaTuning>) => {
+        const nextTuning = resolvePartitaTuningPatch(draftPartitaTuning, patch);
+        setDraftPartitaTuning(nextTuning);
+        if (!isDraggingSlider.current) {
+            onPartitaTuningChange?.(nextTuning);
+        } else {
+            pendingCommitRef.current = () => onPartitaTuningChange?.(nextTuning);
+        }
+    };
+
+    const handleTiltTuningDraft = (patch: Partial<TiltTuning>) => {
+        setDraftTiltTuning(prev => ({ ...prev, ...patch }));
+        if (!isDraggingSlider.current) {
+            onTiltTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onTiltTuningChange?.(patch);
+        }
+    };
+
+    const handleResetBackgroundSettings = () => {
+        setDraftBackgroundOpacity(0.75);
+        onBackgroundOpacityChange?.(0.75);
+        onToggleCoverColorBg?.(false);
+        onToggleDisableVisualizerVignette?.(false);
+        onToggleDisableVisualizerGeometricBackground?.(false);
+    };
+
+    const handleResetSubtitleSettings = () => {
+        setDraftSubtitleOverlayOpacity(0.6);
+        onToggleHideTranslationSubtitle?.(false);
+        onSubtitleOverlayOpacityChange?.(0.6);
+    };
+
+    const handleResetCommonSettings = () => {
+        setDraftFontScale(1);
+        setDraftVisualizerOpacity(1);
+        onCustomFontChange(null);
+        onFontStyleChange('sans');
+        onFontScaleChange(1);
+        onVisualizerOpacityChange?.(1);
+    };
+
+    /** Mark slider drag start so onChange only updates local draft. */
+    const handleSliderPointerDown = useCallback(() => {
+        isDraggingSlider.current = true;
+    }, []);
+
+    /** Commit pending draft value to persistent store on slider release. */
+    const handleSliderCommit = useCallback(() => {
+        if (!isDraggingSlider.current) return;
+        isDraggingSlider.current = false;
+        pendingCommitRef.current?.();
+        pendingCommitRef.current = null;
+    }, []);
 
     return (
         <motion.div
@@ -584,15 +714,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                             </div>
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        onClick={handleReset}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm transition-colors hover:bg-white/10"
-                        style={{ color: 'var(--text-primary)' }}
-                    >
-                        <RotateCcw size={14} />
-                        <span>{t('ui.default') || '默认'}</span>
-                    </button>
                 </div>
 
                 <div className="grid min-h-0 flex-1 gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.25fr)_360px]">
@@ -618,99 +739,86 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 showText
                                 staticMode={staticMode}
                                 isPreviewMode
-                                backgroundOpacity={backgroundOpacity}
+                                backgroundOpacity={draftBackgroundOpacity}
+                                visualizerOpacity={draftVisualizerOpacity}
+                                coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
+                                useCoverColorBg={useCoverColorBg}
+                                transparentBackground={transparentPlayerBackground}
+                                disableVignette={disableVisualizerVignette}
+                                disableGeometricBackground={disableVisualizerGeometricBackground}
                                 lyricsFontScale={normalizedFontScale}
+                                subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
+                                hideTranslationSubtitle={hideTranslationSubtitle}
+                                classicTuning={draftClassicTuning}
                                 cadenzaTuning={cadenzaTuning}
                                 partitaTuning={resolvedPartitaTuning}
                                 fumeTuning={resolvedFumeTuning}
                                 cappellaTuning={cappellaTuning}
-                                tiltTuning={tiltTuning}
+                                tiltTuning={draftTiltTuning}
                                 cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                                 seed={getVisualizerScopedSeed(visualizerMode, 'vis-playground')}
                             />
                         </div>
+                        <VisPlaygroundPreviewHotspots
+                            activeSection={activeEditSection}
+                            onSectionChange={setActiveEditSection}
+                            theme={previewTheme}
+                            labels={hotspotLabels}
+                        />
                     </div>
 
-                    <div className="min-h-0 flex flex-col gap-4">
-                        <div className={`inline-flex w-fit items-center gap-1 rounded-full p-1 ${tabSwitcherBg}`}>
-                            <div className={`rounded-full px-3 py-1.5 text-sm ${activeTabBg}`} style={{ color: 'var(--text-primary)' }}>
-                                {t('options.fontFamily') || '字体'}
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-4">
-                            <div
-                                className="rounded-[24px] border border-white/10 p-4 space-y-4"
-                                style={{ backgroundColor: controlCardBg }}
-                            >
-                                <div className="space-y-1">
-                                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.lyricsStyleSettings') || '歌词样式'}
-                                    </div>
-                                    <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.lyricsStyleSettingsDesc') || '字体、字号和当前渲染器附加参数'}
-                                    </div>
-                                </div>
-
-                                <PresetGroup
-                                    label={t('options.fontFamily') || '字体'}
-                                    value={customFontFamily ? 'custom' : fontStyle}
-                                    options={fontStyleOptions}
-                                    onChange={handleSelectFontStyle}
-                                    isDaylight={isDaylight}
-                                    isOptionActive={(option) => option.value === (customFontFamily ? 'custom' : fontStyle)}
-                                />
-
-                                <PresetGroup
-                                    label={t('options.fontSize') || '字号'}
-                                    value={normalizedFontScale}
-                                    options={FONT_SCALE_OPTIONS}
-                                    onChange={onFontScaleChange}
-                                    isDaylight={isDaylight}
-                                />
-
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                                        <span>{t('options.fontSize') || '字号'}</span>
-                                        <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
-                                            {Math.round(normalizedFontScale * 100)}%
-                                        </span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0.85"
-                                        max="1.4"
-                                        step="0.05"
-                                        value={normalizedFontScale}
-                                        onChange={(event) => onFontScaleChange(parseFloat(event.target.value))}
-                                        className={rangeInputClass}
-                                    />
-                                </div>
-                            </div>
-
-                            {visualizerEntry.renderSettingsPanel?.({
-                                t,
-                                isDaylight,
-                                controlCardBg,
-                                rangeInputClass,
-                                partitaTuning: resolvedPartitaTuning,
-                                onPartitaTuningChange,
-                                fumeTuning: resolvedFumeTuning,
-                                onFumeTuningChange: handleFumeTuningChange,
-                                cappellaTuning,
-                                cappellaCustomEmojiImages,
-                                onCappellaTuningChange,
-                                cappellaCustomEmojiCount: cappellaCustomEmojiImages.length,
-                                hasCappellaCustomEmojiPack: cappellaCustomEmojiImages.length > 0,
-                                isCappellaCustomEmojiPackLoading: isLoadingCappellaCustomEmojiPack,
-                                onImportCappellaCustomEmojiPack,
-                                onClearCappellaCustomEmojiPack,
-                                tiltTuning,
-                                onTiltTuningChange,
-                            })}
-
-                        </div>
-                    </div>
+                    <VisPlaygroundSettingsPanel
+                        activeSection={activeEditSection}
+                        onSectionChange={setActiveEditSection}
+                        t={t}
+                        isDaylight={isDaylight}
+                        theme={previewTheme}
+                        visualizerMode={visualizerMode}
+                        visualizerEntry={visualizerEntry}
+                        onVisualizerModeChange={onVisualizerModeChange}
+                        onResetVisualizerTuning={handleResetVisualizerTuning}
+                        controlCardBg={controlCardBg}
+                        rangeInputClass={rangeInputClass}
+                        backgroundOpacity={draftBackgroundOpacity}
+                        onBackgroundOpacityChange={handleBackgroundOpacityDraft}
+                        visualizerOpacity={draftVisualizerOpacity}
+                        onVisualizerOpacityChange={handleVisualizerOpacityDraft}
+                        useCoverColorBg={useCoverColorBg}
+                        onToggleCoverColorBg={onToggleCoverColorBg}
+                        disableVisualizerVignette={disableVisualizerVignette}
+                        onToggleDisableVisualizerVignette={onToggleDisableVisualizerVignette}
+                        disableVisualizerGeometricBackground={disableVisualizerGeometricBackground}
+                        onToggleDisableVisualizerGeometricBackground={onToggleDisableVisualizerGeometricBackground}
+                        onResetBackgroundSettings={handleResetBackgroundSettings}
+                        fontStyleValue={customFontFamily ? 'custom' : fontStyle}
+                        fontStyleOptions={fontStyleOptions}
+                        onFontStyleChange={handleSelectFontStyle}
+                        fontScale={normalizedFontScale}
+                        fontScaleOptions={FONT_SCALE_OPTIONS}
+                        onFontScaleChange={handleFontScaleDraft}
+                        onResetCommonSettings={handleResetCommonSettings}
+                        classicTuning={draftClassicTuning}
+                        onClassicTuningChange={handleClassicTuningDraft}
+                        partitaTuning={resolvedPartitaTuning}
+                        onPartitaTuningChange={handlePartitaTuningDraft}
+                        fumeTuning={resolvedFumeTuning}
+                        onFumeTuningChange={handleFumeTuningChange}
+                        cappellaTuning={cappellaTuning}
+                        cappellaCustomEmojiImages={cappellaCustomEmojiImages}
+                        onCappellaTuningChange={onCappellaTuningChange}
+                        isLoadingCappellaCustomEmojiPack={isLoadingCappellaCustomEmojiPack}
+                        onImportCappellaCustomEmojiPack={onImportCappellaCustomEmojiPack}
+                        onClearCappellaCustomEmojiPack={onClearCappellaCustomEmojiPack}
+                        tiltTuning={draftTiltTuning}
+                        onTiltTuningChange={handleTiltTuningDraft}
+                        hideTranslationSubtitle={hideTranslationSubtitle}
+                        onToggleHideTranslationSubtitle={onToggleHideTranslationSubtitle}
+                        subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
+                        onSubtitleOverlayOpacityChange={handleSubtitleOverlayOpacityDraft}
+                        onResetSubtitleSettings={handleResetSubtitleSettings}
+                        onSliderPointerDown={handleSliderPointerDown}
+                        onSliderCommit={handleSliderCommit}
+                    />
                 </div>
 
                 {isFontPickerOpen && (

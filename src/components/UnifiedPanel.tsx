@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, Radio, Cloud, Star } from 'lucide-react';
+import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, NeteasePlaylist, ThemeMode, VisualizerMode } from '../types';
 import CoverTab from './panelTab/CoverTab';
@@ -10,10 +10,12 @@ import AccountTab from './panelTab/AccountTab';
 import LocalTab from './panelTab/LocalTab';
 import FmTab from './panelTab/FmTab';
 import NaviTab from './panelTab/NaviTab';
+import OnlineLyricsTab from './panelTab/OnlineLyricsTab';
 import PlaylistSelectionDialog from './shared/PlaylistSelectionDialog';
 import TextInputDialog from './shared/TextInputDialog';
+import type { OnlineLyricsState } from '../types';
 
-export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi';
+export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics';
 
 type UnifiedPanelPlaybackProps = {
     isOpen: boolean;
@@ -47,6 +49,11 @@ type UnifiedPanelPlaybackProps = {
     onMatchOnline: () => void;
     onUpdateLocalLyrics: (content: string, isTranslation: boolean) => void;
     onChangeLyricsSource: (source: 'local' | 'embedded' | 'online') => void;
+    onlineLyricsState: OnlineLyricsState | null;
+    onImportOnlineLyrics: (content: string, fileName: string) => void;
+    onChangeOnlineLyricsSource: (source: 'online' | 'imported') => void;
+    onMatchOnlineLyrics: () => void;
+    onClearOnlineLyricsState: () => void;
     replayGainMode: ReplayGainMode;
     onChangeReplayGainMode: (mode: ReplayGainMode) => void;
     isFmMode: boolean;
@@ -151,6 +158,11 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         onMatchOnline,
         onUpdateLocalLyrics,
         onChangeLyricsSource,
+        onlineLyricsState,
+        onImportOnlineLyrics,
+        onChangeOnlineLyricsSource,
+        onMatchOnlineLyrics,
+        onClearOnlineLyricsState,
         replayGainMode,
         onChangeReplayGainMode,
         isFmMode,
@@ -291,6 +303,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         tabs.splice(1, 0, { id: 'local' as PanelTab, label: t('localMusic.folder'), icon: FileAudio });
     } else if (isNavidrome) {
         tabs.splice(1, 0, { id: 'navi' as PanelTab, label: 'Navidrome', icon: Cloud });
+    } else if (isNetease) {
+        tabs.splice(1, 0, { id: 'onlineLyrics' as PanelTab, label: t('localMusic.lyrics'), icon: FileText });
     }
 
     // Theme Helper
@@ -476,7 +490,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
                                 {/* Tab Content */}
                                 <div
-                                    className={`flex-1 pr-1 ${currentTab === 'cover' ? '' : 'min-h-[120px]'}`}
+                                    className={`flex-1 pr-1 ${currentTab === 'cover' ? '' : 'min-h-[70px]'}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     {currentTab === 'cover' && (
@@ -608,6 +622,16 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             currentSong={currentSong as any}
                                             hasLyrics={hasLyrics}
                                             onMatchOnline={onMatchOnline}
+                                            isDaylight={isDaylight}
+                                        />
+                                    )}
+                                    {currentTab === 'onlineLyrics' && isNetease && currentSong && (
+                                        <OnlineLyricsTab
+                                            onlineLyricsState={onlineLyricsState}
+                                            onImportLyrics={onImportOnlineLyrics}
+                                            onChangeLyricsSource={onChangeOnlineLyricsSource}
+                                            onMatchOnlineLyrics={onMatchOnlineLyrics}
+                                            onClearOnlineLyricsState={onClearOnlineLyricsState}
                                             isDaylight={isDaylight}
                                         />
                                     )}

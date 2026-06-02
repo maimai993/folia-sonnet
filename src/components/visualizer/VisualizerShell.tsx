@@ -17,6 +17,7 @@ type VisualizerShellSharedProps = Pick<
     | 'useCoverColorBg'
     | 'seed'
     | 'backgroundOpacity'
+    | 'visualizerOpacity'
     | 'transparentBackground'
     | 'disableGeometricBackground'
     | 'disableVignette'
@@ -34,6 +35,7 @@ interface VisualizerShellProps {
     useCoverColorBg?: boolean;
     seed?: string | number;
     backgroundOpacity?: number;
+    visualizerOpacity?: number;
     transparentBackground?: boolean;
     disableVignette?: boolean;
     staticMode?: boolean;
@@ -53,6 +55,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     useCoverColorBg = false,
     seed,
     backgroundOpacity = 0.75,
+    visualizerOpacity = 1,
     transparentBackground = false,
     disableVignette = false,
     staticMode = false,
@@ -68,6 +71,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     const resolvedUseCoverColorBg = sharedProps?.useCoverColorBg ?? useCoverColorBg;
     const resolvedSeed = sharedProps?.seed ?? seed;
     const resolvedBackgroundOpacity = sharedProps?.backgroundOpacity ?? backgroundOpacity;
+    const resolvedVisualizerOpacity = sharedProps?.visualizerOpacity ?? visualizerOpacity;
     const resolvedTransparentBackground = sharedProps?.transparentBackground ?? transparentBackground;
     const resolvedDisableGeometricBackground = sharedProps?.disableGeometricBackground ?? disableGeometricBackground;
     const resolvedDisableVignette = sharedProps?.disableVignette ?? disableVignette;
@@ -90,6 +94,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
             style={{
                 backgroundColor: 'transparent',
                 fontFamily: resolveThemeFontStack(theme),
+                opacity: resolvedVisualizerOpacity,
             }}
             onMouseMove={(event) => {
                 // Back button is intentionally hidden most of the time.

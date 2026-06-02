@@ -103,7 +103,7 @@ export default function App() {
     // UI State
     const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
-    const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi'>('cover');
+    const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>('cover');
     const [isPlayerChromeHidden, setIsPlayerChromeHidden] = useState(() => {
         const saved = localStorage.getItem(PLAYER_CHROME_HIDDEN_STORAGE_KEY);
         return saved === 'true';
@@ -213,8 +213,11 @@ export default function App() {
         openPlayerOnLaunch,
         enableMediaCache,
         backgroundOpacity,
+        subtitleOverlayOpacity,
+        visualizerOpacity,
         isDaylight,
         visualizerMode,
+        classicTuning,
         cadenzaTuning,
         partitaTuning,
         fumeTuning,
@@ -666,6 +669,8 @@ export default function App() {
         setShowLyricMatchModal,
         showNaviLyricMatchModal,
         setShowNaviLyricMatchModal,
+        showOnlineLyricMatchModal,
+        setShowOnlineLyricMatchModal,
         loadLocalSongs,
         loadLocalPlaylists,
         onRefreshLocalSongs,
@@ -684,8 +689,13 @@ export default function App() {
         handleUpdateLocalLyrics,
         handleChangeLyricsSource,
         handleManualMatchOnline,
+        handleImportOnlineLyrics,
+        handleChangeOnlineLyricsSource,
+        handleMatchOnlineLyrics,
         handleLyricMatchComplete,
         handleNaviLyricMatchComplete,
+        handleOnlineLyricMatchComplete,
+        handleClearOnlineLyricsState,
         handleHomeMatchSong,
         handleLike,
     } = useLibraryPlaybackController({
@@ -1343,6 +1353,7 @@ export default function App() {
         applyCustomTheme,
         applyDefaultTheme,
         backgroundOpacity,
+        visualizerOpacity,
         bgMode,
         cadenzaTuning,
         cappellaCustomEmojiImages,
@@ -1494,6 +1505,11 @@ export default function App() {
         handleManualMatchOnline,
         handleUpdateLocalLyrics,
         handleChangeLyricsSource,
+        onlineLyricsState: currentSong?.onlineLyricsState ?? null,
+        handleImportOnlineLyrics,
+        handleChangeOnlineLyricsSource,
+        handleMatchOnlineLyrics,
+        handleClearOnlineLyricsState,
         replayGainMode,
         handleChangeReplayGainMode,
         isFmMode,
@@ -1558,11 +1574,14 @@ export default function App() {
         handleAlbumSelect,
         handleArtistSelect,
         handleBgModeChange,
+        handleChangeOnlineLyricsSource,
         handleChangeLyricsSource,
         handleClearCache,
+        handleImportOnlineLyrics,
         handleLike,
         handleLogout,
         handleManualMatchOnline,
+        handleMatchOnlineLyrics,
         handleNextTrack,
         handlePreviewVolume,
         handlePrevTrack,
@@ -1754,11 +1773,14 @@ export default function App() {
         isDaylight,
         showLyricMatchModal,
         showNaviLyricMatchModal,
+        showOnlineLyricMatchModal,
         currentSong,
         setShowLyricMatchModal,
         setShowNaviLyricMatchModal,
+        setShowOnlineLyricMatchModal,
         handleLyricMatchComplete,
         handleNaviLyricMatchComplete,
+        handleOnlineLyricMatchComplete,
         pendingUnavailableReplacement,
         setPendingUnavailableReplacement,
         handleUnavailableReplacementConfirm,
@@ -1767,15 +1789,18 @@ export default function App() {
         currentSong,
         handleLyricMatchComplete,
         handleNaviLyricMatchComplete,
+        handleOnlineLyricMatchComplete,
         handleUnavailableReplacementConfirm,
         isDaylight,
         pendingUnavailableReplacement,
         setPendingUnavailableReplacement,
         setShowLyricMatchModal,
         setShowNaviLyricMatchModal,
+        setShowOnlineLyricMatchModal,
         settingsDialog,
         showLyricMatchModal,
         showNaviLyricMatchModal,
+        showOnlineLyricMatchModal,
         statusMsg,
     ]);
 
@@ -1956,12 +1981,15 @@ export default function App() {
                     staticMode={staticMode}
                     paused={shouldPauseVisualizerBackground}
                     backgroundOpacity={backgroundOpacity}
+                    visualizerOpacity={visualizerOpacity}
                     transparentBackground={currentView === 'player' && transparentPlayerBackground && !isSettingsModalOpen}
                     disableGeometricBackground={disableVisualizerGeometricBackground || isSettingsSubviewOpen}
                     disableVignette={disableVisualizerVignette}
                     lyricsFontScale={lyricsFontScale}
+                    subtitleOverlayOpacity={subtitleOverlayOpacity}
                     isPlayerChromeHidden={isPlayerChromeHidden}
                     hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
+                    classicTuning={classicTuning}
                     cadenzaTuning={cadenzaTuning}
                     partitaTuning={partitaTuning}
                     fumeTuning={fumeTuning}

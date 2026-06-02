@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type React from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type Theme, type TiltTuning, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type Theme, type TiltTuning, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, MAX_CAPPELLA_CUSTOM_EMOJI_IMAGES, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
@@ -15,6 +15,8 @@ export type AudioQuality = 'exhigh' | 'lossless' | 'hires';
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
+export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
+export const VISUALIZER_OPACITY_STORAGE_KEY = 'visualizer_opacity';
 
 const getStoredBoolean = (key: string, fallback: boolean) => {
     if (typeof window === 'undefined') {
@@ -68,6 +70,26 @@ const readStoredBackgroundOpacity = () => {
     return Number.isFinite(parsed) ? parsed : 0.75;
 };
 
+const readStoredSubtitleOverlayOpacity = () => {
+    if (typeof window === 'undefined') {
+        return 0.6;
+    }
+
+    const saved = localStorage.getItem(SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY);
+    const parsed = saved ? parseFloat(saved) : 0.6;
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0.2, parsed)) : 0.6;
+};
+
+const readStoredVisualizerOpacity = () => {
+    if (typeof window === 'undefined') {
+        return 1;
+    }
+
+    const saved = localStorage.getItem(VISUALIZER_OPACITY_STORAGE_KEY);
+    const parsed = saved ? parseFloat(saved) : 1;
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0.2, parsed)) : 1;
+};
+
 const readStoredVisualizerMode = (): VisualizerMode => {
     if (typeof window === 'undefined') {
         return DEFAULT_VISUALIZER_MODE;
@@ -79,6 +101,36 @@ const readStoredVisualizerMode = (): VisualizerMode => {
     }
 
     return hasVisualizerMode(saved) ? saved : DEFAULT_VISUALIZER_MODE;
+};
+
+const clampClassicBreathingFloatMultiplier = (value: number, fallback: number) => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(2, Math.max(0, value));
+};
+
+const readStoredClassicTuning = (): ClassicTuning => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_CLASSIC_TUNING;
+    }
+
+    const saved = localStorage.getItem('classic_tuning');
+    if (!saved) return DEFAULT_CLASSIC_TUNING;
+
+    try {
+        const parsed = JSON.parse(saved) as Partial<ClassicTuning>;
+        return {
+            enableWordRotation: parsed.enableWordRotation ?? DEFAULT_CLASSIC_TUNING.enableWordRotation,
+            breathingFloatMultiplier: clampClassicBreathingFloatMultiplier(
+                parsed.breathingFloatMultiplier ?? DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
+                DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
+            ),
+        };
+    } catch {
+        return DEFAULT_CLASSIC_TUNING;
+    }
 };
 
 const readStoredCadenzaTuning = (): CadenzaTuning => {
@@ -384,8 +436,11 @@ type SettingsUiState = {
     openPlayerOnLaunch: boolean;
     enableMediaCache: boolean;
     backgroundOpacity: number;
+    subtitleOverlayOpacity: number;
+    visualizerOpacity: number;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
+    classicTuning: ClassicTuning;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
     fumeTuning: FumeTuning;
@@ -430,8 +485,12 @@ type SettingsUiState = {
     handleToggleOpenPlayerOnLaunch: (enable: boolean) => void;
     handleToggleMediaCache: (enable: boolean) => void;
     handleSetBackgroundOpacity: (opacity: number) => void;
+    handleSetSubtitleOverlayOpacity: (opacity: number) => void;
+    handleSetVisualizerOpacity: (opacity: number) => void;
     setDaylightPreference: (enabled: boolean) => void;
     handleSetVisualizerMode: (mode: VisualizerMode) => void;
+    handleSetClassicTuning: (patch: Partial<ClassicTuning>) => void;
+    handleResetClassicTuning: () => void;
     handleSetCadenzaTuning: (patch: Partial<CadenzaTuning>) => void;
     handleResetCadenzaTuning: () => void;
     handleSetPartitaTuning: (patch: Partial<PartitaTuning>) => void;
@@ -479,8 +538,11 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
     enableMediaCache: getStoredBoolean('enable_media_cache', false),
     backgroundOpacity: readStoredBackgroundOpacity(),
+    subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
+    visualizerOpacity: readStoredVisualizerOpacity(),
     isDaylight: getStoredBoolean('default_theme_daylight', false),
     visualizerMode: readStoredVisualizerMode(),
+    classicTuning: readStoredClassicTuning(),
     cadenzaTuning: readStoredCadenzaTuning(),
     partitaTuning: readStoredPartitaTuning(),
     fumeTuning: readStoredFumeTuning(),
@@ -665,6 +727,20 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ backgroundOpacity: opacity });
     },
+    handleSetSubtitleOverlayOpacity: (opacity) => {
+        const next = Math.min(1, Math.max(0.2, opacity));
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY, String(next));
+        }
+        set({ subtitleOverlayOpacity: next });
+    },
+    handleSetVisualizerOpacity: (opacity) => {
+        const next = Math.min(1, Math.max(0.2, opacity));
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(VISUALIZER_OPACITY_STORAGE_KEY, String(next));
+        }
+        set({ visualizerOpacity: next });
+    },
     setDaylightPreference: (enabled) => {
         setStoredBoolean('default_theme_daylight', enabled);
         set({ isDaylight: enabled });
@@ -679,6 +755,27 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             type: 'info',
             text: `已切换到${entry.labelFallback}歌词`,
         });
+    },
+    handleSetClassicTuning: (patch) => {
+        const prev = get().classicTuning;
+        const next = {
+            enableWordRotation: patch.enableWordRotation ?? prev.enableWordRotation,
+            breathingFloatMultiplier: clampClassicBreathingFloatMultiplier(
+                patch.breathingFloatMultiplier ?? prev.breathingFloatMultiplier,
+                prev.breathingFloatMultiplier,
+            ),
+        };
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('classic_tuning', JSON.stringify(next));
+        }
+        set({ classicTuning: next });
+    },
+    handleResetClassicTuning: () => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('classic_tuning', JSON.stringify(DEFAULT_CLASSIC_TUNING));
+        }
+        set({ classicTuning: DEFAULT_CLASSIC_TUNING });
+        notify(get, { type: 'info', text: '流光参数已重置' });
     },
     handleSetCadenzaTuning: (patch) => {
         const next = { ...get().cadenzaTuning, ...patch, beamIntensity: 0 };
@@ -987,8 +1084,11 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     openPlayerOnLaunch: state.openPlayerOnLaunch,
     enableMediaCache: state.enableMediaCache,
     backgroundOpacity: state.backgroundOpacity,
+    subtitleOverlayOpacity: state.subtitleOverlayOpacity,
+    visualizerOpacity: state.visualizerOpacity,
     isDaylight: state.isDaylight,
     visualizerMode: state.visualizerMode,
+    classicTuning: state.classicTuning,
     cadenzaTuning: state.cadenzaTuning,
     partitaTuning: state.partitaTuning,
     fumeTuning: state.fumeTuning,
@@ -1021,8 +1121,12 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
     handleToggleMediaCache: state.handleToggleMediaCache,
     handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
+    handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
+    handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
     setDaylightPreference: state.setDaylightPreference,
     handleSetVisualizerMode: state.handleSetVisualizerMode,
+    handleSetClassicTuning: state.handleSetClassicTuning,
+    handleResetClassicTuning: state.handleResetClassicTuning,
     handleSetCadenzaTuning: state.handleSetCadenzaTuning,
     handleResetCadenzaTuning: state.handleResetCadenzaTuning,
     handleSetPartitaTuning: state.handleSetPartitaTuning,

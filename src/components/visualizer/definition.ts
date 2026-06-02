@@ -5,6 +5,7 @@ import {
     type CappellaEmojiImage,
     type CappellaTuning,
     type CadenzaTuning,
+    type ClassicTuning,
     type FumeTuning,
     type Line,
     type PartitaTuning,
@@ -15,7 +16,7 @@ import {
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
-export type VisualizerTuningKind = 'none' | 'cadenza' | 'partita' | 'fume' | 'cappella' | 'tilt';
+export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'cappella' | 'tilt';
 
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
@@ -31,15 +32,18 @@ export interface VisualizerSharedProps {
     seed?: string | number;
     staticMode?: boolean;
     backgroundOpacity?: number;
+    visualizerOpacity?: number;
     transparentBackground?: boolean;
     disableGeometricBackground?: boolean;
     disableVignette?: boolean;
     lyricsFontScale?: number;
+    subtitleOverlayOpacity?: number;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
     paused?: boolean;
     onBack?: () => void;
     isPreviewMode?: boolean;
+    classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
@@ -51,8 +55,11 @@ export interface VisualizerSharedProps {
 export interface VisualizerSettingsPanelProps {
     t: (key: string) => string;
     isDaylight: boolean;
+    theme: Theme;
     controlCardBg: string;
     rangeInputClass: string;
+    classicTuning?: ClassicTuning;
+    onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
     partitaTuning?: PartitaTuning;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     fumeTuning?: FumeTuning;
@@ -67,9 +74,14 @@ export interface VisualizerSettingsPanelProps {
     onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
     tiltTuning?: TiltTuning;
     onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
+    /** Mark slider drag start so onChange only updates draft. */
+    onSliderPointerDown?: () => void;
+    /** Commit draft values to persistent store on slider release. */
+    onSliderCommit?: () => void;
 }
 
 export interface VisualizerSettingsResetProps {
+    resetClassicTuning?: () => void;
     resetPartitaTuning?: () => void;
     resetFumeTuning?: () => void;
     resetCappellaTuning?: () => void;

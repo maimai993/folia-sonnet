@@ -14,6 +14,7 @@ import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } fro
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
+import { loadOnlineLyricsState, resolveOnlineLyrics } from '../utils/onlineLyricsState';
 import type { LyricData, LocalSong, SongResult, StatusMessage } from '../types';
 import type { NavidromeSong } from '../types/navidrome';
 
@@ -210,6 +211,11 @@ export function useSessionRestoreController({
                         return;
                     }
 
+                    const onlineLyricsState = await loadOnlineLyricsState(lastSong);
+                    if (onlineLyricsState) {
+                        setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, onlineLyricsState } : prev);
+                    }
+
                     const cachedAudio = await getCachedAudioBlob(getOnlineSongCacheKey('audio', lastSong));
                     if (cachedAudio) {
                         const blobUrl = URL.createObjectURL(cachedAudio);
@@ -235,18 +241,30 @@ export function useSessionRestoreController({
                         getOnlineSongCacheKey('lyric', lastSong),
                         migrateLyricDataRenderHints,
                     );
-                    if (cachedLyrics) {
-                        const cachedText = cachedLyrics.lines.map(line => line.fullText).join('\n');
-                        setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, isPureMusic: isPureMusicLyricText(cachedText) } : prev);
-                        setLyrics(cachedLyrics);
+                    const restoredPreferredLyrics = resolveOnlineLyrics(onlineLyricsState, cachedLyrics);
+                    if (restoredPreferredLyrics) {
+                        const cachedText = restoredPreferredLyrics.lines.map(line => line.fullText).join('\n');
+                        setCurrentSong(prev => prev?.id === lastSong.id ? {
+                            ...prev,
+                            isPureMusic: onlineLyricsState?.lyricsSource === 'online' && typeof onlineLyricsState.matchedIsPureMusic === 'boolean'
+                                ? onlineLyricsState.matchedIsPureMusic
+                                : isPureMusicLyricText(cachedText),
+                        } : prev);
+                        setLyrics(restoredPreferredLyrics);
                     } else {
                         const lyricRes = isCloudSong(lastSong) && userId
                             ? await neteaseApi.getCloudLyric(userId, lastSong.id)
                             : await neteaseApi.getLyric(lastSong.id);
                         const processed = await processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes));
 
-                        setCurrentSong(prev => prev?.id === lastSong.id ? { ...prev, isPureMusic: processed.isPureMusic } : prev);
-                        setLyrics(processed.lyrics);
+                        const resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, processed.lyrics);
+                        setCurrentSong(prev => prev?.id === lastSong.id ? {
+                            ...prev,
+                            isPureMusic: onlineLyricsState?.lyricsSource === 'online' && typeof onlineLyricsState.matchedIsPureMusic === 'boolean'
+                                ? onlineLyricsState.matchedIsPureMusic
+                                : processed.isPureMusic,
+                        } : prev);
+                        setLyrics(resolvedLyrics);
                     }
                 } catch (error) {
                     console.warn('Failed to restore audio/lyrics for last session', error);

@@ -1,5 +1,6 @@
 import { type Line, type VisualizerMode } from '../../types';
 import { getLineRenderEndTime } from '../../utils/lyrics/renderHints';
+import placeholderCoverUrl from '../../../assets/placeholder_cover.jpg';
 import { getVisualizerPreviewStartOffset } from './registry';
 
 const createCharacterWords = (text: string, startTime: number, endTime: number) => {
@@ -68,6 +69,7 @@ export const VIS_PLAYGROUND_PREVIEW_LINES: Line[] = [
 ];
 
 export const VIS_PLAYGROUND_PREVIEW_LOOP_DURATION = 14.4;
+export const VIS_PLAYGROUND_PREVIEW_COVER_URL = placeholderCoverUrl;
 
 export const getPreviewPlaceholderStartOffset = (mode: VisualizerMode, loopDuration: number) =>
     getVisualizerPreviewStartOffset(mode, loopDuration);

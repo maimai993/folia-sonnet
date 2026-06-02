@@ -41,6 +41,7 @@ let remoteControlWindow = null;
 let appTray = null;
 let latestRemoteControlSnapshot = null;
 let remoteControlAlwaysOnTop = false;
+let mainWindowAlwaysOnTop = false;
 let mainWindowClickThroughEnabled = false;
 let mainWindowClickThroughUnlockHover = false;
 let mainWindowSkipTaskbarEnabled = false;
@@ -61,6 +62,7 @@ const STAGE_API_PORT_SETTING_KEY = 'STAGE_API_PORT';
 const MINIMIZE_TO_TRAY_SETTING_KEY = 'MINIMIZE_TO_TRAY';
 const HIDE_TASKBAR_ICON_SETTING_KEY = 'HIDE_TASKBAR_ICON';
 const REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY = 'REMOTE_CONTROL_ALWAYS_ON_TOP';
+const MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY = 'MAIN_WINDOW_ALWAYS_ON_TOP';
 const TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY = 'TRANSPARENT_PLAYER_BACKGROUND';
 const DEFAULT_STAGE_API_PORT = 32107;
 const FOLIA_RELEASES_URL = 'https://github.com/chthollyphile/folia-major/releases';
@@ -166,12 +168,14 @@ function getPublicSettings() {
     [MINIMIZE_TO_TRAY_SETTING_KEY]: readStoredBoolean(MINIMIZE_TO_TRAY_SETTING_KEY, false),
     [HIDE_TASKBAR_ICON_SETTING_KEY]: readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false),
     [REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true),
+    [MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, false),
     [TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY]: readStoredBoolean(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, false),
   };
 }
 
 mainWindowSkipTaskbarEnabled = readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false);
 remoteControlAlwaysOnTop = readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true);
+mainWindowAlwaysOnTop = readStoredBoolean(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, false);
 
 const stageApi = createStageApi({
   app,
@@ -407,6 +411,28 @@ function applyRemoteControlAlwaysOnTop(win) {
     win.moveTop();
   }
   return remoteControlAlwaysOnTop;
+}
+
+function applyMainWindowAlwaysOnTop() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  mainWindow.setAlwaysOnTop(mainWindowAlwaysOnTop, 'screen-saver');
+  if (mainWindowAlwaysOnTop && typeof mainWindow.moveTop === 'function') {
+    mainWindow.moveTop();
+  }
+  return mainWindowAlwaysOnTop;
+}
+
+function setMainWindowAlwaysOnTop(enabled) {
+  mainWindowAlwaysOnTop = Boolean(enabled);
+  store.set(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, mainWindowAlwaysOnTop);
+  applyMainWindowAlwaysOnTop();
+  patchRemoteControlSnapshot({
+    mainWindowAlwaysOnTop,
+  });
+  return mainWindowAlwaysOnTop;
 }
 
 function refreshTrayMenu() {
@@ -1811,6 +1837,7 @@ function createWindow(options = {}) {
     autoHideMenuBar: true,
     icon: APP_ICON_PATH,
     skipTaskbar: mainWindowSkipTaskbarEnabled,
+    alwaysOnTop: mainWindowAlwaysOnTop,
     show: showImmediately,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -2191,6 +2218,26 @@ ipcMain.handle('window-set-click-through-unlock-hover', (event, active) => {
   return setMainWindowClickThroughUnlockHover(active);
 });
 
+ipcMain.handle('window-get-always-on-top', (event) => {
+  if (!isTrustedMainWindowContents(event.sender) && !isTrustedRemoteControlContents(event.sender)) {
+    return false;
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindowAlwaysOnTop = mainWindow.isAlwaysOnTop();
+  }
+
+  return mainWindowAlwaysOnTop;
+});
+
+ipcMain.handle('window-set-always-on-top', (event, enabled) => {
+  if (!isTrustedMainWindowContents(event.sender) && !isTrustedRemoteControlContents(event.sender)) {
+    return false;
+  }
+
+  return setMainWindowAlwaysOnTop(enabled);
+});
+
 ipcMain.handle('stage-get-status', () => {
   return stageApi.buildStageStatus();
 });
@@ -2284,6 +2331,7 @@ ipcMain.handle('remote-control-publish-snapshot', (event, snapshot) => {
     ? {
         ...snapshot,
         mainWindowClickThroughEnabled,
+        mainWindowAlwaysOnTop,
       }
     : null;
   if (latestRemoteControlSnapshot) {
@@ -2307,6 +2355,10 @@ ipcMain.handle('remote-control-send-command', (event, command) => {
 
   if (command?.type === 'set-main-window-click-through') {
     return setMainWindowClickThroughEnabled(Boolean(command.enabled));
+  }
+
+  if (command?.type === 'set-main-window-always-on-top') {
+    return setMainWindowAlwaysOnTop(Boolean(command.enabled));
   }
 
   if (command?.type === 'set-transparent-mode-enabled') {

@@ -281,9 +281,7 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
 
         // Stagger is the core "Partita" move.
         // The chunk positions should feel offset and sequenced, but still readable as a single line.
-        const staggerMagnitude = isCalm
-            ? 0
-            : tuning.staggerMin + random() * Math.max(tuning.staggerMax - tuning.staggerMin, 0);
+        const staggerMagnitude = tuning.staggerMin + random() * Math.max(tuning.staggerMax - tuning.staggerMin, 0);
         const staggerX = isStaggeredLeft ? -staggerMagnitude : staggerMagnitude;
 
         const staggerScale = isCalm ? 1 : 0.8 + random() * 0.9;
@@ -691,6 +689,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
         showText = true,
         partitaTuning = DEFAULT_PARTITA_TUNING,
         lyricsFontScale = 1,
+        subtitleOverlayOpacity,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
     } = props;
@@ -1006,6 +1005,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                 theme={theme}
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
+                subtitleOverlayOpacity={subtitleOverlayOpacity}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
             />
