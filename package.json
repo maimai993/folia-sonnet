@@ -27,7 +27,9 @@
     "dev:electron:dist:swiftshader": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=swiftshader vite build && electron .",
     "dev:electron:dist:software": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=software vite build && electron .",
     "build:electron:dir": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && electron-builder --linux dir",
-    "build:electron": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && electron-builder"
+    "build:electron": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && electron-builder",
+    "contributors:add": "npx all-contributors-cli add",
+    "contributors:generate": "npx all-contributors-cli generate"
   },
   "build": {
     "appId": "top.izuna.foliamajor",

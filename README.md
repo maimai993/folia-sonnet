@@ -12,12 +12,17 @@ Lyrics Reimagined // 辞曲新境
 [![License](https://img.shields.io/github/license/chthollyphile/folia-major)](https://github.com/chthollyphile/folia-major/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/chthollyphile/folia-major?style=social)](https://github.com/chthollyphile/folia-major/stargazers)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+<!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
+[![All Contributors](https://img.shields.io/badge/all_contributors-11-orange.svg?style=flat-square)](#contributors-)
+<!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 [桌面版下载](https://github.com/chthollyphile/folia-major/releases)
 ·
 [Vercel 部署](https://vercel.com/new/clone?repository-url=https://github.com/chthollyphile/folia-major)
 ·
-[文档](https://folia-site.vercel.app/)
+[使用指南](https://folia-site.vercel.app/guide/)
+·
+[技术说明](docs/technical.md)
 
 </div>
 
@@ -65,12 +70,16 @@ https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
     <td align="center"><strong>云阶</strong></td>
   </tr>
   <tr>
-    <td colspan="2">
-      <img src="./img/preview-cappella.jpg" alt="群唱 主题预览" width="45%" />
+    <td width="50%">
+      <img src="./img/preview-cappella.jpg" alt="群唱 主题预览" />
+    </td>
+    <td width="50%">
+      <img src="./img/preview-tilt.png" alt="Tilt 主题预览" />
     </td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><strong>群唱</strong></td>
+    <td align="center"><strong>群唱</strong></td>
+    <td align="center"><strong>倾诉</strong></td>
   </tr>
 </table>
 
@@ -92,144 +101,17 @@ https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
 
 桌面版内置前后端运行环境，适合希望即装即用的用户。最新版本请前往 [Releases 页面](https://github.com/chthollyphile/folia-major/releases)。
 
-### Linux 获取方式
+Linux 包、Wayland / Hyprland 遥控窗和桌面端细节见 [技术与开发说明](docs/technical.md)。
 
-1. Arch Linux / Manjaro：通过 AUR 安装 `folia-major-bin`
+## 文档与开发
 
-```
-yay -S folia-major-bin
-```
+更完整的使用说明请访问 [Folia Guide](https://folia-site.vercel.app/guide/)。
 
-2. Debian / Ubuntu / Linux Mint：下载 `.deb`
-3. Fedora / RHEL / openSUSE：下载 `.rpm`
-4. 其他发行版：下载 `tar.gz`，解压后直接运行 `folia-major`
+部署、环境变量、本地开发、Stage API、常用脚本和技术栈见 [技术与开发说明](docs/technical.md)。
 
-`tar.gz` 包中附带图标与 `.desktop` 模板，可按需手动创建桌面启动项。
-
-### Hyprland / Wayland 遥控窗
-
-桌面端的外部遥控窗会作为主窗口的伴随窗口打开，并使用稳定窗口标题 `Folia Remote`。在 Hyprland 下，如果希望它以悬浮小窗方式出现，可以在 `hyprland.conf` 中添加类似规则：
-
-```ini
-windowrule = float, title:^(Folia Remote)$
-windowrule = size 520 315, title:^(Folia Remote)$
-windowrule = center, title:^(Folia Remote)$
-windowrule = pin, title:^(Folia Remote)$
-```
-
-不同打包方式下窗口 `class` 可能不同；如果规则没有生效，可以用 `hyprctl clients` 查看实际 `class` / `title` 后再调整匹配条件。
-
-## 部署与开发
-
-### 后端 API
-
-本项目依赖 [NeteaseCloudMusicApiEnhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced) 提供音乐相关后端服务。
-
-如果使用前端版本的话，需要先自行部署该 API 服务。
-
-### AI 能力
-
-Folia 当前支持以下两类 AI 提供方式：
-
-- Google Gemini
-- OpenAI 兼容 API，例如 DeepSeek、ChatGPT 接口等
-
-Gemini 通常更适合当前项目场景，因为 JSON 输出相对稳定。
-
-## 部署与开发
-
-> [!TIP]
-> Folia提供了从外部与播放器进行交互的 Stage API，从而可以实现外部程序与播放器的深度集成。可以通过 `npm run stage:client` 启动本地联调台，查看和测试这些接口的功能。
-> 具体可参考[Stage API 文档](test/manual/stage-client/README.md)
-
-### 一键部署到 Vercel
-
-如果你希望快速上线 Web 版本，可以直接通过下方入口创建 Vercel 项目：
+如果你希望快速上线 Web 版本，可以通过 [Vercel 一键部署](https://vercel.com/new/clone?repository-url=https://github.com/chthollyphile/folia-major) 创建项目：
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/chthollyphile/folia-major)
-
-部署完成后，请在 Vercel 项目设置中补齐环境变量。
-
-### 本地开发
-
-推荐使用 `vercel dev`，这样本地环境会更接近线上部署行为。
-
-#### 1. 安装依赖
-
-```bash
-npm install
-```
-
-#### 2. 配置环境变量
-
-在项目根目录创建 `.env.local`：
-
-```bash
-cp .env.example .env.local
-```
-
-如果你已经在 Vercel 中配置过环境变量，也可以直接拉取：
-
-```bash
-vercel env pull .env.local
-```
-
-然后按需填写以下变量：
-
-| 变量名 | 描述 | 是否必需 |
-| --- | --- | --- |
-| `VITE_NETEASE_API_BASE` | 网易云音乐 API 实例地址 | 是 |
-| `VITE_AI_PROVIDER` | AI 提供商，`google` 或 `openai` | 是 |
-| `GEMINI_API_KEY` | Gemini API Key | 使用 Gemini 时需要 |
-| `OPENAI_API_KEY` | OpenAI 兼容 API Key | 使用 OpenAI兼容接口 时需要 |
-| `OPENAI_API_URL` | OpenAI 兼容接口地址，可填 base URL 或完整 `chat/completions` 地址 | 使用 OpenAI兼容接口 时需要 |
-| `OPENAI_API_MODEL` | 模型名，例如 `gpt-4o`、`gpt-4.1-mini`、`deepseek-v4-flash` | 使用 OpenAI兼容接口 时需要 |
-
-Gemini 示例：
-
-```env
-VITE_NETEASE_API_BASE=http://localhost:3000
-VITE_AI_PROVIDER=google
-GEMINI_API_KEY=your_google_gemini_api_key
-```
-
-OpenAI 兼容接口示例：
-
-```env
-VITE_NETEASE_API_BASE=http://localhost:3000
-VITE_AI_PROVIDER=openai
-OPENAI_API_KEY=your_api_key
-OPENAI_API_URL=https://api.deepseek.com
-OPENAI_API_MODEL=deepseek-v4-flash
-```
-
-如果你使用的是 OpenAI 官方接口，也可以这样写：
-
-```env
-VITE_NETEASE_API_BASE=http://localhost:3000
-VITE_AI_PROVIDER=openai
-OPENAI_API_KEY=your_api_key
-OPENAI_API_URL=https://api.openai.com/v1
-OPENAI_API_MODEL=gpt-4o
-```
-
-#### 3. 启动开发环境
-
-```bash
-vercel dev
-```
-
-## 常用脚本
-
-| 命令 | 说明 |
-| --- | --- |
-| `npm run dev` | 启动 Vite 开发服务器 |
-| `npm run build` | 构建 Web 版本 |
-| `npm run preview` | 预览构建结果 |
-| `npm run dev:electron` | 启动 Electron 开发模式 |
-| `npm run dev:electron:dist` | 构建后以桌面模式运行 |
-| `npm run build:electron` | 打包桌面端应用 |
-| `npm run stage:client` | 打开本地 Stage API 联调台 |
 
 ## 本地音乐与匹配说明
 
@@ -242,15 +124,45 @@ vercel dev
 如果自动匹配不准确，可以在播放界面的右侧面板进入“本地”选项卡，手动搜索并指定更合适的歌词、封面或元数据来源。你也可以选择只使用本地信息，关闭在线匹配结果。
 
 
-## 技术栈
+## 贡献者
 
-- React 19
-- Vite 6
-- TypeScript
-- Tailwind CSS 4
-- Framer Motion
-- Electron
-- i18next
+Thanks goes to these wonderful people. Issue reports, bug reports, ideas, docs, design, tests, and code are all counted through the [all-contributors](https://allcontributors.org/) spec.
+
+<!-- ALL-CONTRIBUTORS-LIST:START -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/chthollyphile"><img src="https://avatars.githubusercontent.com/u/30263107?v=4?s=100" width="100px;" alt="冬霧" style="border-radius: 50%;"/><br /><sub><b>冬霧</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/commits?author=chthollyphile" title="Code">💻</a></td></td>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/ZhaoAlpha931206"><img src="https://avatars.githubusercontent.com/u/113200713?v=4?s=100" width="100px;" alt="zhao_alpha" style="border-radius: 50%;"/><br /><sub><b>zhao_alpha</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3AZhaoAlpha931206" title="Bug reports">🐛</a></td></td>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/hz1ang"><img src="https://avatars.githubusercontent.com/u/79741472?v=4?s=100" width="100px;" alt="hz1ang" style="border-radius: 50%;"/><br /><sub><b>hz1ang</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3Ahz1ang" title="Bug reports">🐛</a> <a href="#ideas-hz1ang" title="Ideas, Planning, & Feedback">🤔</a></td></td>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/steadyoak"><img src="https://avatars.githubusercontent.com/u/62462010?v=4?s=100" width="100px;" alt="steadyoak" style="border-radius: 50%;"/><br /><sub><b>steadyoak</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3Asteadyoak" title="Bug reports">🐛</a> <a href="#ideas-steadyoak" title="Ideas, Planning, & Feedback">🤔</a></td></td>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/jin6yang"><img src="https://avatars.githubusercontent.com/u/68692517?v=4?s=100" width="100px;" alt="POINTER" style="border-radius: 50%;"/><br /><sub><b>POINTER</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3Ajin6yang" title="Bug reports">🐛</a> <a href="#ideas-jin6yang" title="Ideas, Planning, & Feedback">🤔</a></td></td>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/Yuki-3939"><img src="https://avatars.githubusercontent.com/u/171513605?v=4?s=100" width="100px;" alt="Yuki-3939" style="border-radius: 50%;"/><br /><sub><b>Yuki-3939</b></sub></a><br /><a href="#ideas-Yuki-3939" title="Ideas, Planning, & Feedback">🤔</a></td></td>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/MewsCat-Dev"><img src="https://avatars.githubusercontent.com/u/207451147?v=4?s=100" width="100px;" alt="MewsCat" style="border-radius: 50%;"/><br /><sub><b>MewsCat</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3AMewsCat-Dev" title="Bug reports">🐛</a> <a href="#ideas-MewsCat-Dev" title="Ideas, Planning, & Feedback">🤔</a></td></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://afdian.com/a/tumuyan"><img src="https://avatars.githubusercontent.com/u/3126801?v=4?s=100" width="100px;" alt="tumuyan" style="border-radius: 50%;"/><br /><sub><b>tumuyan</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3Atumuyan" title="Bug reports">🐛</a> <a href="#ideas-tumuyan" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/chthollyphile/folia-major/commits?author=tumuyan" title="Code">💻</a></td></td>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/948720857"><img src="https://avatars.githubusercontent.com/u/23718388?v=4?s=100" width="100px;" alt="948720857" style="border-radius: 50%;"/><br /><sub><b>948720857</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3A948720857" title="Bug reports">🐛</a></td></td>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/setube"><img src="https://avatars.githubusercontent.com/u/73606411?v=4?s=100" width="100px;" alt="谦君" style="border-radius: 50%;"/><br /><sub><b>谦君</b></sub></a><br /><a href="#ideas-setube" title="Ideas, Planning, & Feedback">🤔</a></td></td>
+      <td align="center" valign="top" width="14.28%"><td align="center" valign="top" width="14.28%"><a href="https://github.com/suheandzl"><img src="https://avatars.githubusercontent.com/u/3975134?v=4?s=100" width="100px;" alt="suheandzl" style="border-radius: 50%;"/><br /><sub><b>suheandzl</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3Asuheandzl" title="Bug reports">🐛</a></td></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+<!-- 添加 issue 提出者时可以使用：
+
+```bash
+npm run contributors:add -- github-username bug
+npm run contributors:add -- github-username bug,ideas
+npm run contributors:generate
+``` -->
 
 ## 法律与免责声明
 
