@@ -75,7 +75,7 @@ export const useElectronPlaybackBridge = ({
     onRemoteExportCommand,
     onExternalPlayRequest,
 }: UseElectronPlaybackBridgeOptions) => {
-    const buildRemoteSnapshot = (): RemoteControlSnapshot => {
+    const buildRemoteSnapshot = (options: { includeLyrics?: boolean } = {}): RemoteControlSnapshot => {
         const hasActiveTrack = !isNowPlayingStageActive && Boolean(currentSong);
         const currentIndex = currentSong ? playQueue.findIndex(song => song.id === currentSong.id) : -1;
         const canGoPrevious = hasActiveTrack && (currentIndex > 0 || (effectiveLoopMode === 'all' && playQueue.length > 1));
@@ -104,7 +104,7 @@ export const useElectronPlaybackBridge = ({
             playerChromeHidden: isPlayerChromeHidden,
             exportState,
             isDaylight,
-            lyrics,
+            ...(options.includeLyrics ? { lyrics } : {}),
             updatedAt: Date.now(),
         };
     };
@@ -188,14 +188,14 @@ export const useElectronPlaybackBridge = ({
             return;
         }
 
-        const publish = () => {
-            void window.electron?.publishRemoteControlSnapshot(buildRemoteSnapshot()).catch((error) => {
+        const publish = (options: { includeLyrics?: boolean } = {}) => {
+            void window.electron?.publishRemoteControlSnapshot(buildRemoteSnapshot(options)).catch((error) => {
                 console.warn('[Electron] Failed to publish remote control snapshot', error);
             });
         };
 
-        publish();
-        const intervalId = window.setInterval(publish, 500);
+        publish({ includeLyrics: true });
+        const intervalId = window.setInterval(() => publish(), 500);
         return () => window.clearInterval(intervalId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground]);

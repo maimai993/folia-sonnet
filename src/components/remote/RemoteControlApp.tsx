@@ -3,10 +3,10 @@ import { ChevronLeft, Lock, LockOpen, Pause, Pin, PinOff, Play, SkipBack, SkipFo
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayerState } from '../../types';
 import RemoteVideoExportPanel from './RemoteVideoExportPanel';
+import RemoteLyricOverlay from './RemoteLyricOverlay';
 import type { RemoteControlCommand, RemoteControlSnapshot } from '../../types/remoteControl';
 import { DEFAULT_VIDEO_EXPORT_PRESET_ID, idleVideoExportState, VIDEO_EXPORT_PRESETS } from '../../types/videoExport';
 import type { VideoExportStartMode } from '../../types/videoExport';
-import { findLatestActiveLineIndex } from '../../utils/appPlaybackHelpers';
 
 // src/components/remote/RemoteControlApp.tsx
 // Electron-only companion window for controlling the single real player instance.
@@ -63,33 +63,8 @@ const RemoteControlApp: React.FC = () => {
     const [windowControlsRevealed, setWindowControlsRevealed] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const [showLyricsOverlay, setShowLyricsOverlay] = useState(false);
-    const [interpolatedTime, setInterpolatedTime] = useState(0);
-    const lastSyncRef = useRef({ snapshotTime: 0, localTime: 0 });
-
-    useEffect(() => {
-        lastSyncRef.current = {
-            snapshotTime: snapshot.currentTime,
-            localTime: performance.now(),
-        };
-        setInterpolatedTime(snapshot.currentTime);
-    }, [snapshot.currentTime, snapshot.playerState]);
-
-    useEffect(() => {
-        if (snapshot.playerState !== PlayerState.PLAYING) {
-            return;
-        }
-
-        let frameId: number;
-        const tick = () => {
-            const elapsed = (performance.now() - lastSyncRef.current.localTime) / 1000;
-            const nextTime = Math.min(snapshot.duration, lastSyncRef.current.snapshotTime + elapsed);
-            setInterpolatedTime(nextTime);
-            frameId = requestAnimationFrame(tick);
-        };
-
-        frameId = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(frameId);
-    }, [snapshot.playerState, snapshot.duration]);
+    const isDraggingRef = useRef(false);
+    const lastSeekTimeRef = useRef(0);
 
     useEffect(() => {
         if (isHovered) {
@@ -99,28 +74,10 @@ const RemoteControlApp: React.FC = () => {
 
         const timer = setTimeout(() => {
             setShowLyricsOverlay(true);
-        }, 1200);
+        }, 800);
 
         return () => clearTimeout(timer);
     }, [isHovered]);
-
-    const currentLyricInfo = useMemo(() => {
-        let currentLine = null;
-        let nextLine = null;
-        if (snapshot.lyrics && snapshot.lyrics.lines.length > 0) {
-            const index = findLatestActiveLineIndex(snapshot.lyrics.lines, interpolatedTime);
-            if (index !== -1) {
-                currentLine = snapshot.lyrics.lines[index];
-                nextLine = snapshot.lyrics.lines[index + 1] || null;
-            } else {
-                const upcomingIndex = snapshot.lyrics.lines.findIndex(line => line.startTime > interpolatedTime);
-                if (upcomingIndex !== -1) {
-                    nextLine = snapshot.lyrics.lines[upcomingIndex];
-                }
-            }
-        }
-        return { currentLine, nextLine };
-    }, [snapshot.lyrics, interpolatedTime]);
 
     useEffect(() => {
         document.body.style.backgroundColor = 'transparent';
@@ -145,8 +102,17 @@ const RemoteControlApp: React.FC = () => {
         });
 
         const unsubscribe = window.electron?.onRemoteControlSnapshot?.(next => {
-            setSnapshot(next as RemoteControlSnapshot);
-            setPendingSeek(null);
+            const nextSnapshot = next as RemoteControlSnapshot;
+            setSnapshot(previous => ({
+                ...previous,
+                ...nextSnapshot,
+                lyrics: Object.prototype.hasOwnProperty.call(nextSnapshot, 'lyrics')
+                    ? nextSnapshot.lyrics ?? null
+                    : previous.lyrics ?? null,
+            }));
+            if (!isDraggingRef.current && Date.now() - lastSeekTimeRef.current > 800) {
+                setPendingSeek(null);
+            }
         });
 
         return () => {
@@ -202,11 +168,9 @@ const RemoteControlApp: React.FC = () => {
             style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
             onMouseEnter={() => {
                 setWindowControlsRevealed(true);
-                setIsHovered(true);
             }}
             onMouseLeave={() => {
                 setWindowControlsRevealed(false);
-                setIsHovered(false);
             }}
         >
             <div className={`relative flex h-full w-full rounded-[20px] border p-4 items-center justify-center overflow-hidden transition-colors duration-300 ${
@@ -246,11 +210,9 @@ const RemoteControlApp: React.FC = () => {
                     style={noDragStyle}
                     onFocus={() => {
                         setWindowControlsRevealed(true);
-                        setIsHovered(true);
                     }}
                     onMouseEnter={() => {
                         setWindowControlsRevealed(true);
-                        setIsHovered(true);
                     }}
                 >
                     <button
@@ -358,7 +320,7 @@ const RemoteControlApp: React.FC = () => {
                                             transition={{ duration: 0.15 }}
                                             className="w-full flex flex-col justify-between h-[70px]"
                                         >
-                                            {/* Progress Slider */}
+                                            {/* Progress Slider (Always Visible) */}
                                             <div className="w-full">
                                                 <div className="relative w-full h-5 flex items-center" style={noDragStyle}>
                                                     {/* Visible Track Background */}
@@ -384,173 +346,139 @@ const RemoteControlApp: React.FC = () => {
                                                         value={progressValue}
                                                         disabled={primaryDisabled || duration <= 0}
                                                         onChange={(event) => setPendingSeek(Number(event.currentTarget.value))}
+                                                        onPointerDown={() => {
+                                                            isDraggingRef.current = true;
+                                                        }}
+                                                        onPointerCancel={() => {
+                                                            isDraggingRef.current = false;
+                                                        }}
                                                         onPointerUp={() => {
+                                                            isDraggingRef.current = false;
+                                                            lastSeekTimeRef.current = Date.now();
                                                             if (pendingSeek !== null) {
                                                                 sendCommand({ type: 'seek', time: pendingSeek });
                                                             }
                                                         }}
                                                         onKeyUp={(event) => {
                                                             if (event.key === 'Enter' && pendingSeek !== null) {
+                                                                isDraggingRef.current = false;
+                                                                lastSeekTimeRef.current = Date.now();
                                                                 sendCommand({ type: 'seek', time: pendingSeek });
                                                             }
                                                         }}
                                                         className="absolute inset-x-0 h-5 w-full appearance-none cursor-pointer bg-transparent opacity-0 z-10 disabled:cursor-not-allowed [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-transparent [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-transparent"
                                                     />
                                                 </div>
-                                                <div className={`mt-1 flex justify-between text-[10px] tabular-nums transition-colors ${
-                                                    isDaylight ? 'text-black/35' : 'text-white/30'
-                                                }`}>
-                                                    <span>{formatTime(progressValue)}</span>
-                                                    <span>{formatTime(duration)}</span>
-                                                </div>
                                             </div>
 
-                                            {/* Playback Actions or Lyrics Overlay */}
-                                            <div className="h-9 w-full relative" style={noDragStyle}>
+                                            {/* Toggle area for controls+timestamps or lyrics */}
+                                            <div 
+                                                className="flex-1 min-h-0 w-full relative"
+                                                onMouseEnter={() => setIsHovered(true)}
+                                                onMouseLeave={() => setIsHovered(false)}
+                                            >
                                                 <AnimatePresence mode="wait">
                                                     {!showLyricsOverlay ? (
                                                         <motion.div
-                                                            key="controls"
-                                                            initial={{ opacity: 0, y: 8 }}
+                                                            key="controls-view"
+                                                            initial={{ opacity: 0, y: 5 }}
                                                             animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, y: -8 }}
+                                                            exit={{ opacity: 0, y: -5 }}
                                                             transition={{ duration: 0.15 }}
-                                                            className="absolute inset-x-0 bottom-0 top-0 flex w-full items-center justify-between"
+                                                            className="absolute inset-0 flex flex-col justify-between"
                                                         >
-                                                            <div className="flex items-center gap-1.5">
-                                                                <button
-                                                                    type="button"
-                                                                    title="Previous"
-                                                                    disabled={primaryDisabled || !snapshot.canGoPrevious}
-                                                                    onClick={() => sendCommand({ type: 'previous' })}
-                                                                    className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
-                                                                        isDaylight
-                                                                            ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
-                                                                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                                                                    }`}
-                                                                >
-                                                                    <SkipBack size={16} strokeWidth={2} />
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    title={isPlaying ? 'Pause' : 'Play'}
-                                                                    disabled={primaryDisabled}
-                                                                    onClick={() => sendCommand({ type: 'play-pause' })}
-                                                                    className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
-                                                                        isDaylight
-                                                                            ? 'bg-zinc-900 text-white hover:bg-zinc-800'
-                                                                            : 'bg-white text-zinc-950 hover:bg-white/90'
-                                                                    }`}
-                                                                >
-                                                                    {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} className="translate-x-0.5" fill="currentColor" />}
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    title="Next"
-                                                                    disabled={primaryDisabled || !snapshot.canGoNext}
-                                                                    onClick={() => sendCommand({ type: 'next' })}
-                                                                    className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
-                                                                        isDaylight
-                                                                            ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
-                                                                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                                                                    }`}
-                                                                >
-                                                                    <SkipForward size={16} strokeWidth={2} />
-                                                                </button>
+                                                            {/* Timestamps */}
+                                                            <div className={`flex justify-between text-[10px] tabular-nums transition-colors ${
+                                                                isDaylight ? 'text-black/35' : 'text-white/30'
+                                                            }`}>
+                                                                <span>{formatTime(progressValue)}</span>
+                                                                <span>{formatTime(duration)}</span>
                                                             </div>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <button
-                                                                    type="button"
-                                                                    title="Transparent controls"
-                                                                    onClick={() => {
-                                                                        setPresetSelectorOpen(false);
-                                                                        setActivePanel('transparent-controls');
-                                                                    }}
-                                                                    className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
-                                                                        isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
-                                                                    }`}
-                                                                >
-                                                                    <MirrorRectangular size={16} strokeWidth={2} />
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    title="Video export"
-                                                                    disabled={!snapshot.hasTrack}
-                                                                    onClick={() => setActivePanel('export')}
-                                                                    className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
-                                                                        exportState.status === 'recording'
-                                                                            ? (isDaylight ? 'bg-red-500/20 text-red-600 animate-pulse border border-red-500/25' : 'bg-red-500/25 text-red-400 animate-pulse border border-red-500/30')
-                                                                            : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
-                                                                    }`}
-                                                                >
-                                                                    <Video size={16} strokeWidth={2} />
-                                                                </button>
+
+                                                            {/* Playback Actions */}
+                                                            <div className="flex w-full items-center justify-between">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <button
+                                                                        type="button"
+                                                                        title="Previous"
+                                                                        disabled={primaryDisabled || !snapshot.canGoPrevious}
+                                                                        onClick={() => sendCommand({ type: 'previous' })}
+                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                                            isDaylight
+                                                                                ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
+                                                                                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                                                                        }`}
+                                                                    >
+                                                                        <SkipBack size={16} strokeWidth={2} />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        title={isPlaying ? 'Pause' : 'Play'}
+                                                                        disabled={primaryDisabled}
+                                                                        onClick={() => sendCommand({ type: 'play-pause' })}
+                                                                        className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                                            isDaylight
+                                                                                ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                                                                                : 'bg-white text-zinc-950 hover:bg-white/90'
+                                                                        }`}
+                                                                    >
+                                                                        {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} className="translate-x-0.5" fill="currentColor" />}
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        title="Next"
+                                                                        disabled={primaryDisabled || !snapshot.canGoNext}
+                                                                        onClick={() => sendCommand({ type: 'next' })}
+                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                                            isDaylight
+                                                                                ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
+                                                                                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                                                                        }`}
+                                                                    >
+                                                                        <SkipForward size={16} strokeWidth={2} />
+                                                                    </button>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <button
+                                                                        type="button"
+                                                                        title="Transparent controls"
+                                                                        onClick={() => {
+                                                                            setPresetSelectorOpen(false);
+                                                                            setActivePanel('transparent-controls');
+                                                                        }}
+                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
+                                                                            isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+                                                                        }`}
+                                                                    >
+                                                                        <MirrorRectangular size={16} strokeWidth={2} />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        title="Video export"
+                                                                        disabled={!snapshot.hasTrack}
+                                                                        onClick={() => setActivePanel('export')}
+                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                                            exportState.status === 'recording'
+                                                                                ? (isDaylight ? 'bg-red-500/20 text-red-600 animate-pulse border border-red-500/25' : 'bg-red-500/25 text-red-400 animate-pulse border border-red-500/30')
+                                                                                : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
+                                                                        }`}
+                                                                    >
+                                                                        <Video size={16} strokeWidth={2} />
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         </motion.div>
                                                     ) : (
-                                                        <motion.div
-                                                            key="lyrics"
-                                                            initial={{ opacity: 0, y: 8 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, y: -8 }}
-                                                            transition={{ duration: 0.15 }}
-                                                            className="absolute inset-x-0 bottom-0 top-0 flex flex-col justify-center min-w-0"
-                                                        >
-                                                            <div className="truncate text-xs font-bold leading-tight select-none">
-                                                                {currentLyricInfo.currentLine ? (
-                                                                    currentLyricInfo.currentLine.words && currentLyricInfo.currentLine.words.length > 0 ? (
-                                                                        currentLyricInfo.currentLine.words.map((word, idx) => {
-                                                                            const progress = word.endTime > word.startTime
-                                                                                ? Math.max(0, Math.min(100, ((interpolatedTime - word.startTime) / (word.endTime - word.startTime)) * 100))
-                                                                                : (interpolatedTime >= word.startTime ? 100 : 0);
-                                                                            return (
-                                                                                <span
-                                                                                    key={idx}
-                                                                                    style={{
-                                                                                        backgroundImage: `linear-gradient(to right, ${activeColor} ${progress}%, ${baseColor} ${progress}%)`,
-                                                                                        WebkitBackgroundClip: 'text',
-                                                                                        WebkitTextFillColor: 'transparent',
-                                                                                        display: 'inline-block',
-                                                                                        marginRight: '0.25em',
-                                                                                    }}
-                                                                                >
-                                                                                    {word.text}
-                                                                                </span>
-                                                                            );
-                                                                        })
-                                                                    ) : (
-                                                                        <span
-                                                                            style={{
-                                                                                backgroundImage: `linear-gradient(to right, ${activeColor} ${
-                                                                                    currentLyricInfo.currentLine.endTime > currentLyricInfo.currentLine.startTime
-                                                                                        ? Math.max(0, Math.min(100, ((interpolatedTime - currentLyricInfo.currentLine.startTime) / (currentLyricInfo.currentLine.endTime - currentLyricInfo.currentLine.startTime)) * 100))
-                                                                                        : (interpolatedTime >= currentLyricInfo.currentLine.startTime ? 100 : 0)
-                                                                                }%, ${baseColor} ${
-                                                                                    currentLyricInfo.currentLine.endTime > currentLyricInfo.currentLine.startTime
-                                                                                        ? Math.max(0, Math.min(100, ((interpolatedTime - currentLyricInfo.currentLine.startTime) / (currentLyricInfo.currentLine.endTime - currentLyricInfo.currentLine.startTime)) * 100))
-                                                                                        : (interpolatedTime >= currentLyricInfo.currentLine.startTime ? 100 : 0)
-                                                                                }%)`,
-                                                                                WebkitBackgroundClip: 'text',
-                                                                                WebkitTextFillColor: 'transparent',
-                                                                                display: 'inline-block',
-                                                                            }}
-                                                                        >
-                                                                            {currentLyricInfo.currentLine.fullText}
-                                                                        </span>
-                                                                    )
-                                                                ) : (
-                                                                    <span style={{ color: baseColor }}>
-                                                                        {snapshot.hasTrack ? '无歌词' : ''}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <div 
-                                                                className="truncate text-[10px] font-medium leading-none mt-1"
-                                                                style={{ color: baseColor }}
-                                                            >
-                                                                {currentLyricInfo.nextLine ? currentLyricInfo.nextLine.fullText : ''}
-                                                            </div>
-                                                        </motion.div>
+                                                        <RemoteLyricOverlay
+                                                            lyrics={snapshot.lyrics}
+                                                            currentTime={snapshot.currentTime}
+                                                            duration={snapshot.duration}
+                                                            playerState={snapshot.playerState}
+                                                            hasTrack={snapshot.hasTrack}
+                                                            visible={showLyricsOverlay && activePanel === 'playback'}
+                                                            baseColor={baseColor}
+                                                            activeColor={activeColor}
+                                                        />
                                                     )}
                                                 </AnimatePresence>
                                             </div>

@@ -2329,6 +2329,9 @@ ipcMain.handle('remote-control-publish-snapshot', (event, snapshot) => {
 
   latestRemoteControlSnapshot = snapshot
     ? {
+        ...(latestRemoteControlSnapshot && !Object.prototype.hasOwnProperty.call(snapshot, 'lyrics')
+          ? { lyrics: latestRemoteControlSnapshot.lyrics }
+          : {}),
         ...snapshot,
         mainWindowClickThroughEnabled,
         mainWindowAlwaysOnTop,
