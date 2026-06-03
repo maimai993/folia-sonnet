@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Layers, Monitor, PlayCircle, Loader2, Sparkles, Server, Check, AlertCircle, Palette, FolderOpen, Pencil, FlaskConical, ChevronLeft, ChevronRight, RotateCcw, GamepadDirectional, RefreshCw, Download, ExternalLink, Minimize2, EyeOff, Cpu, KeyRound, Globe, ShieldAlert, AppWindow } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
-import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type QueueAddBehavior, type TiltTuning, type StoredCustomLyricsFont, type VisualizerMode } from '../../types';
+import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type QueueAddBehavior, type TiltTuning, type StoredCustomLyricsFont, type VisualizerFrameRate, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled } from '../../services/navidromeService';
 import { NavidromeConfig } from '../../types/navidrome';
 import VisPlayground from '../visualizer/VisPlayground';
@@ -14,6 +14,7 @@ import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
 import { CustomSelect } from '../shared/CustomSelect';
 import { selectSettingsUiSnapshot, useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../utils/frameRateLimiter';
 import { useShallow } from 'zustand/react/shallow';
 
 
@@ -107,6 +108,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         backgroundOpacity,
         subtitleOverlayOpacity,
         visualizerOpacity,
+        visualizerFrameRate,
         isDaylight,
         visualizerMode,
         classicTuning,
@@ -144,6 +146,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetBackgroundOpacity: setBackgroundOpacity,
         handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
         handleSetVisualizerOpacity: setVisualizerOpacity,
+        handleSetVisualizerFrameRate: onVisualizerFrameRateChange,
         handleSetVisualizerMode: onVisualizerModeChange,
         handleSetClassicTuning: onClassicTuningChange,
         handleResetClassicTuning: onResetClassicTuning,
@@ -222,6 +225,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         && typeof navigator !== 'undefined'
         && typeof navigator.mediaDevices?.enumerateDevices === 'function'
         && 'setSinkId' in HTMLMediaElement.prototype;
+    const isVisualizerFrameRateLimiterEnabled = visualizerFrameRate !== 'off';
+    const selectedVisualizerFrameRate = isVisualizerFrameRateLimiterEnabled ? visualizerFrameRate : 120;
+    const selectedVisualizerFrameRateIndex = VISUALIZER_FRAME_RATE_OPTIONS.indexOf(selectedVisualizerFrameRate);
+    const getFrameRateLabel = (frameRate: VisualizerFrameRate) => `${frameRate} FPS`;
+    const handleToggleVisualizerFrameRateLimiter = () => {
+        onVisualizerFrameRateChange(isVisualizerFrameRateLimiterEnabled ? 'off' : selectedVisualizerFrameRate);
+    };
+    const handleFrameRateSliderChange = (value: string) => {
+        const nextIndex = Math.min(VISUALIZER_FRAME_RATE_OPTIONS.length - 1, Math.max(0, Number(value)));
+        onVisualizerFrameRateChange(VISUALIZER_FRAME_RATE_OPTIONS[nextIndex]);
+    };
 
     const loadAudioOutputDevices = async () => {
         if (!supportsAudioOutputSelection) {
@@ -3275,6 +3289,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     onToggleMinimizeToTray?.(false);
                                     onToggleHideTaskbarIcon?.(false);
                                     onToggleOpenPlayerOnLaunch?.(false);
+                                    onVisualizerFrameRateChange('off');
                                 }}
                                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${utilityGhostButtonClass}`}
                                 style={{ color: 'var(--text-primary)' }}
@@ -3328,6 +3343,50 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     >
                                         <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${disableHomeDynamicBackground ? 'translate-x-6' : 'translate-x-0'}`} />
                                     </button>
+                                </div>
+
+                                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="space-y-1">
+                                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                                <Cpu size={14} />
+                                                {t('options.visualizerFrameRate') || '动画帧率限制'}
+                                            </div>
+                                            <div className="text-xs opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                                {t('options.visualizerFrameRateDesc') || '实验性设置：启用后会限制 requestAnimationFrame 驱动的动画帧率，可能导致动画、测量或第三方动画库出现意外问题。'}
+                                            </div>
+                                        </div>
+                                        {renderToggle(isVisualizerFrameRateLimiterEnabled, handleToggleVisualizerFrameRateLimiter)}
+                                    </div>
+                                    <div className={`space-y-3 transition-opacity ${isVisualizerFrameRateLimiterEnabled ? 'opacity-100' : 'opacity-45 pointer-events-none'}`}>
+                                        <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                                            <span>{t('options.visualizerFrameRateValue') || '限制档位'}</span>
+                                            <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                                                {getFrameRateLabel(selectedVisualizerFrameRate)}
+                                            </span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max={VISUALIZER_FRAME_RATE_OPTIONS.length - 1}
+                                            step="1"
+                                            value={Math.max(0, selectedVisualizerFrameRateIndex)}
+                                            onChange={(event) => handleFrameRateSliderChange(event.target.value)}
+                                            className={rangeInputClass}
+                                            aria-label={t('options.visualizerFrameRateValue') || '限制档位'}
+                                            disabled={!isVisualizerFrameRateLimiterEnabled}
+                                        />
+                                        <div className="grid grid-cols-3 text-[11px] font-mono opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                            {VISUALIZER_FRAME_RATE_OPTIONS.map((frameRate, index) => (
+                                                <span
+                                                    key={frameRate}
+                                                    className={index === 1 ? 'text-center' : index === 2 ? 'text-right' : ''}
+                                                >
+                                                    {frameRate}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>

@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import type React from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type Theme, type TiltTuning, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type Theme, type TiltTuning, type VisualizerFrameRate, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
 import { buildStoredCappellaAvatar, clearCustomCappellaAvatar, isSupportedCappellaAvatarFile, saveCustomCappellaAvatar } from '../services/cappellaAvatarPack';
 import { clearUploadedLyricsFont, uploadAndRegisterLyricsFont } from '../services/customLyricsFont';
+import { parseVisualizerFrameRate, setGlobalVisualizerFrameRate, VISUALIZER_FRAME_RATE_STORAGE_KEY } from '../utils/frameRateLimiter';
 
 // src/stores/useSettingsUiStore.ts
 // Shared settings state and actions used by App, Home, and SettingsModal.
@@ -102,6 +103,14 @@ const readStoredVisualizerMode = (): VisualizerMode => {
     }
 
     return hasVisualizerMode(saved) ? saved : DEFAULT_VISUALIZER_MODE;
+};
+
+const readStoredVisualizerFrameRate = (): VisualizerFrameRate => {
+    if (typeof window === 'undefined') {
+        return 'off';
+    }
+
+    return parseVisualizerFrameRate(localStorage.getItem(VISUALIZER_FRAME_RATE_STORAGE_KEY));
 };
 
 const clampClassicBreathingFloatMultiplier = (value: number, fallback: number) => {
@@ -439,6 +448,7 @@ type SettingsUiState = {
     backgroundOpacity: number;
     subtitleOverlayOpacity: number;
     visualizerOpacity: number;
+    visualizerFrameRate: VisualizerFrameRate;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
     classicTuning: ClassicTuning;
@@ -494,6 +504,7 @@ type SettingsUiState = {
     handleSetBackgroundOpacity: (opacity: number) => void;
     handleSetSubtitleOverlayOpacity: (opacity: number) => void;
     handleSetVisualizerOpacity: (opacity: number) => void;
+    handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
     setDaylightPreference: (enabled: boolean) => void;
     handleSetVisualizerMode: (mode: VisualizerMode) => void;
     handleSetClassicTuning: (patch: Partial<ClassicTuning>) => void;
@@ -549,6 +560,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     backgroundOpacity: readStoredBackgroundOpacity(),
     subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
     visualizerOpacity: readStoredVisualizerOpacity(),
+    visualizerFrameRate: readStoredVisualizerFrameRate(),
     isDaylight: getStoredBoolean('default_theme_daylight', false),
     visualizerMode: readStoredVisualizerMode(),
     classicTuning: readStoredClassicTuning(),
@@ -755,6 +767,13 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem(VISUALIZER_OPACITY_STORAGE_KEY, String(next));
         }
         set({ visualizerOpacity: next });
+    },
+    handleSetVisualizerFrameRate: (frameRate) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(VISUALIZER_FRAME_RATE_STORAGE_KEY, String(frameRate));
+        }
+        setGlobalVisualizerFrameRate(frameRate);
+        set({ visualizerFrameRate: frameRate });
     },
     setDaylightPreference: (enabled) => {
         setStoredBoolean('default_theme_daylight', enabled);
@@ -1134,6 +1153,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     backgroundOpacity: state.backgroundOpacity,
     subtitleOverlayOpacity: state.subtitleOverlayOpacity,
     visualizerOpacity: state.visualizerOpacity,
+    visualizerFrameRate: state.visualizerFrameRate,
     isDaylight: state.isDaylight,
     visualizerMode: state.visualizerMode,
     classicTuning: state.classicTuning,
@@ -1173,6 +1193,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
     handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
     handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
+    handleSetVisualizerFrameRate: state.handleSetVisualizerFrameRate,
     setDaylightPreference: state.setDaylightPreference,
     handleSetVisualizerMode: state.handleSetVisualizerMode,
     handleSetClassicTuning: state.handleSetClassicTuning,
