@@ -8,7 +8,6 @@
   ],
   "imageSize": 100,
   "contributorsPerLine": 7,
-  "contributorTemplate": "<td align=\"center\" valign=\"top\" width=\"14.28%\"><a href=\"<%= contributor.profile %>\"><img src=\"<%= contributor.avatar_url %>?s=<%= options.imageSize %>\" width=\"<%= options.imageSize %>px;\" alt=\"<%= contributor.name %>\" style=\"border-radius: 50%;\"/><br /><sub><b><%= contributor.name %></b></sub></a><br /><%= contributions %></td>",
   "contributors": [
     {
       "login": "chthollyphile",
