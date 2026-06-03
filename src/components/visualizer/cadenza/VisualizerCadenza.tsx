@@ -1272,6 +1272,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         showText = true,
         cadenzaTuning = DEFAULT_CADENZA_TUNING,
         lyricsFontScale = 1,
+        subtitleOverlayOpacity,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
     } = props;
@@ -1709,7 +1710,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
                 theme={theme}
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
-                opacity={0.72}
+                subtitleOverlayOpacity={subtitleOverlayOpacity}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
             />

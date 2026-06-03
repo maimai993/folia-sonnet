@@ -19,11 +19,12 @@ import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from '../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { PlayerState } from '../types';
-import type { LyricData, LocalPlaylist, LocalSong, QueueAddBehavior, SongResult, StatusMessage } from '../types';
+import type { LyricData, LocalPlaylist, LocalSong, OnlineLyricsState, QueueAddBehavior, SongResult, StatusMessage } from '../types';
 import type { PlaybackSnapshot, PlaybackNavigationOptions } from '../types/appPlayback';
 import type { NavidromeSong } from '../types/navidrome';
 import type { NavidromeMatchData } from '../components/modal/NaviLyricMatchModal';
 import { applyQueueAddBehavior } from '../utils/queueAddBehavior';
+import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState, getOnlineLyricsStateCacheKey } from '../utils/onlineLyricsState';
 
 // src/hooks/useLibraryPlaybackController.ts
 
@@ -100,6 +101,7 @@ export function useLibraryPlaybackController({
     const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylist[]>([]);
     const [showLyricMatchModal, setShowLyricMatchModal] = useState(false);
     const [showNaviLyricMatchModal, setShowNaviLyricMatchModal] = useState(false);
+    const [showOnlineLyricMatchModal, setShowOnlineLyricMatchModal] = useState(false);
 
     const loadLocalSongs = useCallback(async () => {
         try {
@@ -128,6 +130,42 @@ export function useLibraryPlaybackController({
         () => localPlaylists.find(playlist => playlist.isFavorite) ?? null,
         [localPlaylists],
     );
+
+    const loadBaseOnlineLyrics = useCallback(async (
+        onlineSong: SongResult,
+        fallbackLyrics: LyricData | null = lyrics
+    ): Promise<LyricData | null> => {
+        const cachedLyrics = await getFromCacheWithMigration<LyricData>(getOnlineSongCacheKey('lyric', onlineSong), migrateLyricDataRenderHints);
+        if (cachedLyrics) return cachedLyrics;
+
+        const prefetched = getPrefetchedData(onlineSong, audioQuality);
+        if (prefetched?.lyrics) return prefetched.lyrics;
+
+        if (isCloudSong(onlineSong) && userId) {
+            const lyricRes = await neteaseApi.getCloudLyric(userId, onlineSong.id);
+            const mainLrc = extractCloudLyricText(lyricRes);
+            if (!mainLrc || isPureMusicLyricText(mainLrc)) {
+                return null;
+            }
+            return LyricParserFactory.parse({ type: 'local', lrcContent: mainLrc });
+        }
+
+        const lyricRes = await neteaseApi.getLyric(onlineSong.id);
+        const processed = await processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes));
+        return processed.lyrics;
+    }, [audioQuality, lyrics, userId]);
+
+    const resolveOnlineSongLyricsState = useCallback(async (
+        onlineSong: SongResult,
+        fallbackLyrics: LyricData | null = lyrics
+    ): Promise<{ state: OnlineLyricsState | null; lyrics: LyricData | null; }> => {
+        const state = await loadOnlineLyricsState(onlineSong);
+        const baseLyrics = await loadBaseOnlineLyrics(onlineSong, fallbackLyrics);
+        return {
+            state,
+            lyrics: resolveOnlineLyrics(state, baseLyrics),
+        };
+    }, [loadBaseOnlineLyrics, lyrics]);
 
     const isLocalSongLiked = useCallback((song: SongResult | null) => {
         if (!song || !isLocalPlaybackSong(song) || !song.localData || !getFavoriteLocalPlaylist) {
@@ -351,24 +389,9 @@ export function useLibraryPlaybackController({
         }
 
         const onlineSong = currentSong;
-        const cachedLyrics = await getFromCacheWithMigration<LyricData>(getOnlineSongCacheKey('lyric', onlineSong), migrateLyricDataRenderHints);
-        if (cachedLyrics) return cachedLyrics;
-
-        const prefetched = getPrefetchedData(onlineSong, audioQuality);
-        if (prefetched?.lyrics) return prefetched.lyrics;
-
-        if (isCloudSong(onlineSong) && userId) {
-            const lyricRes = await neteaseApi.getCloudLyric(userId, onlineSong.id);
-            const mainLrc = extractCloudLyricText(lyricRes);
-            if (!mainLrc || isPureMusicLyricText(mainLrc)) {
-                return null;
-            }
-            return LyricParserFactory.parse({ type: 'local', lrcContent: mainLrc });
-        }
-
-        const lyricRes = await neteaseApi.getLyric(onlineSong.id);
-        return (await processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes))).lyrics;
-    }, [audioQuality, currentSong, lyrics, userId]);
+        const resolved = await resolveOnlineSongLyricsState(onlineSong, lyrics);
+        return resolved.lyrics;
+    }, [currentSong, lyrics, resolveOnlineSongLyricsState]);
 
     const handleLocalQueueAdd = useCallback(async (localSong: LocalSong) => {
         const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
@@ -769,6 +792,15 @@ export function useLibraryPlaybackController({
         }
     }, [currentSong, setIsPanelOpen]);
 
+    const handleMatchOnlineLyrics = useCallback(() => {
+        if (!currentSong || isStagePlaybackSong(currentSong) || isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
+            return;
+        }
+
+        setIsPanelOpen(false);
+        setShowOnlineLyricMatchModal(true);
+    }, [currentSong, setIsPanelOpen]);
+
     const handleLyricMatchComplete = useCallback(async () => {
         setShowLyricMatchModal(false);
         if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) return;
@@ -792,6 +824,121 @@ export function useLibraryPlaybackController({
             setStatusMsg({ type: 'success', text: 'Match successful' });
         }
     }, [currentSong, onPlayNavidromeSong, playQueue, setStatusMsg]);
+
+    const handleImportOnlineLyrics = useCallback(async (content: string, fileName: string) => {
+        if (!currentSong || isStagePlaybackSong(currentSong) || isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
+            return;
+        }
+
+        try {
+            const importedLyrics = fileName.toLowerCase().endsWith('.txt')
+                ? await LyricParserFactory.parse({ type: 'embedded', textContent: content })
+                : await LyricParserFactory.parse({ type: 'local', lrcContent: content });
+            const previousState = await loadOnlineLyricsState(currentSong);
+            const nextState: OnlineLyricsState = {
+                lyricsSource: 'imported',
+                importedLyrics,
+                importedLyricsName: fileName,
+                hasOnlineOverride: previousState?.hasOnlineOverride ?? false,
+                onlineOverrideLyrics: previousState?.onlineOverrideLyrics ?? null,
+                matchedSongId: previousState?.matchedSongId,
+                matchedIsPureMusic: previousState?.matchedIsPureMusic,
+            };
+            await saveOnlineLyricsState(currentSong, nextState);
+
+            const updatedSong = { ...currentSong, onlineLyricsState: nextState };
+            setCurrentSong(prev => prev?.id === currentSong.id ? updatedSong : prev);
+            setLyrics(importedLyrics);
+            setCurrentLineIndex(-1);
+            await persistLastPlaybackCache(updatedSong, playQueue);
+            setStatusMsg({ type: 'success', text: 'Lyrics updated' });
+        } catch (error) {
+            console.error('Failed to import online lyrics', error);
+            setStatusMsg({ type: 'error', text: 'Failed to save lyrics' });
+        }
+    }, [currentSong, persistLastPlaybackCache, playQueue, setCurrentLineIndex, setCurrentSong, setLyrics, setStatusMsg]);
+
+    const handleChangeOnlineLyricsSource = useCallback(async (source: 'online' | 'imported') => {
+        if (!currentSong || isStagePlaybackSong(currentSong) || isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
+            return;
+        }
+
+        const previousState = await loadOnlineLyricsState(currentSong);
+        const nextState: OnlineLyricsState = {
+            lyricsSource: source,
+            importedLyrics: previousState?.importedLyrics ?? null,
+            importedLyricsName: previousState?.importedLyricsName ?? null,
+            hasOnlineOverride: previousState?.hasOnlineOverride ?? false,
+            onlineOverrideLyrics: previousState?.onlineOverrideLyrics ?? null,
+            matchedSongId: previousState?.matchedSongId,
+            matchedIsPureMusic: previousState?.matchedIsPureMusic,
+        };
+
+        if (source === 'imported' && !nextState.importedLyrics) {
+            return;
+        }
+
+        try {
+            await saveOnlineLyricsState(currentSong, nextState);
+            const baseLyrics = await loadBaseOnlineLyrics(currentSong, lyrics);
+            const nextLyrics = resolveOnlineLyrics(nextState, baseLyrics);
+            const updatedSong = { ...currentSong, onlineLyricsState: nextState };
+            setCurrentSong(prev => prev?.id === currentSong.id ? updatedSong : prev);
+            setLyrics(nextLyrics);
+            setCurrentLineIndex(-1);
+            await persistLastPlaybackCache(updatedSong, playQueue);
+            setStatusMsg({ type: 'success', text: '歌词来源已切换' });
+        } catch (error) {
+            console.error('Failed to switch online lyrics source', error);
+            setStatusMsg({ type: 'error', text: 'Failed to save lyrics source' });
+        }
+    }, [currentSong, loadBaseOnlineLyrics, lyrics, persistLastPlaybackCache, playQueue, setCurrentLineIndex, setCurrentSong, setLyrics, setStatusMsg]);
+
+    const handleOnlineLyricMatchComplete = useCallback(async () => {
+        setShowOnlineLyricMatchModal(false);
+        if (!currentSong || isStagePlaybackSong(currentSong) || isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
+            return;
+        }
+
+        const resolved = await resolveOnlineSongLyricsState(currentSong, lyrics);
+        const updatedSong = {
+            ...currentSong,
+            onlineLyricsState: resolved.state ?? undefined,
+            isPureMusic: resolved.state?.lyricsSource === 'online' && typeof resolved.state.matchedIsPureMusic === 'boolean'
+                ? resolved.state.matchedIsPureMusic
+                : currentSong.isPureMusic,
+        };
+        setCurrentSong(prev => prev?.id === currentSong.id ? updatedSong : prev);
+        setLyrics(resolved.lyrics);
+        setCurrentLineIndex(-1);
+        await persistLastPlaybackCache(updatedSong, playQueue);
+        setStatusMsg({ type: 'success', text: 'Match successful' });
+    }, [currentSong, lyrics, persistLastPlaybackCache, playQueue, resolveOnlineSongLyricsState, setCurrentLineIndex, setCurrentSong, setLyrics, setStatusMsg]);
+
+    const handleClearOnlineLyricsState = useCallback(async () => {
+        if (!currentSong || isStagePlaybackSong(currentSong) || isLocalPlaybackSong(currentSong) || isNavidromePlaybackSong(currentSong)) {
+            return;
+        }
+
+        try {
+            const key = getOnlineLyricsStateCacheKey(currentSong);
+            await removeFromCache(key);
+
+            const resolved = await resolveOnlineSongLyricsState(currentSong, null);
+            const updatedSong = {
+                ...currentSong,
+                onlineLyricsState: undefined,
+            };
+            setCurrentSong(prev => prev?.id === currentSong.id ? updatedSong : prev);
+            setLyrics(resolved.lyrics);
+            setCurrentLineIndex(-1);
+            await persistLastPlaybackCache(updatedSong, playQueue);
+            setStatusMsg({ type: 'success', text: '已清除手动匹配/上传的歌词' });
+        } catch (error) {
+            console.error('Failed to clear online lyrics state', error);
+            setStatusMsg({ type: 'error', text: '清除失败' });
+        }
+    }, [currentSong, persistLastPlaybackCache, playQueue, resolveOnlineSongLyricsState, setCurrentLineIndex, setCurrentSong, setLyrics, setStatusMsg]);
 
     const handleHomeMatchSong = useCallback(async (song: LocalSong) => {
         await loadLocalSongs();
@@ -886,6 +1033,8 @@ export function useLibraryPlaybackController({
         setShowLyricMatchModal,
         showNaviLyricMatchModal,
         setShowNaviLyricMatchModal,
+        showOnlineLyricMatchModal,
+        setShowOnlineLyricMatchModal,
         loadLocalSongs,
         loadLocalPlaylists,
         onRefreshLocalSongs,
@@ -906,8 +1055,13 @@ export function useLibraryPlaybackController({
         handleUpdateLocalLyrics,
         handleChangeLyricsSource,
         handleManualMatchOnline,
+        handleImportOnlineLyrics,
+        handleChangeOnlineLyricsSource,
+        handleMatchOnlineLyrics,
         handleLyricMatchComplete,
         handleNaviLyricMatchComplete,
+        handleOnlineLyricMatchComplete,
+        handleClearOnlineLyricsState,
         handleHomeMatchSong,
         handleLike,
     };

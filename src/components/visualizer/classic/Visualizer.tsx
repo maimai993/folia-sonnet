@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { Line, Theme, Word as WordType, AudioBands } from '../../../types';
+import { DEFAULT_CLASSIC_TUNING, Line, Theme, Word as WordType, AudioBands, type ClassicTuning } from '../../../types';
 import { getLineRenderEndTime, getLineRenderHints } from '../../../utils/lyrics/renderHints';
 import { useVisualizerRuntime } from '../runtime';
 import { type VisualizerSharedProps } from '../definition';
@@ -43,6 +43,15 @@ interface ClassicLineRenderProfile {
     wordRevealMode: 'normal' | 'fast' | 'instant';
     wordLookahead: number;
 }
+
+const clampClassicBreathingFloatMultiplier = (value: number) => Math.min(2, Math.max(0, value));
+
+const resolveClassicTuning = (tuning?: ClassicTuning): ClassicTuning => ({
+    enableWordRotation: tuning?.enableWordRotation ?? DEFAULT_CLASSIC_TUNING.enableWordRotation,
+    breathingFloatMultiplier: clampClassicBreathingFloatMultiplier(
+        tuning?.breathingFloatMultiplier ?? DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
+    ),
+});
 
 // Helper to determine if text contains CJK characters
 const isCJK = (text: string) => /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/.test(text);
@@ -244,10 +253,13 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         audioBands,
         showText = true,
         lyricsFontScale = 1,
+        subtitleOverlayOpacity,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        classicTuning,
     } = props;
     const { t } = useTranslation();
+    const resolvedClassicTuning = useMemo(() => resolveClassicTuning(classicTuning), [classicTuning]);
     const {
         activeLine,
         recentCompletedLine,
@@ -326,16 +338,16 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                 id: `${w.text}-${i}-${seed}`,
                 x: (random(1) - 0.5) * baseSpread * 2,
                 y: (random(2) - 0.5) * baseSpread * 2,
-                rotate: (random(3) - 0.5) * baseRotate * 2,
+                rotate: resolvedClassicTuning.enableWordRotation ? (random(3) - 0.5) * baseRotate * 2 : 0,
                 scale: isChaotic ? 0.8 + random(4) * 0.6 : 1.1 + random(4) * 0.2,
                 marginRight: isChaotic ? `${random(5) * 1.5}rem` : '0.8rem',
                 alignSelf: isChaotic && random(6) > 0.7 ? (random(7) > 0.5 ? 'flex-start' : 'flex-end') : 'auto',
-                passedRotate: (random(8) - 0.5) * 45
+                passedRotate: resolvedClassicTuning.enableWordRotation ? (random(8) - 0.5) * 45 : 0
             };
         });
 
         return { wordConfigs, lineConfig };
-    }, [activeLine, theme.animationIntensity]);
+    }, [activeLine, resolvedClassicTuning.enableWordRotation, theme.animationIntensity]);
 
     // Container motion is the "body" of each word.
     // waiting/active/passed all reuse the same layout config but interpret it differently.
@@ -345,7 +357,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
             scale: 0.5,
             x: config.x + (Math.sin(config.y) * 100),
             y: config.y + (Math.cos(config.x) * 50),
-            rotate: config.rotate + 20,
+            rotate: resolvedClassicTuning.enableWordRotation ? config.rotate + 20 : 0,
             transition: { duration: 0.4 }
         }),
         active: ({ config }: any) => ({
@@ -488,6 +500,11 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
     };
 
     const lyricContainerFloat = useMemo(() => {
+        const multiplier = resolvedClassicTuning.breathingFloatMultiplier;
+        if (multiplier <= 0) {
+            return null;
+        }
+
         // Small whole-line breathing motion so the screen never feels fully static between word events.
         const configByIntensity = {
             calm: { distance: 10, duration: 8.5 },
@@ -496,11 +513,12 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         } as const;
 
         const { distance, duration } = configByIntensity[theme.animationIntensity];
+        const scaledDistance = distance * multiplier;
 
         return {
             animate: {
-                y: [0, -distance, 0, distance * 0.45, 0],
-                scale: [1, 1.01, 1, 0.995, 1]
+                y: [0, -scaledDistance, 0, scaledDistance * 0.45, 0],
+                scale: [1, 1 + 0.01 * multiplier, 1, 1 - 0.005 * multiplier, 1]
             },
             transition: {
                 duration,
@@ -508,7 +526,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                 ease: "easeInOut" as const
             }
         };
-    }, [theme.animationIntensity]);
+    }, [resolvedClassicTuning.breathingFloatMultiplier, theme.animationIntensity]);
 
     return (
         <VisualizerShell
@@ -520,8 +538,8 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
             {/* Main Container */}
             <motion.div
                 className="relative z-10 w-full h-[70vh] flex items-center justify-center p-8 pointer-events-none will-change-transform"
-                animate={lyricContainerFloat.animate}
-                transition={lyricContainerFloat.transition}
+                animate={lyricContainerFloat?.animate}
+                transition={lyricContainerFloat?.transition}
             >
                 <AnimatePresence mode='popLayout'>
                     {showText && activeLine && (
@@ -604,6 +622,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                 theme={theme}
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
+                subtitleOverlayOpacity={subtitleOverlayOpacity}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
             />

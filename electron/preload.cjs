@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('electron', {
     getMainWindowClickThroughEnabled: () => ipcRenderer.invoke('window-get-click-through'),
     setMainWindowClickThroughEnabled: (enabled) => ipcRenderer.invoke('window-set-click-through', enabled),
     setMainWindowClickThroughUnlockHover: (active) => ipcRenderer.invoke('window-set-click-through-unlock-hover', active),
+    getMainWindowAlwaysOnTop: () => ipcRenderer.invoke('window-get-always-on-top'),
+    setMainWindowAlwaysOnTop: (enabled) => ipcRenderer.invoke('window-set-always-on-top', enabled),
     onMainWindowClickThroughChanged: (callback) => {
         const listener = (_event, state) => callback(state);
         ipcRenderer.on('main-window-click-through-changed', listener);
