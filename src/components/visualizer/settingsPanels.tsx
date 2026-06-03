@@ -265,7 +265,7 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 }) => {
     const resolvedFumeTuning: FumeTuning = {
         hidePrintSymbols: fumeTuning.hidePrintSymbols,
-        disableGeometricBackground: DEFAULT_FUME_TUNING.disableGeometricBackground,
+        disableGeometricBackground: fumeTuning.disableGeometricBackground,
         backgroundObjectOpacity: Math.min(1, Math.max(0, fumeTuning.backgroundObjectOpacity ?? DEFAULT_FUME_TUNING.backgroundObjectOpacity)),
         textHoldRatio: Math.min(1, Math.max(0, fumeTuning.textHoldRatio ?? DEFAULT_FUME_TUNING.textHoldRatio)),
         cameraTrackingMode: resolveFumeCameraTrackingMode(fumeTuning.cameraTrackingMode),
@@ -304,6 +304,15 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 value={resolvedFumeTuning.hidePrintSymbols}
                 options={visibilityOptions}
                 onChange={(next) => handleFumeTuningChange({ hidePrintSymbols: next })}
+                isDaylight={isDaylight}
+                theme={theme}
+            />
+
+            <PresetGroup
+                label={t('options.fumeGeometricBackground') || '通用几何图形'}
+                value={resolvedFumeTuning.disableGeometricBackground}
+                options={visibilityOptions}
+                onChange={(next) => handleFumeTuningChange({ disableGeometricBackground: next })}
                 isDaylight={isDaylight}
                 theme={theme}
             />

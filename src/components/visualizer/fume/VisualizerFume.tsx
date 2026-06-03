@@ -1930,7 +1930,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
     }, [currentLineIndex, lines]);
     const resolvedFumeTuning = useMemo<FumeTuning>(() => ({
         hidePrintSymbols: fumeTuning?.hidePrintSymbols ?? DEFAULT_FUME_TUNING.hidePrintSymbols,
-        disableGeometricBackground: DEFAULT_FUME_TUNING.disableGeometricBackground,
+        disableGeometricBackground: fumeTuning?.disableGeometricBackground ?? DEFAULT_FUME_TUNING.disableGeometricBackground,
         backgroundObjectOpacity: clamp(
             fumeTuning?.backgroundObjectOpacity ?? DEFAULT_FUME_TUNING.backgroundObjectOpacity,
             0,
@@ -2953,7 +2953,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
             audioBands={audioBands}
             sharedProps={{
                 ...props,
-                disableGeometricBackground,
+                disableGeometricBackground: disableGeometricBackground || resolvedFumeTuning.disableGeometricBackground,
             }}
         >
             <div ref={viewportRef} className="relative z-10 h-full w-full pointer-events-none">
