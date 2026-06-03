@@ -88,12 +88,14 @@ export default VisualizerFoo;
 ### 核心时间与歌词数据
 
 - `currentTime`: 当前播放时间的 `MotionValue<number>`，单位秒。推荐通过 `currentTime.get()` 读取当前值，或通过 `useMotionValueEvent` 监听变化。
+  禁止把它的连续变化写入 `useState`、store 或 reducer 来追踪当前精确时间；播放器中的逐帧动画应继续使用 MotionValue、`useTransform`、CSS / Framer Motion、canvas draw loop 或 `useRef` 保存瞬时值。React state 只用于当前行、可见段落、waiting / active / passed 等离散变化。
 - `currentLineIndex`: 当前激活歌词行索引。可能为 `-1`，表示当前没有激活行。
 - `lines`: 已处理好的歌词行数组。新 visualizer 应假定这里的数据已经可直接渲染，不再负责拉取或解析歌词。
 
 ### 主题与音频输入
 
 - `theme`: 当前歌词主题。包含颜色、字体风格、动画强度等。
+  新增颜色必须从当前 `Theme` / `DualTheme` 的 light / dark 结果动态派生，优先使用 `backgroundColor`、`primaryColor`、`accentColor`、`secondaryColor` 及 `colorMix.ts` 工具；不要长期写死只适配暗色或亮色的固定 hex / rgba。
 - `audioPower`: 音频整体能量。
 - `audioBands`: 分频能量，用于驱动背景或局部动画。
 
@@ -596,6 +598,8 @@ resetSettings: props => {
 - `src/i18n/locales/zh-CN.ts`
 - `src/i18n/locales/en.ts`
 
+任何新增到 UI 上的用户可见文本都必须准备 i18n key 并写入这两个文件，包括模式名、设置项、tooltip、按钮、空态和 toast。`labelFallback` 只能作为 registry 兜底，不能替代正式字典项。
+
 常见文案包括：
 
 - 模式名
@@ -666,6 +670,9 @@ resetSettings: props => {
 - 是否处理 `activeLine` 不存在的情况
 - 是否支持 `showText = false`
 - 是否正确使用 `lyricsFontScale`
+- 是否没有用 `useState` / store / reducer 每帧保存当前精确时间
+- 是否所有新增 UI 文案都已经写入中英文 i18n 字典
+- 是否所有新增颜色都从当前 light / dark theme 动态派生
 - 是否在 `staticMode` 下关闭重背景动画
 - 是否已经创建 `<mode>/entry.tsx` 并由 registry 自动发现
 - 是否经过统一 renderer 验证

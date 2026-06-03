@@ -105,6 +105,7 @@ src/
 
 - `hooks/useThemeController.ts`
   默认主题、AI 主题、自定义主题、明暗切换。
+  组件新增颜色时必须接入当前 `Theme` / `DualTheme` 流程，从已选 light / dark theme 动态派生，不能长期写死只适配单一明暗背景的固定色。
 
 ### Services
 
@@ -171,6 +172,7 @@ src/
 
 - `i18n/locales/en.ts` / `zh-CN.ts`
   文案字典。
+  任何新增到 UI 上的用户可见文本都必须同步写入这两个字典，并通过 `react-i18next` 读取。
 
 ## 4. Where Changes Usually Belong
 
@@ -204,3 +206,6 @@ src/
 - 不要在 `App.tsx` 里直接组装超长 props；优先放进 `components/app/*` 下与功能相邻的 `build*.ts` / `create*.ts`。
 - 本地音乐导入是增量快照式，不是单次全量扫描。
 - 歌词解析优先从 `parserCore.ts` 理解，不要从旧兼容层反推。
+- 不要用高频 `useState`、store setter 或 reducer 追踪当前精确播放时间来驱动每帧动画；连续时间优先走 `MotionValue`、CSS / Framer Motion、canvas draw loop 或 `useRef`，React state 只承载当前行、模式、可见段落等离散状态。
+- 新增 UI 文案必须补 `src/i18n/locales/en.ts` 和 `src/i18n/locales/zh-CN.ts`。
+- 新增组件颜色必须从 dual theme 的 light / dark 配色中动态派生，并验证明暗模式下的可读对比。

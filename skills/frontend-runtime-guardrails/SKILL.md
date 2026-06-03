@@ -38,6 +38,8 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 - audio analyser / playback polling callback
 - pointer move / scroll / resize 高频事件
 
+绝对禁止用高频 `useState`、store setter 或等价 React 更新去追踪“当前精确时间”。例如不要把 `currentTime.get()`、`audio.currentTime`、RAF 时间戳或 MotionValue 的每次变化写入 state 来驱动歌词、进度、逐字强度或动画相位。连续时间必须优先参考现有方案：`MotionValue` / `useTransform` / CSS 或 Framer Motion 动画 / canvas draw loop / `useRef` 保存瞬时值；只有当前行、播放状态、可见段落这类离散变化可以进入 React state。
+
 如果必须在高频回调里更新 React state，必须满足至少一条：
 
 - 只更新离散状态，并先比较新旧值，例如 `current === next ? current : next`
@@ -134,6 +136,7 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 审查或实现性能敏感前端改动时，至少检查这些问题：
 
 - 是否存在高频回调里的无条件 `setState`？
+- 是否把当前精确播放时间、RAF 时间戳或 MotionValue 的连续值写进 React state / store？
 - 是否每帧创建新数组、新对象并进入 React state？
 - 是否每个字符、每个词、每个 segment 都各自订阅同一个 MotionValue？
 - 不可见或 inactive 元素是否仍在持续更新？
@@ -158,6 +161,7 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 看到这些实现时要停下来重新设计：
 
 - `useMotionValueEvent`、RAF 或 observer 里每次回调都创建新引用并写入 state
+- 用 `useState`、store 或 reducer 每帧保存当前精确时间，再依赖 React rerender 推进动画
 - 每个字符一个 React state 或每帧重建字符强度数组
 - inactive segment 也持续写 state
 - 用字符串搜索推断歌词时序范围，却没有处理重复文本和 offset

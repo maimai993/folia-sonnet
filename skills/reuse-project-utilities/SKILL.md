@@ -124,6 +124,8 @@ visualizer 颜色混合和 alpha 已有 helper：
 
 需要 `rgba(...)`、主题色混合、canvas gradient、shadow color 时，先用这些 helper。不要重复写 hex/rgb parser。
 
+组件颜色必须来自当前 `Theme` / `DualTheme` 流程。新增 UI 或 visualizer 颜色时，不要把只适合单一明暗背景的固定 hex / rgba 当成主色长期写死；应从 `theme.backgroundColor`、`theme.primaryColor`、`theme.accentColor`、`theme.secondaryColor` 或由 `buildBuiltinDualTheme` / `useThemeController` 选出的当前明暗主题动态派生，并确保 light / dark 两套颜色都有可读对比。临时 alpha、shadow 和 gradient 也应基于主题色再用 `colorWithAlpha` / `mixColors` 生成。
+
 ### Icons
 
 项目使用 `lucide-react`。按钮、tab、控制项、状态动作优先从 lucide 导入图标。
@@ -148,7 +150,7 @@ UI 文案使用 `react-i18next`：
 const { t } = useTranslation();
 ```
 
-新增用户可见文案时，优先放进 `src/i18n/locales/en.ts` 和 `src/i18n/locales/zh-CN.ts`。不要把长期 UI 文案只写成硬编码字符串；短 fallback 可以保留在已有模式里。
+任何新增到 UI 上的用户可见文本都必须准备 i18n key，并同步写入 `src/i18n/locales/en.ts` 和 `src/i18n/locales/zh-CN.ts`。不要把按钮、标题、提示、空态、设置项、tooltip、toast 或模式文案只写成硬编码字符串；短 fallback 只能作为现有 registry / 兼容模式的兜底，不能替代字典项。
 
 ### Long Lists
 
@@ -197,6 +199,7 @@ const { t } = useTranslation();
 - 是否新建了 service 请求逻辑，但已有 service 已经封装同类 API？
 - 是否对大量列表使用普通 `.map()` 而不是虚拟列表？
 - 是否新增硬编码文案却没有更新 i18n 字典？
+- 是否新增固定颜色却没有从 `Theme` / `DualTheme` 动态派生并检查明暗两套表现？
 - 是否创建了相似 helper，却没有搜索已有实现或测试？
 
 ## Validation
