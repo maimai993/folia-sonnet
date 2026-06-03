@@ -56,8 +56,9 @@ const resolveDisplay = (lyrics: LyricData | null | undefined, time: number): Rem
     }
 
     const upcomingIndex = lyrics.lines.findIndex(line => line.startTime > time);
+    const previousIndex = upcomingIndex === -1 ? lyrics.lines.length - 1 : upcomingIndex - 1;
     return {
-        currentLine: null,
+        currentLine: previousIndex >= 0 ? lyrics.lines[previousIndex] ?? null : null,
         nextLine: upcomingIndex === -1 ? null : lyrics.lines[upcomingIndex] ?? null,
     };
 };
@@ -97,6 +98,7 @@ const RemoteLyricOverlay: React.FC<RemoteLyricOverlayProps> = ({
 
     const currentLine = display.currentLine;
     const nextLine = display.nextLine;
+    const hasLyrics = Boolean(lyrics?.lines.length);
     const lineKey = getLineKey(currentLine);
 
     const words = useMemo(() => currentLine?.words ?? [], [currentLine]);
@@ -363,7 +365,7 @@ const RemoteLyricOverlay: React.FC<RemoteLyricOverlayProps> = ({
                             )
                         ) : (
                             <span style={{ color: baseColor }}>
-                                {hasTrack ? '无歌词' : ''}
+                                {hasTrack && !hasLyrics ? '无歌词' : ''}
                             </span>
                         )}
                     </div>
