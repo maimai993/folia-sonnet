@@ -28,10 +28,19 @@ yay -S folia-major-bin
 桌面端的外部遥控窗会作为主窗口的伴随窗口打开，并使用稳定窗口标题 `Folia Remote`。在 Hyprland 下，如果希望它以悬浮小窗方式出现，可以在 `hyprland.conf` 中添加类似规则：
 
 ```ini
-windowrule = float, title:^(Folia Remote)$
-windowrule = size 520 315, title:^(Folia Remote)$
-windowrule = center, title:^(Folia Remote)$
-windowrule = pin, title:^(Folia Remote)$
+windowrule {
+  name = folia-remote
+  float = on
+  size = 520 315
+  center = on
+  pin = on
+  no_blur = on
+  border_size = 0
+  no_shadow = on
+  match:class = ^(folia-major)$
+  match:title = ^(Folia Remote)$
+}
+
 ```
 
 不同打包方式下窗口 `class` 可能不同；如果规则没有生效，可以用 `hyprctl clients` 查看实际 `class` / `title` 后再调整匹配条件。
