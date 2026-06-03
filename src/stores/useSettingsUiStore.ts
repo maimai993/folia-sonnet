@@ -3,8 +3,8 @@ import type React from 'react';
 import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type Theme, type TiltTuning, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
-import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, MAX_CAPPELLA_CUSTOM_EMOJI_IMAGES, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
-import { buildStoredCappellaAvatar, clearCustomCappellaAvatar, isSupportedCappellaAvatarFile, MAX_CAPPELLA_CUSTOM_AVATAR_IMAGES, saveCustomCappellaAvatar } from '../services/cappellaAvatarPack';
+import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
+import { buildStoredCappellaAvatar, clearCustomCappellaAvatar, isSupportedCappellaAvatarFile, saveCustomCappellaAvatar } from '../services/cappellaAvatarPack';
 import { clearUploadedLyricsFont, uploadAndRegisterLyricsFont } from '../services/customLyricsFont';
 
 // src/stores/useSettingsUiStore.ts
@@ -906,10 +906,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
 
         const storedCappellaEmojiPack = get().storedCappellaEmojiPack;
-        const nextTotal = storedCappellaEmojiPack.length + files.length;
-        if (nextTotal > MAX_CAPPELLA_CUSTOM_EMOJI_IMAGES) {
-            return { ok: false, error: `最多只能上传 ${MAX_CAPPELLA_CUSTOM_EMOJI_IMAGES} 张图片，当前已上传 ${storedCappellaEmojiPack.length} 张。` };
-        }
 
         if (!files.every(isSupportedCappellaEmojiFile)) {
             return { ok: false, error: '仅支持 png、jpg、jpeg、gif、webp、svg 图片。' };
@@ -947,10 +943,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
 
         const storedCappellaAvatarPack = get().storedCappellaAvatarPack;
-        const nextTotal = storedCappellaAvatarPack.length + files.length;
-        if (nextTotal > MAX_CAPPELLA_CUSTOM_AVATAR_IMAGES) {
-            return { ok: false, error: `最多只能上传 ${MAX_CAPPELLA_CUSTOM_AVATAR_IMAGES} 张图片，当前已上传 ${storedCappellaAvatarPack.length} 张。` };
-        }
 
         if (!files.every(isSupportedCappellaAvatarFile)) {
             return { ok: false, error: '仅支持 png、jpg、jpeg、gif、webp、svg 图片。' };

@@ -541,8 +541,12 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         setFeedback(t('options.cappellaAvatarCleared') || '自定义头像已清空。');
     };
 
-    const avatarPreviewSlots = Array.from({ length: 5 }, (_, index) => cappellaCustomAvatarImages[index] ?? null);
-    const previewSlots = Array.from({ length: 5 }, (_, index) => cappellaCustomEmojiImages[index] ?? null);
+    const avatarPreviewSlots = cappellaCustomAvatarImages.length > 0
+        ? cappellaCustomAvatarImages
+        : Array.from({ length: 5 }, (_, index) => cappellaCustomAvatarImages[index] ?? null);
+    const previewSlots = cappellaCustomEmojiImages.length > 0
+        ? cappellaCustomEmojiImages
+        : Array.from({ length: 5 }, (_, index) => cappellaCustomEmojiImages[index] ?? null);
 
     return (
         <div
@@ -632,7 +636,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 </div>
                 <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
                     {hasCappellaCustomAvatar
-                        ? `${t('options.cappellaEmojiCount') || '已上传'} ${cappellaCustomAvatarImages.length} / 5`
+                        ? `${t('options.cappellaEmojiCount') || '已上传'} ${cappellaCustomAvatarImages.length}`
                         : (t('options.cappellaAvatarUploadHint') || '还没有自定义头像，上传后可切换到自定义来源。')}
                 </div>
 
@@ -739,7 +743,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 </div>
                 <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
                     {hasCappellaCustomEmojiPack
-                        ? `${t('options.cappellaEmojiCount') || '已上传'} ${cappellaCustomEmojiCount} / 5`
+                        ? `${t('options.cappellaEmojiCount') || '已上传'} ${cappellaCustomEmojiCount}`
                         : (t('options.cappellaEmojiUploadHint') || '还没有自定义表情包，上传后才能切换到自定义。')}
                 </div>
             </div>

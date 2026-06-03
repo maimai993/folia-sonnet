@@ -4,7 +4,6 @@ import type { StoredCappellaAvatarImage } from '../types';
 // src/services/cappellaAvatarPack.ts
 // Persists user-provided Cappella custom avatars in IndexedDB.
 const CAPPELLA_CUSTOM_AVATAR_KEY = 'cappella_custom_avatar';
-const MAX_CAPPELLA_CUSTOM_AVATAR_IMAGES = 5;
 const SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
 
 export const getCustomCappellaAvatar = async (): Promise<StoredCappellaAvatarImage[]> => {
@@ -37,5 +36,3 @@ export const buildStoredCappellaAvatar = (files: File[]): StoredCappellaAvatarIm
         mimeType: file.type || 'application/octet-stream',
         blob: file,
     }));
-
-export { MAX_CAPPELLA_CUSTOM_AVATAR_IMAGES };
