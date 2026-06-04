@@ -66,7 +66,7 @@ describe('frameRateLimiter', () => {
             } catch (error) {
                 reportedErrors.push(error);
             }
-            return 1 as ReturnType<typeof setTimeout>;
+            return 1 as unknown as ReturnType<typeof setTimeout>;
         }) as typeof setTimeout;
 
         try {

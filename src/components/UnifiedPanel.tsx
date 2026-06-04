@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command } from 'lucide-react';
+import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, NeteasePlaylist, ThemeMode, VisualizerMode } from '../types';
 import CoverTab from './panelTab/CoverTab';
@@ -73,6 +73,7 @@ type UnifiedPanelPlaybackProps = {
     playbackControlsDisabled?: boolean;
     onOpenSettings?: () => void;
     onOpenCommandPalette?: () => void;
+    isCommandPaletteOpen?: boolean;
 };
 
 type UnifiedPanelQueueProps = {
@@ -183,6 +184,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         playbackControlsDisabled = false,
         onOpenSettings,
         onOpenCommandPalette,
+        isCommandPaletteOpen = false,
     } = playback;
     const { playQueue, onPlaySong, queueScrollRef, onShuffle } = queue;
     const {
@@ -219,6 +221,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = React.useState(false);
     const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = React.useState(false);
     const [navidromePlaylists, setNavidromePlaylists] = React.useState<Array<{ id: string; name: string; description?: string; }>>([]);
+    const [showGuideLine, setShowGuideLine] = React.useState(false);
+    const [isDragging, setIsDragging] = React.useState(false);
 
     const isStage = isStageContext || Boolean(currentSong && (currentSong as any).isStage === true);
     const isNavidrome = currentSong && (currentSong as any).isNavidrome === true;
@@ -315,7 +319,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const commandSlideRef = React.useRef<{ startX: number; startY: number; triggered: boolean; } | null>(null);
     const suppressToggleClickRef = React.useRef(false);
     const toggleButtonRef = React.useRef<HTMLButtonElement | null>(null);
-    const commandDestinationRef = React.useRef<HTMLDivElement | null>(null);
+    const trackEndIconRef = React.useRef<HTMLDivElement | null>(null);
+    const trackFillRef = React.useRef<HTMLDivElement | null>(null);
     const glassBg = isDaylight ? 'bg-white/60' : 'bg-black/40';
     const placeholderBg = isDaylight ? 'bg-stone-200' : 'bg-zinc-900';
     const activeTabBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
@@ -327,26 +332,32 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             : 'translate-x-1/2 opacity-60';
     const canSlideOpenCommandPalette = !isOpen && Boolean(onOpenCommandPalette);
     const setCommandDestinationFeedback = (progress: number) => {
-        const destination = commandDestinationRef.current;
-        if (!destination) {
+        const iconContainer = trackEndIconRef.current;
+        if (!iconContainer) {
             return;
         }
 
-        destination.style.transition = 'none';
-        destination.style.opacity = String(Math.min(1, Math.max(0, progress)));
-        destination.style.translate = `${Math.round(12 - progress * 12)}px -50%`;
-        destination.style.scale = String(0.94 + progress * 0.06);
+        iconContainer.style.opacity = String(0.35 + progress * 0.65);
+        iconContainer.style.scale = String(1.0 + progress * 0.15);
+        iconContainer.style.transform = `rotate(${progress * 45}deg)`;
+
+        if (progress >= 1) {
+            iconContainer.style.color = theme.accentColor;
+        } else {
+            iconContainer.style.color = '';
+        }
     };
     const resetCommandDestinationFeedback = () => {
-        const destination = commandDestinationRef.current;
-        if (!destination) {
+        const iconContainer = trackEndIconRef.current;
+        if (!iconContainer) {
             return;
         }
 
-        destination.style.transition = 'opacity 150ms ease-out, translate 150ms ease-out, scale 150ms ease-out';
-        destination.style.opacity = '0';
-        destination.style.translate = '12px -50%';
-        destination.style.scale = '0.94';
+        iconContainer.style.transition = 'opacity 150ms ease-out, scale 150ms ease-out, transform 150ms ease-out, color 150ms ease-out';
+        iconContainer.style.opacity = '0.35';
+        iconContainer.style.scale = '1.0';
+        iconContainer.style.transform = '';
+        iconContainer.style.color = '';
     };
     const setToggleButtonDragFeedback = (deltaX: number) => {
         const button = toggleButtonRef.current;
@@ -359,36 +370,139 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         button.style.transition = 'none';
         button.style.translate = `${dragX}px 0`;
         button.style.filter = `brightness(${1 + progress * 0.18})`;
-        button.style.boxShadow = `0 18px 42px rgba(0, 0, 0, ${0.24 + progress * 0.16})`;
+
+        const icon = button.querySelector('svg');
+        if (icon) {
+            icon.style.transform = `rotate(${progress * -180}deg)`;
+            icon.style.scale = String(1 - progress * 0.1);
+        }
+
+        if (progress >= 1) {
+            button.style.backgroundColor = theme.accentColor;
+            button.style.color = '#ffffff';
+            button.style.boxShadow = `0 0 16px ${theme.accentColor}66, 0 18px 42px rgba(0, 0, 0, ${0.24 + progress * 0.16})`;
+        } else {
+            button.style.backgroundColor = '';
+            button.style.color = '';
+            button.style.boxShadow = `0 18px 42px rgba(0, 0, 0, ${0.24 + progress * 0.16})`;
+        }
+
+        // update osu! Slider Track Fill
+        const trackFill = trackFillRef.current;
+        if (trackFill) {
+            trackFill.style.transition = 'none';
+            trackFill.style.width = `${48 + Math.abs(dragX)}px`;
+            if (progress >= 1) {
+                trackFill.style.backgroundColor = theme.accentColor;
+                trackFill.style.opacity = '0.35';
+            } else {
+                trackFill.style.backgroundColor = '';
+                trackFill.style.opacity = '';
+            }
+        }
+
+        const iconContainer = trackEndIconRef.current;
+        if (iconContainer) {
+            iconContainer.style.transition = 'none';
+        }
+
         setCommandDestinationFeedback(progress);
     };
-    const resetToggleButtonDragFeedback = (mode: 'release' | 'trigger' = 'release') => {
+    const resetToggleButtonDragFeedback = (mode: 'release' | 'trigger' = 'release', deltaX = 0) => {
+        setIsDragging(false);
         const button = toggleButtonRef.current;
         if (!button) {
             resetCommandDestinationFeedback();
             return;
         }
 
-        resetCommandDestinationFeedback();
+        const dragX = Math.max(-44, Math.min(0, deltaX));
+
         if (mode === 'trigger') {
             button.animate(
                 [
-                    { translate: '-44px 0', scale: '1', opacity: '1', filter: 'brightness(1.18)' },
-                    { translate: '-64px 0', scale: '0.92', opacity: '0.82', filter: 'brightness(1.28)' },
+                    { translate: `${dragX}px 0`, scale: '1', opacity: '1', filter: 'brightness(1.18)' },
+                    { translate: '-80px 0', scale: '0.8', opacity: '0' },
                 ],
-                { duration: 180, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+                { duration: 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
             );
+
+            const iconContainer = trackEndIconRef.current;
+            if (iconContainer) {
+                iconContainer.animate(
+                    [
+                        { translate: '0px 0px', scale: '1.15', opacity: '1' },
+                        { translate: '-40px 0px', scale: '0.9', opacity: '0' },
+                    ],
+                    { duration: 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
+                );
+            }
+
+            const trackFill = trackFillRef.current;
+            if (trackFill) {
+                trackFill.animate(
+                    [
+                        { width: `${48 + Math.abs(dragX)}px`, opacity: '0.35' },
+                        { width: '96px', opacity: '0' },
+                    ],
+                    { duration: 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
+                );
+            }
+
+            resetCommandDestinationFeedback();
+
             button.style.transition = '';
             button.style.translate = '0 0';
             button.style.filter = '';
             button.style.boxShadow = '';
+            button.style.backgroundColor = '';
+            button.style.color = '';
+            const icon = button.querySelector('svg');
+            if (icon) {
+                icon.style.transition = '';
+                icon.style.transform = '';
+                icon.style.scale = '';
+            }
+
+            if (trackFill) {
+                trackFill.style.transition = '';
+                trackFill.style.width = '48px';
+                trackFill.style.backgroundColor = '';
+                trackFill.style.opacity = '';
+            }
+
+            if (iconContainer) {
+                iconContainer.style.transition = '';
+                iconContainer.style.opacity = '0.35';
+                iconContainer.style.scale = '1.0';
+                iconContainer.style.transform = '';
+                iconContainer.style.color = '';
+            }
             return;
         }
 
-        button.style.transition = 'translate 160ms ease-out, filter 160ms ease-out, box-shadow 160ms ease-out';
+        resetCommandDestinationFeedback();
+        button.style.transition = 'translate 160ms ease-out, filter 160ms ease-out, box-shadow 160ms ease-out, background-color 160ms ease-out, color 160ms ease-out';
         button.style.translate = '0 0';
         button.style.filter = '';
         button.style.boxShadow = '';
+        button.style.backgroundColor = '';
+        button.style.color = '';
+
+        const icon = button.querySelector('svg');
+        if (icon) {
+            icon.style.transition = 'transform 160ms ease-out, scale 160ms ease-out';
+            icon.style.transform = '';
+            icon.style.scale = '';
+        }
+
+        const trackFill = trackFillRef.current;
+        if (trackFill) {
+            trackFill.style.transition = 'width 160ms ease-out, background-color 160ms ease-out, opacity 160ms ease-out';
+            trackFill.style.width = '48px';
+            trackFill.style.backgroundColor = '';
+            trackFill.style.opacity = '';
+        }
     };
     const handleToggleButtonPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
         if (!canSlideOpenCommandPalette) {
@@ -401,6 +515,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             triggered: false,
         };
         suppressToggleClickRef.current = false;
+        setShowGuideLine(false);
+        setIsDragging(true);
+
         setToggleButtonDragFeedback(0);
         event.currentTarget.setPointerCapture?.(event.pointerId);
     };
@@ -417,9 +534,17 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             gesture.triggered = true;
             suppressToggleClickRef.current = true;
             event.preventDefault();
-            resetToggleButtonDragFeedback('trigger');
+            resetToggleButtonDragFeedback('trigger', deltaX);
             onOpenCommandPalette?.();
         }
+    };
+    const handleToggleButtonMouseEnter = () => {
+        if (canSlideOpenCommandPalette) {
+            setShowGuideLine(true);
+        }
+    };
+    const handleToggleButtonMouseLeave = () => {
+        setShowGuideLine(false);
     };
     const clearToggleButtonGesture = () => {
         commandSlideRef.current = null;
@@ -813,24 +938,72 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
             {/* Toggle Button */}
             <AnimatePresence>
-                {!hideToggleButton && (!isOpen || showOpenPanelCloseButton) && (
+                {!hideToggleButton && (!isOpen || showOpenPanelCloseButton) && !isCommandPaletteOpen && (
                     <motion.div
                         initial={{ opacity: 0, x: 20, y: 12, scale: 0.92 }}
                         animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: 20, y: 12, scale: 0.92 }}
+                        exit={isCommandPaletteOpen
+                            ? { opacity: 0, x: 0, y: 0, scale: 1 }
+                            : { opacity: 0, x: 20, y: 12, scale: 0.92 }
+                        }
                         transition={{ duration: 0.24, ease: 'easeOut' }}
                         className="pointer-events-auto fixed bottom-8 right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
                     >
+                        {/* osu! Slider Track */}
                         <div
-                            ref={commandDestinationRef}
-                            className={`pointer-events-none absolute right-16 top-1/2 flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium shadow-lg backdrop-blur-md ${
-                                isDaylight ? 'border-black/10 bg-white/80 text-zinc-900' : 'border-white/10 bg-black/55 text-white'
+                            style={{
+                                width: '96px',
+                                transition: 'opacity 200ms ease-out',
+                            }}
+                            className={`absolute right-4 md:right-8 top-1/2 -translate-y-1/2 h-12 rounded-full border pointer-events-none z-0 ${
+                                showGuideLine || isDragging
+                                    ? 'opacity-100'
+                                    : 'opacity-0'
+                            } ${
+                                isDaylight
+                                    ? 'border-black/10 bg-black/5'
+                                    : 'border-white/10 bg-white/5'
                             }`}
-                            style={{ opacity: 0, translate: '12px -50%', scale: '0.94' }}
                         >
-                            <Command size={13} />
-                            <span className="whitespace-nowrap">{t('commandPalette.destination') || 'Command'}</span>
+                            {/* Semi-transparent command icon at the left end of the track */}
+                            <motion.div 
+                                className="absolute left-3.5 top-[17px] w-3.5 h-3.5 pointer-events-none flex items-center justify-center"
+                                animate={showGuideLine ? {
+                                    x: [0, -4, 0],
+                                    opacity: [0.45, 0.85, 0.45],
+                                } : {
+                                    x: 0,
+                                    opacity: 0.45,
+                                }}
+                                transition={showGuideLine ? {
+                                    duration: 1.5,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
+                                } : undefined}
+                            >
+                                <div
+                                    ref={trackEndIconRef}
+                                    style={{ 
+                                        color: isDaylight ? '#000000' : '#ffffff',
+                                    }}
+                                    className="w-full h-full flex items-center justify-center"
+                                >
+                                    <Command size={14} />
+                                </div>
+                            </motion.div>
+
+                            {/* Track Fill */}
+                            <div
+                                ref={trackFillRef}
+                                style={{
+                                    width: '48px',
+                                }}
+                                className={`absolute right-0 top-0 bottom-0 rounded-full pointer-events-none ${
+                                    isDaylight ? 'bg-black/10' : 'bg-white/10'
+                                }`}
+                            />
                         </div>
+
                         <button
                             ref={toggleButtonRef}
                             type="button"
@@ -838,6 +1011,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                             onPointerMove={handleToggleButtonPointerMove}
                             onPointerUp={clearToggleButtonGesture}
                             onPointerCancel={clearToggleButtonGesture}
+                            onMouseEnter={handleToggleButtonMouseEnter}
+                            onMouseLeave={handleToggleButtonMouseLeave}
                             onClick={handleToggleButtonClick}
                             style={{ touchAction: canSlideOpenCommandPalette ? 'none' : undefined }}
                             className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg backdrop-blur-md transform

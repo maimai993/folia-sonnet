@@ -66,6 +66,7 @@ type BuildPlayerPanelModelParams = {
     isNowPlayingControlDisabled: boolean;
     openSettings: (initialTab: 'help' | 'options') => void;
     openCommandPalette?: LegacyUnifiedPanelProps['playback']['onOpenCommandPalette'];
+    isCommandPaletteOpen?: boolean;
     playQueue: LegacyUnifiedPanelProps['queue']['playQueue'];
     playSong: LegacyUnifiedPanelProps['queue']['onPlaySong'];
     queueScrollRef: RefObject<HTMLDivElement | null>;
@@ -154,6 +155,7 @@ export const buildPlayerPanelModel = ({
     isNowPlayingControlDisabled,
     openSettings,
     openCommandPalette,
+    isCommandPaletteOpen,
     playQueue,
     playSong,
     queueScrollRef,
@@ -243,6 +245,7 @@ export const buildPlayerPanelModel = ({
                 openSettings('options');
             },
             onOpenCommandPalette: openCommandPalette,
+            isCommandPaletteOpen,
         },
         queue: {
             playQueue,
