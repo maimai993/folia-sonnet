@@ -2086,13 +2086,21 @@ export default function App() {
 
             <CommandPalette
                 activeIndex={commandPalette.activeIndex}
+                activePreview={commandPalette.activePreview}
                 isDaylight={isDaylight}
+                isComposing={commandPalette.isComposing}
                 isOpen={commandPalette.isOpen}
                 matches={commandPalette.matches}
                 query={commandPalette.query}
                 theme={theme}
                 onActiveIndexChange={commandPalette.setActiveIndex}
                 onClose={commandPalette.close}
+                onCompositionEnd={(value) => {
+                    commandPalette.setIsComposing(false);
+                    commandPalette.setQuery(value);
+                    commandPalette.setMatchQuery(value);
+                }}
+                onCompositionStart={() => commandPalette.setIsComposing(true)}
                 onExecuteActive={commandPalette.executeActive}
                 onExecuteMatch={commandPalette.executeMatch}
                 onQueryChange={commandPalette.setQuery}

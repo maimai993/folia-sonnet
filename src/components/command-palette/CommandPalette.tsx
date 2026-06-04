@@ -10,13 +10,17 @@ import type { CommandPaletteMatch } from './types';
 
 type CommandPaletteProps = {
     activeIndex: number;
+    activePreview: string | null;
     isDaylight: boolean;
+    isComposing: boolean;
     isOpen: boolean;
     matches: CommandPaletteMatch[];
     query: string;
     theme: Theme;
     onActiveIndexChange: (index: number) => void;
     onClose: () => void;
+    onCompositionEnd: (query: string) => void;
+    onCompositionStart: () => void;
     onExecuteActive: () => Promise<boolean>;
     onExecuteMatch: (index: number) => Promise<boolean>;
     onQueryChange: (query: string) => void;
@@ -33,13 +37,17 @@ const groupLabelKey: Record<string, string> = {
 
 const CommandPalette: React.FC<CommandPaletteProps> = ({
     activeIndex,
+    activePreview,
     isDaylight,
+    isComposing,
     isOpen,
     matches,
     query,
     theme,
     onActiveIndexChange,
     onClose,
+    onCompositionEnd,
+    onCompositionStart,
     onExecuteActive,
     onExecuteMatch,
     onQueryChange,
@@ -71,6 +79,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             if (event.key === 'Escape') {
                 event.preventDefault();
                 onClose();
+                return;
+            }
+
+            if (event.isComposing || isComposing) {
                 return;
             }
 
@@ -124,9 +136,20 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                             <Search size={18} className="opacity-45" />
                             <input
                                 ref={inputRef}
+                                type="text"
                                 value={query}
                                 onChange={(event) => onQueryChange(event.target.value)}
+                                onCompositionStart={onCompositionStart}
+                                onCompositionEnd={(event) => onCompositionEnd(event.currentTarget.value)}
                                 placeholder={t('commandPalette.placeholder') || 'Type a command or search...'}
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="none"
+                                spellCheck={false}
+                                name="folia-command-palette-query"
+                                role="combobox"
+                                aria-autocomplete="list"
+                                aria-expanded={matches.length > 0}
                                 className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:opacity-45"
                                 style={{ color: 'var(--text-primary)' }}
                             />
@@ -139,6 +162,18 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                 <X size={16} />
                             </button>
                         </div>
+
+                        {activePreview && (
+                            <div
+                                className="border-b px-4 py-3 text-sm"
+                                style={{ borderColor: isDaylight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.10)' }}
+                            >
+                                <span className="mr-2 text-xs uppercase tracking-[0.12em] opacity-45">
+                                    {t('commandPalette.recognized') || 'Recognized'}
+                                </span>
+                                <span className="font-medium">{activePreview}</span>
+                            </div>
+                        )}
 
                         <div className="max-h-[50vh] overflow-y-auto p-2">
                             {matches.length === 0 ? (

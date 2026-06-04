@@ -30,8 +30,21 @@ export const useCommandPalette = ({
 }: UseCommandPaletteParams) => {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
+    const [matchQuery, setMatchQuery] = useState('');
+    const [isComposing, setIsComposing] = useState(false);
     const [activeIndex, setActiveIndex] = useState(0);
-    const matches = useMemo(() => getCommandPaletteMatches(query), [query]);
+    const matches = useMemo(() => getCommandPaletteMatches(matchQuery), [matchQuery]);
+    const activePreview = useMemo(() => {
+        const match = matches[activeIndex];
+        if (!match?.command.getPreview) {
+            return null;
+        }
+        if (match.command.requiresInput && !match.input) {
+            return null;
+        }
+
+        return match.command.getPreview(match.input, context);
+    }, [activeIndex, context, matches]);
 
     const open = useCallback(() => {
         if (currentView !== 'player' || isBlocked) {
@@ -44,6 +57,8 @@ export const useCommandPalette = ({
     const close = useCallback(() => {
         setIsOpen(false);
         setQuery('');
+        setMatchQuery('');
+        setIsComposing(false);
         setActiveIndex(0);
     }, []);
 
@@ -53,19 +68,35 @@ export const useCommandPalette = ({
             return false;
         }
 
-        const input = match.input || (match.command.requiresInput ? query.trim() : '');
+        const input = match.input;
+        if (match.command.requiresInput && !input) {
+            return false;
+        }
+
         const didExecute = await match.command.execute(input, context);
         if (didExecute) {
             close();
         }
         return didExecute;
-    }, [close, context, matches, query]);
+    }, [close, context, matchQuery, matches]);
 
     const executeActive = useCallback(() => executeMatch(activeIndex), [activeIndex, executeMatch]);
 
     useEffect(() => {
         setActiveIndex(0);
-    }, [query]);
+    }, [matchQuery]);
+
+    useEffect(() => {
+        if (!isOpen || isComposing) {
+            return undefined;
+        }
+
+        const timer = window.setTimeout(() => {
+            setMatchQuery(query);
+        }, 120);
+
+        return () => window.clearTimeout(timer);
+    }, [isComposing, isOpen, query]);
 
     useEffect(() => {
         if (activeIndex >= matches.length) {
@@ -98,14 +129,18 @@ export const useCommandPalette = ({
 
     return {
         activeIndex,
+        activePreview,
         close,
         executeActive,
         executeMatch,
         isOpen,
+        isComposing,
         matches,
         open,
         query,
         setActiveIndex,
+        setIsComposing,
+        setMatchQuery,
         setQuery,
     };
 };

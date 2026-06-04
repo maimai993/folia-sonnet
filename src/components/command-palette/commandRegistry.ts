@@ -14,6 +14,36 @@ const MAX_COMMAND_MATCHES = 10;
 
 const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
+const getSearchSourceLabel = (sourceTab: HomeViewTab, context: CommandPaletteContext) => {
+    if (sourceTab === 'local') {
+        return context.t('commandPalette.sourceLocal', 'local library');
+    }
+    if (sourceTab === 'navidrome') {
+        return context.t('commandPalette.sourceNavidrome', 'Navidrome');
+    }
+    return context.t('commandPalette.sourceNetease', 'NetEase Cloud Music');
+};
+
+const buildSearchPreview = (
+    input: string,
+    sourceTab: HomeViewTab,
+    context: CommandPaletteContext,
+    isCurrentSource: boolean
+) => {
+    const trimmedInput = input.trim();
+    if (!trimmedInput) {
+        return null;
+    }
+
+    const sourceLabel = isCurrentSource
+        ? context.t('commandPalette.sourceCurrent', 'current source')
+        : getSearchSourceLabel(sourceTab, context);
+
+    return context.t('commandPalette.previewSearch', 'Search {{source}} songs: {{query}}')
+        .replace('{{source}}', sourceLabel)
+        .replace('{{query}}', trimmedInput);
+};
+
 const runSearch = async (
     query: string,
     sourceTab: CommandPaletteSearchSource,
@@ -60,6 +90,12 @@ const createSearchCommand = (
     keywords,
     placeholder: `${keywords[0]} ${description}`,
     requiresInput: true,
+    getPreview: (input, context) => buildSearchPreview(
+        input,
+        resolveSource(context),
+        context,
+        id === 'search-current'
+    ),
     execute: (input, context) => runSearch(input, resolveSource(context), context),
 });
 

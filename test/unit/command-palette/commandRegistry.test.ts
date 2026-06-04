@@ -57,6 +57,30 @@ describe('command palette registry', () => {
         expect(context.openSettings).toHaveBeenCalledWith('options', 'integration');
     });
 
+    it('previews recognized search commands with parsed input', () => {
+        const translations: Record<string, string> = {
+            'commandPalette.previewSearch': '搜索{{source}}歌曲：{{query}}',
+            'commandPalette.sourceCurrent': '当前来源',
+        };
+        const context = createContext({
+            t: (key, fallback) => translations[key] ?? fallback ?? '',
+        });
+        const [match] = getCommandPaletteMatches('search 你好世界');
+
+        expect(match.command.id).toBe('search-current');
+        expect(match.input).toBe('你好世界');
+        expect(match.command.getPreview?.(match.input, context)).toBe('搜索当前来源歌曲：你好世界');
+    });
+
+    it('does not preview search commands before input is provided', () => {
+        const context = createContext();
+        const [match] = getCommandPaletteMatches('search');
+
+        expect(match.command.id).toBe('search-current');
+        expect(match.input).toBe('');
+        expect(match.command.getPreview?.(match.input, context)).toBeNull();
+    });
+
     it('matches commands by Chinese keyword and pinyin', () => {
         expect(getCommandPaletteMatches('本地 bad apple')[0].command.id).toBe('search-local');
         expect(getCommandPaletteMatches('bendi bad apple')[0].command.id).toBe('search-local');

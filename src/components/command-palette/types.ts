@@ -19,6 +19,7 @@ export type CommandPaletteCommand = {
     keywords: string[];
     placeholder?: string;
     requiresInput?: boolean;
+    getPreview?: (input: string, context: CommandPaletteContext) => string | null;
     execute: (input: string, context: CommandPaletteContext) => Promise<boolean> | boolean;
 };
 
