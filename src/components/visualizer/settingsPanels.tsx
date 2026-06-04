@@ -80,7 +80,7 @@ export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         ),
         useLegacyLayout: classicTuning.useLegacyLayout ?? DEFAULT_CLASSIC_TUNING.useLegacyLayout,
         wordSpacing: clampClassicWordSpacing(
-            classicTuning.wordSpacing ?? DEFAULT_CLASSIC_TUNING.wordSpacing ?? 1
+            classicTuning.wordSpacing ?? DEFAULT_CLASSIC_TUNING.wordSpacing ?? 0.7
         ),
     };
     const wordRotationOptions: PresetOption<boolean>[] = useMemo(() => ([

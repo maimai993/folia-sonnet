@@ -222,7 +222,7 @@ export const DEFAULT_CLASSIC_TUNING: ClassicTuning = {
   enableWordRotation: true,
   breathingFloatMultiplier: 1,
   useLegacyLayout: false,
-  wordSpacing: 1,
+  wordSpacing: 0.7,
 };
 
 export interface CadenzaTuning {

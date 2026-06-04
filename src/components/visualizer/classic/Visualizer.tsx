@@ -55,7 +55,7 @@ const resolveClassicTuning = (tuning?: ClassicTuning): ClassicTuning => ({
         tuning?.breathingFloatMultiplier ?? DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
     ),
     useLegacyLayout: tuning?.useLegacyLayout ?? DEFAULT_CLASSIC_TUNING.useLegacyLayout,
-    wordSpacing: clampClassicWordSpacing(tuning?.wordSpacing ?? DEFAULT_CLASSIC_TUNING.wordSpacing ?? 1),
+    wordSpacing: clampClassicWordSpacing(tuning?.wordSpacing ?? DEFAULT_CLASSIC_TUNING.wordSpacing ?? 0.7),
 });
 
 // Helper to determine if text contains CJK characters
@@ -418,7 +418,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                     w_next = wordWidths[i + 1] ?? 0;
                 }
 
-                const spacingMultiplier = resolvedClassicTuning.wordSpacing ?? 1;
+                const spacingMultiplier = resolvedClassicTuning.wordSpacing ?? 0.7;
                 const gap = 0.05 * pxFontSize;
                 const halfOverflow_i = w_i * (s_i - 1) / 2;
                 const halfOverflow_next = w_next * (s_next - 1) / 2;
