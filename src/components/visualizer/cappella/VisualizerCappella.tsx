@@ -540,9 +540,7 @@ const buildCharacterRevealTimes = (line: Line, characters: string[]) => {
                 return;
             }
 
-            revealTimes[targetIndex] = characterIndex === 0
-                ? word.startTime
-                : word.startTime + duration * ((characterIndex + 1) / wordCharacters.length);
+            revealTimes[targetIndex] = word.startTime + duration * (characterIndex / wordCharacters.length);
             lastResolvedRevealTime = Math.max(lastResolvedRevealTime, revealTimes[targetIndex]);
             hasResolvedRevealTime = true;
         });
