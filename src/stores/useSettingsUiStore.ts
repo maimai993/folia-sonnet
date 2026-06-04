@@ -13,6 +13,11 @@ import { parseVisualizerFrameRate, setGlobalVisualizerFrameRate, VISUALIZER_FRAM
 
 export type StatusSetter = React.Dispatch<React.SetStateAction<StatusMessage | null>>;
 export type AudioQuality = 'exhigh' | 'lossless' | 'hires';
+export type SettingsModalInitialTab = 'help' | 'options';
+export type SettingsModalState = {
+    isOpen: boolean;
+    initialTab: SettingsModalInitialTab;
+};
 
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
@@ -475,6 +480,7 @@ type SettingsUiState = {
     isMuted: boolean;
     loopMode: 'off' | 'all' | 'one';
     isSubSettingsViewOpen: boolean;
+    settingsModalState: SettingsModalState;
     setStatusSetter: (setter: StatusSetter | null) => void;
     setAudioQuality: (quality: AudioQuality) => void;
     setTransparentPlayerBackgroundFromSystem: (enabled: boolean) => void;
@@ -488,6 +494,8 @@ type SettingsUiState = {
     clearLyricsCustomFontAfterRestoreFailure: (message: StatusMessage) => void;
     ensureBuiltinCappellaEmojiPack: () => void;
     setIsSubSettingsViewOpen: (open: boolean) => void;
+    openSettings: (initialTab?: SettingsModalInitialTab) => void;
+    closeSettings: () => void;
     handleToggleCoverColorBg: (enable: boolean) => void;
     handleToggleStaticMode: (enable: boolean) => void;
     handleToggleDisableHomeDynamicBackground: (disable: boolean) => void;
@@ -587,6 +595,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     isMuted: getStoredBoolean('player_is_muted', false),
     loopMode: readStoredLoopMode(),
     isSubSettingsViewOpen: false,
+    settingsModalState: {
+        isOpen: false,
+        initialTab: 'help',
+    },
     setStatusSetter: (setter) => set({ statusSetter: setter }),
     setAudioQuality: (quality) => {
         if (typeof window !== 'undefined') {
@@ -639,6 +651,18 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         set({ cappellaTuning: next });
     },
     setIsSubSettingsViewOpen: (open) => set({ isSubSettingsViewOpen: open }),
+    openSettings: (initialTab = 'help') => set({
+        settingsModalState: {
+            isOpen: true,
+            initialTab,
+        },
+    }),
+    closeSettings: () => set(state => ({
+        settingsModalState: {
+            ...state.settingsModalState,
+            isOpen: false,
+        },
+    })),
     handleToggleCoverColorBg: (enable) => {
         setStoredBoolean('use_cover_color_bg', enable);
         set({ useCoverColorBg: enable });

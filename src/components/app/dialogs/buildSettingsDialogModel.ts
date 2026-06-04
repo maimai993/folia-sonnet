@@ -8,17 +8,12 @@ import type {
     StageStatus,
 } from '../../../types';
 import type { useThemeController } from '../../../hooks/useThemeController';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import { type SettingsModalState, useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 
 // src/components/app/dialogs/buildSettingsDialogModel.ts
 
 type SettingsDialogProps = React.ComponentProps<typeof SettingsModal>;
 type ThemeController = ReturnType<typeof useThemeController>;
-
-export type SettingsModalState = {
-    isOpen: boolean;
-    initialTab: NonNullable<SettingsDialogProps['initialTab']>;
-};
 
 type BuildSettingsDialogModelParams = {
     state: SettingsModalState;

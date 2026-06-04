@@ -8,7 +8,7 @@ import Home from './components/app/Home';
 import PlayerPanel from './components/app/PlayerPanel';
 import AppDialogs from './components/app/dialogs/AppDialogs';
 import { createCopySongInfoSuccessHandler } from './components/app/dialogs/createCopySongInfoSuccessHandler';
-import { buildSettingsDialogModel, type SettingsModalState } from './components/app/dialogs/buildSettingsDialogModel';
+import { buildSettingsDialogModel } from './components/app/dialogs/buildSettingsDialogModel';
 import AppOverlays from './components/app/overlays/AppOverlays';
 import { buildAppDialogsModel } from './components/app/dialogs/buildAppDialogsModel';
 import { buildHomeModel } from './components/app/home/buildHomeModel';
@@ -109,12 +109,18 @@ export default function App() {
         return saved === 'true';
     });
     const [isDevDebugOverlayVisible, setIsDevDebugOverlayVisible] = useState(false);
-    const [settingsModalState, setSettingsModalState] = useState<SettingsModalState>({
-        isOpen: false,
-        initialTab: 'help',
-    });
     const [navidromeEnabled, setNavidromeEnabledState] = useState(() => isNavidromeEnabled());
-    const isSettingsSubviewOpen = useSettingsUiStore(state => state.isSubSettingsViewOpen);
+    const {
+        closeSettings,
+        isSettingsSubviewOpen,
+        openSettings,
+        settingsModalState,
+    } = useSettingsUiStore(useShallow(state => ({
+        closeSettings: state.closeSettings,
+        isSettingsSubviewOpen: state.isSubSettingsViewOpen,
+        openSettings: state.openSettings,
+        settingsModalState: state.settingsModalState,
+    })));
 
     // Player State
     const [playerState, setPlayerState] = useState<PlayerState>(PlayerState.IDLE);
@@ -178,12 +184,6 @@ export default function App() {
     // Navigation Persistence State (Lifted from Home/LocalMusicView)
     const homeViewTab = useSearchNavigationStore(state => state.homeViewTab);
     const setHomeViewTab = useSearchNavigationStore(state => state.setHomeViewTab);
-    const openSettings = useCallback((initialTab: SettingsModalState['initialTab'] = 'help') => {
-        setSettingsModalState({ isOpen: true, initialTab });
-    }, []);
-    const closeSettings = useCallback(() => {
-        setSettingsModalState(prev => ({ ...prev, isOpen: false }));
-    }, []);
     const handleToggleNavidromeEnabled = useCallback((enabled: boolean) => {
         setNavidromeEnabledState(enabled);
         if (!enabled && homeViewTab === 'navidrome') {
