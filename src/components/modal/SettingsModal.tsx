@@ -172,6 +172,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [stageAddressCopied, setStageAddressCopied] = useState(false);
     const [authorClickCount, setAuthorClickCount] = useState(0);
     const [meowEasterEgg, setMeowEasterEgg] = useState<{ id: number; } | null>(null);
+    const shouldCloseModalOnSubviewBack = initialSubview !== null;
 
     useEffect(() => {
         setActiveTab(initialTab);
@@ -751,6 +752,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
         </AnimatePresence>
     );
+    const closeSubviewOrModal = (closeSubview: () => void) => {
+        if (shouldCloseModalOnSubviewBack) {
+            onClose();
+            return;
+        }
+
+        closeSubview();
+    };
     const updateBadgeLabel = (() => {
         if (!electronSettings.ENABLE_UPDATE_CHECK || updateStatus?.status === 'disabled') {
             return t('options.updateCheckDisabled') || 'Disabled';
@@ -1949,7 +1958,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onImportCappellaCustomAvatar={onImportCappellaCustomAvatar}
                         onClearCappellaCustomAvatar={onClearCappellaCustomAvatar}
                         isLoadingCappellaCustomAvatarPack={isLoadingCappellaCustomAvatarPack}
-                        onClose={() => setShowVisPlayground(false)}
+                        onClose={() => closeSubviewOrModal(() => setShowVisPlayground(false))}
                     />
                 )}
             </AnimatePresence>
@@ -1976,13 +1985,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             onSaveCustomTheme(dualTheme);
                             setShowThemePark(false);
                         }}
-                        onClose={() => setShowThemePark(false)}
+                        onClose={() => closeSubviewOrModal(() => setShowThemePark(false))}
                     />
                 )}
             </AnimatePresence>
             {renderSettingsSubview({
                 isOpen: showPlaybackSettings,
-                onClose: () => setShowPlaybackSettings(false),
+                onClose: () => closeSubviewOrModal(() => setShowPlaybackSettings(false)),
                 title: '播放控制',
                 description: '播放队列，行为，音频输出等设置。',
                 children: (
@@ -1998,7 +2007,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             })}
             {renderSettingsSubview({
                 isOpen: showAppearanceSettings,
-                onClose: () => setShowAppearanceSettings(false),
+                onClose: () => closeSubviewOrModal(() => setShowAppearanceSettings(false)),
                 title: t('options.visualSettings') || '视觉设置',
                 description: '主题、歌词渲染和背景外观。',
                 children: (
@@ -2027,7 +2036,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             })}
             {renderSettingsSubview({
                 isOpen: showStorageSettings,
-                onClose: () => setShowStorageSettings(false),
+                onClose: () => closeSubviewOrModal(() => setShowStorageSettings(false)),
                 title: '存储与缓存',
                 description: '缓存占用、清理和媒体缓存行为。',
                 children: (
@@ -2055,7 +2064,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             })}
             {renderSettingsSubview({
                 isOpen: showIntegrationSettings,
-                onClose: () => setShowIntegrationSettings(false),
+                onClose: () => closeSubviewOrModal(() => setShowIntegrationSettings(false)),
                 title: '集成设置',
                 description: 'Stage、Now Playing 和 Navidrome 连接。',
                 children: (
@@ -2105,7 +2114,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             })}
             {renderSettingsSubview({
                 isOpen: showDesktopSettings,
-                onClose: () => setShowDesktopSettings(false),
+                onClose: () => closeSubviewOrModal(() => setShowDesktopSettings(false)),
                 title: '桌面端设置',
                 description: '桌面窗口行为、更新检查、自动更新和 AI 配置。',
                 children: (
@@ -2149,7 +2158,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 ),
             })}<LabSettingsModal
                 isOpen={showLabSettings}
-                onClose={() => setShowLabSettings(false)}
+                onClose={() => closeSubviewOrModal(() => setShowLabSettings(false))}
                 onOpenLyricFilterSettings={() => setShowLyricFilterSettings(true)}
                 theme={theme}
             />
@@ -2159,7 +2168,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 currentSongTitle={currentSongTitle}
                 initialPattern={lyricFilterPattern}
                 loadPreviewLyrics={loadLyricFilterPreview}
-                onClose={() => setShowLyricFilterSettings(false)}
+                onClose={() => closeSubviewOrModal(() => setShowLyricFilterSettings(false))}
                 onSave={onSaveLyricFilterPattern}
             />
         </motion.div>

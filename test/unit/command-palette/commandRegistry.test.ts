@@ -38,10 +38,12 @@ describe('command palette registry', () => {
         expect(context.submitSearch).toHaveBeenCalledWith(expect.objectContaining({
             query: 'touhou',
             sourceTab: 'local',
+            returnView: 'player',
         }));
         expect(context.navigateToSearch).toHaveBeenCalledWith(expect.objectContaining({
             query: 'touhou',
             sourceTab: 'local',
+            returnView: 'player',
         }));
     });
 
@@ -53,6 +55,15 @@ describe('command palette registry', () => {
         match.command.execute(match.input, context);
 
         expect(context.openSettings).toHaveBeenCalledWith('options', 'integration');
+    });
+
+    it('matches commands by Chinese keyword and pinyin', () => {
+        expect(getCommandPaletteMatches('本地 bad apple')[0].command.id).toBe('search-local');
+        expect(getCommandPaletteMatches('bendi bad apple')[0].command.id).toBe('search-local');
+        expect(getCommandPaletteMatches('设置')[0].command.id).toBe('settings-options');
+        expect(getCommandPaletteMatches('shezhi')[0].command.id).toBe('settings-options');
+        expect(getCommandPaletteMatches('心象')[0].command.id).toBe('visualizer-cadenza');
+        expect(getCommandPaletteMatches('xinxiang')[0].command.id).toBe('visualizer-cadenza');
     });
 
     it('limits suggestions to ten commands', () => {

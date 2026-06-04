@@ -1,4 +1,5 @@
 import type React from 'react';
+import type { SearchReturnView } from '../../stores/useSearchNavigationStore';
 import type { HomeViewTab, LocalSong, PlayerState, VisualizerMode } from '../../types';
 import type { PanelTab } from '../UnifiedPanel';
 import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/useSettingsUiStore';
@@ -35,7 +36,7 @@ export type CommandPaletteContext = {
     openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null) => void;
     navigateToHome: () => void;
     navigateToPlayer: () => void;
-    navigateToSearch: (args: { query: string; sourceTab: HomeViewTab; replace?: boolean; }) => void;
+    navigateToSearch: (args: { query: string; sourceTab: HomeViewTab; replace?: boolean; returnView?: SearchReturnView; }) => void;
     setHomeViewTab: (tab: HomeViewTab) => void;
     setPanelTab: (tab: PanelTab) => void;
     setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -46,6 +47,7 @@ export type CommandPaletteContext = {
             localSongs: LocalSong[];
             t: (key: string, fallback?: string) => string;
         };
+        returnView?: SearchReturnView;
     }) => Promise<boolean>;
     togglePlay: () => void;
     toggleLoop: () => void;

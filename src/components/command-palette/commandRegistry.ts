@@ -31,6 +31,7 @@ const runSearch = async (
             localSongs: context.localSongs,
             t: context.t,
         },
+        returnView: 'player',
     });
 
     if (didSearch) {
@@ -38,6 +39,7 @@ const runSearch = async (
             query: trimmedQuery,
             sourceTab,
             replace: typeof window !== 'undefined' && Boolean(window.history.state?.search),
+            returnView: 'player',
         });
     }
 
@@ -134,29 +136,29 @@ const createVisualizerCommand = (
 });
 
 export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
-    createSearchCommand('search-current', 'Search songs', 'Search songs in the current source', ['search', 'find', 'song'], context => context.currentSearchSourceTab),
-    createSearchCommand('search-local', 'Search local songs', 'Search local library', ['local', 'local search', 'search local'], () => 'local'),
-    createSearchCommand('search-navidrome', 'Search Navidrome songs', 'Search Navidrome library', ['navi', 'navidrome', 'search navidrome'], () => 'navidrome'),
-    createSearchCommand('search-netease', 'Search NetEase songs', 'Search NetEase Cloud Music', ['netease', 'cloud', 'search netease'], () => 'playlist'),
+    createSearchCommand('search-current', 'Search songs', 'Search songs in the current source', ['search', 'find', 'song', '搜索', '搜歌', 'sousuo', 'souge', 'ss', 'sg'], context => context.currentSearchSourceTab),
+    createSearchCommand('search-local', 'Search local songs', 'Search local library', ['local', 'local search', 'search local', '本地', '本地音乐', 'bendi', 'bendiyinyue', 'bd', 'bdyy'], () => 'local'),
+    createSearchCommand('search-navidrome', 'Search Navidrome songs', 'Search Navidrome library', ['navi', 'navidrome', 'search navidrome', '导航', '服务器', 'fuwuqi', 'fwq'], () => 'navidrome'),
+    createSearchCommand('search-netease', 'Search NetEase songs', 'Search NetEase Cloud Music', ['netease', 'cloud', 'search netease', '网易云', '网抑云', 'wangyiyun', 'wyy'], () => 'playlist'),
 
-    createSettingsCommand('settings-help', 'Open Help', 'Open help and shortcuts', ['help'], 'help'),
-    createSettingsCommand('settings-options', 'Open Options', 'Open the options center', ['settings', 'options'], 'options'),
-    createSettingsCommand('settings-appearance', 'Appearance settings', 'Open visual and appearance settings', ['appearance', 'visual settings'], 'options', 'appearance'),
-    createSettingsCommand('settings-playback', 'Playback settings', 'Open playback behavior settings', ['playback settings', 'playback'], 'options', 'playback'),
-    createSettingsCommand('settings-integration', 'Integration settings', 'Open Stage, Now Playing, and Navidrome settings', ['integration', 'stage', 'now playing', 'navidrome settings'], 'options', 'integration'),
-    createSettingsCommand('settings-storage', 'Storage settings', 'Open cache and storage settings', ['storage', 'cache'], 'options', 'storage'),
-    createSettingsCommand('settings-desktop', 'Desktop settings', 'Open desktop app settings', ['desktop', 'electron'], 'options', 'desktop'),
-    createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental'], 'options', 'lab'),
-    createSettingsCommand('settings-visualizer', 'Visualizer settings', 'Open lyrics animation workbench', ['visualizer settings', 'visualizer workbench'], 'options', 'visualizer'),
-    createSettingsCommand('settings-theme-park', 'Theme Park', 'Open theme editor', ['theme park', 'theme'], 'options', 'themePark'),
-    createSettingsCommand('settings-lyric-filter', 'Lyric filter', 'Open lyric filter settings', ['lyric filter', 'lyrics filter'], 'options', 'lyricFilter'),
+    createSettingsCommand('settings-help', 'Open Help', 'Open help and shortcuts', ['help', '帮助', 'bangzhu', 'bz'], 'help'),
+    createSettingsCommand('settings-options', 'Open Options', 'Open the options center', ['settings', 'options', '设置', '选项', 'shezhi', 'xuanxiang', 'sz', 'xx'], 'options'),
+    createSettingsCommand('settings-appearance', 'Appearance settings', 'Open visual and appearance settings', ['appearance', 'visual settings', '外观', '视觉', 'waiguan', 'shijue', 'wg', 'sj'], 'options', 'appearance'),
+    createSettingsCommand('settings-playback', 'Playback settings', 'Open playback behavior settings', ['playback settings', 'playback', '播放', '播放设置', 'bofang', 'bofangshezhi', 'bf', 'bfsz'], 'options', 'playback'),
+    createSettingsCommand('settings-integration', 'Integration settings', 'Open Stage, Now Playing, and Navidrome settings', ['integration', 'stage', 'now playing', 'navidrome settings', '集成', '连接', 'jicheng', 'lianjie', 'jc', 'lj'], 'options', 'integration'),
+    createSettingsCommand('settings-storage', 'Storage settings', 'Open cache and storage settings', ['storage', 'cache', '存储', '缓存', 'cunchu', 'huancun', 'cc', 'hc'], 'options', 'storage'),
+    createSettingsCommand('settings-desktop', 'Desktop settings', 'Open desktop app settings', ['desktop', 'electron', '桌面', '桌面端', 'zhuomian', 'zhuomianduan', 'zm', 'zmd'], 'options', 'desktop'),
+    createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室', 'shiyan', 'shiyanshi', 'sy', 'sys'], 'options', 'lab'),
+    createSettingsCommand('settings-visualizer', 'Visualizer settings', 'Open lyrics animation workbench', ['visualizer settings', 'visualizer workbench', '可视化', '歌词动画', 'keshihua', 'gecidonghua', 'ksh', 'gcdh'], 'options', 'visualizer'),
+    createSettingsCommand('settings-theme-park', 'Theme Park', 'Open theme editor', ['theme park', 'theme', '主题', '主题公园', 'zhuti', 'zhutigongyuan', 'zt', 'ztgy'], 'options', 'themePark'),
+    createSettingsCommand('settings-lyric-filter', 'Lyric filter', 'Open lyric filter settings', ['lyric filter', 'lyrics filter', '歌词过滤', '过滤', 'geciguolv', 'guolv', 'gcgl', 'gl'], 'options', 'lyricFilter'),
 
     {
         id: 'navigate-home',
         group: 'navigation',
         title: 'Go home',
         description: 'Return to home view',
-        keywords: ['home'],
+        keywords: ['home', '首页', '主页', 'shouye', 'zhuye', 'sy', 'zy'],
         execute: (_input, context) => {
             context.navigateToHome();
             return true;
@@ -167,32 +169,32 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         group: 'navigation',
         title: 'Go player',
         description: 'Return to player view',
-        keywords: ['player'],
+        keywords: ['player', '播放页', '播放器', 'bofangye', 'bofangqi', 'bfy', 'bfq'],
         execute: (_input, context) => {
             context.navigateToPlayer();
             return true;
         },
     },
-    createHomeTabCommand('playlist', 'Open playlists', 'Open playlist home tab', ['playlist', 'playlists']),
-    createHomeTabCommand('local', 'Open local music', 'Open local music tab', ['local music', 'local']),
-    createHomeTabCommand('albums', 'Open albums', 'Open albums tab', ['albums', 'album']),
-    createHomeTabCommand('navidrome', 'Open Navidrome', 'Open Navidrome tab', ['navidrome', 'navi']),
-    createHomeTabCommand('radio', 'Open radio', 'Open radio tab', ['radio', 'fm']),
+    createHomeTabCommand('playlist', 'Open playlists', 'Open playlist home tab', ['playlist', 'playlists', '歌单', 'gedan', 'gd']),
+    createHomeTabCommand('local', 'Open local music', 'Open local music tab', ['local music', 'local', '本地', '本地音乐', 'bendi', 'bendiyinyue', 'bd', 'bdyy']),
+    createHomeTabCommand('albums', 'Open albums', 'Open albums tab', ['albums', 'album', '专辑', 'zhuanji', 'zj']),
+    createHomeTabCommand('navidrome', 'Open Navidrome', 'Open Navidrome tab', ['navidrome', 'navi', '服务器', 'fuwuqi', 'fwq']),
+    createHomeTabCommand('radio', 'Open radio', 'Open radio tab', ['radio', 'fm', '电台', 'diantai', 'dt']),
 
-    createPanelCommand('cover', 'Panel: cover', 'Open the cover panel tab', ['panel cover', 'cover panel']),
-    createPanelCommand('controls', 'Panel: controls', 'Open the controls panel tab', ['panel controls', 'controls panel']),
-    createPanelCommand('queue', 'Panel: queue', 'Open the queue panel tab', ['panel queue', 'queue panel']),
-    createPanelCommand('account', 'Panel: account', 'Open the account panel tab', ['panel account', 'account panel']),
-    createPanelCommand('local', 'Panel: local', 'Open the local panel tab', ['panel local', 'local panel']),
-    createPanelCommand('navi', 'Panel: Navidrome', 'Open the Navidrome panel tab', ['panel navi', 'panel navidrome', 'navi panel']),
-    createPanelCommand('onlineLyrics', 'Panel: lyrics', 'Open the online lyrics panel tab', ['panel lyrics', 'lyrics panel']),
+    createPanelCommand('cover', 'Panel: cover', 'Open the cover panel tab', ['panel cover', 'cover panel', '封面', 'fengmian', 'fm']),
+    createPanelCommand('controls', 'Panel: controls', 'Open the controls panel tab', ['panel controls', 'controls panel', '控制', 'kongzhi', 'kz']),
+    createPanelCommand('queue', 'Panel: queue', 'Open the queue panel tab', ['panel queue', 'queue panel', '队列', 'duilie', 'dl']),
+    createPanelCommand('account', 'Panel: account', 'Open the account panel tab', ['panel account', 'account panel', '账号', '账户', 'zhanghao', 'zhanghu', 'zh']),
+    createPanelCommand('local', 'Panel: local', 'Open the local panel tab', ['panel local', 'local panel', '本地面板', 'bendimianban', 'bdmb']),
+    createPanelCommand('navi', 'Panel: Navidrome', 'Open the Navidrome panel tab', ['panel navi', 'panel navidrome', 'navi panel', 'navidrome 面板', '服务器面板', 'fuwuqimianban', 'fwqmb']),
+    createPanelCommand('onlineLyrics', 'Panel: lyrics', 'Open the online lyrics panel tab', ['panel lyrics', 'lyrics panel', '歌词面板', 'gecimianban', 'gcmb']),
 
     {
         id: 'playback-play',
         group: 'playback',
         title: 'Play',
         description: 'Start playback when paused',
-        keywords: ['play'],
+        keywords: ['play', '播放', 'bofang', 'bf'],
         execute: (_input, context) => {
             if (context.playerState !== PlayerState.PLAYING) {
                 context.togglePlay();
@@ -205,7 +207,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         group: 'playback',
         title: 'Pause',
         description: 'Pause current playback',
-        keywords: ['pause'],
+        keywords: ['pause', '暂停', 'zanting', 'zt'],
         execute: (_input, context) => {
             if (context.playerState === PlayerState.PLAYING) {
                 context.togglePlay();
@@ -218,7 +220,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         group: 'playback',
         title: 'Next track',
         description: 'Play the next track',
-        keywords: ['next'],
+        keywords: ['next', '下一首', 'xiayishou', 'xys'],
         execute: (_input, context) => {
             context.handleNextTrack();
             return true;
@@ -229,7 +231,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         group: 'playback',
         title: 'Previous track',
         description: 'Play the previous track',
-        keywords: ['prev', 'previous'],
+        keywords: ['prev', 'previous', '上一首', 'shangyishou', 'sys'],
         execute: (_input, context) => {
             context.handlePrevTrack();
             return true;
@@ -240,7 +242,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         group: 'playback',
         title: 'Toggle loop',
         description: 'Change loop mode',
-        keywords: ['loop'],
+        keywords: ['loop', '循环', 'xunhuan', 'xh'],
         execute: (_input, context) => {
             context.toggleLoop();
             return true;
@@ -251,19 +253,19 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         group: 'playback',
         title: 'Shuffle queue',
         description: 'Shuffle current play queue',
-        keywords: ['shuffle queue', 'shuffle'],
+        keywords: ['shuffle queue', 'shuffle', '打乱', '打乱队列', 'daluan', 'daluanduilie', 'dl'],
         execute: (_input, context) => {
             context.shuffleQueue();
             return true;
         },
     },
 
-    createVisualizerCommand('classic', 'Visualizer: Luminous', 'Switch to classic visualizer', ['visualizer classic', 'classic']),
-    createVisualizerCommand('cadenza', 'Visualizer: Mindscape', 'Switch to cadenza visualizer', ['visualizer cadenza', 'cadenza', 'mindscape']),
-    createVisualizerCommand('partita', 'Visualizer: Partita', 'Switch to partita visualizer', ['visualizer partita', 'partita']),
-    createVisualizerCommand('fume', 'Visualizer: Fume', 'Switch to fume visualizer', ['visualizer fume', 'fume']),
-    createVisualizerCommand('cappella', 'Visualizer: Cappella', 'Switch to cappella visualizer', ['visualizer cappella', 'cappella']),
-    createVisualizerCommand('tilt', 'Visualizer: Tilt', 'Switch to tilt visualizer', ['visualizer tilt', 'tilt']),
+    createVisualizerCommand('classic', 'Visualizer: Luminous', 'Switch to classic visualizer', ['visualizer classic', 'classic', '流光', 'liuguang', 'lg']),
+    createVisualizerCommand('cadenza', 'Visualizer: Mindscape', 'Switch to cadenza visualizer', ['visualizer cadenza', 'cadenza', 'mindscape', '心象', 'xinxiang', 'xx']),
+    createVisualizerCommand('partita', 'Visualizer: Partita', 'Switch to partita visualizer', ['visualizer partita', 'partita', '云阶', 'yunjie', 'yj']),
+    createVisualizerCommand('fume', 'Visualizer: Fume', 'Switch to fume visualizer', ['visualizer fume', 'fume', '浮名', 'fuming', 'fm']),
+    createVisualizerCommand('cappella', 'Visualizer: Cappella', 'Switch to cappella visualizer', ['visualizer cappella', 'cappella', '群唱', 'qunchang', 'qc']),
+    createVisualizerCommand('tilt', 'Visualizer: Tilt', 'Switch to tilt visualizer', ['visualizer tilt', 'tilt', '倾诉', 'qingsu', 'qs']),
 ];
 
 export const getCommandPaletteMatches = (query: string): CommandPaletteMatch[] => {
