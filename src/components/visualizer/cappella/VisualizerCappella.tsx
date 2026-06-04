@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValueEvent, type MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { layoutWithLines, prepareWithSegments, type PrepareOptions } from '@chenglou/pretext';
-import { DEFAULT_CAPPELLA_TUNING, type AudioBands, type CappellaEmojiImage, type CappellaTuning, type Line, type Theme, type Word } from '../../../types';
+import { DEFAULT_CAPPELLA_TUNING, type AudioBands, type CappellaEmojiImage, type CappellaTuning, type Line, type Theme } from '../../../types';
 import { resolveThemeFontStack } from '../../../utils/fontStacks';
 import { getLineRenderEndTime, getLineRenderHints } from '../../../utils/lyrics/renderHints';
 import { mixColors } from '../colorMix';
@@ -71,7 +71,7 @@ const CAPPELLA_PREHEAT_WINDOW: VisualizerPreheatWindow = {
     maxLead: 1.1,
 };
 const CAPPELLA_LAYOUT_CACHE_LIMIT = 32;
-const CAPPELLA_LOOKAHEAD_CHARACTERS = 2;
+const CAPPELLA_WIDTH_LOOKAHEAD_SECONDS = 0.2;
 const CAPPELLA_BUBBLE_TEXT_OPTIONS = { whiteSpace: 'pre-wrap' } satisfies PrepareOptions;
 
 interface BubbleSize {
@@ -123,6 +123,8 @@ interface CappellaIntensityConfig {
 interface PreparedBubbleMetrics {
     characters: string[];
     sizes: BubbleSize[];
+    revealTimes: number[];
+    bubbleTargetTimes: number[];
 }
 
 interface CharacterRevealPlan {
@@ -474,23 +476,6 @@ const buildCappellaMessages = (
     return messages;
 };
 
-const getVisibleWordCharacters = (word: Word, currentTime: number) => {
-    if (currentTime < word.startTime) {
-        return [];
-    }
-
-    if (currentTime >= word.endTime) {
-        return Array.from(word.text);
-    }
-
-    const characters = Array.from(word.text);
-    const duration = Math.max(word.endTime - word.startTime, 0.001);
-    const progress = Math.min(1, Math.max(0, (currentTime - word.startTime) / duration));
-    const visibleCount = Math.max(1, Math.floor(characters.length * progress));
-
-    return characters.slice(0, visibleCount);
-};
-
 const getLineCharacters = (line: Line) => Array.from(line.fullText);
 
 const getWordTextRanges = (line: Line) => {
@@ -512,33 +497,65 @@ const getWordTextRanges = (line: Line) => {
     return ranges;
 };
 
-const getVisibleLineText = (line: Line, currentTime: number) => {
+const buildCharacterRevealTimes = (line: Line, characters: string[]) => {
+    const revealTimes = characters.map(() => Number.POSITIVE_INFINITY);
     const ranges = getWordTextRanges(line);
-    let lastCompletedWordEnd = 0;
+    let previousWordEndCharacterIndex = 0;
 
-    for (let index = 0; index < line.words.length; index += 1) {
-        const word = line.words[index];
+    line.words.forEach((word, index) => {
         const range = ranges[index];
-
-        if (currentTime < word.startTime) {
-            break;
+        if (!range) {
+            return;
         }
 
-        if (currentTime >= word.endTime) {
-            lastCompletedWordEnd = range?.end ?? lastCompletedWordEnd;
-            continue;
+        const startCharacterIndex = Array.from(line.fullText.slice(0, range.start)).length;
+        const endCharacterIndex = Array.from(line.fullText.slice(0, range.end)).length;
+        const wordCharacters = Array.from(word.text);
+        const duration = Math.max(word.endTime - word.startTime, 0.001);
+
+        for (let characterIndex = previousWordEndCharacterIndex; characterIndex < startCharacterIndex; characterIndex += 1) {
+            revealTimes[characterIndex] = word.startTime;
         }
 
-        const visibleWordText = getVisibleWordCharacters(word, currentTime).join('');
-        const prefixEnd = range?.start ?? lastCompletedWordEnd;
-        return line.fullText.slice(0, prefixEnd) + visibleWordText;
+        wordCharacters.forEach((_, characterIndex) => {
+            const targetIndex = startCharacterIndex + characterIndex;
+            if (targetIndex >= revealTimes.length) {
+                return;
+            }
+
+            revealTimes[targetIndex] = characterIndex === 0
+                ? word.startTime
+                : word.startTime + duration * ((characterIndex + 1) / wordCharacters.length);
+        });
+
+        previousWordEndCharacterIndex = endCharacterIndex;
+    });
+
+    for (let characterIndex = previousWordEndCharacterIndex; characterIndex < revealTimes.length; characterIndex += 1) {
+        revealTimes[characterIndex] = line.endTime;
     }
 
-    return lastCompletedWordEnd > 0 ? line.fullText.slice(0, lastCompletedWordEnd) : '';
+    return revealTimes;
 };
 
-const getVisibleCharacterCount = (line: Line, currentTime: number) =>
-    Array.from(getVisibleLineText(line, currentTime)).length;
+const getCharacterCountAtTime = (revealTimes: number[], currentTime: number) => {
+    let low = 0;
+    let high = revealTimes.length;
+
+    while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        if (revealTimes[mid] <= currentTime) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+
+    return low;
+};
+
+const getBubbleTargetCharacterCount = (metrics: PreparedBubbleMetrics, currentTime: number) =>
+    getCharacterCountAtTime(metrics.bubbleTargetTimes, currentTime);
 
 const getWordRevealUnitCount = (wordText: string) => {
     const trimmed = wordText.trim();
@@ -850,11 +867,12 @@ const getOrBuildBubbleMetrics = (
     }
 
     const characters = getLineCharacters(line);
+    const revealTimes = buildCharacterRevealTimes(line, characters);
+    const bubbleTargetTimes = revealTimes.map(time => time - CAPPELLA_WIDTH_LOOKAHEAD_SECONDS);
     const sizes: BubbleSize[] = [];
 
     for (let visibleCount = 0; visibleCount <= characters.length; visibleCount += 1) {
-        const measuredCount = Math.min(characters.length, visibleCount + CAPPELLA_LOOKAHEAD_CHARACTERS);
-        const measuredText = characters.slice(0, measuredCount).join('');
+        const measuredText = characters.slice(0, visibleCount).join('');
         sizes.push(measureBubbleText({
             text: measuredText,
             theme,
@@ -866,7 +884,7 @@ const getOrBuildBubbleMetrics = (
         }));
     }
 
-    const prepared = { characters, sizes };
+    const prepared = { characters, sizes, revealTimes, bubbleTargetTimes };
     cache.set(cacheKey, prepared);
 
     if (cache.size > CAPPELLA_LAYOUT_CACHE_LIMIT) {
@@ -1106,16 +1124,6 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
         customAvatarImages,
     });
     const useAvatarGridCrop = cappellaTuning.avatarSource === 'cover' && Boolean(coverUrl);
-    const [visibleCharacterCount, setVisibleCharacterCount] = useState(() => (
-        message.kind === 'lyric' ? getVisibleCharacterCount(message.line, currentTime.get()) : 0
-    ));
-    const [isTimestampVisible, setIsTimestampVisible] = useState(() => (
-        timedData !== null && (
-            timedData.kind === 'emo'
-                ? currentTime.get() >= timedData.activationEndTime
-                : isPassedMessage || currentTime.get() >= timedData.line.endTime
-        )
-    ));
     const lineHeightPx = bubbleFontSize * 1.45;
     const preparedMetrics = useMemo(
         () => message.kind === 'lyric' && isActiveMessage
@@ -1128,10 +1136,23 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
                 paddingX: bubblePaddingX,
                 paddingY: bubblePaddingY,
             })
-            : null,
+        : null,
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [bubbleFontSize, bubblePaddingX, bubblePaddingY, isActiveMessage, lineHeightPx, maxTextWidth, message, metricsCache, theme]
     );
+    const [visibleCharacterCount, setVisibleCharacterCount] = useState(() => (
+        preparedMetrics ? getCharacterCountAtTime(preparedMetrics.revealTimes, currentTime.get()) : 0
+    ));
+    const [targetCharacterCount, setTargetCharacterCount] = useState(() => (
+        preparedMetrics ? getBubbleTargetCharacterCount(preparedMetrics, currentTime.get()) : 0
+    ));
+    const [isTimestampVisible, setIsTimestampVisible] = useState(() => (
+        timedData !== null && (
+            timedData.kind === 'emo'
+                ? currentTime.get() >= timedData.activationEndTime
+                : isPassedMessage || currentTime.get() >= timedData.line.endTime
+        )
+    ));
     // 表情图片：active 时更大
     const emoImageSize = isActiveMessage ? motionConfig.emoActiveSize : motionConfig.emoInactiveSize;
     const targetSize = useMemo(() => {
@@ -1153,9 +1174,9 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
                 paddingX: bubblePaddingX,
                 paddingY: bubblePaddingY,
             });
-            const clampedVisibleCount = Math.max(0, Math.min(visibleCharacterCount, prepared.sizes.length - 1));
+            const clampedTargetCount = Math.max(0, Math.min(targetCharacterCount, prepared.sizes.length - 1));
 
-            return prepared.sizes[clampedVisibleCount];
+            return prepared.sizes[clampedTargetCount];
         }
 
         // 对非 active 歌词也计算显式尺寸，使 active→passed 过渡时
@@ -1182,7 +1203,7 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
         metricsCache,
         preparedMetrics,
         theme,
-        visibleCharacterCount,
+        targetCharacterCount,
     ]);
     // scale(origin=bottom) 的视觉上溢量，作为同元素的 marginTop 补偿。
     // 使用完整文本的最终高度而非逐字变化的 targetSize，避免逐帧触发 marginTop 布局重排。
@@ -1203,12 +1224,21 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
             return;
         }
 
-        setVisibleCharacterCount(getVisibleCharacterCount(message.line, currentTime.get()));
+        const latest = currentTime.get();
+        const nextVisibleCount = message.kind === 'lyric' && preparedMetrics
+            ? getCharacterCountAtTime(preparedMetrics.revealTimes, latest)
+            : 0;
+        const nextTargetCount = message.kind === 'lyric' && preparedMetrics
+            ? getBubbleTargetCharacterCount(preparedMetrics, latest)
+            : 0;
+
+        setVisibleCharacterCount(current => current === nextVisibleCount ? current : nextVisibleCount);
+        setTargetCharacterCount(current => current === nextTargetCount ? current : nextTargetCount);
         const nextTimestampVisible = message.kind === 'emo'
-            ? currentTime.get() >= message.activationEndTime
-            : isPassedMessage || currentTime.get() >= message.line.endTime;
+            ? latest >= message.activationEndTime
+            : isPassedMessage || latest >= message.line.endTime;
         setIsTimestampVisible(nextTimestampVisible);
-    }, [currentTime, isActiveMessage, message]);
+    }, [currentTime, isActiveMessage, message, preparedMetrics]);
 
     useMotionValueEvent(currentTime, 'change', latest => {
         if (message.kind === 'lyric' || message.kind === 'emo') {
@@ -1219,10 +1249,14 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
         }
 
         if (isActiveMessage) {
-            const nextVisibleCount = message.kind === 'lyric'
-                ? getVisibleCharacterCount(message.line, latest)
+            const nextVisibleCount = message.kind === 'lyric' && preparedMetrics
+                ? getCharacterCountAtTime(preparedMetrics.revealTimes, latest)
+                : 0;
+            const nextTargetCount = message.kind === 'lyric' && preparedMetrics
+                ? getBubbleTargetCharacterCount(preparedMetrics, latest)
                 : 0;
             setVisibleCharacterCount(current => current === nextVisibleCount ? current : nextVisibleCount);
+            setTargetCharacterCount(current => current === nextTargetCount ? current : nextTargetCount);
         }
     });
 
