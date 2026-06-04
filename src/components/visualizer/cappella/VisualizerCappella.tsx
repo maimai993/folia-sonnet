@@ -71,6 +71,8 @@ const CAPPELLA_PREHEAT_WINDOW: VisualizerPreheatWindow = {
     maxLead: 1.1,
 };
 const CAPPELLA_LAYOUT_CACHE_LIMIT = 32;
+// 气泡宽度动画约 0.2s。气泡尺寸使用提前后的时间轴，
+// 让横向扩展先于字符出现启动，避免临界换行时字符短暂掉到下一行。
 const CAPPELLA_WIDTH_LOOKAHEAD_SECONDS = 0.2;
 const CAPPELLA_BUBBLE_TEXT_OPTIONS = { whiteSpace: 'pre-wrap' } satisfies PrepareOptions;
 
@@ -121,9 +123,13 @@ interface CappellaIntensityConfig {
 }
 
 interface PreparedBubbleMetrics {
+    /** fullText 按 grapheme 拆出的显示字符，sizes 的下标与它的数量对应 */
     characters: string[];
+    /** sizes[n] 表示显示前 n 个字符时气泡应该拥有的 width/height */
     sizes: BubbleSize[];
+    /** 每个字符真实开始显示的时间，用来驱动文字 reveal */
     revealTimes: number[];
+    /** revealTimes 整体提前一段时间，用来驱动气泡提前横向扩展 */
     bubbleTargetTimes: number[];
 }
 
@@ -497,6 +503,9 @@ const getWordTextRanges = (line: Line) => {
     return ranges;
 };
 
+// Builds a per-character reveal timeline from parser word timings.
+// The visual text is rendered per character, but the parser timing is per word;
+// this bridges the two without rebuilding text ranges during playback.
 const buildCharacterRevealTimes = (line: Line, characters: string[]) => {
     const revealTimes = characters.map(() => Number.POSITIVE_INFINITY);
     const ranges = getWordTextRanges(line);
@@ -513,10 +522,14 @@ const buildCharacterRevealTimes = (line: Line, characters: string[]) => {
         const wordCharacters = Array.from(word.text);
         const duration = Math.max(word.endTime - word.startTime, 0.001);
 
+        // Characters between two timed words are usually spaces or sticky punctuation.
+        // Reveal them with the next word so the visible text remains contiguous.
         for (let characterIndex = previousWordEndCharacterIndex; characterIndex < startCharacterIndex; characterIndex += 1) {
             revealTimes[characterIndex] = word.startTime;
         }
 
+        // Match getVisibleWordCharacters(): the first character appears at word start,
+        // then the rest spread across the word duration.
         wordCharacters.forEach((_, characterIndex) => {
             const targetIndex = startCharacterIndex + characterIndex;
             if (targetIndex >= revealTimes.length) {
@@ -531,6 +544,8 @@ const buildCharacterRevealTimes = (line: Line, characters: string[]) => {
         previousWordEndCharacterIndex = endCharacterIndex;
     });
 
+    // Any unmatched trailing characters still belong to this line visually.
+    // Keep them available by the line end instead of leaving them hidden forever.
     for (let characterIndex = previousWordEndCharacterIndex; characterIndex < revealTimes.length; characterIndex += 1) {
         revealTimes[characterIndex] = line.endTime;
     }
@@ -538,6 +553,8 @@ const buildCharacterRevealTimes = (line: Line, characters: string[]) => {
     return revealTimes;
 };
 
+// revealTimes is monotonic, so playback can resolve the visible count with O(log n)
+// binary search instead of rebuilding the visible substring every frame.
 const getCharacterCountAtTime = (revealTimes: number[], currentTime: number) => {
     let low = 0;
     let high = revealTimes.length;
@@ -868,6 +885,8 @@ const getOrBuildBubbleMetrics = (
 
     const characters = getLineCharacters(line);
     const revealTimes = buildCharacterRevealTimes(line, characters);
+    // Measure each prefix exactly once. Text reveal and bubble width use the same
+    // sizes table; they only differ in which timeline resolves the prefix count.
     const bubbleTargetTimes = revealTimes.map(time => time - CAPPELLA_WIDTH_LOOKAHEAD_SECONDS);
     const sizes: BubbleSize[] = [];
 
