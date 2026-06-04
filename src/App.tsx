@@ -1880,6 +1880,7 @@ export default function App() {
             isTitlebarRevealed={isTitlebarRevealed}
             isMainWindowClickThroughEnabled={isMainWindowClickThroughEnabled}
             showMainWindowClickThroughToggle={isMainWindowClickThroughEnabled ? isClickThroughToggleHotspotActive : isTitlebarRevealed}
+            isDaylight={isDaylight}
             onToggleMainWindowClickThrough={() => {
                 const nextEnabled = !isMainWindowClickThroughEnabled;
                 if (!nextEnabled) {
