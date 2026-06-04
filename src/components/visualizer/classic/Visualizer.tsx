@@ -47,6 +47,7 @@ interface ClassicLineRenderProfile {
 }
 
 const clampClassicBreathingFloatMultiplier = (value: number) => Math.min(2, Math.max(0, value));
+const clampClassicWordSpacing = (value: number) => Math.min(2, Math.max(0, value));
 
 const resolveClassicTuning = (tuning?: ClassicTuning): ClassicTuning => ({
     enableWordRotation: tuning?.enableWordRotation ?? DEFAULT_CLASSIC_TUNING.enableWordRotation,
@@ -54,6 +55,7 @@ const resolveClassicTuning = (tuning?: ClassicTuning): ClassicTuning => ({
         tuning?.breathingFloatMultiplier ?? DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
     ),
     useLegacyLayout: tuning?.useLegacyLayout ?? DEFAULT_CLASSIC_TUNING.useLegacyLayout,
+    wordSpacing: clampClassicWordSpacing(tuning?.wordSpacing ?? DEFAULT_CLASSIC_TUNING.wordSpacing ?? 1),
 });
 
 // Helper to determine if text contains CJK characters
@@ -416,13 +418,14 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                     w_next = wordWidths[i + 1] ?? 0;
                 }
 
-                const gap = 0.12 * pxFontSize;
+                const spacingMultiplier = resolvedClassicTuning.wordSpacing ?? 1;
+                const gap = 0.05 * pxFontSize;
                 const halfOverflow_i = w_i * (s_i - 1) / 2;
                 const halfOverflow_next = w_next * (s_next - 1) / 2;
                 const xOffsetDiff = xVal - x_next;
 
-                const calculatedMargin = halfOverflow_i + halfOverflow_next + xOffsetDiff + gap;
-                const minMargin = isChaotic ? 0.2 * pxFontSize : 0.25 * pxFontSize;
+                const calculatedMargin = (halfOverflow_i + halfOverflow_next + xOffsetDiff + gap) * spacingMultiplier;
+                const minMargin = (isChaotic ? 0.08 * pxFontSize : 0.12 * pxFontSize) * spacingMultiplier;
                 const finalMargin = Math.max(minMargin, calculatedMargin);
                 marginRight = `${finalMargin.toFixed(1)}px`;
             }
@@ -440,7 +443,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         });
 
         return { wordConfigs, lineConfig };
-    }, [activeLine, displayWords, resolvedClassicTuning.enableWordRotation, resolvedClassicTuning.useLegacyLayout, theme, lyricsFontScale, viewportWidth]);
+    }, [activeLine, displayWords, resolvedClassicTuning.enableWordRotation, resolvedClassicTuning.useLegacyLayout, resolvedClassicTuning.wordSpacing, theme, lyricsFontScale, viewportWidth]);
 
     // Container motion is the "body" of each word.
     // waiting/active/passed all reuse the same layout config but interpret it differently.

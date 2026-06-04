@@ -121,6 +121,14 @@ const clampClassicBreathingFloatMultiplier = (value: number, fallback: number) =
     return Math.min(2, Math.max(0, value));
 };
 
+const clampClassicWordSpacing = (value: number, fallback: number) => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(2, Math.max(0, value));
+};
+
 const readStoredClassicTuning = (): ClassicTuning => {
     if (typeof window === 'undefined') {
         return DEFAULT_CLASSIC_TUNING;
@@ -138,6 +146,10 @@ const readStoredClassicTuning = (): ClassicTuning => {
                 DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
             ),
             useLegacyLayout: parsed.useLegacyLayout ?? DEFAULT_CLASSIC_TUNING.useLegacyLayout,
+            wordSpacing: clampClassicWordSpacing(
+                parsed.wordSpacing ?? DEFAULT_CLASSIC_TUNING.wordSpacing,
+                DEFAULT_CLASSIC_TUNING.wordSpacing,
+            ),
         };
     } catch {
         return DEFAULT_CLASSIC_TUNING;
@@ -800,6 +812,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
                 prev.breathingFloatMultiplier,
             ),
             useLegacyLayout: patch.useLegacyLayout ?? prev.useLegacyLayout,
+            wordSpacing: clampClassicWordSpacing(
+                patch.wordSpacing ?? prev.wordSpacing,
+                prev.wordSpacing ?? DEFAULT_CLASSIC_TUNING.wordSpacing!,
+            ),
         };
         if (typeof window !== 'undefined') {
             localStorage.setItem('classic_tuning', JSON.stringify(next));

@@ -305,6 +305,7 @@ export default {
     "classicLegacyLayout": "排版模式",
     "classicLegacyLayoutOn": "旧版",
     "classicLegacyLayoutOff": "自适应",
+    "classicWordSpacing": "单词间距",
     "partitaSettings": "云阶参数",
     "partitaSettingsDesc": "控制引导线显示和分块横向错位范围。",
     "partitaGuideLines": "引导线",

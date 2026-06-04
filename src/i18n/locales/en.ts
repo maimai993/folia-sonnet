@@ -303,6 +303,7 @@ export default {
     "classicLegacyLayout": "Layout Mode",
     "classicLegacyLayoutOn": "Legacy",
     "classicLegacyLayoutOff": "Adaptive",
+    "classicWordSpacing": "Word Spacing",
     "partitaSettings": "Partita Tuning",
     "partitaSettingsDesc": "Control guide line visibility and horizontal chunk stagger range.",
     "partitaGuideLines": "Guide Lines",

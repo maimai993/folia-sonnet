@@ -21,6 +21,7 @@ interface PresetGroupProps<T> {
 
 const clampPartitaStagger = (value: number) => Math.min(180, Math.max(0, value));
 const clampClassicBreathingFloatMultiplier = (value: number) => Math.min(2, Math.max(0, value));
+const clampClassicWordSpacing = (value: number) => Math.min(2, Math.max(0, value));
 
 const PresetGroup = <T,>({
     label,
@@ -78,6 +79,9 @@ export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             classicTuning.breathingFloatMultiplier ?? DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
         ),
         useLegacyLayout: classicTuning.useLegacyLayout ?? DEFAULT_CLASSIC_TUNING.useLegacyLayout,
+        wordSpacing: clampClassicWordSpacing(
+            classicTuning.wordSpacing ?? DEFAULT_CLASSIC_TUNING.wordSpacing ?? 1
+        ),
     };
     const wordRotationOptions: PresetOption<boolean>[] = useMemo(() => ([
         { value: true, label: t('options.classicWordRotationOn') || '启用' },
@@ -139,6 +143,28 @@ export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     className={rangeInputClass}
                 />
             </div>
+
+            {!resolvedClassicTuning.useLegacyLayout && (
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                        <span>{t('options.classicWordSpacing') || '单词间距'}</span>
+                        <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                            {resolvedClassicTuning.wordSpacing.toFixed(2)}x
+                        </span>
+                    </div>
+                    <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="0.05"
+                        value={resolvedClassicTuning.wordSpacing}
+                        onChange={(event) => onClassicTuningChange?.({ wordSpacing: parseFloat(event.target.value) })}
+                        onPointerDown={onSliderPointerDown}
+                        onPointerUp={onSliderCommit}
+                        className={rangeInputClass}
+                    />
+                </div>
+            )}
         </div>
     );
 };
