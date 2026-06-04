@@ -14,9 +14,11 @@ import { parseVisualizerFrameRate, setGlobalVisualizerFrameRate, VISUALIZER_FRAM
 export type StatusSetter = React.Dispatch<React.SetStateAction<StatusMessage | null>>;
 export type AudioQuality = 'exhigh' | 'lossless' | 'hires';
 export type SettingsModalInitialTab = 'help' | 'options';
+export type SettingsSubviewId = 'appearance' | 'playback' | 'integration' | 'storage' | 'desktop' | 'lab' | 'visualizer' | 'themePark' | 'lyricFilter';
 export type SettingsModalState = {
     isOpen: boolean;
     initialTab: SettingsModalInitialTab;
+    initialSubview?: SettingsSubviewId | null;
 };
 
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
@@ -494,7 +496,7 @@ type SettingsUiState = {
     clearLyricsCustomFontAfterRestoreFailure: (message: StatusMessage) => void;
     ensureBuiltinCappellaEmojiPack: () => void;
     setIsSubSettingsViewOpen: (open: boolean) => void;
-    openSettings: (initialTab?: SettingsModalInitialTab) => void;
+    openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null) => void;
     closeSettings: () => void;
     handleToggleCoverColorBg: (enable: boolean) => void;
     handleToggleStaticMode: (enable: boolean) => void;
@@ -598,6 +600,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     settingsModalState: {
         isOpen: false,
         initialTab: 'help',
+        initialSubview: null,
     },
     setStatusSetter: (setter) => set({ statusSetter: setter }),
     setAudioQuality: (quality) => {
@@ -651,10 +654,11 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         set({ cappellaTuning: next });
     },
     setIsSubSettingsViewOpen: (open) => set({ isSubSettingsViewOpen: open }),
-    openSettings: (initialTab = 'help') => set({
+    openSettings: (initialTab = 'help', initialSubview = null) => set({
         settingsModalState: {
             isOpen: true,
             initialTab,
+            initialSubview,
         },
     }),
     closeSettings: () => set(state => ({

@@ -18,13 +18,14 @@ import PlaybackSettingsSubview from './settings/PlaybackSettingsSubview';
 import StorageSettingsSection from './settings/StorageSettingsSection';
 import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
-import { selectSettingsUiSnapshot, useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { selectSettingsUiSnapshot, type SettingsSubviewId, useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
 
 
 interface SettingsModalProps {
     onClose: () => void;
     initialTab?: 'help' | 'options';
+    initialSubview?: SettingsSubviewId | null;
     theme?: Theme;
     bgMode: ThemeMode;
     onApplyDefaultTheme: () => void;
@@ -56,6 +57,7 @@ const QUARK_DOWNLOAD_URL = 'https://pan.quark.cn/s/6e4c6fa3bc6f';
 const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
     initialTab = 'help',
+    initialSubview = null,
     theme,
     bgMode,
     onApplyDefaultTheme,
@@ -170,6 +172,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [stageAddressCopied, setStageAddressCopied] = useState(false);
     const [authorClickCount, setAuthorClickCount] = useState(0);
     const [meowEasterEgg, setMeowEasterEgg] = useState<{ id: number; } | null>(null);
+
+    useEffect(() => {
+        setActiveTab(initialTab);
+        setShowVisPlayground(initialSubview === 'visualizer');
+        setShowThemePark(initialSubview === 'themePark');
+        setShowAppearanceSettings(initialSubview === 'appearance');
+        setShowPlaybackSettings(initialSubview === 'playback');
+        setShowIntegrationSettings(initialSubview === 'integration');
+        setShowStorageSettings(initialSubview === 'storage');
+        setShowDesktopSettings(initialSubview === 'desktop');
+        setShowLabSettings(initialSubview === 'lab');
+        setShowLyricFilterSettings(initialSubview === 'lyricFilter');
+    }, [initialSubview, initialTab]);
 
     // Cache State
     const [cacheSizes, setCacheSizes] = useState({

@@ -3,6 +3,8 @@ import { useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { loadCachedOrFetchCover } from './services/coverCache';
 import VisualizerRenderer from './components/visualizer/VisualizerRenderer';
+import CommandPalette from './components/command-palette/CommandPalette';
+import { useCommandPalette } from './components/command-palette/useCommandPalette';
 import AppShell from './components/app/AppShell';
 import Home from './components/app/Home';
 import PlayerPanel from './components/app/PlayerPanel';
@@ -554,11 +556,13 @@ export default function App() {
         popOverlay,
     } = useAppNavigation();
     const {
+        isSearchOpen,
         searchQuery,
         searchSourceTab,
         submitSearch,
         loadMoreSearchResults,
     } = useSearchNavigationStore(useShallow(state => ({
+        isSearchOpen: state.isSearchOpen,
         searchQuery: state.searchQuery,
         searchSourceTab: state.searchSourceTab,
         submitSearch: state.submitSearch,
@@ -1230,6 +1234,53 @@ export default function App() {
     ]);
     const isSettingsModalOpen = settingsModalState.isOpen;
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
+    const commandPaletteContext = useMemo(() => ({
+        currentSearchSourceTab: searchSourceTab,
+        localSongs,
+        playerState,
+        t: (key: string, fallback?: string) => t(key, fallback ?? ''),
+        openSettings,
+        navigateToHome,
+        navigateToPlayer,
+        navigateToSearch,
+        setHomeViewTab,
+        setPanelTab,
+        setIsPanelOpen,
+        submitSearch,
+        togglePlay,
+        toggleLoop,
+        handleNextTrack,
+        handlePrevTrack,
+        shuffleQueue,
+        setVisualizerMode: handleSetVisualizerMode,
+    }), [
+        handleNextTrack,
+        handlePrevTrack,
+        handleSetVisualizerMode,
+        localSongs,
+        navigateToHome,
+        navigateToPlayer,
+        navigateToSearch,
+        openSettings,
+        playerState,
+        searchSourceTab,
+        setHomeViewTab,
+        shuffleQueue,
+        submitSearch,
+        t,
+        toggleLoop,
+        togglePlay,
+    ]);
+    const commandPalette = useCommandPalette({
+        currentView,
+        isBlocked: isSettingsModalOpen
+            || isSearchOpen
+            || showLyricMatchModal
+            || showNaviLyricMatchModal
+            || showOnlineLyricMatchModal
+            || Boolean(pendingUnavailableReplacement),
+        context: commandPaletteContext,
+    });
     const nowPlayingDebugSnapshot = useMemo(() => (
         stageSource === 'now-playing'
             ? {
@@ -1530,6 +1581,7 @@ export default function App() {
         activePlaybackContext,
         isNowPlayingControlDisabled,
         openSettings,
+        openCommandPalette: commandPalette.open,
         playQueue,
         playSong,
         queueScrollRef,
@@ -1567,6 +1619,7 @@ export default function App() {
         audioQuality,
         cacheSize,
         canGenerateAITheme,
+        commandPalette.open,
         coverUrl,
         createCurrentLocalPlaylist,
         createCurrentNavidromePlaylist,
@@ -2030,6 +2083,20 @@ export default function App() {
             {currentView === 'player' && !showLyricMatchModal && (
                 <PlayerPanel model={playerPanelModel} />
             )}
+
+            <CommandPalette
+                activeIndex={commandPalette.activeIndex}
+                isDaylight={isDaylight}
+                isOpen={commandPalette.isOpen}
+                matches={commandPalette.matches}
+                query={commandPalette.query}
+                theme={theme}
+                onActiveIndexChange={commandPalette.setActiveIndex}
+                onClose={commandPalette.close}
+                onExecuteActive={commandPalette.executeActive}
+                onExecuteMatch={commandPalette.executeMatch}
+                onQueryChange={commandPalette.setQuery}
+            />
 
             <AppDialogs model={appDialogsModel} />
         </AppShell>

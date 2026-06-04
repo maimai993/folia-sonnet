@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star } from 'lucide-react';
+import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, NeteasePlaylist, ThemeMode, VisualizerMode } from '../types';
 import CoverTab from './panelTab/CoverTab';
@@ -72,6 +72,7 @@ type UnifiedPanelPlaybackProps = {
     isStageContext?: boolean;
     playbackControlsDisabled?: boolean;
     onOpenSettings?: () => void;
+    onOpenCommandPalette?: () => void;
 };
 
 type UnifiedPanelQueueProps = {
@@ -181,6 +182,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         isStageContext = false,
         playbackControlsDisabled = false,
         onOpenSettings,
+        onOpenCommandPalette,
     } = playback;
     const { playQueue, onPlaySong, queueScrollRef, onShuffle } = queue;
     const {
@@ -310,6 +312,10 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     // Theme Helper
     // const isDaylight = theme.name === 'Daylight Default'; // Deprecated
     const isAI = bgMode === 'ai'; // AI themes usually dark
+    const commandSlideRef = React.useRef<{ startX: number; startY: number; triggered: boolean; } | null>(null);
+    const suppressToggleClickRef = React.useRef(false);
+    const toggleButtonRef = React.useRef<HTMLButtonElement | null>(null);
+    const commandDestinationRef = React.useRef<HTMLDivElement | null>(null);
     const glassBg = isDaylight ? 'bg-white/60' : 'bg-black/40';
     const placeholderBg = isDaylight ? 'bg-stone-200' : 'bg-zinc-900';
     const activeTabBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
@@ -319,6 +325,116 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         : supportsHover
             ? 'translate-x-1/2 opacity-60 group-hover:translate-x-0 group-hover:opacity-100 md:translate-x-0 md:opacity-100 md:hover:scale-105'
             : 'translate-x-1/2 opacity-60';
+    const canSlideOpenCommandPalette = !isOpen && Boolean(onOpenCommandPalette);
+    const setCommandDestinationFeedback = (progress: number) => {
+        const destination = commandDestinationRef.current;
+        if (!destination) {
+            return;
+        }
+
+        destination.style.transition = 'none';
+        destination.style.opacity = String(Math.min(1, Math.max(0, progress)));
+        destination.style.translate = `${Math.round(12 - progress * 12)}px -50%`;
+        destination.style.scale = String(0.94 + progress * 0.06);
+    };
+    const resetCommandDestinationFeedback = () => {
+        const destination = commandDestinationRef.current;
+        if (!destination) {
+            return;
+        }
+
+        destination.style.transition = 'opacity 150ms ease-out, translate 150ms ease-out, scale 150ms ease-out';
+        destination.style.opacity = '0';
+        destination.style.translate = '12px -50%';
+        destination.style.scale = '0.94';
+    };
+    const setToggleButtonDragFeedback = (deltaX: number) => {
+        const button = toggleButtonRef.current;
+        if (!button) {
+            return;
+        }
+
+        const dragX = Math.max(-44, Math.min(0, deltaX));
+        const progress = Math.min(1, Math.abs(dragX) / 36);
+        button.style.transition = 'none';
+        button.style.translate = `${dragX}px 0`;
+        button.style.filter = `brightness(${1 + progress * 0.18})`;
+        button.style.boxShadow = `0 18px 42px rgba(0, 0, 0, ${0.24 + progress * 0.16})`;
+        setCommandDestinationFeedback(progress);
+    };
+    const resetToggleButtonDragFeedback = (mode: 'release' | 'trigger' = 'release') => {
+        const button = toggleButtonRef.current;
+        if (!button) {
+            resetCommandDestinationFeedback();
+            return;
+        }
+
+        resetCommandDestinationFeedback();
+        if (mode === 'trigger') {
+            button.animate(
+                [
+                    { translate: '-44px 0', scale: '1', opacity: '1', filter: 'brightness(1.18)' },
+                    { translate: '-64px 0', scale: '0.92', opacity: '0.82', filter: 'brightness(1.28)' },
+                ],
+                { duration: 180, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+            );
+            button.style.transition = '';
+            button.style.translate = '0 0';
+            button.style.filter = '';
+            button.style.boxShadow = '';
+            return;
+        }
+
+        button.style.transition = 'translate 160ms ease-out, filter 160ms ease-out, box-shadow 160ms ease-out';
+        button.style.translate = '0 0';
+        button.style.filter = '';
+        button.style.boxShadow = '';
+    };
+    const handleToggleButtonPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (!canSlideOpenCommandPalette) {
+            return;
+        }
+
+        commandSlideRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            triggered: false,
+        };
+        suppressToggleClickRef.current = false;
+        setToggleButtonDragFeedback(0);
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+    };
+    const handleToggleButtonPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+        const gesture = commandSlideRef.current;
+        if (!canSlideOpenCommandPalette || !gesture || gesture.triggered) {
+            return;
+        }
+
+        const deltaX = event.clientX - gesture.startX;
+        const deltaY = event.clientY - gesture.startY;
+        setToggleButtonDragFeedback(deltaX);
+        if (deltaX <= -36 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+            gesture.triggered = true;
+            suppressToggleClickRef.current = true;
+            event.preventDefault();
+            resetToggleButtonDragFeedback('trigger');
+            onOpenCommandPalette?.();
+        }
+    };
+    const clearToggleButtonGesture = () => {
+        commandSlideRef.current = null;
+        resetToggleButtonDragFeedback();
+    };
+    const handleToggleButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+        if (suppressToggleClickRef.current) {
+            suppressToggleClickRef.current = false;
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+
+        onToggle();
+    };
     const handleNavigateHome = () => {
         setIsCoverActionsVisible(false);
         onToggle();
@@ -705,8 +821,25 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         transition={{ duration: 0.24, ease: 'easeOut' }}
                         className="pointer-events-auto fixed bottom-8 right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
                     >
+                        <div
+                            ref={commandDestinationRef}
+                            className={`pointer-events-none absolute right-16 top-1/2 flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium shadow-lg backdrop-blur-md ${
+                                isDaylight ? 'border-black/10 bg-white/80 text-zinc-900' : 'border-white/10 bg-black/55 text-white'
+                            }`}
+                            style={{ opacity: 0, translate: '12px -50%', scale: '0.94' }}
+                        >
+                            <Command size={13} />
+                            <span className="whitespace-nowrap">{t('commandPalette.destination') || 'Command'}</span>
+                        </div>
                         <button
-                            onClick={onToggle}
+                            ref={toggleButtonRef}
+                            type="button"
+                            onPointerDown={handleToggleButtonPointerDown}
+                            onPointerMove={handleToggleButtonPointerMove}
+                            onPointerUp={clearToggleButtonGesture}
+                            onPointerCancel={clearToggleButtonGesture}
+                            onClick={handleToggleButtonClick}
+                            style={{ touchAction: canSlideOpenCommandPalette ? 'none' : undefined }}
                             className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg backdrop-blur-md transform
                                 border-none ${toggleButtonMotionClass} ${isOpen ? 'bg-white text-black' : (isDaylight ? 'bg-white/70 text-zinc-900' : 'bg-black/40 text-white')}`}
                         >

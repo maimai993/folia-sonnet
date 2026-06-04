@@ -82,6 +82,7 @@ export const buildSettingsDialogModel = ({
         nowPlayingConnectionStatus,
         onAudioOutputDeviceChange,
         initialTab: state.initialTab,
+        initialSubview: state.initialSubview ?? null,
         onClose,
         onToggleStageMode: async (enabled) => {
             try {
