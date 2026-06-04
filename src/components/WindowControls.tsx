@@ -3,8 +3,10 @@ import { Copy, Minus, Radio, Square, X } from 'lucide-react';
 
 export default function WindowControls({
     revealed,
+    isDaylight = false,
 }: {
     revealed: boolean;
+    isDaylight?: boolean;
 }) {
     const [isMaximized, setIsMaximized] = useState(false);
     const electron = (window as any).electron;
@@ -21,15 +23,23 @@ export default function WindowControls({
 
     const controlsVisible = revealed;
     const btnClass = `flex items-center justify-center w-11 h-full transition-all duration-200 ${
-        controlsVisible ? 'opacity-75 translate-y-0 hover:opacity-100 hover:bg-white/10' : 'opacity-0 -translate-y-1'
+        controlsVisible
+            ? isDaylight
+                ? 'opacity-85 translate-y-0 hover:opacity-100 hover:bg-black/[0.05]'
+                : 'opacity-75 translate-y-0 hover:opacity-100 hover:bg-white/10'
+            : 'opacity-0 -translate-y-1'
     }`;
     const closeBtnClass = `flex items-center justify-center w-11 h-full transition-all duration-200 ${
-        controlsVisible ? 'opacity-75 translate-y-0 hover:opacity-100 hover:bg-red-500 hover:text-white' : 'opacity-0 -translate-y-1'
+        controlsVisible
+            ? isDaylight
+                ? 'opacity-85 translate-y-0 hover:opacity-100 hover:bg-red-500 hover:text-white'
+                : 'opacity-75 translate-y-0 hover:opacity-100 hover:bg-red-500 hover:text-white'
+            : 'opacity-0 -translate-y-1'
     }`;
 
     return (
         <div
-            className="flex h-full text-[var(--text-primary)]"
+            className={`flex h-full ${isDaylight ? 'text-zinc-800' : 'text-[var(--text-primary)]'}`}
             style={{
                 WebkitAppRegion: 'no-drag',
                 pointerEvents: controlsVisible ? 'auto' : 'none',

@@ -16,6 +16,7 @@ type AppShellProps = {
     isMainWindowClickThroughEnabled: boolean;
     showMainWindowClickThroughToggle: boolean;
     onToggleMainWindowClickThrough: () => void;
+    isDaylight: boolean;
     audioElement: React.ReactNode;
     children: React.ReactNode;
 };
@@ -31,6 +32,7 @@ const AppShell: React.FC<AppShellProps> = ({
     isMainWindowClickThroughEnabled,
     showMainWindowClickThroughToggle,
     onToggleMainWindowClickThrough,
+    isDaylight,
     audioElement,
     children,
 }) => {
@@ -69,7 +71,13 @@ const AppShell: React.FC<AppShellProps> = ({
     const shouldApplyWindowRadius = useCustomWindowRadius && !isWindowMaximized;
     const shouldRenderTitlebarBackdrop = !isPlayerView || (useCustomWindowRadius && !isMainWindowClickThroughEnabled);
     const titlebarBackdropClassName = `absolute inset-0 backdrop-blur-sm ${
-        isPlayerView ? 'bg-black/[0.18] border-b border-white/10 shadow-[0_8px_28px_rgba(0,0,0,0.20)]' : ''
+        isDaylight
+            ? isPlayerView
+                ? 'bg-white/[0.18] border-b border-white/25 shadow-[0_8px_28px_rgba(0,0,0,0.06)]'
+                : 'bg-white/[0.12] border-b border-white/15'
+            : isPlayerView
+                ? 'bg-black/[0.18] border-b border-white/10 shadow-[0_8px_28px_rgba(0,0,0,0.20)]'
+                : ''
     }`;
 
     return (
@@ -110,15 +118,19 @@ const AppShell: React.FC<AppShellProps> = ({
                                         : 'pointer-events-none opacity-0 -translate-y-1'
                                 } ${
                                     isMainWindowClickThroughEnabled
-                                        ? 'border-amber-300/35 bg-black/55 text-amber-100 hover:bg-black/70'
-                                        : 'border-white/15 bg-transparent text-white/75 hover:bg-black/20 hover:text-white'
+                                        ? isDaylight
+                                            ? 'border-amber-500/30 bg-amber-50/80 text-amber-700 hover:bg-amber-100/90'
+                                            : 'border-amber-300/35 bg-black/55 text-amber-100 hover:bg-black/70'
+                                        : isDaylight
+                                            ? 'border-black/[0.06] bg-white/40 text-zinc-700 hover:bg-white/80 hover:text-zinc-900 shadow-[0_4px_12px_rgba(0,0,0,0.04)]'
+                                            : 'border-white/15 bg-transparent text-white/75 hover:bg-black/20 hover:text-white'
                                 }`}
                             >
                                 {isMainWindowClickThroughEnabled ? <Lock size={14} /> : <LockOpen size={14} />}
                             </button>
                         </div>
                         <div className="pointer-events-auto absolute top-0 right-0 z-10 h-full">
-                            <WindowControls revealed={isTitlebarRevealed} />
+                            <WindowControls revealed={isTitlebarRevealed} isDaylight={isDaylight} />
                         </div>
                     </div>
                 </div>
