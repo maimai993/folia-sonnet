@@ -131,6 +131,8 @@ interface PreparedBubbleMetrics {
     revealTimes: number[];
     /** revealTimes 整体提前一段时间，用来驱动气泡提前横向扩展 */
     bubbleTargetTimes: number[];
+    /** 歌词最后一个字符完成淡入的时间，用来控制时间戳出现时机 */
+    timestampReadyTime: number;
 }
 
 interface CharacterRevealPlan {
@@ -510,6 +512,8 @@ const buildCharacterRevealTimes = (line: Line, characters: string[]) => {
     const revealTimes = characters.map(() => Number.POSITIVE_INFINITY);
     const ranges = getWordTextRanges(line);
     let previousWordEndCharacterIndex = 0;
+    let lastResolvedRevealTime = line.startTime;
+    let hasResolvedRevealTime = false;
 
     line.words.forEach((word, index) => {
         const range = ranges[index];
@@ -528,8 +532,8 @@ const buildCharacterRevealTimes = (line: Line, characters: string[]) => {
             revealTimes[characterIndex] = word.startTime;
         }
 
-        // Match getVisibleWordCharacters(): the first character appears at word start,
-        // then the rest spread across the word duration.
+        // The first character appears at word start, then the rest spread
+        // across the word duration to match the previous reveal behavior.
         wordCharacters.forEach((_, characterIndex) => {
             const targetIndex = startCharacterIndex + characterIndex;
             if (targetIndex >= revealTimes.length) {
@@ -539,15 +543,19 @@ const buildCharacterRevealTimes = (line: Line, characters: string[]) => {
             revealTimes[targetIndex] = characterIndex === 0
                 ? word.startTime
                 : word.startTime + duration * ((characterIndex + 1) / wordCharacters.length);
+            lastResolvedRevealTime = Math.max(lastResolvedRevealTime, revealTimes[targetIndex]);
+            hasResolvedRevealTime = true;
         });
 
         previousWordEndCharacterIndex = endCharacterIndex;
     });
 
     // Any unmatched trailing characters still belong to this line visually.
-    // Keep them available by the line end instead of leaving them hidden forever.
+    // Attach them to the last timed character instead of waiting for line.endTime,
+    // otherwise the timestamp can appear only when the next line starts.
+    const trailingRevealTime = hasResolvedRevealTime ? lastResolvedRevealTime : line.endTime;
     for (let characterIndex = previousWordEndCharacterIndex; characterIndex < revealTimes.length; characterIndex += 1) {
-        revealTimes[characterIndex] = line.endTime;
+        revealTimes[characterIndex] = trailingRevealTime;
     }
 
     return revealTimes;
@@ -574,6 +582,9 @@ const getCharacterCountAtTime = (revealTimes: number[], currentTime: number) => 
 const getBubbleTargetCharacterCount = (metrics: PreparedBubbleMetrics, currentTime: number) =>
     getCharacterCountAtTime(metrics.bubbleTargetTimes, currentTime);
 
+const getTimestampReadyTime = (metrics: PreparedBubbleMetrics | null, line: Line) =>
+    metrics?.timestampReadyTime ?? line.endTime;
+
 const getWordRevealUnitCount = (wordText: string) => {
     const trimmed = wordText.trim();
     if (!trimmed) {
@@ -589,9 +600,9 @@ const getWordRevealUnitCount = (wordText: string) => {
     return Math.max(revealCharacters.length, 1);
 };
 
-// Builds per-character fade durations while keeping the existing reveal order and entry timing.
-const getCharacterRevealPlan = (line: Line): CharacterRevealPlan => {
-    const characters = Array.from(line.fullText);
+// Builds the CSS fade duration for each character. The timestamp uses the same
+// values so it appears after the last visible character has finished fading in.
+const buildCharacterFadeDurationsMs = (line: Line, characters: string[]) => {
     const fadeDurationsMs = characters.map(() => DEFAULT_CHAR_FADE_MS);
     const ranges = getWordTextRanges(line);
 
@@ -618,6 +629,32 @@ const getCharacterRevealPlan = (line: Line): CharacterRevealPlan => {
             fadeDurationsMs[targetIndex] = fadeDurationMs;
         }
     });
+
+    return fadeDurationsMs;
+};
+
+const getTimestampReadyTimeFromMetrics = (
+    line: Line,
+    revealTimes: number[],
+    fadeDurationsMs: number[]
+) => {
+    if (revealTimes.length === 0) {
+        return line.endTime;
+    }
+
+    return revealTimes.reduce((latest, time, index) => {
+        if (!Number.isFinite(time)) {
+            return latest;
+        }
+
+        return Math.max(latest, time + (fadeDurationsMs[index] ?? DEFAULT_CHAR_FADE_MS) / 1000);
+    }, line.startTime);
+};
+
+// Builds per-character fade durations while keeping the existing reveal order and entry timing.
+const getCharacterRevealPlan = (line: Line): CharacterRevealPlan => {
+    const characters = Array.from(line.fullText);
+    const fadeDurationsMs = buildCharacterFadeDurationsMs(line, characters);
 
     return { characters, fadeDurationsMs };
 };
@@ -885,6 +922,8 @@ const getOrBuildBubbleMetrics = (
 
     const characters = getLineCharacters(line);
     const revealTimes = buildCharacterRevealTimes(line, characters);
+    const fadeDurationsMs = buildCharacterFadeDurationsMs(line, characters);
+    const timestampReadyTime = getTimestampReadyTimeFromMetrics(line, revealTimes, fadeDurationsMs);
     // Measure each prefix exactly once. Text reveal and bubble width use the same
     // sizes table; they only differ in which timeline resolves the prefix count.
     const bubbleTargetTimes = revealTimes.map(time => time - CAPPELLA_WIDTH_LOOKAHEAD_SECONDS);
@@ -903,7 +942,7 @@ const getOrBuildBubbleMetrics = (
         }));
     }
 
-    const prepared = { characters, sizes, revealTimes, bubbleTargetTimes };
+    const prepared = { characters, sizes, revealTimes, bubbleTargetTimes, timestampReadyTime };
     cache.set(cacheKey, prepared);
 
     if (cache.size > CAPPELLA_LAYOUT_CACHE_LIMIT) {
@@ -1169,7 +1208,7 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
         timedData !== null && (
             timedData.kind === 'emo'
                 ? currentTime.get() >= timedData.activationEndTime
-                : isPassedMessage || currentTime.get() >= timedData.line.endTime
+                : isPassedMessage || currentTime.get() >= getTimestampReadyTime(preparedMetrics, timedData.line)
         )
     ));
     // 表情图片：active 时更大
@@ -1255,15 +1294,15 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
         setTargetCharacterCount(current => current === nextTargetCount ? current : nextTargetCount);
         const nextTimestampVisible = message.kind === 'emo'
             ? latest >= message.activationEndTime
-            : isPassedMessage || latest >= message.line.endTime;
+            : isPassedMessage || latest >= getTimestampReadyTime(preparedMetrics, message.line);
         setIsTimestampVisible(nextTimestampVisible);
-    }, [currentTime, isActiveMessage, message, preparedMetrics]);
+    }, [currentTime, isActiveMessage, isPassedMessage, message, preparedMetrics]);
 
     useMotionValueEvent(currentTime, 'change', latest => {
         if (message.kind === 'lyric' || message.kind === 'emo') {
             const nextTimestampVisible = message.kind === 'emo'
                 ? latest >= message.activationEndTime
-                : isPassedMessage || latest >= message.line.endTime;
+                : isPassedMessage || latest >= getTimestampReadyTime(preparedMetrics, message.line);
             setIsTimestampVisible(current => current === nextTimestampVisible ? current : nextTimestampVisible);
         }
 
