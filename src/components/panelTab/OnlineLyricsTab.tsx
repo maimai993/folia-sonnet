@@ -110,11 +110,13 @@ const OnlineLyricsTab: React.FC<OnlineLyricsTabProps> = ({
                 </div>
 
                 {availableSources.length === 1 ? (
-                    <div className={`relative flex p-0.5 ${tabContainerBg} rounded-lg`}>
-                        <div className={`flex-1 relative text-[10px] py-1 px-1.5 rounded-md font-medium text-center ${activeTextColor}`}>
-                            <span className={`absolute inset-0 rounded-md ${activePillBg}`} />
-                            <span className="relative z-10">{availableSources[0].label}</span>
-                        </div>
+                    <div className={`flex items-center justify-between ${isDaylight ? 'bg-black/5' : 'bg-white/5'} rounded-lg p-2 pl-3`}>
+                        <span className="text-[11px] opacity-60">
+                            {t('lyricsSource') === 'Lyrics' ? 'Lyrics Source' : '歌词来源'}
+                        </span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${activeTabBg}`}>
+                            {availableSources[0].label}
+                        </span>
                     </div>
                 ) : (
                     <div className={`relative flex p-0.5 ${tabContainerBg} rounded-lg`}>
