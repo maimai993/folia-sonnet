@@ -38,3 +38,4 @@ test/test-ReplayGain
 impl.md
 test-results/
 .codex-remote-attachments
+test/manual/lyric-output/*

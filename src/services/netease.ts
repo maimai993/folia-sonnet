@@ -77,7 +77,7 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
   // Note: For Vercel hosted APIs, we rely on the `cookie` query param if cross-site cookies are blocked,
   // or `credentials: 'include'` if the server allows it. 
 
-  const storedCookie = typeof localStorage === 'undefined' ? null : localStorage.getItem('netease_cookie');
+  const storedCookie = typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function' ? null : localStorage.getItem('netease_cookie');
 
   if (storedCookie) {
     // Append cookie to URL

@@ -375,7 +375,7 @@ const buildCappellaMessages = (
             : {
                 side: resolvedSide,
                 avatarIndex: resolvedSide === 'left'
-                    ? LEFT_AVATAR_INDICES[nextLeftAvatarCursor % LEFT_AVATAR_INDICES.length]
+                    ? nextLeftAvatarCursor
                     : RIGHT_AVATAR_INDEX,
             };
 
@@ -442,7 +442,7 @@ const buildCappellaMessages = (
         if (shouldForceRight) {
             sideSequenceCursor = 0;
             lastLyricSender = null;
-        } else if (!isShortLine) {
+        } else if (!shouldCarrySender) {
             if (sender.side === 'left') {
                 nextLeftAvatarCursor += 1;
             }
@@ -962,8 +962,11 @@ const CappellaAvatar: React.FC<{
     side: ChatSide;
     useAvatarGridCrop: boolean;
 }> = ({ avatarUrl, avatarIndex, theme, side, useAvatarGridCrop }) => {
-    const avatarPosition = getAvatarPosition(avatarIndex);
     const shouldUseAvatarGridCrop = useAvatarGridCrop || !avatarUrl;
+    const resolvedIndex = shouldUseAvatarGridCrop
+        ? (side === 'right' ? RIGHT_AVATAR_INDEX : LEFT_AVATAR_INDICES[avatarIndex % LEFT_AVATAR_INDICES.length])
+        : avatarIndex;
+    const avatarPosition = getAvatarPosition(resolvedIndex);
 
     return (
         <motion.div
