@@ -325,7 +325,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const placeholderBg = isDaylight ? 'bg-stone-200' : 'bg-zinc-900';
     const activeTabBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
     const tabSwitcherBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
-    const toggleButtonMotionClass = isOpen
+    const toggleButtonMotionClass = (isOpen || showGuideLine || isDragging)
         ? 'translate-x-0 opacity-100'
         : supportsHover
             ? 'translate-x-1/2 opacity-60 group-hover:translate-x-0 group-hover:opacity-100 md:translate-x-0 md:opacity-100 md:hover:scale-105'
@@ -338,8 +338,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         }
 
         iconContainer.style.opacity = String(0.35 + progress * 0.65);
-        iconContainer.style.scale = String(1.0 + progress * 0.15);
-        iconContainer.style.transform = `rotate(${progress * 45}deg)`;
+        iconContainer.style.transform = `scale(${1.0 + progress * 0.15}) rotate(${progress * 45}deg)`;
 
         if (progress >= 1) {
             iconContainer.style.color = theme.accentColor;
@@ -353,10 +352,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             return;
         }
 
-        iconContainer.style.transition = 'opacity 150ms ease-out, scale 150ms ease-out, transform 150ms ease-out, color 150ms ease-out';
+        iconContainer.style.transition = 'opacity 150ms ease-out, transform 150ms ease-out, color 150ms ease-out';
         iconContainer.style.opacity = '0.35';
-        iconContainer.style.scale = '1.0';
-        iconContainer.style.transform = '';
+        iconContainer.style.transform = 'scale(1) rotate(0deg)';
         iconContainer.style.color = '';
     };
     const setToggleButtonDragFeedback = (deltaX: number) => {
@@ -368,7 +366,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         const dragX = Math.max(-44, Math.min(0, deltaX));
         const progress = Math.min(1, Math.abs(dragX) / 36);
         button.style.transition = 'none';
-        button.style.translate = `${dragX}px 0`;
+        button.style.transform = `translateX(${dragX}px)`;
         button.style.filter = `brightness(${1 + progress * 0.18})`;
 
         const icon = button.querySelector('svg');
@@ -421,8 +419,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         if (mode === 'trigger') {
             button.animate(
                 [
-                    { translate: `${dragX}px 0`, scale: '1', opacity: '1', filter: 'brightness(1.18)' },
-                    { translate: '-80px 0', scale: '0.8', opacity: '0' },
+                    { transform: `translateX(${dragX}px) scale(1)`, opacity: '1', filter: 'brightness(1.18)' },
+                    { transform: 'translateX(-80px) scale(0.8)', opacity: '0' },
                 ],
                 { duration: 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
             );
@@ -431,8 +429,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             if (iconContainer) {
                 iconContainer.animate(
                     [
-                        { translate: '0px 0px', scale: '1.15', opacity: '1' },
-                        { translate: '-40px 0px', scale: '0.9', opacity: '0' },
+                        { transform: 'scale(1.15) rotate(45deg)', opacity: '1' },
+                        { transform: 'translateX(-40px) scale(0.9) rotate(45deg)', opacity: '0' },
                     ],
                     { duration: 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
                 );
@@ -452,7 +450,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             resetCommandDestinationFeedback();
 
             button.style.transition = '';
-            button.style.translate = '0 0';
+            button.style.transform = '';
             button.style.filter = '';
             button.style.boxShadow = '';
             button.style.backgroundColor = '';
@@ -474,7 +472,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             if (iconContainer) {
                 iconContainer.style.transition = '';
                 iconContainer.style.opacity = '0.35';
-                iconContainer.style.scale = '1.0';
                 iconContainer.style.transform = '';
                 iconContainer.style.color = '';
             }
@@ -482,8 +479,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         }
 
         resetCommandDestinationFeedback();
-        button.style.transition = 'translate 160ms ease-out, filter 160ms ease-out, box-shadow 160ms ease-out, background-color 160ms ease-out, color 160ms ease-out';
-        button.style.translate = '0 0';
+        button.style.transition = 'transform 160ms ease-out, filter 160ms ease-out, box-shadow 160ms ease-out, background-color 160ms ease-out, color 160ms ease-out';
+        button.style.transform = '';
         button.style.filter = '';
         button.style.boxShadow = '';
         button.style.backgroundColor = '';
@@ -539,12 +536,14 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         }
     };
     const handleToggleButtonMouseEnter = () => {
-        if (canSlideOpenCommandPalette) {
+        if (supportsHover && canSlideOpenCommandPalette) {
             setShowGuideLine(true);
         }
     };
     const handleToggleButtonMouseLeave = () => {
-        setShowGuideLine(false);
+        if (supportsHover) {
+            setShowGuideLine(false);
+        }
     };
     const clearToggleButtonGesture = () => {
         commandSlideRef.current = null;
@@ -949,77 +948,80 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         transition={{ duration: 0.24, ease: 'easeOut' }}
                         className="pointer-events-auto fixed bottom-8 right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
                     >
-                        {/* osu! Slider Track */}
-                        <div
-                            style={{
-                                width: '96px',
-                                transition: 'opacity 200ms ease-out',
-                            }}
-                            className={`absolute right-4 md:right-8 top-1/2 -translate-y-1/2 h-12 rounded-full border pointer-events-none z-0 ${
-                                showGuideLine || isDragging
-                                    ? 'opacity-100'
-                                    : 'opacity-0'
-                            } ${
-                                isDaylight
-                                    ? 'border-black/10 bg-black/5'
-                                    : 'border-white/10 bg-white/5'
-                            }`}
-                        >
-                            {/* Semi-transparent command icon at the left end of the track */}
-                            <motion.div 
-                                className="absolute left-3.5 top-[17px] w-3.5 h-3.5 pointer-events-none flex items-center justify-center"
-                                animate={showGuideLine ? {
-                                    x: [0, -4, 0],
-                                    opacity: [0.45, 0.85, 0.45],
-                                } : {
-                                    x: 0,
-                                    opacity: 0.45,
-                                }}
-                                transition={showGuideLine ? {
-                                    duration: 1.5,
-                                    repeat: Infinity,
-                                    ease: "easeInOut",
-                                } : undefined}
-                            >
-                                <div
-                                    ref={trackEndIconRef}
-                                    style={{ 
-                                        color: isDaylight ? '#000000' : '#ffffff',
-                                    }}
-                                    className="w-full h-full flex items-center justify-center"
-                                >
-                                    <Command size={14} />
-                                </div>
-                            </motion.div>
-
-                            {/* Track Fill */}
+                        {/* Wrapper for both track and button to guarantee perfect alignment across browsers */}
+                        <div className={`relative w-12 h-12 transition-all duration-300 transform ${toggleButtonMotionClass}`}>
+                            {/* osu! Slider Track */}
                             <div
-                                ref={trackFillRef}
                                 style={{
-                                    width: '48px',
+                                    width: '96px',
+                                    transition: 'opacity 200ms ease-out',
                                 }}
-                                className={`absolute right-0 top-0 bottom-0 rounded-full pointer-events-none ${
-                                    isDaylight ? 'bg-black/10' : 'bg-white/10'
+                                className={`absolute right-0 top-0 h-12 rounded-full border pointer-events-none z-0 ${
+                                    showGuideLine || isDragging
+                                        ? 'opacity-100'
+                                        : 'opacity-0'
+                                } ${
+                                    isDaylight
+                                        ? 'border-black/10 bg-black/5'
+                                        : 'border-white/10 bg-white/5'
                                 }`}
-                            />
-                        </div>
+                            >
+                                {/* Semi-transparent command icon at the left end of the track */}
+                                <motion.div 
+                                    className="absolute left-3.5 top-[17px] w-3.5 h-3.5 pointer-events-none flex items-center justify-center"
+                                    animate={showGuideLine ? {
+                                        x: [0, -4, 0],
+                                        opacity: [0.45, 0.85, 0.45],
+                                    } : {
+                                        x: 0,
+                                        opacity: 0.45,
+                                    }}
+                                    transition={showGuideLine ? {
+                                        duration: 1.5,
+                                        repeat: Infinity,
+                                        ease: "easeInOut",
+                                    } : undefined}
+                                >
+                                    <div
+                                        ref={trackEndIconRef}
+                                        style={{ 
+                                            color: isDaylight ? '#000000' : '#ffffff',
+                                        }}
+                                        className="w-full h-full flex items-center justify-center"
+                                    >
+                                        <Command size={14} />
+                                    </div>
+                                </motion.div>
 
-                        <button
-                            ref={toggleButtonRef}
-                            type="button"
-                            onPointerDown={handleToggleButtonPointerDown}
-                            onPointerMove={handleToggleButtonPointerMove}
-                            onPointerUp={clearToggleButtonGesture}
-                            onPointerCancel={clearToggleButtonGesture}
-                            onMouseEnter={handleToggleButtonMouseEnter}
-                            onMouseLeave={handleToggleButtonMouseLeave}
-                            onClick={handleToggleButtonClick}
-                            style={{ touchAction: canSlideOpenCommandPalette ? 'none' : undefined }}
-                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg backdrop-blur-md transform
-                                border-none ${toggleButtonMotionClass} ${isOpen ? 'bg-white text-black' : (isDaylight ? 'bg-white/70 text-zinc-900' : 'bg-black/40 text-white')}`}
-                        >
-                            {isOpen ? <X size={20} /> : <Settings2 size={20} />}
-                        </button>
+                                {/* Track Fill */}
+                                <div
+                                    ref={trackFillRef}
+                                    style={{
+                                        width: '48px',
+                                    }}
+                                    className={`absolute right-0 top-0 bottom-0 rounded-full pointer-events-none ${
+                                        isDaylight ? 'bg-black/10' : 'bg-white/10'
+                                    }`}
+                                />
+                            </div>
+
+                            <button
+                                ref={toggleButtonRef}
+                                type="button"
+                                onPointerDown={handleToggleButtonPointerDown}
+                                onPointerMove={handleToggleButtonPointerMove}
+                                onPointerUp={clearToggleButtonGesture}
+                                onPointerCancel={clearToggleButtonGesture}
+                                onMouseEnter={handleToggleButtonMouseEnter}
+                                onMouseLeave={handleToggleButtonMouseLeave}
+                                onClick={handleToggleButtonClick}
+                                style={{ touchAction: canSlideOpenCommandPalette ? 'none' : undefined }}
+                                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg backdrop-blur-md transform
+                                    border-none absolute right-0 top-0 z-10 ${isOpen ? 'bg-white text-black' : (isDaylight ? 'bg-white/70 text-zinc-900' : 'bg-black/40 text-white')}`}
+                            >
+                                {isOpen ? <X size={20} /> : <Settings2 size={20} />}
+                            </button>
+                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>
