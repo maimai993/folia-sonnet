@@ -186,7 +186,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createSettingsCommand('settings-desktop', 'Desktop settings', 'Open desktop app settings', ['desktop', 'electron', '桌面', '桌面端', 'zhuomian', 'zhuomianduan', 'zm', 'zmd'], 'options', 'desktop'),
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室', 'shiyan', 'shiyanshi', 'sy', 'sys'], 'options', 'lab'),
     createSettingsCommand('settings-visualizer', 'Visualizer settings', 'Open lyrics animation workbench', ['visualizer settings', 'visualizer workbench', '可视化', '歌词动画', 'keshihua', 'gecidonghua', 'ksh', 'gcdh'], 'options', 'visualizer'),
-    createSettingsCommand('settings-theme-park', 'Theme Park', 'Open theme editor', ['theme park', 'theme', '主题', '主题公园', 'zhuti', 'zhutigongyuan', 'zt', 'ztgy'], 'options', 'themePark'),
+    createSettingsCommand('settings-theme-park', 'Color / 配色', 'Open theme editor', ['color', 'theme park', 'theme', '配色', '主题', '主题公园', 'peise', 'zhuti', 'zhutigongyuan', 'ps', 'zt', 'ztgy'], 'options', 'themePark'),
     createSettingsCommand('settings-lyric-filter', 'Lyric filter', 'Open lyric filter settings', ['lyric filter', 'lyrics filter', '歌词过滤', '过滤', 'geciguolv', 'guolv', 'gcgl', 'gl'], 'options', 'lyricFilter'),
 
     {
@@ -302,12 +302,42 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createVisualizerCommand('fume', 'Visualizer: Fume', 'Switch to fume visualizer', ['visualizer fume', 'fume', '浮名', 'fuming', 'fm']),
     createVisualizerCommand('cappella', 'Visualizer: Cappella', 'Switch to cappella visualizer', ['visualizer cappella', 'cappella', '群唱', 'qunchang', 'qc']),
     createVisualizerCommand('tilt', 'Visualizer: Tilt', 'Switch to tilt visualizer', ['visualizer tilt', 'tilt', '倾诉', 'qingsu', 'qs']),
+    {
+        id: 'settings-toggle-transparent',
+        group: 'settings',
+        title: 'Toggle transparency / 透明化',
+        description: 'Toggle transparent player background',
+        keywords: ['transparent', 'transparency', '透明', '透明化', 'touming', 'touminghua', 'tm', 'tmh'],
+        execute: (_input, context) => {
+            context.toggleTransparentBackground();
+            return true;
+        },
+    },
+    {
+        id: 'settings-toggle-daylight',
+        group: 'settings',
+        title: 'Toggle light/dark / 切换明暗',
+        description: 'Toggle theme daylight/midnight mode',
+        keywords: ['daylight', 'midnight', 'light', 'dark', '明暗', '切换明暗', '日夜', '日间', '夜间', 'qiehuanmingan', 'ry', 'rj', 'yj'],
+        execute: (_input, context) => {
+            context.toggleDaylightMode();
+            return true;
+        },
+    },
 ];
 
 export const getCommandPaletteMatches = (query: string, context?: CommandPaletteContext): CommandPaletteMatch[] => {
     const normalizedQuery = normalize(query);
 
     const filteredCommands = COMMAND_PALETTE_COMMANDS.filter(command => {
+        if (command.id === 'settings-desktop') {
+            const isWebBrowser = typeof window !== 'undefined';
+            const isElectron = isWebBrowser && Boolean((window as any).electron);
+            if (isWebBrowser && !isElectron) {
+                return false;
+            }
+        }
+
         if (command.group === 'search') {
             if (command.id === 'search-current') return true;
             if (context) {

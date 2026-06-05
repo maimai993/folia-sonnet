@@ -1234,6 +1234,9 @@ export default function App() {
     ]);
     const isSettingsModalOpen = settingsModalState.isOpen;
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
+    const toggleDaylightMode = useCallback(() => {
+        handleToggleDaylight(!isDaylight);
+    }, [handleToggleDaylight, isDaylight]);
     const currentSearchSourceTabInPalette = useMemo(() => {
         if (currentSong) {
             if (isLocalPlaybackSong(currentSong)) {
@@ -1265,6 +1268,8 @@ export default function App() {
         handlePrevTrack,
         shuffleQueue,
         setVisualizerMode: handleSetVisualizerMode,
+        toggleTransparentBackground: () => handleToggleTransparentPlayerBackground(!transparentPlayerBackground),
+        toggleDaylightMode,
     }), [
         handleNextTrack,
         handlePrevTrack,
@@ -1282,6 +1287,9 @@ export default function App() {
         t,
         toggleLoop,
         togglePlay,
+        handleToggleTransparentPlayerBackground,
+        transparentPlayerBackground,
+        toggleDaylightMode,
     ]);
     const commandPalette = useCommandPalette({
         currentView,
@@ -1352,9 +1360,6 @@ export default function App() {
     const generateCurrentSongTheme = useCallback(() => {
         void generateAITheme(lyrics, currentSong);
     }, [currentSong, generateAITheme, lyrics]);
-    const toggleDaylightMode = useCallback(() => {
-        handleToggleDaylight(!isDaylight);
-    }, [handleToggleDaylight, isDaylight]);
     const seekMainAudio = useCallback((time: number) => {
         if (audioRef.current) {
             audioRef.current.currentTime = time;

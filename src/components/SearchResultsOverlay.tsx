@@ -126,6 +126,18 @@ const SearchResultsOverlay: React.FC<SearchResultsOverlayProps> = ({
         scrollContainerRef.current.scrollTop = scrollTop;
     }, [isSearchOpen, scrollTop, searchResults]);
 
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && isSearchOpen) {
+                event.preventDefault();
+                onClose();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isSearchOpen, onClose]);
+
     const placeholder = useMemo(() => getPlaceholder(searchSourceTab, t), [searchSourceTab, t]);
 
     return (

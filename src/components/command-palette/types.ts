@@ -57,4 +57,6 @@ export type CommandPaletteContext = {
     handlePrevTrack: () => void;
     shuffleQueue: () => void;
     setVisualizerMode: (mode: VisualizerMode) => void;
+    toggleTransparentBackground: () => void;
+    toggleDaylightMode: () => void;
 };

@@ -22,6 +22,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     handlePrevTrack: vi.fn(),
     shuffleQueue: vi.fn(),
     setVisualizerMode: vi.fn(),
+    toggleTransparentBackground: vi.fn(),
+    toggleDaylightMode: vi.fn(),
     ...overrides,
 });
 
@@ -88,6 +90,136 @@ describe('command palette registry', () => {
         expect(getCommandPaletteMatches('shezhi')[0].command.id).toBe('settings-options');
         expect(getCommandPaletteMatches('心象')[0].command.id).toBe('visualizer-cadenza');
         expect(getCommandPaletteMatches('xinxiang')[0].command.id).toBe('visualizer-cadenza');
+    });
+
+    it('executes transparent player background and daylight theme toggle commands', () => {
+        const context = createContext();
+
+        const [matchTransparent] = getCommandPaletteMatches('透明化');
+        expect(matchTransparent.command.id).toBe('settings-toggle-transparent');
+        matchTransparent.command.execute(matchTransparent.input, context);
+        expect(context.toggleTransparentBackground).toHaveBeenCalled();
+
+        const [matchDaylight] = getCommandPaletteMatches('切换明暗');
+        expect(matchDaylight.command.id).toBe('settings-toggle-daylight');
+        matchDaylight.command.execute(matchDaylight.input, context);
+        expect(context.toggleDaylightMode).toHaveBeenCalled();
+    });
+
+    it('filters out non-current search commands when context is provided', () => {
+        const context = createContext({ currentSearchSourceTab: 'local' });
+
+        const matches = getCommandPaletteMatches('search touhou', context);
+        const searchMatches = matches.filter(m => m.command.group === 'search');
+
+        expect(searchMatches).toHaveLength(1);
+        expect(searchMatches[0].command.id).toBe('search-current');
+    });
+
+    it('returns all search commands when context is not provided', () => {
+        const matches = getCommandPaletteMatches('search');
+        const searchMatches = matches.filter(m => m.command.group === 'search');
+        // search-current, search-local, search-navidrome, search-netease
+        expect(searchMatches.length).toBe(4);
+    });
+
+    it('matches and executes color/theme-park command', () => {
+        const context = createContext();
+        
+        const matchesColor = getCommandPaletteMatches('color');
+        expect(matchesColor[0].command.id).toBe('settings-theme-park');
+        
+        const matchesPeise = getCommandPaletteMatches('配色');
+        expect(matchesPeise[0].command.id).toBe('settings-theme-park');
+
+        const matchesZhuti = getCommandPaletteMatches('zhutigongyuan');
+        expect(matchesZhuti[0].command.id).toBe('settings-theme-park');
+
+        matchesColor[0].command.execute('', context);
+        expect(context.openSettings).toHaveBeenCalledWith('options', 'themePark');
+    });
+
+    it('executes navigation commands', () => {
+        const context = createContext();
+        
+        const [matchHome] = getCommandPaletteMatches('home');
+        expect(matchHome.command.id).toBe('navigate-home');
+        matchHome.command.execute('', context);
+        expect(context.navigateToHome).toHaveBeenCalled();
+
+        const [matchPlayer] = getCommandPaletteMatches('player');
+        expect(matchPlayer.command.id).toBe('navigate-player');
+        matchPlayer.command.execute('', context);
+        expect(context.navigateToPlayer).toHaveBeenCalled();
+    });
+
+    it('executes home tab navigation commands', () => {
+        const context = createContext();
+        
+        const [matchLocalTab] = getCommandPaletteMatches('local music');
+        expect(matchLocalTab.command.id).toBe('home-local');
+        matchLocalTab.command.execute('', context);
+        expect(context.setHomeViewTab).toHaveBeenCalledWith('local');
+        expect(context.navigateToHome).toHaveBeenCalled();
+    });
+
+    it('executes playback controls', () => {
+        const context = createContext({ playerState: PlayerState.PAUSED });
+        
+        const [matchPlay] = getCommandPaletteMatches('play');
+        expect(matchPlay.command.id).toBe('playback-play');
+        matchPlay.command.execute('', context);
+        expect(context.togglePlay).toHaveBeenCalled();
+
+        const contextPlaying = createContext({ playerState: PlayerState.PLAYING });
+        const [matchPause] = getCommandPaletteMatches('pause');
+        expect(matchPause.command.id).toBe('playback-pause');
+        matchPause.command.execute('', contextPlaying);
+        expect(contextPlaying.togglePlay).toHaveBeenCalled();
+        
+        const [matchNext] = getCommandPaletteMatches('next');
+        expect(matchNext.command.id).toBe('playback-next');
+        matchNext.command.execute('', context);
+        expect(context.handleNextTrack).toHaveBeenCalled();
+
+        const [matchPrev] = getCommandPaletteMatches('prev');
+        expect(matchPrev.command.id).toBe('playback-prev');
+        matchPrev.command.execute('', context);
+        expect(context.handlePrevTrack).toHaveBeenCalled();
+
+        const [matchLoop] = getCommandPaletteMatches('loop');
+        expect(matchLoop.command.id).toBe('playback-loop');
+        matchLoop.command.execute('', context);
+        expect(context.toggleLoop).toHaveBeenCalled();
+
+        const [matchShuffle] = getCommandPaletteMatches('shuffle');
+        expect(matchShuffle.command.id).toBe('playback-shuffle');
+        matchShuffle.command.execute('', context);
+        expect(context.shuffleQueue).toHaveBeenCalled();
+    });
+
+    it('filters out settings-desktop command in a web browser environment without electron', () => {
+        vi.stubGlobal('window', {});
+
+        try {
+            const matches = getCommandPaletteMatches('desktop');
+            const hasDesktopCommand = matches.some(m => m.command.id === 'settings-desktop');
+            expect(hasDesktopCommand).toBe(false);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('retains settings-desktop command in desktop app environment', () => {
+        vi.stubGlobal('window', { electron: {} });
+
+        try {
+            const matches = getCommandPaletteMatches('desktop');
+            const hasDesktopCommand = matches.some(m => m.command.id === 'settings-desktop');
+            expect(hasDesktopCommand).toBe(true);
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 
     it('limits suggestions to ten commands', () => {

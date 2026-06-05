@@ -650,6 +650,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         || showLabSettings
         || showLyricFilterSettings;
 
+    const closeAllSubviews = () => {
+        if (shouldCloseModalOnSubviewBack) {
+            onClose();
+            return;
+        }
+        setShowVisPlayground(false);
+        setShowThemePark(false);
+        setShowAppearanceSettings(false);
+        setShowPlaybackSettings(false);
+        setShowIntegrationSettings(false);
+        setShowStorageSettings(false);
+        setShowDesktopSettings(false);
+        setShowLabSettings(false);
+        setShowLyricFilterSettings(false);
+    };
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                if (isSubSettingsViewOpen) {
+                    closeAllSubviews();
+                } else {
+                    onClose();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isSubSettingsViewOpen, shouldCloseModalOnSubviewBack, onClose]);
+
     useEffect(() => {
         setIsSubSettingsViewOpen(isSubSettingsViewOpen);
 
