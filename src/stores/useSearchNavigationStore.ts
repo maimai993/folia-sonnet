@@ -5,6 +5,7 @@ import type { HomeViewTab, LocalSong, UnifiedSong } from '../types';
 
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEFAULT_SEARCH_LIMIT = 30;
+export type SearchReturnView = 'home' | 'player';
 
 type SearchExecutorDeps = {
     localSongs: LocalSong[];
@@ -22,6 +23,7 @@ interface SearchNavigationState {
     searchQuery: string;
     searchSourceTab: HomeViewTab;
     searchResults: UnifiedSong[] | null;
+    searchReturnView: SearchReturnView;
     isSearchOpen: boolean;
     isSearching: boolean;
     isLoadingMore: boolean;
@@ -32,9 +34,9 @@ interface SearchNavigationState {
     setHomeViewTab: (tab: HomeViewTab) => void;
     setSearchQuery: (query: string) => void;
     setSearchScrollTop: (scrollTop: number) => void;
-    restoreSearch: (payload: { query: string; sourceTab: HomeViewTab; }) => void;
+    restoreSearch: (payload: { query: string; sourceTab: HomeViewTab; returnView?: SearchReturnView; }) => void;
     hideSearchOverlay: () => void;
-    submitSearch: (payload: { query?: string; sourceTab: HomeViewTab; deps: SearchExecutorDeps; }) => Promise<boolean>;
+    submitSearch: (payload: { query?: string; sourceTab: HomeViewTab; deps: SearchExecutorDeps; returnView?: SearchReturnView; }) => Promise<boolean>;
     loadMoreSearchResults: (payload: { deps: SearchExecutorDeps; }) => Promise<void>;
 }
 
@@ -154,6 +156,7 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
     searchQuery: '',
     searchSourceTab: 'playlist',
     searchResults: null,
+    searchReturnView: 'home',
     isSearchOpen: false,
     isSearching: false,
     isLoadingMore: false,
@@ -169,13 +172,14 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
     },
     setSearchQuery: (query) => set({ searchQuery: query }),
     setSearchScrollTop: (scrollTop) => set({ scrollTop }),
-    restoreSearch: ({ query, sourceTab }) => set({
+    restoreSearch: ({ query, sourceTab, returnView = 'home' }) => set({
         searchQuery: query,
         searchSourceTab: sourceTab,
+        searchReturnView: returnView,
         isSearchOpen: true,
     }),
-    hideSearchOverlay: () => set({ isSearchOpen: false }),
-    submitSearch: async ({ query, sourceTab, deps }) => {
+    hideSearchOverlay: () => set({ isSearchOpen: false, searchReturnView: 'home' }),
+    submitSearch: async ({ query, sourceTab, deps, returnView = 'home' }) => {
         const trimmedQuery = (query ?? get().searchQuery).trim();
         if (!trimmedQuery) {
             return false;
@@ -184,6 +188,7 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
         set({
             searchQuery: trimmedQuery,
             searchSourceTab: sourceTab,
+            searchReturnView: returnView,
             isSearchOpen: true,
             isSearching: true,
             isLoadingMore: false,

@@ -36,6 +36,7 @@ export type AppOverlaysModel = {
 type BuildAppOverlaysModelParams = {
     currentView: FloatingControlsProps['currentView'];
     isOverlayVisible: boolean;
+    isSearchOpen: boolean;
     topOverlay: any;
     overlayStack: any[];
     homeContent: React.ReactNode;
@@ -87,6 +88,7 @@ type BuildAppOverlaysModelParams = {
 export const buildAppOverlaysModel = ({
     currentView,
     isOverlayVisible,
+    isSearchOpen,
     topOverlay,
     overlayStack,
     homeContent,
@@ -133,7 +135,7 @@ export const buildAppOverlaysModel = ({
     onSeekMainAudio,
     noTrackText,
 }: BuildAppOverlaysModelParams): AppOverlaysModel => ({
-    homeOverlay: currentView === 'home' && !isOverlayVisible
+    homeOverlay: currentView === 'home' && !isOverlayVisible && !isSearchOpen
         ? { isVisible: true, content: homeContent }
         : null,
     searchOverlay: currentView === 'home'

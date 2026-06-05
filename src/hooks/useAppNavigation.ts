@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { HomeViewTab, LocalLibraryGroup, NeteasePlaylist } from '../types';
 import type { NavidromeViewSelection } from '../types/navidrome';
-import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
+import { type SearchReturnView, useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 
 type ViewState = 'home' | 'player';
 
@@ -26,7 +26,7 @@ type NavigationHistoryState = {
     overlays: HomeOverlay[];
     overlayView: ViewState | null;
     overlayOriginView: ViewState | null;
-    search?: { query: string; sourceTab: HomeViewTab; } | null;
+    search?: { query: string; sourceTab: HomeViewTab; returnView?: SearchReturnView; } | null;
 };
 
 type OverlayDisplayState = {
@@ -345,17 +345,19 @@ export function useAppNavigation() {
         query,
         sourceTab,
         replace = false,
+        returnView = 'home',
     }: {
         query: string;
         sourceTab: HomeViewTab;
         replace?: boolean;
+        returnView?: SearchReturnView;
     }) => {
         logNavigation('navigateToSearch', {
             view: 'home',
             overlays: overlayStack,
             overlayView,
             overlayOriginView,
-            search: { query, sourceTab },
+            search: { query, sourceTab, returnView },
             replace,
             hash: `#search/${encodeURIComponent(query)}`,
         });
@@ -366,13 +368,27 @@ export function useAppNavigation() {
             overlayOriginView,
             replace,
             hash: `#search/${encodeURIComponent(query)}`,
-            search: { query, sourceTab },
+            search: { query, sourceTab, returnView },
         });
-        useSearchNavigationStore.getState().restoreSearch({ query, sourceTab });
+        useSearchNavigationStore.getState().restoreSearch({ query, sourceTab, returnView });
     };
 
     const closeSearchView = () => {
+        const searchReturnView = useSearchNavigationStore.getState().searchReturnView;
         useSearchNavigationStore.getState().hideSearchOverlay();
+
+        if (searchReturnView === 'player') {
+            pushNavigationState({
+                view: 'player',
+                overlays: overlayStack,
+                overlayView: null,
+                overlayOriginView,
+                replace: true,
+                hash: '#player',
+                search: null,
+            });
+            return;
+        }
 
         const nextHash = overlayStack.length > 0
             ? `#${overlayStack[overlayStack.length - 1].type}`

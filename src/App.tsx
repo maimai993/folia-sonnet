@@ -3,12 +3,14 @@ import { useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { loadCachedOrFetchCover } from './services/coverCache';
 import VisualizerRenderer from './components/visualizer/VisualizerRenderer';
+import CommandPalette from './components/command-palette/CommandPalette';
+import { useCommandPalette } from './components/command-palette/useCommandPalette';
 import AppShell from './components/app/AppShell';
 import Home from './components/app/Home';
 import PlayerPanel from './components/app/PlayerPanel';
 import AppDialogs from './components/app/dialogs/AppDialogs';
 import { createCopySongInfoSuccessHandler } from './components/app/dialogs/createCopySongInfoSuccessHandler';
-import { buildSettingsDialogModel, type SettingsModalState } from './components/app/dialogs/buildSettingsDialogModel';
+import { buildSettingsDialogModel } from './components/app/dialogs/buildSettingsDialogModel';
 import AppOverlays from './components/app/overlays/AppOverlays';
 import { buildAppDialogsModel } from './components/app/dialogs/buildAppDialogsModel';
 import { buildHomeModel } from './components/app/home/buildHomeModel';
@@ -109,12 +111,18 @@ export default function App() {
         return saved === 'true';
     });
     const [isDevDebugOverlayVisible, setIsDevDebugOverlayVisible] = useState(false);
-    const [settingsModalState, setSettingsModalState] = useState<SettingsModalState>({
-        isOpen: false,
-        initialTab: 'help',
-    });
     const [navidromeEnabled, setNavidromeEnabledState] = useState(() => isNavidromeEnabled());
-    const isSettingsSubviewOpen = useSettingsUiStore(state => state.isSubSettingsViewOpen);
+    const {
+        closeSettings,
+        isSettingsSubviewOpen,
+        openSettings,
+        settingsModalState,
+    } = useSettingsUiStore(useShallow(state => ({
+        closeSettings: state.closeSettings,
+        isSettingsSubviewOpen: state.isSubSettingsViewOpen,
+        openSettings: state.openSettings,
+        settingsModalState: state.settingsModalState,
+    })));
 
     // Player State
     const [playerState, setPlayerState] = useState<PlayerState>(PlayerState.IDLE);
@@ -178,12 +186,6 @@ export default function App() {
     // Navigation Persistence State (Lifted from Home/LocalMusicView)
     const homeViewTab = useSearchNavigationStore(state => state.homeViewTab);
     const setHomeViewTab = useSearchNavigationStore(state => state.setHomeViewTab);
-    const openSettings = useCallback((initialTab: SettingsModalState['initialTab'] = 'help') => {
-        setSettingsModalState({ isOpen: true, initialTab });
-    }, []);
-    const closeSettings = useCallback(() => {
-        setSettingsModalState(prev => ({ ...prev, isOpen: false }));
-    }, []);
     const handleToggleNavidromeEnabled = useCallback((enabled: boolean) => {
         setNavidromeEnabledState(enabled);
         if (!enabled && homeViewTab === 'navidrome') {
@@ -554,11 +556,13 @@ export default function App() {
         popOverlay,
     } = useAppNavigation();
     const {
+        isSearchOpen,
         searchQuery,
         searchSourceTab,
         submitSearch,
         loadMoreSearchResults,
     } = useSearchNavigationStore(useShallow(state => ({
+        isSearchOpen: state.isSearchOpen,
         searchQuery: state.searchQuery,
         searchSourceTab: state.searchSourceTab,
         submitSearch: state.submitSearch,
@@ -1230,6 +1234,73 @@ export default function App() {
     ]);
     const isSettingsModalOpen = settingsModalState.isOpen;
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
+    const toggleDaylightMode = useCallback(() => {
+        handleToggleDaylight(!isDaylight);
+    }, [handleToggleDaylight, isDaylight]);
+    const currentSearchSourceTabInPalette = useMemo(() => {
+        if (currentSong) {
+            if (isLocalPlaybackSong(currentSong)) {
+                return 'local';
+            }
+            if (isNavidromePlaybackSong(currentSong)) {
+                return 'navidrome';
+            }
+            return 'playlist';
+        }
+        return searchSourceTab;
+    }, [currentSong, searchSourceTab]);
+    const commandPaletteContext = useMemo(() => ({
+        currentSearchSourceTab: currentSearchSourceTabInPalette,
+        localSongs,
+        playerState,
+        t: (key: string, fallback?: string) => t(key, fallback ?? ''),
+        openSettings,
+        navigateToHome,
+        navigateToPlayer,
+        navigateToSearch,
+        setHomeViewTab,
+        setPanelTab,
+        setIsPanelOpen,
+        submitSearch,
+        togglePlay,
+        toggleLoop,
+        handleNextTrack,
+        handlePrevTrack,
+        shuffleQueue,
+        setVisualizerMode: handleSetVisualizerMode,
+        toggleTransparentBackground: () => handleToggleTransparentPlayerBackground(!transparentPlayerBackground),
+        toggleDaylightMode,
+    }), [
+        handleNextTrack,
+        handlePrevTrack,
+        handleSetVisualizerMode,
+        localSongs,
+        navigateToHome,
+        navigateToPlayer,
+        navigateToSearch,
+        openSettings,
+        playerState,
+        currentSearchSourceTabInPalette,
+        setHomeViewTab,
+        shuffleQueue,
+        submitSearch,
+        t,
+        toggleLoop,
+        togglePlay,
+        handleToggleTransparentPlayerBackground,
+        transparentPlayerBackground,
+        toggleDaylightMode,
+    ]);
+    const commandPalette = useCommandPalette({
+        currentView,
+        isBlocked: isSettingsModalOpen
+            || (currentView === 'home' && isSearchOpen)
+            || showLyricMatchModal
+            || showNaviLyricMatchModal
+            || showOnlineLyricMatchModal
+            || Boolean(pendingUnavailableReplacement),
+        context: commandPaletteContext,
+    });
     const nowPlayingDebugSnapshot = useMemo(() => (
         stageSource === 'now-playing'
             ? {
@@ -1289,9 +1360,6 @@ export default function App() {
     const generateCurrentSongTheme = useCallback(() => {
         void generateAITheme(lyrics, currentSong);
     }, [currentSong, generateAITheme, lyrics]);
-    const toggleDaylightMode = useCallback(() => {
-        handleToggleDaylight(!isDaylight);
-    }, [handleToggleDaylight, isDaylight]);
     const seekMainAudio = useCallback((time: number) => {
         if (audioRef.current) {
             audioRef.current.currentTime = time;
@@ -1530,6 +1598,8 @@ export default function App() {
         activePlaybackContext,
         isNowPlayingControlDisabled,
         openSettings,
+        openCommandPalette: commandPalette.open,
+        isCommandPaletteOpen: commandPalette.isOpen,
         playQueue,
         playSong,
         queueScrollRef,
@@ -1567,6 +1637,8 @@ export default function App() {
         audioQuality,
         cacheSize,
         canGenerateAITheme,
+        commandPalette.open,
+        commandPalette.isOpen,
         coverUrl,
         createCurrentLocalPlaylist,
         createCurrentNavidromePlaylist,
@@ -1639,6 +1711,7 @@ export default function App() {
     const appOverlaysModel = useMemo(() => buildAppOverlaysModel({
         currentView,
         isOverlayVisible,
+        isSearchOpen,
         topOverlay,
         overlayStack,
         homeContent,
@@ -1710,6 +1783,7 @@ export default function App() {
         isDevDebugOverlayVisible,
         isNowPlayingControlDisabled,
         isOverlayVisible,
+        isSearchOpen,
         isPlayerChromeHidden,
         lyrics,
         navigateToPlayer,
@@ -2031,6 +2105,31 @@ export default function App() {
             {currentView === 'player' && !showLyricMatchModal && (
                 <PlayerPanel model={playerPanelModel} />
             )}
+
+            <CommandPalette
+                activeIndex={commandPalette.activeIndex}
+                activePreview={commandPalette.activePreview}
+                activeCommand={commandPalette.activeCommand}
+                isDaylight={isDaylight}
+                isComposing={commandPalette.isComposing}
+                isExecuting={commandPalette.isExecuting}
+                isOpen={commandPalette.isOpen}
+                matches={commandPalette.matches}
+                query={commandPalette.query}
+                theme={theme}
+                onActiveCommandChange={commandPalette.setActiveCommand}
+                onActiveIndexChange={commandPalette.setActiveIndex}
+                onClose={commandPalette.close}
+                onCompositionEnd={(value) => {
+                    commandPalette.setIsComposing(false);
+                    commandPalette.setQuery(value);
+                    commandPalette.setMatchQuery(value);
+                }}
+                onCompositionStart={() => commandPalette.setIsComposing(true)}
+                onExecuteActive={commandPalette.executeActive}
+                onExecuteMatch={commandPalette.executeMatch}
+                onQueryChange={commandPalette.setQuery}
+            />
 
             <AppDialogs model={appDialogsModel} />
         </AppShell>

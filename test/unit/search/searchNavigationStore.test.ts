@@ -30,6 +30,7 @@ describe('useSearchNavigationStore', () => {
             searchQuery: '',
             searchSourceTab: 'playlist',
             searchResults: null,
+            searchReturnView: 'home',
             isSearchOpen: false,
             isSearching: false,
             isLoadingMore: false,
