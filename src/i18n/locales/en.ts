@@ -258,8 +258,9 @@ export default {
     "seekBackward": "Seek Backward 5s",
     "hidePlayerChrome": "Hide progress bar and lower-right button",
     "toggleRightPanel": "Toggle right panel",
+    "openCommandPalette": "Open command palette",
     "browserFullscreen": "Fullscreen",
-    "madeBy": "Made by",
+    "madeBy": "Project:",
     "version": "version"
   },
   "options": {

@@ -955,6 +955,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">P</kbd>
                                     </li>
                                     <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
+                                        <span>{t('help.openCommandPalette') || '打开命令面板'}</span>
+                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">S</kbd>
+                                    </li>
+                                    <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
                                         <span>{t('help.browserFullscreen')}</span>
                                         <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">F11</kbd>
                                     </li>
@@ -974,7 +978,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         >
                                             {t('help.madeBy') || "Made by"}
                                         </button>{' '}
-                                        <a href="https://github.com/chthollyphile/folia-major" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors underline decoration-white/30 hover:decoration-white">chthollyphile</a>
+                                        <a href="https://github.com/chthollyphile/folia-major" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors underline decoration-white/30 hover:decoration-white">chthollyphile/folia-major</a>
                                     </p>
                                 </div>
                                 <button
