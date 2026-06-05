@@ -149,6 +149,14 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 18, scale: 0.98 }}
                         transition={{ duration: 0.18, ease: 'easeOut' }}
+                        onAnimationComplete={() => {
+                            // iOS Safari blocks overflow scrolling in sibling containers
+                            // when an input is focused inside a fixed + backdrop-blur panel.
+                            // Blur proactively so the first touch-scroll works immediately.
+                            if ('ontouchstart' in window) {
+                                inputRef.current?.blur();
+                            }
+                        }}
                         onMouseDown={(event) => event.stopPropagation()}
                     >
                         <div className="flex items-center gap-3 border-b px-4 py-3" style={{ borderColor: isDaylight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.10)' }}>
@@ -218,7 +226,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
                         {/* Removed activePreview top panel, it is now shown inline in the list items description */}
 
-                        <div className="max-h-[50vh] overflow-y-auto p-2">
+                        <div
+                            className="max-h-[50vh] overflow-y-auto p-2"
+                            onTouchStart={() => inputRef.current?.blur()}
+                        >
                             {matches.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center opacity-50">
                                     <Command size={26} />
