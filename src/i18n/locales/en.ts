@@ -82,7 +82,7 @@ export default {
       "settings-desktop": { "title": "Desktop settings", "description": "Open desktop app settings" },
       "settings-lab": { "title": "Lab settings", "description": "Open experimental settings" },
       "settings-visualizer": { "title": "Visualizer settings", "description": "Open lyrics animation workbench" },
-      "settings-theme-park": { "title": "Theme Park", "description": "Open theme editor" },
+      "settings-theme-park": { "title": "Color", "description": "Open theme editor" },
       "settings-lyric-filter": { "title": "Lyric filter", "description": "Open lyric filter settings" },
       "navigate-home": { "title": "Go home", "description": "Return to home view" },
       "navigate-player": { "title": "Go player", "description": "Return to player view" },
@@ -109,7 +109,9 @@ export default {
       "visualizer-partita": { "title": "Visualizer: Partita", "description": "Switch to partita visualizer" },
       "visualizer-fume": { "title": "Visualizer: Fume", "description": "Switch to fume visualizer" },
       "visualizer-cappella": { "title": "Visualizer: Cappella", "description": "Switch to cappella visualizer" },
-      "visualizer-tilt": { "title": "Visualizer: Tilt", "description": "Switch to tilt visualizer" }
+      "visualizer-tilt": { "title": "Visualizer: Tilt", "description": "Switch to tilt visualizer" },
+      "settings-toggle-transparent": { "title": "Toggle transparency", "description": "Toggle transparent player background" },
+      "settings-toggle-daylight": { "title": "Toggle light/dark", "description": "Toggle theme daylight/midnight mode" }
     }
   },
   "ui": {

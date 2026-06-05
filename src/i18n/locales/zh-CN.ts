@@ -82,7 +82,7 @@ export default {
       "settings-desktop": { "title": "桌面端设置", "description": "打开桌面应用设置" },
       "settings-lab": { "title": "实验设置", "description": "打开实验功能设置" },
       "settings-visualizer": { "title": "可视化设置", "description": "打开歌词动画实验台" },
-      "settings-theme-park": { "title": "主题公园", "description": "打开主题编辑器" },
+      "settings-theme-park": { "title": "配色", "description": "打开主题编辑器" },
       "settings-lyric-filter": { "title": "歌词过滤", "description": "打开歌词过滤设置" },
       "navigate-home": { "title": "回到首页", "description": "返回首页视图" },
       "navigate-player": { "title": "回到播放器", "description": "返回播放器视图" },
@@ -109,7 +109,9 @@ export default {
       "visualizer-partita": { "title": "可视化：云阶", "description": "切换到云阶可视化" },
       "visualizer-fume": { "title": "可视化：浮名", "description": "切换到浮名可视化" },
       "visualizer-cappella": { "title": "可视化：群唱", "description": "切换到群唱可视化" },
-      "visualizer-tilt": { "title": "可视化：倾诉", "description": "切换到倾诉可视化" }
+      "visualizer-tilt": { "title": "可视化：倾诉", "description": "切换到倾诉可视化" },
+      "settings-toggle-transparent": { "title": "透明化", "description": "切换播放器背景透明度" },
+      "settings-toggle-daylight": { "title": "切换明暗", "description": "切换主题日夜模式" }
     }
   },
   "ui": {

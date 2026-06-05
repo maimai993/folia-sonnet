@@ -186,7 +186,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createSettingsCommand('settings-desktop', 'Desktop settings', 'Open desktop app settings', ['desktop', 'electron', '桌面', '桌面端', 'zhuomian', 'zhuomianduan', 'zm', 'zmd'], 'options', 'desktop'),
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室', 'shiyan', 'shiyanshi', 'sy', 'sys'], 'options', 'lab'),
     createSettingsCommand('settings-visualizer', 'Visualizer settings', 'Open lyrics animation workbench', ['visualizer settings', 'visualizer workbench', '可视化', '歌词动画', 'keshihua', 'gecidonghua', 'ksh', 'gcdh'], 'options', 'visualizer'),
-    createSettingsCommand('settings-theme-park', 'Color / 配色', 'Open theme editor', ['color', 'theme park', 'theme', '配色', '主题', '主题公园', 'peise', 'zhuti', 'zhutigongyuan', 'ps', 'zt', 'ztgy'], 'options', 'themePark'),
+    createSettingsCommand('settings-theme-park', 'Color', 'Open theme editor', ['color', 'theme park', 'theme', '配色', '主题', '主题公园', 'peise', 'zhuti', 'zhutigongyuan', 'ps', 'zt', 'ztgy'], 'options', 'themePark'),
     createSettingsCommand('settings-lyric-filter', 'Lyric filter', 'Open lyric filter settings', ['lyric filter', 'lyrics filter', '歌词过滤', '过滤', 'geciguolv', 'guolv', 'gcgl', 'gl'], 'options', 'lyricFilter'),
 
     {
@@ -305,7 +305,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     {
         id: 'settings-toggle-transparent',
         group: 'settings',
-        title: 'Toggle transparency / 透明化',
+        title: 'Toggle transparency',
         description: 'Toggle transparent player background',
         keywords: ['transparent', 'transparency', '透明', '透明化', 'touming', 'touminghua', 'tm', 'tmh'],
         execute: (_input, context) => {
@@ -316,7 +316,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     {
         id: 'settings-toggle-daylight',
         group: 'settings',
-        title: 'Toggle light/dark / 切换明暗',
+        title: 'Toggle light/dark',
         description: 'Toggle theme daylight/midnight mode',
         keywords: ['daylight', 'midnight', 'light', 'dark', '明暗', '切换明暗', '日夜', '日间', '夜间', 'qiehuanmingan', 'ry', 'rj', 'yj'],
         execute: (_input, context) => {
