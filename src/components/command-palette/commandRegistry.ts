@@ -304,18 +304,28 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createVisualizerCommand('tilt', 'Visualizer: Tilt', 'Switch to tilt visualizer', ['visualizer tilt', 'tilt', '倾诉', 'qingsu', 'qs']),
 ];
 
-export const getCommandPaletteMatches = (query: string): CommandPaletteMatch[] => {
+export const getCommandPaletteMatches = (query: string, context?: CommandPaletteContext): CommandPaletteMatch[] => {
     const normalizedQuery = normalize(query);
 
+    const filteredCommands = COMMAND_PALETTE_COMMANDS.filter(command => {
+        if (command.group === 'search') {
+            if (command.id === 'search-current') return true;
+            if (context) {
+                return false;
+            }
+        }
+        return true;
+    });
+
     if (!normalizedQuery) {
-        return COMMAND_PALETTE_COMMANDS.slice(0, MAX_COMMAND_MATCHES).map((command, index) => ({
+        return filteredCommands.slice(0, MAX_COMMAND_MATCHES).map((command, index) => ({
             command,
             score: 100 - index,
             input: '',
         }));
     }
 
-    const matches = COMMAND_PALETTE_COMMANDS
+    const matches = filteredCommands
         .map(command => {
             let bestScore = 0;
             let bestInput = '';

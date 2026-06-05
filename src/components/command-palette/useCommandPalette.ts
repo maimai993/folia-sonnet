@@ -39,7 +39,7 @@ export const useCommandPalette = ({
     const matches = useMemo(() => {
         let list: CommandPaletteMatch[];
         if (!activeCommand) {
-            list = getCommandPaletteMatches(matchQuery);
+            list = getCommandPaletteMatches(matchQuery, context);
         } else {
             const inputCommands = COMMAND_PALETTE_COMMANDS.filter(cmd => cmd.requiresInput);
             const activeMatch: CommandPaletteMatch = {
@@ -49,6 +49,10 @@ export const useCommandPalette = ({
             };
             const otherMatches: CommandPaletteMatch[] = inputCommands
                 .filter(cmd => cmd.id !== activeCommand.id)
+                .filter(cmd => {
+                    if (cmd.id === 'search-current') return true;
+                    return false;
+                })
                 .map((cmd, idx) => ({
                     command: cmd,
                     score: 90 - idx,

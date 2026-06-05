@@ -1234,8 +1234,20 @@ export default function App() {
     ]);
     const isSettingsModalOpen = settingsModalState.isOpen;
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
+    const currentSearchSourceTabInPalette = useMemo(() => {
+        if (currentSong) {
+            if (isLocalPlaybackSong(currentSong)) {
+                return 'local';
+            }
+            if (isNavidromePlaybackSong(currentSong)) {
+                return 'navidrome';
+            }
+            return 'playlist';
+        }
+        return searchSourceTab;
+    }, [currentSong, searchSourceTab]);
     const commandPaletteContext = useMemo(() => ({
-        currentSearchSourceTab: searchSourceTab,
+        currentSearchSourceTab: currentSearchSourceTabInPalette,
         localSongs,
         playerState,
         t: (key: string, fallback?: string) => t(key, fallback ?? ''),
@@ -1263,7 +1275,7 @@ export default function App() {
         navigateToSearch,
         openSettings,
         playerState,
-        searchSourceTab,
+        currentSearchSourceTabInPalette,
         setHomeViewTab,
         shuffleQueue,
         submitSearch,
@@ -1694,6 +1706,7 @@ export default function App() {
     const appOverlaysModel = useMemo(() => buildAppOverlaysModel({
         currentView,
         isOverlayVisible,
+        isSearchOpen,
         topOverlay,
         overlayStack,
         homeContent,
@@ -1765,6 +1778,7 @@ export default function App() {
         isDevDebugOverlayVisible,
         isNowPlayingControlDisabled,
         isOverlayVisible,
+        isSearchOpen,
         isPlayerChromeHidden,
         lyrics,
         navigateToPlayer,
