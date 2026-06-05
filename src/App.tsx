@@ -2090,12 +2090,15 @@ export default function App() {
             <CommandPalette
                 activeIndex={commandPalette.activeIndex}
                 activePreview={commandPalette.activePreview}
+                activeCommand={commandPalette.activeCommand}
                 isDaylight={isDaylight}
                 isComposing={commandPalette.isComposing}
+                isExecuting={commandPalette.isExecuting}
                 isOpen={commandPalette.isOpen}
                 matches={commandPalette.matches}
                 query={commandPalette.query}
                 theme={theme}
+                onActiveCommandChange={commandPalette.setActiveCommand}
                 onActiveIndexChange={commandPalette.setActiveIndex}
                 onClose={commandPalette.close}
                 onCompositionEnd={(value) => {

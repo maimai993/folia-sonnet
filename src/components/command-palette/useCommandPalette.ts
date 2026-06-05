@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getCommandPaletteMatches } from './commandRegistry';
-import type { CommandPaletteContext } from './types';
+import { getCommandPaletteMatches, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
+import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch } from './types';
 
 // src/components/command-palette/useCommandPalette.ts
 // Manages palette state, keyboard opening, and selected autocomplete item.
@@ -33,18 +33,46 @@ export const useCommandPalette = ({
     const [matchQuery, setMatchQuery] = useState('');
     const [isComposing, setIsComposing] = useState(false);
     const [activeIndex, setActiveIndex] = useState(0);
-    const matches = useMemo(() => getCommandPaletteMatches(matchQuery), [matchQuery]);
-    const activePreview = useMemo(() => {
-        const match = matches[activeIndex];
-        if (!match?.command.getPreview) {
-            return null;
-        }
-        if (match.command.requiresInput && !match.input) {
-            return null;
+    const [activeCommand, setActiveCommand] = useState<CommandPaletteCommand | null>(null);
+    const [isExecuting, setIsExecuting] = useState(false);
+
+    const matches = useMemo(() => {
+        let list: CommandPaletteMatch[];
+        if (!activeCommand) {
+            list = getCommandPaletteMatches(matchQuery);
+        } else {
+            const inputCommands = COMMAND_PALETTE_COMMANDS.filter(cmd => cmd.requiresInput);
+            const activeMatch: CommandPaletteMatch = {
+                command: activeCommand,
+                score: 100,
+                input: matchQuery,
+            };
+            const otherMatches: CommandPaletteMatch[] = inputCommands
+                .filter(cmd => cmd.id !== activeCommand.id)
+                .map((cmd, idx) => ({
+                    command: cmd,
+                    score: 90 - idx,
+                    input: matchQuery,
+                }));
+            list = [activeMatch, ...otherMatches];
         }
 
-        return match.command.getPreview(match.input, context);
-    }, [activeIndex, context, matches]);
+        return list.map(match => {
+            let previewText: string | null = null;
+            if (match.command.getPreview && (!match.command.requiresInput || match.input)) {
+                previewText = match.command.getPreview(match.input, context);
+            }
+            return {
+                ...match,
+                previewText,
+            };
+        });
+    }, [activeCommand, matchQuery, context]);
+
+    const activePreview = useMemo(() => {
+        const match = matches[activeIndex];
+        return match?.previewText || null;
+    }, [activeIndex, matches]);
 
     const open = useCallback(() => {
         if (currentView !== 'player' || isBlocked) {
@@ -60,31 +88,75 @@ export const useCommandPalette = ({
         setMatchQuery('');
         setIsComposing(false);
         setActiveIndex(0);
+        setActiveCommand(null);
+        setIsExecuting(false);
     }, []);
 
     const executeMatch = useCallback(async (index: number) => {
+        if (isExecuting) {
+            return false;
+        }
+
         const match = matches[index];
         if (!match) {
             return false;
         }
 
         const input = match.input;
+        if (match.command.requiresInput && !activeCommand) {
+            if (!input) {
+                setActiveCommand(match.command);
+                setQuery('');
+                setMatchQuery('');
+                setActiveIndex(0);
+                return false;
+            }
+        }
+
         if (match.command.requiresInput && !input) {
             return false;
         }
 
-        const didExecute = await match.command.execute(input, context);
-        if (didExecute) {
-            close();
+        setIsExecuting(true);
+        try {
+            const didExecute = await match.command.execute(input, context);
+            if (didExecute) {
+                close();
+            }
+            return didExecute;
+        } finally {
+            setIsExecuting(false);
         }
-        return didExecute;
-    }, [close, context, matchQuery, matches]);
+    }, [close, context, activeCommand, matches, isExecuting]);
 
     const executeActive = useCallback(() => executeMatch(activeIndex), [activeIndex, executeMatch]);
 
     useEffect(() => {
         setActiveIndex(0);
     }, [matchQuery]);
+
+    // Space-to-pill conversion for commands requiring input
+    useEffect(() => {
+        if (!isOpen || isComposing || activeCommand) {
+            return;
+        }
+
+        if (query.endsWith(' ')) {
+            const trimmed = query.trim();
+            if (trimmed) {
+                const matchedCmd = COMMAND_PALETTE_COMMANDS.find(cmd =>
+                    cmd.requiresInput &&
+                    cmd.keywords.some(kw => kw.toLowerCase() === trimmed.toLowerCase())
+                );
+                if (matchedCmd) {
+                    setActiveCommand(matchedCmd);
+                    setQuery('');
+                    setMatchQuery('');
+                    setActiveIndex(0);
+                }
+            }
+        }
+    }, [query, isComposing, isOpen, activeCommand]);
 
     useEffect(() => {
         if (!isOpen || isComposing) {
@@ -130,6 +202,9 @@ export const useCommandPalette = ({
     return {
         activeIndex,
         activePreview,
+        activeCommand,
+        setActiveCommand,
+        isExecuting,
         close,
         executeActive,
         executeMatch,

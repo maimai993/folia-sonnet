@@ -27,6 +27,7 @@ export type CommandPaletteMatch = {
     command: CommandPaletteCommand;
     score: number;
     input: string;
+    previewText?: string | null;
 };
 
 export type CommandPaletteContext = {
