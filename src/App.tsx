@@ -1294,7 +1294,7 @@ export default function App() {
     const commandPalette = useCommandPalette({
         currentView,
         isBlocked: isSettingsModalOpen
-            || isSearchOpen
+            || (currentView === 'home' && isSearchOpen)
             || showLyricMatchModal
             || showNaviLyricMatchModal
             || showOnlineLyricMatchModal
