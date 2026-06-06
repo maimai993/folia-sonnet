@@ -1,4 +1,4 @@
-import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -8,13 +8,7 @@ import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { formatSongName } from '../utils/songNameFormatter';
 import { colorWithAlpha } from './visualizer/colorMix';
 import { saveToCache, getFromCache, removeFromCache } from '../services/db';
-import {
-    areIndexListsEqual,
-    pixelToCubeCenter,
-    resolveVisibleHexIndexes,
-    toCubeKey,
-    type HexGridCoord,
-} from './gridView/hexViewport';
+import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 
 interface GridItem {
     id: string | number;
@@ -47,49 +41,6 @@ interface GridViewProps {
     onSelectArtist?: (artistId: number) => void;
     currentUserId?: number | null;
     onPlaylistMutated?: () => Promise<void> | void;
-}
-
-interface HexCoord {
-    x: number;
-    y: number;
-    z: number;
-}
-
-/**
- * Generates cubic spiral coordinates for a honeycomb grid.
- * Fills rings starting from (0,0,0) outwards to ensure a compact layout.
- */
-function getHexCubicSpiral(count: number): HexCoord[] {
-    const results: HexCoord[] = [{ x: 0, y: 0, z: 0 }];
-    if (count <= 1) return results.slice(0, count);
-
-    const dirs = [
-        { x: 0, y: 1, z: -1 }, // down-left
-        { x: -1, y: 1, z: 0 },  // left
-        { x: -1, y: 0, z: 1 },  // up-left
-        { x: 0, y: -1, z: 1 },  // up-right
-        { x: 1, y: -1, z: 0 },  // right
-        { x: 1, y: 0, z: -1 }   // down-right
-    ];
-
-    let radius = 1;
-    while (results.length < count) {
-        let currX = radius;
-        let currY = -radius;
-        let currZ = 0;
-
-        for (let side = 0; side < 6; side++) {
-            for (let step = 0; step < radius; step++) {
-                if (results.length >= count) break;
-                currX += dirs[side].x;
-                currY += dirs[side].y;
-                currZ += dirs[side].z;
-                results.push({ x: currX, y: currY, z: currZ });
-            }
-        }
-        radius++;
-    }
-    return results;
 }
 
 /**
@@ -700,78 +651,19 @@ export const GridView: React.FC<GridViewProps> = ({
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
 
-    const baseCoords = useMemo<HexGridCoord[]>(() => {
-        const cubics = getHexCubicSpiral(gridItems.length);
-        const { spacingX, spacingY } = layoutConfig;
-        return cubics.map((cubic, index) => {
-            const baseX = cubic.x * spacingX + (cubic.z * spacingX) / 2;
-            const baseY = cubic.z * spacingY;
-            return { index, cube: cubic, baseX, baseY };
-        });
-    }, [gridItems.length, layoutConfig]);
-
-    const coordByKey = useMemo(() => {
-        return new Map(baseCoords.map((coord) => [toCubeKey(coord.cube), coord.index]));
-    }, [baseCoords]);
-
-    const [renderedIndexes, setRenderedIndexes] = useState<number[]>([]);
-    const renderedIndexesRef = useRef<number[]>([]);
-    const lastVisibleCenterKeyRef = useRef('');
-
-    useEffect(() => {
-        renderedIndexesRef.current = renderedIndexes;
-    }, [renderedIndexes]);
-
-    const updateRenderedIndexesForViewport = useCallback((dx = dragX.get(), dy = dragY.get(), force = false) => {
-        if (baseCoords.length === 0) {
-            if (renderedIndexesRef.current.length > 0) {
-                renderedIndexesRef.current = [];
-                setRenderedIndexes([]);
-            }
-            return;
-        }
-
-        const worldX = -dx;
-        const worldY = -dy;
-        const centerCube = pixelToCubeCenter(worldX, worldY, layoutConfig.spacingX, layoutConfig.spacingY);
-        const centerKey = toCubeKey(centerCube);
-        if (!force && centerKey === lastVisibleCenterKeyRef.current) return;
-
-        const nextIndexes = resolveVisibleHexIndexes(
-            centerCube,
-            renderRing,
-            coordByKey,
-            baseCoords,
-            worldX,
-            worldY,
-            renderRadius
-        );
-
-        const fallbackFocusedIndex = focusedIndexRef.current;
-        if (nextIndexes.length === 0 && fallbackFocusedIndex >= 0 && fallbackFocusedIndex < baseCoords.length) {
-            nextIndexes.push(fallbackFocusedIndex);
-        }
-
-        if (areIndexListsEqual(renderedIndexesRef.current, nextIndexes)) {
-            lastVisibleCenterKeyRef.current = centerKey;
-            return;
-        }
-
-        lastVisibleCenterKeyRef.current = centerKey;
-        renderedIndexesRef.current = nextIndexes;
-        startTransition(() => {
-            setRenderedIndexes(nextIndexes);
-        });
-    }, [
-        baseCoords,
-        coordByKey,
-        dragX,
-        dragY,
-        layoutConfig.spacingX,
-        layoutConfig.spacingY,
+    const {
+        coords: baseCoords,
+        renderedIndexes,
+        renderedIndexesRef,
+        updateRenderedIndexesForViewport,
+    } = useFoliaHexViewport({
+        itemCount: gridItems.length,
+        spacingX: layoutConfig.spacingX,
+        spacingY: layoutConfig.spacingY,
         renderRadius,
         renderRing,
-    ]);
+        fallbackIndexRef: focusedIndexRef,
+    });
 
     // Keep the active focusedIndex centered when baseCoords changes on resize
     useEffect(() => {

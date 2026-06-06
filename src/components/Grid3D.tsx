@@ -14,7 +14,6 @@ import GridView from './GridView';
 import GridMap from './GridMap';
 import { formatSongName } from '../utils/songNameFormatter';
 
-// C:\Users\123xi\.gemini\antigravity-ide\brain\5ddc5af2-6cab-4638-828b-1773ffe7d556
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
 // Supports cover sliding with auto-fading header controls and opens songs in GridView.
@@ -82,6 +81,12 @@ interface SelectedCollection {
     type: 'playlist' | 'album' | 'radio' | 'local-album' | 'local-playlist' | 'navidrome-album' | 'navidrome-playlist';
     subtitle?: string;
 }
+
+const compactDescription = (description?: string, maxLength = 72) => {
+    if (!description) return '';
+    const normalized = description.replace(/\s+/g, ' ').trim();
+    return normalized.length > maxLength ? `${normalized.substring(0, maxLength)}...` : normalized;
+};
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const {
@@ -314,7 +319,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     name: r.name,
                     coverUrl: r.picUrl,
                     trackCount: r.trackCount,
-                    description: r.creator?.nickname || '每日推荐'
+                    description: r.creator?.nickname || '每日推荐',
+                    summary: r.description || r.copywriter || ''
                 }));
             }
             setRadioItems([fmItem, ...recItems]);
@@ -338,6 +344,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             coverUrl: p.coverImgUrl || (p as any).coverUrl,
             trackCount: p.trackCount,
             description: p.creator?.nickname || '歌单',
+            summary: p.description || '',
             type: 'playlist' as const,
             raw: p
         }));
@@ -350,6 +357,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             coverUrl: a.picUrl,
             trackCount: a.size,
             description: a.artists?.[0]?.name || '未知歌手',
+            summary: a.description || a.briefDesc || '',
             type: 'album' as const,
             raw: a
         }));
@@ -362,6 +370,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             coverUrl: r.coverUrl,
             trackCount: r.trackCount,
             description: r.description || '电台',
+            summary: r.summary || '',
             type: r.isFm ? 'radio' as const : 'playlist' as const,
             raw: r
         }));
@@ -611,10 +620,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                                     <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
                                                         {item.description}
                                                     </p>
-                                                    {item.trackCount !== undefined && (
-                                                        <span className="text-[10px] font-mono opacity-30 mt-2 block">
-                                                            {item.trackCount} {t('playlist.tracks') || 'songs'}
-                                                        </span>
+                                                    {compactDescription(item.summary) && (
+                                                        <p className="text-[10px] leading-snug opacity-45 mt-2 line-clamp-2">
+                                                            {compactDescription(item.summary)}
+                                                        </p>
                                                     )}
                                                 </div>
                                             </div>
@@ -639,12 +648,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     {currentDesktopItems[focusedIndex].name}
                                 </h3>
                                 <p className="text-xs opacity-50 font-mono mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                    {currentDesktopItems[focusedIndex].trackCount !== undefined ? `${currentDesktopItems[focusedIndex].trackCount} ${t('playlist.tracks') || 'songs'}` : ''}
-                                    {currentDesktopItems[focusedIndex].description
-                                        ? ` • ${currentDesktopItems[focusedIndex].description.length > 24
-                                            ? currentDesktopItems[focusedIndex].description.substring(0, 24) + '...'
-                                            : currentDesktopItems[focusedIndex].description
-                                        }`
+                                    {currentDesktopItems[focusedIndex].description}
+                                    {compactDescription(currentDesktopItems[focusedIndex].summary, 48)
+                                        ? ` • ${compactDescription(currentDesktopItems[focusedIndex].summary, 48)}`
                                         : ''}
                                 </p>
                             </motion.div>
@@ -779,6 +785,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             name: item.name,
                             coverUrl: item.coverUrl,
                             description: item.description,
+                            summary: item.summary,
                             rawCollection: item
                         }))}
                         onBack={() => setShowCollectionGrid(false)}

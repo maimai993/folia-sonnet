@@ -69,6 +69,54 @@ export const forEachCubeInRadius = (
     }
 };
 
+export const getHexCubicSpiral = (count: number): CubeCoord[] => {
+    const results: CubeCoord[] = [{ x: 0, y: 0, z: 0 }];
+    if (count <= 1) return results.slice(0, count);
+
+    const dirs = [
+        { x: 0, y: 1, z: -1 },
+        { x: -1, y: 1, z: 0 },
+        { x: -1, y: 0, z: 1 },
+        { x: 0, y: -1, z: 1 },
+        { x: 1, y: -1, z: 0 },
+        { x: 1, y: 0, z: -1 },
+    ];
+
+    let radius = 1;
+    while (results.length < count) {
+        let currX = radius;
+        let currY = -radius;
+        let currZ = 0;
+
+        for (let side = 0; side < 6; side++) {
+            for (let step = 0; step < radius; step++) {
+                if (results.length >= count) break;
+                currX += dirs[side].x;
+                currY += dirs[side].y;
+                currZ += dirs[side].z;
+                results.push({ x: currX, y: currY, z: currZ });
+            }
+        }
+        radius++;
+    }
+
+    return results;
+};
+
+export const buildHexGridCoords = (
+    count: number,
+    spacingX: number,
+    spacingY: number
+): HexGridCoord[] => {
+    const cubics = getHexCubicSpiral(count);
+    return cubics.map((cubic, index) => ({
+        index,
+        cube: cubic,
+        baseX: cubic.x * spacingX + (cubic.z * spacingX) / 2,
+        baseY: cubic.z * spacingY,
+    }));
+};
+
 // Resolves mounted card indexes by combining hex-ring lookup with pixel-radius filtering.
 export const resolveVisibleHexIndexes = (
     center: CubeCoord,

@@ -3,8 +3,8 @@ import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, Disc } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Theme } from '../types';
+import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 
-// C:\Users\123xi\.gemini\antigravity-ide\brain\9ec24ac8-12cb-4fe4-9bba-fb52fb47aecc
 // src/components/GridMap.tsx
 // Hexagonal honeycomb layout showing all collections (playlists, albums, radios).
 // Click on any collection card to select it and jump/center to it in Grid3D view.
@@ -14,6 +14,7 @@ export interface GridMapItem {
     name: string;
     coverUrl?: string;
     description?: string;
+    summary?: string;
     rawCollection?: any;
 }
 
@@ -27,48 +28,11 @@ interface GridMapProps {
     isDaylight: boolean;
 }
 
-interface HexCoord {
-    x: number;
-    y: number;
-    z: number;
-}
-
-/**
- * Generates cubic spiral coordinates for a honeycomb grid.
- * Fills rings starting from (0,0,0) outwards to ensure a compact layout.
- */
-function getHexCubicSpiral(count: number): HexCoord[] {
-    const results: HexCoord[] = [{ x: 0, y: 0, z: 0 }];
-    if (count <= 1) return results.slice(0, count);
-
-    const dirs = [
-        { x: 0, y: 1, z: -1 }, // down-left
-        { x: -1, y: 1, z: 0 },  // left
-        { x: -1, y: 0, z: 1 },  // up-left
-        { x: 0, y: -1, z: 1 },  // up-right
-        { x: 1, y: -1, z: 0 },  // right
-        { x: 1, y: 0, z: -1 }   // down-right
-    ];
-
-    let radius = 1;
-    while (results.length < count) {
-        let currX = radius;
-        let currY = -radius;
-        let currZ = 0;
-
-        for (let side = 0; side < 6; side++) {
-            for (let step = 0; step < radius; step++) {
-                if (results.length >= count) break;
-                currX += dirs[side].x;
-                currY += dirs[side].y;
-                currZ += dirs[side].z;
-                results.push({ x: currX, y: currY, z: currZ });
-            }
-        }
-        radius++;
-    }
-    return results;
-}
+const compactDescription = (description?: string, maxLength = 72) => {
+    if (!description) return '';
+    const normalized = description.replace(/\s+/g, ' ').trim();
+    return normalized.length > maxLength ? `${normalized.substring(0, maxLength)}...` : normalized;
+};
 
 /**
  * Renders a simplified polaroid-style card representing a collection.
@@ -157,6 +121,11 @@ const MapCard = React.memo<{
                                 {item.description}
                             </div>
                         )}
+                        {compactDescription(item.summary) && (
+                            <div className="text-[10px] leading-snug opacity-45 max-w-full font-medium line-clamp-2 whitespace-normal break-words">
+                                {compactDescription(item.summary)}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -167,6 +136,8 @@ const MapCard = React.memo<{
             prev.item.id === next.item.id &&
             prev.item.name === next.item.name &&
             prev.item.coverUrl === next.item.coverUrl &&
+            prev.item.description === next.item.description &&
+            prev.item.summary === next.item.summary &&
             prev.isDaylight === next.isDaylight &&
             prev.cardWidth === next.cardWidth &&
             prev.cardHeight === next.cardHeight
@@ -185,6 +156,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
     const [focusedIndex, setFocusedIndex] = useState(0);
+    const focusedIndexRef = useRef(0);
     const lastUpdateRef = useRef(0);
     const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isDraggingRef = useRef(false);
@@ -274,18 +246,34 @@ export const GridMap: React.FC<GridMapProps> = ({
         return viewportRadius + cardRadius + 200;
     }, [containerSize, layoutConfig]);
 
+    const renderRadius = useMemo(() => (
+        clipRadius + Math.max(layoutConfig.spacingX, layoutConfig.spacingY) * 1.5
+    ), [clipRadius, layoutConfig.spacingX, layoutConfig.spacingY]);
+
+    const renderRing = useMemo(() => (
+        Math.ceil(renderRadius / Math.min(layoutConfig.spacingX, layoutConfig.spacingY)) + 1
+    ), [layoutConfig.spacingX, layoutConfig.spacingY, renderRadius]);
+
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
 
-    const baseCoords = useMemo(() => {
-        const cubics = getHexCubicSpiral(items.length);
-        const { spacingX, spacingY } = layoutConfig;
-        return cubics.map((cubic) => {
-            const baseX = cubic.x * spacingX + (cubic.z * spacingX) / 2;
-            const baseY = cubic.z * spacingY;
-            return { baseX, baseY };
-        });
-    }, [items.length, layoutConfig]);
+    useEffect(() => {
+        focusedIndexRef.current = focusedIndex;
+    }, [focusedIndex]);
+
+    const {
+        coords: baseCoords,
+        renderedIndexes,
+        renderedIndexesRef,
+        updateRenderedIndexesForViewport,
+    } = useFoliaHexViewport({
+        itemCount: items.length,
+        spacingX: layoutConfig.spacingX,
+        spacingY: layoutConfig.spacingY,
+        renderRadius,
+        renderRing,
+        fallbackIndexRef: focusedIndexRef,
+    });
 
     // Keep the active focusedIndex centered when baseCoords changes on resize
     useEffect(() => {
@@ -294,8 +282,9 @@ export const GridMap: React.FC<GridMapProps> = ({
             const targetY = -baseCoords[focusedIndex].baseY;
             dragX.set(targetX);
             dragY.set(targetY);
+            updateRenderedIndexesForViewport(targetX, targetY, true);
         }
-    }, [baseCoords]);
+    }, [baseCoords, updateRenderedIndexesForViewport]);
 
     /**
      * Recenter the honeycomb grid viewport on target item coordinate offset.
@@ -310,7 +299,9 @@ export const GridMap: React.FC<GridMapProps> = ({
             pendingTimeoutRef.current = null;
         }
         setFocusedIndex(index);
+        focusedIndexRef.current = index;
         lastUpdateRef.current = performance.now();
+        updateRenderedIndexesForViewport(targetX, targetY, true);
 
         if (snap) {
             animate(dragX, targetX, { type: 'spring', stiffness: 220, damping: 28 });
@@ -328,12 +319,17 @@ export const GridMap: React.FC<GridMapProps> = ({
         }
     }, [items.length]);
 
+    useEffect(() => {
+        updateRenderedIndexesForViewport(dragX.get(), dragY.get(), true);
+    }, [dragX, dragY, updateRenderedIndexesForViewport]);
+
     const cardWrapperRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     const memoizedCards = useMemo(() => {
-        return items.map((item, idx) => {
+        return renderedIndexes.map((idx) => {
+            const item = items[idx];
             const coord = baseCoords[idx];
-            if (!coord) return null;
+            if (!item || !coord) return null;
 
             return (
                 <div
@@ -358,6 +354,7 @@ export const GridMap: React.FC<GridMapProps> = ({
             );
         });
     }, [
+        renderedIndexes,
         items,
         baseCoords,
         isDaylight,
@@ -392,11 +389,13 @@ export const GridMap: React.FC<GridMapProps> = ({
 
             if (timeSinceLast >= 200) {
                 setFocusedIndex(newIndex);
+                focusedIndexRef.current = newIndex;
                 lastUpdateRef.current = now;
             } else {
                 const remaining = 200 - timeSinceLast;
                 pendingTimeoutRef.current = setTimeout(() => {
                     setFocusedIndex(newIndex);
+                    focusedIndexRef.current = newIndex;
                     lastUpdateRef.current = performance.now();
                 }, remaining);
             }
@@ -409,12 +408,16 @@ export const GridMap: React.FC<GridMapProps> = ({
                 const dx = dragX.get();
                 const dy = dragY.get();
                 const { maxDistance } = layoutConfig;
+                updateRenderedIndexesForViewport(dx, dy);
 
-                let closestIdx = 0;
+                let closestIdx = focusedIndexRef.current;
                 let minDistSq = Infinity;
+                const activeIndexes = renderedIndexesRef.current;
 
-                for (let i = 0; i < baseCoords.length; i++) {
+                for (let activeIndex = 0; activeIndex < activeIndexes.length; activeIndex++) {
+                    const i = activeIndexes[activeIndex];
                     const coord = baseCoords[i];
+                    if (!coord) continue;
                     const cx = coord.baseX + dx;
                     const cy = coord.baseY + dy;
                     const distSq = cx * cx + cy * cy;
@@ -458,7 +461,7 @@ export const GridMap: React.FC<GridMapProps> = ({
             unsubY();
             if (rafId !== null) cancelAnimationFrame(rafId);
         };
-    }, [dragX, dragY, baseCoords, layoutConfig, clipRadius]);
+    }, [dragX, dragY, baseCoords, layoutConfig, clipRadius, renderedIndexes, updateRenderedIndexesForViewport]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
