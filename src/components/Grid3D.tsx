@@ -157,6 +157,43 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         }, 800);
     };
 
+    // Mouse drag-to-scroll implementation
+    const isDraggingRef = useRef(false);
+    const startXRef = useRef(0);
+    const scrollLeftRef = useRef(0);
+    const dragDistanceRef = useRef(0);
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (!scrollContainerRef.current) return;
+        if (e.button !== 0) return; // Only left click
+        isDraggingRef.current = true;
+        startXRef.current = e.pageX - scrollContainerRef.current.offsetLeft;
+        scrollLeftRef.current = scrollContainerRef.current.scrollLeft;
+        dragDistanceRef.current = 0;
+        
+        scrollContainerRef.current.style.scrollBehavior = 'auto';
+        scrollContainerRef.current.style.scrollSnapType = 'none';
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (!isDraggingRef.current || !scrollContainerRef.current) return;
+        e.preventDefault();
+        const x = e.pageX - scrollContainerRef.current.offsetLeft;
+        const walk = (x - startXRef.current) * 1.5;
+        dragDistanceRef.current = Math.abs(walk);
+        scrollContainerRef.current.scrollLeft = scrollLeftRef.current - walk;
+        handleSliding();
+    };
+
+    const handleMouseUpOrLeave = () => {
+        if (!isDraggingRef.current) return;
+        isDraggingRef.current = false;
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.style.scrollBehavior = '';
+            scrollContainerRef.current.style.scrollSnapType = '';
+        }
+    };
+
     // Clean sliding timeout
     useEffect(() => {
         return () => {
@@ -475,7 +512,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             onTouchStart={handleSliding}
                             onTouchMove={handleSliding}
                             onWheel={handleSliding}
-                            className="w-full flex items-center overflow-x-auto overflow-y-hidden py-16 scroll-smooth custom-scrollbar snap-x snap-mandatory"
+                            onMouseDown={handleMouseDown}
+                            onMouseMove={handleMouseMove}
+                            onMouseUp={handleMouseUpOrLeave}
+                            onMouseLeave={handleMouseUpOrLeave}
+                            className="w-full flex items-center overflow-x-auto overflow-y-hidden py-16 scroll-smooth custom-scrollbar snap-x snap-mandatory cursor-grab active:cursor-grabbing"
                             style={{ scrollbarWidth: 'none' }}
                         >
                             <div className="flex px-[40vw] gap-12">
@@ -490,14 +531,18 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     return (
                                         <motion.div
                                             key={item.id}
-                                            className="snap-center shrink-0 cursor-pointer pointer-events-auto"
+                                            className="snap-center shrink-0 cursor-pointer pointer-events-auto select-none"
                                             whileHover={{ 
                                                 scale: 1.05, 
                                                 y: -10, 
                                                 rotate: 0,
                                                 transition: { type: 'spring', stiffness: 300, damping: 20 }
                                             }}
-                                            onClick={() => handleSelectCollectionCard(item)}
+                                            onClick={() => {
+                                                if (dragDistanceRef.current < 8) {
+                                                    handleSelectCollectionCard(item);
+                                                }
+                                            }}
                                         >
                                             <div 
                                                 className={`w-64 rounded-xl border p-4 flex flex-col items-center transition-all ${polaroidClass}`}

@@ -94,11 +94,10 @@ const PolaroidCard: React.FC<{
     t: any;
 }> = ({ item, baseX, baseY, dragX, dragY, isDaylight, theme, onSelect, onAddQueue, mode, t }) => {
     // Map motion values to calculate distance from current center outside of React render lifecycle
-    const cardX = useTransform(dragX, (x) => baseX + Number(x));
-    const cardY = useTransform(dragY, (y) => baseY + Number(y));
-
-    const distance = useTransform([cardX, cardY], ([x, y]) => {
-        return Math.sqrt(Number(x) * Number(x) + Number(y) * Number(y));
+    const distance = useTransform([dragX, dragY], ([x, y]) => {
+        const currentX = baseX + Number(x);
+        const currentY = baseY + Number(y);
+        return Math.sqrt(currentX * currentX + currentY * currentY);
     });
 
     const scale = useTransform(distance, [0, 480], [1.1, 0.45]);
@@ -123,8 +122,8 @@ const PolaroidCard: React.FC<{
         <motion.div
             className={`absolute select-none pointer-events-auto rounded-xl p-3 flex flex-col items-center border transition-shadow duration-300 ${cardBg} ${cardBorderHover}`}
             style={{
-                x: cardX,
-                y: cardY,
+                x: baseX,
+                y: baseY,
                 scale,
                 opacity,
                 zIndex,
@@ -414,7 +413,7 @@ export const GridView: React.FC<GridViewProps> = ({
                         dragTransition={{ power: 0.16, timeConstant: 220 }}
                         onDragEnd={handleDragEnd}
                         style={{ x: dragX, y: dragY }}
-                        className="absolute w-0 h-0 flex items-center justify-center"
+                        className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing"
                     >
                         {items.map((item, idx) => {
                             const coord = baseCoords[idx];
