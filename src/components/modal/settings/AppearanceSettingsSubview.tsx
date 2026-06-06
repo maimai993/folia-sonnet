@@ -1,5 +1,5 @@
 import React from 'react';
-import { Monitor, Palette, Settings2, Sparkles } from 'lucide-react';
+import { Monitor, Palette, Settings2, Sparkles, LayoutGrid } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { DualTheme, Theme, ThemeMode } from '../../../types';
 
@@ -26,6 +26,8 @@ type AppearanceSettingsSubviewProps = {
     toggleOffBackgroundClass: string;
     transparentPlayerBackground: boolean;
     utilityGhostButtonClass: string;
+    homeLayoutStyle: 'carousel' | 'desktop';
+    onChangeHomeLayoutStyle: (style: 'carousel' | 'desktop') => void;
 };
 
 const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
@@ -48,6 +50,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     toggleOffBackgroundClass,
     transparentPlayerBackground,
     utilityGhostButtonClass,
+    homeLayoutStyle,
+    onChangeHomeLayoutStyle,
 }) => {
     const { t } = useTranslation();
     const getAccentOptionStyle = (selected: boolean) => (
@@ -188,6 +192,38 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             style={{ backgroundColor: transparentPlayerBackground ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
                         >
                             <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${transparentPlayerBackground ? 'translate-x-6' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                </div>
+
+                <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
+                    <div className="space-y-1">
+                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                            <LayoutGrid size={14} />
+                            {t('options.homeLayoutStyle') || '首页布局样式'}
+                        </div>
+                        <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                            {t('options.homeLayoutStyleDesc') || '选择首页展示的样式风格：经典 3D 轮播或全新透明桌面（支持拍立得单曲网格）。'}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                        <button
+                            onClick={() => onChangeHomeLayoutStyle('carousel')}
+                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
+                            style={getAccentOptionStyle(homeLayoutStyle === 'carousel')}
+                        >
+                            <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.homeLayoutStyleCarousel') || '经典 3D 轮播'}
+                            </span>
+                        </button>
+                        <button
+                            onClick={() => onChangeHomeLayoutStyle('desktop')}
+                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
+                            style={getAccentOptionStyle(homeLayoutStyle === 'desktop')}
+                        >
+                            <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.homeLayoutStyleDesktop') || '无级透明桌面'}
+                            </span>
                         </button>
                     </div>
                 </div>

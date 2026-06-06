@@ -1,5 +1,7 @@
 import React from 'react';
 import LegacyHome from '../Home';
+import Grid3D from '../Grid3D';
+import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import type { HomeViewModel } from './home/buildHomeModel';
 
 // App-level entry for the home surface backed by a view model.
@@ -8,6 +10,11 @@ type AppHomeProps = {
 };
 
 const Home: React.FC<AppHomeProps> = ({ model }) => {
+    const homeLayoutStyle = useSettingsUiStore(state => state.homeLayoutStyle);
+
+    if (homeLayoutStyle === 'desktop') {
+        return <Grid3D {...model.legacyProps} />;
+    }
     return <LegacyHome {...model.legacyProps} />;
 };
 

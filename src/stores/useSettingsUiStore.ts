@@ -439,6 +439,15 @@ const readStoredAudioOutputDeviceId = (): string => {
     return localStorage.getItem('audio_output_device_id') ?? '';
 };
 
+const readStoredHomeLayoutStyle = (): 'carousel' | 'desktop' => {
+    if (typeof window === 'undefined') {
+        return 'desktop';
+    }
+
+    const saved = localStorage.getItem('home_layout_style');
+    return saved === 'carousel' ? 'carousel' : 'desktop';
+};
+
 const readStoredVolume = () => {
     if (typeof window === 'undefined') {
         return 1;
@@ -494,6 +503,7 @@ type SettingsUiState = {
     volume: number;
     isMuted: boolean;
     loopMode: 'off' | 'all' | 'one';
+    homeLayoutStyle: 'carousel' | 'desktop';
     isSubSettingsViewOpen: boolean;
     settingsModalState: SettingsModalState;
     setStatusSetter: (setter: StatusSetter | null) => void;
@@ -558,6 +568,7 @@ type SettingsUiState = {
     handleSetVolume: (val: number) => void;
     handleToggleMute: () => void;
     handleToggleLoopMode: () => void;
+    handleSetHomeLayoutStyle: (style: 'carousel' | 'desktop') => void;
 };
 
 const notify = (get: () => SettingsUiState, message: StatusMessage) => {
@@ -609,6 +620,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     volume: readStoredVolume(),
     isMuted: getStoredBoolean('player_is_muted', false),
     loopMode: readStoredLoopMode(),
+    homeLayoutStyle: readStoredHomeLayoutStyle(),
     isSubSettingsViewOpen: false,
     settingsModalState: {
         isOpen: false,
@@ -1178,6 +1190,16 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ loopMode: next });
     },
+    handleSetHomeLayoutStyle: (style) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('home_layout_style', style);
+        }
+        set({ homeLayoutStyle: style });
+        notify(get, {
+            type: 'info',
+            text: style === 'desktop' ? '首页布局已切换为透明桌面' : '首页布局已切换为经典轮播',
+        });
+    },
 }));
 
 export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
@@ -1202,6 +1224,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     visualizerFrameRate: state.visualizerFrameRate,
     isDaylight: state.isDaylight,
     visualizerMode: state.visualizerMode,
+    homeLayoutStyle: state.homeLayoutStyle,
+    handleSetHomeLayoutStyle: state.handleSetHomeLayoutStyle,
     classicTuning: state.classicTuning,
     cadenzaTuning: state.cadenzaTuning,
     partitaTuning: state.partitaTuning,
