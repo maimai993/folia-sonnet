@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -622,7 +622,7 @@ export const GridView: React.FC<GridViewProps> = ({
 
     const canEditPlaylist = collection && collection.specialType !== 'cloud' && Boolean(currentUserId && collection.creator?.userId === currentUserId);
 
-    const handleRemoveTrack = async (trackId: number) => {
+    const handleRemoveTrack = useCallback(async (trackId: number) => {
         if (!collection) return;
         try {
             const isLiked = collection.isLiked || collection.name === '我喜欢的音乐' || collection.specialType === 'liked';
@@ -639,7 +639,7 @@ export const GridView: React.FC<GridViewProps> = ({
         } catch (error) {
             console.error('Failed to remove track in GridView', error);
         }
-    };
+    }, [collection, tracks, CACHE_KEY, onPlaylistMutated]);
 
     // Build the grid spiral coordinates mapping using responsive spacing
     const gridItems = useMemo(() => {
@@ -708,6 +708,75 @@ export const GridView: React.FC<GridViewProps> = ({
             centerOnIndex(0, false);
         }
     }, [gridItems.length]);
+
+    // Memoize the mapped card list to prevent React from reconciling wrapper elements when focusedIndex updates
+    const memoizedCards = useMemo(() => {
+        return gridItems.map((item, idx) => {
+            const coord = baseCoords[idx];
+            if (!coord) return null;
+
+            return (
+                <div
+                    key={item.id}
+                    ref={(el) => { cardWrapperRefs.current[idx] = el; }}
+                    className="absolute select-none pointer-events-auto"
+                    style={{
+                        transformOrigin: 'center center',
+                        willChange: 'transform, opacity',
+                    }}
+                >
+                    <PolaroidCard
+                        item={item}
+                        isDaylight={isDaylight}
+                        theme={theme}
+                        mode={mode}
+                        t={t}
+                        cardWidth={layoutConfig.cardWidth}
+                        cardHeight={layoutConfig.cardHeight}
+                        isEditMode={isEditMode}
+                        onRemoveTrack={() => {
+                            if (item.rawTrack) handleRemoveTrack(item.rawTrack.id);
+                        }}
+                        onSelectArtist={onSelectArtist}
+                        onSelectAlbum={onSelectAlbum}
+                        onSelect={() => {
+                            if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
+                                onSelectTrack(item.rawTrack, tracks);
+                            } else if (mode === 'collection' && onSelectCollection) {
+                                onSelectCollection(item.rawCollection || item);
+                            }
+                        }}
+                        onCenter={() => {
+                            if (isDraggingRef.current) return;
+                            centerOnIndex(idx, true);
+                        }}
+                        onAddQueue={() => {
+                            if (mode === 'tracks' && onAddTrackToQueue && item.rawTrack) {
+                                onAddTrackToQueue(item.rawTrack);
+                            }
+                        }}
+                    />
+                </div>
+            );
+        });
+    }, [
+        gridItems,
+        baseCoords,
+        isDaylight,
+        theme,
+        mode,
+        t,
+        layoutConfig.cardWidth,
+        layoutConfig.cardHeight,
+        isEditMode,
+        tracks,
+        onSelectTrack,
+        onSelectCollection,
+        onSelectArtist,
+        onSelectAlbum,
+        onAddTrackToQueue,
+        handleRemoveTrack
+    ]);
 
     // Refs for direct DOM manipulation — eliminates per-card useTransform subscriptions
     const cardWrapperRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -959,54 +1028,7 @@ export const GridView: React.FC<GridViewProps> = ({
                         style={{ x: dragX, y: dragY, background: 'rgba(0,0,0,0)' }}
                         className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing bg-transparent"
                     >
-                        {gridItems.map((item, idx) => {
-                            const coord = baseCoords[idx];
-                            if (!coord) return null;
-
-                            return (
-                                <div
-                                    key={item.id}
-                                    ref={(el) => { cardWrapperRefs.current[idx] = el; }}
-                                    className="absolute select-none pointer-events-auto"
-                                    style={{
-                                        transformOrigin: 'center center',
-                                        willChange: 'transform, opacity',
-                                    }}
-                                >
-                                    <PolaroidCard
-                                        item={item}
-                                        isDaylight={isDaylight}
-                                        theme={theme}
-                                        mode={mode}
-                                        t={t}
-                                        cardWidth={layoutConfig.cardWidth}
-                                        cardHeight={layoutConfig.cardHeight}
-                                        isEditMode={isEditMode}
-                                        onRemoveTrack={() => {
-                                            if (item.rawTrack) handleRemoveTrack(item.rawTrack.id);
-                                        }}
-                                        onSelectArtist={onSelectArtist}
-                                        onSelectAlbum={onSelectAlbum}
-                                        onSelect={() => {
-                                            if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
-                                                onSelectTrack(item.rawTrack, tracks);
-                                            } else if (mode === 'collection' && onSelectCollection) {
-                                                onSelectCollection(item.rawCollection || item);
-                                            }
-                                        }}
-                                        onCenter={() => {
-                                            if (isDraggingRef.current) return;
-                                            centerOnIndex(idx, true);
-                                        }}
-                                        onAddQueue={() => {
-                                            if (mode === 'tracks' && onAddTrackToQueue && item.rawTrack) {
-                                                onAddTrackToQueue(item.rawTrack);
-                                            }
-                                        }}
-                                    />
-                                </div>
-                            );
-                        })}
+                        {memoizedCards}
                     </motion.div>
                 )}
 
