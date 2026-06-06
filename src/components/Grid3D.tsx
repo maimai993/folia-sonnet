@@ -648,9 +648,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     {currentDesktopItems[focusedIndex].name}
                                 </h3>
                                 <p className="text-xs opacity-50 font-mono mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                    {currentDesktopItems[focusedIndex].description}
-                                    {compactDescription(currentDesktopItems[focusedIndex].summary, 48)
-                                        ? ` • ${compactDescription(currentDesktopItems[focusedIndex].summary, 48)}`
+                                    {currentDesktopItems[focusedIndex].trackCount !== undefined ? `${currentDesktopItems[focusedIndex].trackCount} ${t('playlist.tracks') || 'songs'}` : ''}
+                                    {currentDesktopItems[focusedIndex].description
+                                        ? ` • ${currentDesktopItems[focusedIndex].description}`
                                         : ''}
                                 </p>
                             </motion.div>

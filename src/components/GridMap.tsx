@@ -331,14 +331,28 @@ export const GridMap: React.FC<GridMapProps> = ({
             const coord = baseCoords[idx];
             if (!item || !coord) return null;
 
+            const initialDx = dragX.get();
+            const initialDy = dragY.get();
+            const initialCenterX = coord.baseX + initialDx;
+            const initialCenterY = coord.baseY + initialDy;
+            const initialDist = Math.sqrt(initialCenterX * initialCenterX + initialCenterY * initialCenterY);
+            const initialT = Math.min(initialDist / layoutConfig.maxDistance, 1);
+            const initialScale = 1.1 - 0.65 * initialT;
+            const initialOpacity = 1.0 - 0.72 * initialT;
+            const initialZ = Math.round(50 - 49 * initialT);
+
             return (
                 <div
-                    key={item.id}
+                    key={`map-${idx}-${item.id}`}
                     ref={(el) => { cardWrapperRefs.current[idx] = el; }}
                     className="absolute select-none pointer-events-auto"
                     style={{
                         transformOrigin: 'center center',
                         willChange: 'transform, opacity',
+                        display: initialDist > clipRadius ? 'none' : undefined,
+                        transform: `translate(${coord.baseX}px, ${coord.baseY}px) scale(${initialScale})`,
+                        opacity: initialDist > clipRadius ? 0 : initialOpacity,
+                        zIndex: initialZ,
                     }}
                 >
                     <MapCard
@@ -360,6 +374,8 @@ export const GridMap: React.FC<GridMapProps> = ({
         isDaylight,
         layoutConfig.cardWidth,
         layoutConfig.cardHeight,
+        layoutConfig.maxDistance,
+        clipRadius,
         onSelectCollection,
     ]);
 

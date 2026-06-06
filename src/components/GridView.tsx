@@ -198,7 +198,7 @@ const PolaroidCard = React.memo<{
                                     <span className="flex gap-1 flex-wrap">
                                         {item.rawTrack.ar.map((artist, idx) => (
                                             <span
-                                                key={artist.id}
+                                                key={`${artist.id ?? 'artist'}-${idx}-${artist.name}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (artist.id) onSelectArtist(artist.id);
@@ -718,14 +718,28 @@ export const GridView: React.FC<GridViewProps> = ({
             const coord = baseCoords[idx];
             if (!item || !coord) return null;
 
+            const initialDx = dragX.get();
+            const initialDy = dragY.get();
+            const initialCenterX = coord.baseX + initialDx;
+            const initialCenterY = coord.baseY + initialDy;
+            const initialDist = Math.sqrt(initialCenterX * initialCenterX + initialCenterY * initialCenterY);
+            const initialT = Math.min(initialDist / layoutConfig.maxDistance, 1);
+            const initialScale = 1.1 - 0.65 * initialT;
+            const initialOpacity = 1.0 - 0.72 * initialT;
+            const initialZ = Math.round(50 - 49 * initialT);
+
             return (
                 <div
-                    key={item.id}
+                    key={`${mode}-${idx}-${item.id}`}
                     ref={(el) => { cardWrapperRefs.current[idx] = el; }}
                     className="absolute select-none pointer-events-auto"
                     style={{
                         transformOrigin: 'center center',
                         willChange: 'transform, opacity',
+                        display: initialDist > clipRadius ? 'none' : undefined,
+                        transform: `translate(${coord.baseX}px, ${coord.baseY}px) scale(${initialScale})`,
+                        opacity: initialDist > clipRadius ? 0 : initialOpacity,
+                        zIndex: initialZ,
                     }}
                 >
                     <PolaroidCard
@@ -772,6 +786,8 @@ export const GridView: React.FC<GridViewProps> = ({
         t,
         layoutConfig.cardWidth,
         layoutConfig.cardHeight,
+        layoutConfig.maxDistance,
+        clipRadius,
         isEditMode,
         tracks,
         onSelectTrack,
