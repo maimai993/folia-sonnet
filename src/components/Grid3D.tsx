@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
-import { SongResult, NeteaseUser, NeteasePlaylist, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState } from '../types';
+import { SongResult, UnifiedSong, NeteaseUser, NeteasePlaylist, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState } from '../types';
 import { neteaseApi, isSongMarkedUnavailable } from '../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import LocalMusicView from './LocalMusicView';
@@ -69,6 +69,9 @@ interface Grid3DProps {
     theme: Theme;
     onOpenSettings?: (initialTab?: 'help' | 'options') => void;
     navidromeEnabled?: boolean;
+    onPlayAll?: (songs: SongResult[]) => void;
+    onAddAllToQueue?: (songs: SongResult[]) => void;
+    onAddSongToQueue?: (song: SongResult) => void;
 }
 
 interface SelectedCollection {
@@ -88,6 +91,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         playlists,
         cloudPlaylist = null,
         currentTrack,
+        onSelectPlaylist,
+        onSelectAlbum,
+        onSelectArtist,
         onSelectLocalAlbum,
         onSelectLocalArtist,
         localSongs,
@@ -109,6 +115,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         theme,
         onOpenSettings,
         navidromeEnabled = false,
+        onPlayAll,
+        onAddAllToQueue,
+        onAddSongToQueue,
     } = props;
 
     const { t } = useTranslation();
@@ -281,10 +290,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         return base.map(p => ({
             id: p.id,
             name: p.name,
-            coverUrl: p.coverImgUrl || p.coverUrl,
+            coverUrl: p.coverImgUrl || (p as any).coverUrl,
             trackCount: p.trackCount,
             description: p.creator?.nickname || '歌单',
-            type: 'playlist' as const
+            type: 'playlist' as const,
+            raw: p
         }));
     }, [playlists, cloudPlaylist]);
 
@@ -295,7 +305,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             coverUrl: a.picUrl,
             trackCount: a.size,
             description: a.artists?.[0]?.name || '未知歌手',
-            type: 'album' as const
+            type: 'album' as const,
+            raw: a
         }));
     }, [favoriteAlbums]);
 
@@ -306,7 +317,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             coverUrl: r.coverUrl,
             trackCount: r.trackCount,
             description: r.description || '电台',
-            type: r.isFm ? 'radio' as const : 'playlist' as const
+            type: r.isFm ? 'radio' as const : 'playlist' as const,
+            raw: r
         }));
     }, [radioItems]);
 
@@ -318,59 +330,21 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         return [];
     }, [homeViewTab, playlistCards, albumCards, radioCards]);
 
-    // Load track context mapping for grid selection details
-    const handleSelectCollectionCard = async (card: { id: string | number; name: string; coverUrl?: string; type: string; description?: string }) => {
-        setSelectedCollection({
-            id: card.id,
-            name: card.name,
-            coverUrl: card.coverUrl,
-            type: card.type as any,
-            subtitle: card.description
-        });
-        setLoadingTracks(true);
-        setGridTracks([]);
-
-        try {
-            if (card.type === 'radio' && card.id === 'personal_fm') {
-                const fmRes = await neteaseApi.getPersonalFm();
-                if (fmRes.data) {
-                    setGridTracks(fmRes.data);
-                }
-            } else if (card.type === 'album') {
-                const res = await neteaseApi.getAlbum(Number(card.id));
-                if (res.code === 200) {
-                    const enriched = res.songs.map((song: SongResult) => ({
-                        ...song,
-                        al: { id: res.album.id, name: res.album.name, picUrl: song.al?.picUrl || res.album.picUrl },
-                        album: { id: res.album.id, name: res.album.name, picUrl: song.album?.picUrl || res.album.picUrl }
-                    }));
-                    setGridTracks(enriched);
-                }
-            } else if (card.type === 'playlist') {
-                const isCloudDrive = Number(card.id) === -100;
-                const res = isCloudDrive
-                    ? await neteaseApi.getUserCloud(150, 0)
-                    : await neteaseApi.getPlaylistTracks(Number(card.id), 150, 0);
-                if (res.songs) {
-                    setGridTracks(res.songs);
-                }
-            }
-        } catch (error) {
-            console.error('[Grid3D] Failed to load collection tracks:', error);
-        } finally {
-            setLoadingTracks(false);
-        }
+    // Set the selected collection raw details to trigger GridView in self-loading tracks mode
+    const handleSelectCollectionCard = (card: any) => {
+        setSelectedCollection(card.raw || card);
     };
 
     // Generic track click playback bridge
     const handleSelectTrack = (track: SongResult, queue: SongResult[]) => {
-        if (track.isNavidrome) {
+        const ut = track as UnifiedSong;
+        if (ut.isNavidrome) {
             if (onPlayNavidromeSong) {
-                onPlayNavidromeSong(track as any, queue as any);
+                onPlayNavidromeSong(ut as any, queue as any);
             }
-        } else if (track.isLocal) {
+        } else if (ut.isLocal) {
             if (onPlayLocalSong) {
-                onPlayLocalSong(track as any, queue as any);
+                onPlayLocalSong(ut as any, queue as any);
             }
         } else {
             onPlaySong(track, queue);
@@ -588,7 +562,56 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 ) : homeViewTab === 'local' ? (
                     <div className="w-full h-full flex-1">
                         <LocalMusicView
-                            {...props}
+                            localSongs={localSongs}
+                            localPlaylists={localPlaylists}
+                            onRefresh={onRefreshLocalSongs}
+                            onPlaySong={onPlayLocalSong}
+                            onAddToQueue={onAddLocalSongToQueue}
+                            activeRow={localMusicState.activeRow}
+                            setActiveRow={(row) => setLocalMusicState(prev => ({ ...prev, activeRow: row }))}
+                            selectedGroup={localMusicState.selectedGroup}
+                            setSelectedGroup={(group) => setLocalMusicState(prev => ({
+                                ...prev,
+                                selectedGroup: group,
+                                detailStack: group ? prev.detailStack : [],
+                                detailOriginView: group ? prev.detailOriginView : null,
+                            }))}
+                            onBackFromDetail={() => {
+                                if (localMusicState.detailStack.length > 0) {
+                                    setLocalMusicState(prev => {
+                                        const nextStack = prev.detailStack.slice(0, -1);
+                                        return {
+                                            ...prev,
+                                            selectedGroup: nextStack[nextStack.length - 1] ?? null,
+                                            detailStack: nextStack,
+                                        };
+                                    });
+                                    return;
+                                }
+
+                                const shouldReturnToPlayer = localMusicState.detailOriginView === 'player';
+                                setLocalMusicState(prev => ({
+                                    ...prev,
+                                    selectedGroup: null,
+                                    detailStack: [],
+                                    detailOriginView: null,
+                                }));
+
+                                if (shouldReturnToPlayer) {
+                                    onBackToPlayer();
+                                }
+                            }}
+                            onMatchSong={onMatchSong}
+                            focusedFolderIndex={localMusicState.focusedFolderIndex}
+                            setFocusedFolderIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedFolderIndex: index }))}
+                            focusedAlbumIndex={localMusicState.focusedAlbumIndex}
+                            setFocusedAlbumIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedAlbumIndex: index }))}
+                            focusedArtistIndex={localMusicState.focusedArtistIndex}
+                            setFocusedArtistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedArtistIndex: index }))}
+                            focusedPlaylistIndex={localMusicState.focusedPlaylistIndex}
+                            setFocusedPlaylistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedPlaylistIndex: index }))}
+                            onSelectArtistGroup={onSelectLocalArtist}
+                            onSelectAlbumGroup={onSelectLocalAlbum}
                             theme={theme}
                             isDaylight={isDaylight}
                             hasFloatingPlayer={Boolean(currentTrack)}
@@ -613,28 +636,35 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 )}
             </div>
 
-            {/* Polaroid Detail Tracks Grid View (GridView) */}
             <AnimatePresence>
                 {selectedCollection && (
                     <GridView
                         title={selectedCollection.name}
-                        subtitle={selectedCollection.subtitle}
-                        items={gridTracks.map((track, idx) => ({
-                            id: `${track.id}-${idx}`,
-                            name: formatSongName(track),
-                            coverUrl: track.al?.picUrl || track.album?.picUrl,
-                            subtitle: String(idx + 1).padStart(2, '0'),
-                            description: track.ar?.map(a => a.name).join(', '),
-                            rawTrack: track
-                        }))}
+                        subtitle={(selectedCollection as any).creator?.nickname || (selectedCollection as any).artists?.[0]?.name || (selectedCollection as any).description || ''}
+                        collection={selectedCollection as any}
                         mode="tracks"
                         onBack={() => {
                             setSelectedCollection(null);
-                            setGridTracks([]);
                         }}
                         onSelectTrack={handleSelectTrack}
-                        onAddTrackToQueue={onAddLocalSongToQueue}
-                        isLoading={loadingTracks}
+                        onAddTrackToQueue={(track) => {
+                            const ut = track as UnifiedSong;
+                            if (ut.isLocal && ut.localData) {
+                                if (onAddLocalSongToQueue) {
+                                    onAddLocalSongToQueue(ut.localData);
+                                }
+                            } else {
+                                if (onAddSongToQueue) {
+                                    onAddSongToQueue(track);
+                                }
+                            }
+                        }}
+                        onPlayAll={onPlayAll}
+                        onAddAllToQueue={onAddAllToQueue}
+                        onSelectAlbum={onSelectAlbum}
+                        onSelectArtist={onSelectArtist}
+                        currentUserId={user?.userId}
+                        onPlaylistMutated={onRefreshUser}
                         theme={theme}
                         isDaylight={isDaylight}
                     />

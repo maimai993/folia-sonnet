@@ -1,17 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValue, useTransform, animate, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Disc, Play, Plus, Loader2, Heart } from 'lucide-react';
+import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
+import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme } from '../types';
 import { isSongMarkedUnavailable, getSongUnavailableTagText, neteaseApi } from '../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { formatSongName } from '../utils/songNameFormatter';
 import { colorWithAlpha } from './visualizer/colorMix';
-
-// C:\Users\123xi\.gemini\antigravity-ide\brain\5ddc5af2-6cab-4638-828b-1773ffe7d556
-// src/components/GridView.tsx
-// High-performance 2D honeycomb layout grid matching the Apple Watch album grid layout.
-// Displays items as Polaroid-style photo cards containing cover art, metadata, and controls.
+import { saveToCache, getFromCache, removeFromCache } from '../services/db';
 
 interface GridItem {
     id: string | number;
@@ -26,7 +22,7 @@ interface GridItem {
 interface GridViewProps {
     title: string;
     subtitle?: string;
-    items: GridItem[];
+    items?: GridItem[];
     mode: 'collection' | 'tracks';
     onBack: () => void;
     onSelectTrack?: (track: SongResult, queue: SongResult[]) => void;
@@ -35,6 +31,15 @@ interface GridViewProps {
     isLoading?: boolean;
     theme: Theme;
     isDaylight: boolean;
+
+    // Optional self-contained collection props
+    collection?: any;
+    onPlayAll?: (songs: SongResult[]) => void;
+    onAddAllToQueue?: (songs: SongResult[]) => void;
+    onSelectAlbum?: (albumId: number) => void;
+    onSelectArtist?: (artistId: number) => void;
+    currentUserId?: number | null;
+    onPlaylistMutated?: () => Promise<void> | void;
 }
 
 interface HexCoord {
@@ -80,12 +85,14 @@ function getHexCubicSpiral(count: number): HexCoord[] {
     return results;
 }
 
+/**
+ * High-performance memoized Polaroid card — pure visual component.
+ * All position/scale/opacity/zIndex/display transforms are managed
+ * by a single centralized rAF loop in the parent GridView via wrapper refs.
+ * Queue button opacity uses inherited CSS custom property --queue-opacity / --queue-pe.
+ */
 const PolaroidCard = React.memo<{
     item: GridItem;
-    baseX: number;
-    baseY: number;
-    dragX: any;
-    dragY: any;
     isDaylight: boolean;
     theme: Theme;
     onSelect: () => void;
@@ -93,19 +100,15 @@ const PolaroidCard = React.memo<{
     onAddQueue?: () => void;
     mode: 'collection' | 'tracks';
     t: any;
-    isCentered: boolean;
     cardWidth: number;
     cardHeight: number;
-    maxDistance: number;
-    lodStart: number;
-    lodEnd: number;
+    isEditMode?: boolean;
+    onRemoveTrack?: () => void;
+    onSelectArtist?: (artistId: number) => void;
+    onSelectAlbum?: (albumId: number) => void;
 }>(
     ({
         item,
-        baseX,
-        baseY,
-        dragX,
-        dragY,
         isDaylight,
         theme,
         onSelect,
@@ -113,55 +116,18 @@ const PolaroidCard = React.memo<{
         onAddQueue,
         mode,
         t,
-        isCentered,
         cardWidth,
         cardHeight,
-        maxDistance,
-        lodStart,
-        lodEnd
+        isEditMode = false,
+        onRemoveTrack,
+        onSelectArtist,
+        onSelectAlbum
     }) => {
-        // Map motion values to calculate distance from current center outside of React render lifecycle
-        const distance = useTransform([dragX, dragY], ([x, y]) => {
-            const currentX = baseX + Number(x);
-            const currentY = baseY + Number(y);
-            return Math.sqrt(currentX * currentX + currentY * currentY);
-        });
-
-        const scale = useTransform(distance, [0, maxDistance], [1.1, 0.45]);
-        const opacity = useTransform(distance, [0, maxDistance], [1.0, 0.28]);
-        const zIndex = useTransform(distance, [0, maxDistance], [50, 1]);
-
-        // LOD: Hide queue buttons for cards outside the second outer ring (distance > lodEnd)
-        const queueButtonOpacity = useTransform(distance, [lodStart, lodEnd], [1, 0]);
-        const queueButtonPointerEvents = useTransform(distance, (d) => Number(d) > lodEnd ? 'none' : 'auto');
-
         const isUnavailable = mode === 'tracks' && item.rawTrack ? isSongMarkedUnavailable(item.rawTrack) : false;
         const unavailableTagText = (mode === 'tracks' && item.rawTrack)
             ? getSongUnavailableTagText(item.rawTrack, t('status.songUnavailableTag'))
             : '';
 
-        const [isVisible, setIsVisible] = useState(false);
-        const [isLoaded, setIsLoaded] = useState(false);
-        const cardRef = useRef<HTMLDivElement>(null);
-
-        useEffect(() => {
-            if (!cardRef.current) return;
-            const observer = new IntersectionObserver(
-                ([entry]) => {
-                    if (entry.isIntersecting) {
-                        setIsVisible(true);
-                        observer.disconnect();
-                    }
-                },
-                {
-                    rootMargin: '250px',
-                }
-            );
-            observer.observe(cardRef.current);
-            return () => observer.disconnect();
-        }, []);
-
-        // Polaroid card frame coloring depending on theme
         const cardBg = isDaylight 
             ? 'bg-[#faf9f6] text-zinc-900 border-zinc-200/50 shadow-lg' 
             : 'bg-zinc-900 text-zinc-100 border-zinc-800/80 shadow-2xl';
@@ -171,52 +137,93 @@ const PolaroidCard = React.memo<{
             : 'hover:border-zinc-700';
 
         return (
-            <motion.div
-                ref={cardRef}
-                className={`absolute select-none pointer-events-auto rounded-xl p-3 flex flex-col items-center border transition-shadow duration-300 ${cardBg} ${cardBorderHover}`}
+            <div
+                className={`rounded-xl p-3 flex flex-col items-center border transition-shadow duration-300 ${cardBg} ${cardBorderHover}`}
                 style={{
-                    x: baseX,
-                    y: baseY,
-                    scale,
-                    opacity,
-                    zIndex,
                     width: cardWidth,
                     minHeight: cardHeight,
                     height: 'auto',
-                    transformOrigin: 'center center',
+                    animation: isEditMode && !isUnavailable
+                        ? 'polaroid-shake 0.28s ease-in-out infinite'
+                        : 'none',
                 }}
-                onClick={onCenter}
+                onClick={(e) => {
+                    if (isEditMode) {
+                        e.stopPropagation();
+                        return;
+                    }
+                    onCenter();
+                }}
             >
                 {/* Square Polaroid Photo Area */}
                 <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-200/60 dark:bg-zinc-800/60 relative shadow-inner flex items-center justify-center shrink-0">
-                    {item.coverUrl && isVisible ? (
+                    {item.coverUrl ? (
                         <>
                             <img 
                                 src={item.coverUrl} 
                                 alt={item.name} 
-                                onLoad={() => setIsLoaded(true)}
-                                className={`w-full h-full object-cover transition-opacity duration-350 pointer-events-none select-none ${isLoaded ? (isUnavailable ? 'opacity-30' : 'opacity-100') : 'opacity-0'}`}
+                                loading="lazy"
+                                decoding="async"
+                                ref={(el) => {
+                                    if (el && el.complete) {
+                                        el.style.opacity = isUnavailable ? '0.3' : '1';
+                                        const placeholder = el.nextElementSibling as HTMLElement;
+                                        if (placeholder) {
+                                            placeholder.style.opacity = '0';
+                                            placeholder.style.display = 'none';
+                                        }
+                                    }
+                                }}
+                                onLoad={(e) => {
+                                    const img = e.currentTarget;
+                                    img.style.opacity = isUnavailable ? '0.3' : '1';
+                                    const placeholder = img.nextElementSibling as HTMLElement;
+                                    if (placeholder) {
+                                        placeholder.style.opacity = '0';
+                                        setTimeout(() => {
+                                            placeholder.style.display = 'none';
+                                        }, 350);
+                                    }
+                                }}
+                                className="w-full h-full object-cover transition-opacity duration-350 pointer-events-none select-none opacity-0"
                             />
-                            {!isLoaded && (
-                                <div className="absolute inset-0 bg-zinc-300/40 dark:bg-zinc-700/40 animate-pulse flex items-center justify-center">
-                                    <Disc size={48} className="opacity-20 animate-spin" style={{ animationDuration: '3s', color: 'var(--text-primary)' }} />
-                                </div>
-                            )}
+                            <div className="absolute inset-0 bg-zinc-300/40 dark:bg-zinc-700/40 transition-opacity duration-350 flex items-center justify-center">
+                                <Disc size={48} className="opacity-20 animate-spin" style={{ animationDuration: '3s', color: 'var(--text-primary)' }} />
+                            </div>
                         </>
                     ) : (
-                        <div className="absolute inset-0 bg-zinc-300/40 dark:bg-zinc-700/40 animate-pulse flex items-center justify-center">
+                        <div className="absolute inset-0 bg-zinc-300/40 dark:bg-zinc-700/40 flex items-center justify-center">
                             <Disc size={48} className="opacity-20" style={{ color: 'var(--text-primary)' }} />
                         </div>
                     )}
 
                     {/* Unavailable Mask/Badge */}
-                    {isUnavailable && isLoaded && (
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-2 text-center">
+                    {isUnavailable && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-2 text-center z-10">
                             <span className="text-[10px] bg-red-500/80 text-white font-bold px-2 py-1 rounded-full uppercase tracking-wider">
                                 {unavailableTagText || 'UNAVAILABLE'}
                             </span>
                         </div>
                     )}
+
+                    {/* Delete button overlay for Edit Mode */}
+                    <AnimatePresence>
+                        {isEditMode && onRemoveTrack && !isUnavailable && (
+                            <motion.button
+                                key="delete-btn"
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0, opacity: 0 }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRemoveTrack();
+                                }}
+                                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg border border-white/20 z-[60] active:scale-90 transition-transform cursor-pointer"
+                            >
+                                <X size={14} className="stroke-[3]" />
+                            </motion.button>
+                        )}
+                    </AnimatePresence>
                 </div>
 
                 {/* Bottom Polaroid Frame Label Details */}
@@ -226,20 +233,46 @@ const PolaroidCard = React.memo<{
                         <div className="text-xs font-bold tracking-tight opacity-90 max-w-full line-clamp-2 whitespace-normal break-words">
                             {item.subtitle ? `${item.subtitle}. ` : ''}{item.name}
                         </div>
-                        {/* Artists */}
+                        {/* Clickable Artists */}
                         {item.description && (
                             <div className="text-[10px] opacity-55 max-w-full font-medium line-clamp-1 whitespace-normal break-words">
-                                {item.description}
+                                {mode === 'tracks' && onSelectArtist && item.rawTrack?.ar ? (
+                                    <span className="flex gap-1 flex-wrap">
+                                        {item.rawTrack.ar.map((artist, idx) => (
+                                            <span
+                                                key={artist.id}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (artist.id) onSelectArtist(artist.id);
+                                                }}
+                                                className="hover:underline hover:opacity-100 cursor-pointer text-current font-semibold"
+                                            >
+                                                {artist.name}{idx < item.rawTrack.ar.length - 1 ? ',' : ''}
+                                            </span>
+                                        ))}
+                                    </span>
+                                ) : (
+                                    item.description
+                                )}
                             </div>
                         )}
                     </div>
 
                     <div className="flex items-end justify-between mt-auto pt-1.5 w-full">
-                        {/* Left: Album name & Duration */}
+                        {/* Left: Clickable Album name & Duration */}
                         <div className="flex flex-col min-w-0 flex-1 pr-2">
                             {mode === 'tracks' && item.rawTrack && (
                                 <>
-                                    <span className="text-[9px] opacity-35 font-mono line-clamp-1 whitespace-normal break-words max-w-full">
+                                    <span 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const alId = item.rawTrack?.al?.id || item.rawTrack?.album?.id;
+                                            if (alId && onSelectAlbum) {
+                                                onSelectAlbum(alId);
+                                            }
+                                        }}
+                                        className="text-[9px] opacity-35 font-mono line-clamp-1 whitespace-normal break-words max-w-full hover:underline hover:opacity-85 cursor-pointer"
+                                    >
                                         {item.rawTrack.al?.name || item.rawTrack.album?.name || ''}
                                     </span>
                                     <span className="text-[9px] opacity-35 font-mono">
@@ -256,42 +289,41 @@ const PolaroidCard = React.memo<{
 
                         {/* Right: Buttons in bottom right corner */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                            <AnimatePresence>
-                                {isCentered && !isUnavailable && (
-                                    <motion.button
-                                        key="play-btn"
-                                        initial={{ opacity: 0, scale: 0.8 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.8 }}
-                                        transition={{ duration: 0.2, ease: 'easeOut' }}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onSelect();
-                                        }}
-                                        className="w-9 h-9 rounded-full bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/20 dark:hover:bg-zinc-100/20 text-current flex items-center justify-center transition-colors shadow-sm pointer-events-auto z-10"
-                                        title={t('playlist.play') || 'Play'}
-                                    >
-                                        <Play size={15} fill="currentColor" className="ml-0.5" />
-                                    </motion.button>
-                                )}
-                            </AnimatePresence>
-                            {mode === 'tracks' && onAddQueue && !isUnavailable && (
-                                <motion.button
+                            {!isUnavailable && !isEditMode && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onSelect();
+                                    }}
+                                    style={{
+                                        opacity: 'var(--play-opacity, 0)',
+                                        pointerEvents: 'var(--play-pe, none)' as any,
+                                        transform: 'scale(var(--play-scale, 0.8))',
+                                        transition: 'opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, color 0.2s ease',
+                                    }}
+                                    className="w-9 h-9 rounded-full bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/20 dark:hover:bg-zinc-100/20 text-current flex items-center justify-center shadow-sm pointer-events-auto z-10"
+                                    title={t('playlist.play') || 'Play'}
+                                >
+                                    <Play size={15} fill="currentColor" className="ml-0.5" />
+                                </button>
+                            )}
+                            {mode === 'tracks' && onAddQueue && !isUnavailable && !isEditMode && (
+                                <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onAddQueue();
                                     }}
-                                    style={{ opacity: queueButtonOpacity, pointerEvents: queueButtonPointerEvents as any }}
+                                    style={{ opacity: 'var(--queue-opacity, 1)' as any, pointerEvents: 'var(--queue-pe, auto)' as any }}
                                     className="w-9 h-9 rounded-full bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/20 dark:hover:bg-zinc-100/20 text-current flex items-center justify-center transition-colors shadow-sm pointer-events-auto"
                                     title={t('navidrome.addToQueue') || 'Add to Queue'}
                                 >
                                     <Plus size={15} />
-                                </motion.button>
+                                </button>
                             )}
                         </div>
                     </div>
                 </div>
-            </motion.div>
+            </div>
         );
     },
     (prev, next) => {
@@ -299,17 +331,12 @@ const PolaroidCard = React.memo<{
             prev.item.id === next.item.id &&
             prev.item.name === next.item.name &&
             prev.item.coverUrl === next.item.coverUrl &&
-            prev.baseX === next.baseX &&
-            prev.baseY === next.baseY &&
-            prev.isCentered === next.isCentered &&
             prev.isDaylight === next.isDaylight &&
             prev.theme === next.theme &&
             prev.mode === next.mode &&
             prev.cardWidth === next.cardWidth &&
             prev.cardHeight === next.cardHeight &&
-            prev.maxDistance === next.maxDistance &&
-            prev.lodStart === next.lodStart &&
-            prev.lodEnd === next.lodEnd
+            prev.isEditMode === next.isEditMode
         );
     }
 );
@@ -317,7 +344,7 @@ const PolaroidCard = React.memo<{
 export const GridView: React.FC<GridViewProps> = ({
     title,
     subtitle,
-    items,
+    items = [],
     mode,
     onBack,
     onSelectTrack,
@@ -325,11 +352,20 @@ export const GridView: React.FC<GridViewProps> = ({
     onAddTrackToQueue,
     isLoading = false,
     theme,
-    isDaylight
+    isDaylight,
+    collection,
+    onPlayAll,
+    onAddAllToQueue,
+    onSelectAlbum,
+    onSelectArtist,
+    currentUserId,
+    onPlaylistMutated
 }) => {
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
     const [focusedIndex, setFocusedIndex] = useState(0);
+    const lastUpdateRef = useRef(0);
+    const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Track responsive container size to scale grid card dimensions dynamically
     const [containerSize, setContainerSize] = useState(() => {
@@ -419,20 +455,219 @@ export const GridView: React.FC<GridViewProps> = ({
         }
     }, [containerSize.width]);
 
+    // Dynamically calculate visible clipping radius centered on (0,0) viewport coordinates
+    const clipRadius = useMemo(() => {
+        const { width, height } = containerSize;
+        const { cardWidth, cardHeight } = layoutConfig;
+        const viewportRadius = Math.sqrt((width / 2) ** 2 + (height / 2) ** 2);
+        const cardRadius = Math.sqrt(cardWidth ** 2 + cardHeight ** 2) / 2;
+        return viewportRadius + cardRadius + 200; // 200px buffer to prevent visual pop-in during fast drags
+    }, [containerSize, layoutConfig]);
+
+    // Self-loading track states for tracks mode
+    const [tracks, setTracks] = useState<SongResult[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const [offset, setOffset] = useState(0);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [showCutInPanel, setShowCutInPanel] = useState(false);
+
+    const playableTracks = useMemo(() => tracks.filter(track => !isSongMarkedUnavailable(track)), [tracks]);
+    const CACHE_SCHEMA_VERSION = 3;
+
+    const isCloudDrive = collection ? (collection.specialType === 'cloud' || Number(collection.id) === -100) : false;
+    const CACHE_KEY = collection ? (isCloudDrive
+        ? `playlist_tracks_cloud_${currentUserId ?? 'anonymous'}`
+        : `playlist_tracks_${collection.id}`) : '';
+
+    const loadTracks = async (reset = false) => {
+        if (!collection || loading || (!hasMore && !reset)) return;
+        setLoading(true);
+
+        try {
+            const currentOffset = reset ? 0 : offset;
+            const targetTime = collection.trackUpdateTime || collection.updateTime || 0;
+
+            if (reset) {
+                const cached = await getFromCache<{ tracks: SongResult[], snapshotTime: number; schemaVersion?: number; } | SongResult[]>(CACHE_KEY);
+
+                let cachedTracks: SongResult[] = [];
+                let cachedTime = 0;
+                let cachedSchemaVersion = 0;
+
+                if (Array.isArray(cached)) {
+                    cachedTracks = cached;
+                } else if (cached && cached.tracks) {
+                    cachedTracks = cached.tracks;
+                    cachedTime = cached.snapshotTime;
+                    cachedSchemaVersion = cached.schemaVersion ?? 0;
+                }
+
+                if (cachedTracks.length > 0 && targetTime > 0 && cachedTime === targetTime && cachedSchemaVersion === CACHE_SCHEMA_VERSION) {
+                    setTracks(cachedTracks);
+                    setOffset(cachedTracks.length);
+                    setLoading(false);
+                    setHasMore(cachedTracks.length < (collection.trackCount || collection.size || 0));
+                    return;
+                }
+
+                let responseTracks: SongResult[] = [];
+                let hasMoreSync = false;
+
+                if (collection.type === 'album') {
+                    const res = await neteaseApi.getAlbum(Number(collection.id));
+                    if (res.code === 200 && res.songs) {
+                        responseTracks = res.songs.map((song: SongResult) => ({
+                            ...song,
+                            al: { id: res.album.id, name: res.album.name, picUrl: song.al?.picUrl || res.album.picUrl },
+                            album: { id: res.album.id, name: res.album.name, picUrl: song.album?.picUrl || res.album.picUrl }
+                        }));
+                    }
+                } else if (collection.type === 'radio' && collection.id === 'personal_fm') {
+                    const fmRes = await neteaseApi.getPersonalFm();
+                    if (fmRes.data) {
+                        responseTracks = fmRes.data;
+                    }
+                } else {
+                    const res = isCloudDrive
+                        ? await neteaseApi.getUserCloud(150, 0)
+                        : await neteaseApi.getPlaylistTracks(Number(collection.id), 150, 0);
+                    responseTracks = res.songs || [];
+                    hasMoreSync = isCloudDrive ? Boolean(res.hasMore) : responseTracks.length < (collection.trackCount || 0);
+                }
+
+                if (responseTracks.length > 0) {
+                    setTracks(responseTracks);
+                    setOffset(responseTracks.length);
+                    setHasMore(hasMoreSync);
+
+                    saveToCache(CACHE_KEY, { tracks: responseTracks, snapshotTime: targetTime, schemaVersion: CACHE_SCHEMA_VERSION });
+
+                    if (hasMoreSync) {
+                        fetchRemainingTracks(responseTracks, targetTime);
+                    }
+                } else {
+                    setHasMore(false);
+                    setTracks([]);
+                }
+            } else {
+                // Manual Load More
+                if (collection.type !== 'album' && collection.type !== 'radio') {
+                    const res = isCloudDrive
+                        ? await neteaseApi.getUserCloud(1000, currentOffset)
+                        : await neteaseApi.getPlaylistTracks(Number(collection.id), 1000, currentOffset);
+                    if (res.songs && res.songs.length > 0) {
+                        setTracks(prev => {
+                            const combined = [...prev, ...res.songs];
+                            saveToCache(CACHE_KEY, { tracks: combined, snapshotTime: targetTime, schemaVersion: CACHE_SCHEMA_VERSION });
+                            return combined;
+                        });
+                        setOffset(currentOffset + res.songs.length);
+                        setHasMore(isCloudDrive ? Boolean(res.hasMore) : res.songs.length === 1000);
+                    } else {
+                        setHasMore(false);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("GridView failed to load tracks:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchRemainingTracks = async (initialTracks: SongResult[], targetTime: number) => {
+        let currentTracks = [...initialTracks];
+        let currentOffset = initialTracks.length;
+        let fetching = true;
+        let safetyCount = 0;
+        const MAX_LOOPS = 50;
+
+        const totalTracks = collection.trackCount || collection.size || 0;
+
+        while (fetching && currentTracks.length < totalTracks && safetyCount < MAX_LOOPS) {
+            safetyCount++;
+            try {
+                await new Promise(r => setTimeout(r, 100));
+                const res = isCloudDrive
+                    ? await neteaseApi.getUserCloud(1000, currentOffset)
+                    : await neteaseApi.getPlaylistTracks(Number(collection.id), 1000, currentOffset);
+                if (res.songs && res.songs.length > 0) {
+                    const newChunk = res.songs;
+                    currentTracks = [...currentTracks, ...newChunk];
+                    currentOffset += newChunk.length;
+                    setTracks([...currentTracks]);
+                    saveToCache(CACHE_KEY, { tracks: currentTracks, snapshotTime: targetTime, schemaVersion: CACHE_SCHEMA_VERSION });
+
+                    if ((isCloudDrive && !res.hasMore) || (!isCloudDrive && newChunk.length < 1000)) {
+                        fetching = false;
+                    }
+                } else {
+                    fetching = false;
+                }
+            } catch (e) {
+                console.error("GridView background sync failed:", e);
+                fetching = false;
+            }
+        }
+        setHasMore(false);
+    };
+
+    useEffect(() => {
+        if (mode === 'tracks' && collection) {
+            loadTracks(true);
+        }
+    }, [collection?.id]);
+
+    const canEditPlaylist = collection && collection.specialType !== 'cloud' && Boolean(currentUserId && collection.creator?.userId === currentUserId);
+
+    const handleRemoveTrack = async (trackId: number) => {
+        if (!collection) return;
+        try {
+            const isLiked = collection.isLiked || collection.name === '我喜欢的音乐' || collection.specialType === 'liked';
+            if (isLiked) {
+                await neteaseApi.likeSong(trackId, false);
+            } else {
+                await neteaseApi.updatePlaylistTracks('del', collection.id, [trackId]);
+            }
+            const nextTracks = tracks.filter(track => track.id !== trackId);
+            setTracks(nextTracks);
+            await saveToCache(CACHE_KEY, { tracks: nextTracks, snapshotTime: Date.now(), schemaVersion: CACHE_SCHEMA_VERSION });
+            await removeFromCache(`playlist_detail_${collection.id}`);
+            await onPlaylistMutated?.();
+        } catch (error) {
+            console.error('Failed to remove track in GridView', error);
+        }
+    };
+
+    // Build the grid spiral coordinates mapping using responsive spacing
+    const gridItems = useMemo(() => {
+        if (mode === 'collection') {
+            return items || [];
+        }
+        return tracks.map((track, idx) => ({
+            id: `${track.id}-${idx}`,
+            name: formatSongName(track),
+            coverUrl: track.al?.picUrl || track.album?.picUrl,
+            subtitle: String(idx + 1).padStart(2, '0'),
+            description: track.ar?.map(a => a.name).join(', '),
+            rawTrack: track
+        }));
+    }, [mode, items, tracks]);
+
     // Coordinate motion values mapping grid drags
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
 
-    // Build the grid spiral coordinates mapping using responsive spacing
     const baseCoords = useMemo(() => {
-        const cubics = getHexCubicSpiral(items.length);
+        const cubics = getHexCubicSpiral(gridItems.length);
         const { spacingX, spacingY } = layoutConfig;
         return cubics.map((cubic) => {
             const baseX = cubic.x * spacingX + (cubic.z * spacingX) / 2;
             const baseY = cubic.z * spacingY;
             return { baseX, baseY };
         });
-    }, [items.length, layoutConfig]);
+    }, [gridItems.length, layoutConfig]);
 
     // Keep the active focusedIndex centered when baseCoords changes on resize
     useEffect(() => {
@@ -450,7 +685,12 @@ export const GridView: React.FC<GridViewProps> = ({
         const targetX = -baseCoords[index].baseX;
         const targetY = -baseCoords[index].baseY;
 
+        if (pendingTimeoutRef.current) {
+            clearTimeout(pendingTimeoutRef.current);
+            pendingTimeoutRef.current = null;
+        }
         setFocusedIndex(index);
+        lastUpdateRef.current = performance.now();
 
         if (snap) {
             animate(dragX, targetX, { type: 'spring', stiffness: 220, damping: 28 });
@@ -463,62 +703,147 @@ export const GridView: React.FC<GridViewProps> = ({
 
     // Center on the first item initially
     useEffect(() => {
-        if (items.length > 0) {
+        if (gridItems.length > 0) {
             centerOnIndex(0, false);
         }
-    }, [items.length]);
+    }, [gridItems.length]);
 
-    // Track coordinate changes to dynamically update the active centered item HUD
+    // Refs for direct DOM manipulation — eliminates per-card useTransform subscriptions
+    const cardWrapperRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+    // Cleanup throttled state updates on unmount
     useEffect(() => {
-        let frameId: number | null = null;
+        return () => {
+            if (pendingTimeoutRef.current) {
+                clearTimeout(pendingTimeoutRef.current);
+            }
+        };
+    }, []);
 
-        const updateClosestFocus = () => {
-            if (frameId !== null) return;
-            
-            frameId = requestAnimationFrame(() => {
-                frameId = null;
-                const currentX = dragX.get();
-                const currentY = dragY.get();
-                
+    /**
+     * Single centralized rAF loop: subscribes to dragX/dragY ONCE,
+     * batch-updates ALL card DOM styles + tracks focusedIndex.
+     * Replaces ~150 × 7 useTransform callbacks with 1 loop per frame.
+     */
+    useEffect(() => {
+        let rafId: number | null = null;
+
+        const updateFocusedIndexThrottled = (newIndex: number) => {
+            if (pendingTimeoutRef.current) {
+                clearTimeout(pendingTimeoutRef.current);
+                pendingTimeoutRef.current = null;
+            }
+
+            const now = performance.now();
+            const timeSinceLast = now - lastUpdateRef.current;
+
+            if (timeSinceLast >= 200) {
+                setFocusedIndex(newIndex);
+                lastUpdateRef.current = now;
+            } else {
+                const remaining = 200 - timeSinceLast;
+                pendingTimeoutRef.current = setTimeout(() => {
+                    setFocusedIndex(newIndex);
+                    lastUpdateRef.current = performance.now();
+                }, remaining);
+            }
+        };
+
+        const update = () => {
+            if (rafId !== null) return;
+            rafId = requestAnimationFrame(() => {
+                rafId = null;
+                const dx = dragX.get();
+                const dy = dragY.get();
+                const { maxDistance, lodStart, lodEnd } = layoutConfig;
+
                 let closestIdx = 0;
-                let minDist = Infinity;
-                baseCoords.forEach((coord, idx) => {
-                    const dx = coord.baseX + currentX;
-                    const dy = coord.baseY + currentY;
-                    const dist = dx * dx + dy * dy;
-                    if (dist < minDist) {
-                        minDist = dist;
-                        closestIdx = idx;
+                let minDistSq = Infinity;
+
+                for (let i = 0; i < baseCoords.length; i++) {
+                    const coord = baseCoords[i];
+                    const cx = coord.baseX + dx;
+                    const cy = coord.baseY + dy;
+                    const distSq = cx * cx + cy * cy;
+
+                    // Track closest card for focusedIndex
+                    if (distSq < minDistSq) {
+                        minDistSq = distSq;
+                        closestIdx = i;
                     }
-                });
-                
-                setFocusedIndex((prev) => {
-                    if (prev !== closestIdx) {
-                        return closestIdx;
+
+                    const el = cardWrapperRefs.current[i];
+                    if (!el) continue;
+
+                    const dist = Math.sqrt(distSq);
+
+                    // Viewport clipping — skip off-screen cards entirely
+                    if (dist > clipRadius) {
+                        el.style.display = 'none';
+                        continue;
                     }
-                    return prev;
-                });
+
+                    el.style.display = '';
+                    const t = Math.min(dist / maxDistance, 1);
+                    const scale = 1.1 - 0.65 * t;   // lerp(1.1, 0.45, t)
+                    const opac = 1.0 - 0.72 * t;     // lerp(1.0, 0.28, t)
+                    const z = Math.round(50 - 49 * t); // lerp(50, 1, t)
+
+                    el.style.transform = `translate(${coord.baseX}px, ${coord.baseY}px) scale(${scale})`;
+                    el.style.opacity = String(opac);
+                    el.style.zIndex = String(z);
+
+                    // Queue button visibility via CSS custom properties
+                    if (dist > lodEnd) {
+                        el.style.setProperty('--queue-opacity', '0');
+                        el.style.setProperty('--queue-pe', 'none');
+                    } else if (dist < lodStart) {
+                        el.style.setProperty('--queue-opacity', '1');
+                        el.style.setProperty('--queue-pe', 'auto');
+                    } else {
+                        const qt = (dist - lodStart) / (lodEnd - lodStart);
+                        el.style.setProperty('--queue-opacity', String(1 - qt));
+                        el.style.setProperty('--queue-pe', 'auto');
+                    }
+
+                    // Play button visibility via CSS custom properties
+                    if (dist < 40) {
+                        const pt = dist / 40;
+                        el.style.setProperty('--play-opacity', String(1 - pt));
+                        el.style.setProperty('--play-scale', String(1 - 0.2 * pt));
+                        el.style.setProperty('--play-pe', 'auto');
+                    } else {
+                        el.style.setProperty('--play-opacity', '0');
+                        el.style.setProperty('--play-scale', '0.8');
+                        el.style.setProperty('--play-pe', 'none');
+                    }
+                }
+
+                // Update focusedIndex with throttle to eliminate React drag lags
+                updateFocusedIndexThrottled(closestIdx);
             });
         };
 
-        const unsubX = dragX.on('change', updateClosestFocus);
-        const unsubY = dragY.on('change', updateClosestFocus);
+        // Run once immediately to position all cards
+        update();
+
+        const unsubX = dragX.on('change', update);
+        const unsubY = dragY.on('change', update);
         return () => {
             unsubX();
             unsubY();
-            if (frameId !== null) cancelAnimationFrame(frameId);
+            if (rafId !== null) cancelAnimationFrame(rafId);
         };
-    }, [dragX, dragY, baseCoords]);
+    }, [dragX, dragY, baseCoords, layoutConfig, clipRadius]);
 
     // Setup arrow keyboard navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-            // Find current hexagonal coordinate axes neighbors based on direction keys
             if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
                 e.preventDefault();
-                if (items.length === 0) return;
+                if (gridItems.length === 0) return;
 
                 const curr = baseCoords[focusedIndex];
                 let bestNextIdx = focusedIndex;
@@ -530,7 +855,6 @@ export const GridView: React.FC<GridViewProps> = ({
                     const dx = coord.baseX - curr.baseX;
                     const dy = coord.baseY - curr.baseY;
 
-                    // Filter based on directional axis quadrant alignment
                     let isMatch = false;
                     if (e.key === 'ArrowLeft' && dx < -50 && Math.abs(dy) < 180) isMatch = true;
                     if (e.key === 'ArrowRight' && dx > 50 && Math.abs(dy) < 180) isMatch = true;
@@ -554,9 +878,9 @@ export const GridView: React.FC<GridViewProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [focusedIndex, baseCoords, items.length]);
+    }, [focusedIndex, baseCoords, gridItems.length]);
 
-
+    const showLoading = isLoading || (mode === 'tracks' && loading && tracks.length === 0);
 
     return (
         <motion.div
@@ -583,8 +907,22 @@ export const GridView: React.FC<GridViewProps> = ({
                     <ChevronLeft size={20} />
                 </button>
 
-                <div className="text-center">
-                    <h2 className="text-lg font-bold tracking-tight">{title}</h2>
+                <div 
+                    onClick={() => {
+                        if (mode === 'tracks' && collection) {
+                            setShowCutInPanel(!showCutInPanel);
+                        }
+                    }}
+                    className={`text-center flex flex-col items-center select-none pointer-events-auto ${mode === 'tracks' && collection ? 'cursor-pointer hover:opacity-85 active:scale-98 transition-all px-4 py-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/5' : ''}`}
+                >
+                    <h2 className="text-lg font-bold tracking-tight flex items-center gap-1.5 justify-center">
+                        {title}
+                        {mode === 'tracks' && collection && (
+                            <span className="text-[9px] bg-zinc-500/20 text-current px-1.5 py-0.5 rounded-full font-normal opacity-60">
+                                {showCutInPanel ? '收起信息' : '歌单信息'}
+                            </span>
+                        )}
+                    </h2>
                     {subtitle && <p className="text-xs opacity-50 mt-0.5">{subtitle}</p>}
                 </div>
 
@@ -596,14 +934,12 @@ export const GridView: React.FC<GridViewProps> = ({
                 ref={containerRef}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
             >
-
-
-                {isLoading ? (
+                {showLoading ? (
                     <div className="flex flex-col items-center gap-4 opacity-50">
                         <Loader2 className="animate-spin" size={32} />
                         <span className="text-sm font-semibold font-sans">{t('playlist.loading') || 'Loading...'}</span>
                     </div>
-                ) : items.length === 0 ? (
+                ) : gridItems.length === 0 ? (
                     <div className="opacity-40 text-sm font-sans">{t('home.loadingLibrary') || 'No items found'}</div>
                 ) : (
                     <motion.div
@@ -614,52 +950,143 @@ export const GridView: React.FC<GridViewProps> = ({
                         style={{ x: dragX, y: dragY }}
                         className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing"
                     >
-                        {items.map((item, idx) => {
+                        {gridItems.map((item, idx) => {
                             const coord = baseCoords[idx];
                             if (!coord) return null;
 
                             return (
-                                <PolaroidCard
+                                <div
                                     key={item.id}
-                                    item={item}
-                                    baseX={coord.baseX}
-                                    baseY={coord.baseY}
-                                    dragX={dragX}
-                                    dragY={dragY}
-                                    isDaylight={isDaylight}
-                                    theme={theme}
-                                    mode={mode}
-                                    t={t}
-                                    isCentered={focusedIndex === idx}
-                                    cardWidth={layoutConfig.cardWidth}
-                                    cardHeight={layoutConfig.cardHeight}
-                                    maxDistance={layoutConfig.maxDistance}
-                                    lodStart={layoutConfig.lodStart}
-                                    lodEnd={layoutConfig.lodEnd}
-                                    onSelect={() => {
-                                        if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
-                                            const trackList = items
-                                                .map(it => it.rawTrack)
-                                                .filter((it): it is SongResult => !!it);
-                                            onSelectTrack(item.rawTrack, trackList);
-                                        } else if (mode === 'collection' && onSelectCollection) {
-                                            onSelectCollection(item.rawCollection || item);
-                                        }
+                                    ref={(el) => { cardWrapperRefs.current[idx] = el; }}
+                                    className="absolute select-none pointer-events-auto"
+                                    style={{
+                                        transformOrigin: 'center center',
+                                        willChange: 'transform, opacity',
                                     }}
-                                    onCenter={() => centerOnIndex(idx, true)}
-                                    onAddQueue={() => {
-                                        if (mode === 'tracks' && onAddTrackToQueue && item.rawTrack) {
-                                            onAddTrackToQueue(item.rawTrack);
-                                        }
-                                    }}
-                                />
+                                >
+                                    <PolaroidCard
+                                        item={item}
+                                        isDaylight={isDaylight}
+                                        theme={theme}
+                                        mode={mode}
+                                        t={t}
+                                        cardWidth={layoutConfig.cardWidth}
+                                        cardHeight={layoutConfig.cardHeight}
+                                        isEditMode={isEditMode}
+                                        onRemoveTrack={() => {
+                                            if (item.rawTrack) handleRemoveTrack(item.rawTrack.id);
+                                        }}
+                                        onSelectArtist={onSelectArtist}
+                                        onSelectAlbum={onSelectAlbum}
+                                        onSelect={() => {
+                                            if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
+                                                onSelectTrack(item.rawTrack, tracks);
+                                            } else if (mode === 'collection' && onSelectCollection) {
+                                                onSelectCollection(item.rawCollection || item);
+                                            }
+                                        }}
+                                        onCenter={() => centerOnIndex(idx, true)}
+                                        onAddQueue={() => {
+                                            if (mode === 'tracks' && onAddTrackToQueue && item.rawTrack) {
+                                                onAddTrackToQueue(item.rawTrack);
+                                            }
+                                        }}
+                                    />
+                                </div>
                             );
                         })}
                     </motion.div>
                 )}
+
+                {/* Cut-in Info Panel Overlay */}
+                <AnimatePresence>
+                    {showCutInPanel && mode === 'tracks' && collection && (
+                        <motion.div
+                            initial={{ opacity: 0, x: -60, scale: 0.95 }}
+                            animate={{ opacity: 1, x: 0, scale: 1 }}
+                            exit={{ opacity: 0, x: -60, scale: 0.95 }}
+                            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                            className="absolute left-6 top-24 bottom-6 w-80 rounded-3xl z-[80] overflow-hidden flex flex-col p-6 shadow-2xl border border-white/20 dark:border-zinc-800/80 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-2xl pointer-events-auto"
+                            style={{
+                                boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+                            }}
+                        >
+                            {/* Cover Image */}
+                            <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-lg mb-4 bg-zinc-800/20 relative shrink-0">
+                                {(collection.coverImgUrl || collection.coverUrl || collection.picUrl) ? (
+                                    <img src={(collection.coverImgUrl || collection.coverUrl || collection.picUrl).replace('http:', 'https:')} alt={collection.name} className="w-full h-full object-cover select-none pointer-events-none" />
+                                ) : (
+                                    <Disc size={64} className="opacity-20 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                                )}
+                            </div>
+
+                            {/* Title & Creator */}
+                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-4 text-left min-w-0">
+                                <div>
+                                    <h3 className="text-xl font-bold line-clamp-2 leading-snug">{collection.name}</h3>
+                                    {collection.creator && (
+                                        <div className="flex items-center gap-2 mt-2 text-xs opacity-60">
+                                            <div className="w-5 h-5 rounded-full overflow-hidden">
+                                                <img src={collection.creator.avatarUrl?.replace('http:', 'https:')} alt="avatar" className="w-full h-full object-cover" />
+                                            </div>
+                                            <span className="font-semibold">{collection.creator.nickname}</span>
+                                        </div>
+                                    )}
+                                    <div className="text-[10px] opacity-40 mt-1.5">
+                                        {collection.trackCount !== undefined && <span>{collection.trackCount} 首歌</span>}
+                                        {collection.playCount !== undefined && <span> • {collection.playCount} 次播放</span>}
+                                    </div>
+                                </div>
+
+                                {/* Description */}
+                                {collection.description && (
+                                    <p className="text-xs opacity-65 leading-relaxed break-words whitespace-pre-wrap max-h-40 overflow-y-auto pr-1">
+                                        {collection.description}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Buttons Area */}
+                            <div className="space-y-2 mt-4 pt-4 border-t border-zinc-200/20 dark:border-zinc-800/40 shrink-0">
+                                <button
+                                    onClick={() => {
+                                        if (onPlayAll && playableTracks.length > 0) {
+                                            onPlayAll(playableTracks);
+                                        }
+                                    }}
+                                    disabled={playableTracks.length === 0}
+                                    className="w-full py-3 rounded-full font-bold text-xs transition-transform hover:scale-102 active:scale-98 flex items-center justify-center gap-1.5 shadow-md disabled:opacity-40 disabled:hover:scale-100 cursor-pointer"
+                                    style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-color)' }}
+                                >
+                                    <Play size={14} fill="currentColor" />
+                                    播放全部
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (onAddAllToQueue && playableTracks.length > 0) {
+                                            onAddAllToQueue(playableTracks);
+                                        }
+                                    }}
+                                    disabled={playableTracks.length === 0}
+                                    className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/20 dark:hover:bg-zinc-100/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                                >
+                                    <ListPlus size={14} />
+                                    加入队列
+                                </button>
+                                {canEditPlaylist && (
+                                    <button
+                                        onClick={() => setIsEditMode(prev => !prev)}
+                                        className={`w-full py-2.5 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${isEditMode ? 'bg-red-500/20 text-red-500 border border-red-500/30' : 'bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/20 dark:hover:bg-zinc-100/20'}`}
+                                    >
+                                        <Pencil size={14} />
+                                        {isEditMode ? '完成编辑' : '编辑歌单'}
+                                    </button>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
-
-
         </motion.div>
     );
 };

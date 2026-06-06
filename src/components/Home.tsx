@@ -79,6 +79,9 @@ interface HomeProps {
     theme: Theme;
     onOpenSettings?: (initialTab?: 'help' | 'options') => void;
     navidromeEnabled?: boolean;
+    onPlayAll?: (songs: SongResult[]) => void;
+    onAddAllToQueue?: (songs: SongResult[]) => void;
+    onAddSongToQueue?: (song: SongResult) => void;
 }
 
 const Home: React.FC<HomeProps> = ({

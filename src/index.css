@@ -87,3 +87,12 @@ body {
   width: 0;
   height: 0;
 }
+
+/* Polaroid card shake animation for edit mode (GridView) */
+@keyframes polaroid-shake {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-1.2deg); }
+  40% { transform: rotate(1.2deg); }
+  60% { transform: rotate(-1.2deg); }
+  80% { transform: rotate(1.2deg); }
+}
