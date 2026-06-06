@@ -347,7 +347,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     setGridTracks(enriched);
                 }
             } else if (card.type === 'playlist') {
-                const res = await neteaseApi.getPlaylistTracks(Number(card.id), 150, 0);
+                const isCloudDrive = Number(card.id) === -100;
+                const res = isCloudDrive
+                    ? await neteaseApi.getUserCloud(150, 0)
+                    : await neteaseApi.getPlaylistTracks(Number(card.id), 150, 0);
                 if (res.songs) {
                     setGridTracks(res.songs);
                 }
