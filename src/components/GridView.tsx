@@ -366,6 +366,7 @@ export const GridView: React.FC<GridViewProps> = ({
     const [focusedIndex, setFocusedIndex] = useState(0);
     const lastUpdateRef = useRef(0);
     const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const isDraggingRef = useRef(false);
 
     // Track responsive container size to scale grid card dimensions dynamically
     const [containerSize, setContainerSize] = useState(() => {
@@ -947,8 +948,16 @@ export const GridView: React.FC<GridViewProps> = ({
                         dragConstraints={false}
                         dragElastic={0.05}
                         dragTransition={{ power: 0.16, timeConstant: 220 }}
-                        style={{ x: dragX, y: dragY }}
-                        className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing"
+                        onDragStart={() => {
+                            isDraggingRef.current = true;
+                        }}
+                        onDragEnd={() => {
+                            setTimeout(() => {
+                                isDraggingRef.current = false;
+                            }, 50);
+                        }}
+                        style={{ x: dragX, y: dragY, background: 'rgba(0,0,0,0)' }}
+                        className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing bg-transparent"
                     >
                         {gridItems.map((item, idx) => {
                             const coord = baseCoords[idx];
@@ -985,7 +994,10 @@ export const GridView: React.FC<GridViewProps> = ({
                                                 onSelectCollection(item.rawCollection || item);
                                             }
                                         }}
-                                        onCenter={() => centerOnIndex(idx, true)}
+                                        onCenter={() => {
+                                            if (isDraggingRef.current) return;
+                                            centerOnIndex(idx, true);
+                                        }}
                                         onAddQueue={() => {
                                             if (mode === 'tracks' && onAddTrackToQueue && item.rawTrack) {
                                                 onAddTrackToQueue(item.rawTrack);
