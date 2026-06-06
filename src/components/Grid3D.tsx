@@ -82,6 +82,13 @@ interface SelectedCollection {
     subtitle?: string;
 }
 
+const GRID_VIEW_ACTIVE_COLLECTION_KEY = 'folia_gridview_active_collection';
+
+type StoredGridViewCollection = {
+    collection: SelectedCollection;
+    homeViewTab: string;
+};
+
 const compactDescription = (description?: string, maxLength = 72) => {
     if (!description) return '';
     const normalized = description.replace(/\s+/g, ' ').trim();
@@ -376,6 +383,25 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         }));
     }, [radioItems]);
 
+    useEffect(() => {
+        if (selectedCollection) return;
+
+        try {
+            const saved = sessionStorage.getItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
+            if (!saved) return;
+
+            const parsed = JSON.parse(saved) as StoredGridViewCollection;
+            if (parsed?.collection?.id === undefined || parsed.collection.id === null || !parsed.collection.name) return;
+
+            setSelectedCollection(parsed.collection);
+            if (parsed.homeViewTab) {
+                setHomeViewTab(parsed.homeViewTab as any);
+            }
+        } catch {
+            sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
+        }
+    }, [selectedCollection, setHomeViewTab]);
+
     // Active tab list items mapping
     const currentDesktopItems = useMemo(() => {
         if (homeViewTab === 'playlist') return playlistCards;
@@ -386,7 +412,12 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
     // Set the selected collection raw details to trigger GridView in self-loading tracks mode
     const handleSelectCollectionCard = (card: any) => {
-        setSelectedCollection(card.raw || card);
+        const nextCollection = card.raw || card;
+        setSelectedCollection(nextCollection);
+        sessionStorage.setItem(
+            GRID_VIEW_ACTIVE_COLLECTION_KEY,
+            JSON.stringify({ collection: nextCollection, homeViewTab })
+        );
     };
 
     // Generic track click playback bridge
@@ -742,6 +773,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         collection={selectedCollection as any}
                         mode="tracks"
                         onBack={() => {
+                            sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
                             setSelectedCollection(null);
                         }}
                         onSelectTrack={handleSelectTrack}

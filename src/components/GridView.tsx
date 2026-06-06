@@ -44,6 +44,16 @@ interface GridViewProps {
     onPlaylistMutated?: () => Promise<void> | void;
 }
 
+type StoredGridViewNavigationState = {
+    focusedIndex: number;
+    dragX: number;
+    dragY: number;
+    searchQuery: string;
+};
+
+const GRID_VIEW_NAVIGATION_PREFIX = 'folia_gridview_state';
+const GRID_VIEW_LAST_INDEX_PREFIX = 'folia_gridview_last_index';
+
 /**
  * High-performance memoized Polaroid card — pure visual component.
  * All position/scale/opacity/zIndex/display transforms are managed
@@ -102,9 +112,6 @@ const PolaroidCard = React.memo<{
                     width: cardWidth,
                     minHeight: cardHeight,
                     height: 'auto',
-                    animation: isEditMode && !isUnavailable
-                        ? 'polaroid-shake 0.28s ease-in-out infinite'
-                        : 'none',
                 }}
                 onClick={(e) => {
                     if (isEditMode) {
@@ -189,7 +196,7 @@ const PolaroidCard = React.memo<{
                 <div className="w-full flex-1 flex flex-col justify-between pt-3 text-left min-w-0">
                     <div className="space-y-1 mb-2">
                         {/* Index + Title */}
-                        <div className="text-xs font-bold tracking-tight opacity-90 max-w-full line-clamp-2 whitespace-normal break-words">
+                        <div className="text-s font-bold tracking-tight opacity-90 max-w-full line-clamp-2 whitespace-normal break-words">
                             {item.subtitle ? `${item.subtitle}. ` : ''}{item.name}
                         </div>
                         {/* Clickable Artists */}
@@ -332,6 +339,8 @@ export const GridView: React.FC<GridViewProps> = ({
     const pendingBackgroundTracksRef = useRef<SongResult[] | null>(null);
     const pendingBackgroundOffsetRef = useRef(0);
     const wheelTargetRef = useRef({ x: 0, y: 0 });
+    const pendingRestoreStateRef = useRef<StoredGridViewNavigationState | null>(null);
+    const hasRestoredNavigationRef = useRef(false);
 
     // Track responsive container size to scale grid card dimensions dynamically
     const [containerSize, setContainerSize] = useState(() => {
@@ -438,6 +447,18 @@ export const GridView: React.FC<GridViewProps> = ({
         Math.ceil(renderRadius / Math.min(layoutConfig.spacingX, layoutConfig.spacingY)) + 1
     ), [layoutConfig.spacingX, layoutConfig.spacingY, renderRadius]);
 
+    const navigationStorageKey = useMemo(() => {
+        if (mode !== 'tracks' || !collection) return null;
+        const collectionId = collection.id ?? collection.name ?? title;
+        return `${GRID_VIEW_NAVIGATION_PREFIX}_${collectionId}`;
+    }, [collection, mode, title]);
+
+    const lastIndexStorageKey = useMemo(() => {
+        if (mode !== 'tracks' || !collection) return null;
+        const collectionId = collection.id ?? collection.name ?? title;
+        return `${GRID_VIEW_LAST_INDEX_PREFIX}_${collectionId}`;
+    }, [collection, mode, title]);
+
     // Self-loading track states for tracks mode
     const [tracks, setTracks] = useState<SongResult[]>([]);
     const [loading, setLoading] = useState(false);
@@ -453,6 +474,48 @@ export const GridView: React.FC<GridViewProps> = ({
     useEffect(() => {
         focusedIndexRef.current = focusedIndex;
     }, [focusedIndex]);
+
+    useEffect(() => {
+        hasRestoredNavigationRef.current = false;
+        pendingRestoreStateRef.current = null;
+
+        if (!navigationStorageKey) return;
+
+        const savedState = sessionStorage.getItem(navigationStorageKey);
+        const savedIndex = lastIndexStorageKey ? sessionStorage.getItem(lastIndexStorageKey) : null;
+
+        try {
+            if (savedState) {
+                const parsed = JSON.parse(savedState) as Partial<StoredGridViewNavigationState>;
+                pendingRestoreStateRef.current = {
+                    focusedIndex: Number.isFinite(parsed.focusedIndex) ? Number(parsed.focusedIndex) : 0,
+                    dragX: Number.isFinite(parsed.dragX) ? Number(parsed.dragX) : 0,
+                    dragY: Number.isFinite(parsed.dragY) ? Number(parsed.dragY) : 0,
+                    searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
+                };
+            } else if (savedIndex) {
+                const parsedIndex = parseInt(savedIndex, 10);
+                pendingRestoreStateRef.current = {
+                    focusedIndex: Number.isFinite(parsedIndex) ? parsedIndex : 0,
+                    dragX: Number.NaN,
+                    dragY: Number.NaN,
+                    searchQuery: '',
+                };
+            }
+
+            const pendingSearchQuery = pendingRestoreStateRef.current?.searchQuery ?? '';
+            if (pendingSearchQuery) {
+                setShowSearchPanel(true);
+                setDraftSearchQuery(pendingSearchQuery);
+                setSearchQuery(pendingSearchQuery);
+            }
+        } catch {
+            sessionStorage.removeItem(navigationStorageKey);
+            if (lastIndexStorageKey) {
+                sessionStorage.removeItem(lastIndexStorageKey);
+            }
+        }
+    }, [lastIndexStorageKey, navigationStorageKey]);
 
     useEffect(() => {
         if (!showSearchPanel) return;
@@ -695,6 +758,23 @@ export const GridView: React.FC<GridViewProps> = ({
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
 
+    const persistNavigationState = useCallback((index: number) => {
+        if (!navigationStorageKey) return;
+
+        const safeIndex = Math.max(0, Math.min(index, Math.max(gridItems.length - 1, 0)));
+        const state: StoredGridViewNavigationState = {
+            focusedIndex: safeIndex,
+            dragX: dragX.get(),
+            dragY: dragY.get(),
+            searchQuery,
+        };
+
+        sessionStorage.setItem(navigationStorageKey, JSON.stringify(state));
+        if (lastIndexStorageKey) {
+            sessionStorage.setItem(lastIndexStorageKey, String(safeIndex));
+        }
+    }, [dragX, dragY, gridItems.length, lastIndexStorageKey, navigationStorageKey, searchQuery]);
+
     useEffect(() => {
         const syncWheelTarget = () => {
             wheelTargetRef.current = { x: dragX.get(), y: dragY.get() };
@@ -756,6 +836,36 @@ export const GridView: React.FC<GridViewProps> = ({
         }
     };
 
+    useEffect(() => {
+        if (hasRestoredNavigationRef.current) return;
+
+        const pendingState = pendingRestoreStateRef.current;
+        if (!pendingState || gridItems.length === 0 || baseCoords.length === 0) return;
+        if (pendingState.searchQuery && deferredSearchQuery !== pendingState.searchQuery) return;
+
+        const restoredIndex = Math.max(0, Math.min(pendingState.focusedIndex, gridItems.length - 1));
+        const restoredCoord = baseCoords[restoredIndex];
+        if (!restoredCoord) return;
+
+        const restoredX = Number.isFinite(pendingState.dragX)
+            ? pendingState.dragX
+            : -restoredCoord.baseX;
+        const restoredY = Number.isFinite(pendingState.dragY)
+            ? pendingState.dragY
+            : -restoredCoord.baseY;
+
+        setFocusedIndex(restoredIndex);
+        focusedIndexRef.current = restoredIndex;
+        lastUpdateRef.current = performance.now();
+        dragX.set(restoredX);
+        dragY.set(restoredY);
+        wheelTargetRef.current = { x: restoredX, y: restoredY };
+        updateRenderedIndexesForViewport(restoredX, restoredY, true);
+
+        hasRestoredNavigationRef.current = true;
+        pendingRestoreStateRef.current = null;
+    }, [baseCoords, deferredSearchQuery, dragX, dragY, gridItems.length, updateRenderedIndexesForViewport]);
+
     const handleViewportWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
         if (gridItems.length === 0 || event.ctrlKey) return;
 
@@ -782,6 +892,7 @@ export const GridView: React.FC<GridViewProps> = ({
 
     // Center on the first item initially
     useEffect(() => {
+        if (pendingRestoreStateRef.current && !hasRestoredNavigationRef.current) return;
         if (gridItems.length > 0) {
             centerOnIndex(0, false);
         }
@@ -873,6 +984,7 @@ export const GridView: React.FC<GridViewProps> = ({
                         onSelectAlbum={onSelectAlbum}
                         onSelect={() => {
                             if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
+                                persistNavigationState(idx);
                                 onSelectTrack(item.rawTrack, tracks);
                             } else if (mode === 'collection' && onSelectCollection) {
                                 onSelectCollection(item.rawCollection || item);
@@ -910,7 +1022,8 @@ export const GridView: React.FC<GridViewProps> = ({
         onSelectArtist,
         onSelectAlbum,
         onAddTrackToQueue,
-        handleRemoveTrack
+        handleRemoveTrack,
+        persistNavigationState
     ]);
 
     // Refs for direct DOM manipulation — eliminates per-card useTransform subscriptions
@@ -1108,7 +1221,15 @@ export const GridView: React.FC<GridViewProps> = ({
             {/* Top Floating Glass Header */}
             <div className="w-full flex items-center justify-between px-6 py-5 z-[70] bg-gradient-to-b from-black/10 to-transparent pointer-events-none">
                 <button
-                    onClick={onBack}
+                    onClick={() => {
+                        if (navigationStorageKey) {
+                            sessionStorage.removeItem(navigationStorageKey);
+                        }
+                        if (lastIndexStorageKey) {
+                            sessionStorage.removeItem(lastIndexStorageKey);
+                        }
+                        onBack();
+                    }}
                     className="w-10 h-10 rounded-full flex items-center justify-center transition-all pointer-events-auto shadow-lg hover:scale-105 active:scale-95"
                     style={{
                         backgroundColor: isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)',
