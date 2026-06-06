@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, X } from 'lucide-react';
+import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme } from '../types';
 import { isSongMarkedUnavailable, getSongUnavailableTagText, neteaseApi } from '../services/netease';
@@ -12,7 +12,8 @@ import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 
 interface GridItem {
     id: string | number;
-    name: string;
+    name: React.ReactNode;
+    searchText?: string;
     coverUrl?: string;
     subtitle?: string;
     description?: string;
@@ -323,11 +324,14 @@ export const GridView: React.FC<GridViewProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const [focusedIndex, setFocusedIndex] = useState(0);
     const focusedIndexRef = useRef(0);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
+    const isComposingSearchRef = useRef(false);
     const lastUpdateRef = useRef(0);
     const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isDraggingRef = useRef(false);
     const pendingBackgroundTracksRef = useRef<SongResult[] | null>(null);
     const pendingBackgroundOffsetRef = useRef(0);
+    const wheelTargetRef = useRef({ x: 0, y: 0 });
 
     // Track responsive container size to scale grid card dimensions dynamically
     const [containerSize, setContainerSize] = useState(() => {
@@ -441,10 +445,23 @@ export const GridView: React.FC<GridViewProps> = ({
     const [offset, setOffset] = useState(0);
     const [isEditMode, setIsEditMode] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
+    const [showSearchPanel, setShowSearchPanel] = useState(false);
+    const [draftSearchQuery, setDraftSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const deferredSearchQuery = useDeferredValue(searchQuery);
 
     useEffect(() => {
         focusedIndexRef.current = focusedIndex;
     }, [focusedIndex]);
+
+    useEffect(() => {
+        if (!showSearchPanel) return;
+        const id = requestAnimationFrame(() => {
+            searchInputRef.current?.focus();
+            searchInputRef.current?.setSelectionRange(draftSearchQuery.length, draftSearchQuery.length);
+        });
+        return () => cancelAnimationFrame(id);
+    }, [draftSearchQuery.length, showSearchPanel]);
 
     const playableTracks = useMemo(() => tracks.filter(track => !isSongMarkedUnavailable(track)), [tracks]);
     const CACHE_SCHEMA_VERSION = 3;
@@ -633,13 +650,18 @@ export const GridView: React.FC<GridViewProps> = ({
     }, [collection, tracks, CACHE_KEY, onPlaylistMutated]);
 
     // Build the grid spiral coordinates mapping using responsive spacing
-    const gridItems = useMemo(() => {
+    const allGridItems = useMemo(() => {
         if (mode === 'collection') {
             return items || [];
         }
         return tracks.map((track, idx) => ({
             id: `${track.id}-${idx}`,
             name: formatSongName(track),
+            searchText: [
+                track.name,
+                track.alia?.join(' '),
+                track.tns?.join(' '),
+            ].filter(Boolean).join(' '),
             coverUrl: track.al?.picUrl || track.album?.picUrl,
             subtitle: String(idx + 1).padStart(2, '0'),
             description: track.ar?.map(a => a.name).join(', '),
@@ -647,9 +669,43 @@ export const GridView: React.FC<GridViewProps> = ({
         }));
     }, [mode, items, tracks]);
 
+    const gridItems = useMemo(() => {
+        const query = deferredSearchQuery.trim().toLowerCase();
+        if (!query) return allGridItems;
+
+        return allGridItems.filter((item) => {
+            const track = item.rawTrack;
+            const searchableText = [
+                item.searchText,
+                typeof item.name === 'string' ? item.name : undefined,
+                item.description,
+                track?.al?.name,
+                track?.album?.name,
+                track?.ar?.map((artist) => artist.name).join(' '),
+            ]
+                .filter((value) => value !== undefined && value !== null)
+                .join(' ')
+                .toLowerCase();
+
+            return searchableText.includes(query);
+        });
+    }, [allGridItems, deferredSearchQuery]);
+
     // Coordinate motion values mapping grid drags
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
+
+    useEffect(() => {
+        const syncWheelTarget = () => {
+            wheelTargetRef.current = { x: dragX.get(), y: dragY.get() };
+        };
+        const unsubX = dragX.on('change', syncWheelTarget);
+        const unsubY = dragY.on('change', syncWheelTarget);
+        return () => {
+            unsubX();
+            unsubY();
+        };
+    }, [dragX, dragY]);
 
     const {
         coords: baseCoords,
@@ -700,12 +756,71 @@ export const GridView: React.FC<GridViewProps> = ({
         }
     };
 
+    const handleViewportWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+        if (gridItems.length === 0 || event.ctrlKey) return;
+
+        event.preventDefault();
+        const deltaScale = (event.deltaMode === 1
+            ? 32
+            : event.deltaMode === 2
+                ? Math.max(containerSize.height, 1)
+                : 1) * 2.8;
+        const horizontalDelta = event.shiftKey && Math.abs(event.deltaX) < 1
+            ? event.deltaY
+            : event.deltaX;
+        const verticalDelta = event.shiftKey && Math.abs(event.deltaX) < 1
+            ? 0
+            : event.deltaY;
+
+        const targetX = wheelTargetRef.current.x - horizontalDelta * deltaScale;
+        const targetY = wheelTargetRef.current.y - verticalDelta * deltaScale;
+        wheelTargetRef.current = { x: targetX, y: targetY };
+
+        animate(dragX, targetX, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
+        animate(dragY, targetY, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
+    }, [containerSize.height, dragX, dragY, gridItems.length]);
+
     // Center on the first item initially
     useEffect(() => {
         if (gridItems.length > 0) {
             centerOnIndex(0, false);
         }
-    }, [gridItems.length]);
+    }, [deferredSearchQuery, gridItems.length]);
+
+    useEffect(() => {
+        const handleSearchTyping = (event: KeyboardEvent) => {
+            const target = event.target;
+            if (
+                target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                (target instanceof HTMLElement && target.isContentEditable)
+            ) {
+                return;
+            }
+
+            if (event.key === 'Escape' && showSearchPanel) {
+                setShowSearchPanel(false);
+                setDraftSearchQuery('');
+                setSearchQuery('');
+                return;
+            }
+
+            if (event.altKey || event.ctrlKey || event.metaKey) return;
+            if (event.key === 'Process' || event.key === 'Unidentified') {
+                setShowSearchPanel(true);
+                return;
+            }
+            if (event.key.length !== 1) return;
+
+            event.preventDefault();
+            setShowSearchPanel(true);
+            setDraftSearchQuery(event.key);
+            setSearchQuery(event.key);
+        };
+
+        window.addEventListener('keydown', handleSearchTyping);
+        return () => window.removeEventListener('keydown', handleSearchTyping);
+    }, [showSearchPanel]);
 
     useEffect(() => {
         updateRenderedIndexesForViewport(dragX.get(), dragY.get(), true);
@@ -976,6 +1091,7 @@ export const GridView: React.FC<GridViewProps> = ({
     }, [focusedIndex, baseCoords, gridItems.length]);
 
     const showLoading = isLoading || (mode === 'tracks' && loading && tracks.length === 0);
+    const hasSearchQuery = deferredSearchQuery.trim().length > 0;
 
     return (
         <motion.div
@@ -1027,15 +1143,78 @@ export const GridView: React.FC<GridViewProps> = ({
             {/* Honeycomb Drag/Viewport Canvas Area */}
             <div
                 ref={containerRef}
+                onWheel={handleViewportWheel}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
             >
+                <AnimatePresence>
+                    {showSearchPanel && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -12, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                            className="absolute top-6 left-1/2 z-[85] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 pointer-events-auto"
+                        >
+                            <div className="relative rounded-full border border-white/15 bg-white/75 dark:bg-zinc-950/75 shadow-2xl backdrop-blur-2xl">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 opacity-40 w-4 h-4" />
+                                <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    value={draftSearchQuery}
+                                    onChange={(event) => {
+                                        const nextValue = event.target.value;
+                                        setDraftSearchQuery(nextValue);
+                                        if (!isComposingSearchRef.current) {
+                                            setSearchQuery(nextValue);
+                                        }
+                                    }}
+                                    onCompositionStart={() => {
+                                        isComposingSearchRef.current = true;
+                                    }}
+                                    onCompositionEnd={(event) => {
+                                        isComposingSearchRef.current = false;
+                                        const nextValue = event.currentTarget.value;
+                                        setDraftSearchQuery(nextValue);
+                                        setSearchQuery(nextValue);
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Escape') {
+                                            setShowSearchPanel(false);
+                                            setDraftSearchQuery('');
+                                            setSearchQuery('');
+                                        }
+                                    }}
+                                    placeholder={t('home.gridSearchPlaceholder') || 'Filter songs...'}
+                                    className="w-full rounded-full bg-transparent py-3 pl-11 pr-11 text-sm font-medium outline-none placeholder:text-current placeholder:opacity-40"
+                                    style={{ color: 'var(--text-primary)' }}
+                                />
+                                {draftSearchQuery && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDraftSearchQuery('');
+                                            setSearchQuery('');
+                                            searchInputRef.current?.focus();
+                                        }}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-45 transition-opacity hover:opacity-90"
+                                        aria-label="Clear"
+                                    >
+                                        <X size={15} />
+                                    </button>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
                 {showLoading ? (
                     <div className="flex flex-col items-center gap-4 opacity-50">
                         <Loader2 className="animate-spin" size={32} />
                         <span className="text-sm font-semibold font-sans">{t('playlist.loading') || 'Loading...'}</span>
                     </div>
                 ) : gridItems.length === 0 ? (
-                    <div className="opacity-40 text-sm font-sans">{t('home.loadingLibrary') || 'No items found'}</div>
+                    <div className="opacity-40 text-sm font-sans">
+                        {hasSearchQuery ? (t('home.gridSearchNoResults') || 'No matching cards') : (t('home.loadingLibrary') || 'No items found')}
+                    </div>
                 ) : (
                     <motion.div
                         drag

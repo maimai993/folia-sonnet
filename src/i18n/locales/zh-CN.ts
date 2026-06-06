@@ -220,6 +220,8 @@ export default {
     "searchDatabase": "搜索在线歌曲...",
     "searchLocal": "搜索本地歌曲...",
     "searchNavidrome": "搜索navidrome...",
+    "gridSearchPlaceholder": "过滤歌曲...",
+    "gridSearchNoResults": "没有匹配的歌曲",
     "login": "登录",
     "welcomeBack": "欢迎回来",
     "guestTitle": "先搜几首喜欢的歌试试看",

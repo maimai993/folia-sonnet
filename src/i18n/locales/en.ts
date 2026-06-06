@@ -220,6 +220,8 @@ export default {
     "searchDatabase": "SEARCH DATABASE...",
     "searchLocal": "Search local songs...",
     "searchNavidrome": "Search navidrome",
+    "gridSearchPlaceholder": "Filter songs...",
+    "gridSearchNoResults": "No matching songs",
     "login": "Login",
     "welcomeBack": "Welcome Back",
     "guestTitle": "Try searching a few songs first",
