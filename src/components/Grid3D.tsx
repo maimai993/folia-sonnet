@@ -5,18 +5,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
-import { SongResult, UnifiedSong, NeteaseUser, NeteasePlaylist, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState } from '../types';
+import { SongResult, NeteaseUser, NeteasePlaylist, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState } from '../types';
 import { neteaseApi, isSongMarkedUnavailable } from '../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import LocalMusicView from './LocalMusicView';
 import NavidromeMusicView from './navidrome/NavidromeMusicView';
-import GridView from './GridView';
 import GridMap from './GridMap';
 import { formatSongName } from '../utils/songNameFormatter';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
-// Supports cover sliding with auto-fading header controls and opens songs in GridView.
+// Supports cover sliding with auto-fading header controls and delegates GridView opening upward.
 
 interface Grid3DProps {
     onPlaySong: (song: SongResult, playlistCtx?: SongResult[], isFmCall?: boolean) => void;
@@ -72,22 +71,8 @@ interface Grid3DProps {
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
     onAddSongToQueue?: (song: SongResult) => void;
+    onOpenGridView?: (collection: any) => void;
 }
-
-interface SelectedCollection {
-    id: string | number;
-    name: string;
-    coverUrl?: string;
-    type: 'playlist' | 'album' | 'radio' | 'local-album' | 'local-playlist' | 'navidrome-album' | 'navidrome-playlist';
-    subtitle?: string;
-}
-
-const GRID_VIEW_ACTIVE_COLLECTION_KEY = 'folia_gridview_active_collection';
-
-type StoredGridViewCollection = {
-    collection: SelectedCollection;
-    homeViewTab: string;
-};
 
 const compactDescription = (description?: string, maxLength = 72) => {
     if (!description) return '';
@@ -97,16 +82,11 @@ const compactDescription = (description?: string, maxLength = 72) => {
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const {
-        onPlaySong,
         onBackToPlayer,
-        onRefreshUser,
         user,
         playlists,
         cloudPlaylist = null,
         currentTrack,
-        onSelectPlaylist,
-        onSelectAlbum,
-        onSelectArtist,
         onSelectLocalAlbum,
         onSelectLocalArtist,
         localSongs,
@@ -128,9 +108,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         theme,
         onOpenSettings,
         navidromeEnabled = false,
-        onPlayAll,
-        onAddAllToQueue,
-        onAddSongToQueue,
+        onOpenGridView,
     } = props;
 
     const { t } = useTranslation();
@@ -168,10 +146,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         }
     }, [homeViewTab]);
 
-    // Detail Grid states
-    const [selectedCollection, setSelectedCollection] = useState<SelectedCollection | null>(null);
-    const [loadingTracks, setLoadingTracks] = useState(false);
-    const [gridTracks, setGridTracks] = useState<SongResult[]>([]);
     const [showCollectionGrid, setShowCollectionGrid] = useState(false);
 
     // Netease details
@@ -383,25 +357,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         }));
     }, [radioItems]);
 
-    useEffect(() => {
-        if (selectedCollection) return;
-
-        try {
-            const saved = sessionStorage.getItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
-            if (!saved) return;
-
-            const parsed = JSON.parse(saved) as StoredGridViewCollection;
-            if (parsed?.collection?.id === undefined || parsed.collection.id === null || !parsed.collection.name) return;
-
-            setSelectedCollection(parsed.collection);
-            if (parsed.homeViewTab) {
-                setHomeViewTab(parsed.homeViewTab as any);
-            }
-        } catch {
-            sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
-        }
-    }, [selectedCollection, setHomeViewTab]);
-
     // Active tab list items mapping
     const currentDesktopItems = useMemo(() => {
         if (homeViewTab === 'playlist') return playlistCards;
@@ -410,30 +365,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         return [];
     }, [homeViewTab, playlistCards, albumCards, radioCards]);
 
-    // Set the selected collection raw details to trigger GridView in self-loading tracks mode
+    // Delegate GridView opening to the app-level host so Grid3D remains only the home surface.
     const handleSelectCollectionCard = (card: any) => {
-        const nextCollection = card.raw || card;
-        setSelectedCollection(nextCollection);
-        sessionStorage.setItem(
-            GRID_VIEW_ACTIVE_COLLECTION_KEY,
-            JSON.stringify({ collection: nextCollection, homeViewTab })
-        );
-    };
-
-    // Generic track click playback bridge
-    const handleSelectTrack = (track: SongResult, queue: SongResult[]) => {
-        const ut = track as UnifiedSong;
-        if (ut.isNavidrome) {
-            if (onPlayNavidromeSong) {
-                onPlayNavidromeSong(ut as any, queue as any);
-            }
-        } else if (ut.isLocal) {
-            if (onPlayLocalSong) {
-                onPlayLocalSong(ut as any, queue as any);
-            }
-        } else {
-            onPlaySong(track, queue);
-        }
+        onOpenGridView?.(card.raw || card);
     };
 
     // Search committed callback
@@ -764,42 +698,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     </div>
                 )}
             </div>
-
-            <AnimatePresence>
-                {selectedCollection && (
-                    <GridView
-                        title={selectedCollection.name}
-                        subtitle={(selectedCollection as any).creator?.nickname || (selectedCollection as any).artists?.[0]?.name || (selectedCollection as any).description || ''}
-                        collection={selectedCollection as any}
-                        mode="tracks"
-                        onBack={() => {
-                            sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
-                            setSelectedCollection(null);
-                        }}
-                        onSelectTrack={handleSelectTrack}
-                        onAddTrackToQueue={(track) => {
-                            const ut = track as UnifiedSong;
-                            if (ut.isLocal && ut.localData) {
-                                if (onAddLocalSongToQueue) {
-                                    onAddLocalSongToQueue(ut.localData);
-                                }
-                            } else {
-                                if (onAddSongToQueue) {
-                                    onAddSongToQueue(track);
-                                }
-                            }
-                        }}
-                        onPlayAll={onPlayAll}
-                        onAddAllToQueue={onAddAllToQueue}
-                        onSelectAlbum={onSelectAlbum}
-                        onSelectArtist={onSelectArtist}
-                        currentUserId={user?.userId}
-                        onPlaylistMutated={onRefreshUser}
-                        theme={theme}
-                        isDaylight={isDaylight}
-                    />
-                )}
-            </AnimatePresence>
 
             {/* Collection Grid View (All Items GridMap) */}
             <AnimatePresence>

@@ -46,6 +46,7 @@ interface GridViewProps {
 
 type StoredGridViewNavigationState = {
     focusedIndex: number;
+    focusedTrackId?: string | number;
     dragX: number;
     dragY: number;
     searchQuery: string;
@@ -489,6 +490,7 @@ export const GridView: React.FC<GridViewProps> = ({
                 const parsed = JSON.parse(savedState) as Partial<StoredGridViewNavigationState>;
                 pendingRestoreStateRef.current = {
                     focusedIndex: Number.isFinite(parsed.focusedIndex) ? Number(parsed.focusedIndex) : 0,
+                    focusedTrackId: parsed.focusedTrackId,
                     dragX: Number.isFinite(parsed.dragX) ? Number(parsed.dragX) : 0,
                     dragY: Number.isFinite(parsed.dragY) ? Number(parsed.dragY) : 0,
                     searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
@@ -762,8 +764,10 @@ export const GridView: React.FC<GridViewProps> = ({
         if (!navigationStorageKey) return;
 
         const safeIndex = Math.max(0, Math.min(index, Math.max(gridItems.length - 1, 0)));
+        const focusedItem = gridItems[safeIndex];
         const state: StoredGridViewNavigationState = {
             focusedIndex: safeIndex,
+            focusedTrackId: focusedItem?.rawTrack?.id,
             dragX: dragX.get(),
             dragY: dragY.get(),
             searchQuery,
@@ -843,16 +847,17 @@ export const GridView: React.FC<GridViewProps> = ({
         if (!pendingState || gridItems.length === 0 || baseCoords.length === 0) return;
         if (pendingState.searchQuery && deferredSearchQuery !== pendingState.searchQuery) return;
 
-        const restoredIndex = Math.max(0, Math.min(pendingState.focusedIndex, gridItems.length - 1));
+        const trackIndex = pendingState.focusedTrackId === undefined
+            ? -1
+            : gridItems.findIndex(item => String(item.rawTrack?.id) === String(pendingState.focusedTrackId));
+        const restoredIndex = trackIndex >= 0
+            ? trackIndex
+            : Math.max(0, Math.min(pendingState.focusedIndex, gridItems.length - 1));
         const restoredCoord = baseCoords[restoredIndex];
         if (!restoredCoord) return;
 
-        const restoredX = Number.isFinite(pendingState.dragX)
-            ? pendingState.dragX
-            : -restoredCoord.baseX;
-        const restoredY = Number.isFinite(pendingState.dragY)
-            ? pendingState.dragY
-            : -restoredCoord.baseY;
+        const restoredX = -restoredCoord.baseX;
+        const restoredY = -restoredCoord.baseY;
 
         setFocusedIndex(restoredIndex);
         focusedIndexRef.current = restoredIndex;
@@ -893,6 +898,7 @@ export const GridView: React.FC<GridViewProps> = ({
     // Center on the first item initially
     useEffect(() => {
         if (pendingRestoreStateRef.current && !hasRestoredNavigationRef.current) return;
+        if (hasRestoredNavigationRef.current) return;
         if (gridItems.length > 0) {
             centerOnIndex(0, false);
         }
