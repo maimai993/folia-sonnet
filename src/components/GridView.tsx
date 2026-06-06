@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,13 @@ import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { formatSongName } from '../utils/songNameFormatter';
 import { colorWithAlpha } from './visualizer/colorMix';
 import { saveToCache, getFromCache, removeFromCache } from '../services/db';
+import {
+    areIndexListsEqual,
+    pixelToCubeCenter,
+    resolveVisibleHexIndexes,
+    toCubeKey,
+    type HexGridCoord,
+} from './gridView/hexViewport';
 
 interface GridItem {
     id: string | number;
@@ -364,9 +371,12 @@ export const GridView: React.FC<GridViewProps> = ({
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
     const [focusedIndex, setFocusedIndex] = useState(0);
+    const focusedIndexRef = useRef(0);
     const lastUpdateRef = useRef(0);
     const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isDraggingRef = useRef(false);
+    const pendingBackgroundTracksRef = useRef<SongResult[] | null>(null);
+    const pendingBackgroundOffsetRef = useRef(0);
 
     // Track responsive container size to scale grid card dimensions dynamically
     const [containerSize, setContainerSize] = useState(() => {
@@ -465,6 +475,14 @@ export const GridView: React.FC<GridViewProps> = ({
         return viewportRadius + cardRadius + 200; // 200px buffer to prevent visual pop-in during fast drags
     }, [containerSize, layoutConfig]);
 
+    const renderRadius = useMemo(() => (
+        clipRadius + Math.max(layoutConfig.spacingX, layoutConfig.spacingY) * 1.5
+    ), [clipRadius, layoutConfig.spacingX, layoutConfig.spacingY]);
+
+    const renderRing = useMemo(() => (
+        Math.ceil(renderRadius / Math.min(layoutConfig.spacingX, layoutConfig.spacingY)) + 1
+    ), [layoutConfig.spacingX, layoutConfig.spacingY, renderRadius]);
+
     // Self-loading track states for tracks mode
     const [tracks, setTracks] = useState<SongResult[]>([]);
     const [loading, setLoading] = useState(false);
@@ -473,6 +491,10 @@ export const GridView: React.FC<GridViewProps> = ({
     const [isEditMode, setIsEditMode] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
 
+    useEffect(() => {
+        focusedIndexRef.current = focusedIndex;
+    }, [focusedIndex]);
+
     const playableTracks = useMemo(() => tracks.filter(track => !isSongMarkedUnavailable(track)), [tracks]);
     const CACHE_SCHEMA_VERSION = 3;
 
@@ -480,6 +502,15 @@ export const GridView: React.FC<GridViewProps> = ({
     const CACHE_KEY = collection ? (isCloudDrive
         ? `playlist_tracks_cloud_${currentUserId ?? 'anonymous'}`
         : `playlist_tracks_${collection.id}`) : '';
+
+    const flushPendingBackgroundTracks = useCallback(() => {
+        const pendingTracks = pendingBackgroundTracksRef.current;
+        if (!pendingTracks) return;
+
+        pendingBackgroundTracksRef.current = null;
+        setTracks(pendingTracks);
+        setOffset(pendingBackgroundOffsetRef.current);
+    }, []);
 
     const loadTracks = async (reset = false) => {
         if (!collection || loading || (!hasMore && !reset)) return;
@@ -490,6 +521,8 @@ export const GridView: React.FC<GridViewProps> = ({
             const targetTime = collection.trackUpdateTime || collection.updateTime || 0;
 
             if (reset) {
+                pendingBackgroundTracksRef.current = null;
+                pendingBackgroundOffsetRef.current = 0;
                 const cached = await getFromCache<{ tracks: SongResult[], snapshotTime: number; schemaVersion?: number; } | SongResult[]>(CACHE_KEY);
 
                 let cachedTracks: SongResult[] = [];
@@ -597,7 +630,14 @@ export const GridView: React.FC<GridViewProps> = ({
                     const newChunk = res.songs;
                     currentTracks = [...currentTracks, ...newChunk];
                     currentOffset += newChunk.length;
-                    setTracks([...currentTracks]);
+                    const nextTracks = [...currentTracks];
+                    if (isDraggingRef.current) {
+                        pendingBackgroundTracksRef.current = nextTracks;
+                        pendingBackgroundOffsetRef.current = currentOffset;
+                    } else {
+                        setTracks(nextTracks);
+                        setOffset(currentOffset);
+                    }
                     saveToCache(CACHE_KEY, { tracks: currentTracks, snapshotTime: targetTime, schemaVersion: CACHE_SCHEMA_VERSION });
 
                     if ((isCloudDrive && !res.hasMore) || (!isCloudDrive && newChunk.length < 1000)) {
@@ -660,15 +700,78 @@ export const GridView: React.FC<GridViewProps> = ({
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
 
-    const baseCoords = useMemo(() => {
+    const baseCoords = useMemo<HexGridCoord[]>(() => {
         const cubics = getHexCubicSpiral(gridItems.length);
         const { spacingX, spacingY } = layoutConfig;
-        return cubics.map((cubic) => {
+        return cubics.map((cubic, index) => {
             const baseX = cubic.x * spacingX + (cubic.z * spacingX) / 2;
             const baseY = cubic.z * spacingY;
-            return { baseX, baseY };
+            return { index, cube: cubic, baseX, baseY };
         });
     }, [gridItems.length, layoutConfig]);
+
+    const coordByKey = useMemo(() => {
+        return new Map(baseCoords.map((coord) => [toCubeKey(coord.cube), coord.index]));
+    }, [baseCoords]);
+
+    const [renderedIndexes, setRenderedIndexes] = useState<number[]>([]);
+    const renderedIndexesRef = useRef<number[]>([]);
+    const lastVisibleCenterKeyRef = useRef('');
+
+    useEffect(() => {
+        renderedIndexesRef.current = renderedIndexes;
+    }, [renderedIndexes]);
+
+    const updateRenderedIndexesForViewport = useCallback((dx = dragX.get(), dy = dragY.get(), force = false) => {
+        if (baseCoords.length === 0) {
+            if (renderedIndexesRef.current.length > 0) {
+                renderedIndexesRef.current = [];
+                setRenderedIndexes([]);
+            }
+            return;
+        }
+
+        const worldX = -dx;
+        const worldY = -dy;
+        const centerCube = pixelToCubeCenter(worldX, worldY, layoutConfig.spacingX, layoutConfig.spacingY);
+        const centerKey = toCubeKey(centerCube);
+        if (!force && centerKey === lastVisibleCenterKeyRef.current) return;
+
+        const nextIndexes = resolveVisibleHexIndexes(
+            centerCube,
+            renderRing,
+            coordByKey,
+            baseCoords,
+            worldX,
+            worldY,
+            renderRadius
+        );
+
+        const fallbackFocusedIndex = focusedIndexRef.current;
+        if (nextIndexes.length === 0 && fallbackFocusedIndex >= 0 && fallbackFocusedIndex < baseCoords.length) {
+            nextIndexes.push(fallbackFocusedIndex);
+        }
+
+        if (areIndexListsEqual(renderedIndexesRef.current, nextIndexes)) {
+            lastVisibleCenterKeyRef.current = centerKey;
+            return;
+        }
+
+        lastVisibleCenterKeyRef.current = centerKey;
+        renderedIndexesRef.current = nextIndexes;
+        startTransition(() => {
+            setRenderedIndexes(nextIndexes);
+        });
+    }, [
+        baseCoords,
+        coordByKey,
+        dragX,
+        dragY,
+        layoutConfig.spacingX,
+        layoutConfig.spacingY,
+        renderRadius,
+        renderRing,
+    ]);
 
     // Keep the active focusedIndex centered when baseCoords changes on resize
     useEffect(() => {
@@ -677,8 +780,9 @@ export const GridView: React.FC<GridViewProps> = ({
             const targetY = -baseCoords[focusedIndex].baseY;
             dragX.set(targetX);
             dragY.set(targetY);
+            updateRenderedIndexesForViewport(targetX, targetY, true);
         }
-    }, [baseCoords]);
+    }, [baseCoords, updateRenderedIndexesForViewport]);
 
     // Recenter the viewport on target item coordinate offset
     const centerOnIndex = (index: number, snap = true) => {
@@ -691,7 +795,9 @@ export const GridView: React.FC<GridViewProps> = ({
             pendingTimeoutRef.current = null;
         }
         setFocusedIndex(index);
+        focusedIndexRef.current = index;
         lastUpdateRef.current = performance.now();
+        updateRenderedIndexesForViewport(targetX, targetY, true);
 
         if (snap) {
             animate(dragX, targetX, { type: 'spring', stiffness: 220, damping: 28 });
@@ -709,11 +815,16 @@ export const GridView: React.FC<GridViewProps> = ({
         }
     }, [gridItems.length]);
 
-    // Memoize the mapped card list to prevent React from reconciling wrapper elements when focusedIndex updates
+    useEffect(() => {
+        updateRenderedIndexesForViewport(dragX.get(), dragY.get(), true);
+    }, [dragX, dragY, updateRenderedIndexesForViewport]);
+
+    // Memoize only the nearby card set so React keeps heavy image/button trees out of the drag hot path
     const memoizedCards = useMemo(() => {
-        return gridItems.map((item, idx) => {
+        return renderedIndexes.map((idx) => {
+            const item = gridItems[idx];
             const coord = baseCoords[idx];
-            if (!coord) return null;
+            if (!item || !coord) return null;
 
             return (
                 <div
@@ -760,6 +871,7 @@ export const GridView: React.FC<GridViewProps> = ({
             );
         });
     }, [
+        renderedIndexes,
         gridItems,
         baseCoords,
         isDaylight,
@@ -791,9 +903,8 @@ export const GridView: React.FC<GridViewProps> = ({
     }, []);
 
     /**
-     * Single centralized rAF loop: subscribes to dragX/dragY ONCE,
-     * batch-updates ALL card DOM styles + tracks focusedIndex.
-     * Replaces ~150 × 7 useTransform callbacks with 1 loop per frame.
+     * Single centralized rAF loop: subscribes to dragX/dragY ONCE and only
+     * updates the mounted viewport-near card set resolved from the hex grid.
      */
     useEffect(() => {
         let rafId: number | null = null;
@@ -809,11 +920,13 @@ export const GridView: React.FC<GridViewProps> = ({
 
             if (timeSinceLast >= 200) {
                 setFocusedIndex(newIndex);
+                focusedIndexRef.current = newIndex;
                 lastUpdateRef.current = now;
             } else {
                 const remaining = 200 - timeSinceLast;
                 pendingTimeoutRef.current = setTimeout(() => {
                     setFocusedIndex(newIndex);
+                    focusedIndexRef.current = newIndex;
                     lastUpdateRef.current = performance.now();
                 }, remaining);
             }
@@ -826,12 +939,16 @@ export const GridView: React.FC<GridViewProps> = ({
                 const dx = dragX.get();
                 const dy = dragY.get();
                 const { maxDistance, lodStart, lodEnd } = layoutConfig;
+                updateRenderedIndexesForViewport(dx, dy);
 
-                let closestIdx = 0;
+                let closestIdx = focusedIndexRef.current;
                 let minDistSq = Infinity;
+                const activeIndexes = renderedIndexesRef.current;
 
-                for (let i = 0; i < baseCoords.length; i++) {
+                for (let activeIndex = 0; activeIndex < activeIndexes.length; activeIndex++) {
+                    const i = activeIndexes[activeIndex];
                     const coord = baseCoords[i];
+                    if (!coord) continue;
                     const cx = coord.baseX + dx;
                     const cy = coord.baseY + dy;
                     const distSq = cx * cx + cy * cy;
@@ -904,7 +1021,7 @@ export const GridView: React.FC<GridViewProps> = ({
             unsubY();
             if (rafId !== null) cancelAnimationFrame(rafId);
         };
-    }, [dragX, dragY, baseCoords, layoutConfig, clipRadius]);
+    }, [dragX, dragY, baseCoords, layoutConfig, clipRadius, renderedIndexes, updateRenderedIndexesForViewport]);
 
     // Setup arrow keyboard navigation
     useEffect(() => {
@@ -1023,6 +1140,7 @@ export const GridView: React.FC<GridViewProps> = ({
                         onDragEnd={() => {
                             setTimeout(() => {
                                 isDraggingRef.current = false;
+                                flushPendingBackgroundTracks();
                             }, 50);
                         }}
                         style={{ x: dragX, y: dragY, background: 'rgba(0,0,0,0)' }}
