@@ -128,8 +128,8 @@ const PolaroidCard = React.memo<{
             ? getSongUnavailableTagText(item.rawTrack, t('status.songUnavailableTag'))
             : '';
 
-        const cardBg = isDaylight 
-            ? 'bg-[#faf9f6] text-zinc-900 border-zinc-200/50 shadow-lg' 
+        const cardBg = isDaylight
+            ? 'bg-[#faf9f6] text-zinc-900 border-zinc-200/50 shadow-lg'
             : 'bg-zinc-900 text-zinc-100 border-zinc-800/80 shadow-2xl';
 
         const cardBorderHover = isDaylight
@@ -159,9 +159,9 @@ const PolaroidCard = React.memo<{
                 <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-200/60 dark:bg-zinc-800/60 relative shadow-inner flex items-center justify-center shrink-0">
                     {item.coverUrl ? (
                         <>
-                            <img 
-                                src={item.coverUrl} 
-                                alt={item.name} 
+                            <img
+                                src={item.coverUrl}
+                                alt={item.name}
                                 loading="lazy"
                                 decoding="async"
                                 ref={(el) => {
@@ -263,7 +263,7 @@ const PolaroidCard = React.memo<{
                         <div className="flex flex-col min-w-0 flex-1 pr-2">
                             {mode === 'tracks' && item.rawTrack && (
                                 <>
-                                    <span 
+                                    <span
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             const alId = item.rawTrack?.al?.id || item.rawTrack?.album?.id;
@@ -977,7 +977,7 @@ export const GridView: React.FC<GridViewProps> = ({
                     <ChevronLeft size={20} />
                 </button>
 
-                <div 
+                <div
                     onClick={() => {
                         if (mode === 'tracks' && collection) {
                             setShowCutInPanel(!showCutInPanel);

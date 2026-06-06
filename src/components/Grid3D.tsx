@@ -11,6 +11,7 @@ import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import LocalMusicView from './LocalMusicView';
 import NavidromeMusicView from './navidrome/NavidromeMusicView';
 import GridView from './GridView';
+import GridMap from './GridMap';
 import { formatSongName } from '../utils/songNameFormatter';
 
 // C:\Users\123xi\.gemini\antigravity-ide\brain\5ddc5af2-6cab-4638-828b-1773ffe7d556
@@ -144,6 +145,16 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const [isSliding, setIsSliding] = useState(false);
     const slidingTimeoutRef = useRef<any>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [focusedIndex, setFocusedIndex] = useState(0);
+
+    // Reset focused index and scroll to start when switching tabs
+    useEffect(() => {
+        setFocusedIndex(0);
+        const container = scrollContainerRef.current;
+        if (container) {
+            container.scrollLeft = 0;
+        }
+    }, [homeViewTab]);
 
     // Detail Grid states
     const [selectedCollection, setSelectedCollection] = useState<SelectedCollection | null>(null);
@@ -164,6 +175,40 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         slidingTimeoutRef.current = setTimeout(() => {
             setIsSliding(false);
         }, 800);
+    };
+
+    /**
+     * Handles scrolling by triggering visual fade timeouts and calculating the card
+     * that is currently closest to the horizontal center of the viewport.
+     */
+    const handleScroll = () => {
+        handleSliding();
+
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        const flexWrapper = container.firstElementChild;
+        if (!flexWrapper) return;
+
+        const containerCenter = container.scrollLeft + container.clientWidth / 2;
+        let closestIndex = 0;
+        let minDistance = Infinity;
+
+        const cards = flexWrapper.children;
+        for (let i = 0; i < cards.length; i++) {
+            const card = cards[i] as HTMLElement;
+            const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+            const distance = Math.abs(cardCenter - containerCenter);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestIndex = i;
+            }
+        }
+
+        setFocusedIndex((prev) => {
+            if (prev === closestIndex) return prev;
+            return closestIndex;
+        });
     };
 
     // Mouse drag-to-scroll implementation
@@ -485,7 +530,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         {/* Horizontal Polaroid Slider Container */}
                         <div 
                             ref={scrollContainerRef}
-                            onScroll={handleSliding}
+                            onScroll={handleScroll}
                             onTouchStart={handleSliding}
                             onTouchMove={handleSliding}
                             onWheel={handleSliding}
@@ -505,28 +550,49 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                         ? 'bg-[#faf9f6] text-zinc-900 border-zinc-200/50 shadow-lg'
                                         : 'bg-zinc-900 text-zinc-100 border-zinc-800/80 shadow-2xl';
 
+                                    const isFocused = idx === focusedIndex;
+
                                     return (
                                         <motion.div
                                             key={item.id}
                                             className="snap-center shrink-0 cursor-pointer pointer-events-auto select-none"
-                                            whileHover={{ 
-                                                scale: 1.05, 
-                                                y: -10, 
-                                                rotate: 0,
-                                                transition: { type: 'spring', stiffness: 300, damping: 20 }
+                                            animate={{
+                                                scale: isFocused ? 1.08 : 0.95,
+                                                y: isFocused ? -6 : 0,
+                                                rotate: isFocused ? 0 : rotateDeg,
+                                                zIndex: isFocused ? 10 : 1
                                             }}
+                                            whileHover={{ 
+                                                scale: isFocused ? 1.12 : 1.0, 
+                                                y: isFocused ? -12 : -6, 
+                                                rotate: 0,
+                                                zIndex: 12
+                                            }}
+                                            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                                             onClick={() => {
                                                 if (dragDistanceRef.current < 8) {
-                                                    handleSelectCollectionCard(item);
+                                                    if (isFocused) {
+                                                        handleSelectCollectionCard(item);
+                                                    } else {
+                                                        setFocusedIndex(idx);
+                                                        const container = scrollContainerRef.current;
+                                                        if (container) {
+                                                            const flexWrapper = container.firstElementChild;
+                                                            const cardElement = flexWrapper?.children[idx] as HTMLElement;
+                                                            if (cardElement) {
+                                                                const targetScrollLeft = cardElement.offsetLeft + cardElement.offsetWidth / 2 - container.clientWidth / 2;
+                                                                container.scrollTo({
+                                                                    left: targetScrollLeft,
+                                                                    behavior: 'smooth'
+                                                                });
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }}
                                         >
                                             <div 
                                                 className={`w-64 rounded-xl border p-4 flex flex-col items-center transition-all ${polaroidClass}`}
-                                                style={{ 
-                                                    transform: `rotate(${rotateDeg}deg)`,
-                                                    transformOrigin: 'center center'
-                                                }}
                                             >
                                                 {/* Square Album Cover */}
                                                 <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
@@ -557,6 +623,32 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 })}
                             </div>
                         </div>
+
+                        {/* Title details at the bottom (above player progress bar) */}
+                        {currentDesktopItems.length > 0 && currentDesktopItems[focusedIndex] && (
+                            <motion.div
+                                key={`${homeViewTab}-${currentDesktopItems[focusedIndex].id}`}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3 }}
+                                className={`relative shrink-0 text-center z-10 px-8 pointer-events-none ${
+                                    currentTrack ? 'pt-6 md:pt-8 pb-0 -mb-4 md:-mb-6' : 'pt-5 md:pt-6 pb-4'
+                                }`}
+                            >
+                                <h3 className="font-bold text-2xl truncate max-w-xl mx-auto" style={{ color: 'var(--text-primary)' }}>
+                                    {currentDesktopItems[focusedIndex].name}
+                                </h3>
+                                <p className="text-xs opacity-50 font-mono mt-1" style={{ color: 'var(--text-secondary)' }}>
+                                    {currentDesktopItems[focusedIndex].trackCount !== undefined ? `${currentDesktopItems[focusedIndex].trackCount} ${t('playlist.tracks') || 'songs'}` : ''}
+                                    {currentDesktopItems[focusedIndex].description
+                                        ? ` • ${currentDesktopItems[focusedIndex].description.length > 24
+                                            ? currentDesktopItems[focusedIndex].description.substring(0, 24) + '...'
+                                            : currentDesktopItems[focusedIndex].description
+                                        }`
+                                        : ''}
+                                </p>
+                            </motion.div>
+                        )}
 
                     </div>
                 ) : homeViewTab === 'local' ? (
@@ -671,10 +763,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 )}
             </AnimatePresence>
 
-            {/* Collection Grid View (All Items GridView) */}
+            {/* Collection Grid View (All Items GridMap) */}
             <AnimatePresence>
                 {showCollectionGrid && (
-                    <GridView
+                    <GridMap
                         title={
                             homeViewTab === 'playlist' 
                                 ? t('home.playlists') 
@@ -689,11 +781,24 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             description: item.description,
                             rawCollection: item
                         }))}
-                        mode="collection"
                         onBack={() => setShowCollectionGrid(false)}
-                        onSelectCollection={(col) => {
+                        onSelectCollection={(col, idx) => {
                             setShowCollectionGrid(false);
-                            handleSelectCollectionCard(col);
+                            setFocusedIndex(idx);
+                            
+                            // Scroll the container smoothly to center the selected card
+                            const container = scrollContainerRef.current;
+                            if (container) {
+                                const flexWrapper = container.firstElementChild;
+                                const cardElement = flexWrapper?.children[idx] as HTMLElement;
+                                if (cardElement) {
+                                    const targetScrollLeft = cardElement.offsetLeft + cardElement.offsetWidth / 2 - container.clientWidth / 2;
+                                    container.scrollTo({
+                                        left: targetScrollLeft,
+                                        behavior: 'smooth'
+                                    });
+                                }
+                            }
                         }}
                         theme={theme}
                         isDaylight={isDaylight}
