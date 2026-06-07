@@ -209,11 +209,11 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
         },
         {
             id: 'refresh',
-            label: t('audioOutputRefresh') || 'Refresh',
+            label: t('options.audioOutputRefresh') || 'Refresh',
             icon: isLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />,
             disabled: isLoading,
             onClick: () => void fetchLibrary(),
-            title: t('audioOutputRefresh') || 'Refresh',
+            title: t('options.audioOutputRefresh') || 'Refresh',
         },
     ];
 

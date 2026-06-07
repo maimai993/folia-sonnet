@@ -138,6 +138,40 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     const safeFocusedIndex = clampFocusedIndex(focusedIndex, items.length);
     const itemsSignature = useMemo(() => items.map(item => item.id).join(','), [items]);
 
+    const [visibleLimit, setVisibleLimit] = useState(30);
+    const [loadedIndices, setLoadedIndices] = useState<Set<number>>(() => new Set([safeFocusedIndex]));
+
+    useEffect(() => {
+        setVisibleLimit(30);
+        setLoadedIndices(new Set([safeFocusedIndex]));
+    }, [itemsSignature]);
+
+    useEffect(() => {
+        setLoadedIndices(prev => {
+            const next = new Set(prev);
+            const range = 12;
+            const start = Math.max(0, safeFocusedIndex - range);
+            const end = Math.min(items.length - 1, safeFocusedIndex + range);
+            let changed = false;
+            for (let i = start; i <= end; i++) {
+                if (!next.has(i)) {
+                    next.add(i);
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+    }, [safeFocusedIndex, items.length]);
+
+    useEffect(() => {
+        if (safeFocusedIndex >= visibleLimit) {
+            setVisibleLimit(prev => Math.max(prev, safeFocusedIndex + 30));
+        }
+    }, [safeFocusedIndex, visibleLimit]);
+
+    const currentLimit = Math.max(visibleLimit, safeFocusedIndex + 1);
+    const slicedItems = items.slice(0, currentLimit);
+
     const handleSliding = useCallback(() => {
         if (!isInteractive) return;
 
@@ -314,7 +348,14 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         if (closestIndex !== undefined) {
             reportFocusedIndex(closestIndex);
         }
-    }, [handleSliding, isInteractive, reportFocusedIndex, updateCardTransforms]);
+
+        // Batch load: load more items when scrolling near the end
+        const scrollThreshold = 600;
+        const hasMore = visibleLimit < items.length;
+        if (hasMore && container.scrollWidth - (container.scrollLeft + container.clientWidth) < scrollThreshold) {
+            setVisibleLimit(prev => Math.min(items.length, prev + 30));
+        }
+    }, [handleSliding, isInteractive, reportFocusedIndex, updateCardTransforms, visibleLimit, items.length]);
 
     const handleMouseDown = (event: React.MouseEvent) => {
         if (!isInteractive || !scrollContainerRef.current || event.button !== 0) return;
@@ -470,7 +511,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                             {emptyMessage}
                         </div>
                     ) : (
-                        items.map((item, index) => {
+                        slicedItems.map((item, index) => {
                             const isFocused = index === safeFocusedIndex;
 
                             return (
@@ -485,7 +526,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                             scrollToIndex(index);
                                         }
                                     }}
-                                >
+                                	>
                                     {grid3dCardStyle === 'image' ? (
                                         <div
                                             className={`aspect-square rounded-2xl overflow-hidden shadow-2xl relative border border-white/10 ${
@@ -493,7 +534,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                             }`}
                                             style={{ width: coverSize, height: coverSize }}
                                         >
-                                            {item.coverUrl ? (
+                                            {item.coverUrl && loadedIndices.has(index) ? (
                                                 <img src={item.coverUrl} alt={typeof item.name === 'string' ? item.name : ''} className="w-full h-full object-cover pointer-events-none select-none" />
                                             ) : (
                                                 <div className="w-full h-full bg-zinc-800/20 flex items-center justify-center">
@@ -508,7 +549,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                             style={{ width: coverSize }}
                                         >
                                             <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
-                                                {item.coverUrl ? (
+                                                {item.coverUrl && loadedIndices.has(index) ? (
                                                     <img src={item.coverUrl} alt={typeof item.name === 'string' ? item.name : ''} className="w-full h-full object-cover pointer-events-none select-none" />
                                                 ) : (
                                                     <Disc size={64} className="opacity-20" />
