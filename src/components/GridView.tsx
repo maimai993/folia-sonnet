@@ -268,7 +268,7 @@ const PolaroidCard = React.memo<{
                                         transform: 'scale(var(--play-scale, 0.8))',
                                         transition: 'opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, color 0.2s ease',
                                     }}
-                                    className="w-9 h-9 rounded-full bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/20 dark:hover:bg-zinc-100/20 text-current flex items-center justify-center shadow-sm pointer-events-auto z-10"
+                                    className="w-9 h-9 rounded-full bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 text-current flex items-center justify-center shadow-sm pointer-events-auto z-10"
                                     title={t('playlist.play') || 'Play'}
                                 >
                                     <Play size={15} fill="currentColor" className="ml-0.5" />
@@ -281,7 +281,7 @@ const PolaroidCard = React.memo<{
                                         onAddQueue();
                                     }}
                                     style={{ opacity: 'var(--queue-opacity, 1)' as any, pointerEvents: 'var(--queue-pe, auto)' as any }}
-                                    className="w-9 h-9 rounded-full bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/20 dark:hover:bg-zinc-100/20 text-current flex items-center justify-center transition-colors shadow-sm pointer-events-auto"
+                                    className="w-9 h-9 rounded-full bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 text-current flex items-center justify-center transition-colors shadow-sm pointer-events-auto"
                                     title={t('navidrome.addToQueue') || 'Add to Queue'}
                                 >
                                     <Plus size={15} />
@@ -307,6 +307,28 @@ const PolaroidCard = React.memo<{
         );
     }
 );
+/**
+ * 获取低分辨率的封面图片 URL，通过 CDN 参数压缩图片分辨率，
+ * 从而在拉伸时利用浏览器原生双线性插值实现无性能开销的模糊效果。
+ */
+const getLowResCoverUrl = (url: string): string => {
+    if (!url) return '';
+    try {
+        const urlObj = new URL(url);
+        if (urlObj.hostname.includes('126.net')) {
+            return `${urlObj.origin}${urlObj.pathname}?param=150y150`;
+        } else if (urlObj.pathname.includes('getCoverArt')) {
+            urlObj.searchParams.set('size', '150');
+            return urlObj.toString();
+        }
+        return url;
+    } catch {
+        if (url.includes('126.net')) {
+            return url.split('?')[0] + '?param=150y150';
+        }
+        return url;
+    }
+};
 
 export const GridView: React.FC<GridViewProps> = ({
     title,
@@ -1212,6 +1234,8 @@ export const GridView: React.FC<GridViewProps> = ({
     const showLoading = isLoading || (mode === 'tracks' && loading && tracks.length === 0);
     const hasSearchQuery = deferredSearchQuery.trim().length > 0;
 
+    const coverUrl = collection?.coverImgUrl || collection?.coverUrl || collection?.picUrl || '';
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -1219,52 +1243,60 @@ export const GridView: React.FC<GridViewProps> = ({
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[60] flex flex-col justify-between overflow-hidden select-none"
             style={{
-                backgroundColor: isDaylight ? 'rgba(250, 249, 246, 0.95)' : 'rgba(9, 9, 11, 0.95)',
+                backgroundColor: 'var(--bg-color)',
                 color: 'var(--text-primary)',
-                backdropFilter: 'blur(24px)'
             }}
         >
-            {/* Top Floating Glass Header */}
-            <div className="w-full flex items-center justify-between px-6 py-5 z-[70] bg-gradient-to-b from-black/10 to-transparent pointer-events-none">
-                <button
-                    onClick={() => {
-                        if (navigationStorageKey) {
-                            sessionStorage.removeItem(navigationStorageKey);
-                        }
-                        if (lastIndexStorageKey) {
-                            sessionStorage.removeItem(lastIndexStorageKey);
-                        }
-                        onBack();
-                    }}
-                    className="w-10 h-10 rounded-full flex items-center justify-center transition-all pointer-events-auto shadow-lg hover:scale-105 active:scale-95"
-                    style={{
-                        backgroundColor: isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)',
-                        backdropFilter: 'blur(8px)',
-                    }}
-                >
-                    <ChevronLeft size={20} />
-                </button>
-
+            {coverUrl && (
                 <div
-                    onClick={() => {
-                        if (mode === 'tracks' && collection) {
-                            setShowCutInPanel(!showCutInPanel);
-                        }
-                    }}
-                    className={`text-center flex flex-col items-center select-none pointer-events-auto ${mode === 'tracks' && collection ? 'cursor-pointer hover:opacity-85 active:scale-98 transition-all px-4 py-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/5' : ''}`}
+                    className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0"
+                    style={{ opacity: isDaylight ? 0.18 : 0.12 }}
                 >
-                    <h2 className="text-lg font-bold tracking-tight flex items-center gap-1.5 justify-center">
-                        {title}
-                        {mode === 'tracks' && collection && (
-                            <span className="text-[9px] bg-zinc-500/20 text-current px-1.5 py-0.5 rounded-full font-normal opacity-60">
-                                {showCutInPanel ? '收起信息' : '歌单信息'}
-                            </span>
-                        )}
-                    </h2>
-                    {subtitle && <p className="text-xs opacity-50 mt-0.5">{subtitle}</p>}
+                    <img
+                        src={getLowResCoverUrl(coverUrl).replace('http:', 'https:')}
+                        alt=""
+                        className="w-full h-full object-cover scale-110 filter blur-[30px]"
+                    />
                 </div>
+            )}
+            {/* Back Button */}
+            <button
+                onClick={() => {
+                    if (navigationStorageKey) {
+                        sessionStorage.removeItem(navigationStorageKey);
+                    }
+                    if (lastIndexStorageKey) {
+                        sessionStorage.removeItem(lastIndexStorageKey);
+                    }
+                    onBack();
+                }}
+                className="absolute left-6 top-5 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg hover:scale-105 active:scale-95 z-[70]"
+                style={{
+                    backgroundColor: isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)',
+                    backdropFilter: 'blur(8px)',
+                }}
+            >
+                <ChevronLeft size={20} />
+            </button>
 
-                <div className="w-10 h-10" /> {/* Spacer */}
+            {/* Center Clickable Area */}
+            <div
+                onClick={() => {
+                    if (mode === 'tracks' && collection) {
+                        setShowCutInPanel(!showCutInPanel);
+                    }
+                }}
+                className="absolute left-1/2 top-5 -translate-x-1/2 z-[70] text-center flex flex-col items-center select-none cursor-pointer hover:opacity-85 active:scale-98 transition-all px-4 py-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+            >
+                <h2 className="text-lg font-bold tracking-tight flex items-center gap-1.5 justify-center">
+                    {title}
+                    {mode === 'tracks' && collection && (
+                        <span className="text-[9px] bg-zinc-500/20 text-current px-1.5 py-0.5 rounded-full font-normal opacity-60">
+                            {showCutInPanel ? '收起信息' : '歌单信息'}
+                        </span>
+                    )}
+                </h2>
+                {subtitle && <p className="text-xs opacity-50 mt-0.5">{subtitle}</p>}
             </div>
 
             {/* Honeycomb Drag/Viewport Canvas Area */}
@@ -1434,7 +1466,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                         }
                                     }}
                                     disabled={playableTracks.length === 0}
-                                    className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/20 dark:hover:bg-zinc-100/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                                    className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
                                 >
                                     <ListPlus size={14} />
                                     加入队列
@@ -1442,7 +1474,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                 {canEditPlaylist && (
                                     <button
                                         onClick={() => setIsEditMode(prev => !prev)}
-                                        className={`w-full py-2.5 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${isEditMode ? 'bg-red-500/20 text-red-500 border border-red-500/30' : 'bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/20 dark:hover:bg-zinc-100/20'}`}
+                                        className={`w-full py-2.5 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${isEditMode ? 'bg-red-500/20 text-red-500 border border-red-500/30' : 'bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900'}`}
                                     >
                                         <Pencil size={14} />
                                         {isEditMode ? '完成编辑' : '编辑歌单'}
