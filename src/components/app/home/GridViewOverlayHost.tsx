@@ -101,10 +101,14 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
     }, [homeViewTab, setActiveGridViewCollection]);
 
     const closeGridView = useCallback(() => {
+        const shouldReturnToPlayer = Boolean(selectedCollection?.returnToPlayerOnClose);
         sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
         setCollectionHistory([]);
         setActiveGridViewCollection(null);
-    }, [setActiveGridViewCollection]);
+        if (shouldReturnToPlayer) {
+            legacyProps.onBackToPlayer();
+        }
+    }, [legacyProps, selectedCollection, setActiveGridViewCollection]);
 
     const handlePushCollection = useCallback((col: GridViewCollectionDescriptor) => {
         setCollectionHistory(prev => [...prev, col]);
@@ -130,32 +134,44 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         }
     }, [collectionHistory, closeGridView, homeViewTab, setActiveGridViewCollection]);
 
-    const handlePushAlbumCollection = useCallback((albumId: number | string) => {
+    const handlePushAlbumCollection = useCallback((albumId: number | string, album?: any) => {
         if (!selectedCollection) return;
 
         const source = selectedCollection.source;
+        const albumName = album?.name || '专辑';
+        const albumCoverUrl = album?.coverImgUrl || album?.coverUrl || album?.picUrl;
         if (source === 'netease') {
             handlePushCollection({
                 source: 'netease',
                 id: Number(albumId),
-                name: '专辑',
+                name: albumName,
                 type: 'album',
+                coverImgUrl: albumCoverUrl,
+                coverUrl: albumCoverUrl,
+                picUrl: albumCoverUrl,
             });
         } else if (source === 'navidrome') {
             handlePushCollection({
                 source: 'navidrome',
                 id: String(albumId),
-                name: '专辑',
-                type: 'album',
-            });
-        } else if (source === 'local') {
-            const albumName = String(albumId);
-            const albumSongs = legacyProps.localSongs.filter(song => (song.album || '').toLowerCase() === albumName.toLowerCase());
-            handlePushCollection({
-                source: 'local',
-                id: albumName,
                 name: albumName,
                 type: 'album',
+                coverImgUrl: albumCoverUrl,
+                coverUrl: albumCoverUrl,
+                picUrl: albumCoverUrl,
+            });
+        } else if (source === 'local') {
+            const localAlbumName = album?.name || String(albumId);
+            const localCoverUrl = albumCoverUrl;
+            const albumSongs = legacyProps.localSongs.filter(song => (song.album || '').toLowerCase() === localAlbumName.toLowerCase());
+            handlePushCollection({
+                source: 'local',
+                id: localAlbumName,
+                name: localAlbumName,
+                type: 'album',
+                coverImgUrl: localCoverUrl,
+                coverUrl: localCoverUrl,
+                picUrl: localCoverUrl,
                 songIds: albumSongs.map(song => song.id),
             });
         }

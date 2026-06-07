@@ -1402,6 +1402,36 @@ export default function App() {
         }
     }, [homeLayoutStyle, navigateToNeteaseArtist, navigateDirectHome, setActiveGridViewCollection]);
 
+    const handlePlayerPanelAlbumSelect = useCallback((albumId: number) => {
+        if (homeLayoutStyle === 'grid') {
+            setActiveGridViewCollection({
+                source: 'netease',
+                id: albumId,
+                type: 'album',
+                name: '专辑',
+                returnToPlayerOnClose: true,
+            });
+            navigateDirectHome({ clearContext: false });
+        } else {
+            navigateToNeteaseAlbum(albumId);
+        }
+    }, [homeLayoutStyle, navigateToNeteaseAlbum, navigateDirectHome, setActiveGridViewCollection]);
+
+    const handlePlayerPanelArtistSelect = useCallback((artistId: number) => {
+        if (homeLayoutStyle === 'grid') {
+            setActiveGridViewCollection({
+                source: 'netease',
+                id: artistId,
+                type: 'artist',
+                name: '歌手',
+                returnToPlayerOnClose: true,
+            });
+            navigateDirectHome({ clearContext: false });
+        } else {
+            navigateToNeteaseArtist(artistId);
+        }
+    }, [homeLayoutStyle, navigateToNeteaseArtist, navigateDirectHome, setActiveGridViewCollection]);
+
     const homeModel = useMemo(() => buildHomeModel({
         playSong,
         navigateToPlayer,
@@ -1591,8 +1621,8 @@ export default function App() {
         handleDirectHomeFromPanel,
         coverUrl,
         currentSong,
-        handleAlbumSelect: handleUnifiedAlbumSelect,
-        handleArtistSelect: handleUnifiedArtistSelect,
+        handleAlbumSelect: handlePlayerPanelAlbumSelect,
+        handleArtistSelect: handlePlayerPanelArtistSelect,
         effectiveLoopMode,
         toggleLoop,
         handleLike,
@@ -1671,6 +1701,7 @@ export default function App() {
                                 description: currentSong.ar?.map(artist => artist.name).join(', '),
                                 trackCount: songs.length,
                                 songIds: songs.map(song => song.id),
+                                returnToPlayerOnClose: true,
                             });
                             navigateDirectHome({ clearContext: false });
                         }
@@ -1699,6 +1730,7 @@ export default function App() {
                                 description: `${songs.length} 首歌曲`,
                                 trackCount: songs.length,
                                 songIds: songs.map(song => song.id),
+                                returnToPlayerOnClose: true,
                             });
                             navigateDirectHome({ clearContext: false });
                         }
@@ -1721,6 +1753,7 @@ export default function App() {
                         name: albumName,
                         type: 'album',
                         coverUrl: currentSong?.al?.picUrl || currentSong?.album?.picUrl || undefined,
+                        returnToPlayerOnClose: true,
                     });
                     navigateDirectHome({ clearContext: false });
                 }
@@ -1741,6 +1774,7 @@ export default function App() {
                         name: artistName,
                         type: 'artist',
                         coverUrl: currentSong?.al?.picUrl || currentSong?.album?.picUrl || undefined,
+                        returnToPlayerOnClose: true,
                     });
                     navigateDirectHome({ clearContext: false });
                 }
@@ -1842,8 +1876,9 @@ export default function App() {
         homeLayoutStyle,
         setActiveGridViewCollection,
         localSongs,
-        handleUnifiedAlbumSelect,
-        handleUnifiedArtistSelect,
+        handlePlayerPanelAlbumSelect,
+        handlePlayerPanelArtistSelect,
+        navigateDirectHome,
     ]);
     const homeContent = useMemo(() => <Home model={homeModel} />, [homeModel]);
     const appOverlaysModel = useMemo(() => buildAppOverlaysModel({

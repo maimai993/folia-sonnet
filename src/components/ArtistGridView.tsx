@@ -26,7 +26,7 @@ interface ArtistGridViewProps {
     onBack: () => void;
     onSelectTrack?: (track: SongResult, queue: SongResult[]) => void;
     onAddTrackToQueue?: (track: SongResult) => void;
-    onSelectAlbum?: (albumId: number | string) => void;
+    onSelectAlbum?: (albumId: number | string, album?: any) => void;
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
     theme: Theme;
@@ -652,6 +652,29 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     el.style.transform = `translate(${coord.baseX}px, ${coord.baseY}px) scale(${scale})`;
                     el.style.opacity = String(opac);
                     el.style.zIndex = String(z);
+
+                    if (dist > layoutConfig.lodEnd) {
+                        el.style.setProperty('--queue-opacity', '0');
+                        el.style.setProperty('--queue-pe', 'none');
+                    } else if (dist < layoutConfig.lodStart) {
+                        el.style.setProperty('--queue-opacity', '1');
+                        el.style.setProperty('--queue-pe', 'auto');
+                    } else {
+                        const qt = (dist - layoutConfig.lodStart) / (layoutConfig.lodEnd - layoutConfig.lodStart);
+                        el.style.setProperty('--queue-opacity', String(1 - qt));
+                        el.style.setProperty('--queue-pe', 'auto');
+                    }
+
+                    if (dist < 40) {
+                        const pt = dist / 40;
+                        el.style.setProperty('--play-opacity', String(1 - pt));
+                        el.style.setProperty('--play-scale', String(1 - 0.2 * pt));
+                        el.style.setProperty('--play-pe', 'auto');
+                    } else {
+                        el.style.setProperty('--play-opacity', '0');
+                        el.style.setProperty('--play-scale', '0.8');
+                        el.style.setProperty('--play-pe', 'none');
+                    }
                 }
 
                 updateFocusedIndexThrottled(closestIdx);
@@ -852,11 +875,13 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         t={t}
                         cardWidth={layoutConfig.cardWidth}
                         cardHeight={layoutConfig.cardHeight}
+                        openWhenFocusedOnCardClick={!isSongCard}
+                        isFocused={focusedIndex === idx}
                         onSelect={() => {
                             if (isSongCard && onSelectTrack && item.rawTrack) {
                                 onSelectTrack(item.rawTrack, topSongs);
                             } else if (!isSongCard && onSelectAlbum && item.rawCollection) {
-                                onSelectAlbum(item.rawCollection.id);
+                                onSelectAlbum(item.rawCollection.id, item.rawCollection);
                             }
                         }}
                         onCenter={() => {

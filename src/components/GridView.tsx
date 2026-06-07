@@ -102,6 +102,8 @@ export const PolaroidCard = React.memo<{
     onSelectArtist?: (artistId: number | string) => void;
     onSelectAlbum?: (albumId: number | string) => void;
     onBeforeNestedNavigate?: () => void;
+    openWhenFocusedOnCardClick?: boolean;
+    isFocused?: boolean;
 }>(
     ({
         item,
@@ -119,6 +121,8 @@ export const PolaroidCard = React.memo<{
         onSelectArtist,
         onSelectAlbum,
         onBeforeNestedNavigate,
+        openWhenFocusedOnCardClick = false,
+        isFocused = false,
     }) => {
         const isUnavailable = mode === 'tracks' && item.rawTrack ? isSongMarkedUnavailable(item.rawTrack) : false;
         const unavailableTagText = (mode === 'tracks' && item.rawTrack)
@@ -164,6 +168,10 @@ export const PolaroidCard = React.memo<{
                 onClick={(e) => {
                     if (isEditMode) {
                         e.stopPropagation();
+                        return;
+                    }
+                    if (openWhenFocusedOnCardClick && isFocused) {
+                        onSelect();
                         return;
                     }
                     onCenter();
@@ -243,9 +251,9 @@ export const PolaroidCard = React.memo<{
                 {/* Bottom Polaroid Frame Label Details */}
                 <div className="w-full flex-1 flex flex-col justify-between pt-3 text-left min-w-0">
                     <div className="space-y-1 mb-2">
-                        {/* Index + Title */}
+                        {/* Title */}
                         <div className="text-s font-bold tracking-tight opacity-90 max-w-full line-clamp-4 whitespace-normal break-words">
-                            {item.subtitle ? `${item.subtitle}. ` : ''}{item.name}
+                            {item.name}
                         </div>
                         {/* Clickable Artists */}
                         {item.description && (
@@ -307,7 +315,7 @@ export const PolaroidCard = React.memo<{
 
                         {/* Right: Buttons in bottom right corner */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                            {!isEditMode && (
+                            {mode === 'tracks' && !isEditMode && (
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -356,7 +364,9 @@ export const PolaroidCard = React.memo<{
             prev.mode === next.mode &&
             prev.cardWidth === next.cardWidth &&
             prev.cardHeight === next.cardHeight &&
-            prev.isEditMode === next.isEditMode
+            prev.isEditMode === next.isEditMode &&
+            prev.openWhenFocusedOnCardClick === next.openWhenFocusedOnCardClick &&
+            prev.isFocused === next.isFocused
         );
     }
 );
@@ -1502,6 +1512,7 @@ export const GridView: React.FC<GridViewProps> = ({
     const hasSearchQuery = deferredSearchQuery.trim().length > 0;
 
     const coverUrl = neteaseAlbumInfo?.picUrl || collection?.coverImgUrl || collection?.coverUrl || collection?.picUrl || '';
+    const infoPanelCoverUrl = collection?.coverImgUrl || collection?.coverUrl || collection?.picUrl || neteaseAlbumInfo?.picUrl || '';
 
     return (
         <motion.div
@@ -1683,8 +1694,8 @@ export const GridView: React.FC<GridViewProps> = ({
                         >
                             {/* Cover Image */}
                             <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-lg mb-4 bg-zinc-800/20 relative shrink-0">
-                                {(collection.coverImgUrl || collection.coverUrl || collection.picUrl) ? (
-                                    <img src={toHttps(collection.coverImgUrl || collection.coverUrl || collection.picUrl)} alt={collection.name} className="w-full h-full object-cover select-none pointer-events-none" />
+                                {infoPanelCoverUrl ? (
+                                    <img src={toHttps(infoPanelCoverUrl)} alt={collection.name} className="w-full h-full object-cover select-none pointer-events-none" />
                                 ) : (
                                     <Disc size={64} className="opacity-20 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                                 )}
