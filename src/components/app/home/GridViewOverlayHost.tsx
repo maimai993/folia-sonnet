@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useShallow } from 'zustand/react/shallow';
 import LegacyHome from '../../Home';
 import GridView, { GridViewSourceActions } from '../../GridView';
+import ArtistGridView from '../../ArtistGridView';
 import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { LocalSong, SongResult, UnifiedSong } from '../../../types';
@@ -44,13 +45,17 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         homeViewTab: state.homeViewTab,
         setHomeViewTab: state.setHomeViewTab,
     })));
-    const [selectedCollection, setSelectedCollection] = useState<GridViewCollectionDescriptor | null>(null);
+    const [collectionHistory, setCollectionHistory] = useState<GridViewCollectionDescriptor[]>([]);
+    const selectedCollection = collectionHistory[collectionHistory.length - 1] || null;
     const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);
     const [externalTracksLoading, setExternalTracksLoading] = useState(false);
     const [navidromePlaylistItems, setNavidromePlaylistItems] = useState<Array<{ id: string | number; name: string; description?: string; }>>([]);
+    const selectedCollectionKey = selectedCollection
+        ? `${selectedCollection.source}:${selectedCollection.type}:${String(selectedCollection.id)}`
+        : '';
 
     useEffect(() => {
-        if (selectedCollection) return;
+        if (collectionHistory.length > 0) return;
 
         try {
             const saved = sessionStorage.getItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
@@ -59,7 +64,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
             const parsed = JSON.parse(saved) as StoredGridViewCollection;
             if (parsed?.collection?.id === undefined || parsed.collection.id === null || !parsed.collection.name) return;
 
-            setSelectedCollection(parsed.collection);
+            setCollectionHistory([parsed.collection]);
             setActiveGridViewCollection(parsed.collection);
             if (parsed.homeViewTab) {
                 setHomeViewTab(parsed.homeViewTab as any);
@@ -67,23 +72,27 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         } catch {
             sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
         }
-    }, [selectedCollection, setHomeViewTab, setActiveGridViewCollection]);
+    }, [collectionHistory.length, setHomeViewTab, setActiveGridViewCollection]);
 
     useEffect(() => {
         if (activeGridViewCollection) {
-            setSelectedCollection(activeGridViewCollection);
+            const currentTop = collectionHistory[collectionHistory.length - 1];
+            if (currentTop?.id === activeGridViewCollection.id && currentTop?.source === activeGridViewCollection.source) {
+                return;
+            }
+            setCollectionHistory([activeGridViewCollection]);
             sessionStorage.setItem(
                 GRID_VIEW_ACTIVE_COLLECTION_KEY,
                 JSON.stringify({ collection: activeGridViewCollection, homeViewTab })
             );
         } else {
-            setSelectedCollection(null);
+            setCollectionHistory([]);
             sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
         }
     }, [activeGridViewCollection, homeViewTab]);
 
     const openGridView = useCallback((collection: GridViewCollectionDescriptor) => {
-        setSelectedCollection(collection);
+        setCollectionHistory([collection]);
         setActiveGridViewCollection(collection);
         sessionStorage.setItem(
             GRID_VIEW_ACTIVE_COLLECTION_KEY,
@@ -93,9 +102,64 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
 
     const closeGridView = useCallback(() => {
         sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
-        setSelectedCollection(null);
+        setCollectionHistory([]);
         setActiveGridViewCollection(null);
     }, [setActiveGridViewCollection]);
+
+    const handlePushCollection = useCallback((col: GridViewCollectionDescriptor) => {
+        setCollectionHistory(prev => [...prev, col]);
+        setActiveGridViewCollection(col);
+        sessionStorage.setItem(
+            GRID_VIEW_ACTIVE_COLLECTION_KEY,
+            JSON.stringify({ collection: col, homeViewTab })
+        );
+    }, [homeViewTab, setActiveGridViewCollection]);
+
+    const handleBackCollection = useCallback(() => {
+        if (collectionHistory.length > 1) {
+            const nextHistory = collectionHistory.slice(0, -1);
+            setCollectionHistory(nextHistory);
+            const newTop = nextHistory[nextHistory.length - 1];
+            setActiveGridViewCollection(newTop);
+            sessionStorage.setItem(
+                GRID_VIEW_ACTIVE_COLLECTION_KEY,
+                JSON.stringify({ collection: newTop, homeViewTab })
+            );
+        } else {
+            closeGridView();
+        }
+    }, [collectionHistory, closeGridView, homeViewTab, setActiveGridViewCollection]);
+
+    const handlePushAlbumCollection = useCallback((albumId: number | string) => {
+        if (!selectedCollection) return;
+
+        const source = selectedCollection.source;
+        if (source === 'netease') {
+            handlePushCollection({
+                source: 'netease',
+                id: Number(albumId),
+                name: '专辑',
+                type: 'album',
+            });
+        } else if (source === 'navidrome') {
+            handlePushCollection({
+                source: 'navidrome',
+                id: String(albumId),
+                name: '专辑',
+                type: 'album',
+            });
+        } else if (source === 'local') {
+            const albumName = String(albumId);
+            const albumSongs = legacyProps.localSongs.filter(song => (song.album || '').toLowerCase() === albumName.toLowerCase());
+            handlePushCollection({
+                source: 'local',
+                id: albumName,
+                name: albumName,
+                type: 'album',
+                songIds: albumSongs.map(song => song.id),
+            });
+        }
+    }, [handlePushCollection, legacyProps.localSongs, selectedCollection]);
 
     useEffect(() => {
         if (!selectedCollection) {
@@ -313,28 +377,84 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
     return (
         <>
             {children(openGridView)}
-            <AnimatePresence>
+            <AnimatePresence initial={false}>
                 {selectedCollection && (
-                    <GridView
-                        title={selectedCollection.name}
-                        subtitle={(selectedCollection as any).creator?.nickname || (selectedCollection as any).artists?.[0]?.name || selectedCollection.description || ''}
-                        collection={selectedCollection}
-                        mode="tracks"
-                        onBack={closeGridView}
-                        onSelectTrack={handleSelectTrack}
-                        onAddTrackToQueue={handleAddTrackToQueue}
-                        onPlayAll={legacyProps.onPlayAll}
-                        onAddAllToQueue={legacyProps.onAddAllToQueue}
-                        onSelectAlbum={legacyProps.onSelectAlbum}
-                        onSelectArtist={legacyProps.onSelectArtist}
-                        currentUserId={legacyProps.user?.userId}
-                        onPlaylistMutated={legacyProps.onRefreshUser}
-                        externalTracks={externalTracks}
-                        externalTracksLoading={externalTracksLoading}
-                        sourceActions={sourceActions}
-                        theme={legacyProps.theme}
-                        isDaylight={isDaylight}
+                    <motion.div
+                        key="grid-transition-backdrop"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                        className="fixed inset-0 z-[49] pointer-events-none"
+                        style={{ backgroundColor: 'var(--bg-color)' }}
                     />
+                )}
+            </AnimatePresence>
+            <AnimatePresence initial={false}>
+                {selectedCollection && (
+                    selectedCollection.type === 'artist' ? (
+                        <ArtistGridView
+                            key={selectedCollectionKey}
+                            collection={selectedCollection}
+                            onBack={handleBackCollection}
+                            onSelectTrack={handleSelectTrack}
+                            onAddTrackToQueue={handleAddTrackToQueue}
+                            onPlayAll={legacyProps.onPlayAll}
+                            onAddAllToQueue={legacyProps.onAddAllToQueue}
+                            onSelectAlbum={handlePushAlbumCollection}
+                            theme={legacyProps.theme}
+                            isDaylight={isDaylight}
+                            localSongs={legacyProps.localSongs}
+                        />
+                    ) : (
+                        <GridView
+                            key={selectedCollectionKey}
+                            title={selectedCollection.name}
+                            subtitle={(selectedCollection as any).creator?.nickname || (selectedCollection as any).artists?.[0]?.name || selectedCollection.description || ''}
+                            collection={selectedCollection}
+                            mode="tracks"
+                            onBack={handleBackCollection}
+                            onSelectTrack={handleSelectTrack}
+                            onAddTrackToQueue={handleAddTrackToQueue}
+                            onPlayAll={legacyProps.onPlayAll}
+                            onAddAllToQueue={legacyProps.onAddAllToQueue}
+                            onSelectAlbum={handlePushAlbumCollection}
+                            onSelectArtist={(artistId) => {
+                                const source = selectedCollection.source;
+                                if (source === 'netease') {
+                                    handlePushCollection({
+                                        source: 'netease',
+                                        id: Number(artistId),
+                                        name: '歌手',
+                                        type: 'artist',
+                                    });
+                                } else if (source === 'navidrome') {
+                                    handlePushCollection({
+                                        source: 'navidrome',
+                                        id: String(artistId),
+                                        name: '歌手',
+                                        type: 'artist',
+                                    });
+                                } else if (source === 'local') {
+                                    const artistSongs = legacyProps.localSongs.filter(song => (song.matchedArtists || song.artist || '').toLowerCase() === String(artistId).toLowerCase());
+                                    handlePushCollection({
+                                        source: 'local',
+                                        id: String(artistId),
+                                        name: String(artistId),
+                                        type: 'artist',
+                                        songIds: artistSongs.map(song => song.id),
+                                    });
+                                }
+                            }}
+                            currentUserId={legacyProps.user?.userId}
+                            onPlaylistMutated={legacyProps.onRefreshUser}
+                            externalTracks={externalTracks}
+                            externalTracksLoading={externalTracksLoading}
+                            sourceActions={sourceActions}
+                            theme={legacyProps.theme}
+                            isDaylight={isDaylight}
+                        />
+                    )
                 )}
             </AnimatePresence>
         </>

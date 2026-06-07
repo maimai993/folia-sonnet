@@ -60,8 +60,8 @@ interface GridViewProps {
     collection?: any;
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
-    onSelectAlbum?: (albumId: number) => void;
-    onSelectArtist?: (artistId: number) => void;
+    onSelectAlbum?: (albumId: number | string) => void;
+    onSelectArtist?: (artistId: number | string) => void;
     currentUserId?: number | null;
     onPlaylistMutated?: () => Promise<void> | void;
     externalTracks?: SongResult[];
@@ -86,7 +86,7 @@ const GRID_VIEW_LAST_INDEX_PREFIX = 'folia_gridview_last_index';
  * by a single centralized rAF loop in the parent GridView via wrapper refs.
  * Queue button opacity uses inherited CSS custom property --queue-opacity / --queue-pe.
  */
-const PolaroidCard = React.memo<{
+export const PolaroidCard = React.memo<{
     item: GridItem;
     isDaylight: boolean;
     theme: Theme;
@@ -99,8 +99,9 @@ const PolaroidCard = React.memo<{
     cardHeight: number;
     isEditMode?: boolean;
     onRemoveTrack?: () => void;
-    onSelectArtist?: (artistId: number) => void;
-    onSelectAlbum?: (albumId: number) => void;
+    onSelectArtist?: (artistId: number | string) => void;
+    onSelectAlbum?: (albumId: number | string) => void;
+    onBeforeNestedNavigate?: () => void;
 }>(
     ({
         item,
@@ -116,7 +117,8 @@ const PolaroidCard = React.memo<{
         isEditMode = false,
         onRemoveTrack,
         onSelectArtist,
-        onSelectAlbum
+        onSelectAlbum,
+        onBeforeNestedNavigate,
     }) => {
         const isUnavailable = mode === 'tracks' && item.rawTrack ? isSongMarkedUnavailable(item.rawTrack) : false;
         const unavailableTagText = (mode === 'tracks' && item.rawTrack)
@@ -255,7 +257,10 @@ const PolaroidCard = React.memo<{
                                                 key={`${artist.id ?? 'artist'}-${idx}-${artist.name}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (artist.id) onSelectArtist(artist.id);
+                                                    if (artist.id) {
+                                                        onBeforeNestedNavigate?.();
+                                                        onSelectArtist(artist.id);
+                                                    }
                                                 }}
                                                 className="hover:underline hover:opacity-100 cursor-pointer text-current font-semibold"
                                             >
@@ -280,6 +285,7 @@ const PolaroidCard = React.memo<{
                                             e.stopPropagation();
                                             const alId = item.rawTrack?.al?.id || item.rawTrack?.album?.id;
                                             if (alId && onSelectAlbum) {
+                                                onBeforeNestedNavigate?.();
                                                 onSelectAlbum(alId);
                                             }
                                         }}
@@ -1237,7 +1243,7 @@ export const GridView: React.FC<GridViewProps> = ({
             const initialDist = Math.sqrt(initialCenterX * initialCenterX + initialCenterY * initialCenterY);
             const initialT = Math.min(initialDist / layoutConfig.maxDistance, 1);
             const initialScale = 1.1 - 0.65 * initialT;
-            const initialOpacity = 1.0 - 0.72 * initialT;
+            const initialOpacity = 1.0 - 0.60 * initialT;
             const initialZ = Math.round(50 - 49 * initialT);
 
             return (
@@ -1268,6 +1274,9 @@ export const GridView: React.FC<GridViewProps> = ({
                         }}
                         onSelectArtist={onSelectArtist}
                         onSelectAlbum={onSelectAlbum}
+                        onBeforeNestedNavigate={() => {
+                            persistNavigationState(idx);
+                        }}
                         onSelect={() => {
                             if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
                                 persistNavigationState(idx);
@@ -1395,7 +1404,7 @@ export const GridView: React.FC<GridViewProps> = ({
                     el.style.display = '';
                     const t = Math.min(dist / maxDistance, 1);
                     const scale = 1.1 - 0.65 * t;   // lerp(1.1, 0.45, t)
-                    const opac = 1.0 - 0.72 * t;     // lerp(1.0, 0.28, t)
+                    const opac = 1.0 - 0.60 * t;     // lerp(1.0, 0.4, t)
                     const z = Math.round(50 - 49 * t); // lerp(50, 1, t)
 
                     el.style.transform = `translate(${coord.baseX}px, ${coord.baseY}px) scale(${scale})`;

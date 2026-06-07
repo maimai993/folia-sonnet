@@ -16,6 +16,7 @@ export interface UseFoliaHexViewportOptions {
     renderRadius: number;
     renderRing: number;
     fallbackIndexRef?: RefObject<number>;
+    coords?: HexGridCoord[];
 }
 
 export const useFoliaHexViewport = ({
@@ -25,10 +26,11 @@ export const useFoliaHexViewport = ({
     renderRadius,
     renderRing,
     fallbackIndexRef,
+    coords: customCoords,
 }: UseFoliaHexViewportOptions) => {
     const coords = useMemo<HexGridCoord[]>(
-        () => buildHexGridCoords(itemCount, spacingX, spacingY),
-        [itemCount, spacingX, spacingY]
+        () => customCoords || buildHexGridCoords(itemCount, spacingX, spacingY),
+        [customCoords, itemCount, spacingX, spacingY]
     );
 
     const coordByKey = useMemo(() => (
