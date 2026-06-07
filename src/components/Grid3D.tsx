@@ -113,6 +113,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
     const { t } = useTranslation();
     const isDaylight = useSettingsUiStore(state => state.isDaylight);
+    const grid3dCardStyle = useSettingsUiStore(state => state.grid3dCardStyle);
     const {
         homeViewTab,
         setHomeViewTab,
@@ -130,7 +131,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     })));
 
     const isNeteaseTab = homeViewTab === 'playlist' || homeViewTab === 'albums' || homeViewTab === 'radio';
-    
+
     // UI Interaction states
     const [isSliding, setIsSliding] = useState(false);
     const slidingTimeoutRef = useRef<any>(null);
@@ -173,6 +174,24 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         const container = scrollContainerRef.current;
         if (!container) return;
 
+        // Skip updating focusedIndex if currently executing a programmatic smooth scroll
+        if (isProgrammaticScrollRef.current) {
+            if (programmaticTargetLeftRef.current !== null) {
+                const diff = Math.abs(container.scrollLeft - programmaticTargetLeftRef.current);
+                if (diff < 3) {
+                    isProgrammaticScrollRef.current = false;
+                    programmaticTargetLeftRef.current = null;
+                    if (programmaticScrollTimeoutRef.current) {
+                        clearTimeout(programmaticScrollTimeoutRef.current);
+                        programmaticScrollTimeoutRef.current = null;
+                    }
+                }
+            } else {
+                isProgrammaticScrollRef.current = false;
+            }
+            return;
+        }
+
         const flexWrapper = container.firstElementChild;
         if (!flexWrapper) return;
 
@@ -195,24 +214,68 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             if (prev === closestIndex) return prev;
             return closestIndex;
         });
+
     };
 
-    // Mouse drag-to-scroll implementation
+    // --- Momentum / inertia engine shared by drag and wheel ---
+    const momentumVelocityRef = useRef(0);
+    const momentumRafRef = useRef<number | null>(null);
+
+    /** Stop any running momentum animation */
+    const stopMomentum = () => {
+        if (momentumRafRef.current !== null) {
+            cancelAnimationFrame(momentumRafRef.current);
+            momentumRafRef.current = null;
+        }
+        momentumVelocityRef.current = 0;
+    };
+
+    /** Kick off a decaying inertia loop from the current velocity */
+    const startMomentum = () => {
+        const container = scrollContainerRef.current;
+        if (!container || Math.abs(momentumVelocityRef.current) < 0.5) return;
+
+        let lastTime = performance.now();
+        const FRICTION = 0.80;
+
+        const tick = (now: number) => {
+            const elapsed = now - lastTime;
+            lastTime = now;
+            // Scale friction to ~60 fps baseline so momentum feels consistent across refresh rates
+            const frames = elapsed / 16.67;
+            momentumVelocityRef.current *= Math.pow(FRICTION, frames);
+
+            if (Math.abs(momentumVelocityRef.current) < 0.5) {
+                momentumVelocityRef.current = 0;
+                momentumRafRef.current = null;
+                return;
+            }
+
+            container.scrollLeft += momentumVelocityRef.current;
+            momentumRafRef.current = requestAnimationFrame(tick);
+        };
+
+        momentumRafRef.current = requestAnimationFrame(tick);
+    };
+
+    // Mouse drag-to-scroll with velocity tracking
     const isDraggingRef = useRef(false);
     const startXRef = useRef(0);
     const scrollLeftRef = useRef(0);
     const dragDistanceRef = useRef(0);
+    const lastDragScrollRef = useRef(0);
+    const lastDragTimeRef = useRef(0);
 
     const handleMouseDown = (e: React.MouseEvent) => {
         if (!scrollContainerRef.current) return;
         if (e.button !== 0) return; // Only left click
+        stopMomentum();
         isDraggingRef.current = true;
         startXRef.current = e.pageX - scrollContainerRef.current.offsetLeft;
         scrollLeftRef.current = scrollContainerRef.current.scrollLeft;
         dragDistanceRef.current = 0;
-        
-        scrollContainerRef.current.style.scrollBehavior = 'auto';
-        scrollContainerRef.current.style.scrollSnapType = 'none';
+        lastDragScrollRef.current = scrollContainerRef.current.scrollLeft;
+        lastDragTimeRef.current = performance.now();
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
@@ -221,23 +284,36 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         const x = e.pageX - scrollContainerRef.current.offsetLeft;
         const walk = (x - startXRef.current) * 1.5;
         dragDistanceRef.current = Math.abs(walk);
+
+        const prevScroll = scrollContainerRef.current.scrollLeft;
         scrollContainerRef.current.scrollLeft = scrollLeftRef.current - walk;
+        const nowScroll = scrollContainerRef.current.scrollLeft;
+
+        // Track velocity for momentum
+        const now = performance.now();
+        const dt = now - lastDragTimeRef.current;
+        if (dt > 0) {
+            momentumVelocityRef.current = (nowScroll - lastDragScrollRef.current) / dt * 16;
+        }
+        lastDragScrollRef.current = nowScroll;
+        lastDragTimeRef.current = now;
         handleSliding();
     };
 
     const handleMouseUpOrLeave = () => {
         if (!isDraggingRef.current) return;
         isDraggingRef.current = false;
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.style.scrollBehavior = '';
-            scrollContainerRef.current.style.scrollSnapType = '';
-        }
+        startMomentum();
     };
 
-    // Clean sliding timeout
+
+
+    // Clean sliding, programmatic scroll timeouts, and momentum
     useEffect(() => {
         return () => {
             if (slidingTimeoutRef.current) clearTimeout(slidingTimeoutRef.current);
+            if (programmaticScrollTimeoutRef.current) clearTimeout(programmaticScrollTimeoutRef.current);
+            stopMomentum();
         };
     }, []);
 
@@ -365,6 +441,59 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         return [];
     }, [homeViewTab, playlistCards, albumCards, radioCards]);
 
+    const isProgrammaticScrollRef = useRef(false);
+    const programmaticTargetLeftRef = useRef<number | null>(null);
+    const programmaticScrollTimeoutRef = useRef<any>(null);
+
+    const focusedIndexRef = useRef(focusedIndex);
+    useEffect(() => {
+        focusedIndexRef.current = focusedIndex;
+    }, [focusedIndex]);
+
+    const currentDesktopItemsRef = useRef(currentDesktopItems);
+    useEffect(() => {
+        currentDesktopItemsRef.current = currentDesktopItems;
+    }, [currentDesktopItems]);
+
+    // Wheel-to-horizontal scroll with momentum — direct + inertia on stop
+    const wheelIdleTimerRef = useRef<any>(null);
+
+    useEffect(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        const handleWheelEvent = (e: WheelEvent) => {
+            e.preventDefault();
+            handleSliding();
+
+            // Stop any existing momentum when user resumes scrolling
+            if (momentumRafRef.current !== null) {
+                cancelAnimationFrame(momentumRafRef.current);
+                momentumRafRef.current = null;
+            }
+
+            // Map vertical to horizontal; apply directly
+            const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+            const scaled = delta * 1;
+            container.scrollLeft += scaled;
+
+            // Track velocity for momentum after wheel stops
+            momentumVelocityRef.current = scaled;
+
+            // Debounce: start momentum when wheel events stop
+            if (wheelIdleTimerRef.current) clearTimeout(wheelIdleTimerRef.current);
+            wheelIdleTimerRef.current = setTimeout(() => {
+                startMomentum();
+            }, 80);
+        };
+
+        container.addEventListener('wheel', handleWheelEvent, { passive: false });
+        return () => {
+            container.removeEventListener('wheel', handleWheelEvent);
+            if (wheelIdleTimerRef.current) clearTimeout(wheelIdleTimerRef.current);
+        };
+    }, [homeViewTab]);
+
     // Delegate GridView opening to the app-level host so Grid3D remains only the home surface.
     const handleSelectCollectionCard = (card: any) => {
         onOpenGridView?.(card.raw || card);
@@ -404,7 +533,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
     return (
         <div className={`relative w-full h-full flex flex-col font-sans overflow-hidden ${mainBg} pointer-events-auto backdrop-blur-sm`}>
-            
+
             {/* Main Header Container (Fades out when sliding/interacting) */}
             <div className={`transition-opacity duration-500 ease-in-out z-20 ${isSliding ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
                 <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto p-4 md:p-8 gap-y-4 md:gap-y-0">
@@ -483,7 +612,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
                 {isNeteaseTab ? (
                     <div className="w-full flex-1 flex flex-col justify-center relative min-h-0">
-                        
+
                         {/* Map Button (GridView Launcher) */}
                         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10">
                             <motion.button
@@ -502,47 +631,61 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         </div>
 
                         {/* Horizontal Polaroid Slider Container */}
-                        <div 
+                        <div
                             ref={scrollContainerRef}
                             onScroll={handleScroll}
                             onTouchStart={handleSliding}
                             onTouchMove={handleSliding}
-                            onWheel={handleSliding}
                             onMouseDown={handleMouseDown}
                             onMouseMove={handleMouseMove}
                             onMouseUp={handleMouseUpOrLeave}
                             onMouseLeave={handleMouseUpOrLeave}
-                            className="w-full flex items-center overflow-x-auto overflow-y-hidden py-16 scroll-smooth custom-scrollbar snap-x snap-mandatory cursor-grab active:cursor-grabbing"
+                            className="w-full flex items-center overflow-x-auto overflow-y-hidden py-16 custom-scrollbar cursor-grab active:cursor-grabbing"
                             style={{ scrollbarWidth: 'none' }}
                         >
                             <div className="flex px-[40vw] gap-12">
                                 {currentDesktopItems.map((item, idx) => {
-                                    // Stagger photo rotations organically to mimic real sheets lying on desk
-                                    const rotateDeg = (idx % 2 === 0 ? 3.5 : -3.5) * (idx % 3 === 0 ? 0.4 : 1.0);
-                                    
+
                                     const polaroidClass = isDaylight
                                         ? 'bg-[#faf9f6] text-zinc-900 border-zinc-200/50 shadow-lg'
                                         : 'bg-zinc-900 text-zinc-100 border-zinc-800/80 shadow-2xl';
 
                                     const isFocused = idx === focusedIndex;
+                                    const distance = Math.abs(idx - focusedIndex);
+
+                                    // Dynamic layout metrics calculated based on index distance from center focused index
+                                    const targetScale = isFocused
+                                        ? (grid3dCardStyle === 'image' ? 1.25 : 1.2)
+                                        : Math.max(0.5, (grid3dCardStyle === 'image' ? 0.90 : 0.92) - (distance - 1) * 0.12);
+
+                                    const targetOpacity = isFocused
+                                        ? 1.0
+                                        : Math.max(0.15, 0.7 - (distance - 1) * 0.18);
+
+                                    const targetY = isFocused
+                                        ? -6
+                                        : 0;
+
+                                    const targetZIndex = Math.max(1, 10 - distance);
 
                                     return (
                                         <motion.div
                                             key={item.id}
-                                            className="snap-center shrink-0 cursor-pointer pointer-events-auto select-none"
+                                            className="shrink-0 cursor-pointer pointer-events-auto select-none"
                                             animate={{
-                                                scale: isFocused ? 1.08 : 0.95,
-                                                y: isFocused ? -6 : 0,
-                                                rotate: isFocused ? 0 : rotateDeg,
-                                                zIndex: isFocused ? 10 : 1
+                                                scale: targetScale,
+                                                opacity: targetOpacity,
+                                                y: targetY,
+                                                zIndex: targetZIndex
                                             }}
-                                            whileHover={{ 
-                                                scale: isFocused ? 1.12 : 1.0, 
-                                                y: isFocused ? -12 : -6, 
-                                                rotate: 0,
+                                            whileHover={{
+                                                scale: isFocused
+                                                    ? (grid3dCardStyle === 'image' ? 1.3 : 1.24)
+                                                    : (grid3dCardStyle === 'image' ? 1.05 : 1.0),
+                                                y: isFocused ? -12 : -6,
                                                 zIndex: 12
                                             }}
-                                            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                                            transition={{ type: 'spring', stiffness: 600, damping: 40, mass: 0.5 }}
                                             onClick={() => {
                                                 if (dragDistanceRef.current < 8) {
                                                     if (isFocused) {
@@ -555,43 +698,71 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                                             const cardElement = flexWrapper?.children[idx] as HTMLElement;
                                                             if (cardElement) {
                                                                 const targetScrollLeft = cardElement.offsetLeft + cardElement.offsetWidth / 2 - container.clientWidth / 2;
+
+                                                                isProgrammaticScrollRef.current = true;
+                                                                programmaticTargetLeftRef.current = targetScrollLeft;
+                                                                if (programmaticScrollTimeoutRef.current) clearTimeout(programmaticScrollTimeoutRef.current);
+                                                                programmaticScrollTimeoutRef.current = setTimeout(() => {
+                                                                    isProgrammaticScrollRef.current = false;
+                                                                    programmaticTargetLeftRef.current = null;
+                                                                }, 600);
+
                                                                 container.scrollTo({
                                                                     left: targetScrollLeft,
                                                                     behavior: 'smooth'
                                                                 });
+                                                                wheelScrollTargetRef.current = targetScrollLeft;
                                                             }
                                                         }
                                                     }
                                                 }
                                             }}
                                         >
-                                            <div 
-                                                className={`w-64 rounded-xl border p-4 flex flex-col items-center transition-all ${polaroidClass}`}
-                                            >
-                                                {/* Square Album Cover */}
-                                                <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
+                                            {grid3dCardStyle === 'image' ? (
+                                                /* Pure Image Cover Style */
+                                                <div
+                                                    className={`w-64 aspect-square rounded-2xl overflow-hidden shadow-2xl relative transition-all duration-300 border border-white/10 ${isFocused ? 'ring-2 ring-white/30' : ''
+                                                        }`}
+                                                >
                                                     {item.coverUrl ? (
                                                         <img src={item.coverUrl} alt={item.name} className="w-full h-full object-cover pointer-events-none select-none" />
                                                     ) : (
-                                                        <Disc size={64} className="opacity-20" />
+                                                        <div className="w-full h-full bg-zinc-800/20 flex items-center justify-center">
+                                                            <Disc size={64} className="opacity-20" />
+                                                        </div>
                                                     )}
+                                                    <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
                                                 </div>
+                                            ) : (
+                                                /* Polaroid Card Style */
+                                                <div
+                                                    className={`w-64 rounded-xl border p-4 flex flex-col items-center transition-all ${polaroidClass}`}
+                                                >
+                                                    {/* Square Album Cover */}
+                                                    <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
+                                                        {item.coverUrl ? (
+                                                            <img src={item.coverUrl} alt={item.name} className="w-full h-full object-cover pointer-events-none select-none" />
+                                                        ) : (
+                                                            <Disc size={64} className="opacity-20" />
+                                                        )}
+                                                    </div>
 
-                                                {/* Details White Border Label */}
-                                                <div className="w-full text-left pt-2 min-w-0">
-                                                    <h3 className="font-bold text-sm truncate max-w-full tracking-tight">
-                                                        {item.name}
-                                                    </h3>
-                                                    <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
-                                                        {item.description}
-                                                    </p>
-                                                    {compactDescription(item.summary) && (
-                                                        <p className="text-[10px] leading-snug opacity-45 mt-2 line-clamp-2">
-                                                            {compactDescription(item.summary)}
+                                                    {/* Details White Border Label */}
+                                                    <div className="w-full text-left pt-2 min-w-0">
+                                                        <h3 className="font-bold text-sm truncate max-w-full tracking-tight">
+                                                            {item.name}
+                                                        </h3>
+                                                        <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
+                                                            {item.description}
                                                         </p>
-                                                    )}
+                                                        {compactDescription(item.summary) && (
+                                                            <p className="text-[10px] leading-snug opacity-45 mt-2 line-clamp-2">
+                                                                {compactDescription(item.summary)}
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
                                         </motion.div>
                                     );
                                 })}
@@ -605,9 +776,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.3 }}
-                                className={`relative shrink-0 text-center z-10 px-8 pointer-events-none ${
-                                    currentTrack ? 'pt-6 md:pt-8 pb-0 -mb-4 md:-mb-6' : 'pt-5 md:pt-6 pb-4'
-                                }`}
+                                className={`relative shrink-0 text-center z-10 px-8 pointer-events-none ${currentTrack ? 'pt-6 md:pt-8 pb-0 -mb-4 md:-mb-6' : 'pt-5 md:pt-6 pb-4'
+                                    }`}
                             >
                                 <h3 className="font-bold text-2xl truncate max-w-xl mx-auto" style={{ color: 'var(--text-primary)' }}>
                                     {currentDesktopItems[focusedIndex].name}
@@ -704,10 +874,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 {showCollectionGrid && (
                     <GridMap
                         title={
-                            homeViewTab === 'playlist' 
-                                ? t('home.playlists') 
-                                : homeViewTab === 'albums' 
-                                    ? t('home.albums') 
+                            homeViewTab === 'playlist'
+                                ? t('home.playlists')
+                                : homeViewTab === 'albums'
+                                    ? t('home.albums')
                                     : t('home.radio')
                         }
                         items={currentDesktopItems.map(item => ({
@@ -722,7 +892,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         onSelectCollection={(col, idx) => {
                             setShowCollectionGrid(false);
                             setFocusedIndex(idx);
-                            
+
                             // Scroll the container smoothly to center the selected card
                             const container = scrollContainerRef.current;
                             if (container) {
@@ -734,6 +904,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                         left: targetScrollLeft,
                                         behavior: 'smooth'
                                     });
+                                    wheelScrollTargetRef.current = targetScrollLeft;
                                 }
                             }
                         }}

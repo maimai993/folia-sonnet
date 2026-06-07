@@ -28,6 +28,8 @@ type AppearanceSettingsSubviewProps = {
     utilityGhostButtonClass: string;
     homeLayoutStyle: 'carousel' | 'desktop';
     onChangeHomeLayoutStyle: (style: 'carousel' | 'desktop') => void;
+    grid3dCardStyle: 'image' | 'card';
+    onChangeGrid3dCardStyle: (style: 'image' | 'card') => void;
 };
 
 const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
@@ -52,6 +54,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     utilityGhostButtonClass,
     homeLayoutStyle,
     onChangeHomeLayoutStyle,
+    grid3dCardStyle,
+    onChangeGrid3dCardStyle,
 }) => {
     const { t } = useTranslation();
     const getAccentOptionStyle = (selected: boolean) => (
@@ -227,6 +231,40 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         </button>
                     </div>
                 </div>
+
+                {homeLayoutStyle === 'desktop' && (
+                    <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                <LayoutGrid size={14} />
+                                {t('options.grid3dCardStyle') || '3D 网格卡片样式'}
+                            </div>
+                            <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.grid3dCardStyleDesc') || '选择 3D 网格中每张卡片的外观：纯图片封面或经典的拍立得文本卡片。'}
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mt-2">
+                            <button
+                                onClick={() => onChangeGrid3dCardStyle('image')}
+                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
+                                style={getAccentOptionStyle(grid3dCardStyle === 'image')}
+                            >
+                                <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.grid3dCardStyleImage') || '纯图片封面'}
+                                </span>
+                            </button>
+                            <button
+                                onClick={() => onChangeGrid3dCardStyle('card')}
+                                className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
+                                style={getAccentOptionStyle(grid3dCardStyle === 'card')}
+                            >
+                                <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.grid3dCardStyleCard') || '拍立得卡片'}
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </section>
     );
