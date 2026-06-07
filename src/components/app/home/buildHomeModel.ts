@@ -1,5 +1,5 @@
 import type React from 'react';
-import { PlayerState, type HomeViewTab } from '../../../types';
+import { PlayerState, type HomeViewTab, type SongResult } from '../../../types';
 import type LegacyHome from '../../Home';
 
 // src/components/app/home/buildHomeModel.ts
@@ -58,6 +58,9 @@ type BuildHomeModelParams = {
     loadStageSessionIntoPlayback: (session: any) => Promise<void>;
     theme: LegacyHomeProps['theme'];
     navidromeEnabled: LegacyHomeProps['navidromeEnabled'];
+    playAll: (songs: SongResult[]) => void;
+    addAllToQueue: (songs: SongResult[]) => void;
+    addSongToQueue: (song: SongResult) => void;
 };
 
 // Builds the full Home model from raw app dependencies so App.tsx no longer assembles nested props inline.
@@ -109,6 +112,9 @@ export const buildHomeModel = ({
     loadStageSessionIntoPlayback,
     theme,
     navidromeEnabled,
+    playAll,
+    addAllToQueue,
+    addSongToQueue,
 }: BuildHomeModelParams): HomeViewModel => {
     return {
         legacyProps: {
@@ -123,6 +129,9 @@ export const buildHomeModel = ({
             onSelectPlaylist: handlePlaylistSelect,
             onSelectAlbum: handleAlbumSelect,
             onSelectArtist: handleArtistSelect,
+            onPlayAll: playAll,
+            onAddAllToQueue: addAllToQueue,
+            onAddSongToQueue: addSongToQueue,
             focusedPlaylistIndex,
             setFocusedPlaylistIndex,
             focusedFavoriteAlbumIndex,

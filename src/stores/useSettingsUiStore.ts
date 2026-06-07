@@ -439,6 +439,29 @@ const readStoredAudioOutputDeviceId = (): string => {
     return localStorage.getItem('audio_output_device_id') ?? '';
 };
 
+const readStoredHomeLayoutStyle = (): 'carousel' | 'grid' => {
+    if (typeof window === 'undefined') {
+        return 'grid';
+    }
+
+    const saved = localStorage.getItem('home_layout_style');
+    if (saved === 'desktop') return 'grid';
+    return saved === 'carousel' ? 'carousel' : 'grid';
+};
+
+/**
+ * Reads the stored card style for the Grid3D desktop home view from localStorage.
+ * Returns 'image' (pure cover cover) or 'card' (Polaroid style with details).
+ */
+const readStoredGrid3dCardStyle = (): 'image' | 'card' => {
+    if (typeof window === 'undefined') {
+        return 'card';
+    }
+
+    const saved = localStorage.getItem('grid3d_card_style');
+    return saved === 'image' ? 'image' : 'card';
+};
+
 const readStoredVolume = () => {
     if (typeof window === 'undefined') {
         return 1;
@@ -494,6 +517,10 @@ type SettingsUiState = {
     volume: number;
     isMuted: boolean;
     loopMode: 'off' | 'all' | 'one';
+    homeLayoutStyle: 'carousel' | 'grid';
+    grid3dCardStyle: 'image' | 'card';
+    activeGridViewCollection: any | null;
+    setActiveGridViewCollection: (collection: any | null) => void;
     isSubSettingsViewOpen: boolean;
     settingsModalState: SettingsModalState;
     setStatusSetter: (setter: StatusSetter | null) => void;
@@ -558,6 +585,8 @@ type SettingsUiState = {
     handleSetVolume: (val: number) => void;
     handleToggleMute: () => void;
     handleToggleLoopMode: () => void;
+    handleSetHomeLayoutStyle: (style: 'carousel' | 'grid') => void;
+    handleSetGrid3dCardStyle: (style: 'image' | 'card') => void;
 };
 
 const notify = (get: () => SettingsUiState, message: StatusMessage) => {
@@ -609,6 +638,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     volume: readStoredVolume(),
     isMuted: getStoredBoolean('player_is_muted', false),
     loopMode: readStoredLoopMode(),
+    homeLayoutStyle: readStoredHomeLayoutStyle(),
+    grid3dCardStyle: readStoredGrid3dCardStyle(),
+    activeGridViewCollection: null,
+    setActiveGridViewCollection: (collection) => set({ activeGridViewCollection: collection }),
     isSubSettingsViewOpen: false,
     settingsModalState: {
         isOpen: false,
@@ -1178,6 +1211,26 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ loopMode: next });
     },
+    handleSetHomeLayoutStyle: (style) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('home_layout_style', style);
+        }
+        set({ homeLayoutStyle: style });
+        notify(get, {
+            type: 'info',
+            text: style === 'grid' ? '首页布局已切换为万象' : '首页布局已切换为经典',
+        });
+    },
+    handleSetGrid3dCardStyle: (style) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('grid3d_card_style', style);
+        }
+        set({ grid3dCardStyle: style });
+        notify(get, {
+            type: 'info',
+            text: style === 'image' ? '卡片样式已切换为纯图片封面' : '卡片样式已切换为拍立得卡片',
+        });
+    },
 }));
 
 export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
@@ -1202,6 +1255,12 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     visualizerFrameRate: state.visualizerFrameRate,
     isDaylight: state.isDaylight,
     visualizerMode: state.visualizerMode,
+    homeLayoutStyle: state.homeLayoutStyle,
+    handleSetHomeLayoutStyle: state.handleSetHomeLayoutStyle,
+    grid3dCardStyle: state.grid3dCardStyle,
+    handleSetGrid3dCardStyle: state.handleSetGrid3dCardStyle,
+    activeGridViewCollection: state.activeGridViewCollection,
+    setActiveGridViewCollection: state.setActiveGridViewCollection,
     classicTuning: state.classicTuning,
     cadenzaTuning: state.cadenzaTuning,
     partitaTuning: state.partitaTuning,

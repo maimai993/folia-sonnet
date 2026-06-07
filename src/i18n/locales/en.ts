@@ -220,6 +220,8 @@ export default {
     "searchDatabase": "SEARCH DATABASE...",
     "searchLocal": "Search local songs...",
     "searchNavidrome": "Search navidrome",
+    "gridSearchPlaceholder": "Filter songs...",
+    "gridSearchNoResults": "No matching songs",
     "login": "Login",
     "welcomeBack": "Welcome Back",
     "guestTitle": "Try searching a few songs first",
@@ -506,7 +508,15 @@ export default {
     "openaiApiModel": "OpenAI Model",
     "openaiApiModelDesc": "Required by many OpenAI-compatible providers. Examples: gpt-4o, gpt-4.1-mini, deepseek-v4-flash.",
     "geminiApiKeyDesc": "Netease API backend runs locally.",
-    "save": "Save"
+    "save": "Save",
+    "homeLayoutStyle": "Home Layout Style",
+    "homeLayoutStyleDesc": "Choose the style of the home screen: Classic (Legacy) or Vast Desktop (New, supporting Polaroid track grids).",
+    "homeLayoutStyleCarousel": "Classic (Legacy)",
+    "homeLayoutStyleGrid": "Vast Desktop (New)",
+    "grid3dCardStyle": "3D Grid Card Style",
+    "grid3dCardStyleDesc": "Choose the appearance of each card in the 3D grid: cover image only or classic Polaroid text cards.",
+    "grid3dCardStyleImage": "Cover Image Only",
+    "grid3dCardStyleCard": "Polaroid Card"
   },
   "localMusic": {
     "foldersAndPlaylists": "Folders & Playlists",

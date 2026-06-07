@@ -103,6 +103,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         visualizerOpacity,
         isDaylight,
         visualizerMode,
+        homeLayoutStyle,
+        grid3dCardStyle,
         classicTuning,
         cadenzaTuning,
         partitaTuning,
@@ -156,6 +158,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetLyricsCustomFont: onLyricsCustomFontChange,
         handleUploadLyricsCustomFont: onLyricsCustomFontUpload,
         handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
+        handleSetHomeLayoutStyle: onChangeHomeLayoutStyle,
+        handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
     } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
     const setIsSubSettingsViewOpen = useSettingsUiStore(state => state.setIsSubSettingsViewOpen);
     const [activeTab, setActiveTab] = useState<'help' | 'options'>(initialTab);
@@ -2068,6 +2072,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         toggleOffBackgroundClass={toggleOffBackgroundClass}
                         transparentPlayerBackground={transparentPlayerBackground}
                         utilityGhostButtonClass={utilityGhostButtonClass}
+                        homeLayoutStyle={homeLayoutStyle}
+                        onChangeHomeLayoutStyle={onChangeHomeLayoutStyle}
+                        grid3dCardStyle={grid3dCardStyle}
+                        onChangeGrid3dCardStyle={onChangeGrid3dCardStyle}
                     />
                 ),
             })}

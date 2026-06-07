@@ -546,7 +546,7 @@ export interface LocalLibraryGroup {
   type: LocalLibraryGroupType;
   name: string;
   songs: LocalSong[];
-  coverUrl?: string;
+  coverUrl?: string | Blob;
   id: string;
   isVirtual?: boolean;
   trackCount?: number;

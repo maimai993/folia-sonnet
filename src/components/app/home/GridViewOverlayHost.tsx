@@ -1,0 +1,480 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useShallow } from 'zustand/react/shallow';
+import LegacyHome from '../../Home';
+import GridView, { GridViewSourceActions } from '../../GridView';
+import ArtistGridView from '../../ArtistGridView';
+import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
+import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import { LocalSong, SongResult, UnifiedSong } from '../../../types';
+import { NavidromeSong } from '../../../types/navidrome';
+import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
+import { deleteFolderSongs, resyncFolder } from '../../../services/localMusicService';
+import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
+import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
+import {
+    GridViewCollectionDescriptor,
+    isLocalGridViewCollection,
+    isNavidromeGridViewCollection,
+    resolveLocalGridViewTracks,
+    resolveNavidromeGridViewTracks,
+} from './gridViewCollectionAdapters';
+
+// src/components/app/home/GridViewOverlayHost.tsx
+// Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
+
+type LegacyHomeProps = React.ComponentProps<typeof LegacyHome>;
+
+type GridViewOverlayHostProps = {
+    legacyProps: LegacyHomeProps;
+    children: (openGridView: (collection: GridViewCollectionDescriptor) => void) => React.ReactNode;
+};
+
+type StoredGridViewCollection = {
+    collection: GridViewCollectionDescriptor;
+    homeViewTab: string;
+};
+
+export const GRID_VIEW_ACTIVE_COLLECTION_KEY = 'folia_gridview_active_collection';
+
+const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, children }) => {
+    const activeGridViewCollection = useSettingsUiStore(state => state.activeGridViewCollection);
+    const setActiveGridViewCollection = useSettingsUiStore(state => state.setActiveGridViewCollection);
+    const isDaylight = useSettingsUiStore(state => state.isDaylight);
+    const { homeViewTab, setHomeViewTab } = useSearchNavigationStore(useShallow(state => ({
+        homeViewTab: state.homeViewTab,
+        setHomeViewTab: state.setHomeViewTab,
+    })));
+    const [collectionHistory, setCollectionHistory] = useState<GridViewCollectionDescriptor[]>([]);
+    const selectedCollection = collectionHistory[collectionHistory.length - 1] || null;
+    const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);
+    const [externalTracksLoading, setExternalTracksLoading] = useState(false);
+    const [navidromePlaylistItems, setNavidromePlaylistItems] = useState<Array<{ id: string | number; name: string; description?: string; }>>([]);
+    const selectedCollectionKey = selectedCollection
+        ? `${selectedCollection.source}:${selectedCollection.type}:${String(selectedCollection.id)}`
+        : '';
+
+    useEffect(() => {
+        if (collectionHistory.length > 0) return;
+
+        try {
+            const saved = sessionStorage.getItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
+            if (!saved) return;
+
+            const parsed = JSON.parse(saved) as StoredGridViewCollection;
+            if (parsed?.collection?.id === undefined || parsed.collection.id === null || !parsed.collection.name) return;
+
+            setCollectionHistory([parsed.collection]);
+            setActiveGridViewCollection(parsed.collection);
+            if (parsed.homeViewTab) {
+                setHomeViewTab(parsed.homeViewTab as any);
+            }
+        } catch {
+            sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
+        }
+    }, [collectionHistory.length, setHomeViewTab, setActiveGridViewCollection]);
+
+    useEffect(() => {
+        if (activeGridViewCollection) {
+            const currentTop = collectionHistory[collectionHistory.length - 1];
+            if (currentTop?.id === activeGridViewCollection.id && currentTop?.source === activeGridViewCollection.source) {
+                return;
+            }
+            setCollectionHistory([activeGridViewCollection]);
+            sessionStorage.setItem(
+                GRID_VIEW_ACTIVE_COLLECTION_KEY,
+                JSON.stringify({ collection: activeGridViewCollection, homeViewTab })
+            );
+        } else {
+            setCollectionHistory([]);
+            sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
+        }
+    }, [activeGridViewCollection, homeViewTab]);
+
+    const openGridView = useCallback((collection: GridViewCollectionDescriptor) => {
+        setCollectionHistory([collection]);
+        setActiveGridViewCollection(collection);
+        sessionStorage.setItem(
+            GRID_VIEW_ACTIVE_COLLECTION_KEY,
+            JSON.stringify({ collection, homeViewTab })
+        );
+    }, [homeViewTab, setActiveGridViewCollection]);
+
+    const closeGridView = useCallback(() => {
+        const shouldReturnToPlayer = Boolean(selectedCollection?.returnToPlayerOnClose);
+        sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
+        setCollectionHistory([]);
+        setActiveGridViewCollection(null);
+        if (shouldReturnToPlayer) {
+            legacyProps.onBackToPlayer();
+        }
+    }, [legacyProps, selectedCollection, setActiveGridViewCollection]);
+
+    const handlePushCollection = useCallback((col: GridViewCollectionDescriptor) => {
+        setCollectionHistory(prev => [...prev, col]);
+        setActiveGridViewCollection(col);
+        sessionStorage.setItem(
+            GRID_VIEW_ACTIVE_COLLECTION_KEY,
+            JSON.stringify({ collection: col, homeViewTab })
+        );
+    }, [homeViewTab, setActiveGridViewCollection]);
+
+    const handleBackCollection = useCallback(() => {
+        if (collectionHistory.length > 1) {
+            const nextHistory = collectionHistory.slice(0, -1);
+            setCollectionHistory(nextHistory);
+            const newTop = nextHistory[nextHistory.length - 1];
+            setActiveGridViewCollection(newTop);
+            sessionStorage.setItem(
+                GRID_VIEW_ACTIVE_COLLECTION_KEY,
+                JSON.stringify({ collection: newTop, homeViewTab })
+            );
+        } else {
+            closeGridView();
+        }
+    }, [collectionHistory, closeGridView, homeViewTab, setActiveGridViewCollection]);
+
+    const handlePushAlbumCollection = useCallback((albumId: number | string, album?: any) => {
+        if (!selectedCollection) return;
+
+        const source = selectedCollection.source;
+        const albumName = album?.name || '专辑';
+        const albumCoverUrl = album?.coverImgUrl || album?.coverUrl || album?.picUrl;
+        if (source === 'netease') {
+            handlePushCollection({
+                source: 'netease',
+                id: Number(albumId),
+                name: albumName,
+                type: 'album',
+                coverImgUrl: albumCoverUrl,
+                coverUrl: albumCoverUrl,
+                picUrl: albumCoverUrl,
+            });
+        } else if (source === 'navidrome') {
+            handlePushCollection({
+                source: 'navidrome',
+                id: String(albumId),
+                name: albumName,
+                type: 'album',
+                coverImgUrl: albumCoverUrl,
+                coverUrl: albumCoverUrl,
+                picUrl: albumCoverUrl,
+            });
+        } else if (source === 'local') {
+            const localAlbumName = album?.name || String(albumId);
+            const localCoverUrl = albumCoverUrl;
+            const albumSongs = legacyProps.localSongs.filter(song => (song.album || '').toLowerCase() === localAlbumName.toLowerCase());
+            handlePushCollection({
+                source: 'local',
+                id: localAlbumName,
+                name: localAlbumName,
+                type: 'album',
+                coverImgUrl: localCoverUrl,
+                coverUrl: localCoverUrl,
+                picUrl: localCoverUrl,
+                songIds: albumSongs.map(song => song.id),
+            });
+        }
+    }, [handlePushCollection, legacyProps.localSongs, selectedCollection]);
+
+    useEffect(() => {
+        if (!selectedCollection) {
+            setExternalTracks(undefined);
+            setExternalTracksLoading(false);
+            setNavidromePlaylistItems([]);
+            return;
+        }
+
+        if (isLocalGridViewCollection(selectedCollection)) {
+            const resolvedTracks = resolveLocalGridViewTracks(selectedCollection, legacyProps.localSongs) as UnifiedSong[];
+            const createdUrls: string[] = [];
+            const processedTracks = resolvedTracks.map(track => {
+                const localData = track.localData;
+                if (!localData) return track;
+
+                const preferOnlineCover = localData.useOnlineCover === true;
+                if (preferOnlineCover && localData.matchedCoverUrl) {
+                    return track;
+                }
+
+                if (localData.embeddedCover) {
+                    const url = URL.createObjectURL(localData.embeddedCover);
+                    createdUrls.push(url);
+                    return {
+                        ...track,
+                        al: track.al ? { ...track.al, picUrl: url } : { id: 0, name: '', picUrl: url },
+                        album: track.album ? { ...track.album, picUrl: url } : { id: 0, name: '', picUrl: url },
+                    };
+                }
+
+                return track;
+            });
+
+            setExternalTracks(processedTracks);
+            setExternalTracksLoading(false);
+
+            return () => {
+                createdUrls.forEach(url => URL.revokeObjectURL(url));
+            };
+        }
+
+        if (!isNavidromeGridViewCollection(selectedCollection)) {
+            setExternalTracks(undefined);
+            setExternalTracksLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+        setExternalTracks([]);
+        setExternalTracksLoading(true);
+
+        resolveNavidromeGridViewTracks(selectedCollection)
+            .then((tracks) => {
+                if (!cancelled) {
+                    setExternalTracks(tracks);
+                }
+            })
+            .catch((error) => {
+                console.error('[GridViewOverlayHost] Failed to load Navidrome GridView tracks:', error);
+                if (!cancelled) {
+                    setExternalTracks([]);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setExternalTracksLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [legacyProps.localSongs, selectedCollection]);
+
+    const refreshNavidromePlaylists = useCallback(async () => {
+        const config = getNavidromeConfig();
+        if (!config) {
+            setNavidromePlaylistItems([]);
+            return;
+        }
+
+        const playlists = await navidromeApi.getPlaylists(config);
+        setNavidromePlaylistItems(playlists.map(playlist => ({
+            id: playlist.id,
+            name: playlist.name,
+            description: playlist.owner,
+        })));
+    }, []);
+
+    useEffect(() => {
+        if (selectedCollection && isNavidromeGridViewCollection(selectedCollection)) {
+            void refreshNavidromePlaylists();
+        }
+    }, [refreshNavidromePlaylists, selectedCollection]);
+
+    const handleSelectTrack = useCallback((track: SongResult, queue: SongResult[]) => {
+        const unifiedTrack = track as UnifiedSong;
+        if (unifiedTrack.isNavidrome) {
+            const naviSong = resolveNavidromePlaybackCarrier(unifiedTrack);
+            if (naviSong) {
+                const naviQueue = queue
+                    .map(t => resolveNavidromePlaybackCarrier(t))
+                    .filter((t): t is NavidromeSong => Boolean(t));
+                legacyProps.onPlayNavidromeSong?.(naviSong, naviQueue);
+                return;
+            }
+        }
+        if (unifiedTrack.isLocal && unifiedTrack.localData) {
+            const localQueue = queue
+                .map(t => (t as UnifiedSong).localData)
+                .filter((song): song is LocalSong => Boolean(song));
+            legacyProps.onPlayLocalSong?.(unifiedTrack.localData, localQueue);
+            return;
+        }
+        legacyProps.onPlaySong(track, queue);
+    }, [legacyProps]);
+
+    const handleAddTrackToQueue = useCallback((track: SongResult) => {
+        const unifiedTrack = track as UnifiedSong;
+        if (unifiedTrack.isLocal && unifiedTrack.localData) {
+            legacyProps.onAddLocalSongToQueue?.(unifiedTrack.localData);
+            return;
+        }
+        if (unifiedTrack.isNavidrome) {
+            const naviSong = resolveNavidromePlaybackCarrier(unifiedTrack);
+            if (naviSong) {
+                legacyProps.onAddNavidromeSongsToQueue?.([naviSong]);
+                return;
+            }
+        }
+        legacyProps.onAddSongToQueue?.(track);
+    }, [legacyProps]);
+
+    const sourceActions = useMemo<GridViewSourceActions>(() => ({
+        local: {
+            onRefresh: legacyProps.onRefreshLocalSongs,
+            onResyncFolder: async (collection) => {
+                const importedSongs = await resyncFolder(collection.name);
+                if (importedSongs !== null) {
+                    legacyProps.onRefreshLocalSongs();
+                }
+            },
+            onDeleteFolder: async (collection) => {
+                await deleteFolderSongs(collection.name);
+                legacyProps.onRefreshLocalSongs();
+            },
+            onRenamePlaylist: async (playlistId, name) => {
+                await updateLocalPlaylist(playlistId, playlist => ({
+                    ...playlist,
+                    name: name.trim(),
+                }));
+                legacyProps.onRefreshLocalSongs();
+            },
+            onDeletePlaylist: async (playlistId) => {
+                await deleteLocalPlaylist(playlistId);
+                legacyProps.onRefreshLocalSongs();
+            },
+            onRemovePlaylistSongs: async (playlistId, songIds) => {
+                await removeSongsFromLocalPlaylist(playlistId, songIds);
+                legacyProps.onRefreshLocalSongs();
+            },
+        },
+        navidrome: {
+            availablePlaylists: navidromePlaylistItems,
+            onAddToPlaylist: async (playlistId, songs) => {
+                const config = getNavidromeConfig();
+                if (!config) return;
+
+                await navidromeApi.updatePlaylist(config, String(playlistId), {
+                    songIdsToAdd: songs
+                        .map(song => (song as UnifiedSong).navidromeData?.id)
+                        .filter((id): id is string => Boolean(id)),
+                });
+                await refreshNavidromePlaylists();
+            },
+            onCreatePlaylist: async (name, songs) => {
+                const config = getNavidromeConfig();
+                if (!config) return;
+
+                await navidromeApi.createPlaylist(
+                    config,
+                    name,
+                    songs
+                        .map(song => (song as UnifiedSong).navidromeData?.id)
+                        .filter((id): id is string => Boolean(id))
+                );
+                await refreshNavidromePlaylists();
+            },
+            onRenamePlaylist: async (playlistId, name) => {
+                const config = getNavidromeConfig();
+                if (!config) return;
+
+                await navidromeApi.updatePlaylist(config, playlistId, { name });
+                await refreshNavidromePlaylists();
+            },
+            onDeletePlaylist: async (playlistId) => {
+                const config = getNavidromeConfig();
+                if (!config) return;
+
+                await navidromeApi.deletePlaylist(config, playlistId);
+                await refreshNavidromePlaylists();
+            },
+            onRemovePlaylistSongs: async (playlistId, songIndexes) => {
+                const config = getNavidromeConfig();
+                if (!config) return;
+
+                await navidromeApi.updatePlaylist(config, playlistId, {
+                    songIndexesToRemove: songIndexes,
+                });
+            },
+        },
+    }), [legacyProps, navidromePlaylistItems, refreshNavidromePlaylists]);
+
+    return (
+        <>
+            {children(openGridView)}
+            <AnimatePresence initial={false}>
+                {selectedCollection && (
+                    <motion.div
+                        key="grid-transition-backdrop"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                        className="fixed inset-0 z-[49] pointer-events-none"
+                        style={{ backgroundColor: 'var(--bg-color)' }}
+                    />
+                )}
+            </AnimatePresence>
+            <AnimatePresence initial={false}>
+                {selectedCollection && (
+                    selectedCollection.type === 'artist' ? (
+                        <ArtistGridView
+                            key={selectedCollectionKey}
+                            collection={selectedCollection}
+                            onBack={handleBackCollection}
+                            onSelectTrack={handleSelectTrack}
+                            onAddTrackToQueue={handleAddTrackToQueue}
+                            onPlayAll={legacyProps.onPlayAll}
+                            onAddAllToQueue={legacyProps.onAddAllToQueue}
+                            onSelectAlbum={handlePushAlbumCollection}
+                            theme={legacyProps.theme}
+                            isDaylight={isDaylight}
+                            localSongs={legacyProps.localSongs}
+                        />
+                    ) : (
+                        <GridView
+                            key={selectedCollectionKey}
+                            title={selectedCollection.name}
+                            subtitle={(selectedCollection as any).creator?.nickname || (selectedCollection as any).artists?.[0]?.name || selectedCollection.description || ''}
+                            collection={selectedCollection}
+                            mode="tracks"
+                            onBack={handleBackCollection}
+                            onSelectTrack={handleSelectTrack}
+                            onAddTrackToQueue={handleAddTrackToQueue}
+                            onPlayAll={legacyProps.onPlayAll}
+                            onAddAllToQueue={legacyProps.onAddAllToQueue}
+                            onSelectAlbum={handlePushAlbumCollection}
+                            onSelectArtist={(artistId) => {
+                                const source = selectedCollection.source;
+                                if (source === 'netease') {
+                                    handlePushCollection({
+                                        source: 'netease',
+                                        id: Number(artistId),
+                                        name: '歌手',
+                                        type: 'artist',
+                                    });
+                                } else if (source === 'navidrome') {
+                                    handlePushCollection({
+                                        source: 'navidrome',
+                                        id: String(artistId),
+                                        name: '歌手',
+                                        type: 'artist',
+                                    });
+                                } else if (source === 'local') {
+                                    const artistSongs = legacyProps.localSongs.filter(song => (song.matchedArtists || song.artist || '').toLowerCase() === String(artistId).toLowerCase());
+                                    handlePushCollection({
+                                        source: 'local',
+                                        id: String(artistId),
+                                        name: String(artistId),
+                                        type: 'artist',
+                                        songIds: artistSongs.map(song => song.id),
+                                    });
+                                }
+                            }}
+                            currentUserId={legacyProps.user?.userId}
+                            onPlaylistMutated={legacyProps.onRefreshUser}
+                            externalTracks={externalTracks}
+                            externalTracksLoading={externalTracksLoading}
+                            sourceActions={sourceActions}
+                            theme={legacyProps.theme}
+                            isDaylight={isDaylight}
+                        />
+                    )
+                )}
+            </AnimatePresence>
+        </>
+    );
+};
+
+export default GridViewOverlayHost;

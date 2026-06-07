@@ -412,16 +412,22 @@ export const navidromeApi = {
             ? navidromeApi.getCoverArtUrl(config, coverArtId, 600)
             : undefined;
 
+        const displayArtists = [{ id: 0, name: song.artist }];
+        const displayAlbum = {
+            id: 0,
+            name: song.album,
+            picUrl: coverArtUrl,
+        };
+
         return {
             // Use negative ID to avoid conflicts with Netease IDs
             id: -Math.abs(parseInt(song.id.replace(/\D/g, ''), 10) || Date.now()),
             name: song.title,
-            artists: [{ id: 0, name: song.artist }],
-            album: {
-                id: 0,
-                name: song.album,
-                picUrl: coverArtUrl,
-            },
+            artists: displayArtists,
+            album: displayAlbum,
+            ar: displayArtists,
+            al: displayAlbum,
+            dt: song.duration * 1000,
             duration: song.duration * 1000, // Convert to milliseconds
             isNavidrome: true,
             navidromeData: {
