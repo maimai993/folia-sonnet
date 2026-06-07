@@ -4,10 +4,23 @@ import { LocalLibraryGroup, LocalPlaylist, LocalSong } from '../../../types';
 // src/components/app/home/localGrid3DModel.ts
 // Builds local-library overview groups for the desktop Grid3D surface.
 
-const getLocalCoverUrl = (songs: LocalSong[]) => (
-    songs.find(song => song.useOnlineCover && song.matchedCoverUrl)?.matchedCoverUrl
-    || songs.find(song => song.matchedCoverUrl)?.matchedCoverUrl
-);
+const getLocalCoverUrl = (songs: LocalSong[]): Blob | string | undefined => {
+    const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    const preferredSong = sortedSongs.find(song => {
+        if (song.useOnlineCover) {
+            return song.matchedCoverUrl || song.embeddedCover;
+        }
+        return song.embeddedCover || song.matchedCoverUrl;
+    });
+
+    if (!preferredSong) return undefined;
+
+    if (preferredSong.useOnlineCover) {
+        return preferredSong.matchedCoverUrl || preferredSong.embeddedCover;
+    }
+
+    return preferredSong.embeddedCover || preferredSong.matchedCoverUrl;
+};
 
 const sortByName = <T extends { name: string }>(items: T[]) => (
     items.sort((a, b) => a.name.localeCompare(b.name))

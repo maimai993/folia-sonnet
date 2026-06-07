@@ -102,16 +102,20 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
         void fetchLibrary();
     }, [fetchLibrary]);
 
-    const albumItems = useMemo(() => albums.map(album => ({
-        id: album.id,
-        name: album.name,
-        coverUrl: album.coverArt ? navidromeApi.getCoverArtUrl(config!, album.coverArt, 600) : createCoverPlaceholder(album.name, 'playlist'),
-        description: album.artist,
-        trackCount: album.songCount,
-    })), [albums, config]);
+    const albumItems = useMemo(() => {
+        if (!config) return [];
+        return albums.map(album => ({
+            id: album.id,
+            name: album.name,
+            coverUrl: album.coverArt ? navidromeApi.getCoverArtUrl(config, album.coverArt, 600) : createCoverPlaceholder(album.name, 'playlist'),
+            description: album.artist,
+            trackCount: album.songCount,
+        }));
+    }, [albums, config]);
 
     const playlistItems = useMemo(() => {
-        const getCoverArtUrl = (coverArtId: string, size?: number) => navidromeApi.getCoverArtUrl(config!, coverArtId, size);
+        if (!config) return [];
+        const getCoverArtUrl = (coverArtId: string, size?: number) => navidromeApi.getCoverArtUrl(config, coverArtId, size);
         const randomCover = pickRandomSongCoverUrl(randomSongs, getCoverArtUrl);
         const favoritesCover = pickRandomSongCoverUrl(favoriteSongs, getCoverArtUrl);
 
@@ -133,7 +137,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
             ...playlists.map(playlist => ({
                 id: playlist.id,
                 name: playlist.name,
-                coverUrl: playlist.coverArt ? navidromeApi.getCoverArtUrl(config!, playlist.coverArt, 600) : createCoverPlaceholder(playlist.name, 'playlist'),
+                coverUrl: playlist.coverArt ? navidromeApi.getCoverArtUrl(config, playlist.coverArt, 600) : createCoverPlaceholder(playlist.name, 'playlist'),
                 description: playlist.owner || t('home.playlists'),
                 trackCount: playlist.songCount,
                 editable: true,
@@ -141,15 +145,18 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
         ];
     }, [config, favoriteSongs, playlists, randomSongs, t]);
 
-    const artistItems = useMemo(() => artists.map(artist => ({
-        id: artist.id,
-        name: artist.name,
-        coverUrl: artist.coverArt
-            ? navidromeApi.getCoverArtUrl(config!, artist.coverArt, 600)
-            : artist.artistImageUrl || createCoverPlaceholder(artist.name, 'artist'),
-        description: t('navidrome.artists'),
-        trackCount: artist.albumCount,
-    })), [artists, config, t]);
+    const artistItems = useMemo(() => {
+        if (!config) return [];
+        return artists.map(artist => ({
+            id: artist.id,
+            name: artist.name,
+            coverUrl: artist.coverArt
+                ? navidromeApi.getCoverArtUrl(config, artist.coverArt, 600)
+                : artist.artistImageUrl || createCoverPlaceholder(artist.name, 'artist'),
+            description: t('navidrome.artists'),
+            trackCount: artist.albumCount,
+        }));
+    }, [artists, config, t]);
 
     useEffect(() => {
         if (!externalSelection || !onOpenGridView) return;

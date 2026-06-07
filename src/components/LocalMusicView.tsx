@@ -493,7 +493,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         return (
             <LocalArtistView
                 artistName={resolvedSelectedGroup.name}
-                coverUrl={resolvedSelectedGroup.coverUrl}
+                coverUrl={typeof resolvedSelectedGroup.coverUrl === 'string' ? resolvedSelectedGroup.coverUrl : undefined}
                 songs={resolvedSelectedGroup.songs}
                 onBack={() => {
                     onPlaylistVisibilityChange?.(false);
@@ -512,7 +512,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
         return (
             <LocalPlaylistView
                 title={resolvedSelectedGroup.name}
-                coverUrl={resolvedSelectedGroup.coverUrl}
+                coverUrl={typeof resolvedSelectedGroup.coverUrl === 'string' ? resolvedSelectedGroup.coverUrl : undefined}
                 songs={resolvedSelectedGroup.songs}
                 onBack={() => {
                     onPlaylistVisibilityChange?.(false);

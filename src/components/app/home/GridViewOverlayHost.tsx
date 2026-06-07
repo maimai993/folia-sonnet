@@ -5,7 +5,8 @@ import LegacyHome from '../../Home';
 import GridView, { GridViewSourceActions } from '../../GridView';
 import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
-import { SongResult, UnifiedSong } from '../../../types';
+import { LocalSong, SongResult, UnifiedSong } from '../../../types';
+import { NavidromeSong } from '../../../types/navidrome';
 import { deleteFolderSongs, resyncFolder } from '../../../services/localMusicService';
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
@@ -86,9 +87,36 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         }
 
         if (isLocalGridViewCollection(selectedCollection)) {
-            setExternalTracks(resolveLocalGridViewTracks(selectedCollection, legacyProps.localSongs));
+            const resolvedTracks = resolveLocalGridViewTracks(selectedCollection, legacyProps.localSongs) as UnifiedSong[];
+            const createdUrls: string[] = [];
+            const processedTracks = resolvedTracks.map(track => {
+                const localData = track.localData;
+                if (!localData) return track;
+
+                const preferOnlineCover = localData.useOnlineCover === true;
+                if (preferOnlineCover && localData.matchedCoverUrl) {
+                    return track;
+                }
+
+                if (localData.embeddedCover) {
+                    const url = URL.createObjectURL(localData.embeddedCover);
+                    createdUrls.push(url);
+                    return {
+                        ...track,
+                        al: track.al ? { ...track.al, picUrl: url } : { id: 0, name: '', picUrl: url },
+                        album: track.album ? { ...track.album, picUrl: url } : { id: 0, name: '', picUrl: url },
+                    };
+                }
+
+                return track;
+            });
+
+            setExternalTracks(processedTracks);
             setExternalTracksLoading(false);
-            return;
+
+            return () => {
+                createdUrls.forEach(url => URL.revokeObjectURL(url));
+            };
         }
 
         if (!isNavidromeGridViewCollection(selectedCollection)) {
@@ -147,12 +175,18 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
 
     const handleSelectTrack = useCallback((track: SongResult, queue: SongResult[]) => {
         const unifiedTrack = track as UnifiedSong;
-        if (unifiedTrack.isNavidrome) {
-            legacyProps.onPlayNavidromeSong?.(unifiedTrack as any, queue as any);
+        if (unifiedTrack.isNavidrome && unifiedTrack.navidromeData) {
+            const naviQueue = queue
+                .map(t => t as UnifiedSong)
+                .filter(t => t.isNavidrome) as any as NavidromeSong[];
+            legacyProps.onPlayNavidromeSong?.(unifiedTrack as any as NavidromeSong, naviQueue);
             return;
         }
-        if (unifiedTrack.isLocal) {
-            legacyProps.onPlayLocalSong?.(unifiedTrack as any, queue as any);
+        if (unifiedTrack.isLocal && unifiedTrack.localData) {
+            const localQueue = queue
+                .map(t => (t as UnifiedSong).localData)
+                .filter((song): song is LocalSong => Boolean(song));
+            legacyProps.onPlayLocalSong?.(unifiedTrack.localData, localQueue);
             return;
         }
         legacyProps.onPlaySong(track, queue);
@@ -258,7 +292,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                 {selectedCollection && (
                     <GridView
                         title={selectedCollection.name}
-                        subtitle={selectedCollection.creator?.nickname || selectedCollection.artists?.[0]?.name || selectedCollection.description || ''}
+                        subtitle={(selectedCollection as any).creator?.nickname || (selectedCollection as any).artists?.[0]?.name || selectedCollection.description || ''}
                         collection={selectedCollection}
                         mode="tracks"
                         onBack={closeGridView}

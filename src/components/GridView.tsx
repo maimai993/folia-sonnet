@@ -377,6 +377,22 @@ const getLowResCoverUrl = (url: string): string => {
     }
 };
 
+const toHttps = (url?: string): string => {
+    if (!url) return '';
+    if (
+        url.startsWith('http:') &&
+        !url.includes('/rest/') &&
+        !url.includes('localhost') &&
+        !url.includes('127.0.0.1') &&
+        !url.includes('192.168.') &&
+        !url.includes('10.') &&
+        !url.includes('172.')
+    ) {
+        return url.replace('http:', 'https:');
+    }
+    return url;
+};
+
 export const GridView: React.FC<GridViewProps> = ({
     title,
     subtitle,
@@ -723,7 +739,7 @@ export const GridView: React.FC<GridViewProps> = ({
     }, []);
 
     const loadTracks = async (reset = false) => {
-        if (usesExternalTracks || !collection || loading || (!hasMore && !reset)) return;
+        if (usesExternalTracks || !collection || collection.source !== 'netease' || loading || (!hasMore && !reset)) return;
         setLoading(true);
 
         try {
@@ -865,10 +881,10 @@ export const GridView: React.FC<GridViewProps> = ({
     };
 
     useEffect(() => {
-        if (mode === 'tracks' && collection && !usesExternalTracks) {
+        if (mode === 'tracks' && collection && !usesExternalTracks && collection.source === 'netease') {
             loadTracks(true);
         }
-    }, [collection?.id, mode, usesExternalTracks]);
+    }, [collection?.id, mode, usesExternalTracks, collection?.source]);
 
     const canEditNeteasePlaylist = !usesExternalTracks && collection && collection.specialType !== 'cloud' && Boolean(currentUserId && collection.creator?.userId === currentUserId);
     const canEditPlaylist = Boolean(canEditNeteasePlaylist || isLocalPlaylistCollection || isNavidromePlaylistCollection);
@@ -1461,7 +1477,7 @@ export const GridView: React.FC<GridViewProps> = ({
                     style={{ opacity: isDaylight ? 0.18 : 0.12 }}
                 >
                     <img
-                        src={getLowResCoverUrl(coverUrl).replace('http:', 'https:')}
+                        src={toHttps(getLowResCoverUrl(coverUrl))}
                         alt=""
                         className="w-full h-full object-cover scale-110 filter blur-[30px]"
                     />
@@ -1626,7 +1642,7 @@ export const GridView: React.FC<GridViewProps> = ({
                             {/* Cover Image */}
                             <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-lg mb-4 bg-zinc-800/20 relative shrink-0">
                                 {(collection.coverImgUrl || collection.coverUrl || collection.picUrl) ? (
-                                    <img src={(collection.coverImgUrl || collection.coverUrl || collection.picUrl).replace('http:', 'https:')} alt={collection.name} className="w-full h-full object-cover select-none pointer-events-none" />
+                                    <img src={toHttps(collection.coverImgUrl || collection.coverUrl || collection.picUrl)} alt={collection.name} className="w-full h-full object-cover select-none pointer-events-none" />
                                 ) : (
                                     <Disc size={64} className="opacity-20 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                                 )}
@@ -1655,7 +1671,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                     {collection.creator && (
                                         <div className="flex items-center gap-2 mt-2 text-xs opacity-60">
                                             <div className="w-5 h-5 rounded-full overflow-hidden">
-                                                <img src={collection.creator.avatarUrl?.replace('http:', 'https:')} alt="avatar" className="w-full h-full object-cover" />
+                                                <img src={toHttps(collection.creator.avatarUrl)} alt="avatar" className="w-full h-full object-cover" />
                                             </div>
                                             <span className="font-semibold">{collection.creator.nickname}</span>
                                         </div>

@@ -70,8 +70,8 @@ describe('gridViewCollectionAdapters', () => {
 
         const tracks = resolveLocalGridViewTracks(descriptor, songs);
 
-        expect(tracks.map(track => track.localData?.id)).toEqual(['song-c', 'song-a']);
-        expect(tracks.every(track => track.isLocal)).toBe(true);
+        expect(tracks.map(track => (track as any).localData?.id)).toEqual(['song-c', 'song-a']);
+        expect(tracks.every(track => (track as any).isLocal)).toBe(true);
     });
 
     it('creates Navidrome descriptors for every GridView collection type', () => {
@@ -89,7 +89,8 @@ describe('gridViewCollectionAdapters', () => {
             name: 'Navi Item',
             type: 'album',
         });
-        expect(createNavidromeGridViewCollection({ ...baseItem, editable: true }, 'playlist')).toMatchObject({
+        const playlistItem = { ...baseItem, editable: true };
+        expect(createNavidromeGridViewCollection(playlistItem, 'playlist')).toMatchObject({
             type: 'playlist',
             editable: true,
         });
