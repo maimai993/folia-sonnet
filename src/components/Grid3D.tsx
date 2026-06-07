@@ -794,7 +794,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                                         </h3>
                                                         {((item.type !== 'playlist' && item.description) || !compactDescription(item.summary)) && (
                                                             <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
-                                                                {item.type !== 'playlist' && item.description ? item.description : '\u00A0'}
+                                                                {item.type !== 'playlist' && item.description ? item.description : '♫'}
                                                             </p>
                                                         )}
                                                         {compactDescription(item.summary) && (
@@ -942,7 +942,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 const cardElement = flexWrapper?.children[idx] as HTMLElement;
                                 if (cardElement) {
                                     const targetScrollLeft = cardElement.offsetLeft + cardElement.offsetWidth / 2 - container.clientWidth / 2;
-                                    
+
                                     // Snap to target vicinity first to shorten transition distance, then scroll smoothly
                                     const currentScroll = container.scrollLeft;
                                     const distance = targetScrollLeft - currentScroll;
