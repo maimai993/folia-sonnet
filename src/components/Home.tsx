@@ -765,6 +765,7 @@ const Home: React.FC<HomeProps> = ({
                                             theme={theme}
                                             isDaylight={isDaylight}
                                             hasFloatingPlayer={Boolean(currentTrack)}
+                                            layoutStyle="carousel"
                                         />
                                     </motion.div>
                                 ) : (
@@ -794,6 +795,7 @@ const Home: React.FC<HomeProps> = ({
                                                 }
                                                 setSearchNavidromeSelection(null);
                                             }}
+                                            layoutStyle="carousel"
                                         />
                                     </motion.div>
                                 )}

@@ -9,6 +9,9 @@ import { formatSongName } from '../utils/songNameFormatter';
 import { colorWithAlpha } from './visualizer/colorMix';
 import { saveToCache, getFromCache, removeFromCache } from '../services/db';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
+import { buildLocalQueue, buildNavidromeQueue } from '../services/playbackAdapters';
+import { removeSongsFromLocalPlaylist } from '../services/localPlaylistService';
+import { SubsonicSong } from '../types/navidrome';
 
 interface GridItem {
     id: string | number;
@@ -576,7 +579,7 @@ export const GridView: React.FC<GridViewProps> = ({
     const CACHE_SCHEMA_VERSION = 3;
 
     const isCloudDrive = collection ? (collection.specialType === 'cloud' || Number(collection.id) === -100) : false;
-    const CACHE_KEY = collection ? (isCloudDrive
+    const CACHE_KEY = (collection && !collection.isLocal && !collection.isNavidrome) ? (isCloudDrive
         ? `playlist_tracks_cloud_${currentUserId ?? 'anonymous'}`
         : `playlist_tracks_${collection.id}`) : '';
 
@@ -600,6 +603,53 @@ export const GridView: React.FC<GridViewProps> = ({
             if (reset) {
                 pendingBackgroundTracksRef.current = null;
                 pendingBackgroundOffsetRef.current = 0;
+
+                if (collection.isLocal) {
+                    const localSongs = collection.songs || [];
+                    const unifiedLocalSongs = buildLocalQueue(localSongs) as unknown as SongResult[];
+                    setTracks(unifiedLocalSongs);
+                    setOffset(unifiedLocalSongs.length);
+                    setHasMore(false);
+                    setLoading(false);
+                    return;
+                }
+
+                if (collection.isNavidrome) {
+                    const config = getNavidromeConfig();
+                    if (!config) {
+                        setTracks([]);
+                        setOffset(0);
+                        setHasMore(false);
+                        setLoading(false);
+                        return;
+                    }
+                    let subsonicSongs: SubsonicSong[] = [];
+                    if (collection.type === 'album') {
+                        const albumDetail = await navidromeApi.getAlbum(config, String(collection.id));
+                        subsonicSongs = albumDetail?.song || [];
+                    } else if (collection.type === 'playlist') {
+                        const playlistDetail = await navidromeApi.getPlaylist(config, String(collection.id));
+                        subsonicSongs = playlistDetail?.entry || [];
+                    } else if (collection.type === 'artist') {
+                        const artistDetail = await navidromeApi.getArtist(config, String(collection.id));
+                        const albums = artistDetail?.album || [];
+                        const albumResults = await Promise.all(albums.map(album => navidromeApi.getAlbum(config, album.id)));
+                        subsonicSongs = albumResults.flatMap(album => album?.song || []);
+                    } else if (collection.type === 'random') {
+                        subsonicSongs = await navidromeApi.getRandomSongs(config, 100);
+                    } else if (collection.type === 'favorites') {
+                        subsonicSongs = await navidromeApi.getStarred2(config);
+                    }
+
+                    const navidromeSongs = subsonicSongs.map(song => navidromeApi.toNavidromeSong(config, song));
+                    const unifiedNavidromeSongs = buildNavidromeQueue(navidromeSongs);
+                    setTracks(unifiedNavidromeSongs);
+                    setOffset(unifiedNavidromeSongs.length);
+                    setHasMore(false);
+                    setLoading(false);
+                    return;
+                }
+
                 const cached = await getFromCache<{ tracks: SongResult[], snapshotTime: number; schemaVersion?: number; } | SongResult[]>(CACHE_KEY);
 
                 let cachedTracks: SongResult[] = [];
@@ -737,11 +787,47 @@ export const GridView: React.FC<GridViewProps> = ({
         }
     }, [collection?.id]);
 
-    const canEditPlaylist = collection && collection.specialType !== 'cloud' && Boolean(currentUserId && collection.creator?.userId === currentUserId);
+    const canEditPlaylist = collection && (
+        collection.isLocal
+            ? (collection.type === 'playlist' && !collection.isVirtual)
+            : collection.isNavidrome
+                ? (collection.type === 'playlist')
+                : (collection.specialType !== 'cloud' && Boolean(currentUserId && collection.creator?.userId === currentUserId))
+    );
 
     const handleRemoveTrack = useCallback(async (trackId: number) => {
         if (!collection) return;
         try {
+            if (collection.isLocal) {
+                if (collection.type !== 'playlist' || !collection.playlistId) return;
+                const targetTrack = tracks.find(t => t.id === trackId) as any;
+                if (!targetTrack || !targetTrack.localData) return;
+                const originalSongId = targetTrack.localData.id;
+                
+                await removeSongsFromLocalPlaylist(collection.playlistId, [originalSongId]);
+                const nextTracks = tracks.filter(track => track.id !== trackId);
+                setTracks(nextTracks);
+                await onPlaylistMutated?.();
+                return;
+            }
+
+            if (collection.isNavidrome) {
+                if (collection.type !== 'playlist') return;
+                const config = getNavidromeConfig();
+                if (!config) return;
+                
+                const songIndex = tracks.findIndex(t => t.id === trackId);
+                if (songIndex === -1) return;
+
+                await navidromeApi.updatePlaylist(config, String(collection.id), {
+                    songIndexesToRemove: [songIndex]
+                });
+                const nextTracks = tracks.filter(track => track.id !== trackId);
+                setTracks(nextTracks);
+                await onPlaylistMutated?.();
+                return;
+            }
+
             const isLiked = collection.isLiked || collection.name === '我喜欢的音乐' || collection.specialType === 'liked';
             if (isLiked) {
                 await neteaseApi.likeSong(trackId, false);
@@ -941,7 +1027,7 @@ export const GridView: React.FC<GridViewProps> = ({
         pendingRestoreStateRef.current = null;
     }, [baseCoords, deferredSearchQuery, dragX, dragY, gridItems.length, updateRenderedIndexesForViewport]);
 
-    const handleViewportWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const handleViewportWheel = useCallback((event: WheelEvent) => {
         if (gridItems.length === 0 || event.ctrlKey) return;
 
         event.preventDefault();
@@ -966,6 +1052,16 @@ export const GridView: React.FC<GridViewProps> = ({
         animate(dragX, clampedX, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
         animate(dragY, clampedY, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
     }, [containerSize.height, dragX, dragY, gridItems.length, dragBounds]);
+
+    useEffect(() => {
+        const element = containerRef.current;
+        if (!element) return;
+
+        element.addEventListener('wheel', handleViewportWheel, { passive: false });
+        return () => {
+            element.removeEventListener('wheel', handleViewportWheel);
+        };
+    }, [handleViewportWheel]);
 
     // Center on the first item initially
     useEffect(() => {
@@ -1356,7 +1452,6 @@ export const GridView: React.FC<GridViewProps> = ({
             {/* Honeycomb Drag/Viewport Canvas Area */}
             <div
                 ref={containerRef}
-                onWheel={handleViewportWheel}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
             >
                 <AnimatePresence>

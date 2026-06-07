@@ -9,6 +9,7 @@ import LocalPlaylistView from './local/LocalPlaylistView';
 import Carousel3D from './Carousel3D';
 import LocalArtistView from './local/LocalArtistView';
 import { deleteLocalPlaylist, updateLocalPlaylist } from '../services/localPlaylistService';
+import { Grid3DSlider } from './folia-grid/Grid3DSlider';
 
 interface LocalMusicViewProps {
     localSongs: LocalSong[];
@@ -36,6 +37,8 @@ interface LocalMusicViewProps {
     theme: any;
     isDaylight: boolean;
     hasFloatingPlayer?: boolean;
+    layoutStyle?: 'carousel' | 'desktop';
+    onOpenGridView?: (collection: any) => void;
 }
 
 /**
@@ -79,7 +82,9 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
     onSelectAlbumGroup,
     theme,
     isDaylight,
-    hasFloatingPlayer = false
+    hasFloatingPlayer = false,
+    layoutStyle = 'carousel',
+    onOpenGridView
 }) => {
     const { t } = useTranslation();
     const allSongsLabel = t('localMusic.allSongs');
@@ -684,16 +689,47 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                                     )}
                                 </div>
                                 <div className="w-full flex-[0_1_clamp(460px,46vh,760px)] min-h-0 max-h-[clamp(460px,46vh,760px)]">
-                                    <Carousel3D
-                                        items={activeSection.items}
-                                        onSelect={(item) => setSelectedGroup(item)}
-                                        emptyMessage={activeSection.emptyMessage}
-                                        initialFocusedIndex={activeSection.focusedIndex}
-                                        onFocusedIndexChange={activeSection.onFocusedIndexChange}
-                                        isDaylight={isDaylight}
-                                        compactLayout
-                                        hasFloatingPlayer={hasFloatingPlayer}
-                                    />
+                                    {layoutStyle === 'desktop' ? (
+                                        <Grid3DSlider
+                                            items={activeSection.items.map(item => ({
+                                                id: item.id,
+                                                name: item.name,
+                                                coverUrl: item.coverUrl,
+                                                description: item.description,
+                                                raw: item
+                                            }))}
+                                            onSelect={(item) => {
+                                                const rawGroup = item.raw;
+                                                if (onOpenGridView && rawGroup) {
+                                                    onOpenGridView({
+                                                        id: rawGroup.id,
+                                                        name: rawGroup.name,
+                                                        coverUrl: rawGroup.coverUrl,
+                                                        description: rawGroup.description,
+                                                        isLocal: true,
+                                                        songs: rawGroup.songs,
+                                                        type: rawGroup.type
+                                                    });
+                                                }
+                                            }}
+                                            emptyMessage={activeSection.emptyMessage}
+                                            initialFocusedIndex={activeSection.focusedIndex}
+                                            onFocusedIndexChange={activeSection.onFocusedIndexChange}
+                                            isDaylight={isDaylight}
+                                            hasFloatingPlayer={hasFloatingPlayer}
+                                        />
+                                    ) : (
+                                        <Carousel3D
+                                            items={activeSection.items}
+                                            onSelect={(item) => setSelectedGroup(item)}
+                                            emptyMessage={activeSection.emptyMessage}
+                                            initialFocusedIndex={activeSection.focusedIndex}
+                                            onFocusedIndexChange={activeSection.onFocusedIndexChange}
+                                            isDaylight={isDaylight}
+                                            compactLayout
+                                            hasFloatingPlayer={hasFloatingPlayer}
+                                        />
+                                    )}
                                 </div>
                             </motion.div>
                         </AnimatePresence>

@@ -12,6 +12,7 @@ import LocalMusicView from './LocalMusicView';
 import NavidromeMusicView from './navidrome/NavidromeMusicView';
 import GridMap from './GridMap';
 import { formatSongName } from '../utils/songNameFormatter';
+import { Grid3DSlider } from './folia-grid/Grid3DSlider';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -196,15 +197,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         ? (isDesktopWidth ? 208 : 192)
         : (isDesktopWidth ? (isUltraDesktop ? 360 : isLargeDesktop ? 312 : 218) : 224);
 
-    // Reset focused index and scroll to start when switching tabs; also run initial card transforms
+    // Reset focused index when switching tabs
     useEffect(() => {
         setFocusedIndex(0);
-        const container = scrollContainerRef.current;
-        if (container) {
-            container.scrollLeft = 0;
-        }
-        // Defer initial transform update to next frame so DOM has rendered
-        requestAnimationFrame(() => updateCardTransforms());
     }, [homeViewTab]);
 
 
@@ -288,189 +283,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             setIsSliding(false);
         }, 300);
     };
-
-    /**
-     * Directly update every card's transform/opacity based on its pixel distance
-     * from the viewport center. Called on every scroll frame for continuous (无极) scaling.
-     */
-    const updateCardTransforms = () => {
-        const container = scrollContainerRef.current;
-        if (!container) return;
-        const flexWrapper = container.firstElementChild;
-        if (!flexWrapper) return;
-
-        const containerCenter = container.scrollLeft + container.clientWidth / 2;
-        const maxDist = 600; // distance (px) at which cards reach minimum scale
-        const isImage = grid3dCardStyle === 'image';
-        const peakScale = isImage ? 1.25 : 1.2;
-        const minScale = 0.5;
-        const cards = flexWrapper.children;
-
-        let closestIndex = 0;
-        let minPixelDist = Infinity;
-
-        for (let i = 0; i < cards.length; i++) {
-            const el = cards[i] as HTMLElement;
-            const cardCenter = el.offsetLeft + el.offsetWidth / 2;
-            const pixelDist = Math.abs(cardCenter - containerCenter);
-            const t = Math.min(pixelDist / maxDist, 1);
-
-            const scale = peakScale - (peakScale - minScale) * t;
-            const opacity = Math.max(0.15, 1.0 - 0.85 * t);
-            const y = -6 * (1 - t);
-            const z = Math.max(1, Math.round(10 - 9 * t));
-
-            el.style.transform = `scale(${scale}) translateY(${y}px)`;
-            el.style.opacity = String(opacity);
-            el.style.zIndex = String(z);
-
-            if (pixelDist < minPixelDist) {
-                minPixelDist = pixelDist;
-                closestIndex = i;
-            }
-        }
-
-        return closestIndex;
-    };
-
-    /**
-     * Handles scrolling by triggering visual fade timeouts, updating card transforms,
-     * and calculating the card that is currently closest to the horizontal center.
-     */
-    const handleScroll = () => {
-        handleSliding();
-
-        const container = scrollContainerRef.current;
-        if (!container) return;
-
-        // Always update card transforms for continuous scaling
-        const closestIndex = updateCardTransforms();
-
-        // Skip updating focusedIndex if currently executing a programmatic smooth scroll
-        if (isProgrammaticScrollRef.current) {
-            if (programmaticTargetLeftRef.current !== null) {
-                const diff = Math.abs(container.scrollLeft - programmaticTargetLeftRef.current);
-                if (diff < 3) {
-                    isProgrammaticScrollRef.current = false;
-                    programmaticTargetLeftRef.current = null;
-                    if (programmaticScrollTimeoutRef.current) {
-                        clearTimeout(programmaticScrollTimeoutRef.current);
-                        programmaticScrollTimeoutRef.current = null;
-                    }
-                }
-            } else {
-                isProgrammaticScrollRef.current = false;
-            }
-            return;
-        }
-
-        if (closestIndex !== undefined) {
-            setFocusedIndex((prev) => {
-                if (prev === closestIndex) return prev;
-                return closestIndex;
-            });
-        }
-    };
-
-    // --- Momentum / inertia engine shared by drag and wheel ---
-    const momentumVelocityRef = useRef(0);
-    const momentumRafRef = useRef<number | null>(null);
-
-    /** Stop any running momentum animation */
-    const stopMomentum = () => {
-        if (momentumRafRef.current !== null) {
-            cancelAnimationFrame(momentumRafRef.current);
-            momentumRafRef.current = null;
-        }
-        momentumVelocityRef.current = 0;
-    };
-
-    /** Kick off a decaying inertia loop from the current velocity */
-    const startMomentum = () => {
-        const container = scrollContainerRef.current;
-        if (!container || Math.abs(momentumVelocityRef.current) < 0.5) return;
-
-        let lastTime = performance.now();
-        const FRICTION = 0.80;
-
-        const tick = (now: number) => {
-            const elapsed = now - lastTime;
-            lastTime = now;
-            // Scale friction to ~60 fps baseline so momentum feels consistent across refresh rates
-            const frames = elapsed / 16.67;
-            momentumVelocityRef.current *= Math.pow(FRICTION, frames);
-
-            if (Math.abs(momentumVelocityRef.current) < 0.5) {
-                momentumVelocityRef.current = 0;
-                momentumRafRef.current = null;
-                return;
-            }
-
-            container.scrollLeft += momentumVelocityRef.current;
-            momentumRafRef.current = requestAnimationFrame(tick);
-        };
-
-        momentumRafRef.current = requestAnimationFrame(tick);
-    };
-
-    // Mouse drag-to-scroll with velocity tracking
-    const isDraggingRef = useRef(false);
-    const startXRef = useRef(0);
-    const scrollLeftRef = useRef(0);
-    const dragDistanceRef = useRef(0);
-    const lastDragScrollRef = useRef(0);
-    const lastDragTimeRef = useRef(0);
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        if (!scrollContainerRef.current) return;
-        if (e.button !== 0) return; // Only left click
-        stopMomentum();
-        isDraggingRef.current = true;
-        startXRef.current = e.pageX - scrollContainerRef.current.offsetLeft;
-        scrollLeftRef.current = scrollContainerRef.current.scrollLeft;
-        dragDistanceRef.current = 0;
-        lastDragScrollRef.current = scrollContainerRef.current.scrollLeft;
-        lastDragTimeRef.current = performance.now();
-    };
-
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!isDraggingRef.current || !scrollContainerRef.current) return;
-        e.preventDefault();
-        const x = e.pageX - scrollContainerRef.current.offsetLeft;
-        const walk = (x - startXRef.current) * 1.5;
-        dragDistanceRef.current = Math.abs(walk);
-
-        const prevScroll = scrollContainerRef.current.scrollLeft;
-        scrollContainerRef.current.scrollLeft = scrollLeftRef.current - walk;
-        const nowScroll = scrollContainerRef.current.scrollLeft;
-
-        // Track velocity for momentum
-        const now = performance.now();
-        const dt = now - lastDragTimeRef.current;
-        if (dt > 0) {
-            momentumVelocityRef.current = (nowScroll - lastDragScrollRef.current) / dt * 16;
-        }
-        lastDragScrollRef.current = nowScroll;
-        lastDragTimeRef.current = now;
-        handleSliding();
-    };
-
-    const handleMouseUpOrLeave = () => {
-        if (!isDraggingRef.current) return;
-        isDraggingRef.current = false;
-        startMomentum();
-    };
-
-
-
-    // Clean sliding, programmatic scroll timeouts, and momentum
-    useEffect(() => {
-        return () => {
-            if (slidingTimeoutRef.current) clearTimeout(slidingTimeoutRef.current);
-            if (programmaticScrollTimeoutRef.current) clearTimeout(programmaticScrollTimeoutRef.current);
-            stopMomentum();
-        };
-    }, []);
 
     // Load favorite albums and recommendations
     useEffect(() => {
@@ -596,123 +408,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         return [];
     }, [homeViewTab, playlistCards, albumCards, radioCards]);
 
-    // Trigger card transform update when items or loading state changes to apply initial scaling
-    useEffect(() => {
-        requestAnimationFrame(() => updateCardTransforms());
-    }, [currentDesktopItems, isLoading]);
 
-    const isProgrammaticScrollRef = useRef(false);
-    const programmaticTargetLeftRef = useRef<number | null>(null);
-    const programmaticScrollTimeoutRef = useRef<any>(null);
-    const lastKeyboardNavTimeRef = useRef<number>(0);
-
-    const focusedIndexRef = useRef(focusedIndex);
-    useEffect(() => {
-        focusedIndexRef.current = focusedIndex;
-    }, [focusedIndex]);
-
-    const currentDesktopItemsRef = useRef(currentDesktopItems);
-    useEffect(() => {
-        currentDesktopItemsRef.current = currentDesktopItems;
-    }, [currentDesktopItems]);
-
-    // Center programmatic scrolling on a specific index card
-    const scrollToIndex = useCallback((idx: number) => {
-        if (idx < 0 || idx >= currentDesktopItems.length) return;
-        setFocusedIndex(idx);
-        const container = scrollContainerRef.current;
-        if (container) {
-            const flexWrapper = container.firstElementChild;
-            const cardElement = flexWrapper?.children[idx] as HTMLElement;
-            if (cardElement) {
-                const targetScrollLeft = cardElement.offsetLeft + cardElement.offsetWidth / 2 - container.clientWidth / 2;
-
-                isProgrammaticScrollRef.current = true;
-                programmaticTargetLeftRef.current = targetScrollLeft;
-                if (programmaticScrollTimeoutRef.current) clearTimeout(programmaticScrollTimeoutRef.current);
-                programmaticScrollTimeoutRef.current = setTimeout(() => {
-                    isProgrammaticScrollRef.current = false;
-                    programmaticTargetLeftRef.current = null;
-                }, 600);
-
-                container.scrollTo({
-                    left: targetScrollLeft,
-                    behavior: 'smooth'
-                });
-            }
-        }
-    }, [currentDesktopItems]);
-
-    // Keyboard arrow key navigation to jump to adjacent cards
-    useEffect(() => {
-        if (!isNeteaseTab || showCollectionGrid) return;
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (
-                e.target instanceof HTMLInputElement ||
-                e.target instanceof HTMLTextAreaElement ||
-                (e.target instanceof HTMLElement && e.target.isContentEditable)
-            ) {
-                return;
-            }
-
-            if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                const now = performance.now();
-                if (now - lastKeyboardNavTimeRef.current < 200) return;
-                lastKeyboardNavTimeRef.current = now;
-                scrollToIndex(focusedIndex - 1);
-            } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                const now = performance.now();
-                if (now - lastKeyboardNavTimeRef.current < 200) return;
-                lastKeyboardNavTimeRef.current = now;
-                scrollToIndex(focusedIndex + 1);
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [focusedIndex, scrollToIndex, isNeteaseTab, showCollectionGrid]);
-
-    // Wheel-to-horizontal scroll with momentum — direct + inertia on stop
-    const wheelIdleTimerRef = useRef<any>(null);
-
-    useEffect(() => {
-        const container = scrollContainerRef.current;
-        if (!container) return;
-
-        const handleWheelEvent = (e: WheelEvent) => {
-            e.preventDefault();
-            handleSliding();
-
-            // Stop any existing momentum when user resumes scrolling
-            if (momentumRafRef.current !== null) {
-                cancelAnimationFrame(momentumRafRef.current);
-                momentumRafRef.current = null;
-            }
-
-            // Map vertical to horizontal; apply directly
-            const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-            const scaled = delta * 0.6;
-            container.scrollLeft += scaled;
-
-            // Track velocity for momentum after wheel stops
-            momentumVelocityRef.current = scaled;
-
-            // Debounce: start momentum when wheel events stop
-            if (wheelIdleTimerRef.current) clearTimeout(wheelIdleTimerRef.current);
-            wheelIdleTimerRef.current = setTimeout(() => {
-                startMomentum();
-            }, 80);
-        };
-
-        container.addEventListener('wheel', handleWheelEvent, { passive: false });
-        return () => {
-            container.removeEventListener('wheel', handleWheelEvent);
-            if (wheelIdleTimerRef.current) clearTimeout(wheelIdleTimerRef.current);
-        };
-    }, [homeViewTab]);
 
     // Delegate GridView opening to the app-level host so Grid3D remains only the home surface.
     // If Personal FM is clicked, it plays Personal FM directly instead of opening GridView.
@@ -884,142 +580,16 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 </motion.button>
                             </div>
                         )}
-
-                        {/* Horizontal Polaroid Slider Container */}
-                        <div
-                            ref={scrollContainerRef}
-                            onScroll={handleScroll}
-                            onTouchStart={handleSliding}
-                            onTouchMove={handleSliding}
-                            onMouseDown={handleMouseDown}
-                            onMouseMove={handleMouseMove}
-                            onMouseUp={handleMouseUpOrLeave}
-                            onMouseLeave={handleMouseUpOrLeave}
-                            className="w-full flex items-center overflow-x-auto overflow-y-hidden py-24 custom-scrollbar cursor-grab active:cursor-grabbing"
-                            style={{ scrollbarWidth: 'none' }}
-                        >
-                            <div className="flex px-[40vw] gap-12">
-                                {isLoading ? (
-                                    /* Card Skeletons Lazy Loading */
-                                    Array.from({ length: 5 }).map((_, idx) => (
-                                        <div key={`skeleton-${idx}`} className="shrink-0 pointer-events-none select-none">
-                                            {grid3dCardStyle === 'image' ? (
-                                                <div
-                                                    className="aspect-square rounded-2xl animate-pulse bg-zinc-200/20 dark:bg-zinc-800/20 border border-white/5 shadow-inner"
-                                                    style={{ width: coverSize, height: coverSize }}
-                                                />
-                                            ) : (
-                                                <div
-                                                    className="rounded-xl border border-white/5 p-4 flex flex-col items-center backdrop-blur-md shadow-lg"
-                                                    style={{ width: coverSize }}
-                                                >
-                                                    <div
-                                                        className="w-full aspect-square rounded-lg animate-pulse bg-zinc-200/20 dark:bg-zinc-800/20 mb-4"
-                                                    />
-                                                    <div className="w-full text-left pt-2 space-y-2">
-                                                        <div className="h-4 w-3/4 animate-pulse bg-zinc-200/20 dark:bg-zinc-800/20 rounded-md" />
-                                                        <div className="h-3 w-1/2 animate-pulse bg-zinc-200/20 dark:bg-zinc-800/20 rounded-md" />
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))
-                                ) : (
-                                    currentDesktopItems.map((item, idx) => {
-                                        const isFocused = idx === focusedIndex;
-
-                                        return (
-                                            <div
-                                                key={item.id}
-                                                className="shrink-0 cursor-pointer pointer-events-auto select-none"
-                                                onClick={() => {
-                                                    if (dragDistanceRef.current < 8) {
-                                                        if (isFocused) {
-                                                            handleSelectCollectionCard(item);
-                                                        } else {
-                                                            scrollToIndex(idx);
-                                                        }
-                                                    }
-                                                }}
-                                            >
-                                                {grid3dCardStyle === 'image' ? (
-                                                    /* Pure Image Cover Style */
-                                                    <div
-                                                        className={`aspect-square rounded-2xl overflow-hidden shadow-2xl relative border border-white/10 ${isFocused ? 'ring-2 ring-white/30' : ''
-                                                            }`}
-                                                        style={{ width: coverSize, height: coverSize }}
-                                                    >
-                                                        {item.coverUrl ? (
-                                                            <img src={item.coverUrl} alt={item.name} className="w-full h-full object-cover pointer-events-none select-none" />
-                                                        ) : (
-                                                            <div className="w-full h-full bg-zinc-800/20 flex items-center justify-center">
-                                                                <Disc size={64} className="opacity-20" />
-                                                            </div>
-                                                        )}
-                                                        <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
-                                                    </div>
-                                                ) : (
-                                                    /* Polaroid Card Style */
-                                                    <div
-                                                        className="rounded-xl border p-4 flex flex-col items-center backdrop-blur-md shadow-lg hover:shadow-2xl theme-polaroid-card"
-                                                        style={{ width: coverSize }}
-                                                    >
-                                                        {/* Square Album Cover */}
-                                                        <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
-                                                            {item.coverUrl ? (
-                                                                <img src={item.coverUrl} alt={item.name} className="w-full h-full object-cover pointer-events-none select-none" />
-                                                            ) : (
-                                                                <Disc size={64} className="opacity-20" />
-                                                            )}
-                                                        </div>
-
-                                                        {/* Details White Border Label */}
-                                                        <div className="w-full text-left pt-2 min-w-0">
-                                                            <h3 className="font-bold text-sm truncate max-w-full tracking-tight">
-                                                                {item.name}
-                                                            </h3>
-                                                            {((item.type !== 'playlist' && item.description) || !compactDescription(item.summary)) && (
-                                                                <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
-                                                                    {item.type !== 'playlist' && item.description ? item.description : '♫'}
-                                                                </p>
-                                                            )}
-                                                            {compactDescription(item.summary) && (
-                                                                <p className="text-[10px] leading-snug opacity-45 mt-2 line-clamp-2">
-                                                                    {compactDescription(item.summary)}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Title details at the bottom (above player progress bar) */}
-                        {!isLoading && currentDesktopItems.length > 0 && currentDesktopItems[focusedIndex] && (
-                            <motion.div
-                                key={`${homeViewTab}-${currentDesktopItems[focusedIndex].id}`}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className={`relative shrink-0 text-center z-10 px-8 pointer-events-none ${currentTrack ? 'pt-6 md:pt-8 pb-0 -mb-4 md:-mb-6' : 'pt-5 md:pt-6 pb-4'
-                                    }`}
-                            >
-                                <h3 className="font-bold text-2xl truncate max-w-xl mx-auto" style={{ color: 'var(--text-primary)' }}>
-                                    {currentDesktopItems[focusedIndex].name
-                                    }
-                                </h3>
-                                <p className="text-xs opacity-50 font-mono mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                    {currentDesktopItems[focusedIndex].trackCount !== undefined ? `${currentDesktopItems[focusedIndex].trackCount} ${t('playlist.tracks') || 'songs'}` : ''}
-                                    {currentDesktopItems[focusedIndex].description
-                                        ? ` • ${currentDesktopItems[focusedIndex].description}`
-                                        : ''}
-                                </p>
-                            </motion.div>
-                        )}
+                        <Grid3DSlider
+                            items={currentDesktopItems}
+                            onSelect={handleSelectCollectionCard}
+                            isLoading={isLoading}
+                            emptyMessage={t('home.loadingLibrary')}
+                            isDaylight={isDaylight}
+                            hasFloatingPlayer={Boolean(currentTrack)}
+                            initialFocusedIndex={focusedIndex}
+                            onFocusedIndexChange={setFocusedIndex}
+                        />
 
                     </div>
                 ) : homeViewTab === 'local' ? (
@@ -1078,6 +648,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             theme={theme}
                             isDaylight={isDaylight}
                             hasFloatingPlayer={Boolean(currentTrack)}
+                            layoutStyle="desktop"
+                            onOpenGridView={onOpenGridView}
                         />
                     </div>
                 ) : (
@@ -1094,6 +666,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             externalSelection={pendingNavidromeSelection}
                             hasFloatingPlayer={Boolean(currentTrack)}
                             onExternalSelectionHandled={onPendingNavidromeSelectionHandled}
+                            layoutStyle="desktop"
+                            onOpenGridView={onOpenGridView}
                         />
                     </div>
                 )}
@@ -1122,30 +696,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         onSelectCollection={(col, idx) => {
                             setShowCollectionGrid(false);
                             setFocusedIndex(idx);
-
-                            // Scroll the container smoothly to center the selected card
-                            const container = scrollContainerRef.current;
-                            if (container) {
-                                const flexWrapper = container.firstElementChild;
-                                const cardElement = flexWrapper?.children[idx] as HTMLElement;
-                                if (cardElement) {
-                                    const targetScrollLeft = cardElement.offsetLeft + cardElement.offsetWidth / 2 - container.clientWidth / 2;
-
-                                    // Snap to target vicinity first to shorten transition distance, then scroll smoothly
-                                    const currentScroll = container.scrollLeft;
-                                    const distance = targetScrollLeft - currentScroll;
-                                    const threshold = 600; // Snap if target is further than ~2 cards away
-
-                                    if (Math.abs(distance) > threshold) {
-                                        container.scrollLeft = targetScrollLeft - Math.sign(distance) * threshold;
-                                    }
-
-                                    container.scrollTo({
-                                        left: targetScrollLeft,
-                                        behavior: 'smooth'
-                                    });
-                                }
-                            }
                         }}
                         theme={theme}
                         isDaylight={isDaylight}
