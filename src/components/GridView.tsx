@@ -120,7 +120,7 @@ const PolaroidCard = React.memo<{
                         <>
                             <img
                                 src={item.coverUrl}
-                                alt={item.name}
+                                alt={typeof item.name === 'string' ? item.name : ''}
                                 loading="lazy"
                                 decoding="async"
                                 ref={(el) => {
@@ -729,7 +729,7 @@ export const GridView: React.FC<GridViewProps> = ({
     }, [collection, tracks, CACHE_KEY, onPlaylistMutated]);
 
     // Build the grid spiral coordinates mapping using responsive spacing
-    const allGridItems = useMemo(() => {
+    const allGridItems = useMemo((): GridItem[] => {
         if (mode === 'collection') {
             return items || [];
         }
@@ -819,6 +819,32 @@ export const GridView: React.FC<GridViewProps> = ({
         fallbackIndexRef: focusedIndexRef,
     });
 
+    const dragBounds = useMemo(() => {
+        if (baseCoords.length === 0) return { left: 0, right: 0, top: 0, bottom: 0 };
+
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+
+        baseCoords.forEach((c) => {
+            if (c.baseX < minX) minX = c.baseX;
+            if (c.baseX > maxX) maxX = c.baseX;
+            if (c.baseY < minY) minY = c.baseY;
+            if (c.baseY > maxY) maxY = c.baseY;
+        });
+
+        const bufferX = Math.max(containerSize.width / 2, 200);
+        const bufferY = Math.max(containerSize.height / 2, 200);
+
+        return {
+            left: -maxX - bufferX,
+            right: -minX + bufferX,
+            top: -maxY - bufferY,
+            bottom: -minY + bufferY,
+        };
+    }, [baseCoords, containerSize]);
+
     // Keep the active focusedIndex centered when baseCoords changes on resize
     useEffect(() => {
         if (baseCoords.length > 0 && focusedIndex >= 0 && focusedIndex < baseCoords.length) {
@@ -903,11 +929,13 @@ export const GridView: React.FC<GridViewProps> = ({
 
         const targetX = wheelTargetRef.current.x - horizontalDelta * deltaScale;
         const targetY = wheelTargetRef.current.y - verticalDelta * deltaScale;
-        wheelTargetRef.current = { x: targetX, y: targetY };
+        const clampedX = Math.max(dragBounds.left, Math.min(dragBounds.right, targetX));
+        const clampedY = Math.max(dragBounds.top, Math.min(dragBounds.bottom, targetY));
+        wheelTargetRef.current = { x: clampedX, y: clampedY };
 
-        animate(dragX, targetX, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
-        animate(dragY, targetY, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
-    }, [containerSize.height, dragX, dragY, gridItems.length]);
+        animate(dragX, clampedX, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
+        animate(dragY, clampedY, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
+    }, [containerSize.height, dragX, dragY, gridItems.length, dragBounds]);
 
     // Center on the first item initially
     useEffect(() => {
@@ -1375,7 +1403,7 @@ export const GridView: React.FC<GridViewProps> = ({
                 ) : (
                     <motion.div
                         drag
-                        dragConstraints={false}
+                        dragConstraints={dragBounds}
                         dragElastic={0.05}
                         dragTransition={{ power: 0.16, timeConstant: 220 }}
                         onDragStart={() => {

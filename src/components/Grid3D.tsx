@@ -82,6 +82,7 @@ const compactDescription = (description?: string, maxLength = 72) => {
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const {
+        onPlaySong,
         onBackToPlayer,
         user,
         playlists,
@@ -137,6 +138,62 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const slidingTimeoutRef = useRef<any>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [focusedIndex, setFocusedIndex] = useState(0);
+
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [containerSize, setContainerSize] = useState(() => {
+        if (typeof window === 'undefined') {
+            return { width: 0, height: 0 };
+        }
+        return { width: window.innerWidth, height: window.innerHeight };
+    });
+
+    useEffect(() => {
+        const element = containerRef.current;
+        if (!element) return;
+
+        const updateContainerSize = () => {
+            const nextWidth = element.clientWidth;
+            const nextHeight = element.clientHeight;
+
+            setContainerSize((prev) => (
+                prev.width === nextWidth && prev.height === nextHeight
+                    ? prev
+                    : { width: nextWidth, height: nextHeight }
+            ));
+        };
+
+        updateContainerSize();
+
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', updateContainerSize);
+            return () => window.removeEventListener('resize', updateContainerSize);
+        }
+
+        const observer = new ResizeObserver(() => {
+            updateContainerSize();
+        });
+        observer.observe(element);
+
+        return () => observer.disconnect();
+    }, []);
+
+    const isDesktopWidth = containerSize.width >= 768;
+    const isNarrowLayout = containerSize.width > 0 && containerSize.width < 768;
+    const hasFloatingPlayer = Boolean(currentTrack);
+    const isShortLayout = containerSize.height > 0 && containerSize.height < (hasFloatingPlayer ? 420 : 380);
+    const useCompactMetrics = isNarrowLayout || isShortLayout;
+    const isLargeDesktop = !useCompactMetrics
+        && isDesktopWidth
+        && containerSize.width >= 1440
+        && containerSize.height >= (hasFloatingPlayer ? 660 : 600);
+    const isUltraDesktop = !useCompactMetrics
+        && isDesktopWidth
+        && containerSize.width >= 2000
+        && containerSize.height >= (hasFloatingPlayer ? 780 : 720);
+
+    const coverSize = useCompactMetrics
+        ? (isDesktopWidth ? 208 : 192)
+        : (isDesktopWidth ? (isUltraDesktop ? 360 : isLargeDesktop ? 312 : 218) : 224);
 
     // Reset focused index and scroll to start when switching tabs; also run initial card transforms
     useEffect(() => {
@@ -587,8 +644,24 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     }, [homeViewTab]);
 
     // Delegate GridView opening to the app-level host so Grid3D remains only the home surface.
-    const handleSelectCollectionCard = (card: any) => {
-        onOpenGridView?.(card.raw || card);
+    // If Personal FM is clicked, it plays Personal FM directly instead of opening GridView.
+    const handleSelectCollectionCard = async (card: any) => {
+        if (card.id === 'personal_fm' || card.raw?.id === 'personal_fm') {
+            try {
+                const fmRes = await neteaseApi.getPersonalFm();
+                if (fmRes.data && fmRes.data.length > 0) {
+                    onPlaySong(fmRes.data[0], fmRes.data, true);
+                }
+            } catch (e) {
+                console.error('[Grid3D] Failed to fetch and play Personal FM:', e);
+            }
+            return;
+        }
+
+        const collection = card.raw
+            ? { ...card.raw, type: card.type }
+            : card;
+        onOpenGridView?.(collection);
     };
 
     // Search committed callback
@@ -623,14 +696,16 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     // Desktop Polaroid Layout parameters
     const cardSpacing = 'px-6';
 
+    const bottomPadding = currentTrack ? 'pb-28 md:pb-32' : '';
+
     return (
-        <div className={`relative w-full h-full flex flex-col font-sans overflow-hidden ${mainBg} pointer-events-auto backdrop-blur-sm`}>
+        <div ref={containerRef} className={`relative w-full h-full flex flex-col font-sans overflow-hidden ${mainBg} pointer-events-auto backdrop-blur-sm ${bottomPadding}`}>
 
             {/* Main Header Container (Fades out when sliding/interacting) */}
             <div className={`transition-opacity duration-300 ease-in-out z-20 ${isSliding ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
                 <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto p-4 md:p-8 gap-y-4 md:gap-y-0">
                     {/* Left title and settings */}
-                    <div className="flex items-center justify-start">
+                    <div className="flex items-center justify-start order-1 md:order-none">
                         <h1 className="text-2xl font-bold tracking-tight opacity-90 flex items-center gap-3">
                             Folia
                         </h1>
@@ -644,7 +719,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     </div>
 
                     {/* Center Tab Switcher */}
-                    <div className="flex justify-center col-span-2 md:col-span-1">
+                    <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1">
                         <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
                             <div className="inline-flex items-center gap-0">
                                 {[
@@ -677,7 +752,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     </div>
 
                     {/* Right Search Bar */}
-                    <div className="flex justify-end">
+                    <div className="flex justify-end order-2 md:order-none">
                         <form onSubmit={handleSearch} className="relative w-full md:w-56 transition-all focus-within:md:w-72">
                             {isSearchingActive ? (
                                 <Loader2 className="absolute left-3 top-1/2 w-4 h-4 animate-spin opacity-40 -mt-2" />
@@ -732,7 +807,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             onMouseMove={handleMouseMove}
                             onMouseUp={handleMouseUpOrLeave}
                             onMouseLeave={handleMouseUpOrLeave}
-                            className="w-full flex items-center overflow-x-auto overflow-y-hidden py-16 custom-scrollbar cursor-grab active:cursor-grabbing"
+                            className="w-full flex items-center overflow-x-auto overflow-y-hidden py-24 custom-scrollbar cursor-grab active:cursor-grabbing"
                             style={{ scrollbarWidth: 'none' }}
                         >
                             <div className="flex px-[40vw] gap-12">
@@ -759,8 +834,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             {grid3dCardStyle === 'image' ? (
                                                 /* Pure Image Cover Style */
                                                 <div
-                                                    className={`w-64 aspect-square rounded-2xl overflow-hidden shadow-2xl relative border border-white/10 ${isFocused ? 'ring-2 ring-white/30' : ''
+                                                    className={`aspect-square rounded-2xl overflow-hidden shadow-2xl relative border border-white/10 ${isFocused ? 'ring-2 ring-white/30' : ''
                                                         }`}
+                                                    style={{ width: coverSize, height: coverSize }}
                                                 >
                                                     {item.coverUrl ? (
                                                         <img src={item.coverUrl} alt={item.name} className="w-full h-full object-cover pointer-events-none select-none" />
@@ -774,7 +850,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             ) : (
                                                 /* Polaroid Card Style */
                                                 <div
-                                                    className="w-64 rounded-xl border p-4 flex flex-col items-center backdrop-blur-md shadow-lg hover:shadow-2xl theme-polaroid-card"
+                                                    className="rounded-xl border p-4 flex flex-col items-center backdrop-blur-md shadow-lg hover:shadow-2xl theme-polaroid-card"
+                                                    style={{ width: coverSize }}
                                                 >
                                                     {/* Square Album Cover */}
                                                     <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
