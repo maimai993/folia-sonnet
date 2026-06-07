@@ -117,11 +117,15 @@ export default function App() {
         isSettingsSubviewOpen,
         openSettings,
         settingsModalState,
+        homeLayoutStyle,
+        setActiveGridViewCollection,
     } = useSettingsUiStore(useShallow(state => ({
         closeSettings: state.closeSettings,
         isSettingsSubviewOpen: state.isSubSettingsViewOpen,
         openSettings: state.openSettings,
         settingsModalState: state.settingsModalState,
+        homeLayoutStyle: state.homeLayoutStyle,
+        setActiveGridViewCollection: state.setActiveGridViewCollection,
     })));
 
     // Player State
@@ -551,8 +555,8 @@ export default function App() {
         navigateToSearch,
         closeSearchView,
         handlePlaylistSelect,
-        handleAlbumSelect,
-        handleArtistSelect,
+        handleAlbumSelect: navigateToNeteaseAlbum,
+        handleArtistSelect: navigateToNeteaseArtist,
         popOverlay,
     } = useAppNavigation();
     const {
@@ -840,8 +844,8 @@ export default function App() {
         hideSearchOverlay,
         setHomeViewTab,
         setPendingNavidromeSelection,
-        handleArtistSelect,
-        handleAlbumSelect,
+        handleArtistSelect: navigateToNeteaseArtist,
+        handleAlbumSelect: navigateToNeteaseAlbum,
         openLocalArtistByName,
         openLocalAlbumByName,
         persistLastPlaybackCache,
@@ -1379,8 +1383,8 @@ export default function App() {
         currentSong,
         playerState,
         handlePlaylistSelect,
-        handleAlbumSelect,
-        handleArtistSelect,
+        handleAlbumSelect: navigateToNeteaseAlbum,
+        handleArtistSelect: navigateToNeteaseArtist,
         focusedPlaylistIndex,
         setFocusedPlaylistIndex,
         focusedFavoriteAlbumIndex,
@@ -1447,8 +1451,8 @@ export default function App() {
         focusedPlaylistIndex,
         focusedRadioIndex,
         fumeTuning,
-        handleAlbumSelect,
-        handleArtistSelect,
+        navigateToNeteaseAlbum,
+        navigateToNeteaseArtist,
         handleClearCustomCappellaEmojiPack,
         handleCustomThemePreferenceChange,
         handleHomeMatchSong,
@@ -1558,8 +1562,23 @@ export default function App() {
         handleDirectHomeFromPanel,
         coverUrl,
         currentSong,
-        handleAlbumSelect,
-        handleArtistSelect,
+        handleAlbumSelect: (albumId) => {
+            if (homeLayoutStyle === 'grid') {
+                setActiveGridViewCollection({
+                    source: 'netease',
+                    id: albumId,
+                    type: 'album',
+                    name: currentSong?.al?.name || '专辑',
+                    coverUrl: currentSong?.al?.picUrl || undefined,
+                });
+                navigateDirectHome({ clearContext: false });
+            } else {
+                navigateToNeteaseAlbum(albumId);
+            }
+        },
+        handleArtistSelect: (artistId) => {
+            navigateToNeteaseArtist(artistId);
+        },
         effectiveLoopMode,
         toggleLoop,
         handleLike,
@@ -1618,10 +1637,103 @@ export default function App() {
         addCurrentSongToNeteasePlaylist,
         addCurrentSongToNavidromePlaylist,
         createCurrentNavidromePlaylist,
-        openCurrentLocalAlbum,
-        openCurrentLocalArtist,
-        openCurrentNavidromeAlbum,
-        openCurrentNavidromeArtist,
+        openCurrentLocalAlbum: () => {
+            if (homeLayoutStyle === 'grid') {
+                if (currentSong && isLocalPlaybackSong(currentSong) && currentSong.localData) {
+                    const localSong = currentSong.localData;
+                    const albumName = currentSong.al?.name || currentSong.album?.name || localSong.matchedAlbumName || localSong.album;
+                    if (albumName) {
+                        const songs = localSongs.filter(song => {
+                            const candidateAlbum = song.matchedAlbumName || song.album || '';
+                            return candidateAlbum === albumName;
+                        });
+                        if (songs.length > 0) {
+                            setActiveGridViewCollection({
+                                source: 'local',
+                                id: `album-current-${albumName}`,
+                                name: albumName,
+                                type: 'album',
+                                coverUrl: currentSong.al?.picUrl || currentSong.album?.picUrl || undefined,
+                                description: currentSong.ar?.map(artist => artist.name).join(', '),
+                                trackCount: songs.length,
+                                songIds: songs.map(song => song.id),
+                            });
+                            navigateDirectHome({ clearContext: false });
+                        }
+                    }
+                }
+            } else {
+                openCurrentLocalAlbum();
+            }
+        },
+        openCurrentLocalArtist: () => {
+            if (homeLayoutStyle === 'grid') {
+                if (currentSong && isLocalPlaybackSong(currentSong) && currentSong.localData) {
+                    const artistName = currentSong.ar?.[0]?.name || currentSong.artists?.[0]?.name || currentSong.localData.matchedArtists || currentSong.localData.artist;
+                    if (artistName) {
+                        const songs = localSongs.filter(song => {
+                            const candidateArtist = song.matchedArtists || song.artist || '';
+                            return candidateArtist === artistName;
+                        });
+                        if (songs.length > 0) {
+                            setActiveGridViewCollection({
+                                source: 'local',
+                                id: `artist-current-${artistName}`,
+                                name: artistName,
+                                type: 'artist',
+                                coverUrl: currentSong.al?.picUrl || currentSong.album?.picUrl || undefined,
+                                description: `${songs.length} 首歌曲`,
+                                trackCount: songs.length,
+                                songIds: songs.map(song => song.id),
+                            });
+                            navigateDirectHome({ clearContext: false });
+                        }
+                    }
+                }
+            } else {
+                openCurrentLocalArtist();
+            }
+        },
+        openCurrentNavidromeAlbum: () => {
+            if (homeLayoutStyle === 'grid') {
+                const currentNavidromeSong = (currentSong as any)?.navidromeData;
+                const playbackCarrier = currentNavidromeSong?.navidromeData;
+                const albumId = currentNavidromeSong?.albumId || playbackCarrier?.albumId;
+                if (albumId) {
+                    const albumName = currentSong?.al?.name || currentSong?.album?.name || '专辑';
+                    setActiveGridViewCollection({
+                        source: 'navidrome',
+                        id: albumId,
+                        name: albumName,
+                        type: 'album',
+                        coverUrl: currentSong?.al?.picUrl || currentSong?.album?.picUrl || undefined,
+                    });
+                    navigateDirectHome({ clearContext: false });
+                }
+            } else {
+                openCurrentNavidromeAlbum();
+            }
+        },
+        openCurrentNavidromeArtist: () => {
+            if (homeLayoutStyle === 'grid') {
+                const currentNavidromeSong = (currentSong as any)?.navidromeData;
+                const playbackCarrier = currentNavidromeSong?.navidromeData;
+                const artistId = currentNavidromeSong?.artistId || playbackCarrier?.artistId;
+                if (artistId) {
+                    const artistName = currentSong?.ar?.[0]?.name || currentSong?.artists?.[0]?.name || '歌手';
+                    setActiveGridViewCollection({
+                        source: 'navidrome',
+                        id: artistId,
+                        name: artistName,
+                        type: 'artist',
+                        coverUrl: currentSong?.al?.picUrl || currentSong?.album?.picUrl || undefined,
+                    });
+                    navigateDirectHome({ clearContext: false });
+                }
+            } else {
+                openCurrentNavidromeArtist();
+            }
+        },
         handleCopySongInfoSuccess: createCopySongInfoSuccessHandler({ setStatusMsg, t }),
         user,
         handleLogout,
@@ -1651,8 +1763,9 @@ export default function App() {
         currentSong,
         effectiveLoopMode,
         generateCurrentSongTheme,
-        handleAlbumSelect,
-        handleArtistSelect,
+        navigateToNeteaseAlbum,
+        navigateToNeteaseArtist,
+        localSongs,
         handleBgModeChange,
         handleChangeOnlineLyricsSource,
         handleChangeLyricsSource,
@@ -1712,6 +1825,9 @@ export default function App() {
         user,
         visualizerMode,
         volume,
+        homeLayoutStyle,
+        setActiveGridViewCollection,
+        localSongs,
     ]);
     const homeContent = useMemo(() => <Home model={homeModel} />, [homeModel]);
     const appOverlaysModel = useMemo(() => buildAppOverlaysModel({
@@ -1734,8 +1850,8 @@ export default function App() {
         playOnlineQueueFromStart,
         addNeteaseSongsToQueue,
         addNeteaseSongToQueue,
-        handleAlbumSelect,
-        handleArtistSelect,
+        handleAlbumSelect: navigateToNeteaseAlbum,
+        handleArtistSelect: navigateToNeteaseArtist,
         userId: user?.userId,
         playlists,
         refreshUserData,
@@ -1776,8 +1892,8 @@ export default function App() {
         devDebugSnapshot,
         duration,
         effectiveLoopMode,
-        handleAlbumSelect,
-        handleArtistSelect,
+        navigateToNeteaseAlbum,
+        navigateToNeteaseArtist,
         handleSearchLoadMore,
         handleSearchOverlaySubmit,
         handleSearchResultAlbumSelect,

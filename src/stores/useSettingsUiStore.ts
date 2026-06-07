@@ -519,6 +519,8 @@ type SettingsUiState = {
     loopMode: 'off' | 'all' | 'one';
     homeLayoutStyle: 'carousel' | 'grid';
     grid3dCardStyle: 'image' | 'card';
+    activeGridViewCollection: any | null;
+    setActiveGridViewCollection: (collection: any | null) => void;
     isSubSettingsViewOpen: boolean;
     settingsModalState: SettingsModalState;
     setStatusSetter: (setter: StatusSetter | null) => void;
@@ -638,6 +640,8 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     loopMode: readStoredLoopMode(),
     homeLayoutStyle: readStoredHomeLayoutStyle(),
     grid3dCardStyle: readStoredGrid3dCardStyle(),
+    activeGridViewCollection: null,
+    setActiveGridViewCollection: (collection) => set({ activeGridViewCollection: collection }),
     isSubSettingsViewOpen: false,
     settingsModalState: {
         isOpen: false,
@@ -1255,6 +1259,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetHomeLayoutStyle: state.handleSetHomeLayoutStyle,
     grid3dCardStyle: state.grid3dCardStyle,
     handleSetGrid3dCardStyle: state.handleSetGrid3dCardStyle,
+    activeGridViewCollection: state.activeGridViewCollection,
+    setActiveGridViewCollection: state.setActiveGridViewCollection,
     classicTuning: state.classicTuning,
     cadenzaTuning: state.cadenzaTuning,
     partitaTuning: state.partitaTuning,

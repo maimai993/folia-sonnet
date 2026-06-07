@@ -37,6 +37,8 @@ type StoredGridViewCollection = {
 export const GRID_VIEW_ACTIVE_COLLECTION_KEY = 'folia_gridview_active_collection';
 
 const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, children }) => {
+    const activeGridViewCollection = useSettingsUiStore(state => state.activeGridViewCollection);
+    const setActiveGridViewCollection = useSettingsUiStore(state => state.setActiveGridViewCollection);
     const isDaylight = useSettingsUiStore(state => state.isDaylight);
     const { homeViewTab, setHomeViewTab } = useSearchNavigationStore(useShallow(state => ({
         homeViewTab: state.homeViewTab,
@@ -58,26 +60,42 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
             if (parsed?.collection?.id === undefined || parsed.collection.id === null || !parsed.collection.name) return;
 
             setSelectedCollection(parsed.collection);
+            setActiveGridViewCollection(parsed.collection);
             if (parsed.homeViewTab) {
                 setHomeViewTab(parsed.homeViewTab as any);
             }
         } catch {
             sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
         }
-    }, [selectedCollection, setHomeViewTab]);
+    }, [selectedCollection, setHomeViewTab, setActiveGridViewCollection]);
+
+    useEffect(() => {
+        if (activeGridViewCollection) {
+            setSelectedCollection(activeGridViewCollection);
+            sessionStorage.setItem(
+                GRID_VIEW_ACTIVE_COLLECTION_KEY,
+                JSON.stringify({ collection: activeGridViewCollection, homeViewTab })
+            );
+        } else {
+            setSelectedCollection(null);
+            sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
+        }
+    }, [activeGridViewCollection, homeViewTab]);
 
     const openGridView = useCallback((collection: GridViewCollectionDescriptor) => {
         setSelectedCollection(collection);
+        setActiveGridViewCollection(collection);
         sessionStorage.setItem(
             GRID_VIEW_ACTIVE_COLLECTION_KEY,
             JSON.stringify({ collection, homeViewTab })
         );
-    }, [homeViewTab]);
+    }, [homeViewTab, setActiveGridViewCollection]);
 
     const closeGridView = useCallback(() => {
         sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
         setSelectedCollection(null);
-    }, []);
+        setActiveGridViewCollection(null);
+    }, [setActiveGridViewCollection]);
 
     useEffect(() => {
         if (!selectedCollection) {
