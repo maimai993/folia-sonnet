@@ -6,6 +6,13 @@ import GridView from '../../GridView';
 import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { SongResult, UnifiedSong } from '../../../types';
+import {
+    GridViewCollectionDescriptor,
+    isLocalGridViewCollection,
+    isNavidromeGridViewCollection,
+    resolveLocalGridViewTracks,
+    resolveNavidromeGridViewTracks,
+} from './gridViewCollectionAdapters';
 
 // src/components/app/home/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
@@ -14,11 +21,11 @@ type LegacyHomeProps = React.ComponentProps<typeof LegacyHome>;
 
 type GridViewOverlayHostProps = {
     legacyProps: LegacyHomeProps;
-    children: (openGridView: (collection: any) => void) => React.ReactNode;
+    children: (openGridView: (collection: GridViewCollectionDescriptor) => void) => React.ReactNode;
 };
 
 type StoredGridViewCollection = {
-    collection: any;
+    collection: GridViewCollectionDescriptor;
     homeViewTab: string;
 };
 
@@ -30,7 +37,9 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         homeViewTab: state.homeViewTab,
         setHomeViewTab: state.setHomeViewTab,
     })));
-    const [selectedCollection, setSelectedCollection] = useState<any | null>(null);
+    const [selectedCollection, setSelectedCollection] = useState<GridViewCollectionDescriptor | null>(null);
+    const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);
+    const [externalTracksLoading, setExternalTracksLoading] = useState(false);
 
     useEffect(() => {
         if (selectedCollection) return;
@@ -51,7 +60,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         }
     }, [selectedCollection, setHomeViewTab]);
 
-    const openGridView = useCallback((collection: any) => {
+    const openGridView = useCallback((collection: GridViewCollectionDescriptor) => {
         setSelectedCollection(collection);
         sessionStorage.setItem(
             GRID_VIEW_ACTIVE_COLLECTION_KEY,
@@ -63,6 +72,52 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         sessionStorage.removeItem(GRID_VIEW_ACTIVE_COLLECTION_KEY);
         setSelectedCollection(null);
     }, []);
+
+    useEffect(() => {
+        if (!selectedCollection) {
+            setExternalTracks(undefined);
+            setExternalTracksLoading(false);
+            return;
+        }
+
+        if (isLocalGridViewCollection(selectedCollection)) {
+            setExternalTracks(resolveLocalGridViewTracks(selectedCollection, legacyProps.localSongs));
+            setExternalTracksLoading(false);
+            return;
+        }
+
+        if (!isNavidromeGridViewCollection(selectedCollection)) {
+            setExternalTracks(undefined);
+            setExternalTracksLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+        setExternalTracks([]);
+        setExternalTracksLoading(true);
+
+        resolveNavidromeGridViewTracks(selectedCollection)
+            .then((tracks) => {
+                if (!cancelled) {
+                    setExternalTracks(tracks);
+                }
+            })
+            .catch((error) => {
+                console.error('[GridViewOverlayHost] Failed to load Navidrome GridView tracks:', error);
+                if (!cancelled) {
+                    setExternalTracks([]);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setExternalTracksLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [legacyProps.localSongs, selectedCollection]);
 
     const handleSelectTrack = useCallback((track: SongResult, queue: SongResult[]) => {
         const unifiedTrack = track as UnifiedSong;
@@ -81,6 +136,10 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         const unifiedTrack = track as UnifiedSong;
         if (unifiedTrack.isLocal && unifiedTrack.localData) {
             legacyProps.onAddLocalSongToQueue?.(unifiedTrack.localData);
+            return;
+        }
+        if (unifiedTrack.isNavidrome) {
+            legacyProps.onAddNavidromeSongsToQueue?.([unifiedTrack as any]);
             return;
         }
         legacyProps.onAddSongToQueue?.(track);
@@ -105,6 +164,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                         onSelectArtist={legacyProps.onSelectArtist}
                         currentUserId={legacyProps.user?.userId}
                         onPlaylistMutated={legacyProps.onRefreshUser}
+                        externalTracks={externalTracks}
+                        externalTracksLoading={externalTracksLoading}
                         theme={legacyProps.theme}
                         isDaylight={isDaylight}
                     />

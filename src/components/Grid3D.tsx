@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, User, Loader2, Settings, LayoutGrid, Disc, Map as MapIcon, ArrowLeft, Heart, ChevronRight } from 'lucide-react';
+import { Search, User, Loader2, Settings, Map as MapIcon, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
@@ -13,6 +13,7 @@ import NavidromeMusicView from './navidrome/NavidromeMusicView';
 import GridMap from './GridMap';
 import { formatSongName } from '../utils/songNameFormatter';
 import { Grid3DSlider } from './folia-grid/Grid3DSlider';
+import { createNeteaseGridViewCollection } from './app/home/gridViewCollectionAdapters';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -75,12 +76,6 @@ interface Grid3DProps {
     onOpenGridView?: (collection: any) => void;
 }
 
-const compactDescription = (description?: string, maxLength = 72) => {
-    if (!description) return '';
-    const normalized = description.replace(/\s+/g, ' ').trim();
-    return normalized.length > maxLength ? `${normalized.substring(0, maxLength)}...` : normalized;
-};
-
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const {
         onPlaySong,
@@ -116,7 +111,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
     const { t } = useTranslation();
     const isDaylight = useSettingsUiStore(state => state.isDaylight);
-    const grid3dCardStyle = useSettingsUiStore(state => state.grid3dCardStyle);
     const {
         homeViewTab,
         setHomeViewTab,
@@ -135,69 +129,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
     const isNeteaseTab = homeViewTab === 'playlist' || homeViewTab === 'albums' || homeViewTab === 'radio';
 
-    // UI Interaction states
-    const [isSliding, setIsSliding] = useState(false);
-    const slidingTimeoutRef = useRef<any>(null);
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [focusedIndex, setFocusedIndex] = useState(0);
 
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [containerSize, setContainerSize] = useState(() => {
-        if (typeof window === 'undefined') {
-            return { width: 0, height: 0 };
-        }
-        return { width: window.innerWidth, height: window.innerHeight };
-    });
-
-    useEffect(() => {
-        const element = containerRef.current;
-        if (!element) return;
-
-        const updateContainerSize = () => {
-            const nextWidth = element.clientWidth;
-            const nextHeight = element.clientHeight;
-
-            setContainerSize((prev) => (
-                prev.width === nextWidth && prev.height === nextHeight
-                    ? prev
-                    : { width: nextWidth, height: nextHeight }
-            ));
-        };
-
-        updateContainerSize();
-
-        if (typeof ResizeObserver === 'undefined') {
-            window.addEventListener('resize', updateContainerSize);
-            return () => window.removeEventListener('resize', updateContainerSize);
-        }
-
-        const observer = new ResizeObserver(() => {
-            updateContainerSize();
-        });
-        observer.observe(element);
-
-        return () => observer.disconnect();
-    }, []);
-
-    const isDesktopWidth = containerSize.width >= 768;
-    const isNarrowLayout = containerSize.width > 0 && containerSize.width < 768;
-    const hasFloatingPlayer = Boolean(currentTrack);
-    const isShortLayout = containerSize.height > 0 && containerSize.height < (hasFloatingPlayer ? 420 : 380);
-    const useCompactMetrics = isNarrowLayout || isShortLayout;
-    const isLargeDesktop = !useCompactMetrics
-        && isDesktopWidth
-        && containerSize.width >= 1440
-        && containerSize.height >= (hasFloatingPlayer ? 660 : 600);
-    const isUltraDesktop = !useCompactMetrics
-        && isDesktopWidth
-        && containerSize.width >= 2000
-        && containerSize.height >= (hasFloatingPlayer ? 780 : 720);
-
-    const coverSize = useCompactMetrics
-        ? (isDesktopWidth ? 208 : 192)
-        : (isDesktopWidth ? (isUltraDesktop ? 360 : isLargeDesktop ? 312 : 218) : 224);
-
-    // Reset focused index when switching tabs
+    // Reset focused index when switching tabs.
     useEffect(() => {
         setFocusedIndex(0);
     }, [homeViewTab]);
@@ -274,15 +208,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         (homeViewTab === 'playlist' && playlists.length === 0 && user !== null) ||
         (homeViewTab === 'albums' && loadingAlbums) ||
         (homeViewTab === 'radio' && loadingRadio);
-
-    // Trigger sliding fade indicators
-    const handleSliding = () => {
-        setIsSliding(true);
-        if (slidingTimeoutRef.current) clearTimeout(slidingTimeoutRef.current);
-        slidingTimeoutRef.current = setTimeout(() => {
-            setIsSliding(false);
-        }, 300);
-    };
 
     // Load favorite albums and recommendations
     useEffect(() => {
@@ -408,8 +333,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         return [];
     }, [homeViewTab, playlistCards, albumCards, radioCards]);
 
-
-
     // Delegate GridView opening to the app-level host so Grid3D remains only the home surface.
     // If Personal FM is clicked, it plays Personal FM directly instead of opening GridView.
     const handleSelectCollectionCard = async (card: any) => {
@@ -428,7 +351,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         const collection = card.raw
             ? { ...card.raw, type: card.type }
             : card;
-        onOpenGridView?.(collection);
+        onOpenGridView?.(createNeteaseGridViewCollection(collection));
     };
 
     // Search committed callback
@@ -460,16 +383,13 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const navPillInactiveText = isDaylight ? 'text-black/60 hover:text-black' : 'text-white/60 hover:text-white';
     const activeTabBg = isDaylight ? 'text-black font-bold' : 'text-black';
 
-    // Desktop Polaroid Layout parameters
-    const cardSpacing = 'px-6';
-
     const bottomPadding = currentTrack ? 'pb-28 md:pb-32' : '';
 
     return (
-        <div ref={containerRef} className={`relative w-full h-full flex flex-col font-sans overflow-hidden ${mainBg} pointer-events-auto backdrop-blur-sm ${bottomPadding}`}>
+        <div className={`relative w-full h-full flex flex-col font-sans overflow-hidden ${mainBg} pointer-events-auto backdrop-blur-sm ${bottomPadding}`}>
 
             {/* Main Header Container (Fades out when sliding/interacting) */}
-            <div className={`transition-opacity duration-300 ease-in-out z-20 ${isSliding ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+            <div className="transition-opacity duration-300 ease-in-out z-20 opacity-100">
                 <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto p-4 md:p-8 gap-y-4 md:gap-y-0">
                     {/* Left title and settings */}
                     <div className="flex items-center justify-start order-1 md:order-none">
@@ -580,15 +500,17 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 </motion.button>
                             </div>
                         )}
+
                         <Grid3DSlider
                             items={currentDesktopItems}
+                            focusedIndex={focusedIndex}
+                            onFocusedIndexChange={setFocusedIndex}
                             onSelect={handleSelectCollectionCard}
+                            isInteractive={!showCollectionGrid}
                             isLoading={isLoading}
                             emptyMessage={t('home.loadingLibrary')}
                             isDaylight={isDaylight}
                             hasFloatingPlayer={Boolean(currentTrack)}
-                            initialFocusedIndex={focusedIndex}
-                            onFocusedIndexChange={setFocusedIndex}
                         />
 
                     </div>
@@ -648,7 +570,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             theme={theme}
                             isDaylight={isDaylight}
                             hasFloatingPlayer={Boolean(currentTrack)}
-                            layoutStyle="desktop"
+                            layoutStyle="grid3d"
                             onOpenGridView={onOpenGridView}
                         />
                     </div>
@@ -666,7 +588,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             externalSelection={pendingNavidromeSelection}
                             hasFloatingPlayer={Boolean(currentTrack)}
                             onExternalSelectionHandled={onPendingNavidromeSelectionHandled}
-                            layoutStyle="desktop"
+                            layoutStyle="grid3d"
                             onOpenGridView={onOpenGridView}
                         />
                     </div>
