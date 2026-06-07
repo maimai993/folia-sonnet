@@ -7,6 +7,7 @@ import { useSearchNavigationStore } from '../../../stores/useSearchNavigationSto
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { LocalSong, SongResult, UnifiedSong } from '../../../types';
 import { NavidromeSong } from '../../../types/navidrome';
+import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
 import { deleteFolderSongs, resyncFolder } from '../../../services/localMusicService';
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
@@ -175,12 +176,15 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
 
     const handleSelectTrack = useCallback((track: SongResult, queue: SongResult[]) => {
         const unifiedTrack = track as UnifiedSong;
-        if (unifiedTrack.isNavidrome && unifiedTrack.navidromeData) {
-            const naviQueue = queue
-                .map(t => t as UnifiedSong)
-                .filter(t => t.isNavidrome) as any as NavidromeSong[];
-            legacyProps.onPlayNavidromeSong?.(unifiedTrack as any as NavidromeSong, naviQueue);
-            return;
+        if (unifiedTrack.isNavidrome) {
+            const naviSong = resolveNavidromePlaybackCarrier(unifiedTrack);
+            if (naviSong) {
+                const naviQueue = queue
+                    .map(t => resolveNavidromePlaybackCarrier(t))
+                    .filter((t): t is NavidromeSong => Boolean(t));
+                legacyProps.onPlayNavidromeSong?.(naviSong, naviQueue);
+                return;
+            }
         }
         if (unifiedTrack.isLocal && unifiedTrack.localData) {
             const localQueue = queue
@@ -199,8 +203,11 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
             return;
         }
         if (unifiedTrack.isNavidrome) {
-            legacyProps.onAddNavidromeSongsToQueue?.([unifiedTrack as any]);
-            return;
+            const naviSong = resolveNavidromePlaybackCarrier(unifiedTrack);
+            if (naviSong) {
+                legacyProps.onAddNavidromeSongsToQueue?.([naviSong]);
+                return;
+            }
         }
         legacyProps.onAddSongToQueue?.(track);
     }, [legacyProps]);

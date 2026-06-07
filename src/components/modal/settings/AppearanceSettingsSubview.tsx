@@ -26,8 +26,8 @@ type AppearanceSettingsSubviewProps = {
     toggleOffBackgroundClass: string;
     transparentPlayerBackground: boolean;
     utilityGhostButtonClass: string;
-    homeLayoutStyle: 'carousel' | 'desktop';
-    onChangeHomeLayoutStyle: (style: 'carousel' | 'desktop') => void;
+    homeLayoutStyle: 'carousel' | 'grid';
+    onChangeHomeLayoutStyle: (style: 'carousel' | 'grid') => void;
     grid3dCardStyle: 'image' | 'card';
     onChangeGrid3dCardStyle: (style: 'image' | 'card') => void;
 };
@@ -207,7 +207,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             {t('options.homeLayoutStyle') || '首页布局样式'}
                         </div>
                         <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.homeLayoutStyleDesc') || '选择首页展示的样式风格：经典 3D 轮播或全新透明桌面（支持拍立得单曲网格）。'}
+                            {t('options.homeLayoutStyleDesc') || '选择首页展示的样式风格：经典(旧版)或万象(新版)透明桌面（支持拍立得单曲网格）。'}
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3 mt-2">
@@ -217,22 +217,22 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             style={getAccentOptionStyle(homeLayoutStyle === 'carousel')}
                         >
                             <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.homeLayoutStyleCarousel') || '经典 3D 轮播'}
+                                {t('options.homeLayoutStyleCarousel') || '经典(旧版)'}
                             </span>
                         </button>
                         <button
-                            onClick={() => onChangeHomeLayoutStyle('desktop')}
+                            onClick={() => onChangeHomeLayoutStyle('grid')}
                             className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
-                            style={getAccentOptionStyle(homeLayoutStyle === 'desktop')}
+                            style={getAccentOptionStyle(homeLayoutStyle === 'grid')}
                         >
                             <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.homeLayoutStyleDesktop') || '无级透明桌面'}
+                                {t('options.homeLayoutStyleGrid') || '万象(新版)'}
                             </span>
                         </button>
                     </div>
                 </div>
 
-                {homeLayoutStyle === 'desktop' && (
+                {homeLayoutStyle === 'grid' && (
                     <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                         <div className="space-y-1">
                             <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>

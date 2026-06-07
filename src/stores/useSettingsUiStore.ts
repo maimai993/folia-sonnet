@@ -439,13 +439,14 @@ const readStoredAudioOutputDeviceId = (): string => {
     return localStorage.getItem('audio_output_device_id') ?? '';
 };
 
-const readStoredHomeLayoutStyle = (): 'carousel' | 'desktop' => {
+const readStoredHomeLayoutStyle = (): 'carousel' | 'grid' => {
     if (typeof window === 'undefined') {
-        return 'desktop';
+        return 'grid';
     }
 
     const saved = localStorage.getItem('home_layout_style');
-    return saved === 'carousel' ? 'carousel' : 'desktop';
+    if (saved === 'desktop') return 'grid';
+    return saved === 'carousel' ? 'carousel' : 'grid';
 };
 
 /**
@@ -516,7 +517,7 @@ type SettingsUiState = {
     volume: number;
     isMuted: boolean;
     loopMode: 'off' | 'all' | 'one';
-    homeLayoutStyle: 'carousel' | 'desktop';
+    homeLayoutStyle: 'carousel' | 'grid';
     grid3dCardStyle: 'image' | 'card';
     isSubSettingsViewOpen: boolean;
     settingsModalState: SettingsModalState;
@@ -582,7 +583,7 @@ type SettingsUiState = {
     handleSetVolume: (val: number) => void;
     handleToggleMute: () => void;
     handleToggleLoopMode: () => void;
-    handleSetHomeLayoutStyle: (style: 'carousel' | 'desktop') => void;
+    handleSetHomeLayoutStyle: (style: 'carousel' | 'grid') => void;
     handleSetGrid3dCardStyle: (style: 'image' | 'card') => void;
 };
 
@@ -1213,7 +1214,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         set({ homeLayoutStyle: style });
         notify(get, {
             type: 'info',
-            text: style === 'desktop' ? '首页布局已切换为透明桌面' : '首页布局已切换为经典轮播',
+            text: style === 'grid' ? '首页布局已切换为万象' : '首页布局已切换为经典',
         });
     },
     handleSetGrid3dCardStyle: (style) => {

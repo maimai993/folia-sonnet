@@ -13,7 +13,7 @@ type AppHomeProps = {
 const Home: React.FC<AppHomeProps> = ({ model }) => {
     const homeLayoutStyle = useSettingsUiStore(state => state.homeLayoutStyle);
 
-    if (homeLayoutStyle === 'desktop') {
+    if (homeLayoutStyle === 'grid') {
         return (
             <GridViewOverlayHost legacyProps={model.legacyProps}>
                 {(openGridView) => (
