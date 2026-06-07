@@ -834,8 +834,8 @@ export const GridView: React.FC<GridViewProps> = ({
             if (c.baseY > maxY) maxY = c.baseY;
         });
 
-        const bufferX = Math.max(containerSize.width / 2, 200);
-        const bufferY = Math.max(containerSize.height / 2, 200);
+        const bufferX = Math.max(0, containerSize.width / 2 - 2 * layoutConfig.spacingX);
+        const bufferY = Math.max(0, containerSize.height / 2 - 2 * layoutConfig.spacingY);
 
         return {
             left: -maxX - bufferX,
@@ -843,7 +843,7 @@ export const GridView: React.FC<GridViewProps> = ({
             top: -maxY - bufferY,
             bottom: -minY + bufferY,
         };
-    }, [baseCoords, containerSize]);
+    }, [baseCoords, layoutConfig, containerSize]);
 
     // Keep the active focusedIndex centered when baseCoords changes on resize
     useEffect(() => {

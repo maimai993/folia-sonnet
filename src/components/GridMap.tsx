@@ -263,6 +263,52 @@ export const GridMap: React.FC<GridMapProps> = ({
         };
     }, [dragX, dragY]);
 
+
+
+    useEffect(() => {
+        focusedIndexRef.current = focusedIndex;
+    }, [focusedIndex]);
+
+    const {
+        coords: baseCoords,
+        renderedIndexes,
+        renderedIndexesRef,
+        updateRenderedIndexesForViewport,
+    } = useFoliaHexViewport({
+        itemCount: items.length,
+        spacingX: layoutConfig.spacingX,
+        spacingY: layoutConfig.spacingY,
+        renderRadius,
+        renderRing,
+        fallbackIndexRef: focusedIndexRef,
+    });
+
+    const dragBounds = useMemo(() => {
+        if (baseCoords.length === 0) return { left: 0, right: 0, top: 0, bottom: 0 };
+
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+
+        baseCoords.forEach((c) => {
+            if (c.baseX < minX) minX = c.baseX;
+            if (c.baseX > maxX) maxX = c.baseX;
+            if (c.baseY < minY) minY = c.baseY;
+            if (c.baseY > maxY) maxY = c.baseY;
+        });
+
+        const bufferX = Math.max(0, containerSize.width / 2 - 2 * layoutConfig.spacingX);
+        const bufferY = Math.max(0, containerSize.height / 2 - 2 * layoutConfig.spacingY);
+
+        return {
+            left: -maxX - bufferX,
+            right: -minX + bufferX,
+            top: -maxY - bufferY,
+            bottom: -minY + bufferY,
+        };
+    }, [baseCoords, layoutConfig, containerSize]);
+
     // Handles mouse wheel events and animates viewport translation offsets
     const handleViewportWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
         if (items.length === 0 || event.ctrlKey) return;
@@ -282,29 +328,13 @@ export const GridMap: React.FC<GridMapProps> = ({
 
         const targetX = wheelTargetRef.current.x - horizontalDelta * deltaScale;
         const targetY = wheelTargetRef.current.y - verticalDelta * deltaScale;
-        wheelTargetRef.current = { x: targetX, y: targetY };
+        const clampedX = Math.max(dragBounds.left, Math.min(dragBounds.right, targetX));
+        const clampedY = Math.max(dragBounds.top, Math.min(dragBounds.bottom, targetY));
+        wheelTargetRef.current = { x: clampedX, y: clampedY };
 
-        animate(dragX, targetX, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
-        animate(dragY, targetY, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
-    }, [containerSize.height, dragX, dragY, items.length]);
-
-    useEffect(() => {
-        focusedIndexRef.current = focusedIndex;
-    }, [focusedIndex]);
-
-    const {
-        coords: baseCoords,
-        renderedIndexes,
-        renderedIndexesRef,
-        updateRenderedIndexesForViewport,
-    } = useFoliaHexViewport({
-        itemCount: items.length,
-        spacingX: layoutConfig.spacingX,
-        spacingY: layoutConfig.spacingY,
-        renderRadius,
-        renderRing,
-        fallbackIndexRef: focusedIndexRef,
-    });
+        animate(dragX, clampedX, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
+        animate(dragY, clampedY, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
+    }, [containerSize.height, dragX, dragY, items.length, dragBounds]);
 
     // Keep the active focusedIndex centered when baseCoords changes on resize
     useEffect(() => {
@@ -600,7 +630,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                 ) : (
                     <motion.div
                         drag
-                        dragConstraints={false}
+                        dragConstraints={dragBounds}
                         dragElastic={0.05}
                         dragTransition={{ power: 0.16, timeConstant: 220 }}
                         onDragStart={() => {
