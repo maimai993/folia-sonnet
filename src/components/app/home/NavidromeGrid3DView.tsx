@@ -110,6 +110,10 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
             coverUrl: album.coverArt ? navidromeApi.getCoverArtUrl(config, album.coverArt, 600) : createCoverPlaceholder(album.name, 'playlist'),
             description: album.artist,
             trackCount: album.songCount,
+            albumArtist: album.artist,
+            albumYear: album.year,
+            albumGenre: album.genre,
+            albumDuration: album.duration,
         }));
     }, [albums, config]);
 

@@ -20,6 +20,12 @@ export interface BaseGridViewCollectionDescriptor {
     picUrl?: string;
     description?: string;
     trackCount?: number;
+    albumArtist?: string;
+    albumYear?: number;
+    albumGenre?: string;
+    albumDuration?: number;
+    albumCompany?: string;
+    albumPublishTime?: number;
 }
 
 export interface LocalGridViewCollectionDescriptor extends BaseGridViewCollectionDescriptor {
@@ -52,6 +58,11 @@ const getDisplayName = (name: React.ReactNode) => (
 export const createNeteaseGridViewCollection = (collection: any): GridViewCollectionDescriptor => ({
     ...collection,
     source: 'netease',
+    albumArtist: collection.type === 'album'
+        ? collection.raw?.artists?.map((artist: { name?: string }) => artist.name).filter(Boolean).join(' / ') || collection.description
+        : collection.albumArtist,
+    albumPublishTime: collection.type === 'album' ? collection.raw?.publishTime : collection.albumPublishTime,
+    albumCompany: collection.type === 'album' ? collection.raw?.company : collection.albumCompany,
 });
 
 export const createLocalGridViewCollection = (group: LocalLibraryGroup): LocalGridViewCollectionDescriptor => ({
@@ -74,6 +85,10 @@ export const createNavidromeGridViewCollection = (
         coverUrl?: string;
         description?: string;
         trackCount?: number;
+        albumArtist?: string;
+        albumYear?: number;
+        albumGenre?: string;
+        albumDuration?: number;
     },
     type: NavidromeGridViewCollectionType
 ): NavidromeGridViewCollectionDescriptor => ({
@@ -84,6 +99,10 @@ export const createNavidromeGridViewCollection = (
     coverUrl: item.coverUrl,
     description: item.description,
     trackCount: item.trackCount,
+    albumArtist: item.albumArtist,
+    albumYear: item.albumYear,
+    albumGenre: item.albumGenre,
+    albumDuration: item.albumDuration,
     editable: Boolean((item as { editable?: boolean }).editable),
 });
 

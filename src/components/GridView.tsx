@@ -393,6 +393,25 @@ const toHttps = (url?: string): string => {
     return url;
 };
 
+const formatAlbumDate = (timestamp?: number) => {
+    if (!timestamp || !Number.isFinite(timestamp)) return '';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString();
+};
+
+const formatAlbumDuration = (duration?: number) => {
+    if (!duration || !Number.isFinite(duration)) return '';
+    const totalSeconds = duration > 10000 ? Math.round(duration / 1000) : Math.round(duration);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+        return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
 export const GridView: React.FC<GridViewProps> = ({
     title,
     subtitle,
@@ -553,6 +572,7 @@ export const GridView: React.FC<GridViewProps> = ({
     const [loading, setLoading] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const [offset, setOffset] = useState(0);
+    const [loadedAlbumInfo, setLoadedAlbumInfo] = useState<any>(null);
     const [removedExternalTrackKeys, setRemovedExternalTrackKeys] = useState<Set<string>>(() => new Set());
     const baseDisplayTracks = externalTracks ?? tracks;
     const displayTracks = baseDisplayTracks.filter((track, index) => (
@@ -573,6 +593,10 @@ export const GridView: React.FC<GridViewProps> = ({
     const collectionSource = collection?.source as string | undefined;
     const isLocalCollection = collectionSource === 'local';
     const isNavidromeCollection = collectionSource === 'navidrome';
+    const isAlbumCollection = collection?.type === 'album';
+    const neteaseAlbumInfo = collectionSource === 'netease' && isAlbumCollection
+        ? (loadedAlbumInfo || collection?.raw || collection)
+        : null;
     const isLocalFolderCollection = isLocalCollection && collection?.type === 'folder' && !collection?.isVirtual;
     const isLocalPlaylistCollection = isLocalCollection && collection?.type === 'playlist' && Boolean(collection?.playlistId) && !collection?.isVirtual;
     const isNavidromePlaylistCollection = isNavidromeCollection && collection?.type === 'playlist' && Boolean(collection?.editable);
@@ -588,6 +612,7 @@ export const GridView: React.FC<GridViewProps> = ({
         setEditableTitle(title);
         setIsEditMode(false);
         setRemovedExternalTrackKeys(new Set());
+        setLoadedAlbumInfo(null);
     }, [collection?.id, title]);
 
     useEffect(() => {
@@ -777,6 +802,7 @@ export const GridView: React.FC<GridViewProps> = ({
                 if (collection.type === 'album') {
                     const res = await neteaseApi.getAlbum(Number(collection.id));
                     if (res.code === 200 && res.songs) {
+                        setLoadedAlbumInfo(res.album);
                         responseTracks = res.songs.map((song: SongResult) => ({
                             ...song,
                             al: { id: res.album.id, name: res.album.name, picUrl: song.al?.picUrl || res.album.picUrl },
@@ -1680,12 +1706,45 @@ export const GridView: React.FC<GridViewProps> = ({
                                         {collection.trackCount !== undefined && <span>{collection.trackCount} 首歌</span>}
                                         {collection.playCount !== undefined && <span> • {collection.playCount} 次播放</span>}
                                     </div>
+                                    {isAlbumCollection && (
+                                        <div className="mt-3 space-y-1.5 text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                            {neteaseAlbumInfo?.alias?.[0] && (
+                                                <div className="font-medium opacity-80">{neteaseAlbumInfo.alias[0]}</div>
+                                            )}
+                                            {neteaseAlbumInfo?.artist && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onSelectArtist?.(neteaseAlbumInfo.artist.id)}
+                                                    className="font-semibold hover:underline"
+                                                >
+                                                    {neteaseAlbumInfo.artist.name}
+                                                </button>
+                                            )}
+                                            {!neteaseAlbumInfo?.artist && collection.albumArtist && (
+                                                <div className="font-semibold">{collection.albumArtist}</div>
+                                            )}
+                                            {(formatAlbumDate(neteaseAlbumInfo?.publishTime || collection.albumPublishTime) || neteaseAlbumInfo?.company || collection.albumCompany) && (
+                                                <div>
+                                                    {[formatAlbumDate(neteaseAlbumInfo?.publishTime || collection.albumPublishTime), neteaseAlbumInfo?.company || collection.albumCompany]
+                                                        .filter(Boolean)
+                                                        .join(' • ')}
+                                                </div>
+                                            )}
+                                            {isNavidromeCollection && (
+                                                <div>
+                                                    {[collection.albumYear, collection.albumGenre, formatAlbumDuration(collection.albumDuration)]
+                                                        .filter(Boolean)
+                                                        .join(' • ')}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Description */}
-                                {collection.description && (
+                                {(neteaseAlbumInfo?.description || collection.description) && (
                                     <p className="text-xs opacity-65 leading-relaxed break-words whitespace-pre-wrap max-h-40 overflow-y-auto pr-1">
-                                        {collection.description}
+                                        {neteaseAlbumInfo?.description || collection.description}
                                     </p>
                                 )}
                             </div>
