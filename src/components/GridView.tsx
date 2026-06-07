@@ -1141,7 +1141,7 @@ export const GridView: React.FC<GridViewProps> = ({
         pendingRestoreStateRef.current = null;
     }, [baseCoords, deferredSearchQuery, dragX, dragY, gridItems.length, updateRenderedIndexesForViewport]);
 
-    const handleViewportWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const handleViewportWheel = useCallback((event: WheelEvent) => {
         if (gridItems.length === 0 || event.ctrlKey) return;
 
         event.preventDefault();
@@ -1166,6 +1166,14 @@ export const GridView: React.FC<GridViewProps> = ({
         animate(dragX, clampedX, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
         animate(dragY, clampedY, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
     }, [containerSize.height, dragX, dragY, gridItems.length, dragBounds]);
+
+    useEffect(() => {
+        const element = containerRef.current;
+        if (!element) return;
+
+        element.addEventListener('wheel', handleViewportWheel, { passive: false });
+        return () => element.removeEventListener('wheel', handleViewportWheel);
+    }, [handleViewportWheel]);
 
     // Center on the first item initially
     useEffect(() => {
@@ -1435,7 +1443,7 @@ export const GridView: React.FC<GridViewProps> = ({
             unsubY();
             if (rafId !== null) cancelAnimationFrame(rafId);
         };
-    }, [dragX, dragY, baseCoords, layoutConfig, clipRadius, renderedIndexes, updateRenderedIndexesForViewport]);
+    }, [dragX, dragY, baseCoords, layoutConfig, clipRadius, updateRenderedIndexesForViewport]);
 
     // Setup arrow keyboard navigation
     useEffect(() => {
@@ -1484,7 +1492,7 @@ export const GridView: React.FC<GridViewProps> = ({
     const showLoading = isLoading || externalTracksLoading || (mode === 'tracks' && loading && displayTracks.length === 0);
     const hasSearchQuery = deferredSearchQuery.trim().length > 0;
 
-    const coverUrl = collection?.coverImgUrl || collection?.coverUrl || collection?.picUrl || '';
+    const coverUrl = neteaseAlbumInfo?.picUrl || collection?.coverImgUrl || collection?.coverUrl || collection?.picUrl || '';
 
     return (
         <motion.div
@@ -1543,7 +1551,7 @@ export const GridView: React.FC<GridViewProps> = ({
                 }}
             >
                 <h2 className="text-lg font-bold tracking-tight flex items-center gap-1.5 justify-center">
-                    {title}
+                    {neteaseAlbumInfo?.name || title}
                     {mode === 'tracks' && collection && (
                         <span className="text-[9px] bg-zinc-500/20 text-current px-1.5 py-0.5 rounded-full font-normal opacity-60">
                             {showCutInPanel ? '收起信息' : '歌单信息'}
@@ -1556,7 +1564,6 @@ export const GridView: React.FC<GridViewProps> = ({
             {/* Honeycomb Drag/Viewport Canvas Area */}
             <div
                 ref={containerRef}
-                onWheel={handleViewportWheel}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
             >
                 <AnimatePresence>

@@ -1568,8 +1568,8 @@ export default function App() {
                     source: 'netease',
                     id: albumId,
                     type: 'album',
-                    name: currentSong?.al?.name || '专辑',
-                    coverUrl: currentSong?.al?.picUrl || undefined,
+                    name: '专辑',
+                    coverUrl: undefined,
                 });
                 navigateDirectHome({ clearContext: false });
             } else {

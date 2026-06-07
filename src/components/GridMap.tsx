@@ -310,7 +310,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     }, [baseCoords, layoutConfig, containerSize]);
 
     // Handles mouse wheel events and animates viewport translation offsets
-    const handleViewportWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const handleViewportWheel = useCallback((event: WheelEvent) => {
         if (items.length === 0 || event.ctrlKey) return;
 
         event.preventDefault();
@@ -335,6 +335,14 @@ export const GridMap: React.FC<GridMapProps> = ({
         animate(dragX, clampedX, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
         animate(dragY, clampedY, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
     }, [containerSize.height, dragX, dragY, items.length, dragBounds]);
+
+    useEffect(() => {
+        const element = containerRef.current;
+        if (!element) return;
+
+        element.addEventListener('wheel', handleViewportWheel, { passive: false });
+        return () => element.removeEventListener('wheel', handleViewportWheel);
+    }, [handleViewportWheel]);
 
     // Keep the active focusedIndex centered when baseCoords changes on resize
     useEffect(() => {
@@ -539,7 +547,7 @@ export const GridMap: React.FC<GridMapProps> = ({
             unsubY();
             if (rafId !== null) cancelAnimationFrame(rafId);
         };
-    }, [dragX, dragY, baseCoords, layoutConfig, clipRadius, renderedIndexes, updateRenderedIndexesForViewport]);
+    }, [dragX, dragY, baseCoords, layoutConfig, clipRadius, updateRenderedIndexesForViewport]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -622,7 +630,6 @@ export const GridMap: React.FC<GridMapProps> = ({
             {/* Honeycomb Drag/Viewport Canvas Area */}
             <div
                 ref={containerRef}
-                onWheel={handleViewportWheel}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
             >
                 {items.length === 0 ? (
