@@ -248,7 +248,7 @@ const PolaroidCard = React.memo<{
 
                         {/* Right: Buttons in bottom right corner */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                            {!isUnavailable && !isEditMode && (
+                            {!isEditMode && (
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, User, Loader2, Settings, LayoutGrid, Disc, Map as MapIcon, ArrowLeft, Heart } from 'lucide-react';
+import { Search, User, Loader2, Settings, LayoutGrid, Disc, Map as MapIcon, ArrowLeft, Heart, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
@@ -84,6 +84,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const {
         onPlaySong,
         onBackToPlayer,
+        onRefreshUser,
         user,
         playlists,
         cloudPlaylist = null,
@@ -206,13 +207,78 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         requestAnimationFrame(() => updateCardTransforms());
     }, [homeViewTab]);
 
+
+
     const [showCollectionGrid, setShowCollectionGrid] = useState(false);
+
+    // Login QR State
+    const [showLoginModal, setShowLoginModal] = useState(false);
+    const [qrCodeImg, setQrCodeImg] = useState<string>("");
+    const [qrStatus, setQrStatus] = useState<string>("");
+    const qrCheckInterval = useRef<any>(null);
+
+    const initLogin = async () => {
+        setShowLoginModal(true);
+        setQrStatus(t('home.loadingQr'));
+        try {
+            const keyRes = await neteaseApi.getQrKey();
+            const key = keyRes.data.unikey;
+
+            const createRes = await neteaseApi.createQr(key);
+            setQrCodeImg(createRes.data.qrimg);
+            setQrStatus(t('home.scanQr'));
+
+            if (qrCheckInterval.current) clearInterval(qrCheckInterval.current);
+            qrCheckInterval.current = setInterval(async () => {
+                try {
+                    const checkRes = await neteaseApi.checkQr(key);
+                    const code = checkRes.code;
+
+                    if (code === 800) {
+                        setQrStatus(t('home.qrExpired'));
+                        clearInterval(qrCheckInterval.current);
+                    } else if (code === 801) {
+                        // Waiting
+                    } else if (code === 802) {
+                        setQrStatus(t('home.qrScanned'));
+                    } else if (code === 803) {
+                        setQrStatus(t('home.loginSuccess'));
+                        clearInterval(qrCheckInterval.current);
+                        if (checkRes.cookie) {
+                            localStorage.setItem('netease_cookie', checkRes.cookie);
+                        }
+                        // Trigger parent refresh
+                        setTimeout(async () => {
+                            onRefreshUser();
+                            setShowLoginModal(false);
+                        }, 1000);
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }, 3000);
+
+        } catch (e) {
+            setQrStatus(t('home.loginError'));
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (qrCheckInterval.current) clearInterval(qrCheckInterval.current);
+        };
+    }, []);
 
     // Netease details
     const [favoriteAlbums, setFavoriteAlbums] = useState<any[]>([]);
     const [loadingAlbums, setLoadingAlbums] = useState(false);
     const [radioItems, setRadioItems] = useState<any[]>([]);
     const [loadingRadio, setLoadingRadio] = useState(false);
+
+    const isLoading =
+        (homeViewTab === 'playlist' && playlists.length === 0 && user !== null) ||
+        (homeViewTab === 'albums' && loadingAlbums) ||
+        (homeViewTab === 'radio' && loadingRadio);
 
     // Trigger sliding fade indicators
     const handleSliding = () => {
@@ -530,6 +596,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         return [];
     }, [homeViewTab, playlistCards, albumCards, radioCards]);
 
+    // Trigger card transform update when items or loading state changes to apply initial scaling
+    useEffect(() => {
+        requestAnimationFrame(() => updateCardTransforms());
+    }, [currentDesktopItems, isLoading]);
+
     const isProgrammaticScrollRef = useRef(false);
     const programmaticTargetLeftRef = useRef<number | null>(null);
     const programmaticScrollTimeoutRef = useRef<any>(null);
@@ -777,25 +848,42 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
             {/* Desktop Canvas Surface */}
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
-                {isNeteaseTab ? (
+                {isNeteaseTab && !user ? (
+                    /* Guest Connect Account Page */
+                    <div className="flex flex-1 w-full flex-col items-center justify-center space-y-6">
+                        <div className={`w-24 h-24 rounded-3xl ${isDaylight ? 'bg-white/40 shadow-sm border border-black/5' : 'bg-white/5 border border-white/5'} flex items-center justify-center backdrop-blur-md`}>
+                            <User size={40} className="opacity-20" />
+                        </div>
+                        <h2 className="text-3xl font-bold opacity-80 text-center">{t('home.guestTitle')}</h2>
+                        <p className="opacity-40 text-sm text-center max-w-md leading-6">{t('home.guestPrompt')}</p>
+                        <button
+                            onClick={initLogin}
+                            className="px-8 py-3 bg-white text-black rounded-full font-bold text-sm hover:scale-105 transition-transform"
+                        >
+                            {t('home.connectAccount')}
+                        </button>
+                    </div>
+                ) : isNeteaseTab ? (
                     <div className="w-full flex-1 flex flex-col justify-center relative min-h-0">
 
                         {/* Map Button (GridView Launcher) */}
-                        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10">
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => setShowCollectionGrid(true)}
-                                className="px-4 py-2 rounded-full flex items-center gap-2 text-xs font-semibold shadow-lg backdrop-blur-md transition-all border border-white/10"
-                                style={{
-                                    backgroundColor: isDaylight ? 'rgba(255,255,255,0.7)' : 'rgba(25,25,25,0.7)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <MapIcon size={14} />
-                                <span>{t('home.allAlbums') || '全部'}</span>
-                            </motion.button>
-                        </div>
+                        {!isLoading && (
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10">
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => setShowCollectionGrid(true)}
+                                    className="px-4 py-2 rounded-full flex items-center gap-2 text-xs font-semibold shadow-lg backdrop-blur-md transition-all border border-white/10"
+                                    style={{
+                                        backgroundColor: isDaylight ? 'rgba(255,255,255,0.7)' : 'rgba(25,25,25,0.7)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                >
+                                    <MapIcon size={14} />
+                                    <span>{t('home.allAlbums') || '全部'}</span>
+                                </motion.button>
+                            </div>
+                        )}
 
                         {/* Horizontal Polaroid Slider Container */}
                         <div
@@ -811,83 +899,107 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             style={{ scrollbarWidth: 'none' }}
                         >
                             <div className="flex px-[40vw] gap-12">
-                                {currentDesktopItems.map((item, idx) => {
-
-
-
-                                    const isFocused = idx === focusedIndex;
-
-                                    return (
-                                        <div
-                                            key={item.id}
-                                            className="shrink-0 cursor-pointer pointer-events-auto select-none"
-                                            onClick={() => {
-                                                if (dragDistanceRef.current < 8) {
-                                                    if (isFocused) {
-                                                        handleSelectCollectionCard(item);
-                                                    } else {
-                                                        scrollToIndex(idx);
-                                                    }
-                                                }
-                                            }}
-                                        >
+                                {isLoading ? (
+                                    /* Card Skeletons Lazy Loading */
+                                    Array.from({ length: 5 }).map((_, idx) => (
+                                        <div key={`skeleton-${idx}`} className="shrink-0 pointer-events-none select-none">
                                             {grid3dCardStyle === 'image' ? (
-                                                /* Pure Image Cover Style */
                                                 <div
-                                                    className={`aspect-square rounded-2xl overflow-hidden shadow-2xl relative border border-white/10 ${isFocused ? 'ring-2 ring-white/30' : ''
-                                                        }`}
+                                                    className="aspect-square rounded-2xl animate-pulse bg-zinc-200/20 dark:bg-zinc-800/20 border border-white/5 shadow-inner"
                                                     style={{ width: coverSize, height: coverSize }}
-                                                >
-                                                    {item.coverUrl ? (
-                                                        <img src={item.coverUrl} alt={item.name} className="w-full h-full object-cover pointer-events-none select-none" />
-                                                    ) : (
-                                                        <div className="w-full h-full bg-zinc-800/20 flex items-center justify-center">
-                                                            <Disc size={64} className="opacity-20" />
-                                                        </div>
-                                                    )}
-                                                    <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
-                                                </div>
+                                                />
                                             ) : (
-                                                /* Polaroid Card Style */
                                                 <div
-                                                    className="rounded-xl border p-4 flex flex-col items-center backdrop-blur-md shadow-lg hover:shadow-2xl theme-polaroid-card"
+                                                    className="rounded-xl border border-white/5 p-4 flex flex-col items-center backdrop-blur-md shadow-lg"
                                                     style={{ width: coverSize }}
                                                 >
-                                                    {/* Square Album Cover */}
-                                                    <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
-                                                        {item.coverUrl ? (
-                                                            <img src={item.coverUrl} alt={item.name} className="w-full h-full object-cover pointer-events-none select-none" />
-                                                        ) : (
-                                                            <Disc size={64} className="opacity-20" />
-                                                        )}
-                                                    </div>
-
-                                                    {/* Details White Border Label */}
-                                                    <div className="w-full text-left pt-2 min-w-0">
-                                                        <h3 className="font-bold text-sm truncate max-w-full tracking-tight">
-                                                            {item.name}
-                                                        </h3>
-                                                        {((item.type !== 'playlist' && item.description) || !compactDescription(item.summary)) && (
-                                                            <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
-                                                                {item.type !== 'playlist' && item.description ? item.description : '♫'}
-                                                            </p>
-                                                        )}
-                                                        {compactDescription(item.summary) && (
-                                                            <p className="text-[10px] leading-snug opacity-45 mt-2 line-clamp-2">
-                                                                {compactDescription(item.summary)}
-                                                            </p>
-                                                        )}
+                                                    <div
+                                                        className="w-full aspect-square rounded-lg animate-pulse bg-zinc-200/20 dark:bg-zinc-800/20 mb-4"
+                                                    />
+                                                    <div className="w-full text-left pt-2 space-y-2">
+                                                        <div className="h-4 w-3/4 animate-pulse bg-zinc-200/20 dark:bg-zinc-800/20 rounded-md" />
+                                                        <div className="h-3 w-1/2 animate-pulse bg-zinc-200/20 dark:bg-zinc-800/20 rounded-md" />
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
-                                    );
-                                })}
+                                    ))
+                                ) : (
+                                    currentDesktopItems.map((item, idx) => {
+                                        const isFocused = idx === focusedIndex;
+
+                                        return (
+                                            <div
+                                                key={item.id}
+                                                className="shrink-0 cursor-pointer pointer-events-auto select-none"
+                                                onClick={() => {
+                                                    if (dragDistanceRef.current < 8) {
+                                                        if (isFocused) {
+                                                            handleSelectCollectionCard(item);
+                                                        } else {
+                                                            scrollToIndex(idx);
+                                                        }
+                                                    }
+                                                }}
+                                            >
+                                                {grid3dCardStyle === 'image' ? (
+                                                    /* Pure Image Cover Style */
+                                                    <div
+                                                        className={`aspect-square rounded-2xl overflow-hidden shadow-2xl relative border border-white/10 ${isFocused ? 'ring-2 ring-white/30' : ''
+                                                            }`}
+                                                        style={{ width: coverSize, height: coverSize }}
+                                                    >
+                                                        {item.coverUrl ? (
+                                                            <img src={item.coverUrl} alt={item.name} className="w-full h-full object-cover pointer-events-none select-none" />
+                                                        ) : (
+                                                            <div className="w-full h-full bg-zinc-800/20 flex items-center justify-center">
+                                                                <Disc size={64} className="opacity-20" />
+                                                            </div>
+                                                        )}
+                                                        <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+                                                    </div>
+                                                ) : (
+                                                    /* Polaroid Card Style */
+                                                    <div
+                                                        className="rounded-xl border p-4 flex flex-col items-center backdrop-blur-md shadow-lg hover:shadow-2xl theme-polaroid-card"
+                                                        style={{ width: coverSize }}
+                                                    >
+                                                        {/* Square Album Cover */}
+                                                        <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
+                                                            {item.coverUrl ? (
+                                                                <img src={item.coverUrl} alt={item.name} className="w-full h-full object-cover pointer-events-none select-none" />
+                                                            ) : (
+                                                                <Disc size={64} className="opacity-20" />
+                                                            )}
+                                                        </div>
+
+                                                        {/* Details White Border Label */}
+                                                        <div className="w-full text-left pt-2 min-w-0">
+                                                            <h3 className="font-bold text-sm truncate max-w-full tracking-tight">
+                                                                {item.name}
+                                                            </h3>
+                                                            {((item.type !== 'playlist' && item.description) || !compactDescription(item.summary)) && (
+                                                                <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
+                                                                    {item.type !== 'playlist' && item.description ? item.description : '♫'}
+                                                                </p>
+                                                            )}
+                                                            {compactDescription(item.summary) && (
+                                                                <p className="text-[10px] leading-snug opacity-45 mt-2 line-clamp-2">
+                                                                    {compactDescription(item.summary)}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                )}
                             </div>
                         </div>
 
                         {/* Title details at the bottom (above player progress bar) */}
-                        {currentDesktopItems.length > 0 && currentDesktopItems[focusedIndex] && (
+                        {!isLoading && currentDesktopItems.length > 0 && currentDesktopItems[focusedIndex] && (
                             <motion.div
                                 key={`${homeViewTab}-${currentDesktopItems[focusedIndex].id}`}
                                 initial={{ opacity: 0, y: 10 }}
@@ -897,7 +1009,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     }`}
                             >
                                 <h3 className="font-bold text-2xl truncate max-w-xl mx-auto" style={{ color: 'var(--text-primary)' }}>
-                                    {currentDesktopItems[focusedIndex].name}
+                                    {currentDesktopItems[focusedIndex].name
+                                    }
                                 </h3>
                                 <p className="text-xs opacity-50 font-mono mt-1" style={{ color: 'var(--text-secondary)' }}>
                                     {currentDesktopItems[focusedIndex].trackCount !== undefined ? `${currentDesktopItems[focusedIndex].trackCount} ${t('playlist.tracks') || 'songs'}` : ''}
@@ -1039,6 +1152,61 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     />
                 )}
             </AnimatePresence>
+
+            {/* Login Modal */}
+            {showLoginModal && (
+                <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4">
+                    <div className="bg-zinc-900/90 border border-white/10 p-8 rounded-3xl max-w-sm w-full text-center relative shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                        <button
+                            onClick={() => {
+                                setShowLoginModal(false);
+                                if (qrCheckInterval.current) clearInterval(qrCheckInterval.current);
+                            }}
+                            className="absolute top-4 right-4 opacity-30 hover:opacity-100 rounded-full bg-white/5 p-1 transition-colors cursor-pointer"
+                            style={{ color: 'var(--text-primary)' }}
+                        >
+                            ✕
+                        </button>
+                        <h3 className="text-lg font-bold mb-6" style={{ color: 'var(--text-primary)' }}>{t('home.loginTitle')}</h3>
+
+                        <div className="relative inline-block bg-white p-2 rounded-xl mb-4 shadow-inner">
+                            {qrCodeImg ? (
+                                <img src={qrCodeImg} alt="QR Code" className="w-40 h-40" />
+                            ) : (
+                                <div className="w-40 h-40 flex items-center justify-center bg-gray-100 rounded-lg">
+                                    <Loader2 className="animate-spin text-gray-400" size={24} />
+                                </div>
+                            )}
+                        </div>
+
+                        <p className={`text-xs font-medium mt-2 ${qrStatus.includes('Success') ? 'text-green-400' : 'opacity-60'}`} style={{ color: qrStatus.includes('Success') ? undefined : 'var(--text-secondary)' }}>
+                            {qrStatus}
+                        </p>
+
+                        <p className="text-[10px] opacity-30 mt-6" style={{ color: 'var(--text-secondary)' }}>
+                            {t('home.loginNote')}
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* User Avatar - Back to Player */}
+            {user && (
+                <div className="absolute bottom-8 right-8 z-[100]">
+                    <div
+                        onClick={onBackToPlayer}
+                        className="group relative w-12 h-12 cursor-pointer rounded-full border border-white/20 hover:scale-105 transition-all overflow-hidden shadow-lg pointer-events-auto"
+                        title="Return to Player"
+                    >
+                        <img src={user.avatarUrl?.replace('http:', 'https:')} alt={user.nickname} className="w-full h-full object-cover" />
+
+                        {/* Hover Overlay */}
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-[2px]">
+                            <ChevronRight className="text-white" size={24} />
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
     );
