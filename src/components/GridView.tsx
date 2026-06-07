@@ -98,17 +98,9 @@ const PolaroidCard = React.memo<{
             ? getSongUnavailableTagText(item.rawTrack, t('status.songUnavailableTag'))
             : '';
 
-        const cardBg = isDaylight
-            ? 'bg-[#faf9f6] text-zinc-900 border-zinc-200/50 shadow-lg'
-            : 'bg-zinc-900 text-zinc-100 border-zinc-800/80 shadow-2xl';
-
-        const cardBorderHover = isDaylight
-            ? 'hover:border-zinc-300'
-            : 'hover:border-zinc-700';
-
         return (
             <div
-                className={`rounded-xl p-3 flex flex-col items-center border transition-shadow duration-300 ${cardBg} ${cardBorderHover}`}
+                className="rounded-xl p-3 flex flex-col items-center border backdrop-blur-md transition-shadow duration-300 shadow-lg hover:shadow-2xl theme-polaroid-card"
                 style={{
                     width: cardWidth,
                     minHeight: cardHeight,
@@ -1286,7 +1278,11 @@ export const GridView: React.FC<GridViewProps> = ({
                         setShowCutInPanel(!showCutInPanel);
                     }
                 }}
-                className="absolute left-1/2 top-5 -translate-x-1/2 z-[70] text-center flex flex-col items-center select-none cursor-pointer hover:opacity-85 active:scale-98 transition-all px-4 py-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+                className="absolute left-1/2 top-5 -translate-x-1/2 z-[70] text-center flex flex-col items-center select-none cursor-pointer hover:scale-[1.01] active:scale-98 transition-all px-5 py-2 rounded-2xl backdrop-blur-md"
+                style={{
+                    backgroundColor: 'color-mix(in srgb, var(--bg-color) 20%, transparent)',
+                    color: 'var(--text-primary)',
+                }}
             >
                 <h2 className="text-lg font-bold tracking-tight flex items-center gap-1.5 justify-center">
                     {title}
@@ -1312,9 +1308,9 @@ export const GridView: React.FC<GridViewProps> = ({
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: -10, scale: 0.98 }}
                             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                            className="absolute top-6 left-1/2 z-[85] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 pointer-events-auto"
+                            className="absolute top-24 left-1/2 z-[85] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 pointer-events-auto"
                         >
-                            <div className="relative rounded-full border border-white/15 bg-white/75 dark:bg-zinc-950/75 shadow-2xl backdrop-blur-2xl">
+                            <div className="relative rounded-full border shadow-2xl backdrop-blur-2xl theme-glass-panel">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 opacity-40 w-4 h-4" />
                                 <input
                                     ref={searchInputRef}
@@ -1343,24 +1339,26 @@ export const GridView: React.FC<GridViewProps> = ({
                                             setSearchQuery('');
                                         }
                                     }}
-                                    placeholder={t('home.gridSearchPlaceholder') || 'Filter songs...'}
+                                    placeholder={`${t('home.gridSearchPlaceholder') || 'Filter songs...'} (Esc)`}
                                     className="w-full rounded-full bg-transparent py-3 pl-11 pr-11 text-sm font-medium outline-none placeholder:text-current placeholder:opacity-40"
                                     style={{ color: 'var(--text-primary)' }}
                                 />
-                                {draftSearchQuery && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (draftSearchQuery) {
                                             setDraftSearchQuery('');
                                             setSearchQuery('');
                                             searchInputRef.current?.focus();
-                                        }}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-45 transition-opacity hover:opacity-90"
-                                        aria-label="Clear"
-                                    >
-                                        <X size={15} />
-                                    </button>
-                                )}
+                                        } else {
+                                            setShowSearchPanel(false);
+                                        }
+                                    }}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-45 transition-opacity hover:opacity-90 cursor-pointer"
+                                    aria-label={draftSearchQuery ? "Clear" : "Close"}
+                                >
+                                    <X size={15} />
+                                </button>
                             </div>
                         </motion.div>
                     )}
@@ -1404,7 +1402,7 @@ export const GridView: React.FC<GridViewProps> = ({
                             animate={{ opacity: 1, x: 0, scale: 1 }}
                             exit={{ opacity: 0, x: -60, scale: 0.95 }}
                             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                            className="absolute left-6 top-24 bottom-28 sm:bottom-6 w-80 rounded-3xl z-[80] overflow-y-auto hide-scrollbar flex flex-col p-6 shadow-2xl border border-white/20 dark:border-zinc-800/80 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-2xl pointer-events-auto"
+                            className="absolute left-6 top-24 bottom-28 sm:bottom-6 w-80 rounded-3xl z-[80] overflow-y-auto hide-scrollbar flex flex-col p-6 shadow-2xl border backdrop-blur-2xl pointer-events-auto theme-glass-panel"
                             style={{
                                 boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
                             }}
@@ -1445,7 +1443,10 @@ export const GridView: React.FC<GridViewProps> = ({
                             </div>
 
                             {/* Buttons Area */}
-                            <div className="space-y-2 mt-4 pt-4 border-t border-zinc-200/20 dark:border-zinc-800/40 shrink-0">
+                            <div
+                                className="space-y-2 mt-4 pt-4 border-t shrink-0"
+                                style={{ borderTopColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }}
+                            >
                                 <button
                                     onClick={() => {
                                         if (onPlayAll && playableTracks.length > 0) {

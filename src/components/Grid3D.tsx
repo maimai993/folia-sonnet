@@ -738,9 +738,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             <div className="flex px-[40vw] gap-12">
                                 {currentDesktopItems.map((item, idx) => {
 
-                                    const polaroidClass = isDaylight
-                                        ? 'bg-[#faf9f6] text-zinc-900 border-zinc-200/50 shadow-lg'
-                                        : 'bg-zinc-900 text-zinc-100 border-zinc-800/80 shadow-2xl';
+
 
                                     const isFocused = idx === focusedIndex;
 
@@ -776,7 +774,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             ) : (
                                                 /* Polaroid Card Style */
                                                 <div
-                                                    className={`w-64 rounded-xl border p-4 flex flex-col items-center ${polaroidClass}`}
+                                                    className="w-64 rounded-xl border p-4 flex flex-col items-center backdrop-blur-md shadow-lg hover:shadow-2xl theme-polaroid-card"
                                                 >
                                                     {/* Square Album Cover */}
                                                     <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">

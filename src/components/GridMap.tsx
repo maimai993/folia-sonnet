@@ -46,17 +46,9 @@ const MapCard = React.memo<{
     cardHeight: number;
 }>(
     ({ item, isDaylight, onSelect, cardWidth, cardHeight }) => {
-        const cardBg = isDaylight
-            ? 'bg-[#faf9f6] text-zinc-900 border-zinc-200/50 shadow-lg'
-            : 'bg-zinc-900 text-zinc-100 border-zinc-800/80 shadow-2xl';
-
-        const cardBorderHover = isDaylight
-            ? 'hover:border-zinc-300'
-            : 'hover:border-zinc-700';
-
         return (
             <div
-                className={`rounded-xl p-3 flex flex-col items-center border transition-shadow duration-300 cursor-pointer ${cardBg} ${cardBorderHover}`}
+                className="rounded-xl p-3 flex flex-col items-center border backdrop-blur-md transition-shadow duration-300 shadow-lg hover:shadow-2xl theme-polaroid-card cursor-pointer"
                 style={{
                     width: cardWidth,
                     minHeight: cardHeight,
