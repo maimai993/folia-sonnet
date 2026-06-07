@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Disc } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -160,6 +160,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     const lastUpdateRef = useRef(0);
     const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isDraggingRef = useRef(false);
+    const wheelTargetRef = useRef({ x: 0, y: 0 });
 
     // Track responsive container size to scale grid card dimensions dynamically
     const [containerSize, setContainerSize] = useState(() => {
@@ -256,6 +257,44 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
+
+    // Synchronize programmatic drag shifts with the scroll position tracker
+    useEffect(() => {
+        const syncWheelTarget = () => {
+            wheelTargetRef.current = { x: dragX.get(), y: dragY.get() };
+        };
+        const unsubX = dragX.on('change', syncWheelTarget);
+        const unsubY = dragY.on('change', syncWheelTarget);
+        return () => {
+            unsubX();
+            unsubY();
+        };
+    }, [dragX, dragY]);
+
+    // Handles mouse wheel events and animates viewport translation offsets
+    const handleViewportWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+        if (items.length === 0 || event.ctrlKey) return;
+
+        event.preventDefault();
+        const deltaScale = (event.deltaMode === 1
+            ? 32
+            : event.deltaMode === 2
+                ? Math.max(containerSize.height, 1)
+                : 1) * 2.8;
+        const horizontalDelta = event.shiftKey && Math.abs(event.deltaX) < 1
+            ? event.deltaY
+            : event.deltaX;
+        const verticalDelta = event.shiftKey && Math.abs(event.deltaX) < 1
+            ? 0
+            : event.deltaY;
+
+        const targetX = wheelTargetRef.current.x - horizontalDelta * deltaScale;
+        const targetY = wheelTargetRef.current.y - verticalDelta * deltaScale;
+        wheelTargetRef.current = { x: targetX, y: targetY };
+
+        animate(dragX, targetX, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
+        animate(dragY, targetY, { type: 'spring', stiffness: 560, damping: 48, mass: 0.65 });
+    }, [containerSize.height, dragX, dragY, items.length]);
 
     useEffect(() => {
         focusedIndexRef.current = focusedIndex;
@@ -361,6 +400,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                         cardWidth={layoutConfig.cardWidth}
                         cardHeight={layoutConfig.cardHeight}
                         onSelect={() => {
+                            if (isDraggingRef.current) return;
                             onSelectCollection(item.rawCollection || item, idx);
                         }}
                     />
@@ -560,6 +600,7 @@ export const GridMap: React.FC<GridMapProps> = ({
             {/* Honeycomb Drag/Viewport Canvas Area */}
             <div
                 ref={containerRef}
+                onWheel={handleViewportWheel}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
             >
                 {items.length === 0 ? (

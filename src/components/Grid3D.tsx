@@ -138,13 +138,15 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [focusedIndex, setFocusedIndex] = useState(0);
 
-    // Reset focused index and scroll to start when switching tabs
+    // Reset focused index and scroll to start when switching tabs; also run initial card transforms
     useEffect(() => {
         setFocusedIndex(0);
         const container = scrollContainerRef.current;
         if (container) {
             container.scrollLeft = 0;
         }
+        // Defer initial transform update to next frame so DOM has rendered
+        requestAnimationFrame(() => updateCardTransforms());
     }, [homeViewTab]);
 
     const [showCollectionGrid, setShowCollectionGrid] = useState(false);
@@ -165,14 +167,61 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     };
 
     /**
-     * Handles scrolling by triggering visual fade timeouts and calculating the card
-     * that is currently closest to the horizontal center of the viewport.
+     * Directly update every card's transform/opacity based on its pixel distance
+     * from the viewport center. Called on every scroll frame for continuous (无极) scaling.
+     */
+    const updateCardTransforms = () => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const flexWrapper = container.firstElementChild;
+        if (!flexWrapper) return;
+
+        const containerCenter = container.scrollLeft + container.clientWidth / 2;
+        const maxDist = 600; // distance (px) at which cards reach minimum scale
+        const isImage = grid3dCardStyle === 'image';
+        const peakScale = isImage ? 1.25 : 1.2;
+        const minScale = 0.5;
+        const cards = flexWrapper.children;
+
+        let closestIndex = 0;
+        let minPixelDist = Infinity;
+
+        for (let i = 0; i < cards.length; i++) {
+            const el = cards[i] as HTMLElement;
+            const cardCenter = el.offsetLeft + el.offsetWidth / 2;
+            const pixelDist = Math.abs(cardCenter - containerCenter);
+            const t = Math.min(pixelDist / maxDist, 1);
+
+            const scale = peakScale - (peakScale - minScale) * t;
+            const opacity = Math.max(0.15, 1.0 - 0.85 * t);
+            const y = -6 * (1 - t);
+            const z = Math.max(1, Math.round(10 - 9 * t));
+
+            el.style.transform = `scale(${scale}) translateY(${y}px)`;
+            el.style.opacity = String(opacity);
+            el.style.zIndex = String(z);
+
+            if (pixelDist < minPixelDist) {
+                minPixelDist = pixelDist;
+                closestIndex = i;
+            }
+        }
+
+        return closestIndex;
+    };
+
+    /**
+     * Handles scrolling by triggering visual fade timeouts, updating card transforms,
+     * and calculating the card that is currently closest to the horizontal center.
      */
     const handleScroll = () => {
         handleSliding();
 
         const container = scrollContainerRef.current;
         if (!container) return;
+
+        // Always update card transforms for continuous scaling
+        const closestIndex = updateCardTransforms();
 
         // Skip updating focusedIndex if currently executing a programmatic smooth scroll
         if (isProgrammaticScrollRef.current) {
@@ -192,29 +241,12 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             return;
         }
 
-        const flexWrapper = container.firstElementChild;
-        if (!flexWrapper) return;
-
-        const containerCenter = container.scrollLeft + container.clientWidth / 2;
-        let closestIndex = 0;
-        let minDistance = Infinity;
-
-        const cards = flexWrapper.children;
-        for (let i = 0; i < cards.length; i++) {
-            const card = cards[i] as HTMLElement;
-            const cardCenter = card.offsetLeft + card.offsetWidth / 2;
-            const distance = Math.abs(cardCenter - containerCenter);
-            if (distance < minDistance) {
-                minDistance = distance;
-                closestIndex = i;
-            }
+        if (closestIndex !== undefined) {
+            setFocusedIndex((prev) => {
+                if (prev === closestIndex) return prev;
+                return closestIndex;
+            });
         }
-
-        setFocusedIndex((prev) => {
-            if (prev === closestIndex) return prev;
-            return closestIndex;
-        });
-
     };
 
     // --- Momentum / inertia engine shared by drag and wheel ---
@@ -474,7 +506,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
             // Map vertical to horizontal; apply directly
             const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-            const scaled = delta * 1;
+            const scaled = delta * 0.6;
             container.scrollLeft += scaled;
 
             // Track velocity for momentum after wheel stops
@@ -651,41 +683,12 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                         : 'bg-zinc-900 text-zinc-100 border-zinc-800/80 shadow-2xl';
 
                                     const isFocused = idx === focusedIndex;
-                                    const distance = Math.abs(idx - focusedIndex);
-
-                                    // Dynamic layout metrics calculated based on index distance from center focused index
-                                    const targetScale = isFocused
-                                        ? (grid3dCardStyle === 'image' ? 1.25 : 1.2)
-                                        : Math.max(0.5, (grid3dCardStyle === 'image' ? 0.90 : 0.92) - (distance - 1) * 0.12);
-
-                                    const targetOpacity = isFocused
-                                        ? 1.0
-                                        : Math.max(0.15, 0.7 - (distance - 1) * 0.18);
-
-                                    const targetY = isFocused
-                                        ? -6
-                                        : 0;
-
-                                    const targetZIndex = Math.max(1, 10 - distance);
 
                                     return (
-                                        <motion.div
+                                        <div
                                             key={item.id}
                                             className="shrink-0 cursor-pointer pointer-events-auto select-none"
-                                            animate={{
-                                                scale: targetScale,
-                                                opacity: targetOpacity,
-                                                y: targetY,
-                                                zIndex: targetZIndex
-                                            }}
-                                            whileHover={{
-                                                scale: isFocused
-                                                    ? (grid3dCardStyle === 'image' ? 1.3 : 1.24)
-                                                    : (grid3dCardStyle === 'image' ? 1.05 : 1.0),
-                                                y: isFocused ? -12 : -6,
-                                                zIndex: 12
-                                            }}
-                                            transition={{ type: 'spring', stiffness: 600, damping: 40, mass: 0.5 }}
+                                            style={{ willChange: 'transform, opacity' }}
                                             onClick={() => {
                                                 if (dragDistanceRef.current < 8) {
                                                     if (isFocused) {
@@ -711,7 +714,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                                                     left: targetScrollLeft,
                                                                     behavior: 'smooth'
                                                                 });
-                                                                wheelScrollTargetRef.current = targetScrollLeft;
                                                             }
                                                         }
                                                     }
@@ -721,7 +723,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             {grid3dCardStyle === 'image' ? (
                                                 /* Pure Image Cover Style */
                                                 <div
-                                                    className={`w-64 aspect-square rounded-2xl overflow-hidden shadow-2xl relative transition-all duration-300 border border-white/10 ${isFocused ? 'ring-2 ring-white/30' : ''
+                                                    className={`w-64 aspect-square rounded-2xl overflow-hidden shadow-2xl relative border border-white/10 ${isFocused ? 'ring-2 ring-white/30' : ''
                                                         }`}
                                                 >
                                                     {item.coverUrl ? (
@@ -736,7 +738,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             ) : (
                                                 /* Polaroid Card Style */
                                                 <div
-                                                    className={`w-64 rounded-xl border p-4 flex flex-col items-center transition-all ${polaroidClass}`}
+                                                    className={`w-64 rounded-xl border p-4 flex flex-col items-center ${polaroidClass}`}
                                                 >
                                                     {/* Square Album Cover */}
                                                     <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
@@ -763,7 +765,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                                     </div>
                                                 </div>
                                             )}
-                                        </motion.div>
+                                        </div>
                                     );
                                 })}
                             </div>
@@ -900,11 +902,20 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 const cardElement = flexWrapper?.children[idx] as HTMLElement;
                                 if (cardElement) {
                                     const targetScrollLeft = cardElement.offsetLeft + cardElement.offsetWidth / 2 - container.clientWidth / 2;
+                                    
+                                    // Snap to target vicinity first to shorten transition distance, then scroll smoothly
+                                    const currentScroll = container.scrollLeft;
+                                    const distance = targetScrollLeft - currentScroll;
+                                    const threshold = 600; // Snap if target is further than ~2 cards away
+
+                                    if (Math.abs(distance) > threshold) {
+                                        container.scrollLeft = targetScrollLeft - Math.sign(distance) * threshold;
+                                    }
+
                                     container.scrollTo({
                                         left: targetScrollLeft,
                                         behavior: 'smooth'
                                     });
-                                    wheelScrollTargetRef.current = targetScrollLeft;
                                 }
                             }
                         }}
