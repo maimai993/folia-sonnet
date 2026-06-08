@@ -534,7 +534,6 @@ type SettingsUiState = {
     setCappellaCustomAvatarImages: (images: CappellaAvatarImage[]) => void;
     setIsLoadingCappellaCustomAvatarPack: (loading: boolean) => void;
     clearLyricsCustomFontAfterRestoreFailure: (message: StatusMessage) => void;
-    ensureBuiltinCappellaEmojiPack: () => void;
     setIsSubSettingsViewOpen: (open: boolean) => void;
     openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null) => void;
     closeSettings: () => void;
@@ -683,21 +682,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ lyricsCustomFont: null });
         notify(get, message);
-    },
-    ensureBuiltinCappellaEmojiPack: () => {
-        const { storedCappellaEmojiPack, cappellaTuning } = get();
-        if (storedCappellaEmojiPack.length > 0 || cappellaTuning.emojiPackSource !== 'custom') {
-            return;
-        }
-
-        const next = {
-            ...cappellaTuning,
-            emojiPackSource: 'builtin' as const,
-        };
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('cappella_tuning', JSON.stringify(next));
-        }
-        set({ cappellaTuning: next });
     },
     setIsSubSettingsViewOpen: (open) => set({ isSubSettingsViewOpen: open }),
     openSettings: (initialTab = 'help', initialSubview = null) => set({
