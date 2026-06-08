@@ -1024,6 +1024,8 @@ export default function App() {
         lyrics,
         onRemoteExportCommand: handleExportCommand,
         onExternalPlayRequest: handleStageExternalPlayRequest,
+        isLiked: currentSong ? (isLocalPlaybackSong(currentSong) ? isLocalSongLiked(currentSong) : likedSongIds.has(currentSong.id)) : false,
+        onLike: handleLike,
     });
 
     usePlaybackVisualizerBridge({

@@ -40,6 +40,8 @@ type UseElectronPlaybackBridgeOptions = {
     lyrics: LyricData | null;
     onRemoteExportCommand?: (command: RemoteControlCommand) => boolean;
     onExternalPlayRequest?: (request: any) => Promise<void>;
+    isLiked: boolean;
+    onLike?: () => void;
 };
 
 export const useElectronPlaybackBridge = ({
@@ -74,6 +76,8 @@ export const useElectronPlaybackBridge = ({
     lyrics,
     onRemoteExportCommand,
     onExternalPlayRequest,
+    isLiked,
+    onLike,
 }: UseElectronPlaybackBridgeOptions) => {
     const buildRemoteSnapshot = (options: { includeLyrics?: boolean } = {}): RemoteControlSnapshot => {
         const hasActiveTrack = !isNowPlayingStageActive && Boolean(currentSong);
@@ -105,6 +109,7 @@ export const useElectronPlaybackBridge = ({
             exportState,
             isDaylight,
             ...(options.includeLyrics ? { lyrics } : {}),
+            isLiked,
             updatedAt: Date.now(),
         };
     };
@@ -198,7 +203,7 @@ export const useElectronPlaybackBridge = ({
         const intervalId = window.setInterval(() => publish(), 500);
         return () => window.clearInterval(intervalId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground]);
+    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground, isLiked]);
 
     useEffect(() => {
         if (!window.electron?.onRemoteControlCommand) {
@@ -221,6 +226,11 @@ export const useElectronPlaybackBridge = ({
             }
 
             if (command.type === 'open-export') {
+                return;
+            }
+
+            if (command.type === 'toggle-like') {
+                onLike?.();
                 return;
             }
 
@@ -262,7 +272,7 @@ export const useElectronPlaybackBridge = ({
 
         return window.electron.onRemoteControlCommand(runCommand);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteExportCommand, setIsPlayerChromeHidden, setShowTransparentWindowBorder, taskbarHasTrackRef, taskbarPlayerStateRef]);
+    }, [audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteExportCommand, setIsPlayerChromeHidden, setShowTransparentWindowBorder, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
 
     useEffect(() => {
         if (!window.electron?.onStageExternalPlayRequest || !onExternalPlayRequest) {

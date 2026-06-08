@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { ChevronLeft, Lock, LockOpen, Pause, Pin, PinOff, Play, SkipBack, SkipForward, Video, MirrorRectangular, X } from 'lucide-react';
+import { ChevronLeft, Heart, Lock, LockOpen, Pause, Pin, PinOff, Play, SkipBack, SkipForward, Video, MirrorRectangular, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayerState } from '../../types';
 import RemoteVideoExportPanel from './RemoteVideoExportPanel';
@@ -47,6 +47,7 @@ const emptySnapshot: RemoteControlSnapshot = {
     exportState: idleVideoExportState(),
     isDaylight: false,
     lyrics: null,
+    isLiked: false,
     updatedAt: 0,
 };
 
@@ -439,6 +440,19 @@ const RemoteControlApp: React.FC = () => {
                                                                     </button>
                                                                 </div>
                                                                 <div className="flex items-center gap-1.5">
+                                                                    <button
+                                                                        type="button"
+                                                                        title={snapshot.isLiked ? '取消收藏' : '收藏'}
+                                                                        disabled={primaryDisabled}
+                                                                        onClick={() => sendCommand({ type: 'toggle-like' })}
+                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                                                                            snapshot.isLiked
+                                                                                ? (isDaylight ? 'bg-red-500/20 text-red-600 hover:bg-red-500/30' : 'bg-red-500/25 text-red-400 hover:bg-red-500/35')
+                                                                                : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
+                                                                        }`}
+                                                                    >
+                                                                        <Heart size={16} fill={snapshot.isLiked ? 'currentColor' : 'none'} strokeWidth={2} />
+                                                                    </button>
                                                                     <button
                                                                         type="button"
                                                                         title="Transparent controls"

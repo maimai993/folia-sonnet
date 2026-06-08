@@ -17,7 +17,8 @@ export type RemoteControlCommand =
     | { type: 'open-export' }
     | { type: 'start-export'; preset: VideoExportPreset; startMode: VideoExportStartMode }
     | { type: 'stop-export' }
-    | { type: 'cancel-export' };
+    | { type: 'cancel-export' }
+    | { type: 'toggle-like' };
 
 export interface RemoteControlSnapshot {
     hasTrack: boolean;
@@ -39,6 +40,7 @@ export interface RemoteControlSnapshot {
     exportState: VideoExportState;
     isDaylight?: boolean;
     lyrics?: LyricData | null;
+    isLiked?: boolean;
     updatedAt: number;
 }
 
