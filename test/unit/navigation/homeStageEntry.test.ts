@@ -1,0 +1,119 @@
+import { readFile } from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { describe, expect, it, vi } from 'vitest';
+import { PlayerState } from '@/types';
+import { buildHomeModel } from '@/components/app/home/buildHomeModel';
+
+// test/unit/navigation/homeStageEntry.test.ts
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(currentDir, '../../..');
+
+const readRepoFile = async (relativePath: string) => {
+    return readFile(path.join(repoRoot, relativePath), 'utf8');
+};
+
+const createBaseParams = () => {
+    const openStagePlayer = vi.fn().mockResolvedValue(undefined);
+
+    return {
+        playSong: vi.fn(),
+        navigateToPlayer: vi.fn(),
+        refreshUserData: vi.fn().mockResolvedValue(undefined),
+        user: null,
+        playlists: [],
+        cloudPlaylist: undefined,
+        currentSong: null,
+        playerState: PlayerState.PAUSED,
+        handlePlaylistSelect: vi.fn(),
+        handleAlbumSelect: vi.fn(),
+        handleArtistSelect: vi.fn(),
+        focusedPlaylistIndex: 0,
+        setFocusedPlaylistIndex: vi.fn(),
+        focusedFavoriteAlbumIndex: 0,
+        setFocusedFavoriteAlbumIndex: vi.fn(),
+        focusedRadioIndex: 0,
+        setFocusedRadioIndex: vi.fn(),
+        openSettings: vi.fn(),
+        navigateToSearch: vi.fn(),
+        openLocalAlbumByName: vi.fn(),
+        openLocalArtistByName: vi.fn(),
+        localSongs: [],
+        localPlaylists: [],
+        onRefreshLocalSongs: vi.fn(),
+        onPlayLocalSong: vi.fn(),
+        onAddLocalSongToQueue: vi.fn(),
+        localMusicState: 'idle' as any,
+        setLocalMusicState: vi.fn(),
+        onMatchSong: vi.fn(),
+        onPlayNavidromeSong: vi.fn(),
+        onAddNavidromeSongsToQueue: vi.fn(),
+        onMatchNavidromeSong: vi.fn(),
+        navidromeFocusedAlbumIndex: 0,
+        setNavidromeFocusedAlbumIndex: vi.fn(),
+        pendingNavidromeSelection: null,
+        setPendingNavidromeSelection: vi.fn(),
+        stageSource: 'stage-api' as const,
+        activePlaybackContext: 'stage' as const,
+        openStagePlayer,
+        stageStatus: null,
+        setStageStatus: vi.fn(),
+        leaveStagePlayback: vi.fn(),
+        clearStagePlaybackSession: vi.fn(),
+        clearPersistedStagePlaybackCache: vi.fn().mockResolvedValue(undefined),
+        loadStageSessionIntoPlayback: vi.fn().mockResolvedValue(undefined),
+        theme: null,
+        navidromeEnabled: false,
+        playAll: vi.fn(),
+        addAllToQueue: vi.fn(),
+        addSongToQueue: vi.fn(),
+    };
+};
+
+describe('home stage entry wiring', () => {
+    it('exposes stage entry props through the Home view model', async () => {
+        const params = createBaseParams();
+        const model = buildHomeModel(params);
+
+        expect(model.legacyProps.stageEnabled).toBe(true);
+        expect(model.legacyProps.stageSource).toBe('stage-api');
+        expect(model.legacyProps.stageIsActive).toBe(true);
+
+        await model.legacyProps.onOpenStagePlayer?.();
+        expect(params.openStagePlayer).toHaveBeenCalledTimes(1);
+    });
+
+    it('disables the stage entry when no stage source is available', () => {
+        const params = createBaseParams();
+        const model = buildHomeModel({
+            ...params,
+            stageSource: undefined,
+            activePlaybackContext: 'main',
+        });
+
+        expect(model.legacyProps.stageEnabled).toBe(false);
+        expect(model.legacyProps.stageSource).toBeUndefined();
+        expect(model.legacyProps.stageIsActive).toBe(false);
+    });
+});
+
+describe('home stage entry source contracts', () => {
+    it('keeps the app-level home surface forwarding legacy props into Grid3D', async () => {
+        const content = await readRepoFile('src/components/app/Home.tsx');
+
+        expect(content).toContain('<Grid3D');
+        expect(content).toContain('{...model.legacyProps}');
+        expect(content).toContain('onOpenGridView={openGridView}');
+    });
+
+    it('keeps the Grid3D desktop tabs rendering the stage entry button', async () => {
+        const content = await readRepoFile('src/components/Grid3D.tsx');
+
+        expect(content).toContain('stageEnabled?: boolean;');
+        expect(content).toContain('onOpenStagePlayer?: () => void;');
+        expect(content).toContain('{stageEnabled && (');
+        expect(content).toContain("onClick={() => onOpenStagePlayer?.()}");
+        expect(content).toContain("t('home.stage')");
+    });
+});
