@@ -839,14 +839,51 @@ async function populateRepresentativeCovers(songs: LocalSong[]): Promise<void> {
     await mapWithConcurrency(Array.from(albumGroups.values()), IMPORT_CONCURRENCY, ensureGroupCover);
 }
 
+// Copies an album's representative imported cover to sibling tracks without fetching more artwork.
+function propagateImportedAlbumCovers(songs: LocalSong[]): number {
+    const albumGroups = new Map<string, LocalSong[]>();
+
+    songs.forEach(song => {
+        const albumKey = getImportedAlbumKey(song);
+        if (!albumKey) {
+            return;
+        }
+
+        const albumSongs = albumGroups.get(albumKey) || [];
+        albumSongs.push(song);
+        albumGroups.set(albumKey, albumSongs);
+    });
+
+    let propagatedCount = 0;
+    albumGroups.forEach(groupSongs => {
+        const representativeCover = [...groupSongs]
+            .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
+            .find(song => song.embeddedCover)?.embeddedCover;
+
+        if (!representativeCover) {
+            return;
+        }
+
+        groupSongs.forEach(song => {
+            if (!song.embeddedCover) {
+                song.embeddedCover = representativeCover;
+                propagatedCount += 1;
+            }
+        });
+    });
+
+    return propagatedCount;
+}
+
 async function populateRepresentativeCoversInBackground(rootFolderName: string, songs: LocalSong[]) {
     const coverStartedAt = performance.now();
 
     try {
         await populateRepresentativeCovers(songs);
+        const propagatedCoverCount = propagateImportedAlbumCovers(songs);
         const songsWithEmbeddedCover = songs.filter(song => !!song.embeddedCover).length;
         await saveLocalSongs(songs.filter(song => !!song.embeddedCover));
-        console.log(`[LocalMusic][Import] Background cover extraction for "${rootFolderName}" finished with ${songsWithEmbeddedCover}/${songs.length} songs carrying embedded covers in ${formatImportDuration(performance.now() - coverStartedAt)}.`);
+        console.log(`[LocalMusic][Import] Background cover extraction for "${rootFolderName}" finished with ${songsWithEmbeddedCover}/${songs.length} songs carrying embedded covers, propagated to ${propagatedCoverCount} sibling tracks in ${formatImportDuration(performance.now() - coverStartedAt)}.`);
         notifyLocalMusicUpdated();
     } catch (error) {
         console.error(`[LocalMusic][Import] Background cover extraction failed for "${rootFolderName}":`, error);

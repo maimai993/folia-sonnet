@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, Settings, ChevronRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -13,7 +13,7 @@ import NavidromeGrid3DView from './app/home/NavidromeGrid3DView';
 import { formatSongName } from '../utils/songNameFormatter';
 import DesktopGrid3DSurface from './folia-grid/DesktopGrid3DSurface';
 import { createNeteaseGridViewCollection } from './app/home/gridViewCollectionAdapters';
-import { importFolder } from '../services/localMusicService';
+import { importFolder, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -129,11 +129,36 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
     const [focusedIndex, setFocusedIndex] = useState(0);
     const [isLocalImporting, setIsLocalImporting] = useState(false);
+    const [scanProgress, setScanProgress] = useState<{
+        active: boolean;
+        folderName: string;
+        totalSongs: number;
+        completedSongs: number;
+    } | null>(null);
+    const [scanDetailsExpanded, setScanDetailsExpanded] = useState(false);
+    const scanProgressPercent = scanProgress?.totalSongs
+        ? Math.min(100, Math.round((scanProgress.completedSongs / scanProgress.totalSongs) * 100))
+        : 0;
 
     // Reset focused index when switching tabs.
     useEffect(() => {
         setFocusedIndex(0);
     }, [homeViewTab]);
+
+    useEffect(() => {
+        const handleScanProgress = (event: Event) => {
+            const customEvent = event as CustomEvent<{
+                active: boolean;
+                folderName: string;
+                totalSongs: number;
+                completedSongs: number;
+            }>;
+            setScanProgress(customEvent.detail.active ? customEvent.detail : null);
+        };
+
+        window.addEventListener(LOCAL_MUSIC_SCAN_PROGRESS_EVENT, handleScanProgress as EventListener);
+        return () => window.removeEventListener(LOCAL_MUSIC_SCAN_PROGRESS_EVENT, handleScanProgress as EventListener);
+    }, []);
 
     // Login QR State
     const [showLoginModal, setShowLoginModal] = useState(false);
@@ -350,7 +375,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     };
 
     const handleFolderImport = async () => {
-        if (isLocalImporting) return;
+        if (isLocalImporting || scanProgress?.active) return;
 
         setIsLocalImporting(true);
         try {
@@ -415,6 +440,65 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         >
                             <Settings size={20} style={{ color: 'var(--text-primary)' }} />
                         </button>
+                        {scanProgress?.active && (
+                            <div
+                                className="relative ml-3"
+                                onMouseEnter={() => setScanDetailsExpanded(true)}
+                                onMouseLeave={() => setScanDetailsExpanded(false)}
+                            >
+                                <button
+                                    onClick={() => setScanDetailsExpanded(prev => !prev)}
+                                    className="relative rounded-full p-px transition-all"
+                                    style={{
+                                        background: `conic-gradient(from -90deg, ${isDaylight ? (theme?.accentColor || 'rgba(17,24,39,0.92)') : 'rgba(255,255,255,0.98)'} 0deg ${scanProgressPercent * 3.6}deg, ${isDaylight ? 'rgba(24,24,27,0.16)' : 'rgba(255,255,255,0.14)'} ${scanProgressPercent * 3.6}deg 360deg)`,
+                                        borderRadius: '999px'
+                                    }}
+                                    title="查看扫描进度"
+                                >
+                                    <div
+                                        className={`relative flex items-center justify-center min-w-[56px] h-7 px-2.5 rounded-full backdrop-blur-md ${
+                                            isDaylight ? 'bg-white/95 text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-zinc-950/92 text-zinc-100'
+                                        }`}
+                                    >
+                                        <span className="relative z-10 text-[10px] font-semibold tabular-nums leading-none">
+                                            {scanProgressPercent}%
+                                        </span>
+                                    </div>
+                                </button>
+                                <AnimatePresence>
+                                    {scanDetailsExpanded && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -6 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -6 }}
+                                            className={`absolute left-0 top-full mt-2 w-72 p-4 rounded-2xl border backdrop-blur-xl shadow-xl ${
+                                                isDaylight ? 'bg-white/85 border-black/10 text-zinc-800' : 'bg-black/60 border-white/10 text-zinc-100'
+                                            }`}
+                                        >
+                                            <div className="text-sm font-semibold truncate">
+                                                正在扫描 {scanProgress.folderName}
+                                            </div>
+                                            <div className={`text-xs mt-1 ${isDaylight ? 'text-zinc-600' : 'text-zinc-300/70'}`}>
+                                                正在后台提取元数据与封面，媒体库较大时会持续一段时间。
+                                            </div>
+                                            <div className="mt-3 flex items-center justify-between text-xs font-mono">
+                                                <span>进度</span>
+                                                <span>{Math.min(scanProgress.completedSongs, scanProgress.totalSongs)} / {scanProgress.totalSongs}</span>
+                                            </div>
+                                            <div className={`mt-2 w-full h-2 rounded-full overflow-hidden ${isDaylight ? 'bg-black/10' : 'bg-white/10'}`}>
+                                                <div
+                                                    className="h-full rounded-full transition-[width] duration-300 ease-out"
+                                                    style={{
+                                                        width: `${scanProgress.totalSongs > 0 ? (scanProgress.completedSongs / scanProgress.totalSongs) * 100 : 0}%`,
+                                                        backgroundColor: theme?.accentColor || 'var(--text-primary)'
+                                                    }}
+                                                />
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        )}
                     </div>
 
                     {/* Center Tab Switcher */}
@@ -536,8 +620,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             focusedPlaylistIndex={localMusicState.focusedPlaylistIndex}
                             setFocusedPlaylistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedPlaylistIndex: index }))}
                             onImportFolder={handleFolderImport}
-                            importButtonDisabled={isLocalImporting}
+                            importButtonDisabled={isLocalImporting || Boolean(scanProgress?.active)}
                             isImporting={isLocalImporting}
+                            isScanInProgress={Boolean(scanProgress?.active)}
                             theme={theme}
                             isDaylight={isDaylight}
                             hasFloatingPlayer={Boolean(currentTrack)}

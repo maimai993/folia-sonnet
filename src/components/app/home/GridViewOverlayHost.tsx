@@ -16,6 +16,7 @@ import {
     GridViewCollectionDescriptor,
     isLocalGridViewCollection,
     isNavidromeGridViewCollection,
+    resolveLocalGridViewCoverSource,
     resolveLocalGridViewTracks,
     resolveNavidromeGridViewTracks,
 } from './gridViewCollectionAdapters';
@@ -37,6 +38,10 @@ type StoredGridViewCollection = {
 
 export const GRID_VIEW_ACTIVE_COLLECTION_KEY = 'folia_gridview_active_collection';
 
+const getPersistentCoverUrl = (url?: string) => (
+    url && !url.startsWith('blob:') ? url : undefined
+);
+
 const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, children }) => {
     const activeGridViewCollection = useSettingsUiStore(state => state.activeGridViewCollection);
     const setActiveGridViewCollection = useSettingsUiStore(state => state.setActiveGridViewCollection);
@@ -49,10 +54,32 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
     const selectedCollection = collectionHistory[collectionHistory.length - 1] || null;
     const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);
     const [externalTracksLoading, setExternalTracksLoading] = useState(false);
+    const [resolvedLocalCollectionCoverUrl, setResolvedLocalCollectionCoverUrl] = useState<string | undefined>(undefined);
     const [navidromePlaylistItems, setNavidromePlaylistItems] = useState<Array<{ id: string | number; name: string; description?: string; }>>([]);
     const selectedCollectionKey = selectedCollection
         ? `${selectedCollection.source}:${selectedCollection.type}:${String(selectedCollection.id)}`
         : '';
+    const displaySelectedCollection = useMemo(() => {
+        if (!selectedCollection) {
+            return null;
+        }
+
+        if (!isLocalGridViewCollection(selectedCollection)) {
+            return selectedCollection;
+        }
+
+        const coverUrl = resolvedLocalCollectionCoverUrl
+            || getPersistentCoverUrl(selectedCollection.coverUrl)
+            || getPersistentCoverUrl(selectedCollection.coverImgUrl)
+            || getPersistentCoverUrl(selectedCollection.picUrl);
+
+        return {
+            ...selectedCollection,
+            coverUrl,
+            coverImgUrl: coverUrl,
+            picUrl: coverUrl,
+        };
+    }, [resolvedLocalCollectionCoverUrl, selectedCollection]);
 
     useEffect(() => {
         if (collectionHistory.length > 0) return;
@@ -181,13 +208,24 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         if (!selectedCollection) {
             setExternalTracks(undefined);
             setExternalTracksLoading(false);
+            setResolvedLocalCollectionCoverUrl(undefined);
             setNavidromePlaylistItems([]);
             return;
         }
 
         if (isLocalGridViewCollection(selectedCollection)) {
             const resolvedTracks = resolveLocalGridViewTracks(selectedCollection, legacyProps.localSongs) as UnifiedSong[];
+            const collectionCoverSource = resolveLocalGridViewCoverSource(selectedCollection, legacyProps.localSongs);
             const createdUrls: string[] = [];
+            let collectionCoverObjectUrl: string | null = null;
+
+            if (collectionCoverSource instanceof Blob) {
+                collectionCoverObjectUrl = URL.createObjectURL(collectionCoverSource);
+                setResolvedLocalCollectionCoverUrl(collectionCoverObjectUrl);
+            } else {
+                setResolvedLocalCollectionCoverUrl(collectionCoverSource);
+            }
+
             const processedTracks = resolvedTracks.map(track => {
                 const localData = track.localData;
                 if (!localData) return track;
@@ -214,6 +252,9 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
             setExternalTracksLoading(false);
 
             return () => {
+                if (collectionCoverObjectUrl) {
+                    URL.revokeObjectURL(collectionCoverObjectUrl);
+                }
                 createdUrls.forEach(url => URL.revokeObjectURL(url));
             };
         }
@@ -221,12 +262,14 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         if (!isNavidromeGridViewCollection(selectedCollection)) {
             setExternalTracks(undefined);
             setExternalTracksLoading(false);
+            setResolvedLocalCollectionCoverUrl(undefined);
             return;
         }
 
         let cancelled = false;
         setExternalTracks([]);
         setExternalTracksLoading(true);
+        setResolvedLocalCollectionCoverUrl(undefined);
 
         resolveNavidromeGridViewTracks(selectedCollection)
             .then((tracks) => {
@@ -407,11 +450,11 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                 )}
             </AnimatePresence>
             <AnimatePresence initial={false}>
-                {selectedCollection && (
-                    selectedCollection.type === 'artist' ? (
+                {displaySelectedCollection && (
+                    displaySelectedCollection.type === 'artist' ? (
                         <ArtistGridView
                             key={selectedCollectionKey}
-                            collection={selectedCollection}
+                            collection={displaySelectedCollection}
                             onBack={handleBackCollection}
                             onSelectTrack={handleSelectTrack}
                             onAddTrackToQueue={handleAddTrackToQueue}
@@ -425,9 +468,9 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                     ) : (
                         <GridView
                             key={selectedCollectionKey}
-                            title={selectedCollection.name}
-                            subtitle={(selectedCollection as any).creator?.nickname || (selectedCollection as any).artists?.[0]?.name || selectedCollection.description || ''}
-                            collection={selectedCollection}
+                            title={displaySelectedCollection.name}
+                            subtitle={(displaySelectedCollection as any).creator?.nickname || (displaySelectedCollection as any).artists?.[0]?.name || displaySelectedCollection.description || ''}
+                            collection={displaySelectedCollection}
                             mode="tracks"
                             onBack={handleBackCollection}
                             onSelectTrack={handleSelectTrack}

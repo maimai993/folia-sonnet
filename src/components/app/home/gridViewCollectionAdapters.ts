@@ -120,6 +120,38 @@ export const resolveLocalGridViewTracks = (
     return buildLocalQueue(orderedSongs) as SongResult[];
 };
 
+const getLocalGridViewCoverSource = (songs: LocalSong[]): Blob | string | undefined => {
+    const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    const preferredSong = sortedSongs.find(song => {
+        if (song.useOnlineCover) {
+            return song.matchedCoverUrl || song.embeddedCover;
+        }
+        return song.embeddedCover || song.matchedCoverUrl;
+    });
+
+    if (!preferredSong) {
+        return undefined;
+    }
+
+    if (preferredSong.useOnlineCover) {
+        return preferredSong.matchedCoverUrl || preferredSong.embeddedCover;
+    }
+
+    return preferredSong.embeddedCover || preferredSong.matchedCoverUrl;
+};
+
+export const resolveLocalGridViewCoverSource = (
+    descriptor: LocalGridViewCollectionDescriptor,
+    localSongs: LocalSong[]
+): Blob | string | undefined => {
+    const songsById = new Map(localSongs.map(song => [song.id, song]));
+    const orderedSongs = descriptor.songIds
+        .map(songId => songsById.get(songId))
+        .filter((song): song is LocalSong => Boolean(song));
+
+    return getLocalGridViewCoverSource(orderedSongs);
+};
+
 // Loads Navidrome tracks for GridView without moving Navidrome service logic into GridView itself.
 export const resolveNavidromeGridViewTracks = async (
     descriptor: NavidromeGridViewCollectionDescriptor
