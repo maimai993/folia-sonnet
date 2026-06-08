@@ -1,5 +1,5 @@
 import { LocalPlaylist, LocalSong } from '../types';
-import { getFromCache, saveToCache } from './db';
+import { getFromCache, getLocalSongs, saveToCache } from './db';
 
 const LOCAL_PLAYLISTS_CACHE_KEY = 'local_playlists';
 const FAVORITE_PLAYLIST_NAME = '我喜欢的音乐';
@@ -116,8 +116,20 @@ const persistPlaylists = async (playlists: LocalPlaylist[]) => {
 export const getLocalPlaylists = async (): Promise<LocalPlaylist[]> => {
     const cached = await getFromCache<LegacyLocalPlaylist[]>(LOCAL_PLAYLISTS_CACHE_KEY);
     const cachedPlaylists = Array.isArray(cached) ? cached : [];
-    const playlists = cachedPlaylists.map(normalizePlaylist);
-    const shouldPersist = cachedPlaylists.some(playlistNeedsNormalization);
+    const validSongIds = new Set((await getLocalSongs()).map(song => song.id));
+    let shouldPersist = cachedPlaylists.some(playlistNeedsNormalization);
+    const playlists = cachedPlaylists.map(normalizePlaylist).map(playlist => {
+        const prunedSongIds = playlist.songIds.filter(songId => validSongIds.has(songId));
+        if (prunedSongIds.length !== playlist.songIds.length) {
+            shouldPersist = true;
+            return {
+                ...playlist,
+                songIds: prunedSongIds,
+            };
+        }
+
+        return playlist;
+    });
 
     const favoritePlaylist = playlists.find(playlist => playlist.isFavorite);
     if (!favoritePlaylist) {

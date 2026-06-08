@@ -1,6 +1,7 @@
 import { LocalSong, LyricData, LocalLibrarySnapshot, LocalLibrarySnapshotFile, LocalLibrarySnapshotNode } from '../types';
 import { saveLocalSong, saveLocalSongs, deleteLocalSong as dbDeleteLocalSong, deleteLocalSongs as dbDeleteLocalSongs, saveDirHandles, getDirHandles, deleteDirHandle, getLocalSongs, getLocalLibrarySnapshot, saveLocalLibrarySnapshot, deleteLocalLibrarySnapshot } from './db';
 import { neteaseApi } from './netease';
+import { getLocalPlaylists, saveLocalPlaylists } from './localPlaylistService';
 import { parseEmbeddedMetadataAsync, type EmbeddedMetadataResult } from '../utils/localMetadataWorkerClient';
 import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 
@@ -70,6 +71,32 @@ function formatImportDuration(ms: number): string {
 
 function notifyLocalMusicUpdated() {
     window.dispatchEvent(new CustomEvent(LOCAL_MUSIC_UPDATED_EVENT));
+}
+
+async function removeDeletedSongIdsFromPlaylists(songIds: string[]): Promise<void> {
+    if (songIds.length === 0) {
+        return;
+    }
+
+    const removingIds = new Set(songIds);
+    const playlists = await getLocalPlaylists();
+    let changed = false;
+    const nextPlaylists = playlists.map(playlist => {
+        const nextSongIds = playlist.songIds.filter(songId => !removingIds.has(songId));
+        if (nextSongIds.length === playlist.songIds.length) {
+            return playlist;
+        }
+
+        changed = true;
+        return {
+            ...playlist,
+            songIds: nextSongIds,
+        };
+    });
+
+    if (changed) {
+        await saveLocalPlaylists(nextPlaylists);
+    }
 }
 
 function notifyLocalMusicScanProgress(detail: LocalMusicScanProgressDetail) {
@@ -1420,6 +1447,8 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
         embeddedCoverRequestMap.delete(id);
     });
     await dbDeleteLocalSongs(songIds);
+    await removeDeletedSongIdsFromPlaylists(songIds);
+    notifyLocalMusicUpdated();
     console.log(`[LocalMusic] Deleted ${songIds.length} songs by ID`);
 }
 
@@ -1454,9 +1483,11 @@ export async function deleteFolderSongs(folderName: string): Promise<void> {
         embeddedCoverRequestMap.delete(id);
     });
     await dbDeleteLocalSongs(songIdsToDelete);
+    await removeDeletedSongIdsFromPlaylists(songIdsToDelete);
 
     const rootFolderName = folderName.split('/')[0];
     await cleanupDirHandleIfUnused(rootFolderName);
 
+    notifyLocalMusicUpdated();
     console.log(`[LocalMusic] Deleted ${songsToDelete.length} songs from folder tree: ${folderName}`);
 }
