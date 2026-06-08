@@ -27,11 +27,9 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
     const setCappellaCustomAvatarImages = useSettingsUiStore(state => state.setCappellaCustomAvatarImages);
     const setIsLoadingCappellaCustomAvatarPack = useSettingsUiStore(state => state.setIsLoadingCappellaCustomAvatarPack);
     const clearLyricsCustomFontAfterRestoreFailure = useSettingsUiStore(state => state.clearLyricsCustomFontAfterRestoreFailure);
-    const ensureBuiltinCappellaEmojiPack = useSettingsUiStore(state => state.ensureBuiltinCappellaEmojiPack);
     const lyricsCustomFont = useSettingsUiStore(state => state.lyricsCustomFont);
     const storedCappellaEmojiPack = useSettingsUiStore(state => state.storedCappellaEmojiPack);
     const storedCappellaAvatarPack = useSettingsUiStore(state => state.storedCappellaAvatarPack);
-    const cappellaEmojiPackSource = useSettingsUiStore(state => state.cappellaTuning.emojiPackSource);
     const isDaylight = useSettingsUiStore(state => state.isDaylight);
 
     useEffect(() => {
@@ -210,10 +208,6 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
             nextImages.forEach(image => URL.revokeObjectURL(image.url));
         };
     }, [setCappellaCustomAvatarImages, storedCappellaAvatarPack]);
-
-    useEffect(() => {
-        ensureBuiltinCappellaEmojiPack();
-    }, [cappellaEmojiPackSource, ensureBuiltinCappellaEmojiPack, storedCappellaEmojiPack.length]);
 
     return preferences;
 }

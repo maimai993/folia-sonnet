@@ -685,19 +685,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         notify(get, message);
     },
     ensureBuiltinCappellaEmojiPack: () => {
-        const { storedCappellaEmojiPack, cappellaTuning } = get();
-        if (storedCappellaEmojiPack.length > 0 || cappellaTuning.emojiPackSource !== 'custom') {
-            return;
-        }
-
-        const next = {
-            ...cappellaTuning,
-            emojiPackSource: 'builtin' as const,
-        };
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('cappella_tuning', JSON.stringify(next));
-        }
-        set({ cappellaTuning: next });
+        // No-op: the visualizer's resolvedCappellaTuning already handles runtime
+        // fallback when cappellaTuning.emojiPackSource is 'custom' but the custom
+        // emoji pack is not yet loaded. Mutating state here would corrupt both the
+        // in-memory tuning and persisted localStorage before async load completes.
     },
     setIsSubSettingsViewOpen: (open) => set({ isSubSettingsViewOpen: open }),
     openSettings: (initialTab = 'help', initialSubview = null) => set({
