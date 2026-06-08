@@ -74,6 +74,9 @@ interface Grid3DProps {
     onAddAllToQueue?: (songs: SongResult[]) => void;
     onAddSongToQueue?: (song: SongResult) => void;
     onOpenGridView?: (collection: any) => void;
+    stageEnabled?: boolean;
+    stageIsActive?: boolean;
+    onOpenStagePlayer?: () => void;
 }
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
@@ -99,6 +102,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         onOpenSettings,
         navidromeEnabled = false,
         onOpenGridView,
+        stageEnabled = false,
+        stageIsActive = false,
+        onOpenStagePlayer,
     } = props;
 
     const { t } = useTranslation();
@@ -440,6 +446,15 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                         </button>
                                     );
                                 })}
+                                {stageEnabled && (
+                                    <button
+                                        onClick={() => onOpenStagePlayer?.()}
+                                        data-stage-active={stageIsActive ? 'true' : 'false'}
+                                        className={`relative inline-flex items-center justify-center px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${navPillInactiveText}`}
+                                    >
+                                        <span className="relative z-10">{t('home.stage') || '舞台'}</span>
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
