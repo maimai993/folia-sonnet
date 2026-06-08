@@ -534,7 +534,6 @@ type SettingsUiState = {
     setCappellaCustomAvatarImages: (images: CappellaAvatarImage[]) => void;
     setIsLoadingCappellaCustomAvatarPack: (loading: boolean) => void;
     clearLyricsCustomFontAfterRestoreFailure: (message: StatusMessage) => void;
-    ensureBuiltinCappellaEmojiPack: () => void;
     setIsSubSettingsViewOpen: (open: boolean) => void;
     openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null) => void;
     closeSettings: () => void;
@@ -683,12 +682,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ lyricsCustomFont: null });
         notify(get, message);
-    },
-    ensureBuiltinCappellaEmojiPack: () => {
-        // No-op: the visualizer's resolvedCappellaTuning already handles runtime
-        // fallback when cappellaTuning.emojiPackSource is 'custom' but the custom
-        // emoji pack is not yet loaded. Mutating state here would corrupt both the
-        // in-memory tuning and persisted localStorage before async load completes.
     },
     setIsSubSettingsViewOpen: (open) => set({ isSubSettingsViewOpen: open }),
     openSettings: (initialTab = 'help', initialSubview = null) => set({
