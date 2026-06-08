@@ -46,7 +46,8 @@ declare global {
     | { type: 'open-export' }
     | { type: 'start-export'; preset: ElectronVideoExportPreset; startMode: ElectronVideoExportStartMode }
     | { type: 'stop-export' }
-    | { type: 'cancel-export' };
+    | { type: 'cancel-export' }
+    | { type: 'toggle-like' };
 
   type ElectronVideoExportStatus =
     | 'idle'
@@ -108,6 +109,7 @@ declare global {
     exportState: ElectronVideoExportState;
     isDaylight?: boolean;
     lyrics?: import('./types').LyricData | null;
+    isLiked?: boolean;
     updatedAt: number;
   }
 

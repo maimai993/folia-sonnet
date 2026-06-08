@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
 import { ChevronLeft, Palette, RotateCcw, Sun, Moon, Check } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
@@ -127,90 +127,90 @@ const ThemePreviewLayer: React.FC<{
     clipPath,
     overlayAlign,
 }) => {
-    const isLight = mode === 'light';
-    const overlayPositionClass = overlayAlign === 'top-left'
-        ? 'items-start justify-start'
-        : 'items-end justify-end';
-    const badgeRowAlignmentClass = overlayAlign === 'top-left'
-        ? 'justify-start'
-        : 'justify-end';
-    const isBottomRight = overlayAlign === 'bottom-right';
+        const isLight = mode === 'light';
+        const overlayPositionClass = overlayAlign === 'top-left'
+            ? 'items-start justify-start'
+            : 'items-end justify-end';
+        const badgeRowAlignmentClass = overlayAlign === 'top-left'
+            ? 'justify-start'
+            : 'justify-end';
+        const isBottomRight = overlayAlign === 'bottom-right';
 
-    return (
-        <div
-            className="absolute inset-0 overflow-hidden"
-            style={{
-                clipPath,
-            }}
-        >
-            <div className="absolute inset-0">
-                <VisualizerRenderer
-                    mode={visualizerMode}
-                    currentTime={currentTime}
-                    currentLineIndex={currentLineIndex}
-                    lines={VIS_PLAYGROUND_PREVIEW_LINES}
-                    theme={theme}
-                    audioPower={audioPower}
-                    audioBands={audioBands}
-                    songTitle="Cappella Preview"
-                    showText
-                    staticMode={staticMode}
-                    isPreviewMode
-                    backgroundOpacity={backgroundOpacity}
-                    visualizerOpacity={visualizerOpacity}
-                    coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
-                    lyricsFontScale={lyricsFontScale}
-                    classicTuning={classicTuning}
-                    cadenzaTuning={cadenzaTuning}
-                    partitaTuning={partitaTuning}
-                    fumeTuning={fumeTuning}
-                    cappellaTuning={cappellaTuning}
-                    cappellaCustomEmojiImages={cappellaCustomEmojiImages}
-                    cappellaCustomAvatarImages={cappellaCustomAvatarImages}
-                    seed={getVisualizerScopedSeed(visualizerMode, `theme-park-${mode}`)}
-                />
-            </div>
+        return (
+            <div
+                className="absolute inset-0 overflow-hidden"
+                style={{
+                    clipPath,
+                }}
+            >
+                <div className="absolute inset-0">
+                    <VisualizerRenderer
+                        mode={visualizerMode}
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={VIS_PLAYGROUND_PREVIEW_LINES}
+                        theme={theme}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        songTitle="Cappella Preview"
+                        showText
+                        staticMode={staticMode}
+                        isPreviewMode
+                        backgroundOpacity={backgroundOpacity}
+                        visualizerOpacity={visualizerOpacity}
+                        coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
+                        lyricsFontScale={lyricsFontScale}
+                        classicTuning={classicTuning}
+                        cadenzaTuning={cadenzaTuning}
+                        partitaTuning={partitaTuning}
+                        fumeTuning={fumeTuning}
+                        cappellaTuning={cappellaTuning}
+                        cappellaCustomEmojiImages={cappellaCustomEmojiImages}
+                        cappellaCustomAvatarImages={cappellaCustomAvatarImages}
+                        seed={getVisualizerScopedSeed(visualizerMode, `theme-park-${mode}`)}
+                    />
+                </div>
 
-            <div className={`relative z-10 flex h-full p-4 pointer-events-none ${overlayPositionClass}`}>
-                <div className={`flex max-w-full flex-col gap-2 ${badgeRowAlignmentClass}`}>
-                    {isBottomRight && (
-                        <div className={`flex ${badgeRowAlignmentClass}`}>
-                            <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
-                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.accentColor }} />
-                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
-                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.secondaryColor }} />
-                            </div>
-                        </div>
-                    )}
-                    <div className={`flex max-w-full flex-wrap items-center gap-2 ${badgeRowAlignmentClass}`}>
-                        <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] backdrop-blur-md" style={{ color: theme.primaryColor, borderColor: `${theme.primaryColor}30`, backgroundColor: `${theme.backgroundColor}80` }}>
-                            {isLight ? <Sun size={13} /> : <Moon size={13} />}
-                            <span>{isLight ? 'Light' : 'Dark'}</span>
-                        </div>
-                        {isActive && (
-                            <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs backdrop-blur-md" style={{ color: theme.backgroundColor, backgroundColor: theme.accentColor }}>
-                                <Check size={12} />
-                                <span>编辑中</span>
+                <div className={`relative z-10 flex h-full p-4 pointer-events-none ${overlayPositionClass}`}>
+                    <div className={`flex max-w-full flex-col gap-2 ${badgeRowAlignmentClass}`}>
+                        {isBottomRight && (
+                            <div className={`flex ${badgeRowAlignmentClass}`}>
+                                <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
+                                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.accentColor }} />
+                                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
+                                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.secondaryColor }} />
+                                </div>
                             </div>
                         )}
-                        <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] backdrop-blur-md" style={{ color: theme.secondaryColor, borderColor: `${theme.secondaryColor}25`, backgroundColor: `${theme.backgroundColor}88` }}>
-                            <span>{visualizerModeLabel}</span>
-                        </div>
-                    </div>
-                    {!isBottomRight && (
-                        <div className={`flex ${badgeRowAlignmentClass}`}>
-                            <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
-                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.accentColor }} />
-                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
-                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.secondaryColor }} />
+                        <div className={`flex max-w-full flex-wrap items-center gap-2 ${badgeRowAlignmentClass}`}>
+                            <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em] backdrop-blur-md" style={{ color: theme.primaryColor, borderColor: `${theme.primaryColor}30`, backgroundColor: `${theme.backgroundColor}80` }}>
+                                {isLight ? <Sun size={13} /> : <Moon size={13} />}
+                                <span>{isLight ? 'Light' : 'Dark'}</span>
+                            </div>
+                            {isActive && (
+                                <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs backdrop-blur-md" style={{ color: theme.backgroundColor, backgroundColor: theme.accentColor }}>
+                                    <Check size={12} />
+                                    <span>编辑中</span>
+                                </div>
+                            )}
+                            <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] backdrop-blur-md" style={{ color: theme.secondaryColor, borderColor: `${theme.secondaryColor}25`, backgroundColor: `${theme.backgroundColor}88` }}>
+                                <span>{visualizerModeLabel}</span>
                             </div>
                         </div>
-                    )}
+                        {!isBottomRight && (
+                            <div className={`flex ${badgeRowAlignmentClass}`}>
+                                <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 backdrop-blur-md" style={{ backgroundColor: `${theme.backgroundColor}88` }}>
+                                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.accentColor }} />
+                                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
+                                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.secondaryColor }} />
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
-    );
-};
+        );
+    };
 
 const DiagonalThemePreview: React.FC<{
     lightTheme: Theme;
@@ -257,80 +257,80 @@ const DiagonalThemePreview: React.FC<{
     audioBands,
     onSelectMode,
 }) => {
-    const borderColor = activeMode === 'light' ? lightTheme.accentColor : darkTheme.accentColor;
+        const borderColor = activeMode === 'light' ? lightTheme.accentColor : darkTheme.accentColor;
 
-    return (
-        <div
-            className="relative isolate h-[min(46vh,460px)] min-h-[300px] overflow-hidden rounded-[30px] border shadow-[0_18px_50px_rgba(0,0,0,0.18)] lg:h-full lg:min-h-0"
-            style={{ borderColor }}
-        >
-            <button
-                type="button"
-                onClick={() => onSelectMode('light')}
-                className="absolute left-0 top-0 z-20 h-[44%] w-[44%]"
-                style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }}
-                aria-label="Select light theme preview"
-            />
-            <button
-                type="button"
-                onClick={() => onSelectMode('dark')}
-                className="absolute bottom-0 right-0 z-20 h-[44%] w-[44%]"
-                style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
-                aria-label="Select dark theme preview"
-            />
+        return (
+            <div
+                className="relative isolate h-[min(46vh,460px)] min-h-[300px] overflow-hidden rounded-[30px] border shadow-[0_18px_50px_rgba(0,0,0,0.18)] lg:h-full lg:min-h-0"
+                style={{ borderColor }}
+            >
+                <button
+                    type="button"
+                    onClick={() => onSelectMode('light')}
+                    className="absolute left-0 top-0 z-20 h-[44%] w-[44%]"
+                    style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }}
+                    aria-label="Select light theme preview"
+                />
+                <button
+                    type="button"
+                    onClick={() => onSelectMode('dark')}
+                    className="absolute bottom-0 right-0 z-20 h-[44%] w-[44%]"
+                    style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
+                    aria-label="Select dark theme preview"
+                />
 
-            <ThemePreviewLayer
-                theme={lightTheme}
-                mode="light"
-                isActive={activeMode === 'light'}
-                visualizerMode={visualizerMode}
-                visualizerModeLabel={visualizerModeLabel}
-                staticMode={staticMode}
-                backgroundOpacity={backgroundOpacity}
-                visualizerOpacity={visualizerOpacity}
-                classicTuning={classicTuning}
-                cadenzaTuning={cadenzaTuning}
-                partitaTuning={partitaTuning}
-                fumeTuning={fumeTuning}
-                cappellaTuning={cappellaTuning}
-                cappellaCustomEmojiImages={cappellaCustomEmojiImages}
-                cappellaCustomAvatarImages={cappellaCustomAvatarImages}
-                lyricsFontScale={lyricsFontScale}
-                currentTime={currentTime}
-                currentLineIndex={currentLineIndex}
-                audioPower={audioPower}
-                audioBands={audioBands}
-                clipPath="polygon(0 0, 100% 0, 0 100%)"
-                overlayAlign="top-left"
-            />
-            <ThemePreviewLayer
-                theme={darkTheme}
-                mode="dark"
-                isActive={activeMode === 'dark'}
-                visualizerMode={visualizerMode}
-                visualizerModeLabel={visualizerModeLabel}
-                staticMode={staticMode}
-                backgroundOpacity={backgroundOpacity}
-                visualizerOpacity={visualizerOpacity}
-                classicTuning={classicTuning}
-                cadenzaTuning={cadenzaTuning}
-                partitaTuning={partitaTuning}
-                fumeTuning={fumeTuning}
-                cappellaTuning={cappellaTuning}
-                cappellaCustomEmojiImages={cappellaCustomEmojiImages}
-                cappellaCustomAvatarImages={cappellaCustomAvatarImages}
-                lyricsFontScale={lyricsFontScale}
-                currentTime={currentTime}
-                currentLineIndex={currentLineIndex}
-                audioPower={audioPower}
-                audioBands={audioBands}
-                clipPath="polygon(100% 0, 100% 100%, 0 100%)"
-                overlayAlign="bottom-right"
-            />
+                <ThemePreviewLayer
+                    theme={lightTheme}
+                    mode="light"
+                    isActive={activeMode === 'light'}
+                    visualizerMode={visualizerMode}
+                    visualizerModeLabel={visualizerModeLabel}
+                    staticMode={staticMode}
+                    backgroundOpacity={backgroundOpacity}
+                    visualizerOpacity={visualizerOpacity}
+                    classicTuning={classicTuning}
+                    cadenzaTuning={cadenzaTuning}
+                    partitaTuning={partitaTuning}
+                    fumeTuning={fumeTuning}
+                    cappellaTuning={cappellaTuning}
+                    cappellaCustomEmojiImages={cappellaCustomEmojiImages}
+                    cappellaCustomAvatarImages={cappellaCustomAvatarImages}
+                    lyricsFontScale={lyricsFontScale}
+                    currentTime={currentTime}
+                    currentLineIndex={currentLineIndex}
+                    audioPower={audioPower}
+                    audioBands={audioBands}
+                    clipPath="polygon(0 0, 100% 0, 0 100%)"
+                    overlayAlign="top-left"
+                />
+                <ThemePreviewLayer
+                    theme={darkTheme}
+                    mode="dark"
+                    isActive={activeMode === 'dark'}
+                    visualizerMode={visualizerMode}
+                    visualizerModeLabel={visualizerModeLabel}
+                    staticMode={staticMode}
+                    backgroundOpacity={backgroundOpacity}
+                    visualizerOpacity={visualizerOpacity}
+                    classicTuning={classicTuning}
+                    cadenzaTuning={cadenzaTuning}
+                    partitaTuning={partitaTuning}
+                    fumeTuning={fumeTuning}
+                    cappellaTuning={cappellaTuning}
+                    cappellaCustomEmojiImages={cappellaCustomEmojiImages}
+                    cappellaCustomAvatarImages={cappellaCustomAvatarImages}
+                    lyricsFontScale={lyricsFontScale}
+                    currentTime={currentTime}
+                    currentLineIndex={currentLineIndex}
+                    audioPower={audioPower}
+                    audioBands={audioBands}
+                    clipPath="polygon(100% 0, 100% 100%, 0 100%)"
+                    overlayAlign="bottom-right"
+                />
 
-        </div>
-    );
-};
+            </div>
+        );
+    };
 
 const ThemePark: React.FC<ThemeParkProps> = ({
     initialTheme,
@@ -353,6 +353,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     onSaveTheme,
 }) => {
     const { t } = useTranslation();
+    const isMouseDownOnOverlayRef = useRef(false);
     const currentTime = useMotionValue(0);
     const audioPower = useMotionValue(0.24);
     const bass = useMotionValue(0.18);
@@ -452,6 +453,18 @@ const ThemePark: React.FC<ThemeParkProps> = ({
         onSaveTheme(normalizeDualTheme(draftTheme));
     };
 
+    // 仅当 mouse down 和 click 都在 overlay 元素本身发生时才触发关闭，
+    // 避免在调色板拖拽鼠标至外部松开时误触关闭。
+    const handleOverlayMouseDown = (event: React.MouseEvent) => {
+        isMouseDownOnOverlayRef.current = event.target === event.currentTarget;
+    };
+
+    const handleOverlayClick = (event: React.MouseEvent) => {
+        if (event.target === event.currentTarget && isMouseDownOnOverlayRef.current) {
+            onClose();
+        }
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -460,7 +473,8 @@ const ThemePark: React.FC<ThemeParkProps> = ({
             transition={{ duration: 0.22, ease: 'easeOut' }}
             className="fixed inset-0 z-[140] backdrop-blur-xl p-3 sm:p-5"
             style={{ backgroundColor: overlayBackground }}
-            onClick={onClose}
+            onMouseDown={handleOverlayMouseDown}
+            onClick={handleOverlayClick}
         >
             <motion.div
                 initial={{ opacity: 0, y: 18, scale: 0.98 }}
