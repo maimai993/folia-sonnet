@@ -355,9 +355,25 @@ async function buildSnapshotTree(
     let relevantFileCount = 0;
 
     const childEntries: Array<FileSystemHandle> = [];
-    // @ts-ignore
-    for await (const entry of handle.values()) {
-        childEntries.push(entry);
+
+    try {
+        // @ts-ignore
+        for await (const entry of handle.values()) {
+            childEntries.push(entry);
+        }
+    } catch (error) {
+        console.warn(`[LocalMusic][Import] Skip unreadable directory "${currentPath}":`, error);
+
+        return {
+            tree: {
+                name: handle.name,
+                relativePath: currentPath,
+                hash: hashSnapshotNode(currentPath, [], []),
+                files: [],
+                children: []
+            },
+            relevantFileCount: 0
+        };
     }
 
     childEntries.sort((a, b) => a.name.localeCompare(b.name));
@@ -365,9 +381,15 @@ async function buildSnapshotTree(
     for (const entry of childEntries) {
         if (entry.kind === 'directory') {
             const childPath = `${currentPath}/${entry.name}`;
-            const childResult = await buildSnapshotTree(entry as FileSystemDirectoryHandle, childPath);
-            children.push(childResult.tree);
-            relevantFileCount += childResult.relevantFileCount;
+
+            try {
+                const childResult = await buildSnapshotTree(entry as FileSystemDirectoryHandle, childPath);
+                children.push(childResult.tree);
+                relevantFileCount += childResult.relevantFileCount;
+            } catch (error) {
+                console.warn(`[LocalMusic][Import] Skip failed child directory "${childPath}":`, error);
+            }
+
             continue;
         }
 
@@ -377,19 +399,24 @@ async function buildSnapshotTree(
         }
 
         const fileHandle = entry as FileSystemFileHandle;
-        const file = await fileHandle.getFile();
-        const relativePath = `${currentPath}/${file.name}`;
-        const signature = buildFileSignature(relativePath, file.size, file.lastModified);
 
-        files.push({
-            name: file.name,
-            relativePath,
-            kind,
-            size: file.size,
-            lastModified: file.lastModified,
-            signature
-        });
-        relevantFileCount += 1;
+        try {
+            const file = await fileHandle.getFile();
+            const relativePath = `${currentPath}/${file.name}`;
+            const signature = buildFileSignature(relativePath, file.size, file.lastModified);
+
+            files.push({
+                name: file.name,
+                relativePath,
+                kind,
+                size: file.size,
+                lastModified: file.lastModified,
+                signature
+            });
+            relevantFileCount += 1;
+        } catch (error) {
+            console.warn(`[LocalMusic][Import] Skip unreadable file "${currentPath}/${entry.name}":`, error);
+        }
     }
 
     const tree: LocalLibrarySnapshotNode = {
@@ -1044,7 +1071,16 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
             }
         }
 
-        // Save directory handle for persistence
+        const traversalStartedAt = performance.now();
+        const allSongs = await getLocalSongs();
+        const existingRootSongs = allSongs.filter(song =>
+            song.folderName === rootFolderName || (song.folderName && song.folderName.startsWith(`${rootFolderName}/`))
+        );
+        const previousSnapshot = await getLocalLibrarySnapshot(rootFolderName);
+        const diffPlan = await collectImportDiffPlan(rootFolderName, dirHandle, existingRootSongs, previousSnapshot);
+        console.log(`[LocalMusic][Import] Traversed ${diffPlan.relevantFileCount} relevant files in ${formatImportDuration(performance.now() - traversalStartedAt)}.`);
+
+        // Save directory handle for persistence after a successful scan plan is built
         try {
             const { getDirHandles, saveDirHandles } = await import('./db');
             const dirHandles = await getDirHandles();
@@ -1054,15 +1090,6 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
         } catch (e) {
             console.error('[LocalMusic] Failed to save directory handle:', e);
         }
-
-        const traversalStartedAt = performance.now();
-        const allSongs = await getLocalSongs();
-        const existingRootSongs = allSongs.filter(song =>
-            song.folderName === rootFolderName || (song.folderName && song.folderName.startsWith(`${rootFolderName}/`))
-        );
-        const previousSnapshot = await getLocalLibrarySnapshot(rootFolderName);
-        const diffPlan = await collectImportDiffPlan(rootFolderName, dirHandle, existingRootSongs, previousSnapshot);
-        console.log(`[LocalMusic][Import] Traversed ${diffPlan.relevantFileCount} relevant files in ${formatImportDuration(performance.now() - traversalStartedAt)}.`);
 
         const lyricIndexStartedAt = performance.now();
         console.log(`[LocalMusic][Import] Indexed ${diffPlan.lrcMap.size} lyric files, ${diffPlan.tlrcMap.size} translated lyric files, and ${diffPlan.coverMap.size} folder cover files in ${formatImportDuration(performance.now() - lyricIndexStartedAt)}.`);

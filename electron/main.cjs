@@ -1925,6 +1925,28 @@ app.whenReady().then(async () => {
   }
 
   setupFileSystemAccessPermissionHandlers();
+
+  session.defaultSession.on('file-system-access-restricted', (event, details, callback) => {
+    if (details.isDirectory) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: '无法导入此文件夹',
+        message: '不能直接导入系统目录或常用用户目录。\n请选择一个专门存放音乐的文件夹。',
+        buttons: ['选择其他文件夹', '取消'],
+        defaultId: 0,
+        cancelId: 1,
+      }).then(({ response }) => {
+        if (response === 0) {
+          callback('tryAgain');
+        } else {
+          callback('deny');
+        }
+      });
+      return;
+    }
+    callback('deny');
+  });
+
   setupAutoUpdater();
   await startApi();
   try {
