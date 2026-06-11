@@ -174,22 +174,26 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
         }
 
         let frameId = 0;
+        let canvasWidth = 0;
+        let canvasHeight = 0;
 
         const resizeCanvas = () => {
             const rect = canvas.getBoundingClientRect();
             const dpr = window.devicePixelRatio || 1;
             const nextWidth = Math.max(1, Math.floor(rect.width * dpr));
             const nextHeight = Math.max(1, Math.floor(rect.height * dpr));
+            canvasWidth = rect.width;
+            canvasHeight = rect.height;
             if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
                 canvas.width = nextWidth;
                 canvas.height = nextHeight;
             }
             context.setTransform(dpr, 0, 0, dpr, 0, 0);
-            return { width: rect.width, height: rect.height };
         };
 
         const draw = () => {
-            const { width, height } = resizeCanvas();
+            const width = canvasWidth;
+            const height = canvasHeight;
             if (width <= 0 || height <= 0) {
                 return;
             }
@@ -280,14 +284,21 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
             }
         };
 
-        const drawStatic = () => {
-            const { width, height } = resizeCanvas();
-            drawStaticBars(context, width, height, theme, mode);
+        const handleResize = () => {
+            resizeCanvas();
+            if ((staticMode || isPreviewMode) && canvasWidth > 0 && canvasHeight > 0) {
+                drawStaticBars(context, canvasWidth, canvasHeight, theme, mode);
+            }
         };
 
+        resizeCanvas();
+        window.addEventListener('resize', handleResize);
+
         if (staticMode || isPreviewMode) {
-            drawStatic();
-            return;
+            if (canvasWidth > 0 && canvasHeight > 0) {
+                drawStaticBars(context, canvasWidth, canvasHeight, theme, mode);
+            }
+            return () => window.removeEventListener('resize', handleResize);
         }
 
         const loop = () => {
@@ -296,10 +307,9 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
         };
 
         loop();
-        window.addEventListener('resize', drawStatic);
         return () => {
             window.cancelAnimationFrame(frameId);
-            window.removeEventListener('resize', drawStatic);
+            window.removeEventListener('resize', handleResize);
         };
     }, [audioBands, audioPower, isPreviewMode, mode, staticMode, theme]);
 

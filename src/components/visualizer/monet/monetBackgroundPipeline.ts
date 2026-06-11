@@ -51,7 +51,9 @@ const resolveSourceUrl = ({
 
 const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
-    image.crossOrigin = 'anonymous';
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+        image.crossOrigin = 'anonymous';
+    }
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Failed to load image: ${src}`));
     image.src = src;
@@ -118,7 +120,7 @@ const applyBackgroundPostProcessing = (
     width: number,
     height: number,
     theme: Theme,
-    tuning: MonetTuning,
+    tuning: MonetBackgroundTuning,
 ) => {
     const grayscale = clamp(tuning.backgroundGrayscale, 0, 1);
     const saturation = clamp(tuning.backgroundSaturation, 0, 2);
@@ -178,7 +180,7 @@ const paintMonetOverlay = (
     width: number,
     height: number,
     theme: Theme,
-    tuning: MonetTuning,
+    tuning: MonetBackgroundTuning,
 ) => {
     const overlay = clamp(tuning.backgroundOverlayOpacity, 0, 1);
     const overlayGradient = context.createLinearGradient(0, 0, width, height);

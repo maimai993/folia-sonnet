@@ -223,7 +223,9 @@ export const compressConfig = (config: any): string => {
     if (config.monetTuning) minified.mt = compressMonet(config.monetTuning);
 
     const jsonStr = JSON.stringify(minified);
-    const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
+    const bytes = new TextEncoder().encode(jsonStr);
+    const binaryString = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+    const base64 = btoa(binaryString);
     return `folia-theme://${base64}`;
 };
 
@@ -235,7 +237,9 @@ export const decompressConfig = (str: string): any => {
     const trimmed = str.trim();
     if (trimmed.startsWith('folia-theme://')) {
         const base64 = trimmed.slice('folia-theme://'.length);
-        const jsonStr = decodeURIComponent(escape(atob(base64)));
+        const binaryString = atob(base64);
+        const bytes = Uint8Array.from(binaryString, char => char.charCodeAt(0));
+        const jsonStr = new TextDecoder().decode(bytes);
         parsed = JSON.parse(jsonStr);
     } else {
         parsed = JSON.parse(trimmed);
