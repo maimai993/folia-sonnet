@@ -567,7 +567,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
                         />
                     ))}
                 </AnimatePresence>
-            ) : (
+            ) : emptyText ? (
                 <div
                     className="absolute left-0 top-1/2 -translate-y-1/2 font-semibold"
                     style={{
@@ -579,7 +579,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
                 >
                     {emptyText}
                 </div>
-            )}
+            ) : null}
         </div>
     );
 };

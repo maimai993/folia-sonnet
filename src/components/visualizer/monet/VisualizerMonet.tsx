@@ -204,7 +204,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     translationFontPx={translationFontPx}
                                     fontStack={lyricFontStack}
                                     keywordColoringEnabled={monetTuning.keywordColoringEnabled}
-                                    emptyText={t('ui.waitingForMusic') || 'Waiting for music'}
+                                    emptyText=""
                                 />
                             </motion.div>
 
