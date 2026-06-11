@@ -7,6 +7,7 @@ import { resolveThemeFontStack } from '../../utils/fontStacks';
 import { type VisualizerSharedProps } from './definition';
 import FluidBackground from './FluidBackground';
 import GeometricBackground from './GeometricBackground';
+import MonetBackgroundLayer from './backgrounds/MonetBackgroundLayer';
 
 // Shared outer shell for all visualizers.
 // This is where we keep background layering, font injection, and the hover-only back button
@@ -14,6 +15,7 @@ import GeometricBackground from './GeometricBackground';
 type VisualizerShellSharedProps = Pick<
     VisualizerSharedProps,
     | 'coverUrl'
+    | 'isDaylight'
     | 'useCoverColorBg'
     | 'seed'
     | 'backgroundOpacity'
@@ -21,6 +23,9 @@ type VisualizerShellSharedProps = Pick<
     | 'transparentBackground'
     | 'disableGeometricBackground'
     | 'disableVignette'
+    | 'resolvedVisualizerBackgroundMode'
+    | 'monetBackgroundTuning'
+    | 'monetBackgroundImage'
     | 'staticMode'
     | 'paused'
     | 'onBack'
@@ -68,6 +73,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     const { t } = useTranslation();
     const [showBackButton, setShowBackButton] = useState(false);
     const resolvedCoverUrl = sharedProps?.coverUrl ?? coverUrl;
+    const resolvedIsDaylight = sharedProps?.isDaylight ?? false;
     const resolvedUseCoverColorBg = sharedProps?.useCoverColorBg ?? useCoverColorBg;
     const resolvedSeed = sharedProps?.seed ?? seed;
     const resolvedBackgroundOpacity = sharedProps?.backgroundOpacity ?? backgroundOpacity;
@@ -75,9 +81,14 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     const resolvedTransparentBackground = sharedProps?.transparentBackground ?? transparentBackground;
     const resolvedDisableGeometricBackground = sharedProps?.disableGeometricBackground ?? disableGeometricBackground;
     const resolvedDisableVignette = sharedProps?.disableVignette ?? disableVignette;
+    const resolvedBackgroundMode = sharedProps?.resolvedVisualizerBackgroundMode ?? 'common';
+    const resolvedMonetBackgroundTuning = sharedProps?.monetBackgroundTuning;
+    const resolvedMonetBackgroundImage = sharedProps?.monetBackgroundImage;
     const resolvedStaticMode = sharedProps?.staticMode ?? staticMode;
     const resolvedPaused = sharedProps?.paused ?? paused;
     const resolvedOnBack = sharedProps?.onBack ?? onBack;
+    const shouldRenderCommonBackground = !resolvedTransparentBackground && resolvedBackgroundMode === 'common';
+    const shouldRenderMonetBackground = !resolvedTransparentBackground && resolvedBackgroundMode === 'monet';
 
     // Keep the tailwind font utility roughly aligned with the theme category,
     // but still let the real resolved font stack win through inline style.
@@ -134,7 +145,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
 
             <AnimatePresence>
                 {/* Cover-color background is optional because some modes already have a strong built-in background identity. */}
-                {!resolvedTransparentBackground && resolvedUseCoverColorBg && (
+                {shouldRenderCommonBackground && resolvedUseCoverColorBg && (
                     <motion.div
                         key="fluid-bg"
                         initial={{ opacity: 0 }}
@@ -148,17 +159,28 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
                 )}
             </AnimatePresence>
 
-            {!resolvedTransparentBackground && (
+            {shouldRenderCommonBackground && (
                 <div
                     className="absolute inset-0 z-0 transition-all duration-1000"
                     style={{ backgroundColor: theme.backgroundColor, opacity: resolvedUseCoverColorBg ? resolvedBackgroundOpacity : 1 }}
                 />
             )}
 
+            {shouldRenderMonetBackground && (
+                <MonetBackgroundLayer
+                    coverUrl={resolvedCoverUrl}
+                    monetBackgroundImage={resolvedMonetBackgroundImage}
+                    theme={theme}
+                    isDaylight={resolvedIsDaylight}
+                    tuning={resolvedMonetBackgroundTuning}
+                    transparentBackground={resolvedTransparentBackground}
+                />
+            )}
+
             {/* staticMode here means "kill the heavier ambient motion layer",
                 not "freeze the entire lyric renderer". Transparent background only removes
                 the solid/fluid backing, so the geometric layer can still render. */}
-            {!resolvedStaticMode && (
+            {shouldRenderCommonBackground && !resolvedStaticMode && (
                 <div className="absolute inset-0 z-0">
                     <GeometricBackground
                         theme={theme}

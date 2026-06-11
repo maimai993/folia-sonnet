@@ -145,13 +145,15 @@ export default function App() {
     const mid = useMotionValue(0);
     const vocal = useMotionValue(0);
     const treble = useMotionValue(0);
+    const spectrum = useMotionValue(new Uint8Array(0));
     const audioBands = useMemo(() => ({
         bass,
         lowMid,
         mid,
         vocal,
         treble,
-    }), [bass, lowMid, mid, vocal, treble]);
+        spectrum,
+    }), [bass, lowMid, mid, spectrum, treble, vocal]);
 
     // Refs
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -221,6 +223,7 @@ export default function App() {
         backgroundOpacity,
         subtitleOverlayOpacity,
         visualizerOpacity,
+        visualizerBackgroundMode,
         isDaylight,
         visualizerMode,
         classicTuning,
@@ -229,9 +232,13 @@ export default function App() {
         fumeTuning,
         cappellaTuning,
         tiltTuning,
+        monetBackgroundTuning,
+        monetTuning,
         cappellaCustomEmojiImages,
         isLoadingCappellaCustomEmojiPack,
         cappellaCustomAvatarImages,
+        monetBackgroundImage,
+        monetPortraitImage,
         lyricsFontStyle,
         lyricsFontScale,
         lyricsCustomFontFamily,
@@ -258,6 +265,8 @@ export default function App() {
         handleSetBackgroundOpacity,
         setDaylightPreference,
         handleSetVisualizerMode,
+        handleSetVisualizerBackgroundMode,
+        handleSetMonetBackgroundTuning,
         handleSetCadenzaTuning,
         handleResetCadenzaTuning,
         handleSetPartitaTuning,
@@ -495,6 +504,26 @@ export default function App() {
     );
 
     const coverUrl = getCoverUrl();
+    const currentSongArtist = useMemo(() => {
+        if (!currentSong) {
+            return null;
+        }
+        const joinedArtists = currentSong.ar?.map(artist => artist.name).filter(Boolean).join(', ');
+        if (joinedArtists) {
+            return joinedArtists;
+        }
+        const fallbackArtists = currentSong.artists?.map(artist => artist.name).filter(Boolean).join(', ');
+        if (fallbackArtists) {
+            return fallbackArtists;
+        }
+        return currentSong.localData?.matchedArtists || currentSong.localData?.artist || null;
+    }, [currentSong]);
+    const currentSongAlbum = useMemo(() => {
+        if (!currentSong) {
+            return null;
+        }
+        return currentSong.al?.name || currentSong.album?.name || currentSong.localData?.matchedAlbumName || currentSong.localData?.album || null;
+    }, [currentSong]);
 
     // Theme Controller
     // manages current theme, daylight mode, and related actions like generating AI themes 
@@ -1274,12 +1303,16 @@ export default function App() {
         handlePrevTrack,
         shuffleQueue,
         setVisualizerMode: handleSetVisualizerMode,
+        setVisualizerBackgroundMode: handleSetVisualizerBackgroundMode,
+        setMonetBackgroundTuning: handleSetMonetBackgroundTuning,
         toggleTransparentBackground: () => handleToggleTransparentPlayerBackground(!transparentPlayerBackground),
         toggleDaylightMode,
     }), [
         handleNextTrack,
         handlePrevTrack,
         handleSetVisualizerMode,
+        handleSetVisualizerBackgroundMode,
+        handleSetMonetBackgroundTuning,
         localSongs,
         navigateToHome,
         navigateToPlayer,
@@ -2223,9 +2256,12 @@ export default function App() {
                     currentLineIndex={currentLineIndex}
                     lines={lyrics?.lines || []}
                     theme={visualizerTheme}
+                    isDaylight={isDaylight}
                     audioPower={audioPower}
                     audioBands={audioBands}
                     songTitle={currentSong?.name}
+                    songArtist={currentSongArtist}
+                    songAlbum={currentSongAlbum}
                     coverUrl={getCoverUrl()}
                     showText={currentView === 'player' && !isSettingsModalOpen}
                     useCoverColorBg={useCoverColorBg}
@@ -2237,6 +2273,7 @@ export default function App() {
                     transparentBackground={currentView === 'player' && transparentPlayerBackground && !isSettingsModalOpen}
                     disableGeometricBackground={disableVisualizerGeometricBackground || isSettingsSubviewOpen}
                     disableVignette={disableVisualizerVignette}
+                    visualizerBackgroundMode={visualizerBackgroundMode}
                     lyricsFontScale={lyricsFontScale}
                     subtitleOverlayOpacity={subtitleOverlayOpacity}
                     isPlayerChromeHidden={isPlayerChromeHidden}
@@ -2247,8 +2284,12 @@ export default function App() {
                     fumeTuning={fumeTuning}
                     cappellaTuning={cappellaTuning}
                     tiltTuning={tiltTuning}
+                    monetBackgroundTuning={monetBackgroundTuning}
+                    monetTuning={monetTuning}
                     cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                     cappellaCustomAvatarImages={cappellaCustomAvatarImages}
+                    monetBackgroundImage={monetBackgroundImage}
+                    monetPortraitImage={monetPortraitImage}
                     onBack={navigateToHome}
                 />
             </div>

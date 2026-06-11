@@ -50,6 +50,8 @@ interface SettingsModalProps {
     onToggleNowPlayingStage?: (enabled: boolean) => Promise<void> | void;
     nowPlayingConnectionStatus?: NowPlayingConnectionStatus;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
+    aiTheme?: DualTheme | null;
+    customTheme?: DualTheme | null;
 }
 
 const QUARK_DOWNLOAD_URL = 'https://pan.quark.cn/s/6e4c6fa3bc6f';
@@ -82,6 +84,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     onToggleNowPlayingStage,
     nowPlayingConnectionStatus = 'disabled',
     onAudioOutputDeviceChange,
+    aiTheme,
+    customTheme,
 }) => {
     const { t } = useTranslation();
     const {
@@ -101,6 +105,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         backgroundOpacity,
         subtitleOverlayOpacity,
         visualizerOpacity,
+        visualizerBackgroundMode,
         isDaylight,
         visualizerMode,
         homeLayoutStyle,
@@ -111,10 +116,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         fumeTuning,
         cappellaTuning,
         tiltTuning,
+        monetBackgroundTuning,
+        monetTuning,
         cappellaCustomEmojiImages,
         isLoadingCappellaCustomEmojiPack,
         cappellaCustomAvatarImages,
         isLoadingCappellaCustomAvatarPack,
+        monetBackgroundImage,
+        isLoadingMonetBackgroundImage,
+        monetPortraitImage,
+        isLoadingMonetPortraitImage,
         lyricsFontStyle,
         lyricsFontScale,
         lyricsCustomFontFamily,
@@ -138,6 +149,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetBackgroundOpacity: setBackgroundOpacity,
         handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
         handleSetVisualizerOpacity: setVisualizerOpacity,
+        handleSetVisualizerBackgroundMode: onVisualizerBackgroundModeChange,
+        handleResetVisualizerBackgroundMode: onResetVisualizerBackgroundMode,
         handleSetVisualizerMode: onVisualizerModeChange,
         handleSetClassicTuning: onClassicTuningChange,
         handleResetClassicTuning: onResetClassicTuning,
@@ -149,6 +162,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleResetCappellaTuning: onResetCappellaTuning,
         handleSetTiltTuning: onTiltTuningChange,
         handleResetTiltTuning: onResetTiltTuning,
+        handleSetMonetBackgroundTuning: onMonetBackgroundTuningChange,
+        handleResetMonetBackgroundTuning: onResetMonetBackgroundTuning,
+        handleSetMonetTuning: onMonetTuningChange,
+        handleResetMonetTuning: onResetMonetTuning,
+        handleUploadMonetBackgroundImage: onUploadMonetBackgroundImage,
+        handleClearMonetBackgroundImage: onClearMonetBackgroundImage,
+        handleUploadMonetPortraitImage: onUploadMonetPortraitImage,
+        handleClearMonetPortraitImage: onClearMonetPortraitImage,
         handleImportCustomCappellaEmojiPack: onImportCappellaCustomEmojiPack,
         handleClearCustomCappellaEmojiPack: onClearCappellaCustomEmojiPack,
         handleImportCustomCappellaAvatar: onImportCappellaCustomAvatar,
@@ -1952,6 +1973,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         visualizerMode={visualizerMode}
                         backgroundOpacity={backgroundOpacity}
                         visualizerOpacity={visualizerOpacity}
+                        visualizerBackgroundMode={visualizerBackgroundMode}
                         useCoverColorBg={useCoverColorBg}
                         staticMode={staticMode}
                         transparentPlayerBackground={transparentPlayerBackground}
@@ -1965,8 +1987,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         fumeTuning={fumeTuning}
                         cappellaTuning={cappellaTuning}
                         tiltTuning={tiltTuning}
+                        monetBackgroundTuning={monetBackgroundTuning}
+                        monetTuning={monetTuning}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}
+                        monetBackgroundImage={monetBackgroundImage}
+                        monetPortraitImage={monetPortraitImage}
                         fontStyle={lyricsFontStyle}
                         fontScale={lyricsFontScale}
                         customFontFamily={lyricsCustomFontFamily}
@@ -1981,6 +2007,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onToggleCoverColorBg={onToggleCoverColorBg}
                         onToggleDisableVisualizerVignette={onToggleDisableVisualizerVignette}
                         onToggleDisableVisualizerGeometricBackground={onToggleDisableVisualizerGeometricBackground}
+                        onVisualizerBackgroundModeChange={onVisualizerBackgroundModeChange}
+                        onResetVisualizerBackgroundMode={onResetVisualizerBackgroundMode}
                         onToggleHideTranslationSubtitle={onToggleHidePlayerTranslationSubtitle}
                         onSubtitleOverlayOpacityChange={setSubtitleOverlayOpacity}
                         onClassicTuningChange={onClassicTuningChange}
@@ -1993,6 +2021,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onResetCappellaTuning={onResetCappellaTuning}
                         onTiltTuningChange={onTiltTuningChange}
                         onResetTiltTuning={onResetTiltTuning}
+                        onMonetBackgroundTuningChange={onMonetBackgroundTuningChange}
+                        onResetMonetBackgroundTuning={onResetMonetBackgroundTuning}
+                        onMonetTuningChange={onMonetTuningChange}
+                        onResetMonetTuning={onResetMonetTuning}
+                        onUploadMonetBackgroundImage={onUploadMonetBackgroundImage}
+                        onClearMonetBackgroundImage={onClearMonetBackgroundImage}
+                        isLoadingMonetBackgroundImage={isLoadingMonetBackgroundImage}
+                        onUploadMonetPortraitImage={onUploadMonetPortraitImage}
+                        onClearMonetPortraitImage={onClearMonetPortraitImage}
+                        isLoadingMonetPortraitImage={isLoadingMonetPortraitImage}
                         onImportCappellaCustomEmojiPack={onImportCappellaCustomEmojiPack}
                         onClearCappellaCustomEmojiPack={onClearCappellaCustomEmojiPack}
                         isLoadingCappellaCustomEmojiPack={isLoadingCappellaCustomEmojiPack}
@@ -2012,13 +2050,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
                         visualizerOpacity={visualizerOpacity}
+                        visualizerBackgroundMode={visualizerBackgroundMode}
                         classicTuning={classicTuning}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
                         fumeTuning={fumeTuning}
                         cappellaTuning={cappellaTuning}
+                        monetBackgroundTuning={monetBackgroundTuning}
+                        monetTuning={monetTuning}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}
+                        monetBackgroundImage={monetBackgroundImage}
+                        monetPortraitImage={monetPortraitImage}
                         lyricsFontStyle={lyricsFontStyle}
                         lyricsFontScale={lyricsFontScale}
                         lyricsCustomFontFamily={lyricsCustomFontFamily}
@@ -2065,6 +2108,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onToggleCustomThemePreferred={onToggleCustomThemePreferred}
                         onToggleSongThemeAutoSwitch={onToggleSongThemeAutoSwitch}
                         onToggleTransparentPlayerBackground={onToggleTransparentPlayerBackground}
+                        onSaveCustomTheme={onSaveCustomTheme}
                         settingsCardClass={settingsCardClass}
                         songThemeAutoSwitchEnabled={songThemeAutoSwitchEnabled}
                         theme={theme}
@@ -2076,6 +2120,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onChangeHomeLayoutStyle={onChangeHomeLayoutStyle}
                         grid3dCardStyle={grid3dCardStyle}
                         onChangeGrid3dCardStyle={onChangeGrid3dCardStyle}
+                        aiTheme={aiTheme}
+                        customTheme={customTheme}
                     />
                 ),
             })}

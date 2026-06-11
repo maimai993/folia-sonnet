@@ -35,6 +35,7 @@ export interface Theme {
   wordColors?: { word: string; color: string; }[];
   lyricsIcons?: string[];
   provider?: string;
+  description?: string;
 }
 
 export type CustomLyricsFontSource = 'system' | 'uploaded';
@@ -53,7 +54,7 @@ export interface DualTheme {
 
 export type ThemeMode = 'default' | 'ai' | 'custom';
 
-export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume';
+export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet';
 export type VisualizerMode = BuiltinVisualizerMode | (string & {});
 export type VisualizerFrameRate = 'off' | 120 | 90 | 60;
 
@@ -306,6 +307,55 @@ export const DEFAULT_TILT_TUNING: TiltTuning = {
   colorScheme: 'default',
 };
 
+export type MonetBackgroundSource = 'cover-derived' | 'uploaded-global';
+export type MonetBackgroundLayout = 'full-overlay' | 'half-pane-gradient';
+export type MonetBackgroundWashColorMode = 'theme' | 'custom';
+export type MonetAudioStyle = 'bar' | 'line';
+export type MonetPortraitSource = 'cover' | 'custom';
+export type VisualizerBackgroundMode = 'common' | 'monet';
+
+export interface MonetBackgroundTuning {
+  backgroundSource: MonetBackgroundSource;
+  backgroundLayout: MonetBackgroundLayout;
+  backgroundBlurPx: number;
+  backgroundOverlayOpacity: number;
+  backgroundGrayscale: number;
+  backgroundSaturation: number;
+  backgroundWash: number;
+  backgroundHalfPaneOffsetX: number;
+  backgroundWashColorMode: MonetBackgroundWashColorMode;
+  backgroundWashCustomColor: string;
+}
+
+export interface MonetTuning {
+  keywordColoringEnabled: boolean;
+  showDescription: boolean;
+  audioStyle: MonetAudioStyle;
+  fontScale: number;
+  portraitSource: MonetPortraitSource;
+}
+
+export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
+  backgroundSource: 'cover-derived',
+  backgroundLayout: 'half-pane-gradient',
+  backgroundBlurPx: 2,
+  backgroundOverlayOpacity: 0.42,
+  backgroundGrayscale: 0,
+  backgroundSaturation: 1.05,
+  backgroundWash: 0.16,
+  backgroundHalfPaneOffsetX: 0,
+  backgroundWashColorMode: 'theme',
+  backgroundWashCustomColor: '#8fb7ff',
+};
+
+export const DEFAULT_MONET_TUNING: MonetTuning = {
+  keywordColoringEnabled: true,
+  showDescription: true,
+  audioStyle: 'bar',
+  fontScale: 1.0,
+  portraitSource: 'cover',
+};
+
 export interface StoredCappellaEmojiImage {
   id: string;
   name: string;
@@ -327,6 +377,32 @@ export interface StoredCappellaAvatarImage {
 }
 
 export interface CappellaAvatarImage {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export interface StoredMonetBackgroundImage {
+  id: string;
+  name: string;
+  mimeType: string;
+  blob: Blob;
+}
+
+export interface MonetBackgroundImage {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export interface StoredMonetPortraitImage {
+  id: string;
+  name: string;
+  mimeType: string;
+  blob: Blob;
+}
+
+export interface MonetPortraitImage {
   id: string;
   name: string;
   url: string;
@@ -569,9 +645,10 @@ export type ReplayGainMode = 'off' | 'track' | 'album';
 import { MotionValue } from 'framer-motion';
 
 export interface AudioBands {
-  bass: MotionValue<number>;    // 20-150Hz (Circles)
-  lowMid: MotionValue<number>;  // 150-400Hz (Squares)
-  mid: MotionValue<number>;     // 400-1200Hz (Triangles)
-  vocal: MotionValue<number>;   // 1000-3500Hz (Icons)
-  treble: MotionValue<number>;  // 3500Hz+ (Crosses)
-}
+    bass: MotionValue<number>;    // 20-150Hz (Circles)
+    lowMid: MotionValue<number>;  // 150-400Hz (Squares)
+    mid: MotionValue<number>;     // 400-1200Hz (Triangles)
+    vocal: MotionValue<number>;   // 1000-3500Hz (Icons)
+    treble: MotionValue<number>;  // 3500Hz+ (Crosses)
+    spectrum?: MotionValue<Uint8Array>; // Raw analyser FFT magnitude bins for full-spectrum visualizers
+  }

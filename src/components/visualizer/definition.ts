@@ -9,25 +9,33 @@ import {
     type ClassicTuning,
     type FumeTuning,
     type Line,
+    type MonetBackgroundImage,
+    type MonetBackgroundTuning,
+    type MonetPortraitImage,
+    type MonetTuning,
     type PartitaTuning,
     type Theme,
     type TiltTuning,
+    type VisualizerBackgroundMode,
     type VisualizerMode,
 } from '../../types';
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
-export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'cappella' | 'tilt';
+export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'cappella' | 'tilt' | 'monet';
 
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
     currentLineIndex: number;
     lines: Line[];
     theme: Theme;
+    isDaylight?: boolean;
     audioPower: MotionValue<number>;
     audioBands: AudioBands;
     showText?: boolean;
     songTitle?: string | null;
+    songArtist?: string | null;
+    songAlbum?: string | null;
     coverUrl?: string | null;
     useCoverColorBg?: boolean;
     seed?: string | number;
@@ -39,6 +47,8 @@ export interface VisualizerSharedProps {
     disableVignette?: boolean;
     lyricsFontScale?: number;
     subtitleOverlayOpacity?: number;
+    visualizerBackgroundMode?: VisualizerBackgroundMode | null;
+    resolvedVisualizerBackgroundMode?: VisualizerBackgroundMode;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
     paused?: boolean;
@@ -52,6 +62,10 @@ export interface VisualizerSharedProps {
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
     tiltTuning?: TiltTuning;
+    monetBackgroundTuning?: MonetBackgroundTuning;
+    monetTuning?: MonetTuning;
+    monetBackgroundImage?: MonetBackgroundImage | null;
+    monetPortraitImage?: MonetPortraitImage | null;
 }
 
 export interface VisualizerSettingsPanelProps {
@@ -81,6 +95,18 @@ export interface VisualizerSettingsPanelProps {
     isCappellaCustomAvatarLoading?: boolean;
     tiltTuning?: TiltTuning;
     onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
+    monetTuning?: MonetTuning;
+    onMonetTuningChange?: (patch: Partial<MonetTuning>) => void;
+    monetBackgroundImage?: MonetBackgroundImage | null;
+    monetBackgroundTuning?: MonetBackgroundTuning;
+    onMonetBackgroundTuningChange?: (patch: Partial<MonetBackgroundTuning>) => void;
+    onUploadMonetBackgroundImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
+    onClearMonetBackgroundImage?: () => Promise<void> | void;
+    isLoadingMonetBackgroundImage?: boolean;
+    monetPortraitImage?: MonetPortraitImage | null;
+    onUploadMonetPortraitImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
+    onClearMonetPortraitImage?: () => Promise<void> | void;
+    isLoadingMonetPortraitImage?: boolean;
     /** Mark slider drag start so onChange only updates draft. */
     onSliderPointerDown?: () => void;
     /** Commit draft values to persistent store on slider release. */
@@ -93,6 +119,7 @@ export interface VisualizerSettingsResetProps {
     resetFumeTuning?: () => void;
     resetCappellaTuning?: () => void;
     resetTiltTuning?: () => void;
+    resetMonetTuning?: () => void;
     setDraftFumeTuning?: (tuning: FumeTuning) => void;
 }
 

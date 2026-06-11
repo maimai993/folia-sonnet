@@ -9,6 +9,8 @@ import {
     DEFAULT_CAPPELLA_TUNING,
     DEFAULT_CLASSIC_TUNING,
     DEFAULT_FUME_TUNING,
+    DEFAULT_MONET_BACKGROUND_TUNING,
+    DEFAULT_MONET_TUNING,
     DEFAULT_PARTITA_TUNING,
     DEFAULT_TILT_TUNING,
     type AudioBands,
@@ -18,10 +20,15 @@ import {
     type CadenzaTuning,
     type ClassicTuning,
     type FumeTuning,
+    type MonetBackgroundImage,
+    type MonetBackgroundTuning,
+    type MonetPortraitImage,
+    type MonetTuning,
     type PartitaTuning,
     type StoredCustomLyricsFont,
     type Theme,
     type TiltTuning,
+    type VisualizerBackgroundMode,
     type VisualizerMode,
 } from '../../types';
 import { resolveThemeFontStack } from '../../utils/fontStacks';
@@ -48,6 +55,7 @@ interface VisPlaygroundProps {
     transparentPlayerBackground?: boolean;
     disableVisualizerVignette?: boolean;
     disableVisualizerGeometricBackground?: boolean;
+    visualizerBackgroundMode?: VisualizerBackgroundMode | null;
     hideTranslationSubtitle?: boolean;
     subtitleOverlayOpacity?: number;
     classicTuning?: ClassicTuning;
@@ -56,8 +64,12 @@ interface VisPlaygroundProps {
     fumeTuning?: FumeTuning;
     cappellaTuning?: CappellaTuning;
     tiltTuning?: TiltTuning;
+    monetBackgroundTuning?: MonetBackgroundTuning;
+    monetTuning?: MonetTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
+    monetBackgroundImage?: MonetBackgroundImage | null;
+    monetPortraitImage?: MonetPortraitImage | null;
     fontStyle: Theme['fontStyle'];
     fontScale: number;
     customFontFamily: string | null;
@@ -72,6 +84,8 @@ interface VisPlaygroundProps {
     onToggleCoverColorBg?: (enabled: boolean) => void;
     onToggleDisableVisualizerVignette?: (disabled: boolean) => void;
     onToggleDisableVisualizerGeometricBackground?: (disabled: boolean) => void;
+    onVisualizerBackgroundModeChange?: (mode: VisualizerBackgroundMode) => void;
+    onResetVisualizerBackgroundMode?: () => void;
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
@@ -84,6 +98,16 @@ interface VisPlaygroundProps {
     onResetCappellaTuning?: () => void;
     onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
     onResetTiltTuning?: () => void;
+    onMonetBackgroundTuningChange?: (patch: Partial<MonetBackgroundTuning>) => void;
+    onResetMonetBackgroundTuning?: () => void;
+    onMonetTuningChange?: (patch: Partial<MonetTuning>) => void;
+    onResetMonetTuning?: () => void;
+    onUploadMonetBackgroundImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
+    onClearMonetBackgroundImage?: () => Promise<void> | void;
+    isLoadingMonetBackgroundImage?: boolean;
+    onUploadMonetPortraitImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
+    onClearMonetPortraitImage?: () => Promise<void> | void;
+    isLoadingMonetPortraitImage?: boolean;
     onImportCappellaCustomEmojiPack?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
     isLoadingCappellaCustomEmojiPack?: boolean;
@@ -223,6 +247,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     transparentPlayerBackground = false,
     disableVisualizerVignette = false,
     disableVisualizerGeometricBackground = false,
+    visualizerBackgroundMode = null,
     hideTranslationSubtitle = false,
     subtitleOverlayOpacity = 0.6,
     classicTuning = DEFAULT_CLASSIC_TUNING,
@@ -231,8 +256,12 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     fumeTuning = DEFAULT_FUME_TUNING,
     cappellaTuning = DEFAULT_CAPPELLA_TUNING,
     tiltTuning = DEFAULT_TILT_TUNING,
+    monetBackgroundTuning = DEFAULT_MONET_BACKGROUND_TUNING,
+    monetTuning = DEFAULT_MONET_TUNING,
     cappellaCustomEmojiImages = [],
     cappellaCustomAvatarImages = [],
+    monetBackgroundImage = null,
+    monetPortraitImage = null,
     fontStyle,
     fontScale,
     customFontFamily,
@@ -247,6 +276,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onToggleCoverColorBg,
     onToggleDisableVisualizerVignette,
     onToggleDisableVisualizerGeometricBackground,
+    onVisualizerBackgroundModeChange,
+    onResetVisualizerBackgroundMode,
     onToggleHideTranslationSubtitle,
     onSubtitleOverlayOpacityChange,
     onClassicTuningChange,
@@ -259,6 +290,16 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onResetCappellaTuning,
     onTiltTuningChange,
     onResetTiltTuning,
+    onMonetBackgroundTuningChange,
+    onResetMonetBackgroundTuning,
+    onMonetTuningChange,
+    onResetMonetTuning,
+    onUploadMonetBackgroundImage,
+    onClearMonetBackgroundImage,
+    isLoadingMonetBackgroundImage = false,
+    onUploadMonetPortraitImage,
+    onClearMonetPortraitImage,
+    isLoadingMonetPortraitImage = false,
     onImportCappellaCustomEmojiPack,
     onClearCappellaCustomEmojiPack,
     isLoadingCappellaCustomEmojiPack = false,
@@ -275,6 +316,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const mid = useMotionValue(0.12);
     const vocal = useMotionValue(0.2);
     const treble = useMotionValue(0.1);
+    const spectrum = useMotionValue(new Uint8Array(64));
     const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, 0));
     const [isFontPickerOpen, setIsFontPickerOpen] = useState(false);
     const [isLoadingSystemFonts, setIsLoadingSystemFonts] = useState(false);
@@ -291,6 +333,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [draftPartitaTuning, setDraftPartitaTuning] = useState<PartitaTuning>(partitaTuning);
     const [draftFumeTuning, setDraftFumeTuning] = useState<FumeTuning>(fumeTuning);
     const [draftTiltTuning, setDraftTiltTuning] = useState<TiltTuning>(tiltTuning);
+    const [draftMonetBackgroundTuning, setDraftMonetBackgroundTuning] = useState<MonetBackgroundTuning>(monetBackgroundTuning);
+    const [draftMonetTuning, setDraftMonetTuning] = useState<MonetTuning>(monetTuning);
     const [activeEditSection, setActiveEditSection] = useState<VisPlaygroundEditSection>('common');
     const fontListRef = React.useRef<HTMLDivElement>(null);
     const fontVirtualListRef = useListRef(null);
@@ -304,7 +348,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         mid,
         vocal,
         treble,
-    }), [bass, lowMid, mid, treble, vocal]);
+        spectrum,
+    }), [bass, lowMid, mid, spectrum, treble, vocal]);
 
     const normalizedFontScale = clampFontScale(draftFontScale);
     const builtinFontOptions: PresetOption<Theme['fontStyle']>[] = useMemo(() => ([
@@ -365,6 +410,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     useEffect(() => { setDraftPartitaTuning(partitaTuning); }, [partitaTuning]);
     useEffect(() => { setDraftFumeTuning(fumeTuning); }, [fumeTuning]);
     useEffect(() => { setDraftTiltTuning(tiltTuning); }, [tiltTuning]);
+    useEffect(() => { setDraftMonetBackgroundTuning(monetBackgroundTuning); }, [monetBackgroundTuning]);
+    useEffect(() => { setDraftMonetTuning(monetTuning); }, [monetTuning]);
 
     useEffect(() => {
         let frameId = 0;
@@ -385,12 +432,25 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             vocal.set(wave(3.4, 0.0038, 0.16, 0.22));
             treble.set(wave(4.2, 0.0046, 0.08, 0.14));
 
+            const nextSpectrum = new Uint8Array(64);
+            for (let index = 0; index < nextSpectrum.length; index += 1) {
+                const normalizedIndex = index / Math.max(1, nextSpectrum.length - 1);
+                const lowShape = Math.exp(-normalizedIndex * 2.4);
+                const harmonic =
+                    Math.sin(now * 0.0027 + normalizedIndex * Math.PI * 3.4) * 0.18 +
+                    Math.sin(now * 0.0052 + normalizedIndex * Math.PI * 11.5) * 0.08;
+                const shimmer = Math.sin(now * 0.0018 + normalizedIndex * Math.PI * 1.2) * 0.12;
+                const amplitude = Math.max(0, Math.min(1, lowShape * 0.8 + 0.08 + harmonic + shimmer));
+                nextSpectrum[index] = Math.round(amplitude * 255);
+            }
+            spectrum.set(nextSpectrum);
+
             frameId = window.requestAnimationFrame(tick);
         };
 
         frameId = window.requestAnimationFrame(tick);
         return () => window.cancelAnimationFrame(frameId);
-    }, [audioPower, bass, currentTime, lowMid, mid, treble, visualizerMode, vocal]);
+    }, [audioPower, bass, currentTime, lowMid, mid, spectrum, treble, visualizerMode, vocal]);
 
     useMotionValueEvent(currentTime, 'change', latest => {
         const nextIndex = findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, latest);
@@ -424,6 +484,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             resetFumeTuning: onResetFumeTuning,
             resetCappellaTuning: onResetCappellaTuning,
             resetTiltTuning: onResetTiltTuning,
+            resetMonetTuning: onResetMonetTuning,
             setDraftFumeTuning,
         });
     };
@@ -653,12 +714,35 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         }
     };
 
+    const handleMonetBackgroundTuningDraft = (patch: Partial<MonetBackgroundTuning>) => {
+        const next = { ...draftMonetBackgroundTuning, ...patch };
+        setDraftMonetBackgroundTuning(next);
+        if (!isDraggingSlider.current) {
+            onMonetBackgroundTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onMonetBackgroundTuningChange?.(patch);
+        }
+    };
+
+    const handleMonetTuningDraft = (patch: Partial<MonetTuning>) => {
+        const next = { ...draftMonetTuning, ...patch };
+        setDraftMonetTuning(next);
+        if (!isDraggingSlider.current) {
+            onMonetTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onMonetTuningChange?.(patch);
+        }
+    };
+
     const handleResetBackgroundSettings = () => {
         setDraftBackgroundOpacity(0.75);
         onBackgroundOpacityChange?.(0.75);
         onToggleCoverColorBg?.(false);
         onToggleDisableVisualizerVignette?.(false);
         onToggleDisableVisualizerGeometricBackground?.(false);
+        onResetVisualizerBackgroundMode?.();
+        setDraftMonetBackgroundTuning(DEFAULT_MONET_BACKGROUND_TUNING);
+        onResetMonetBackgroundTuning?.();
     };
 
     const handleResetSubtitleSettings = () => {
@@ -742,6 +826,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 currentLineIndex={currentLineIndex}
                                 lines={VIS_PLAYGROUND_PREVIEW_LINES}
                                 theme={previewTheme}
+                                isDaylight={isDaylight}
                                 audioPower={audioPower}
                                 audioBands={audioBands}
                                 songTitle="Cappella Preview"
@@ -755,6 +840,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 transparentBackground={transparentPlayerBackground}
                                 disableVignette={disableVisualizerVignette}
                                 disableGeometricBackground={disableVisualizerGeometricBackground}
+                                visualizerBackgroundMode={visualizerBackgroundMode}
                                 lyricsFontScale={normalizedFontScale}
                                 subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                                 hideTranslationSubtitle={hideTranslationSubtitle}
@@ -764,8 +850,12 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 fumeTuning={resolvedFumeTuning}
                                 cappellaTuning={cappellaTuning}
                                 tiltTuning={draftTiltTuning}
+                                monetBackgroundTuning={draftMonetBackgroundTuning}
+                                monetTuning={draftMonetTuning}
                                 cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                                 cappellaCustomAvatarImages={cappellaCustomAvatarImages}
+                                monetBackgroundImage={monetBackgroundImage}
+                                monetPortraitImage={monetPortraitImage}
                                 seed={getVisualizerScopedSeed(visualizerMode, 'vis-playground')}
                             />
                         </div>
@@ -799,6 +889,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onToggleDisableVisualizerVignette={onToggleDisableVisualizerVignette}
                         disableVisualizerGeometricBackground={disableVisualizerGeometricBackground}
                         onToggleDisableVisualizerGeometricBackground={onToggleDisableVisualizerGeometricBackground}
+                        visualizerBackgroundMode={visualizerBackgroundMode}
+                        onVisualizerBackgroundModeChange={onVisualizerBackgroundModeChange}
                         onResetBackgroundSettings={handleResetBackgroundSettings}
                         fontStyleValue={customFontFamily ? 'custom' : fontStyle}
                         fontStyleOptions={fontStyleOptions}
@@ -825,6 +917,19 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         isLoadingCappellaCustomAvatarPack={isLoadingCappellaCustomAvatarPack}
                         tiltTuning={draftTiltTuning}
                         onTiltTuningChange={handleTiltTuningDraft}
+                        monetBackgroundTuning={draftMonetBackgroundTuning}
+                        onMonetBackgroundTuningChange={handleMonetBackgroundTuningDraft}
+                        monetTuning={draftMonetTuning}
+                        onMonetTuningChange={handleMonetTuningDraft}
+                        onResetMonetTuning={onResetMonetTuning}
+                        monetBackgroundImage={monetBackgroundImage}
+                        onUploadMonetBackgroundImage={onUploadMonetBackgroundImage}
+                        onClearMonetBackgroundImage={onClearMonetBackgroundImage}
+                        isLoadingMonetBackgroundImage={isLoadingMonetBackgroundImage}
+                        monetPortraitImage={monetPortraitImage}
+                        onUploadMonetPortraitImage={onUploadMonetPortraitImage}
+                        onClearMonetPortraitImage={onClearMonetPortraitImage}
+                        isLoadingMonetPortraitImage={isLoadingMonetPortraitImage}
                         hideTranslationSubtitle={hideTranslationSubtitle}
                         onToggleHideTranslationSubtitle={onToggleHideTranslationSubtitle}
                         subtitleOverlayOpacity={draftSubtitleOverlayOpacity}

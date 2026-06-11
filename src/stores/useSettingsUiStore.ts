@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import type React from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type FumeTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type Theme, type TiltTuning, type VisualizerFrameRate, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type FumeTuning, type MonetBackgroundImage, type MonetBackgroundLayout, type MonetBackgroundSource, type MonetBackgroundTuning, type MonetBackgroundWashColorMode, type MonetPortraitImage, type MonetPortraitSource, type MonetTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type StoredMonetBackgroundImage, type StoredMonetPortraitImage, type Theme, type TiltTuning, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
 import { buildStoredCappellaAvatar, clearCustomCappellaAvatar, isSupportedCappellaAvatarFile, saveCustomCappellaAvatar } from '../services/cappellaAvatarPack';
 import { clearUploadedLyricsFont, uploadAndRegisterLyricsFont } from '../services/customLyricsFont';
+import { buildStoredMonetBackgroundImage, clearMonetBackgroundImage, isSupportedMonetBackgroundFile, saveMonetBackgroundImage } from '../services/monetBackgroundImage';
+import { buildStoredMonetPortraitImage, clearMonetPortraitImage, isSupportedMonetPortraitFile, saveMonetPortraitImage } from '../services/monetPortraitImage';
 import { parseVisualizerFrameRate, setGlobalVisualizerFrameRate, VISUALIZER_FRAME_RATE_STORAGE_KEY } from '../utils/frameRateLimiter';
 
 // src/stores/useSettingsUiStore.ts
@@ -340,6 +342,179 @@ const readStoredTiltTuning = (): TiltTuning => {
     }
 };
 
+const resolveMonetBackgroundSource = (value: MonetBackgroundSource | undefined): MonetBackgroundSource => (
+    value === 'uploaded-global' ? 'uploaded-global' : DEFAULT_MONET_BACKGROUND_TUNING.backgroundSource
+);
+
+const resolveMonetBackgroundLayout = (value: MonetBackgroundLayout | undefined): MonetBackgroundLayout => (
+    value === 'full-overlay' || value === 'half-pane-gradient'
+        ? value
+        : DEFAULT_MONET_BACKGROUND_TUNING.backgroundLayout
+);
+
+const resolveMonetBackgroundWashColorMode = (
+    value: MonetBackgroundWashColorMode | undefined,
+): MonetBackgroundWashColorMode => (
+    value === 'custom' ? 'custom' : DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashColorMode
+);
+
+const clampMonetBackgroundBlur = (value: number, fallback: number) => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(60, Math.max(0, value));
+};
+
+const clampUnitInterval = (value: number, fallback: number) => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(1, Math.max(0, value));
+};
+
+const clampMonetBackgroundSaturation = (value: number, fallback: number) => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(2, Math.max(0, value));
+};
+
+const clampMonetBackgroundOffsetX = (value: number, fallback: number) => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(40, Math.max(-40, value));
+};
+
+const clampMonetFontScale = (value: number, fallback: number) => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(1.5, Math.max(0.7, value));
+};
+
+const normalizeHexColor = (value: unknown, fallback: string) => {
+    if (typeof value !== 'string') {
+        return fallback;
+    }
+
+    const trimmed = value.trim();
+    const withoutHash = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+    if (!/^[0-9a-fA-F]{6}$/.test(withoutHash)) {
+        return fallback;
+    }
+
+    return `#${withoutHash.toLowerCase()}`;
+};
+
+const resolveMonetPortraitSource = (value: MonetPortraitSource | undefined): MonetPortraitSource => (
+    value === 'custom' ? 'custom' : DEFAULT_MONET_TUNING.portraitSource
+);
+
+const readStoredVisualizerBackgroundMode = (): VisualizerBackgroundMode | null => {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    const saved = localStorage.getItem('visualizer_background_mode');
+    return saved === 'common' || saved === 'monet' ? saved : null;
+};
+
+export const resolveVisualizerBackgroundMode = (
+    storedMode: VisualizerBackgroundMode | null | undefined,
+    visualizerMode: VisualizerMode,
+): VisualizerBackgroundMode => storedMode ?? (visualizerMode === 'monet' ? 'monet' : 'common');
+
+type StoredMonetBackgroundTuningInput = Partial<MonetBackgroundTuning> & {
+    backgroundCropMode?: unknown;
+    coverPaneRatio?: unknown;
+    lyricsFocusScale?: unknown;
+};
+
+export const resolveStoredMonetBackgroundTuning = (parsed: StoredMonetBackgroundTuningInput): MonetBackgroundTuning => ({
+    backgroundSource: resolveMonetBackgroundSource(parsed.backgroundSource),
+    backgroundLayout: resolveMonetBackgroundLayout(parsed.backgroundLayout),
+    backgroundBlurPx: clampMonetBackgroundBlur(
+        parsed.backgroundBlurPx ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundBlurPx,
+        DEFAULT_MONET_BACKGROUND_TUNING.backgroundBlurPx,
+    ),
+    backgroundOverlayOpacity: clampUnitInterval(
+        parsed.backgroundOverlayOpacity ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundOverlayOpacity,
+        DEFAULT_MONET_BACKGROUND_TUNING.backgroundOverlayOpacity,
+    ),
+    backgroundGrayscale: clampUnitInterval(
+        parsed.backgroundGrayscale ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundGrayscale,
+        DEFAULT_MONET_BACKGROUND_TUNING.backgroundGrayscale,
+    ),
+    backgroundSaturation: clampMonetBackgroundSaturation(
+        parsed.backgroundSaturation ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundSaturation,
+        DEFAULT_MONET_BACKGROUND_TUNING.backgroundSaturation,
+    ),
+    backgroundWash: clampUnitInterval(
+        parsed.backgroundWash ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundWash,
+        DEFAULT_MONET_BACKGROUND_TUNING.backgroundWash,
+    ),
+    backgroundHalfPaneOffsetX: clampMonetBackgroundOffsetX(
+        parsed.backgroundHalfPaneOffsetX ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundHalfPaneOffsetX,
+        DEFAULT_MONET_BACKGROUND_TUNING.backgroundHalfPaneOffsetX,
+    ),
+    backgroundWashColorMode: resolveMonetBackgroundWashColorMode(parsed.backgroundWashColorMode),
+    backgroundWashCustomColor: normalizeHexColor(
+        parsed.backgroundWashCustomColor,
+        DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashCustomColor,
+    ),
+});
+
+type StoredMonetTuningInput = Partial<MonetTuning> & StoredMonetBackgroundTuningInput;
+
+export const resolveStoredMonetTuning = (parsed: StoredMonetTuningInput): MonetTuning => ({
+    keywordColoringEnabled: parsed.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
+    showDescription: parsed.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
+    audioStyle: parsed.audioStyle === 'line' ? 'line' : DEFAULT_MONET_TUNING.audioStyle,
+    fontScale: clampMonetFontScale(
+        parsed.fontScale ?? DEFAULT_MONET_TUNING.fontScale,
+        DEFAULT_MONET_TUNING.fontScale,
+    ),
+    portraitSource: resolveMonetPortraitSource(parsed.portraitSource),
+});
+
+const readStoredMonetBackgroundTuning = (): MonetBackgroundTuning => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_MONET_BACKGROUND_TUNING;
+    }
+
+    const saved = localStorage.getItem('monet_background_tuning') ?? localStorage.getItem('monet_tuning');
+    if (!saved) return DEFAULT_MONET_BACKGROUND_TUNING;
+
+    try {
+        const parsed = JSON.parse(saved) as StoredMonetBackgroundTuningInput;
+        return resolveStoredMonetBackgroundTuning(parsed);
+    } catch {
+        return DEFAULT_MONET_BACKGROUND_TUNING;
+    }
+};
+
+const readStoredMonetTuning = (): MonetTuning => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_MONET_TUNING;
+    }
+
+    const saved = localStorage.getItem('monet_tuning');
+    if (!saved) return DEFAULT_MONET_TUNING;
+
+    try {
+        const parsed = JSON.parse(saved) as StoredMonetTuningInput;
+        return resolveStoredMonetTuning(parsed);
+    } catch {
+        return DEFAULT_MONET_TUNING;
+    }
+};
+
 const readStoredLyricsFontStyle = (): Theme['fontStyle'] => {
     if (typeof window === 'undefined') {
         return 'sans';
@@ -491,6 +666,7 @@ type SettingsUiState = {
     backgroundOpacity: number;
     subtitleOverlayOpacity: number;
     visualizerOpacity: number;
+    visualizerBackgroundMode: VisualizerBackgroundMode | null;
     visualizerFrameRate: VisualizerFrameRate;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
@@ -500,12 +676,20 @@ type SettingsUiState = {
     fumeTuning: FumeTuning;
     cappellaTuning: CappellaTuning;
     tiltTuning: TiltTuning;
+    monetBackgroundTuning: MonetBackgroundTuning;
+    monetTuning: MonetTuning;
     storedCappellaEmojiPack: StoredCappellaEmojiImage[];
     cappellaCustomEmojiImages: CappellaEmojiImage[];
     isLoadingCappellaCustomEmojiPack: boolean;
     storedCappellaAvatarPack: StoredCappellaAvatarImage[];
     cappellaCustomAvatarImages: CappellaAvatarImage[];
     isLoadingCappellaCustomAvatarPack: boolean;
+    storedMonetBackgroundImage: StoredMonetBackgroundImage | null;
+    monetBackgroundImage: MonetBackgroundImage | null;
+    isLoadingMonetBackgroundImage: boolean;
+    storedMonetPortraitImage: StoredMonetPortraitImage | null;
+    monetPortraitImage: MonetPortraitImage | null;
+    isLoadingMonetPortraitImage: boolean;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
     lyricsCustomFont: StoredCustomLyricsFont | null;
@@ -533,6 +717,12 @@ type SettingsUiState = {
     setStoredCappellaAvatarPack: (pack: StoredCappellaAvatarImage[]) => void;
     setCappellaCustomAvatarImages: (images: CappellaAvatarImage[]) => void;
     setIsLoadingCappellaCustomAvatarPack: (loading: boolean) => void;
+    setStoredMonetBackgroundImage: (image: StoredMonetBackgroundImage | null) => void;
+    setMonetBackgroundImage: (image: MonetBackgroundImage | null) => void;
+    setIsLoadingMonetBackgroundImage: (loading: boolean) => void;
+    setStoredMonetPortraitImage: (image: StoredMonetPortraitImage | null) => void;
+    setMonetPortraitImage: (image: MonetPortraitImage | null) => void;
+    setIsLoadingMonetPortraitImage: (loading: boolean) => void;
     clearLyricsCustomFontAfterRestoreFailure: (message: StatusMessage) => void;
     setIsSubSettingsViewOpen: (open: boolean) => void;
     openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null) => void;
@@ -553,6 +743,8 @@ type SettingsUiState = {
     handleSetBackgroundOpacity: (opacity: number) => void;
     handleSetSubtitleOverlayOpacity: (opacity: number) => void;
     handleSetVisualizerOpacity: (opacity: number) => void;
+    handleSetVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
+    handleResetVisualizerBackgroundMode: () => void;
     handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
     setDaylightPreference: (enabled: boolean) => void;
     handleSetVisualizerMode: (mode: VisualizerMode) => void;
@@ -568,6 +760,14 @@ type SettingsUiState = {
     handleResetCappellaTuning: () => void;
     handleSetTiltTuning: (patch: Partial<TiltTuning>) => void;
     handleResetTiltTuning: () => void;
+    handleSetMonetBackgroundTuning: (patch: Partial<MonetBackgroundTuning>) => void;
+    handleResetMonetBackgroundTuning: () => void;
+    handleSetMonetTuning: (patch: Partial<MonetTuning>) => void;
+    handleResetMonetTuning: () => void;
+    handleUploadMonetBackgroundImage: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
+    handleClearMonetBackgroundImage: () => Promise<void>;
+    handleUploadMonetPortraitImage: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
+    handleClearMonetPortraitImage: () => Promise<void>;
     handleImportCustomCappellaEmojiPack: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     handleClearCustomCappellaEmojiPack: () => Promise<void>;
     handleImportCustomCappellaAvatar: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
@@ -611,6 +811,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     backgroundOpacity: readStoredBackgroundOpacity(),
     subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
     visualizerOpacity: readStoredVisualizerOpacity(),
+    visualizerBackgroundMode: readStoredVisualizerBackgroundMode(),
     visualizerFrameRate: readStoredVisualizerFrameRate(),
     isDaylight: getStoredBoolean('default_theme_daylight', false),
     visualizerMode: readStoredVisualizerMode(),
@@ -620,12 +821,20 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     fumeTuning: readStoredFumeTuning(),
     cappellaTuning: readStoredCappellaTuning(),
     tiltTuning: readStoredTiltTuning(),
+    monetBackgroundTuning: readStoredMonetBackgroundTuning(),
+    monetTuning: readStoredMonetTuning(),
     storedCappellaEmojiPack: [],
     cappellaCustomEmojiImages: [],
     isLoadingCappellaCustomEmojiPack: true,
     storedCappellaAvatarPack: [],
     cappellaCustomAvatarImages: [],
     isLoadingCappellaCustomAvatarPack: true,
+    storedMonetBackgroundImage: null,
+    monetBackgroundImage: null,
+    isLoadingMonetBackgroundImage: true,
+    storedMonetPortraitImage: null,
+    monetPortraitImage: null,
+    isLoadingMonetPortraitImage: true,
     lyricsFontStyle: readStoredLyricsFontStyle(),
     lyricsFontScale: readStoredLyricsFontScale(),
     lyricsCustomFont: readStoredCustomLyricsFont(),
@@ -676,6 +885,12 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     setStoredCappellaAvatarPack: (pack) => set({ storedCappellaAvatarPack: pack }),
     setCappellaCustomAvatarImages: (images) => set({ cappellaCustomAvatarImages: images }),
     setIsLoadingCappellaCustomAvatarPack: (loading) => set({ isLoadingCappellaCustomAvatarPack: loading }),
+    setStoredMonetBackgroundImage: (image) => set({ storedMonetBackgroundImage: image }),
+    setMonetBackgroundImage: (image) => set({ monetBackgroundImage: image }),
+    setIsLoadingMonetBackgroundImage: (loading) => set({ isLoadingMonetBackgroundImage: loading }),
+    setStoredMonetPortraitImage: (image) => set({ storedMonetPortraitImage: image }),
+    setMonetPortraitImage: (image) => set({ monetPortraitImage: image }),
+    setIsLoadingMonetPortraitImage: (loading) => set({ isLoadingMonetPortraitImage: loading }),
     clearLyricsCustomFontAfterRestoreFailure: (message) => {
         if (typeof window !== 'undefined') {
             localStorage.removeItem('lyrics_custom_font');
@@ -825,6 +1040,18 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem(VISUALIZER_OPACITY_STORAGE_KEY, String(next));
         }
         set({ visualizerOpacity: next });
+    },
+    handleSetVisualizerBackgroundMode: (mode) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('visualizer_background_mode', mode);
+        }
+        set({ visualizerBackgroundMode: mode });
+    },
+    handleResetVisualizerBackgroundMode: () => {
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem('visualizer_background_mode');
+        }
+        set({ visualizerBackgroundMode: null });
     },
     handleSetVisualizerFrameRate: (frameRate) => {
         if (typeof window !== 'undefined') {
@@ -981,6 +1208,106 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ tiltTuning: DEFAULT_TILT_TUNING });
         notify(get, { type: 'info', text: '倾诉参数已重置' });
+    },
+    handleSetMonetBackgroundTuning: (patch) => {
+        const prev = get().monetBackgroundTuning;
+        const next = resolveStoredMonetBackgroundTuning({
+            ...prev,
+            ...patch,
+        });
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('monet_background_tuning', JSON.stringify(next));
+        }
+        set({ monetBackgroundTuning: next });
+    },
+    handleResetMonetBackgroundTuning: () => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('monet_background_tuning', JSON.stringify(DEFAULT_MONET_BACKGROUND_TUNING));
+        }
+        set({ monetBackgroundTuning: DEFAULT_MONET_BACKGROUND_TUNING });
+        notify(get, { type: 'info', text: '莫奈背景参数已重置' });
+    },
+    handleSetMonetTuning: (patch) => {
+        const prev = get().monetTuning;
+        const next = resolveStoredMonetTuning({
+            ...prev,
+            ...patch,
+        });
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('monet_tuning', JSON.stringify(next));
+        }
+        set({ monetTuning: next });
+    },
+    handleResetMonetTuning: () => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('monet_tuning', JSON.stringify(DEFAULT_MONET_TUNING));
+        }
+        set({ monetTuning: DEFAULT_MONET_TUNING });
+        notify(get, { type: 'info', text: '莫奈参数已重置' });
+    },
+    handleUploadMonetBackgroundImage: async (files) => {
+        const file = files[0];
+        if (!file) {
+            return { ok: false, error: '请选择图片文件。' };
+        }
+
+        if (!isSupportedMonetBackgroundFile(file)) {
+            return { ok: false, error: '仅支持 png、jpg、jpeg、gif、webp、svg 图片。' };
+        }
+
+        const image = buildStoredMonetBackgroundImage(file);
+        await saveMonetBackgroundImage(image);
+        set({ storedMonetBackgroundImage: image });
+        notify(get, { type: 'success', text: 'Monet 背景图已更新' });
+        return { ok: true };
+    },
+    handleClearMonetBackgroundImage: async () => {
+        await clearMonetBackgroundImage();
+        const prev = get().monetBackgroundTuning;
+        const nextTuning = prev.backgroundSource === 'uploaded-global'
+            ? { ...prev, backgroundSource: 'cover-derived' as const }
+            : prev;
+        if (nextTuning !== prev && typeof window !== 'undefined') {
+            localStorage.setItem('monet_background_tuning', JSON.stringify(nextTuning));
+        }
+        set({
+            storedMonetBackgroundImage: null,
+            monetBackgroundImage: null,
+            monetBackgroundTuning: nextTuning,
+        });
+        notify(get, { type: 'info', text: 'Monet 背景图已清空' });
+    },
+    handleUploadMonetPortraitImage: async (files) => {
+        const file = files[0];
+        if (!file) {
+            return { ok: false, error: '请选择图片文件。' };
+        }
+
+        if (!isSupportedMonetPortraitFile(file)) {
+            return { ok: false, error: '仅支持 png、jpg、jpeg、gif、webp、svg 图片。' };
+        }
+
+        const image = buildStoredMonetPortraitImage(file);
+        await saveMonetPortraitImage(image);
+        set({ storedMonetPortraitImage: image });
+        notify(get, { type: 'success', text: 'Monet 肖像图已更新' });
+        return { ok: true };
+    },
+    handleClearMonetPortraitImage: async () => {
+        await clearMonetPortraitImage();
+        const prev = get().monetTuning;
+        const nextTuning = prev.portraitSource === 'custom'
+            ? { ...prev, portraitSource: 'cover' as const }
+            : prev;
+        if (nextTuning !== prev && typeof window !== 'undefined') {
+            localStorage.setItem('monet_tuning', JSON.stringify(nextTuning));
+        }
+        set({
+            storedMonetPortraitImage: null,
+            monetPortraitImage: null,
+            monetTuning: nextTuning,
+        });
+        notify(get, { type: 'info', text: 'Monet 肖像图已清空' });
     },
     handleImportCustomCappellaEmojiPack: async (files) => {
         if (files.length === 0) {
@@ -1236,6 +1563,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     backgroundOpacity: state.backgroundOpacity,
     subtitleOverlayOpacity: state.subtitleOverlayOpacity,
     visualizerOpacity: state.visualizerOpacity,
+    visualizerBackgroundMode: state.visualizerBackgroundMode,
     visualizerFrameRate: state.visualizerFrameRate,
     isDaylight: state.isDaylight,
     visualizerMode: state.visualizerMode,
@@ -1251,10 +1579,16 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     fumeTuning: state.fumeTuning,
     cappellaTuning: state.cappellaTuning,
     tiltTuning: state.tiltTuning,
+    monetBackgroundTuning: state.monetBackgroundTuning,
+    monetTuning: state.monetTuning,
     cappellaCustomEmojiImages: state.cappellaCustomEmojiImages,
     isLoadingCappellaCustomEmojiPack: state.isLoadingCappellaCustomEmojiPack,
     cappellaCustomAvatarImages: state.cappellaCustomAvatarImages,
     isLoadingCappellaCustomAvatarPack: state.isLoadingCappellaCustomAvatarPack,
+    monetBackgroundImage: state.monetBackgroundImage,
+    isLoadingMonetBackgroundImage: state.isLoadingMonetBackgroundImage,
+    monetPortraitImage: state.monetPortraitImage,
+    isLoadingMonetPortraitImage: state.isLoadingMonetPortraitImage,
     lyricsFontStyle: state.lyricsFontStyle,
     lyricsFontScale: state.lyricsFontScale,
     lyricsCustomFontFamily: state.lyricsCustomFont?.family ?? null,
@@ -1282,6 +1616,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
     handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
     handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
+    handleSetVisualizerBackgroundMode: state.handleSetVisualizerBackgroundMode,
+    handleResetVisualizerBackgroundMode: state.handleResetVisualizerBackgroundMode,
     handleSetVisualizerFrameRate: state.handleSetVisualizerFrameRate,
     setDaylightPreference: state.setDaylightPreference,
     handleSetVisualizerMode: state.handleSetVisualizerMode,
@@ -1297,6 +1633,14 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleResetCappellaTuning: state.handleResetCappellaTuning,
     handleSetTiltTuning: state.handleSetTiltTuning,
     handleResetTiltTuning: state.handleResetTiltTuning,
+    handleSetMonetBackgroundTuning: state.handleSetMonetBackgroundTuning,
+    handleResetMonetBackgroundTuning: state.handleResetMonetBackgroundTuning,
+    handleSetMonetTuning: state.handleSetMonetTuning,
+    handleResetMonetTuning: state.handleResetMonetTuning,
+    handleUploadMonetBackgroundImage: state.handleUploadMonetBackgroundImage,
+    handleClearMonetBackgroundImage: state.handleClearMonetBackgroundImage,
+    handleUploadMonetPortraitImage: state.handleUploadMonetPortraitImage,
+    handleClearMonetPortraitImage: state.handleClearMonetPortraitImage,
     handleImportCustomCappellaEmojiPack: state.handleImportCustomCappellaEmojiPack,
     handleClearCustomCappellaEmojiPack: state.handleClearCustomCappellaEmojiPack,
     handleImportCustomCappellaAvatar: state.handleImportCustomCappellaAvatar,
