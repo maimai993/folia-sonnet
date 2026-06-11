@@ -1,14 +1,13 @@
 import React from 'react';
 import { ChevronDown, Square } from 'lucide-react';
 import type { RemoteControlCommand } from '../../types/remoteControl';
-import { VIDEO_EXPORT_PRESETS } from '../../types/videoExport';
 import type { VideoExportPreset, VideoExportStartMode, VideoExportState } from '../../types/videoExport';
 
 // src/components/remote/RemoteVideoExportPanel.tsx
 // Export controls live only in the uncaptured remote window.
 type RemoteVideoExportPanelProps = {
     exportState: VideoExportState;
-    selectedPresetId: string;
+    selectedPreset: VideoExportPreset;
     startMode: VideoExportStartMode;
     primaryDisabled: boolean;
     onOpenPresetSelector: () => void;
@@ -54,7 +53,7 @@ const getExportStatusLabel = (exportState: VideoExportState) => {
 
 const RemoteVideoExportPanel: React.FC<RemoteVideoExportPanelProps> = ({
     exportState,
-    selectedPresetId,
+    selectedPreset,
     startMode,
     primaryDisabled,
     onOpenPresetSelector,
@@ -62,7 +61,6 @@ const RemoteVideoExportPanel: React.FC<RemoteVideoExportPanelProps> = ({
     sendCommand,
     isDaylight = false,
 }) => {
-    const selectedPreset = VIDEO_EXPORT_PRESETS.find(preset => preset.id === selectedPresetId) ?? VIDEO_EXPORT_PRESETS[1];
     const exportBusy = isExportBusy(exportState.status);
     const statusLabel = getExportStatusLabel(exportState);
 
@@ -181,7 +179,7 @@ const RemoteVideoExportPanel: React.FC<RemoteVideoExportPanelProps> = ({
                         key="btn-start"
                         type="button"
                         disabled={primaryDisabled}
-                        onClick={() => sendCommand({ type: 'start-export', preset: selectedPreset as VideoExportPreset, startMode })}
+                        onClick={() => sendCommand({ type: 'start-export', preset: selectedPreset, startMode })}
                         className={`h-8 w-full rounded-xl px-4 text-[12px] font-bold transition disabled:cursor-not-allowed disabled:opacity-35 ${
                             isDaylight
                                 ? 'bg-zinc-900 text-white hover:bg-zinc-800'

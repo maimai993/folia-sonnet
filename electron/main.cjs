@@ -2423,6 +2423,26 @@ ipcMain.handle('remote-control-send-command', (event, command) => {
     return true;
   }
 
+  if (command?.type === 'resize-main-window') {
+    const exportSize = sanitizeVideoExportSize(command);
+    if (!mainWindow || mainWindow.isDestroyed() || !exportSize) {
+      return false;
+    }
+
+    if (mainWindow.isFullScreen()) {
+      mainWindow.setFullScreen(false);
+    }
+
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    }
+
+    mainWindow.setContentSize(exportSize.width, exportSize.height, true);
+    mainWindow.center();
+    mainWindow.focus();
+    return true;
+  }
+
   if (!mainWindow || mainWindow.isDestroyed()) {
     return false;
   }

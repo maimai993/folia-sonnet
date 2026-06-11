@@ -111,6 +111,8 @@ export const useElectronPlaybackBridge = ({
             ...(options.includeLyrics ? { lyrics } : {}),
             isLiked,
             updatedAt: Date.now(),
+            mainWindowWidth: window.innerWidth,
+            mainWindowHeight: window.innerHeight,
         };
     };
 
@@ -201,7 +203,14 @@ export const useElectronPlaybackBridge = ({
 
         publish({ includeLyrics: true });
         const intervalId = window.setInterval(() => publish(), 500);
-        return () => window.clearInterval(intervalId);
+
+        const handleResize = () => publish();
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+            window.clearInterval(intervalId);
+            window.removeEventListener('resize', handleResize);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground, isLiked]);
 

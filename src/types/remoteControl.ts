@@ -8,6 +8,7 @@ export type RemoteControlCommand =
     | { type: 'previous' }
     | { type: 'next' }
     | { type: 'seek'; time: number }
+    | { type: 'resize-main-window'; width: number; height: number }
     | { type: 'set-main-window-border-visible'; visible: boolean }
     | { type: 'set-main-window-click-through'; enabled: boolean }
     | { type: 'set-main-window-always-on-top'; enabled: boolean }
@@ -42,6 +43,6 @@ export interface RemoteControlSnapshot {
     lyrics?: LyricData | null;
     isLiked?: boolean;
     updatedAt: number;
+    mainWindowWidth?: number;
+    mainWindowHeight?: number;
 }
-
-

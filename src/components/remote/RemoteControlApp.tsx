@@ -1,12 +1,20 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { ChevronLeft, Heart, Lock, LockOpen, Pause, Pin, PinOff, Play, SkipBack, SkipForward, Video, MirrorRectangular, X } from 'lucide-react';
+import { ChevronLeft, Heart, Lock, LockOpen, Pause, Pin, PinOff, Play, SkipBack, SkipForward, Video, MirrorRectangular, X, Check, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayerState } from '../../types';
 import RemoteVideoExportPanel from './RemoteVideoExportPanel';
 import RemoteLyricOverlay from './RemoteLyricOverlay';
 import type { RemoteControlCommand, RemoteControlSnapshot } from '../../types/remoteControl';
-import { DEFAULT_VIDEO_EXPORT_PRESET_ID, idleVideoExportState, VIDEO_EXPORT_PRESETS } from '../../types/videoExport';
-import type { VideoExportStartMode } from '../../types/videoExport';
+import {
+    createVideoExportPresets,
+    DEFAULT_VIDEO_EXPORT_PRESET_ID,
+    DEFAULT_VIDEO_EXPORT_PRESET_VALUES,
+    idleVideoExportState,
+    sanitizeVideoExportPresetValues,
+    VIDEO_EXPORT_PRESET_MAX,
+    VIDEO_EXPORT_PRESET_MIN,
+} from '../../types/videoExport';
+import type { VideoExportPresetValues, VideoExportStartMode } from '../../types/videoExport';
 
 // src/components/remote/RemoteControlApp.tsx
 // Electron-only companion window for controlling the single real player instance.
@@ -22,9 +30,30 @@ const formatTime = (seconds: number) => {
 };
 
 const REMOTE_CONTROL_DOCUMENT_TITLE = 'Folia Remote';
+const REMOTE_VIDEO_EXPORT_PRESET_VALUES_STORAGE_KEY = 'remote_video_export_preset_values';
 
 const sendCommand = (command: RemoteControlCommand) => {
     void window.electron?.sendRemoteControlCommand(command);
+};
+
+const readStoredVideoExportPresetValues = (): VideoExportPresetValues => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_VIDEO_EXPORT_PRESET_VALUES;
+    }
+
+    const raw = window.localStorage.getItem(REMOTE_VIDEO_EXPORT_PRESET_VALUES_STORAGE_KEY);
+    if (!raw) {
+        return DEFAULT_VIDEO_EXPORT_PRESET_VALUES;
+    }
+
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed)
+            ? sanitizeVideoExportPresetValues(parsed)
+            : DEFAULT_VIDEO_EXPORT_PRESET_VALUES;
+    } catch {
+        return DEFAULT_VIDEO_EXPORT_PRESET_VALUES;
+    }
 };
 
 const emptySnapshot: RemoteControlSnapshot = {
@@ -58,6 +87,9 @@ const RemoteControlApp: React.FC = () => {
     const [pendingSeek, setPendingSeek] = useState<number | null>(null);
     const [activePanel, setActivePanel] = useState<RemotePanelMode>('playback');
     const [selectedPresetId, setSelectedPresetId] = useState(DEFAULT_VIDEO_EXPORT_PRESET_ID);
+    const [presetValues, setPresetValues] = useState<VideoExportPresetValues>(() => readStoredVideoExportPresetValues());
+    const [draftWidth, setDraftWidth] = useState('');
+    const [draftHeight, setDraftHeight] = useState('');
     const [startMode, setStartMode] = useState<VideoExportStartMode>('from-start');
     const [presetSelectorOpen, setPresetSelectorOpen] = useState(false);
     const [alwaysOnTop, setAlwaysOnTop] = useState(false);
@@ -66,6 +98,32 @@ const RemoteControlApp: React.FC = () => {
     const [showLyricsOverlay, setShowLyricsOverlay] = useState(false);
     const isDraggingRef = useRef(false);
     const lastSeekTimeRef = useRef(0);
+    const exportPresets = useMemo(() => createVideoExportPresets(presetValues), [presetValues]);
+    const selectedPreset = exportPresets.find(preset => preset.id === selectedPresetId) ?? exportPresets[1];
+
+    const widthFocusedRef = useRef(false);
+    const heightFocusedRef = useRef(false);
+    const isSavingRef = useRef(false);
+
+    useEffect(() => {
+        const activePreset = exportPresets.find(preset => preset.id === selectedPresetId);
+        if (activePreset) {
+            setDraftWidth(String(activePreset.width));
+            setDraftHeight(String(activePreset.height));
+        }
+    }, [selectedPresetId, presetValues, exportPresets]);
+
+    useEffect(() => {
+        if (!widthFocusedRef.current) {
+            setDraftWidth(String(snapshot.mainWindowWidth ?? 1920));
+        }
+    }, [snapshot.mainWindowWidth]);
+
+    useEffect(() => {
+        if (!heightFocusedRef.current) {
+            setDraftHeight(String(snapshot.mainWindowHeight ?? 1080));
+        }
+    }, [snapshot.mainWindowHeight]);
 
     useEffect(() => {
         if (isHovered) {
@@ -150,6 +208,89 @@ const RemoteControlApp: React.FC = () => {
     const noDragStyle = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
     
     const progressPercent = duration > 0 ? (progressValue / duration) * 100 : 0;
+
+    useEffect(() => {
+        window.localStorage.setItem(REMOTE_VIDEO_EXPORT_PRESET_VALUES_STORAGE_KEY, JSON.stringify(presetValues));
+    }, [presetValues]);
+
+    const handleSelectExportPreset = (presetId: string) => {
+        const nextPreset = exportPresets.find(item => item.id === presetId);
+        if (!nextPreset) {
+            return;
+        }
+
+        setSelectedPresetId(nextPreset.id);
+        sendCommand({ type: 'resize-main-window', width: nextPreset.width, height: nextPreset.height });
+    };
+
+    const handleApplyCustomPresetValues = () => {
+        const w = Number(draftWidth);
+        const h = Number(draftHeight);
+        if (!Number.isFinite(w) || !Number.isFinite(h)) {
+            return;
+        }
+
+        isSavingRef.current = true;
+        setTimeout(() => {
+            isSavingRef.current = false;
+        }, 1000);
+
+        const clampVal = (val: number, fallback: number) => {
+            const integerVal = Math.round(val);
+            const safeVal = Number.isFinite(integerVal) ? integerVal : fallback;
+            const clampedVal = Math.min(VIDEO_EXPORT_PRESET_MAX, Math.max(VIDEO_EXPORT_PRESET_MIN, safeVal));
+            return clampedVal % 2 === 0 ? clampedVal : clampedVal + 1;
+        };
+
+        const clampedW = clampVal(w, 1920);
+        const clampedH = clampVal(h, 1080);
+
+        const activeIndex = exportPresets.findIndex(preset => preset.id === selectedPresetId);
+        if (activeIndex === -1) {
+            return;
+        }
+
+        const nextPresetValues = [...presetValues] as VideoExportPresetValues;
+        nextPresetValues[activeIndex] = { width: clampedW, height: clampedH };
+        setPresetValues(nextPresetValues);
+
+        sendCommand({ type: 'resize-main-window', width: clampedW, height: clampedH });
+    };
+
+    const getCalculatedAspectRatio = (wStr: string, hStr: string) => {
+        const w = Number(wStr);
+        const h = Number(hStr);
+        if (!w || !h || !Number.isFinite(w) || !Number.isFinite(h)) {
+            return '';
+        }
+
+        const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+        const divisor = gcd(w, h);
+        const aspectW = w / divisor;
+        const aspectH = h / divisor;
+        const orientationStr = w >= h ? '横屏' : '竖屏';
+
+        if (aspectW === 16 && aspectH === 9) {
+            return `16:9 (${orientationStr})`;
+        }
+        if (aspectW === 9 && aspectH === 16) {
+            return `9:16 (${orientationStr})`;
+        }
+        if (aspectW === 4 && aspectH === 3) {
+            return `4:3 (${orientationStr})`;
+        }
+        if (aspectW === 3 && aspectH === 4) {
+            return `3:4 (${orientationStr})`;
+        }
+        if (aspectW === 1 && aspectH === 1) {
+            return `1:1 (方屏)`;
+        }
+        if (aspectW === 21 && aspectH === 9) {
+            return `21:9 (超宽屏)`;
+        }
+
+        return `${aspectW}:${aspectH} (${orientationStr})`;
+    };
 
     const handleToggleAlwaysOnTop = () => {
         const nextAlwaysOnTop = !alwaysOnTop;
@@ -508,7 +649,7 @@ const RemoteControlApp: React.FC = () => {
                                         >
                                             <RemoteVideoExportPanel
                                                 exportState={exportState}
-                                                selectedPresetId={selectedPresetId}
+                                                selectedPreset={selectedPreset}
                                                 startMode={startMode}
                                                 primaryDisabled={primaryDisabled}
                                                 isDaylight={isDaylight}
@@ -630,7 +771,7 @@ const RemoteControlApp: React.FC = () => {
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.95 }}
                             transition={{ duration: 0.15 }}
-                            className={`absolute inset-0 z-50 flex flex-col p-4 rounded-[20px] shadow-2xl border overflow-hidden transition-colors duration-300 ${
+                            className={`absolute inset-0 z-50 flex flex-col p-3 rounded-[20px] shadow-2xl border overflow-hidden transition-colors duration-300 ${
                                 isDaylight ? 'border-black/10' : 'border-white/10'
                             }`}
                             style={noDragStyle}
@@ -654,7 +795,7 @@ const RemoteControlApp: React.FC = () => {
                                     </>
                                 )}
                             </div>
-                            <div className="flex items-center justify-between mb-2.5">
+                            <div className="flex items-center justify-between mb-1.5">
                                 <span className={`text-[13px] font-bold transition-colors ${
                                     isDaylight ? 'text-black/90' : 'text-white/90'
                                 }`}>选择导出预设</span>
@@ -670,36 +811,146 @@ const RemoteControlApp: React.FC = () => {
                                     <X size={14} />
                                 </button>
                             </div>
-                            <div className="grid grid-cols-2 gap-2 overflow-y-auto pr-0.5 py-1 flex-1">
-                                {VIDEO_EXPORT_PRESETS.map(preset => {
-                                    const isSelected = preset.id === selectedPresetId;
-                                    return (
+                            <div className="flex gap-3 flex-1 overflow-hidden py-0.5">
+                                {/* Left Column: Vertical Presets List */}
+                                <div className="flex flex-col gap-2 w-[42%] shrink-0">
+                                    {exportPresets.map((preset, index) => {
+                                        const isSelected = preset.id === selectedPresetId;
+                                        return (
+                                            <button
+                                                key={preset.id}
+                                                type="button"
+                                                role="option"
+                                                aria-selected={isSelected}
+                                                onClick={() => handleSelectExportPreset(preset.id)}
+                                                className={`flex items-center justify-between rounded-xl p-2 px-3 border transition text-left cursor-pointer flex-1 min-h-[42px] ${
+                                                    isSelected
+                                                        ? (isDaylight
+                                                            ? 'bg-zinc-900 border-zinc-900 text-white shadow-md font-bold'
+                                                            : 'bg-white border-white text-zinc-950 shadow-md font-bold')
+                                                        : (isDaylight
+                                                            ? 'bg-black/5 border-black/5 text-black/70 hover:bg-black/10 hover:text-black hover:border-black/10 font-medium'
+                                                            : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/10 font-medium')
+                                                }`}
+                                            >
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="text-[9px] opacity-60 font-semibold mb-0.5 tracking-wide uppercase truncate">
+                                                        预设 {index + 1} ({preset.orientation === 'portrait' ? '竖屏' : '横屏'})
+                                                    </span>
+                                                    <span className="text-xs font-bold truncate">{preset.label}</span>
+                                                </div>
+                                                {isSelected && (
+                                                    <div className={`flex items-center justify-center rounded-full p-0.5 shrink-0 ml-1.5 ${
+                                                        isDaylight ? 'bg-white text-zinc-900' : 'bg-zinc-900 text-white'
+                                                    }`}>
+                                                        <Check size={10} className="stroke-[3]" />
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Right Column: Customize Form */}
+                                <div
+                                    className={`flex flex-col flex-1 min-w-0 rounded-xl border p-2 px-2.5 justify-between transition ${
+                                        isDaylight
+                                            ? 'bg-black/5 border-black/5 text-black/80'
+                                            : 'bg-white/5 border-white/5 text-white/80'
+                                    }`}
+                                >
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center gap-1.5 mb-1.5">
+                                            <Sliders size={11} className="opacity-75" />
+                                            <span className="text-[9px] opacity-60 font-semibold tracking-wide uppercase">
+                                                自定义预设 {exportPresets.findIndex(p => p.id === selectedPresetId) + 1}
+                                            </span>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <label
+                                                className={`flex flex-col rounded-xl px-2 py-1 transition-colors border ${
+                                                    isDaylight 
+                                                        ? 'bg-white/80 border-black/5 focus-within:border-black/25' 
+                                                        : 'bg-zinc-950/35 border-white/5 focus-within:border-white/20'
+                                                }`}
+                                            >
+                                                <span className="text-[9px] opacity-50 font-semibold">宽度 (px)</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={draftWidth}
+                                                    onFocus={() => { widthFocusedRef.current = true; }}
+                                                    onBlur={() => {
+                                                        widthFocusedRef.current = false;
+                                                        const currentWidth = snapshot.mainWindowWidth ?? 1920;
+                                                        setTimeout(() => {
+                                                            if (!widthFocusedRef.current && !isSavingRef.current) {
+                                                                setDraftWidth(String(currentWidth));
+                                                            }
+                                                        }, 150);
+                                                    }}
+                                                    onChange={(event) => setDraftWidth(event.currentTarget.value.replace(/[^\d]/g, ''))}
+                                                    className="bg-transparent text-[11px] font-semibold outline-none w-full"
+                                                />
+                                            </label>
+                                            
+                                            <label
+                                                className={`flex flex-col rounded-xl px-2 py-1 transition-colors border ${
+                                                    isDaylight 
+                                                        ? 'bg-white/80 border-black/5 focus-within:border-black/25' 
+                                                        : 'bg-zinc-950/35 border-white/5 focus-within:border-white/20'
+                                                }`}
+                                            >
+                                                <span className="text-[9px] opacity-50 font-semibold">高度 (px)</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={draftHeight}
+                                                    onFocus={() => { heightFocusedRef.current = true; }}
+                                                    onBlur={() => {
+                                                        heightFocusedRef.current = false;
+                                                        const currentHeight = snapshot.mainWindowHeight ?? 1080;
+                                                        setTimeout(() => {
+                                                            if (!heightFocusedRef.current && !isSavingRef.current) {
+                                                                setDraftHeight(String(currentHeight));
+                                                            }
+                                                        }, 150);
+                                                    }}
+                                                    onChange={(event) => setDraftHeight(event.currentTarget.value.replace(/[^\d]/g, ''))}
+                                                    className="bg-transparent text-[11px] font-semibold outline-none w-full"
+                                                />
+                                            </label>
+                                        </div>
+                                        
+                                        {getCalculatedAspectRatio(draftWidth, draftHeight) && (
+                                            <div className="mt-1.5 flex items-center px-0.5">
+                                                <span className={`text-[9px] font-semibold transition-colors px-1.5 py-0.5 rounded ${
+                                                    isDaylight ? 'bg-black/5 text-black/60' : 'bg-white/5 text-white/60'
+                                                }`}>
+                                                    比例: {getCalculatedAspectRatio(draftWidth, draftHeight)}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="flex flex-col gap-1 mt-1">
+                                        <div className={`text-[9px] leading-tight opacity-50 ${isDaylight ? 'text-black' : 'text-white'}`}>
+                                            限制范围 {VIDEO_EXPORT_PRESET_MIN}-{VIDEO_EXPORT_PRESET_MAX} px，偶数有更好的编码兼容性
+                                        </div>
                                         <button
-                                            key={preset.id}
                                             type="button"
-                                            role="option"
-                                            aria-selected={isSelected}
-                                            onClick={() => {
-                                                setSelectedPresetId(preset.id);
-                                                setPresetSelectorOpen(false);
-                                            }}
-                                            className={`flex flex-col items-start justify-center rounded-xl p-2.5 px-3.5 border transition text-left cursor-pointer ${
-                                                isSelected
-                                                    ? (isDaylight
-                                                        ? 'bg-zinc-900 border-zinc-900 text-white shadow-md font-bold'
-                                                        : 'bg-white border-white text-zinc-950 shadow-md font-bold')
-                                                    : (isDaylight
-                                                        ? 'bg-black/5 border-black/5 text-black/70 hover:bg-black/10 hover:text-black hover:border-black/10 font-medium'
-                                                        : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/10 font-medium')
+                                            onClick={handleApplyCustomPresetValues}
+                                            className={`flex h-8 items-center justify-center rounded-lg text-[11px] font-bold shadow-sm transition active:scale-[0.98] ${
+                                                isDaylight
+                                                    ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                                                    : 'bg-white text-zinc-950 hover:bg-white/90'
                                             }`}
                                         >
-                                            <span className="text-[9px] opacity-60 font-semibold mb-0.5 tracking-wide uppercase">
-                                                {preset.orientation === 'portrait' ? '竖屏 9:16' : '横屏 16:9'}
-                                            </span>
-                                            <span className="text-xs font-semibold">{preset.label}</span>
+                                            保存至预设 {exportPresets.findIndex(p => p.id === selectedPresetId) + 1}
                                         </button>
-                                    );
-                                })}
+                                    </div>
+                                </div>
                             </div>
                         </motion.div>
                     )}
