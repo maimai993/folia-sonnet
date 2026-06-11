@@ -60,12 +60,13 @@ export async function handleGenerateTheme(request: Request, env: WorkerEnv) {
 
       LIGHT THEME RULES:
       - Use LIGHT backgrounds. Avoid defaulting to pure white background for every light theme. Generate diverse and rich light-colored backgrounds (e.g., warm creams, soft pastel blues, pale sage greens, gentle peach, warm sands, pale lavenders) that directly match the song's mood.
-      - Ensure text/icons are dark enough for contrast.
+      - Ensure text/icons are dark enough for contrast, but avoid defaulting to pure black (#000000). Generate a very dark tone that coordinates with the background color's hue (e.g., deep navy, dark charcoal, dark plum).
       - 'accentColor' must be visible against the light background.
 
       DARK THEME RULES:
       - Use DARK backgrounds. Avoid generic pure black backgrounds; use rich, diverse dark colors (e.g., deep midnight blue, dark forest green, charcoal gray, dark plum, deep chocolate, burgundy) matching the song's mood.
-      - Ensure text/icons are light enough for contrast.
+      - Ensure text/icons are light enough for contrast, but avoid defaulting to pure white (#ffffff). Generate a very bright, soft tone that coordinates with the background color's hue (e.g., soft sky blue, pale mint green, light warm cream).
+      - 'accentColor' must contrast with the dark background and should be creatively derived from the song's specific mood (e.g., soft blues, mint greens, warm corals, lavender, pale gold) rather than defaulting to generic bright yellow.
 
       SHARED RULES FOR BOTH THEMES:
       1. CRITICAL for 'secondaryColor': This color is used for secondary TEXT (e.g., album name, artist name).
