@@ -55,6 +55,8 @@ const MONET_ACTIVE_GAP_PX = 18;
 const MONET_INACTIVE_GAP_PX = 14;
 const MONET_GLOW_RISE_DURATION_SCALE = 1.18;
 const MONET_GLOW_PASS_TAIL_SECONDS = 1.05;
+const MONET_GLOW_BUFFER_PX = 24;
+const MONET_V_GLOW_BUFFER_PX = 20;
 const MONET_SCROLL_TRANSITION = {
     y: { type: 'spring', stiffness: 142, damping: 28, mass: 0.82 },
     scale: { type: 'spring', stiffness: 150, damping: 30, mass: 0.78 },
@@ -174,10 +176,13 @@ const buildPositionedEntries = (
     inactiveFontPx: number,
     translationFontPx: number,
     fontStack: string,
+    glowBufferPx: number,
 ): PositionedMonetLineEntry[] => {
     const railWidth = railSize.width || MONET_RAIL_WIDTH_FALLBACK_PX;
     const railHeight = railSize.height || MONET_RAIL_HEIGHT_FALLBACK_PX;
     const inactiveScale = clamp(inactiveFontPx / Math.max(lyricFontPx, 1), 0.72, 0.92);
+    const contentWidthPx = Math.max(railWidth - glowBufferPx * 2, 0);
+
     const measuredEntries: PositionedMonetLineEntry[] = entries.map(entry => {
         const tone = resolveLineTone(entry, theme, inactiveScale);
         const layout = measureMonetLineLayout({
@@ -186,7 +191,7 @@ const buildPositionedEntries = (
             fontPx: lyricFontPx,
             translationFontPx,
             fontStack,
-            maxWidthPx: railWidth - 8,
+            maxWidthPx: contentWidthPx - 8,
         });
 
         return {
@@ -417,7 +422,8 @@ const MonetRailLine: React.FC<{
     translationFontPx: number;
     fontStack: string;
     keywordColoringEnabled: boolean;
-}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, keywordColoringEnabled }) => {
+    glowBufferPx: number;
+}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, keywordColoringEnabled, glowBufferPx }) => {
     const initialOffset = entry.offset >= 0 ? 34 : -34;
     const exitOffset = entry.status === 'passed' || entry.offset < 0 ? -38 : 38;
     const textMask = getLineMask(entry.layout.isTextClipped, Math.max(lyricFontPx * 0.55, 12));
@@ -425,7 +431,7 @@ const MonetRailLine: React.FC<{
 
     return (
         <motion.div
-            className="absolute left-0 top-0 w-full min-w-0 max-w-full will-change-transform"
+            className="absolute top-0 min-w-0 will-change-transform"
             initial={{
                 opacity: 0,
                 y: entry.y + initialOffset,
@@ -447,17 +453,25 @@ const MonetRailLine: React.FC<{
             }}
             transition={MONET_SCROLL_TRANSITION}
             style={{
+                left: `${glowBufferPx}px`,
+                right: `${glowBufferPx}px`,
                 height: entry.layout.visualHeightPx,
                 transformOrigin: 'left top',
                 zIndex: entry.tone.zIndex,
             }}
         >
             <div
-                className="w-full min-w-0 max-w-full overflow-hidden"
+                className="min-w-0 overflow-hidden"
                 style={{
-                    height: entry.layout.textHeightPx,
-                    paddingTop: entry.layout.textPaddingTopPx,
-                    paddingBottom: entry.layout.textPaddingBottomPx,
+                    marginLeft: `-${glowBufferPx}px`,
+                    marginRight: `-${glowBufferPx}px`,
+                    paddingLeft: `${glowBufferPx}px`,
+                    paddingRight: `${glowBufferPx}px`,
+                    marginTop: `-${MONET_V_GLOW_BUFFER_PX}px`,
+                    marginBottom: `-${MONET_V_GLOW_BUFFER_PX}px`,
+                    paddingTop: `${entry.layout.textPaddingTopPx + MONET_V_GLOW_BUFFER_PX}px`,
+                    paddingBottom: `${entry.layout.textPaddingBottomPx + MONET_V_GLOW_BUFFER_PX}px`,
+                    height: `${entry.layout.textHeightPx + MONET_V_GLOW_BUFFER_PX * 2}px`,
                     boxSizing: 'border-box',
                     fontFamily: fontStack,
                     fontSize: lyricFontPx,
@@ -487,11 +501,15 @@ const MonetRailLine: React.FC<{
             </div>
             {entry.status === 'active' && entry.line.translation ? (
                 <motion.div
-                    className="w-full min-w-0 max-w-full overflow-hidden whitespace-pre-wrap break-words"
+                    className="min-w-0 overflow-hidden whitespace-pre-wrap break-words"
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
                     style={{
+                        marginLeft: `-${glowBufferPx}px`,
+                        marginRight: `-${glowBufferPx}px`,
+                        paddingLeft: `${glowBufferPx}px`,
+                        paddingRight: `${glowBufferPx}px`,
                         height: entry.layout.translationHeightPx,
                         paddingTop: entry.layout.translationPaddingTopPx,
                         paddingBottom: entry.layout.translationPaddingBottomPx,
@@ -539,6 +557,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
             inactiveFontPx,
             translationFontPx,
             fontStack,
+            MONET_GLOW_BUFFER_PX,
         ),
         [entries, railSize, theme, lyricFontPx, inactiveFontPx, translationFontPx, fontStack],
     );
@@ -548,6 +567,10 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
             ref={railRef}
             className="relative h-[clamp(260px,42vh,400px)] max-w-[720px] overflow-hidden"
             style={{
+                marginLeft: `-${MONET_GLOW_BUFFER_PX}px`,
+                marginRight: `-${MONET_GLOW_BUFFER_PX}px`,
+                paddingLeft: `${MONET_GLOW_BUFFER_PX}px`,
+                paddingRight: `${MONET_GLOW_BUFFER_PX}px`,
                 WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 11%, black 88%, transparent 100%)',
                 maskImage: 'linear-gradient(to bottom, transparent 0%, black 11%, black 88%, transparent 100%)',
             }}
@@ -564,6 +587,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
                             translationFontPx={translationFontPx}
                             fontStack={fontStack}
                             keywordColoringEnabled={keywordColoringEnabled}
+                            glowBufferPx={MONET_GLOW_BUFFER_PX}
                         />
                     ))}
                 </AnimatePresence>
