@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { motion, useMotionValueEvent } from 'framer-motion';
+import { motion, useMotionValueEvent, useDragControls, useMotionValue } from 'framer-motion';
+import { RotateCcw } from 'lucide-react';
 import { DEFAULT_MONET_TUNING } from '../../../types';
 import { colorWithAlpha } from '../colorMix';
 import { type VisualizerSharedProps } from '../definition';
@@ -37,8 +38,24 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         isPreviewMode = false,
         monetTuning = DEFAULT_MONET_TUNING,
         monetPortraitImage = null,
+        onMonetTuningChange,
     } = props;
     const { t } = useTranslation();
+
+    const handleSetMonetTuning = onMonetTuningChange;
+
+    // Edit/moving mode states for the right-side cover component position
+    const [isEditingPosition, setIsEditingPosition] = useState(false);
+    const [isHangerHovered, setIsHangerHovered] = useState(false);
+    const initialOffsetX = monetTuning.portraitOffsetX ?? 0;
+    const offsetX = useMotionValue(initialOffsetX);
+
+    useEffect(() => {
+        offsetX.set(initialOffsetX);
+    }, [initialOffsetX, offsetX]);
+
+    const dragControls = useDragControls();
+    const isDraggingRef = useRef(false);
 
     const [introKey, setIntroKey] = useState(0);
     const lastTimeRef = useRef(0);
@@ -249,39 +266,167 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                             className="hidden min-w-0 items-center justify-center overflow-visible px-3 pr-5 sm:pr-8 md:flex lg:justify-end lg:pr-10 xl:pr-12"
                             style={{ flex: '0 0 clamp(220px, 28vw, 430px)' }}
                         >
-                            <motion.div
-                                animate={theme.animationIntensity === 'chaotic' ? {
-                                    y: [0, -6, 0, 6, 0],
-                                    x: [0, -3, 0, 3, 0],
-                                    rotate: [0, 0.4, 0, -0.4, 0]
-                                } : {}}
-                                transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
-                                className="relative w-full max-w-[clamp(210px,26vw,380px)]"
-                            >
-                                <div
-                                    className="absolute -top-3 right-8 z-20 h-14 w-3 rounded-full shadow-md"
-                                    style={{
-                                        backgroundColor: colorWithAlpha(theme.backgroundColor, 0.86),
-                                        boxShadow: `0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
-                                    }}
-                                />
-                                <div
-                                    className="relative rounded-[2.5rem] border p-1.5 backdrop-blur-sm"
-                                    style={{
-                                        borderColor: colorWithAlpha(theme.primaryColor, 0.12),
-                                        backgroundColor: colorWithAlpha(theme.backgroundColor, 0.08),
-                                        boxShadow: `0 30px 70px ${colorWithAlpha(theme.backgroundColor, 0.34)}, 0 16px 36px ${colorWithAlpha(theme.accentColor, 0.14)}, 0 0 0 1px ${colorWithAlpha(theme.primaryColor, 0.04)}`,
-                                    }}
-                                >
+                            {/* Bounding box wrapper that stays in the default position */}
+                            <div className="relative w-full max-w-[clamp(210px,26vw,380px)]">
+                                
+                                {/* Dashed movable region border */}
+                                {isEditingPosition && (
                                     <div
-                                        className="aspect-[0.74] w-full overflow-hidden rounded-[2rem] bg-cover bg-center"
+                                        className="absolute border-2 border-dashed rounded-[2.5rem] pointer-events-none"
                                         style={{
-                                            backgroundImage: portraitUrl ? `url(${portraitUrl})` : undefined,
-                                            backgroundColor: colorWithAlpha(theme.primaryColor, 0.08),
+                                            borderColor: colorWithAlpha(theme.primaryColor, 0.24),
+                                            left: monetTuning.portraitStyle === 'square' ? 'calc(-35.135% - 150px)' : -150,
+                                            right: 0,
+                                            top: -12,
+                                            bottom: -12,
+                                            zIndex: 5,
                                         }}
-                                    />
-                                </div>
-                            </motion.div>
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                offsetX.set(0);
+                                            }}
+                                            className="absolute -top-10 right-0 pointer-events-auto rounded-full p-2 text-xs backdrop-blur-md transition-all active:scale-95 flex items-center justify-center font-medium"
+                                            style={{
+                                                backgroundColor: colorWithAlpha(theme.backgroundColor, 0.86),
+                                                color: theme.primaryColor,
+                                                border: `1px solid ${colorWithAlpha(theme.primaryColor, 0.16)}`,
+                                                boxShadow: `0 4px 12px ${colorWithAlpha('#000000', 0.12)}`,
+                                            }}
+                                            title={t('common.reset') || '重置'}
+                                        >
+                                            <RotateCcw size={14} />
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Draggable motion wrapper */}
+                                <motion.div
+                                    drag={isEditingPosition ? 'x' : false}
+                                    dragControls={dragControls}
+                                    dragListener={false}
+                                    dragConstraints={{ left: -150, right: 0 }}
+                                    dragElastic={0}
+                                    dragMomentum={false}
+                                    style={{ x: offsetX }}
+                                    onDragStart={() => {
+                                        isDraggingRef.current = true;
+                                    }}
+                                    onDragEnd={() => {
+                                        // Delay resetting drag reference to avoid triggering click save
+                                        setTimeout(() => {
+                                            isDraggingRef.current = false;
+                                        }, 50);
+                                    }}
+                                    className="w-full relative"
+                                >
+                                    <motion.div
+                                        animate={theme.animationIntensity === 'chaotic' ? {
+                                            y: [0, -6, 0, 6, 0],
+                                            x: [0, -3, 0, 3, 0],
+                                            rotate: [0, 0.4, 0, -0.4, 0]
+                                        } : {}}
+                                        transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+                                        className="relative"
+                                        style={{
+                                            width: monetTuning.portraitStyle === 'square' ? '135.135%' : '100%',
+                                            marginLeft: monetTuning.portraitStyle === 'square' ? '-35.135%' : '0%',
+                                        }}
+                                    >
+                                        {/* Hanger / Black-White Bar */}
+                                        <motion.div
+                                            onPointerDown={(e) => {
+                                                if (isEditingPosition) {
+                                                    dragControls.start(e);
+                                                }
+                                            }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (isDraggingRef.current) return;
+                                                
+                                                if (!isEditingPosition) {
+                                                    setIsEditingPosition(true);
+                                                } else {
+                                                    const finalOffset = Math.round(offsetX.get());
+                                                    handleSetMonetTuning?.({
+                                                        ...monetTuning,
+                                                        portraitOffsetX: finalOffset,
+                                                    });
+                                                    setIsEditingPosition(false);
+                                                }
+                                            }}
+                                            onMouseEnter={() => setIsHangerHovered(true)}
+                                            onMouseLeave={() => setIsHangerHovered(false)}
+                                            className="absolute -top-3 right-8 z-20 h-14 w-3 rounded-full shadow-md cursor-pointer transition-transform duration-200 hover:scale-y-105 active:scale-y-95"
+                                            animate={isEditingPosition ? {
+                                                borderColor: [
+                                                    colorWithAlpha(theme.accentColor, 0.3),
+                                                    colorWithAlpha(theme.accentColor, 1.0),
+                                                    colorWithAlpha(theme.accentColor, 0.3)
+                                                ],
+                                                boxShadow: [
+                                                    `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
+                                                    `0 0 10px ${colorWithAlpha(theme.accentColor, 0.65)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
+                                                    `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
+                                                ]
+                                            } : {
+                                                borderColor: isHangerHovered
+                                                    ? colorWithAlpha(theme.primaryColor, 0.36)
+                                                    : 'transparent',
+                                                boxShadow: `0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
+                                            }}
+                                            transition={isEditingPosition ? {
+                                                duration: 1.5,
+                                                repeat: Infinity,
+                                                ease: "easeInOut"
+                                            } : { duration: 0.2 }}
+                                            style={{
+                                                backgroundColor: colorWithAlpha(theme.backgroundColor, 0.86),
+                                                borderWidth: '1.5px',
+                                                borderStyle: 'solid',
+                                            }}
+                                        />
+
+                                        {/* Square cover with enhanced shadow, no transparent border */}
+                                        {monetTuning.portraitStyle === 'square' ? (
+                                            <div
+                                                className="relative w-full aspect-square"
+                                                style={{
+                                                    boxShadow: `0 36px 80px ${colorWithAlpha(theme.backgroundColor, 0.45)}, 0 20px 42px ${colorWithAlpha(theme.accentColor, 0.22)}, 0 0 0 1px ${colorWithAlpha(theme.primaryColor, 0.06)}`,
+                                                    borderRadius: '2rem',
+                                                }}
+                                            >
+                                                <div
+                                                    className="w-full h-full overflow-hidden rounded-[2rem] bg-cover bg-center"
+                                                    style={{
+                                                        backgroundImage: portraitUrl ? `url(${portraitUrl})` : undefined,
+                                                        backgroundColor: colorWithAlpha(theme.primaryColor, 0.08),
+                                                    }}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div
+                                                className="relative w-full aspect-[0.74] p-1.5 rounded-[2.15rem] border backdrop-blur-sm"
+                                                style={{
+                                                    borderColor: colorWithAlpha(theme.primaryColor, 0.1),
+                                                    backgroundColor: colorWithAlpha(theme.backgroundColor, 0.15),
+                                                    boxShadow: `0 24px 60px ${colorWithAlpha(theme.backgroundColor, 0.35)}`,
+                                                }}
+                                            >
+                                                <div
+                                                    className="w-full h-full overflow-hidden rounded-[1.85rem] bg-cover bg-center"
+                                                    style={{
+                                                        backgroundImage: portraitUrl ? `url(${portraitUrl})` : undefined,
+                                                        backgroundColor: colorWithAlpha(theme.primaryColor, 0.08),
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                    </motion.div>
+                                </motion.div>
+                            </div>
                         </motion.div>
                     ) : null}
                 </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Monitor, Palette, Settings2, Sparkles, LayoutGrid, Download, Copy, Check } from 'lucide-react';
+import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { DualTheme, Theme, ThemeMode } from '../../../types';
@@ -186,6 +186,8 @@ const compressMonet = (t: any): any => ({
     mas: t.audioStyle,
     mfs: t.fontScale,
     mps: t.portraitSource,
+    pox: t.portraitOffsetX,
+    mpy: t.portraitStyle,
 });
 const decompressMonet = (o: any): any => ({
     keywordColoringEnabled: o.kce !== undefined ? o.kce : true,
@@ -193,11 +195,10 @@ const decompressMonet = (o: any): any => ({
     audioStyle: o.mas || 'bar',
     fontScale: o.mfs !== undefined ? o.mfs : 1.0,
     portraitSource: o.mps || 'cover',
+    portraitOffsetX: o.pox !== undefined ? o.pox : 0,
+    portraitStyle: o.mpy || 'rectangular',
 });
 
-/**
- * Compresses the full visual configurations object into a minified, base64-encoded string starting with 'folia-theme://'.
- */
 export const compressConfig = (config: any): string => {
     const minified: any = {};
     if (config.theme) {

@@ -147,6 +147,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         audioStyle: monetTuning.audioStyle ?? DEFAULT_MONET_TUNING.audioStyle,
         fontScale: clampValue(monetTuning.fontScale ?? DEFAULT_MONET_TUNING.fontScale, 0.7, 1.5, DEFAULT_MONET_TUNING.fontScale),
         portraitSource: monetTuning.portraitSource ?? DEFAULT_MONET_TUNING.portraitSource,
+        portraitStyle: monetTuning.portraitStyle ?? DEFAULT_MONET_TUNING.portraitStyle ?? 'rectangular',
     };
 
     const keywordColoringOptions = useMemo<PresetOption<boolean>[]>(() => ([
@@ -168,6 +169,10 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     const audioStyleOptions = useMemo<PresetOption<MonetAudioStyle>[]>(() => ([
         { value: 'bar', label: t('options.monetAudioStyleBar') || '柱状' },
         { value: 'line', label: t('options.monetAudioStyleLine') || '线条' },
+    ]), [t]);
+    const portraitStyleOptions = useMemo<PresetOption<'rectangular' | 'square'>[]>(() => ([
+        { value: 'rectangular', label: t('options.monetPortraitStyleRectangular') || '长方形' },
+        { value: 'square', label: t('options.monetPortraitStyleSquare') || '正方形' },
     ]), [t]);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -250,6 +255,15 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     value={resolvedTuning.portraitSource}
                     options={portraitSourceOptions}
                     onChange={(value) => onMonetTuningChange?.({ portraitSource: value })}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
+
+                <PresetGroup
+                    label={t('options.monetPortraitStyle') || '封面形状'}
+                    value={resolvedTuning.portraitStyle}
+                    options={portraitStyleOptions}
+                    onChange={(value) => onMonetTuningChange?.({ portraitStyle: value })}
                     isDaylight={isDaylight}
                     theme={theme}
                 />

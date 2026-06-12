@@ -852,6 +852,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 tiltTuning={draftTiltTuning}
                                 monetBackgroundTuning={draftMonetBackgroundTuning}
                                 monetTuning={draftMonetTuning}
+                                onMonetTuningChange={handleMonetTuningDraft}
                                 cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                                 cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                                 monetBackgroundImage={monetBackgroundImage}

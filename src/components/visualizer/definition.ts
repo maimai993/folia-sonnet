@@ -66,6 +66,7 @@ export interface VisualizerSharedProps {
     monetTuning?: MonetTuning;
     monetBackgroundImage?: MonetBackgroundImage | null;
     monetPortraitImage?: MonetPortraitImage | null;
+    onMonetTuningChange?: (patch: Partial<MonetTuning>) => void;
 }
 
 export interface VisualizerSettingsPanelProps {

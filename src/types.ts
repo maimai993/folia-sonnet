@@ -333,6 +333,8 @@ export interface MonetTuning {
   audioStyle: MonetAudioStyle;
   fontScale: number;
   portraitSource: MonetPortraitSource;
+  portraitOffsetX?: number;
+  portraitStyle?: 'square' | 'rectangular';
 }
 
 export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
@@ -354,6 +356,8 @@ export const DEFAULT_MONET_TUNING: MonetTuning = {
   audioStyle: 'bar',
   fontScale: 1.0,
   portraitSource: 'cover',
+  portraitOffsetX: 0,
+  portraitStyle: 'rectangular',
 };
 
 export interface StoredCappellaEmojiImage {

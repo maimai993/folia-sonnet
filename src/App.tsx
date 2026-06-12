@@ -267,6 +267,7 @@ export default function App() {
         handleSetVisualizerMode,
         handleSetVisualizerBackgroundMode,
         handleSetMonetBackgroundTuning,
+        handleSetMonetTuning,
         handleSetCadenzaTuning,
         handleResetCadenzaTuning,
         handleSetPartitaTuning,
@@ -2286,6 +2287,7 @@ export default function App() {
                     tiltTuning={tiltTuning}
                     monetBackgroundTuning={monetBackgroundTuning}
                     monetTuning={monetTuning}
+                    onMonetTuningChange={handleSetMonetTuning}
                     cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                     cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                     monetBackgroundImage={monetBackgroundImage}

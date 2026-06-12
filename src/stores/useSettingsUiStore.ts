@@ -471,7 +471,6 @@ export const resolveStoredMonetBackgroundTuning = (parsed: StoredMonetBackground
 });
 
 type StoredMonetTuningInput = Partial<MonetTuning> & StoredMonetBackgroundTuningInput;
-
 export const resolveStoredMonetTuning = (parsed: StoredMonetTuningInput): MonetTuning => ({
     keywordColoringEnabled: parsed.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
     showDescription: parsed.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
@@ -481,8 +480,11 @@ export const resolveStoredMonetTuning = (parsed: StoredMonetTuningInput): MonetT
         DEFAULT_MONET_TUNING.fontScale,
     ),
     portraitSource: resolveMonetPortraitSource(parsed.portraitSource),
+    portraitOffsetX: typeof parsed.portraitOffsetX === 'number'
+        ? Math.min(0, Math.max(-150, parsed.portraitOffsetX))
+        : (DEFAULT_MONET_TUNING.portraitOffsetX ?? 0),
+    portraitStyle: parsed.portraitStyle === 'square' ? 'square' : 'rectangular',
 });
-
 const readStoredMonetBackgroundTuning = (): MonetBackgroundTuning => {
     if (typeof window === 'undefined') {
         return DEFAULT_MONET_BACKGROUND_TUNING;

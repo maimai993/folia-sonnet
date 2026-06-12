@@ -92,6 +92,8 @@ describe('Visual Settings Import and Export', () => {
             audioStyle: 'line' as const,
             fontScale: 1.1,
             portraitSource: 'cover' as const,
+            portraitOffsetX: -120,
+            portraitStyle: 'square' as const,
         },
     };
 
@@ -106,6 +108,8 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.theme?.light.name).toBe('Light Gold');
         expect(decoded.theme?.dark.accentColor).toBe('#fbbf24');
         expect(decoded.monetBackgroundTuning?.backgroundBlurPx).toBe(4);
+        expect(decoded.monetTuning?.portraitOffsetX).toBe(-120);
+        expect(decoded.monetTuning?.portraitStyle).toBe('square');
 
         // Verify custom properties alignment
         expect(decoded.theme?.light.wordColors).toEqual([{ word: 'love', color: '#ff0000' }]);
