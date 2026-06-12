@@ -39,6 +39,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         monetTuning = DEFAULT_MONET_TUNING,
         monetPortraitImage = null,
         onMonetTuningChange,
+        seed,
     } = props;
     const { t } = useTranslation();
 
@@ -69,9 +70,11 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         lastTimeRef.current = latest;
     });
 
+    const songIdentifier = seed ?? songTitle ?? '';
+
     useEffect(() => {
         setIntroKey(prev => prev + 1);
-    }, [songTitle, songArtist, coverUrl]);
+    }, [songIdentifier]);
 
     const {
         activeLine,
