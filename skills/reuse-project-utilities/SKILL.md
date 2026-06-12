@@ -22,6 +22,7 @@ description: Use when implementing, refactoring, or reviewing code in this repos
 
 - 歌词解析、时序、render end：`src/utils/lyrics/*`
 - visualizer 运行时、背景、颜色：`src/components/visualizer/*`
+- 设置 UI、导入导出、命令面板：`src/components/modal/settings/*`、`src/stores/useSettingsUiStore.ts`、`src/components/command-palette/*`
 - 字体栈和自定义字体：`src/utils/fontStacks.ts`、`src/services/customLyricsFont.ts`
 - 播放队列、播放适配：`src/services/playbackAdapters.ts`、`src/utils/appPlaybackHelpers.ts`
 - 网易云 / Navidrome / 本地音乐 API：`src/services/*`
@@ -152,6 +153,14 @@ const { t } = useTranslation();
 
 任何新增到 UI 上的用户可见文本都必须准备 i18n key，并同步写入 `src/i18n/locales/en.ts` 和 `src/i18n/locales/zh-CN.ts`。不要把按钮、标题、提示、空态、设置项、tooltip、toast 或模式文案只写成硬编码字符串；短 fallback 只能作为现有 registry / 兼容模式的兜底，不能替代字典项。
 
+### Settings And Commands
+
+新增设置时先套用 `settings-feature-integration`：
+
+- 视觉相关设置必须进入 `AppearanceSettingsSubview.tsx` 的导入导出链路。
+- 功能性设置或可执行动作必须注册到 `src/components/command-palette/commandRegistry.ts`。
+- 设置状态优先复用 `src/stores/useSettingsUiStore.ts`，不要在组件里另起一套 localStorage 读写。
+
 ### Long Lists
 
 项目已使用 `react-window` 的 `List` 和 `useListRef`。
@@ -199,6 +208,7 @@ const { t } = useTranslation();
 - 是否新建了 service 请求逻辑，但已有 service 已经封装同类 API？
 - 是否对大量列表使用普通 `.map()` 而不是虚拟列表？
 - 是否新增硬编码文案却没有更新 i18n 字典？
+- 是否新增设置却没有接入视觉配置导入导出或 command palette？
 - 是否新增固定颜色却没有从 `Theme` / `DualTheme` 动态派生并检查明暗两套表现？
 - 是否创建了相似 helper，却没有搜索已有实现或测试？
 

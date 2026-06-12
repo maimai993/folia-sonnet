@@ -9,6 +9,8 @@
 - `partita/VisualizerPartita.tsx`: 云阶模式
 - `fume/VisualizerFume.tsx`: 浮名模式
 - `cappella/VisualizerCappella.tsx`: 群唱模式
+- `tilt/VisualizerTilt.tsx`: 倾诉模式
+- `monet/VisualizerMonet.tsx`: 莫奈海报模式
 - `definition.ts`: visualizer 共享契约、registry entry 定义
 - `settingsPanels.tsx`: 模式自带设置面板
 - `VisualizerShell.tsx`: 共享外层容器、背景层、返回按钮
@@ -17,7 +19,10 @@
 - `GeometricBackground.tsx`: 通用几何背景
 - `FumeBackground.ts`: Fume 专用 canvas 几何背景
 - `FluidBackground.tsx`: 封面取色流体背景
+- `backgrounds/*`: shell 级背景层，例如 Monet 背景图层
+- `MonetBackgroundSettingsCard.tsx`: shell 级 Monet 背景设置卡片
 - `VisPlayground.tsx`: 可视化预览和样式设置面板
+- `VisPlaygroundSettingsPanel.tsx`: 预览页的共享设置控制面板
 
 ## 目标
 
@@ -38,29 +43,44 @@ interface VisualizerSharedProps {
     currentLineIndex: number;
     lines: Line[];
     theme: Theme;
+    isDaylight?: boolean;
     audioPower: MotionValue<number>;
     audioBands: AudioBands;
     showText?: boolean;
     songTitle?: string | null;
+    songArtist?: string | null;
+    songAlbum?: string | null;
     coverUrl?: string | null;
     useCoverColorBg?: boolean;
     seed?: string | number;
     staticMode?: boolean;
     backgroundOpacity?: number;
+    visualizerOpacity?: number;
     transparentBackground?: boolean;
     disableGeometricBackground?: boolean;
     disableVignette?: boolean;
     lyricsFontScale?: number;
+    subtitleOverlayOpacity?: number;
+    visualizerBackgroundMode?: VisualizerBackgroundMode | null;
+    resolvedVisualizerBackgroundMode?: VisualizerBackgroundMode;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
     paused?: boolean;
     isPreviewMode?: boolean;
     onBack?: () => void;
+    classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
     cappellaTuning?: CappellaTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
+    cappellaCustomAvatarImages?: CappellaAvatarImage[];
+    tiltTuning?: TiltTuning;
+    monetBackgroundTuning?: MonetBackgroundTuning;
+    monetTuning?: MonetTuning;
+    monetBackgroundImage?: MonetBackgroundImage | null;
+    monetPortraitImage?: MonetPortraitImage | null;
+    onMonetTuningChange?: (patch: Partial<MonetTuning>) => void;
 }
 ```
 
@@ -80,6 +100,8 @@ export default VisualizerFoo;
 - `partitaTuning?: PartitaTuning`
 - `fumeTuning?: FumeTuning`
 - `cappellaTuning?: CappellaTuning`
+- `tiltTuning?: TiltTuning`
+- `monetTuning?: MonetTuning`
 
 不要把必须由外部传入的运行时配置写死在组件常量里，除非它确实不需要进入设置面板。
 
@@ -96,6 +118,7 @@ export default VisualizerFoo;
 
 - `theme`: 当前歌词主题。包含颜色、字体风格、动画强度等。
   新增颜色必须从当前 `Theme` / `DualTheme` 的 light / dark 结果动态派生，优先使用 `backgroundColor`、`primaryColor`、`accentColor`、`secondaryColor` 及 `colorMix.ts` 工具；不要长期写死只适配暗色或亮色的固定 hex / rgba。
+- `isDaylight`: 当前是否是浅色主题，适合细调边框、阴影和控制面板对比度。
 - `audioPower`: 音频整体能量。
 - `audioBands`: 分频能量，用于驱动背景或局部动画。
 
@@ -103,13 +126,17 @@ export default VisualizerFoo;
 
 - `showText`: 是否显示歌词文字。预览和播放器里都可能传入。
 - `songTitle`: 当前歌曲标题，主要给会把整首歌词重组成新表现形式的模式使用，例如 `cappella`。
+- `songArtist` / `songAlbum`: 当前歌曲元数据，适合海报式或唱片式 visualizer 使用。
 - `coverUrl`: 封面 URL，主要给 `FluidBackground` 使用。
 - `useCoverColorBg`: 是否启用封面取色背景。
 - `backgroundOpacity`: 当启用封面背景时，叠加底色的透明度。
+- `visualizerOpacity`: 歌词动画整体透明度，不应该由每个 renderer 再各自发明一套全局透明度。
 - `transparentBackground`: 播放页透明背景模式，移除纯色/封面底层但保留可独立控制的 visualizer 图形层。
 - `disableGeometricBackground`: 隐藏 `GeometricBackground` 的通用几何图形和粒子层。
 - `disableVignette`: 关闭 `GeometricBackground` 自带的半透明边缘暗角，不影响几何图形本体。
 - `lyricsFontScale`: 用户字号缩放。新 visualizer 应把它乘进最终字号，而不是忽略。
+- `subtitleOverlayOpacity`: 共享字幕层透明度。
+- `visualizerBackgroundMode` / `resolvedVisualizerBackgroundMode`: shell 级背景模式。`common` 是通用几何/封面背景，`monet` 是 Monet 背景图层。
 - `staticMode`: 静态模式。约定为“禁用重资源背景动画”，不是关闭全部歌词动画。
 - `isPlayerChromeHidden`: 播放器外层 chrome 是否隐藏，适合做边距或字幕策略调整。
 - `hideTranslationSubtitle`: 关闭底部翻译字幕层时使用。
@@ -180,15 +207,18 @@ visualizer/
 ├─ FluidBackground.tsx
 ├─ FumeBackground.ts
 ├─ GeometricBackground.tsx
+├─ MonetBackgroundSettingsCard.tsx
 ├─ PreviewPlaceholder.ts
 ├─ README.md
 ├─ registry.tsx
 ├─ runtime.ts
 ├─ settingsPanels.tsx
 ├─ VisPlayground.tsx
+├─ VisPlaygroundSettingsPanel.tsx
 ├─ VisualizerRenderer.tsx
 ├─ VisualizerShell.tsx
 ├─ VisualizerSubtitleOverlay.tsx
+├─ backgrounds/
 ├─ cappella/
 │  └─ VisualizerCappella.tsx
 ├─ classic/
@@ -199,6 +229,10 @@ visualizer/
 │  └─ VisualizerPartita.tsx
 ├─ fume/
 │  └─ VisualizerFume.tsx
+├─ tilt/
+│  └─ VisualizerTilt.tsx
+├─ monet/
+│  └─ VisualizerMonet.tsx
 └─ ...
 ```
 
@@ -209,8 +243,10 @@ visualizer/
   - 根容器
   - 返回按钮显隐与点击
   - `FluidBackground`
+  - `backgrounds/*` shell 级背景层
   - 背景底色
   - `GeometricBackground`
+  - `visualizerOpacity` 和背景模式的外层协调
   - 按 renderer 需要关闭默认几何背景
   - `staticMode` / `useCoverColorBg` / `backgroundOpacity` 这些通用外层行为
 
@@ -254,6 +290,10 @@ visualizer/
   文章式整页排版 + 摄影机追焦 + glyph 级 reveal
 - `cappella/VisualizerCappella.tsx`
   聊天气泡 / 表情包叙事布局，靠离线测量稳定气泡尺寸
+- `tilt/VisualizerTilt.tsx`
+  倾斜排版与强调片段，用较少状态表达文字重心变化
+- `monet/VisualizerMonet.tsx`
+  海报式布局、右侧肖像、关键词着色和底部音频条
 
 不要把这些 renderer 强行揉成一个统一组件。共享的是壳层、runtime、字幕层、预热入口，以及模式注册 / 设置面板挂载方式，不是具体渲染算法。
 
@@ -314,10 +354,17 @@ visualizer/
 #### 5. 模式设置面板跟模式入口绑定，而不是继续堆到全局预览器
 
 - 现在 registry entry 不只负责 `render`，还可以挂 `renderSettingsPanel` 和 `resetSettings`。
-- `settingsPanels.tsx` 是当前内置模式面板的收敛位置。
+- `settingsPanels.tsx` 承载多数内置模式面板；复杂模式也可以把面板放在模式相邻文件，例如 `monet/MonetSettingsPanel.tsx`。
 - 这能避免 `VisPlayground.tsx` 继续膨胀成“所有模式逻辑的大分支文件”。
 
 如果以后新增模式也需要复杂视觉调参，优先延续这条链路。
+
+#### 6. 视觉调参必须能备份和恢复
+
+- visualizer 模式、背景模式、通用透明度、字体字号和所有 renderer tuning 都属于视觉配置。
+- 当前导入导出入口在 `src/components/modal/settings/AppearanceSettingsSubview.tsx`。
+- 新增视觉设置时，必须同步 `buildCurrentConfig`、`compressConfig`、`decompressConfig`、JSON `validKeys` 和 `handleImportConfig`。
+- 不要只在 `useSettingsUiStore.ts` 持久化，却漏掉 shortcode / JSON 导入导出。
 
 ## 推荐的内部结构
 
@@ -570,7 +617,7 @@ resetSettings: props => {
 - 确认是否需要针对新模式补额外控制项
 - 复用 registry 提供的模式标签和 preview seed / offset
 
-优先把专属控制拆到模式相邻文件，再由 entry 的 `renderSettingsPanel` 挂回预览面板，避免继续在 `VisPlayground.tsx` 里堆模式分支。
+优先把共享设置放在 `VisPlaygroundSettingsPanel.tsx`，把专属控制拆到模式相邻文件，再由 entry 的 `renderSettingsPanel` 挂回预览面板，避免继续在 `VisPlayground.tsx` 里堆模式分支。
 
 #### `src/components/modal/SettingsModal.tsx`
 
@@ -579,7 +626,12 @@ resetSettings: props => {
 - 透传新的 tuning props 到 `VisPlayground`
 - 如果新增了新的调参能力，补设置入口
 
-模式按钮列表当前由 registry 生成，不应再手写一排 `classic / cadenza / partita / fume` 分支。
+模式按钮列表当前由 registry 生成，不应再手写内置模式分支。
+
+新增设置还要判断是否触发 `skills/settings-feature-integration/SKILL.md`：
+
+- 视觉相关设置必须接入 `AppearanceSettingsSubview.tsx` 的导入导出。
+- 功能性设置或可执行动作必须接入 `src/components/command-palette/commandRegistry.ts`。
 
 #### `src/components/modal/ThemePark.tsx`
 
@@ -678,6 +730,8 @@ resetSettings: props => {
 - 是否经过统一 renderer 验证
 - 是否已经接入 `VisPlayground.tsx` 的专属设置面板（如果需要）
 - 是否已经接入 `ThemePark.tsx`（如果需要专属 tuning）
+- 如果新增视觉设置，是否已经接入外观页 shortcode / JSON 导入导出
+- 如果新增功能性设置或动作，是否已经接入 command palette
 - 是否补充了中英文文案
 - 如果有调参，是否完成本地存储和重置逻辑
 

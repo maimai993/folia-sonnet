@@ -157,6 +157,23 @@ vercel dev
 | `npm run build:electron` | 打包桌面端应用 |
 | `npm run stage:client` | 打开本地 Stage API 联调台 |
 
+## 代码速查地图
+
+| 需求 | 优先入口 |
+| --- | --- |
+| App 顶层装配、overlay、dialog、播放器面板参数组装 | `src/components/app/*` |
+| 设置中心 UI | `src/components/modal/settings/*` |
+| 设置持久化、visualizer tuning、偏好 store | `src/stores/useSettingsUiStore.ts` |
+| 命令面板命令 | `src/components/command-palette/commandRegistry.ts` |
+| visualizer 共享契约和注册 | `src/components/visualizer/definition.ts`、`src/components/visualizer/registry.tsx` |
+| visualizer 预览和设置面板 | `src/components/visualizer/VisPlayground.tsx`、`src/components/visualizer/VisPlaygroundSettingsPanel.tsx` |
+| visualizer 模式实现 | `src/components/visualizer/<mode>/*` |
+| 歌词解析和渲染提示 | `src/utils/lyrics/*` |
+| 本地音乐、Navidrome、网易云服务 | `src/services/*` |
+| 共享类型和默认 tuning | `src/types.ts` |
+
+新增设置时遵守项目 skill：视觉相关设置需要进入外观页的配置导入导出；功能性设置和可执行动作需要注册到 command palette。
+
 ## 技术栈
 
 - React 19

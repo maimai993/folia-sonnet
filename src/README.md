@@ -28,6 +28,7 @@ src/
 ├─ components/
 ├─ hooks/
 ├─ services/
+├─ stores/
 ├─ utils/
 ├─ workers/
 └─ i18n/
@@ -85,12 +86,15 @@ src/
 
 - `components/modal/*`
   各类弹窗，尤其是：
-  `SettingsModal.tsx` 是全局设置中心，也承载帮助说明。
+  `SettingsModal.tsx` 是全局设置中心和帮助入口；具体设置页已拆到 `components/modal/settings/*`。
+
+- `components/command-palette/*`
+  命令面板。`commandRegistry.ts` 统一注册搜索、设置入口、导航、右侧面板、播放、visualizer 和背景切换命令；新增功能性设置或可执行动作时必须同步这里和 i18n。
 
 - `components/visualizer/*`
   歌词可视化层。
-  根目录保留共享壳层、背景层、runtime、registry 和预览入口；
-  `classic/Visualizer.tsx` / `cadenza/VisualizerCadenza.tsx` / `partita/VisualizerPartita.tsx` / `fume/VisualizerFume.tsx` 分别负责各模式实现。
+  根目录保留共享壳层、背景层、runtime、registry、视觉设置卡片和预览入口；
+  `classic` / `cadenza` / `partita` / `fume` / `cappella` / `tilt` / `monet` 子目录分别负责各模式实现。
 
 ### Hooks
 
@@ -178,7 +182,10 @@ src/
 
 - 改页面布局或交互：`components/*`
 - 改 App 顶层装配、overlay 归口、dialog 归口、参数组装：`components/app/*`
+- 改设置 UI：优先看 `components/modal/settings/*`；不要继续把新设置堆进 `SettingsModal.tsx`
+- 改可执行命令或功能性设置入口：`components/command-palette/commandRegistry.ts`
 - 改跨页面状态或导航：`hooks/*`
+- 改共享偏好、visualizer tuning、设置持久化：`stores/useSettingsUiStore.ts`
 - 改 API、缓存、导入、播放数据流：`services/*`
 - 改解析、纯逻辑、格式转换：`utils/*`
 - 改耗时解析：优先看 `workers/*`
@@ -197,11 +204,14 @@ src/
 7. `services/onlinePlayback.ts`
 8. `utils/lyrics/LyricParserFactory.ts`
 9. `utils/lyrics/parserCore.ts`
+10. `stores/useSettingsUiStore.ts`
+11. `components/command-palette/commandRegistry.ts`
 
 ## 6. Project-Specific Notes
 
 - 这是统一播放模型，不要把网易云 / 本地 / Navidrome 分成三套播放器状态。
 - `SettingsModal.tsx` 是设置中心，不只是帮助说明。
+- 新增设置时先判断是否适用 `settings-feature-integration`：视觉相关设置必须接入视觉配置导入导出；功能性设置或可执行动作必须接入 command palette。
 - `PlayerPanel.tsx` 是当前 app-level 面板入口，`UnifiedPanel.tsx` 是 legacy 实现；不要重新把面板逻辑塞回单个大组件。
 - 不要在 `App.tsx` 里直接组装超长 props；优先放进 `components/app/*` 下与功能相邻的 `build*.ts` / `create*.ts`。
 - 本地音乐导入是增量快照式，不是单次全量扫描。

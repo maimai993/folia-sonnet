@@ -141,7 +141,23 @@ description: Use when the user refers to repository-specific terms such as home 
   -> `src/components/panelTab/FmTab.tsx`
 
 - “帮助弹窗”“设置弹窗”“选项中心”
-  -> `src/components/modal/HelpModal.tsx`
+  -> `src/components/modal/SettingsModal.tsx`
+  -> settings subviews: `src/components/modal/settings/*`
+
+- “命令面板”“command palette”“快捷命令”
+  -> `src/components/command-palette/commandRegistry.ts`
+  -> context type: `src/components/command-palette/types.ts`
+
+- “外观设置”“视觉设置”“视觉配置导入导出”
+  -> `src/components/modal/settings/AppearanceSettingsSubview.tsx`
+  -> settings store: `src/stores/useSettingsUiStore.ts`
+
+- “播放设置”“集成设置”“存储设置”“桌面端设置”“实验室设置”
+  -> `src/components/modal/settings/PlaybackSettingsSubview.tsx`
+  -> `src/components/modal/settings/IntegrationSettingsSubview.tsx`
+  -> `src/components/modal/settings/StorageSettingsSection.tsx`
+  -> `src/components/modal/settings/DesktopSettingsSubview.tsx`
+  -> `src/components/modal/settings/LabSettingsModal.tsx`
 
 - “本地歌词匹配弹窗”
   -> `src/components/modal/LyricMatchModal.tsx`
@@ -155,19 +171,40 @@ description: Use when the user refers to repository-specific terms such as home 
   -> `src/components/visualizer/*`
 
 - “经典模式”“classic”
-  -> `Visualizer.tsx`
+  -> `src/components/visualizer/classic/Visualizer.tsx`
   -> `VisualizerMode = 'classic'`
 
-- “心象模式”"cadenza"
-  -> `VisualizerCadenza.tsx`
+- “心象模式”“cadenza”
+  -> `src/components/visualizer/cadenza/VisualizerCadenza.tsx`
   -> `VisualizerMode = 'cadenza'`
 
-- “云阶模式”""partita"
-  -> `VisualizerPartita.tsx`
+- “云阶模式”“partita”
+  -> `src/components/visualizer/partita/VisualizerPartita.tsx`
   -> `VisualizerMode = 'partita'`
 
+- “浮名模式”“fume”
+  -> `src/components/visualizer/fume/VisualizerFume.tsx`
+  -> `VisualizerMode = 'fume'`
+
+- “群唱模式”“cappella”
+  -> `src/components/visualizer/cappella/VisualizerCappella.tsx`
+  -> `VisualizerMode = 'cappella'`
+
+- “倾诉模式”“tilt”
+  -> `src/components/visualizer/tilt/VisualizerTilt.tsx`
+  -> `VisualizerMode = 'tilt'`
+
+- “莫奈模式”“monet”
+  -> `src/components/visualizer/monet/VisualizerMonet.tsx`
+  -> `VisualizerMode = 'monet'`
+
+- “通用背景 / 莫奈背景”
+  -> `visualizerBackgroundMode` in `src/stores/useSettingsUiStore.ts`
+  -> shell background card: `src/components/visualizer/MonetBackgroundSettingsCard.tsx`
+
 - “可视化模式状态”
-  -> `visualizerMode` in `src/hooks/useAppPreferences.ts`
+  -> `visualizerMode` in `src/stores/useSettingsUiStore.ts`
+  -> bridge hook: `src/hooks/useAppPreferences.ts`
   -> related type in `src/types.ts`
 
 ### Data / Service

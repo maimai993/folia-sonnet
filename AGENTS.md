@@ -35,6 +35,10 @@
   路径：`skills/reuse-project-utilities/SKILL.md`
   用于在实现、重构或审查时提示优先复用仓库已有公共工具和常用库，例如 pretext 文本测量、visualizer runtime、歌词时序 helper、字体/颜色 helper、i18n、lucide 图标和虚拟列表，避免重复造轮子。
 
+- `settings-feature-integration`
+  路径：`skills/settings-feature-integration/SKILL.md`
+  用于新增或调整设置项时判断接入位置：视觉相关设置必须进入视觉配置导入导出，功能性设置和可执行动作必须注册到 command palette。
+
 全局沟通规则：
 
 - 不需要使用skills的时候，不要读取它们。
