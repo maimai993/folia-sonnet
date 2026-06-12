@@ -239,6 +239,8 @@ export default function App() {
         cappellaCustomAvatarImages,
         monetBackgroundImage,
         monetPortraitImage,
+        urlBackgroundList,
+        urlBackgroundSelectedId,
         lyricsFontStyle,
         lyricsFontScale,
         lyricsCustomFontFamily,
@@ -2292,6 +2294,8 @@ export default function App() {
                     cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                     monetBackgroundImage={monetBackgroundImage}
                     monetPortraitImage={monetPortraitImage}
+                    urlBackgroundList={urlBackgroundList}
+                    urlBackgroundSelectedId={urlBackgroundSelectedId}
                     onBack={navigateToHome}
                 />
             </div>

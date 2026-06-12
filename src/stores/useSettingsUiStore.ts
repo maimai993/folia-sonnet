@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type React from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type FumeTuning, type MonetBackgroundImage, type MonetBackgroundLayout, type MonetBackgroundSource, type MonetBackgroundTuning, type MonetBackgroundWashColorMode, type MonetPortraitImage, type MonetPortraitSource, type MonetTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type StoredMonetBackgroundImage, type StoredMonetPortraitImage, type Theme, type TiltTuning, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_FUME_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type FumeTuning, type MonetBackgroundImage, type MonetBackgroundLayout, type MonetBackgroundSource, type MonetBackgroundTuning, type MonetBackgroundWashColorMode, type MonetPortraitImage, type MonetPortraitSource, type MonetTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type StoredMonetBackgroundImage, type StoredMonetPortraitImage, type Theme, type TiltTuning, type UrlBackgroundItem, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
@@ -422,7 +422,25 @@ const readStoredVisualizerBackgroundMode = (): VisualizerBackgroundMode | null =
     }
 
     const saved = localStorage.getItem('visualizer_background_mode');
-    return saved === 'common' || saved === 'monet' ? saved : null;
+    return saved === 'common' || saved === 'monet' || saved === 'url' ? saved : null;
+};
+
+const readStoredUrlBackgroundList = (): UrlBackgroundItem[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+        const saved = localStorage.getItem('url_background_list');
+        if (!saved) return [];
+        const parsed = JSON.parse(saved);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((item: any) => item && typeof item.id === 'string' && typeof item.url === 'string' && typeof item.note === 'string');
+    } catch {
+        return [];
+    }
+};
+
+const readStoredUrlBackgroundSelectedId = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('url_background_selected_id') || null;
 };
 
 export const resolveVisualizerBackgroundMode = (
@@ -669,6 +687,8 @@ type SettingsUiState = {
     subtitleOverlayOpacity: number;
     visualizerOpacity: number;
     visualizerBackgroundMode: VisualizerBackgroundMode | null;
+    urlBackgroundList: UrlBackgroundItem[];
+    urlBackgroundSelectedId: string | null;
     visualizerFrameRate: VisualizerFrameRate;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
@@ -747,6 +767,10 @@ type SettingsUiState = {
     handleSetVisualizerOpacity: (opacity: number) => void;
     handleSetVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
     handleResetVisualizerBackgroundMode: () => void;
+    handleAddUrlBackgroundItem: (item: UrlBackgroundItem) => void;
+    handleUpdateUrlBackgroundItem: (id: string, patch: Partial<Omit<UrlBackgroundItem, 'id'>>) => void;
+    handleDeleteUrlBackgroundItem: (id: string) => void;
+    handleSetUrlBackgroundSelectedId: (id: string | null) => void;
     handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
     setDaylightPreference: (enabled: boolean) => void;
     handleSetVisualizerMode: (mode: VisualizerMode) => void;
@@ -814,6 +838,8 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
     visualizerOpacity: readStoredVisualizerOpacity(),
     visualizerBackgroundMode: readStoredVisualizerBackgroundMode(),
+    urlBackgroundList: readStoredUrlBackgroundList(),
+    urlBackgroundSelectedId: readStoredUrlBackgroundSelectedId(),
     visualizerFrameRate: readStoredVisualizerFrameRate(),
     isDaylight: getStoredBoolean('default_theme_daylight', false),
     visualizerMode: readStoredVisualizerMode(),
@@ -1054,6 +1080,52 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.removeItem('visualizer_background_mode');
         }
         set({ visualizerBackgroundMode: null });
+    },
+    handleAddUrlBackgroundItem: (item) => {
+        const next = [...get().urlBackgroundList, item];
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('url_background_list', JSON.stringify(next));
+        }
+        set({ urlBackgroundList: next });
+    },
+    handleUpdateUrlBackgroundItem: (id, patch) => {
+        const next = get().urlBackgroundList.map(item =>
+            item.id === id ? { ...item, ...patch } : item
+        );
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('url_background_list', JSON.stringify(next));
+        }
+        set({ urlBackgroundList: next });
+    },
+    handleDeleteUrlBackgroundItem: (id) => {
+        const next = get().urlBackgroundList.filter(item => item.id !== id);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('url_background_list', JSON.stringify(next));
+        }
+        const selectedId = get().urlBackgroundSelectedId;
+        if (selectedId === id) {
+            const newSelectedId = next.length > 0 ? next[0].id : null;
+            if (typeof window !== 'undefined') {
+                if (newSelectedId) {
+                    localStorage.setItem('url_background_selected_id', newSelectedId);
+                } else {
+                    localStorage.removeItem('url_background_selected_id');
+                }
+            }
+            set({ urlBackgroundList: next, urlBackgroundSelectedId: newSelectedId });
+        } else {
+            set({ urlBackgroundList: next });
+        }
+    },
+    handleSetUrlBackgroundSelectedId: (id) => {
+        if (typeof window !== 'undefined') {
+            if (id) {
+                localStorage.setItem('url_background_selected_id', id);
+            } else {
+                localStorage.removeItem('url_background_selected_id');
+            }
+        }
+        set({ urlBackgroundSelectedId: id });
     },
     handleSetVisualizerFrameRate: (frameRate) => {
         if (typeof window !== 'undefined') {
@@ -1566,6 +1638,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     subtitleOverlayOpacity: state.subtitleOverlayOpacity,
     visualizerOpacity: state.visualizerOpacity,
     visualizerBackgroundMode: state.visualizerBackgroundMode,
+    urlBackgroundList: state.urlBackgroundList,
+    urlBackgroundSelectedId: state.urlBackgroundSelectedId,
     visualizerFrameRate: state.visualizerFrameRate,
     isDaylight: state.isDaylight,
     visualizerMode: state.visualizerMode,
@@ -1620,6 +1694,10 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
     handleSetVisualizerBackgroundMode: state.handleSetVisualizerBackgroundMode,
     handleResetVisualizerBackgroundMode: state.handleResetVisualizerBackgroundMode,
+    handleAddUrlBackgroundItem: state.handleAddUrlBackgroundItem,
+    handleUpdateUrlBackgroundItem: state.handleUpdateUrlBackgroundItem,
+    handleDeleteUrlBackgroundItem: state.handleDeleteUrlBackgroundItem,
+    handleSetUrlBackgroundSelectedId: state.handleSetUrlBackgroundSelectedId,
     handleSetVisualizerFrameRate: state.handleSetVisualizerFrameRate,
     setDaylightPreference: state.setDaylightPreference,
     handleSetVisualizerMode: state.handleSetVisualizerMode,

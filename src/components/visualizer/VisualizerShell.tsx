@@ -2,12 +2,13 @@ import React, { forwardRef, useState } from 'react';
 import { AnimatePresence, motion, MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
-import { AudioBands, Theme } from '../../types';
+import { AudioBands, Theme, type UrlBackgroundItem } from '../../types';
 import { resolveThemeFontStack } from '../../utils/fontStacks';
 import { type VisualizerSharedProps } from './definition';
 import FluidBackground from './FluidBackground';
 import GeometricBackground from './GeometricBackground';
 import MonetBackgroundLayer from './backgrounds/MonetBackgroundLayer';
+import UrlBackgroundLayer from './backgrounds/UrlBackgroundLayer';
 
 // Shared outer shell for all visualizers.
 // This is where we keep background layering, font injection, and the hover-only back button
@@ -26,6 +27,8 @@ type VisualizerShellSharedProps = Pick<
     | 'resolvedVisualizerBackgroundMode'
     | 'monetBackgroundTuning'
     | 'monetBackgroundImage'
+    | 'urlBackgroundList'
+    | 'urlBackgroundSelectedId'
     | 'staticMode'
     | 'paused'
     | 'onBack'
@@ -47,6 +50,8 @@ interface VisualizerShellProps {
     disableGeometricBackground?: boolean;
     paused?: boolean;
     onBack?: () => void;
+    urlBackgroundList?: UrlBackgroundItem[];
+    urlBackgroundSelectedId?: string | null;
     children: React.ReactNode;
     className?: string;
 }
@@ -67,6 +72,8 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     disableGeometricBackground = false,
     paused = false,
     onBack,
+    urlBackgroundList,
+    urlBackgroundSelectedId,
     children,
     className = '',
 }, ref) => {
@@ -84,11 +91,14 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     const resolvedBackgroundMode = sharedProps?.resolvedVisualizerBackgroundMode ?? 'common';
     const resolvedMonetBackgroundTuning = sharedProps?.monetBackgroundTuning;
     const resolvedMonetBackgroundImage = sharedProps?.monetBackgroundImage;
+    const resolvedUrlBackgroundList = sharedProps?.urlBackgroundList ?? urlBackgroundList;
+    const resolvedUrlBackgroundSelectedId = sharedProps?.urlBackgroundSelectedId ?? urlBackgroundSelectedId;
     const resolvedStaticMode = sharedProps?.staticMode ?? staticMode;
     const resolvedPaused = sharedProps?.paused ?? paused;
     const resolvedOnBack = sharedProps?.onBack ?? onBack;
     const shouldRenderCommonBackground = !resolvedTransparentBackground && resolvedBackgroundMode === 'common';
     const shouldRenderMonetBackground = !resolvedTransparentBackground && resolvedBackgroundMode === 'monet';
+    const shouldRenderUrlBackground = !resolvedTransparentBackground && resolvedBackgroundMode === 'url';
 
     // Keep the tailwind font utility roughly aligned with the theme category,
     // but still let the real resolved font stack win through inline style.
@@ -174,6 +184,13 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
                     isDaylight={resolvedIsDaylight}
                     tuning={resolvedMonetBackgroundTuning}
                     transparentBackground={resolvedTransparentBackground}
+                />
+            )}
+
+            {shouldRenderUrlBackground && (
+                <UrlBackgroundLayer
+                    urlBackgroundList={resolvedUrlBackgroundList}
+                    urlBackgroundSelectedId={resolvedUrlBackgroundSelectedId}
                 />
             )}
 

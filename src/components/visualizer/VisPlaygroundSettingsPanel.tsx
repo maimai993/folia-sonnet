@@ -14,11 +14,13 @@ import {
     type PartitaTuning,
     type Theme,
     type TiltTuning,
+    type UrlBackgroundItem,
     type VisualizerBackgroundMode,
     type VisualizerMode,
 } from '../../types';
 import { colorWithAlpha } from './colorMix';
 import { MonetBackgroundSettingsCard } from './MonetBackgroundSettingsCard';
+import { UrlBackgroundSettingsCard } from './backgrounds/UrlBackgroundSettingsCard';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel, type VisualizerRegistryEntry } from './registry';
 import { type VisPlaygroundEditSection } from './VisPlaygroundPreviewHotspots';
 
@@ -110,6 +112,12 @@ interface VisPlaygroundSettingsPanelProps {
     onUploadMonetPortraitImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearMonetPortraitImage?: () => Promise<void> | void;
     isLoadingMonetPortraitImage?: boolean;
+    urlBackgroundList?: UrlBackgroundItem[];
+    urlBackgroundSelectedId?: string | null;
+    onAddUrlBackgroundItem?: (item: UrlBackgroundItem) => void;
+    onUpdateUrlBackgroundItem?: (id: string, patch: Partial<Omit<UrlBackgroundItem, 'id'>>) => void;
+    onDeleteUrlBackgroundItem?: (id: string) => void;
+    onSetUrlBackgroundSelectedId?: (id: string | null) => void;
     hideTranslationSubtitle: boolean;
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
     subtitleOverlayOpacity: number;
@@ -326,6 +334,12 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onUploadMonetPortraitImage,
         onClearMonetPortraitImage,
         isLoadingMonetPortraitImage,
+        urlBackgroundList = [],
+        urlBackgroundSelectedId = null,
+        onAddUrlBackgroundItem,
+        onUpdateUrlBackgroundItem,
+        onDeleteUrlBackgroundItem,
+        onSetUrlBackgroundSelectedId,
         hideTranslationSubtitle,
         onToggleHideTranslationSubtitle,
         subtitleOverlayOpacity,
@@ -345,6 +359,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
     const backgroundModeOptions = useMemo<PresetOption<VisualizerBackgroundMode>[]>(() => ([
         { value: 'common', label: t('options.visualizerBackgroundModeCommon') || '通用' },
         { value: 'monet', label: t('options.visualizerBackgroundModeMonet') || '莫奈' },
+        { value: 'url', label: t('options.visualizerBackgroundModeUrl') || 'URL' },
     ]), [t]);
 
     return (
@@ -522,6 +537,19 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     </div>
                                 </div>
                             </>
+                        ) : resolvedBackgroundMode === 'url' ? (
+                            <UrlBackgroundSettingsCard
+                                t={t}
+                                isDaylight={isDaylight}
+                                theme={theme}
+                                controlCardBg={controlCardBg}
+                                urlBackgroundList={urlBackgroundList}
+                                urlBackgroundSelectedId={urlBackgroundSelectedId}
+                                onAddUrlBackgroundItem={onAddUrlBackgroundItem}
+                                onUpdateUrlBackgroundItem={onUpdateUrlBackgroundItem}
+                                onDeleteUrlBackgroundItem={onDeleteUrlBackgroundItem}
+                                onSetUrlBackgroundSelectedId={onSetUrlBackgroundSelectedId}
+                            />
                         ) : (
                             <MonetBackgroundSettingsCard
                                 t={t}

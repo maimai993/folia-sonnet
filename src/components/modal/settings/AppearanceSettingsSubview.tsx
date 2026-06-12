@@ -222,6 +222,8 @@ export const compressConfig = (config: any): string => {
     if (config.tiltTuning) minified.tt = compressTilt(config.tiltTuning);
     if (config.monetBackgroundTuning) minified.mbt = compressMonetBackground(config.monetBackgroundTuning);
     if (config.monetTuning) minified.mt = compressMonet(config.monetTuning);
+    if (config.urlBackgroundList) minified.ubl = config.urlBackgroundList;
+    if (config.urlBackgroundSelectedId) minified.ubid = config.urlBackgroundSelectedId;
 
     const jsonStr = JSON.stringify(minified);
     const bytes = new TextEncoder().encode(jsonStr);
@@ -274,6 +276,8 @@ export const decompressConfig = (str: string): any => {
         if (parsed.tt) decompressed.tiltTuning = decompressTilt(parsed.tt);
         if (parsed.mbt) decompressed.monetBackgroundTuning = decompressMonetBackground(parsed.mbt);
         if (parsed.mt) decompressed.monetTuning = decompressMonet(parsed.mt);
+        if (parsed.ubl) decompressed.urlBackgroundList = parsed.ubl;
+        if (parsed.ubid) decompressed.urlBackgroundSelectedId = parsed.ubid;
 
         return decompressed;
     } else {
@@ -281,7 +285,8 @@ export const decompressConfig = (str: string): any => {
             'theme', 'visualizerMode', 'visualizerBackgroundMode', 'backgroundOpacity',
             'visualizerOpacity', 'lyricsFontStyle', 'lyricsFontScale', 'classicTuning',
             'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'cappellaTuning',
-            'tiltTuning', 'monetBackgroundTuning', 'monetTuning'
+            'tiltTuning', 'monetBackgroundTuning', 'monetTuning',
+            'urlBackgroundList', 'urlBackgroundSelectedId'
         ];
         const hasValidKey = validKeys.some(k => parsed[k] !== undefined);
         if (!hasValidKey) {
@@ -371,6 +376,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         tiltTuning: state.tiltTuning,
         monetBackgroundTuning: state.monetBackgroundTuning,
         monetTuning: state.monetTuning,
+        urlBackgroundList: state.urlBackgroundList,
+        urlBackgroundSelectedId: state.urlBackgroundSelectedId,
 
         handleSetVisualizerMode: state.handleSetVisualizerMode,
         handleSetVisualizerBackgroundMode: state.handleSetVisualizerBackgroundMode,
@@ -386,6 +393,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleSetTiltTuning: state.handleSetTiltTuning,
         handleSetMonetBackgroundTuning: state.handleSetMonetBackgroundTuning,
         handleSetMonetTuning: state.handleSetMonetTuning,
+        handleAddUrlBackgroundItem: state.handleAddUrlBackgroundItem,
+        handleSetUrlBackgroundSelectedId: state.handleSetUrlBackgroundSelectedId,
     })));
 
     const getAccentOptionStyle = (selected: boolean) => (
@@ -424,6 +433,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             tiltTuning: store.tiltTuning,
             monetBackgroundTuning: store.monetBackgroundTuning,
             monetTuning: store.monetTuning,
+            urlBackgroundList: store.urlBackgroundList,
+            urlBackgroundSelectedId: store.urlBackgroundSelectedId,
         };
     };
 
@@ -508,6 +519,16 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (config.monetTuning) {
                 store.handleSetMonetTuning(config.monetTuning);
+            }
+            if (config.urlBackgroundList && Array.isArray(config.urlBackgroundList)) {
+                for (const item of config.urlBackgroundList) {
+                    if (item && typeof item.id === 'string' && typeof item.url === 'string') {
+                        store.handleAddUrlBackgroundItem(item);
+                    }
+                }
+            }
+            if (config.urlBackgroundSelectedId) {
+                store.handleSetUrlBackgroundSelectedId(config.urlBackgroundSelectedId);
             }
 
             store.statusSetter?.({ type: 'success', text: t('options.importSuccess') || '配置导入成功！' });

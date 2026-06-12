@@ -16,6 +16,7 @@ import {
     type PartitaTuning,
     type Theme,
     type TiltTuning,
+    type UrlBackgroundItem,
     type VisualizerBackgroundMode,
     type VisualizerMode,
 } from '../../types';
@@ -66,6 +67,8 @@ export interface VisualizerSharedProps {
     monetTuning?: MonetTuning;
     monetBackgroundImage?: MonetBackgroundImage | null;
     monetPortraitImage?: MonetPortraitImage | null;
+    urlBackgroundList?: UrlBackgroundItem[];
+    urlBackgroundSelectedId?: string | null;
     onMonetTuningChange?: (patch: Partial<MonetTuning>) => void;
 }
 
@@ -108,6 +111,12 @@ export interface VisualizerSettingsPanelProps {
     onUploadMonetPortraitImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearMonetPortraitImage?: () => Promise<void> | void;
     isLoadingMonetPortraitImage?: boolean;
+    urlBackgroundList?: UrlBackgroundItem[];
+    urlBackgroundSelectedId?: string | null;
+    onAddUrlBackgroundItem?: (item: UrlBackgroundItem) => void;
+    onUpdateUrlBackgroundItem?: (id: string, patch: Partial<Omit<UrlBackgroundItem, 'id'>>) => void;
+    onDeleteUrlBackgroundItem?: (id: string) => void;
+    onSetUrlBackgroundSelectedId?: (id: string | null) => void;
     /** Mark slider drag start so onChange only updates draft. */
     onSliderPointerDown?: () => void;
     /** Commit draft values to persistent store on slider release. */

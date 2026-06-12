@@ -340,6 +340,17 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         },
     },
     {
+        id: 'background-url',
+        group: 'visualizer',
+        title: 'Background: URL',
+        description: 'Switch background to URL webpage mode',
+        keywords: ['background url', 'url background', 'url', 'webpage', 'URL背景', '网页背景', 'urlbj', 'wybj', '背景切换到 URL', '背景切换到URL'],
+        execute: (_input, context) => {
+            context.setVisualizerBackgroundMode('url');
+            return true;
+        },
+    },
+    {
         id: 'settings-toggle-transparent',
         group: 'settings',
         title: 'Toggle transparency',
