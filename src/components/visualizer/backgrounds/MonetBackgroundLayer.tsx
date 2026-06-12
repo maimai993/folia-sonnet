@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { DEFAULT_MONET_BACKGROUND_TUNING, type MonetBackgroundImage, type MonetBackgroundTuning, type Theme } from '../../../types';
 import { colorWithAlpha } from '../colorMix';
 import { getMonetBackgroundCacheKey, resolveMonetBackgroundDataUrl } from '../monet/monetBackgroundPipeline';
@@ -102,15 +103,22 @@ const MonetBackgroundLayer: React.FC<MonetBackgroundLayerProps> = ({
     if (tuning.backgroundLayout === 'full-overlay') {
         return (
             <div className="absolute inset-0 z-0 overflow-hidden">
-                <div
-                    className="absolute inset-0"
-                    style={{
-                        backgroundColor: theme.backgroundColor,
-                        backgroundImage: resolvedBackgroundImage,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                    }}
-                />
+                <AnimatePresence initial={false}>
+                    <motion.div
+                        key={pipelineUrl || sourceUrl || 'fallback'}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.8, ease: 'easeInOut' }}
+                        className="absolute inset-0"
+                        style={{
+                            backgroundColor: theme.backgroundColor,
+                            backgroundImage: resolvedBackgroundImage,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                        }}
+                    />
+                </AnimatePresence>
                 <div
                     className="absolute inset-0"
                     style={{ background: readabilityGradient }}
@@ -132,20 +140,26 @@ const MonetBackgroundLayer: React.FC<MonetBackgroundLayerProps> = ({
                     backgroundImage: fallbackGradient,
                 }}
             />
-            {pipelineUrl || sourceUrl ? (
-                <div
-                    className="absolute inset-y-0 left-0 w-[72%] sm:w-[68%] lg:w-[60%]"
-                    style={{
-                        backgroundImage: resolvedBackgroundImage,
-                        backgroundRepeat: 'no-repeat',
-                        backgroundSize: 'cover',
-                        backgroundPosition: `${imagePositionX}% center`,
-                        opacity: imageOpacity,
-                        WebkitMaskImage: 'linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.94) 48%, rgba(0,0,0,0.46) 74%, rgba(0,0,0,0) 100%)',
-                        maskImage: 'linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.94) 48%, rgba(0,0,0,0.46) 74%, rgba(0,0,0,0) 100%)',
-                    }}
-                />
-            ) : null}
+            <AnimatePresence initial={false}>
+                {pipelineUrl || sourceUrl ? (
+                    <motion.div
+                        key={pipelineUrl || sourceUrl || 'fallback'}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: imageOpacity }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.8, ease: 'easeInOut' }}
+                        className="absolute inset-y-0 left-0 w-[72%] sm:w-[68%] lg:w-[60%]"
+                        style={{
+                            backgroundImage: resolvedBackgroundImage,
+                            backgroundRepeat: 'no-repeat',
+                            backgroundSize: 'cover',
+                            backgroundPosition: `${imagePositionX}% center`,
+                            WebkitMaskImage: 'linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.94) 48%, rgba(0,0,0,0.46) 74%, rgba(0,0,0,0) 100%)',
+                            maskImage: 'linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.94) 48%, rgba(0,0,0,0.46) 74%, rgba(0,0,0,0) 100%)',
+                        }}
+                    />
+                ) : null}
+            </AnimatePresence>
             <div
                 className="absolute inset-0"
                 style={{
