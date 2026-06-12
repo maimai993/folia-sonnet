@@ -176,6 +176,7 @@ vercel dev
 
 ## 技术栈
 
+- [NeteaseCloudMusicApiEnhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced)
 - React 19
 - Vite 6
 - TypeScript
