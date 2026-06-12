@@ -374,7 +374,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                             } : {
                                                 borderColor: isHangerHovered
                                                     ? colorWithAlpha(theme.primaryColor, 0.36)
-                                                    : 'transparent',
+                                                    : colorWithAlpha(theme.primaryColor, 0),
                                                 boxShadow: `0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
                                             }}
                                             transition={isEditingPosition ? {
