@@ -1476,10 +1476,12 @@ function extractResponseContentText(message) {
 process.env.ENABLE_GENERAL_UNBLOCK = 'false';
 
 // Issue: Netease API module reads 'anonymous_token' synchronously from tmp dir upon require.
-// If not present, Electron crashes with ENOENT. We pre-create it safely.
+// If not present, Electron crashes with ENOENT. Pre-create the file, then hydrate the
+// package's runtime state in the order required by the current api-enhanced build.
 const fsp = fs.promises;
 const os = require('os');
 const tokenPath = path.resolve(os.tmpdir(), 'anonymous_token');
+const xeapiPublicKeyPath = path.resolve(os.tmpdir(), 'xeapi_public_key');
 if (!fs.existsSync(tokenPath)) {
   fs.writeFileSync(tokenPath, '', 'utf-8');
 }
@@ -1613,6 +1615,13 @@ async function clearAudioCacheDirectory() {
   }
 }
 
+const { register_anonimous } = require('@neteasecloudmusicapienhanced/api/main');
+const { getXeapiPublicKey } = require('@neteasecloudmusicapienhanced/api/util/xeapiKey');
+const {
+  cookieToJson,
+  generateDeviceId,
+  generateRandomChineseIP,
+} = require('@neteasecloudmusicapienhanced/api/util/index');
 const { serveNcmApi } = require('@neteasecloudmusicapienhanced/api/server');
 
 const net = require('net');
@@ -1632,9 +1641,40 @@ async function getFreePort() {
   });
 }
 
+// Initializes the Netease API runtime files before the local server starts handling requests.
+async function initializeNcmApiRuntime() {
+  global.cnIp = generateRandomChineseIP();
+
+  if (!global.deviceId) {
+    global.deviceId = generateDeviceId();
+  }
+
+  let currentPublicKey = {};
+  if (fs.existsSync(xeapiPublicKeyPath)) {
+    try {
+      currentPublicKey = JSON.parse(fs.readFileSync(xeapiPublicKeyPath, 'utf-8'));
+    } catch (error) {
+      console.warn('[Netease API] Failed to read cached xeapi public key, regenerating', error);
+    }
+  }
+
+  const nextPublicKey = await getXeapiPublicKey(currentPublicKey, global.deviceId);
+  fs.writeFileSync(xeapiPublicKeyPath, JSON.stringify(nextPublicKey), 'utf-8');
+
+  const anonymousRegistration = await register_anonimous();
+  const anonymousCookie = anonymousRegistration?.body?.cookie;
+  if (typeof anonymousCookie === 'string' && anonymousCookie.trim()) {
+    const cookieObject = cookieToJson(anonymousCookie);
+    if (typeof cookieObject.MUSIC_A === 'string') {
+      fs.writeFileSync(tokenPath, cookieObject.MUSIC_A, 'utf-8');
+    }
+  }
+}
+
 async function startApi() {
   try {
     const freePort = await getFreePort();
+    await initializeNcmApiRuntime();
     await serveNcmApi({ port: freePort });
     assignedPort = freePort;
     console.log('Netease API started on port', assignedPort);
