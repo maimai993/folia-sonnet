@@ -21,6 +21,14 @@ interface UrlBackgroundSettingsCardProps {
 
 const generateId = () => `url-bg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+// Prepend https:// when the user omits the protocol,
+// otherwise the iframe interprets bare domains as relative paths.
+const normalizeUrl = (url: string): string => {
+    const trimmed = url.trim();
+    if (!trimmed) return trimmed;
+    return trimmed.includes('://') ? trimmed : `https://${trimmed}`;
+};
+
 const UrlBackgroundSettingsCard: React.FC<UrlBackgroundSettingsCardProps> = ({
     t,
     isDaylight,
@@ -46,7 +54,7 @@ const UrlBackgroundSettingsCard: React.FC<UrlBackgroundSettingsCardProps> = ({
     }, []);
 
     const handleAdd = useCallback(() => {
-        const trimmedUrl = draftUrl.trim();
+        const trimmedUrl = normalizeUrl(draftUrl);
         if (!trimmedUrl) return;
         const item: UrlBackgroundItem = {
             id: generateId(),
@@ -66,7 +74,7 @@ const UrlBackgroundSettingsCard: React.FC<UrlBackgroundSettingsCardProps> = ({
 
     const handleSaveEdit = useCallback(() => {
         if (!editingId) return;
-        const trimmedUrl = draftUrl.trim();
+        const trimmedUrl = normalizeUrl(draftUrl);
         if (!trimmedUrl) return;
         onUpdateUrlBackgroundItem?.(editingId, {
             url: trimmedUrl,

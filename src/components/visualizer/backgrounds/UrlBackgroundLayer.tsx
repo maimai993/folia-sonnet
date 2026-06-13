@@ -39,22 +39,19 @@ const UrlBackgroundLayer: React.FC<UrlBackgroundLayerProps> = ({
             setReady(true);
             return;
         }
-        // Container not laid out yet — use rAF to wait for next paint.
-        let cancelled = false;
-        let retryCount = 0;
-        const MAX_RETRIES = 2500; // ~10s at 250fps safety limit
-        const check = () => {
-            if (cancelled || retryCount >= MAX_RETRIES) return;
-            const r = el.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) {
-                setReady(true);
-            } else {
-                retryCount += 1;
-                requestAnimationFrame(check);
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const { width, height } = entry.contentRect;
+                if (width > 0 && height > 0) {
+                    setReady(true);
+                    observer.disconnect();
+                }
             }
+        });
+        observer.observe(el);
+        return () => {
+            observer.disconnect();
         };
-        requestAnimationFrame(check);
-        return () => { cancelled = true; };
     }, [selectedItem]);
 
     if (!selectedItem?.url) return null;

@@ -432,7 +432,13 @@ const readStoredUrlBackgroundList = (): UrlBackgroundItem[] => {
         if (!saved) return [];
         const parsed = JSON.parse(saved);
         if (!Array.isArray(parsed)) return [];
-        return parsed.filter((item: any) => item && typeof item.id === 'string' && typeof item.url === 'string' && typeof item.note === 'string');
+        return parsed.filter((item: any): item is UrlBackgroundItem =>
+            item && typeof item.id === 'string' && typeof item.url === 'string'
+        ).map(item => ({
+            id: item.id,
+            url: item.url,
+            note: typeof item.note === 'string' ? item.note : item.url,
+        }));
     } catch {
         return [];
     }
@@ -771,6 +777,7 @@ type SettingsUiState = {
     handleUpdateUrlBackgroundItem: (id: string, patch: Partial<Omit<UrlBackgroundItem, 'id'>>) => void;
     handleDeleteUrlBackgroundItem: (id: string) => void;
     handleSetUrlBackgroundSelectedId: (id: string | null) => void;
+    handleSetUrlBackgroundList: (items: UrlBackgroundItem[]) => void;
     handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
     setDaylightPreference: (enabled: boolean) => void;
     handleSetVisualizerMode: (mode: VisualizerMode) => void;
@@ -1126,6 +1133,12 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             }
         }
         set({ urlBackgroundSelectedId: id });
+    },
+    handleSetUrlBackgroundList: (items) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('url_background_list', JSON.stringify(items));
+        }
+        set({ urlBackgroundList: items });
     },
     handleSetVisualizerFrameRate: (frameRate) => {
         if (typeof window !== 'undefined') {
@@ -1698,6 +1711,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleUpdateUrlBackgroundItem: state.handleUpdateUrlBackgroundItem,
     handleDeleteUrlBackgroundItem: state.handleDeleteUrlBackgroundItem,
     handleSetUrlBackgroundSelectedId: state.handleSetUrlBackgroundSelectedId,
+    handleSetUrlBackgroundList: state.handleSetUrlBackgroundList,
     handleSetVisualizerFrameRate: state.handleSetVisualizerFrameRate,
     setDaylightPreference: state.setDaylightPreference,
     handleSetVisualizerMode: state.handleSetVisualizerMode,

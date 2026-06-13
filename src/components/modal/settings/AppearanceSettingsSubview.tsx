@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { DualTheme, Theme, ThemeMode } from '../../../types';
+import type { DualTheme, Theme, ThemeMode, UrlBackgroundItem } from '../../../types';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
@@ -394,6 +394,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleSetMonetBackgroundTuning: state.handleSetMonetBackgroundTuning,
         handleSetMonetTuning: state.handleSetMonetTuning,
         handleAddUrlBackgroundItem: state.handleAddUrlBackgroundItem,
+        handleUpdateUrlBackgroundItem: state.handleUpdateUrlBackgroundItem,
+        handleSetUrlBackgroundList: state.handleSetUrlBackgroundList,
         handleSetUrlBackgroundSelectedId: state.handleSetUrlBackgroundSelectedId,
     })));
 
@@ -520,15 +522,32 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             if (config.monetTuning) {
                 store.handleSetMonetTuning(config.monetTuning);
             }
+            let mergedUrlList: UrlBackgroundItem[] | undefined;
+
             if (config.urlBackgroundList && Array.isArray(config.urlBackgroundList)) {
+                // Batch merge: compute the final list once, then apply with a single
+                // store update to avoid sequential localStorage writes per item.
+                const existingMap = new Map(store.urlBackgroundList.map(i => [i.id, { ...i }]));
                 for (const item of config.urlBackgroundList) {
                     if (item && typeof item.id === 'string' && typeof item.url === 'string') {
-                        store.handleAddUrlBackgroundItem(item);
+                        const existing = existingMap.get(item.id);
+                        existingMap.set(item.id, {
+                            ...(existing ?? { id: item.id }),
+                            url: item.url,
+                            note: item.note,
+                        });
                     }
                 }
+                mergedUrlList = Array.from(existingMap.values());
+                store.handleSetUrlBackgroundList(mergedUrlList);
             }
+            // Validate that the imported selectedId still exists in the final list
+            // to avoid a dangling reference that renders UrlBackgroundLayer blank.
             if (config.urlBackgroundSelectedId) {
-                store.handleSetUrlBackgroundSelectedId(config.urlBackgroundSelectedId);
+                const list = mergedUrlList ?? store.urlBackgroundList;
+                if (list.some(i => i.id === config.urlBackgroundSelectedId)) {
+                    store.handleSetUrlBackgroundSelectedId(config.urlBackgroundSelectedId);
+                }
             }
 
             store.statusSetter?.({ type: 'success', text: t('options.importSuccess') || '配置导入成功！' });
