@@ -1134,7 +1134,7 @@ function getGeminiResponseSchema() {
   };
 }
 
-async function generateGeminiTheme({ apiKey, promptText, customFetch }) {
+async function generateGeminiTheme({ apiKey, systemPrompt, sourcePrompt, customFetch }) {
   const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
   const response = await customFetch(endpoint, {
     method: 'POST',
@@ -1143,10 +1143,15 @@ async function generateGeminiTheme({ apiKey, promptText, customFetch }) {
       'x-goog-api-key': apiKey,
     },
     body: JSON.stringify({
+      systemInstruction: {
+        parts: [
+          { text: systemPrompt }
+        ]
+      },
       contents: [
         {
           parts: [
-            { text: promptText }
+            { text: sourcePrompt }
           ]
         }
       ],
@@ -1354,8 +1359,8 @@ async function formatOpenAICompatibleError(response) {
     : `OpenAI compatible API error (${response.status}): ${response.statusText}`;
 }
 
-function buildThemePrompt(snippet, isPureMusic, songTitle, includeSchemaText = false) {
-  const basePrompt = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.
+function buildThemeSystemPrompt(includeSchemaText = false) {
+  const instructionPrompt = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.
 
 DUAL THEME REQUIREMENTS:
 1. Generate TWO complete themes: one optimized for LIGHT/DAYLIGHT mode, one for DARK/MIDNIGHT mode.
@@ -1402,28 +1407,27 @@ IMPORTANT for 'wordColors':
 
 IMPORTANT for 'lyricsIcons':
 1. Identify 3-5 visual concepts/objects mentioned in or strongly implied by the source text.
-2. Return them as valid Lucide React icon names (PascalCase).
+2. Return them as valid Lucide React icon names (PascalCase).`;
 
-Pure instrumental: ${isPureMusic ? 'yes' : 'no'}
-${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
-${snippet}`;
-
-  if (!includeSchemaText) {
-    return basePrompt;
-  }
-
-  return `${basePrompt}
-
+  const schemaPrompt = includeSchemaText ? `
 Response MUST be a valid JSON object. Do not include markdown formatting like \`\`\`json. Just the raw JSON.
 
 JSON Schema:
-${JSON.stringify(THEME_JSON_SCHEMA, null, 2)}`;
+${JSON.stringify(THEME_JSON_SCHEMA, null, 2)}` : '';
+
+  return `${instructionPrompt}${schemaPrompt}`;
 }
 
-function buildOpenAICompatibleRequestBody(model, provider, promptText) {
+function buildThemeSourcePrompt(snippet, isPureMusic, songTitle) {
+  return `Pure instrumental: ${isPureMusic ? 'yes' : 'no'}
+${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
+${snippet}`;
+}
+
+function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt) {
   const messages = [
-    { role: 'system', content: 'You are a helpful assistant that generates JSON themes for music players.' },
-    { role: 'user', content: promptText }
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: sourcePrompt }
   ];
 
   if (providerSupportsStructuredOutputs(provider)) {
@@ -2626,12 +2630,8 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
       const apiUrl = normalizeOpenAIChatCompletionsUrl(store.get('OPENAI_API_URL'));
       const model = resolveOpenAICompatibleModel(apiUrl, store.get('OPENAI_API_MODEL'));
       const openAICompatibleProvider = detectOpenAICompatibleProvider(apiUrl, model);
-      const promptText = buildThemePrompt(
-        snippet,
-        isPureMusic,
-        songTitle,
-        !providerSupportsStructuredOutputs(openAICompatibleProvider)
-      );
+      const systemPrompt = buildThemeSystemPrompt(true);
+      const sourcePrompt = buildThemeSourcePrompt(snippet, isPureMusic, songTitle);
 
       if (!apiKey) {
         throw new Error("OPENAI_API_KEY is not configured in settings");
@@ -2643,7 +2643,7 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`,
         },
-        body: JSON.stringify(buildOpenAICompatibleRequestBody(model, openAICompatibleProvider, promptText)),
+        body: JSON.stringify(buildOpenAICompatibleRequestBody(model, openAICompatibleProvider, systemPrompt, sourcePrompt)),
       });
 
       if (!response.ok) {
@@ -2668,10 +2668,12 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
       if (!apiKey) {
         throw new Error("GEMINI_API_KEY is not configured in settings");
       }
-      const promptText = buildThemePrompt(snippet, isPureMusic, songTitle, false);
+      const systemPrompt = buildThemeSystemPrompt(true);
+      const sourcePrompt = buildThemeSourcePrompt(snippet, isPureMusic, songTitle);
       dualTheme = await generateGeminiTheme({
         apiKey,
-        promptText,
+        systemPrompt,
+        sourcePrompt,
         customFetch
       });
 

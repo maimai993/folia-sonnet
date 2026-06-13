@@ -192,8 +192,8 @@ const formatOpenAICompatibleError = async (response: Response) => {
         : `OpenAI compatible API error (${response.status}): ${response.statusText}`;
 };
 
-const buildThemePrompt = (snippet: string, isPureMusic: boolean, songTitle?: string, includeSchemaText = false) => {
-    const basePrompt = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.
+const buildThemeSystemPrompt = (includeSchemaText = false) => {
+    const instructionPrompt = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.
 
 DUAL THEME REQUIREMENTS:
 1. Generate TWO complete themes: one optimized for LIGHT/DAYLIGHT mode, one for DARK/MIDNIGHT mode.
@@ -242,28 +242,30 @@ IMPORTANT for 'wordColors':
 
 IMPORTANT for 'lyricsIcons':
 1. Identify 3-5 visual concepts/objects mentioned in or strongly implied by the source text.
-2. Return them as valid Lucide React icon names (PascalCase, e.g., 'CloudLightning', 'HeartHandshake').
+2. Return them as valid Lucide React icon names (PascalCase, e.g., 'CloudLightning', 'HeartHandshake').`;
 
-Pure instrumental: ${isPureMusic ? 'yes' : 'no'}
-${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
-${snippet}`;
-
-    if (!includeSchemaText) {
-        return basePrompt;
-    }
-
-    return `${basePrompt}
-
+    const schemaPrompt = includeSchemaText ? `
 Response MUST be a valid JSON object. Do not include markdown formatting like \`\`\`json. Just the raw JSON.
 
 JSON Schema:
-${JSON.stringify(THEME_JSON_SCHEMA, null, 2)}`;
+${JSON.stringify(THEME_JSON_SCHEMA, null, 2)}` : '';
+
+    return `${instructionPrompt}${schemaPrompt}`;
 };
 
-const buildOpenAICompatibleRequestBody = (model: string, provider: OpenAICompatibleProvider, prompt: string) => {
+const buildThemeSourcePrompt = (snippet: string, isPureMusic: boolean, songTitle?: string) => `Pure instrumental: ${isPureMusic ? 'yes' : 'no'}
+${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
+${snippet}`;
+
+const buildOpenAICompatibleRequestBody = (
+    model: string,
+    provider: OpenAICompatibleProvider,
+    systemPrompt: string,
+    sourcePrompt: string
+) => {
     const messages = [
-        { role: 'system', content: 'You are a helpful assistant that generates JSON themes for music players.' },
-        { role: 'user', content: prompt }
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: sourcePrompt }
     ];
 
     if (providerSupportsStructuredOutputs(provider)) {
@@ -343,12 +345,8 @@ export async function handleGenerateOpenAITheme(request: Request, env: WorkerEnv
 
         // Limit text to avoid token limits if lyrics are huge
         const snippet = lyricsText.slice(0, 2000);
-        const prompt = buildThemePrompt(
-            snippet,
-            isPureMusic,
-            songTitle,
-            !providerSupportsStructuredOutputs(provider)
-        );
+        const systemPrompt = buildThemeSystemPrompt(true);
+        const sourcePrompt = buildThemeSourcePrompt(snippet, isPureMusic, songTitle);
 
         const response = await fetch(apiUrl, {
             method: 'POST',
@@ -356,7 +354,7 @@ export async function handleGenerateOpenAITheme(request: Request, env: WorkerEnv
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${apiKey}`,
             },
-            body: JSON.stringify(buildOpenAICompatibleRequestBody(model, provider, prompt)),
+            body: JSON.stringify(buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt)),
         });
 
         if (!response.ok) {
