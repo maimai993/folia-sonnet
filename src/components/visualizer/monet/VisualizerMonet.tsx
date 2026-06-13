@@ -143,37 +143,29 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                 <div className="flex h-full w-full max-w-[1520px] flex-row items-center overflow-hidden">
                     {showText && (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center px-5 py-5 sm:px-8 sm:py-6 lg:px-14 lg:py-8">
-                            <motion.div
-                                animate={theme.animationIntensity === 'chaotic' ? {
-                                    y: [0, -3, 0, 3, 0],
-                                    x: [0, -1.5, 0, 1.5, 0]
-                                } : {}}
-                                transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 0.1 }}
-                            >
-                                <div className="mb-3 space-y-1.5">
-                                    <motion.div
-                                        key={`artist-${introKey}`}
-                                        initial={{ opacity: 0, x: -30, y: -10 }}
-                                        animate={{ opacity: 1, x: 0, y: 0 }}
-                                        transition={{ duration: 1.2, ease: [0.25, 1, 0.5, 1], delay: 0.15 }}
-                                        className="text-[clamp(1rem,1.8vw,1.8rem)] italic"
-                                        style={{ color: colorWithAlpha(theme.primaryColor, 0.96), letterSpacing: 0 }}
-                                    >
-                                        {primaryMetaLabel}
-                                    </motion.div>
-                                    <motion.div
-                                        key={`line-${introKey}`}
-                                        initial={{ scaleY: 0 }}
-                                        animate={{ scaleY: 1 }}
-                                        transition={{ duration: 1.5, ease: [0.25, 1, 0.5, 1], delay: 0.5 }}
-                                        className="h-14 w-px rounded-full"
-                                        style={{ 
-                                            originY: 0,
-                                            background: `linear-gradient(180deg, ${colorWithAlpha(theme.primaryColor, 0.72)}, transparent)` 
-                                        }}
-                                    />
-                                </div>
-                            </motion.div>
+                            <div className="mb-3 space-y-1.5">
+                                <motion.div
+                                    key={`artist-${introKey}`}
+                                    initial={{ opacity: 0, x: -30, y: -10 }}
+                                    animate={{ opacity: 1, x: 0, y: 0 }}
+                                    transition={{ duration: 1.2, ease: [0.25, 1, 0.5, 1], delay: 0.15 }}
+                                    className="text-[clamp(1rem,1.8vw,1.8rem)] italic"
+                                    style={{ color: colorWithAlpha(theme.primaryColor, 0.96), letterSpacing: 0 }}
+                                >
+                                    {primaryMetaLabel}
+                                </motion.div>
+                                <motion.div
+                                    key={`line-${introKey}`}
+                                    initial={{ scaleY: 0 }}
+                                    animate={{ scaleY: 1 }}
+                                    transition={{ duration: 1.5, ease: [0.25, 1, 0.5, 1], delay: 0.5 }}
+                                    className="h-14 w-px rounded-full"
+                                    style={{ 
+                                        originY: 0,
+                                        background: `linear-gradient(180deg, ${colorWithAlpha(theme.primaryColor, 0.72)}, transparent)` 
+                                    }}
+                                />
+                            </div>
 
                             <motion.div
                                 key={`title-${introKey}`}
@@ -181,14 +173,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ duration: 1.3, ease: [0.25, 1, 0.5, 1], delay: 0.3 }}
                             >
-                                <motion.div
-                                    animate={theme.animationIntensity === 'chaotic' ? {
-                                        y: [0, 4, 0, -4, 0],
-                                        x: [0, 2, 0, -2, 0]
-                                    } : {}}
-                                    transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
-                                    className="mb-6 space-y-1"
-                                >
+                                <div className="mb-6 space-y-1">
                                     <div
                                         className="font-semibold leading-[1.06]"
                                         style={{
@@ -206,7 +191,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     >
                                         {secondaryMetaLabel}
                                     </div>
-                                </motion.div>
+                                </div>
                             </motion.div>
 
                             <motion.div
@@ -236,13 +221,6 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     transition={{ duration: 1.0, ease: [0.25, 1, 0.5, 1], delay: 0.95 }}
                                     className="mt-auto pt-4"
                                 >
-                                    <motion.div
-                                        animate={theme.animationIntensity === 'chaotic' ? {
-                                            y: [0, -3, 0, 3, 0],
-                                            x: [0, 1.5, 0, -1.5, 0]
-                                        } : {}}
-                                        transition={{ duration: 6.5, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
-                                    >
                                         <div
                                             className="inline-flex items-center gap-3 rounded-full border px-4 py-2 backdrop-blur-md"
                                             style={{
@@ -254,7 +232,6 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: theme.accentColor }} />
                                             <span className="text-xs uppercase" style={{ letterSpacing: 0 }}>{capsuleLabel}</span>
                                         </div>
-                                    </motion.div>
                                 </motion.div>
                             )}
                         </div>
@@ -326,12 +303,30 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     className="w-full relative"
                                 >
                                     <motion.div
-                                        animate={theme.animationIntensity === 'chaotic' ? {
-                                            y: [0, -6, 0, 6, 0],
-                                            x: [0, -3, 0, 3, 0],
-                                            rotate: [0, 0.4, 0, -0.4, 0]
-                                        } : {}}
-                                        transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+                                        animate={
+                                            theme.animationIntensity === 'chaotic'
+                                                ? {
+                                                      y: [0, -18, 0, 18, 0],
+                                                      x: [0, -9, 0, 9, 0],
+                                                      rotate: [0, 1.2, 0, -1.2, 0],
+                                                  }
+                                                : theme.animationIntensity === 'normal'
+                                                ? {
+                                                      y: [0, -6, 0, 6, 0],
+                                                      x: [0, -3, 0, 3, 0],
+                                                      rotate: [0, 0.4, 0, -0.4, 0],
+                                                  }
+                                                : {
+                                                      y: 0,
+                                                      x: 0,
+                                                      rotate: 0,
+                                                  }
+                                        }
+                                        transition={
+                                            theme.animationIntensity === 'calm'
+                                                ? { duration: 0.8, ease: 'easeOut' }
+                                                : { duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }
+                                        }
                                         className="relative"
                                         style={{
                                             width: monetTuning.portraitStyle === 'square' ? '135.135%' : '100%',
@@ -444,14 +439,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                     className="absolute bottom-0 left-0 z-20 h-10 overflow-hidden px-5 sm:px-8 lg:px-14"
                     style={{ width: 'min(450px, 55vw)' }}
                 >
-                    <motion.div
-                        className="h-full w-full"
-                        animate={theme.animationIntensity === 'chaotic' ? {
-                            y: [0, 2, 0, -2, 0],
-                            x: [0, -1, 0, 1, 0]
-                        } : {}}
-                        transition={{ duration: 7.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-                    >
+                    <div className="h-full w-full">
                         <AudioOverlay
                             audioPower={audioPower}
                             audioBands={audioBands}
@@ -460,7 +448,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                             staticMode={staticMode}
                             isPreviewMode={isPreviewMode}
                         />
-                    </motion.div>
+                    </div>
                 </motion.div>
             )}
         </VisualizerShell>

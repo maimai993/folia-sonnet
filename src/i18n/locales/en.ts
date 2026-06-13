@@ -364,7 +364,7 @@ export default {
     "visualizerBackgroundMode": "Background Type",
     "visualizerBackgroundModeCommon": "Common",
     "visualizerBackgroundModeMonet": "Monet",
-    "visualizerBackgroundModeUrl": "URL",
+    "visualizerBackgroundModeUrl": "Embed",
     "urlBackgroundSettings": "Embedded Background",
     "urlBackgroundSettingsDesc": "Display a webpage as the player background. Note: some websites block being embedded in an iframe and may not display.",
     "urlBackgroundNotePlaceholder": "Note (for easy identification)",

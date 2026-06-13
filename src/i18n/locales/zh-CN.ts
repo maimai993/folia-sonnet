@@ -366,7 +366,7 @@ export default {
     "visualizerBackgroundMode": "背景类型",
     "visualizerBackgroundModeCommon": "通用",
     "visualizerBackgroundModeMonet": "莫奈",
-    "visualizerBackgroundModeUrl": "URL",
+    "visualizerBackgroundModeUrl": "嵌入",
     "urlBackgroundSettings": "嵌入背景",
     "urlBackgroundSettingsDesc": "将网页显示为播放页背景。注意：部分网站禁止被嵌入其他页面中显示，可能无法正常加载。",
     "urlBackgroundNotePlaceholder": "备注（方便查看）",
