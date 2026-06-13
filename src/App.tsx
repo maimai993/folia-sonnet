@@ -548,6 +548,8 @@ export default function App() {
     const {
         theme,
         setTheme,
+        aiTheme,
+        customTheme,
         hasCustomTheme,
         isCustomThemePreferred,
         songThemeAutoSwitchEnabled,
@@ -1374,6 +1376,19 @@ export default function App() {
         nowPlayingTrack?.title,
         stageSource,
     ]);
+    const activeDualTheme = useMemo(() => {
+        if (bgMode === 'custom' && customTheme) {
+            return customTheme;
+        }
+        if (bgMode === 'ai' && aiTheme) {
+            return aiTheme;
+        }
+        return {
+            light: DAYLIGHT_THEME,
+            dark: DEFAULT_THEME,
+        };
+    }, [bgMode, customTheme, aiTheme]);
+
     const devDebugSnapshot = useMemo(() => (
         isDev
             ? buildDebugSnapshot({
@@ -1388,6 +1403,8 @@ export default function App() {
             audioSrc,
             coverUrl,
             nowPlayingDebug: nowPlayingDebugSnapshot,
+            themeMode: bgMode,
+            activeDualTheme,
         })
             : null
     ), [
@@ -1402,6 +1419,8 @@ export default function App() {
         playerState,
         lyrics,
         visualizerMode,
+        bgMode,
+        activeDualTheme,
     ]);
     const themeParkSeedTheme = useMemo(() => getThemeParkSeedTheme(), [getThemeParkSeedTheme]);
     const generateCurrentSongTheme = useCallback(() => {

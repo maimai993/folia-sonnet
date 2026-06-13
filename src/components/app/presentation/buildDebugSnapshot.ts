@@ -1,4 +1,4 @@
-import type { LyricData, SongResult, PlayerState } from '../../../types';
+import type { LyricData, SongResult, PlayerState, ThemeMode, DualTheme } from '../../../types';
 import { getAudioSrcKind, resolveDebugLyricsSource, resolveDebugSongSource } from '../../../utils/appPlaybackHelpers';
 import { getLineRenderHints } from '../../../utils/lyrics/renderHints';
 
@@ -17,6 +17,8 @@ export const buildDebugSnapshot = ({
     audioSrc,
     coverUrl,
     nowPlayingDebug,
+    themeMode,
+    activeDualTheme,
 }: {
     shortcutLabel: string;
     currentSong: SongResult | null;
@@ -45,6 +47,8 @@ export const buildDebugSnapshot = ({
         lastDriftSec: number | null;
         lastError: string | null;
     } | null;
+    themeMode: ThemeMode;
+    activeDualTheme: DualTheme;
 }) => {
     const debugActiveLine = lyrics && currentLineIndex >= 0 ? lyrics.lines[currentLineIndex] ?? null : null;
     const debugNextLine = (() => {
@@ -121,5 +125,7 @@ export const buildDebugSnapshot = ({
         nextLine: toLineSnapshot(debugNextLine),
         rawActiveLine: toRawLineSnapshot(debugActiveLine),
         rawNextLine: toRawLineSnapshot(debugNextLine),
+        themeMode,
+        activeDualTheme,
     };
 };

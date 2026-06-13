@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MotionValue, useMotionValueEvent } from 'framer-motion';
+import type { ThemeMode, DualTheme } from '../types';
 
 export interface DevDebugLineSnapshot {
     text: string | null;
@@ -68,6 +69,8 @@ export interface DevDebugSnapshot {
     nextLine: DevDebugLineSnapshot | null;
     rawActiveLine: DevDebugRawLineSnapshot | null;
     rawNextLine: DevDebugRawLineSnapshot | null;
+    themeMode: ThemeMode;
+    activeDualTheme: DualTheme;
 }
 
 interface DevDebugOverlayProps {
@@ -158,6 +161,21 @@ const DebugRow: React.FC<{ label: string; value: string; }> = ({ label, value })
     );
 };
 
+const renderCellValue = (value: string, isDaylight: boolean) => {
+    if (/^#[0-9a-fA-F]{3,8}$/.test(value.trim())) {
+        return (
+            <span className="inline-flex items-center gap-1.5">
+                <span
+                    className={`inline-block h-2.5 w-2.5 rounded-full border shrink-0 ${isDaylight ? 'border-black/15' : 'border-white/15'}`}
+                    style={{ backgroundColor: value.trim() }}
+                />
+                <span>{value}</span>
+            </span>
+        );
+    }
+    return value;
+};
+
 const DebugMetricTable: React.FC<{
     title?: string;
     rows: Array<{ label: string; value: string; }>;
@@ -184,9 +202,9 @@ const DebugMetricTable: React.FC<{
                                 {row.label}
                             </th>
                             <td
-                                className={`border-b px-2 py-1 font-medium ${cellClass} ${index === rows.length - 1 ? 'border-b-0' : ''}`}
+                                className={`border-b px-2 py-1 font-medium break-all ${cellClass} ${index === rows.length - 1 ? 'border-b-0' : ''}`}
                             >
-                                {row.value}
+                                {renderCellValue(row.value, isDaylight)}
                             </td>
                         </tr>
                     ))}
@@ -435,7 +453,7 @@ const DevDebugOverlay: React.FC<DevDebugOverlayProps> = ({
     currentTime,
     isDaylight,
 }) => {
-    const [activeTab, setActiveTab] = useState<'memory' | 'playback' | 'lyrics'>('memory');
+    const [activeTab, setActiveTab] = useState<'memory' | 'playback' | 'lyrics' | 'theme'>('memory');
     const [liveCurrentTime, setLiveCurrentTime] = useState(() => currentTime.get());
     const [memoryHistory, setMemoryHistory] = useState<MemorySample[]>([]);
     const [gcCount, setGcCount] = useState(0);
@@ -575,6 +593,7 @@ const DevDebugOverlay: React.FC<DevDebugOverlayProps> = ({
                     <TabButton label="Memory" isActive={activeTab === 'memory'} onClick={() => setActiveTab('memory')} isDaylight={isDaylight} />
                     <TabButton label="Playback" isActive={activeTab === 'playback'} onClick={() => setActiveTab('playback')} isDaylight={isDaylight} />
                     <TabButton label="Lyrics" isActive={activeTab === 'lyrics'} onClick={() => setActiveTab('lyrics')} isDaylight={isDaylight} />
+                    <TabButton label="Theme" isActive={activeTab === 'theme'} onClick={() => setActiveTab('theme')} isDaylight={isDaylight} />
                 </div>
 
                 {activeTab === 'memory' && (
@@ -733,8 +752,62 @@ const DevDebugOverlay: React.FC<DevDebugOverlayProps> = ({
                         />
                     </div>
                 )}
+
+                {activeTab === 'theme' && (
+                    <div className="mt-3 grid gap-3">
+                        <section className={panelClass}>
+                            <div className="px-3 pt-3 text-[10px] uppercase tracking-[0.16em] opacity-60">Theme Status</div>
+                            <div className="px-3 pb-3">
+                                <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-[10px]">
+                                    <DebugRow label="Mode" value={snapshot.themeMode} />
+                                    <DebugRow label="Daylight Mode" value={isDaylight ? 'Light' : 'Dark'} />
+                                    <DebugRow label="Active Name" value={isDaylight ? snapshot.activeDualTheme.light.name : snapshot.activeDualTheme.dark.name} />
+                                </dl>
+                            </div>
+                        </section>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <DebugMetricTable
+                                title="Light Theme"
+                                isDaylight={isDaylight}
+                                rows={[
+                                    { label: 'Name', value: snapshot.activeDualTheme.light.name },
+                                    { label: 'BG', value: snapshot.activeDualTheme.light.backgroundColor },
+                                    { label: 'Primary', value: snapshot.activeDualTheme.light.primaryColor },
+                                    { label: 'Accent', value: snapshot.activeDualTheme.light.accentColor },
+                                    { label: 'Secondary', value: snapshot.activeDualTheme.light.secondaryColor },
+                                    { label: 'Font Style', value: snapshot.activeDualTheme.light.fontStyle },
+                                    { label: 'Font Family', value: snapshot.activeDualTheme.light.fontFamily ?? 'N/A' },
+                                    { label: 'Animation', value: snapshot.activeDualTheme.light.animationIntensity },
+                                    { label: 'Word Colors', value: snapshot.activeDualTheme.light.wordColors?.map(wc => `${wc.word}: ${wc.color}`).join(', ') || '[]' },
+                                    { label: 'Icons', value: snapshot.activeDualTheme.light.lyricsIcons?.join(', ') || '[]' },
+                                    { label: 'Provider', value: snapshot.activeDualTheme.light.provider ?? 'N/A' },
+                                    { label: 'Desc', value: snapshot.activeDualTheme.light.description ?? 'N/A' },
+                                ]}
+                            />
+                            <DebugMetricTable
+                                title="Dark Theme"
+                                isDaylight={isDaylight}
+                                rows={[
+                                    { label: 'Name', value: snapshot.activeDualTheme.dark.name },
+                                    { label: 'BG', value: snapshot.activeDualTheme.dark.backgroundColor },
+                                    { label: 'Primary', value: snapshot.activeDualTheme.dark.primaryColor },
+                                    { label: 'Accent', value: snapshot.activeDualTheme.dark.accentColor },
+                                    { label: 'Secondary', value: snapshot.activeDualTheme.dark.secondaryColor },
+                                    { label: 'Font Style', value: snapshot.activeDualTheme.dark.fontStyle },
+                                    { label: 'Font Family', value: snapshot.activeDualTheme.dark.fontFamily ?? 'N/A' },
+                                    { label: 'Animation', value: snapshot.activeDualTheme.dark.animationIntensity },
+                                    { label: 'Word Colors', value: snapshot.activeDualTheme.dark.wordColors?.map(wc => `${wc.word}: ${wc.color}`).join(', ') || '[]' },
+                                    { label: 'Icons', value: snapshot.activeDualTheme.dark.lyricsIcons?.join(', ') || '[]' },
+                                    { label: 'Provider', value: snapshot.activeDualTheme.dark.provider ?? 'N/A' },
+                                    { label: 'Desc', value: snapshot.activeDualTheme.dark.description ?? 'N/A' },
+                                ]}
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
-        </aside>
+            </aside>
     );
 };
 
