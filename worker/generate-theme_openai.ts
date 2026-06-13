@@ -212,7 +212,7 @@ SOURCE MODE:
 3. Base your mood inference only on the provided source text.
 
 COLOR & THEME GENERATION WORKFLOW:
-1. First, identify 5-10 key emotional standalone words from the source text that represent the core mood and atmosphere of the song.
+1. First, identify 10-20 key emotional standalone words from the source text that represent the core mood and atmosphere of the song.
 2. Assign a specific, representative color to each of these key emotional standalone words under 'wordColors'.
 3. Based on the emotional direction and colors of these identified words, construct the overall color palettes (backgroundColor, primaryColor, secondaryColor, accentColor) for the light and dark themes.
 4. Coordinated Colors: The colors assigned in 'wordColors' must be designed in coordination and harmony with the overall color schemes of the themes.
@@ -234,7 +234,7 @@ SHARED RULES FOR BOTH THEMES:
 2. 'wordColors' and 'lyricsIcons' should be the SAME for both themes (they represent the source text's meaning).
 
 IMPORTANT for 'wordColors':
-1. Extract 5-10 emotional standalone words. For Latin-script text, each 'word' MUST be one complete word only, not a phrase.
+1. Extract 10-20 emotional standalone words. For Latin-script text, each 'word' MUST be one complete word only, not a phrase.
 2. CRITICAL: Do NOT include punctuation, apostrophes, curly quotes, hyphens, or spaces in Latin-script 'word' values. Use clean whole words like "train", "gone", "hidden", "cities"; do NOT return "train’s gone", "well-hidden", "set me free", or "shun the light".
 3. Avoid function words such as articles, prepositions, pronouns, particles, and auxiliaries (for example: the, a, an, to, me, and, of, in, on).
 4. For CJK lyrics, short meaningful semantic terms may contain multiple CJK characters, but do not select single particles unless they are emotionally meaningful.

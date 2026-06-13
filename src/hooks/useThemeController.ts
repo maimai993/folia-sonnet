@@ -343,18 +343,7 @@ export function useThemeController({
         if (pointer === 'ai') {
             const lastDualTheme = await getLastDualTheme();
             if (lastDualTheme) {
-                applyDualTheme({
-                    light: {
-                        ...lastDualTheme.light,
-                        wordColors: [],
-                        lyricsIcons: [],
-                    },
-                    dark: {
-                        ...lastDualTheme.dark,
-                        wordColors: [],
-                        lyricsIcons: [],
-                    },
-                }, { respectCustomPreference: false });
+                applyDualTheme(lastDualTheme, { respectCustomPreference: false });
                 return 'fallback-dual' as const;
             }
 
@@ -397,18 +386,7 @@ export function useThemeController({
         if (options?.allowLastUsedFallback) {
             const lastDualTheme = await getLastDualTheme();
             if (lastDualTheme) {
-                applyDualTheme({
-                    light: {
-                        ...lastDualTheme.light,
-                        wordColors: [],
-                        lyricsIcons: [],
-                    },
-                    dark: {
-                        ...lastDualTheme.dark,
-                        wordColors: [],
-                        lyricsIcons: [],
-                    },
-                }, { respectCustomPreference: false });
+                applyDualTheme(lastDualTheme, { respectCustomPreference: false });
                 return 'fallback-dual' as const;
             }
 
