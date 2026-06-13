@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="/img/1.png" alt="Folia" width="100%" />
+  <img src="/img/head2.png" alt="Folia" width="100%" />
 </p>
 
 <div align="center">
