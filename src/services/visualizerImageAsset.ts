@@ -42,4 +42,4 @@ export const buildStoredVisualizerImageAsset = <T extends StoredVisualizerImageA
     name: file.name,
     mimeType: file.type || 'application/octet-stream',
     blob: file,
-} as T);
+} as unknown as T);

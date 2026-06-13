@@ -517,13 +517,20 @@ export default function App() {
         if (fallbackArtists) {
             return fallbackArtists;
         }
-        return currentSong.localData?.matchedArtists || currentSong.localData?.artist || null;
+        return isLocalPlaybackSong(currentSong)
+            ? currentSong.localData.matchedArtists || currentSong.localData.artist || null
+            : null;
     }, [currentSong]);
     const currentSongAlbum = useMemo(() => {
         if (!currentSong) {
             return null;
         }
-        return currentSong.al?.name || currentSong.album?.name || currentSong.localData?.matchedAlbumName || currentSong.localData?.album || null;
+        if (currentSong.al?.name || currentSong.album?.name) {
+            return currentSong.al?.name || currentSong.album?.name || null;
+        }
+        return isLocalPlaybackSong(currentSong)
+            ? currentSong.localData.matchedAlbumName || currentSong.localData.album || null
+            : null;
     }, [currentSong]);
 
     // Theme Controller

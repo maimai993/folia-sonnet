@@ -59,14 +59,27 @@ const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, rejec
     image.src = src;
 });
 
+const resolveCanvasImageDimension = (
+    image: CanvasImageSource,
+    dimension: 'width' | 'height',
+    fallback: number,
+) => {
+    if (!(dimension in image)) {
+        return fallback;
+    }
+
+    const value = image[dimension];
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+};
+
 const drawCoverCropped = (
     context: CanvasRenderingContext2D,
     image: CanvasImageSource,
     width: number,
     height: number,
 ) => {
-    const imageWidth = 'width' in image ? image.width : width;
-    const imageHeight = 'height' in image ? image.height : height;
+    const imageWidth = resolveCanvasImageDimension(image, 'width', width);
+    const imageHeight = resolveCanvasImageDimension(image, 'height', height);
     if (!imageWidth || !imageHeight) {
         return;
     }
