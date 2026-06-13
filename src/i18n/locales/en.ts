@@ -116,6 +116,7 @@ export default {
       "background-monet-full-overlay": { "title": "Background: Monet Full Screen Overlay", "description": "Switch background to Monet full screen overlay layout" },
       "background-monet-half-gradient": { "title": "Background: Monet Half Screen Gradient", "description": "Switch background to Monet half screen gradient layout" },
       "background-common": { "title": "Background: Common", "description": "Switch background to general layout" },
+      "background-url": { "title": "Background: Embedded Background", "description": "Switch background to embedded webpage mode" },
       "settings-toggle-transparent": { "title": "Toggle transparency", "description": "Toggle transparent player background" },
       "settings-toggle-daylight": { "title": "Toggle light/dark", "description": "Toggle theme daylight/midnight mode" }
     }
@@ -364,7 +365,7 @@ export default {
     "visualizerBackgroundModeCommon": "Common",
     "visualizerBackgroundModeMonet": "Monet",
     "visualizerBackgroundModeUrl": "URL",
-    "urlBackgroundSettings": "URL Background",
+    "urlBackgroundSettings": "Embedded Background",
     "urlBackgroundSettingsDesc": "Display a webpage as the player background. Note: some websites block being embedded in an iframe and may not display.",
     "urlBackgroundNotePlaceholder": "Note (for easy identification)",
     "urlBackgroundAdd": "Add URL",

@@ -342,9 +342,9 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     {
         id: 'background-url',
         group: 'visualizer',
-        title: 'Background: URL',
-        description: 'Switch background to URL webpage mode',
-        keywords: ['background url', 'url background', 'url', 'webpage', 'URL背景', '网页背景', 'urlbj', 'wybj', '背景切换到 URL', '背景切换到URL'],
+        title: 'Background: Embedded Background',
+        description: 'Switch background to embedded webpage mode',
+        keywords: ['embedded background', 'embed background', 'background embed', 'background url', 'url background', 'url', 'webpage', '嵌入背景', '网页背景', 'qianrubeijing', 'qrbj', 'wybj', '背景切换到 嵌入背景', '背景切换到嵌入背景'],
         execute: (_input, context) => {
             context.setVisualizerBackgroundMode('url');
             return true;

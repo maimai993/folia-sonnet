@@ -116,6 +116,7 @@ export default {
       "background-monet-full-overlay": { "title": "背景切换到 莫奈: 全屏叠色", "description": "切换背景到莫奈全屏叠色" },
       "background-monet-half-gradient": { "title": "背景切换到 莫奈: 半屏渐变", "description": "切换背景到莫奈半屏渐变" },
       "background-common": { "title": "背景切换到 通用", "description": "切换背景到通用" },
+      "background-url": { "title": "背景切换到 嵌入背景", "description": "切换背景到嵌入网页模式" },
       "settings-toggle-transparent": { "title": "透明化", "description": "切换播放器背景透明度" },
       "settings-toggle-daylight": { "title": "切换明暗", "description": "切换主题日夜模式" }
     }
@@ -366,7 +367,7 @@ export default {
     "visualizerBackgroundModeCommon": "通用",
     "visualizerBackgroundModeMonet": "莫奈",
     "visualizerBackgroundModeUrl": "URL",
-    "urlBackgroundSettings": "URL 背景",
+    "urlBackgroundSettings": "嵌入背景",
     "urlBackgroundSettingsDesc": "将网页显示为播放页背景。注意：部分网站禁止被嵌入其他页面中显示，可能无法正常加载。",
     "urlBackgroundNotePlaceholder": "备注（方便查看）",
     "urlBackgroundAdd": "添加 URL",
