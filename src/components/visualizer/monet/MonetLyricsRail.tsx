@@ -4,6 +4,12 @@ import type { Theme } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { colorWithAlpha, mixColors } from '../colorMix';
 import {
+    buildWordColorRangesFromMatchers,
+    prepareWordColorMatchers,
+    resolveTokenColorMap,
+    type WordColorMatcher,
+} from '../wordColoring';
+import {
     buildMonetDisplayTokens,
     measureMonetGraphemeOffsets,
     measureMonetLineLayout,
@@ -84,7 +90,7 @@ export const resolveMonetWordColor = (
     const matched = theme.wordColors.find(entry => {
         const target = entry.word;
         if (isCJK(cleanCurrent)) {
-            return target.includes(cleanCurrent);
+            return target.trim() === cleanCurrent;
         }
 
         const targetWords = target.split(/\s+/).map(value => value.toLowerCase().replace(/[^\w]/g, ''));
@@ -235,14 +241,21 @@ const getLineMask = (isClipped: boolean, fadePx: number) => (
 const MonetTimedTokenSpan: React.FC<{
     entry: PositionedMonetLineEntry;
     currentTime: MotionValue<number>;
-    theme: Theme;
     accentColor: string;
     fontPx: number;
     fontStack: string;
-    keywordColoringEnabled: boolean;
-}> = ({ entry, currentTime, theme, accentColor, fontPx, fontStack, keywordColoringEnabled }) => {
+    wordColorMatchers: WordColorMatcher[];
+}> = ({ entry, currentTime, accentColor, fontPx, fontStack, wordColorMatchers }) => {
     const lineRenderEndTime = useMemo(() => getLineRenderEndTime(entry.line), [entry.line]);
     const tokens = useMemo(() => buildMonetDisplayTokens(entry.line), [entry.line]);
+    const wordColorRanges = useMemo(
+        () => buildWordColorRangesFromMatchers(entry.line.fullText, wordColorMatchers),
+        [entry.line.fullText, wordColorMatchers],
+    );
+    const tokenColors = useMemo(
+        () => resolveTokenColorMap(tokens, wordColorRanges),
+        [tokens, wordColorRanges],
+    );
     const fontSpec = useMemo(
         () => `${entry.tone.fontWeight} ${fontPx}px ${fontStack}`,
         [entry.tone.fontWeight, fontPx, fontStack],
@@ -260,12 +273,10 @@ const MonetTimedTokenSpan: React.FC<{
                         lineRenderEndTime={lineRenderEndTime}
                         currentTime={currentTime}
                         lineStatus={entry.status}
-                        defaultAccentColor={accentColor}
+                        wordColor={tokenColors.get(token.key) ?? accentColor}
                         baseColor={entry.tone.baseColor}
                         fontPx={fontPx}
                         fontSpec={fontSpec}
-                        theme={theme}
-                        keywordColoringEnabled={keywordColoringEnabled}
                     />
                 ) : (
                     <span key={token.key} style={{ color: entry.tone.baseColor }}>
@@ -284,12 +295,10 @@ const MonetWordSweep: React.FC<{
     lineRenderEndTime: number;
     currentTime: MotionValue<number>;
     lineStatus: MonetLineStatus;
-    defaultAccentColor: string;
+    wordColor: string;
     baseColor: string;
     fontPx: number;
     fontSpec: string;
-    theme: Theme;
-    keywordColoringEnabled: boolean;
 }> = ({
     text,
     startTime,
@@ -297,19 +306,13 @@ const MonetWordSweep: React.FC<{
     lineRenderEndTime,
     currentTime,
     lineStatus,
-    defaultAccentColor,
+    wordColor,
     baseColor,
     fontPx,
     fontSpec,
-    theme,
-    keywordColoringEnabled,
 }) => {
     const isLineActive = lineStatus === 'active';
     const canRenderGlow = lineStatus === 'active' || lineStatus === 'passed';
-    const wordColor = useMemo(
-        () => resolveMonetWordColor(text, theme, defaultAccentColor, keywordColoringEnabled),
-        [defaultAccentColor, keywordColoringEnabled, text, theme],
-    );
     const graphemeOffsets = useMemo(
         () => measureMonetGraphemeOffsets(text, fontPx, fontSpec),
         [text, fontPx, fontSpec],
@@ -421,9 +424,9 @@ const MonetRailLine: React.FC<{
     lyricFontPx: number;
     translationFontPx: number;
     fontStack: string;
-    keywordColoringEnabled: boolean;
     glowBufferPx: number;
-}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, keywordColoringEnabled, glowBufferPx }) => {
+    wordColorMatchers: WordColorMatcher[];
+}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, glowBufferPx, wordColorMatchers }) => {
     const initialOffset = entry.offset >= 0 ? 34 : -34;
     const exitOffset = entry.status === 'passed' || entry.offset < 0 ? -38 : 38;
     const textMask = getLineMask(entry.layout.isTextClipped, Math.max(lyricFontPx * 0.55, 12));
@@ -492,11 +495,10 @@ const MonetRailLine: React.FC<{
                 <MonetTimedTokenSpan
                     entry={entry}
                     currentTime={currentTime}
-                    theme={theme}
                     accentColor={colorWithAlpha(theme.primaryColor, 0.98)}
                     fontPx={lyricFontPx}
                     fontStack={fontStack}
-                    keywordColoringEnabled={keywordColoringEnabled}
+                    wordColorMatchers={wordColorMatchers}
                 />
             </div>
             {entry.status === 'active' && entry.line.translation ? (
@@ -561,6 +563,10 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
         ),
         [entries, railSize, theme, lyricFontPx, inactiveFontPx, translationFontPx, fontStack],
     );
+    const wordColorMatchers = useMemo(
+        () => prepareWordColorMatchers(theme.wordColors, keywordColoringEnabled),
+        [keywordColoringEnabled, theme.wordColors],
+    );
 
     return (
         <div
@@ -586,8 +592,8 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
                             lyricFontPx={lyricFontPx}
                             translationFontPx={translationFontPx}
                             fontStack={fontStack}
-                            keywordColoringEnabled={keywordColoringEnabled}
                             glowBufferPx={MONET_GLOW_BUFFER_PX}
+                            wordColorMatchers={wordColorMatchers}
                         />
                     ))}
                 </AnimatePresence>

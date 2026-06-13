@@ -4,6 +4,7 @@ import { getMonetBackgroundCacheKey, resolveWashColor, checkCanvasFilterSupport 
 import { resolveMonetWordColor } from '@/components/visualizer/monet/MonetLyricsRail';
 import { buildMonetDisplayTokens, resolveMonetLyricContext } from '@/components/visualizer/monet/VisualizerMonet';
 import { buildMonetVisibleLineEntries } from '@/components/visualizer/monet/monetLyricsModel';
+import { buildWordColorRanges, prepareWordColorMatchers, resolveTokenColorMap } from '@/components/visualizer/wordColoring';
 import { resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveVisualizerBackgroundMode } from '@/stores/useSettingsUiStore';
 
 // test/unit/visualizer/monetSettings.test.ts
@@ -111,6 +112,12 @@ describe('Monet tuning and lyric helpers', () => {
         };
 
         expect(buildMonetDisplayTokens(line).map(token => token.text).join('')).toBe(line.fullText);
+        expect(buildMonetDisplayTokens(line).map(token => [token.text, token.startOffset, token.endOffset])).toEqual([
+            ['Hello', 0, 5],
+            [', ', 5, 7],
+            ['world', 7, 12],
+            ['!', 12, 13],
+        ]);
     });
 
     it('keeps lyric context aligned around the active line', () => {
@@ -181,6 +188,127 @@ describe('Monet tuning and lyric helpers', () => {
         expect(resolveMonetWordColor('night', theme, '#ffffff', true)).toBe('#ffee88');
         expect(resolveMonetWordColor('雨', theme, '#ffffff', true)).toBe('#66ccff');
         expect(resolveMonetWordColor('night', theme, '#ffffff', false)).toBe('#ffffff');
+    });
+
+    it('maps CJK phrase coloring by full-line ranges instead of coloring every matching particle token', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 8,
+            fullText: 'の 時の欠片 の',
+            words: [
+                { text: 'の', startTime: 0, endTime: 1 },
+                { text: '時', startTime: 1, endTime: 2 },
+                { text: 'の', startTime: 2, endTime: 3 },
+                { text: '欠', startTime: 3, endTime: 4 },
+                { text: '片', startTime: 4, endTime: 5 },
+                { text: 'の', startTime: 5, endTime: 6 },
+            ],
+        };
+        const tokens = buildMonetDisplayTokens(line);
+        const ranges = buildWordColorRanges(line.fullText, [{ word: '時の欠片', color: '#66ccff' }]);
+        const colorMap = resolveTokenColorMap(tokens, ranges);
+
+        expect(ranges).toEqual([{ startOffset: 2, endOffset: 6, color: '#66ccff', priority: 4 }]);
+        expect(tokens.map(token => [token.text, colorMap.get(token.key) ?? null])).toEqual([
+            ['の', null],
+            [' ', null],
+            ['時', '#66ccff'],
+            ['の', '#66ccff'],
+            ['欠', '#66ccff'],
+            ['片', '#66ccff'],
+            [' ', null],
+            ['の', null],
+        ]);
+    });
+
+    it('colors repeated CJK phrase ranges without falling back to single-character includes', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 10,
+            fullText: '時の欠片と時の欠片',
+            words: [
+                { text: '時', startTime: 0, endTime: 1 },
+                { text: 'の', startTime: 1, endTime: 2 },
+                { text: '欠', startTime: 2, endTime: 3 },
+                { text: '片', startTime: 3, endTime: 4 },
+                { text: 'と', startTime: 4, endTime: 5 },
+                { text: '時', startTime: 5, endTime: 6 },
+                { text: 'の', startTime: 6, endTime: 7 },
+                { text: '欠', startTime: 7, endTime: 8 },
+                { text: '片', startTime: 8, endTime: 9 },
+            ],
+        };
+        const tokens = buildMonetDisplayTokens(line);
+        const ranges = buildWordColorRanges(line.fullText, [{ word: '時の欠片', color: '#66ccff' }]);
+        const colorMap = resolveTokenColorMap(tokens, ranges);
+
+        expect(ranges.map(range => [range.startOffset, range.endOffset])).toEqual([[0, 4], [5, 9]]);
+        expect(tokens.map(token => [token.text, colorMap.get(token.key) ?? null])).toEqual([
+            ['時', '#66ccff'],
+            ['の', '#66ccff'],
+            ['欠', '#66ccff'],
+            ['片', '#66ccff'],
+            ['と', null],
+            ['時', '#66ccff'],
+            ['の', '#66ccff'],
+            ['欠', '#66ccff'],
+            ['片', '#66ccff'],
+        ]);
+    });
+
+    it('keeps English keyword coloring as normalized word range matches', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 4,
+            fullText: 'Night, glow! daylight',
+            words: [
+                { text: 'Night', startTime: 0, endTime: 1 },
+                { text: 'glow', startTime: 1, endTime: 2 },
+                { text: 'daylight', startTime: 2, endTime: 3 },
+            ],
+        };
+        const tokens = buildMonetDisplayTokens(line);
+        const ranges = buildWordColorRanges(line.fullText, [{ word: 'night glow', color: '#ffee88' }]);
+        const colorMap = resolveTokenColorMap(tokens, ranges);
+
+        expect(tokens.map(token => [token.text, colorMap.get(token.key) ?? null])).toEqual([
+            ['Night', '#ffee88'],
+            [', ', null],
+            ['glow', '#ffee88'],
+            ['! ', null],
+            ['daylight', null],
+        ]);
+    });
+
+    it('prepares keyword matchers once while letting English ranges scan the line once', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 4,
+            fullText: 'Night, rain and glow',
+            words: [
+                { text: 'Night', startTime: 0, endTime: 1 },
+                { text: 'rain', startTime: 1, endTime: 2 },
+                { text: 'glow', startTime: 2, endTime: 3 },
+            ],
+        };
+        const tokens = buildMonetDisplayTokens(line);
+        const matchers = prepareWordColorMatchers([
+            { word: 'night glow', color: '#ffee88' },
+            { word: 'rain', color: '#66ccff' },
+        ]);
+        const ranges = buildWordColorRanges(line.fullText, [
+            { word: 'night glow', color: '#ffee88' },
+            { word: 'rain', color: '#66ccff' },
+        ]);
+        const colorMap = resolveTokenColorMap(tokens, ranges);
+
+        expect(matchers).toEqual([
+            { color: '#ffee88', cjkPhrases: [], englishWords: ['night', 'glow'], priority: 5 },
+            { color: '#66ccff', cjkPhrases: [], englishWords: ['rain'], priority: 4 },
+        ]);
+        expect(colorMap.get(tokens[0].key)).toBe('#ffee88');
+        expect(colorMap.get(tokens[2].key)).toBe('#66ccff');
+        expect(colorMap.get(tokens[4].key)).toBe('#ffee88');
     });
 
     it('changes the background cache key only when source or background treatment changes', () => {

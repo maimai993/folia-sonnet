@@ -13,6 +13,8 @@ export interface MonetDisplayToken {
     endTime: number | null;
     key: string;
     timed: boolean;
+    startOffset: number;
+    endOffset: number;
 }
 
 export interface MonetLyricContext {
@@ -78,6 +80,15 @@ const MONET_MIN_MEASURE_WIDTH_PX = 180;
 const graphemeSegmenter = typeof Intl !== 'undefined'
     ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
     : null;
+
+export {
+    buildWordColorRanges as buildMonetWordColorRanges,
+    buildWordColorRangesFromMatchers as buildMonetWordColorRangesFromMatchers,
+    prepareWordColorMatchers as prepareMonetWordColorMatchers,
+    resolveTokenColorMap as resolveMonetTokenColorMap,
+    type WordColorMatcher as MonetWordColorMatcher,
+    type WordColorRange as MonetWordColorRange,
+} from '../wordColoring';
 
 export const resolveClampFontPx = (minRem: number, preferredVw: number, maxRem: number): number => {
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_WIDTH_FALLBACK_PX;
@@ -154,6 +165,8 @@ export const buildMonetDisplayTokens = (line: Line): MonetDisplayToken[] => {
             endTime: getLineRenderEndTime(line),
             key: `${line.startTime}-full`,
             timed: true,
+            startOffset: 0,
+            endOffset: line.fullText.length,
         }];
     }
 
@@ -172,18 +185,23 @@ export const buildMonetDisplayTokens = (line: Line): MonetDisplayToken[] => {
                 endTime: null,
                 key: `${line.startTime}-static-${cursor}`,
                 timed: false,
+                startOffset: cursor,
+                endOffset: matchIndex,
             });
         }
 
+        const endOffset = matchIndex + word.text.length;
         tokens.push({
             text: word.text,
             startTime: word.startTime,
             endTime: word.endTime,
             key: `${line.startTime}-${index}-${word.startTime}`,
             timed: true,
+            startOffset: matchIndex,
+            endOffset,
         });
 
-        cursor = matchIndex + word.text.length;
+        cursor = endOffset;
     });
 
     if (cursor < line.fullText.length) {
@@ -193,6 +211,8 @@ export const buildMonetDisplayTokens = (line: Line): MonetDisplayToken[] => {
             endTime: null,
             key: `${line.startTime}-tail-${cursor}`,
             timed: false,
+            startOffset: cursor,
+            endOffset: line.fullText.length,
         });
     }
 
@@ -204,6 +224,8 @@ export const buildMonetDisplayTokens = (line: Line): MonetDisplayToken[] => {
             endTime: getLineRenderEndTime(line),
             key: `${line.startTime}-fallback-full`,
             timed: true,
+            startOffset: 0,
+            endOffset: line.fullText.length,
         }];
 };
 
