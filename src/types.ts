@@ -312,7 +312,13 @@ export type MonetBackgroundLayout = 'full-overlay' | 'half-pane-gradient';
 export type MonetBackgroundWashColorMode = 'theme' | 'custom';
 export type MonetAudioStyle = 'bar' | 'line';
 export type MonetPortraitSource = 'cover' | 'custom';
-export type VisualizerBackgroundMode = 'common' | 'monet';
+export type VisualizerBackgroundMode = 'common' | 'monet' | 'url';
+
+export interface UrlBackgroundItem {
+  id: string;
+  url: string;
+  note: string;
+}
 
 export interface MonetBackgroundTuning {
   backgroundSource: MonetBackgroundSource;

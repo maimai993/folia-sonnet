@@ -28,6 +28,7 @@ import {
     type StoredCustomLyricsFont,
     type Theme,
     type TiltTuning,
+    type UrlBackgroundItem,
     type VisualizerBackgroundMode,
     type VisualizerMode,
 } from '../../types';
@@ -70,6 +71,8 @@ interface VisPlaygroundProps {
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
     monetBackgroundImage?: MonetBackgroundImage | null;
     monetPortraitImage?: MonetPortraitImage | null;
+    urlBackgroundList?: UrlBackgroundItem[];
+    urlBackgroundSelectedId?: string | null;
     fontStyle: Theme['fontStyle'];
     fontScale: number;
     customFontFamily: string | null;
@@ -108,6 +111,10 @@ interface VisPlaygroundProps {
     onUploadMonetPortraitImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearMonetPortraitImage?: () => Promise<void> | void;
     isLoadingMonetPortraitImage?: boolean;
+    onAddUrlBackgroundItem?: (item: UrlBackgroundItem) => void;
+    onUpdateUrlBackgroundItem?: (id: string, patch: Partial<Omit<UrlBackgroundItem, 'id'>>) => void;
+    onDeleteUrlBackgroundItem?: (id: string) => void;
+    onSetUrlBackgroundSelectedId?: (id: string | null) => void;
     onImportCappellaCustomEmojiPack?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearCappellaCustomEmojiPack?: () => Promise<void> | void;
     isLoadingCappellaCustomEmojiPack?: boolean;
@@ -300,6 +307,12 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onUploadMonetPortraitImage,
     onClearMonetPortraitImage,
     isLoadingMonetPortraitImage = false,
+    urlBackgroundList = [],
+    urlBackgroundSelectedId = null,
+    onAddUrlBackgroundItem,
+    onUpdateUrlBackgroundItem,
+    onDeleteUrlBackgroundItem,
+    onSetUrlBackgroundSelectedId,
     onImportCappellaCustomEmojiPack,
     onClearCappellaCustomEmojiPack,
     isLoadingCappellaCustomEmojiPack = false,
@@ -857,6 +870,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                                 monetBackgroundImage={monetBackgroundImage}
                                 monetPortraitImage={monetPortraitImage}
+                                urlBackgroundList={urlBackgroundList}
+                                urlBackgroundSelectedId={urlBackgroundSelectedId}
                                 seed={getVisualizerScopedSeed(visualizerMode, 'vis-playground')}
                             />
                         </div>
@@ -931,6 +946,12 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onUploadMonetPortraitImage={onUploadMonetPortraitImage}
                         onClearMonetPortraitImage={onClearMonetPortraitImage}
                         isLoadingMonetPortraitImage={isLoadingMonetPortraitImage}
+                        urlBackgroundList={urlBackgroundList}
+                        urlBackgroundSelectedId={urlBackgroundSelectedId}
+                        onAddUrlBackgroundItem={onAddUrlBackgroundItem}
+                        onUpdateUrlBackgroundItem={onUpdateUrlBackgroundItem}
+                        onDeleteUrlBackgroundItem={onDeleteUrlBackgroundItem}
+                        onSetUrlBackgroundSelectedId={onSetUrlBackgroundSelectedId}
                         hideTranslationSubtitle={hideTranslationSubtitle}
                         onToggleHideTranslationSubtitle={onToggleHideTranslationSubtitle}
                         subtitleOverlayOpacity={draftSubtitleOverlayOpacity}

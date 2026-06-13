@@ -126,6 +126,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         isLoadingMonetBackgroundImage,
         monetPortraitImage,
         isLoadingMonetPortraitImage,
+        urlBackgroundList,
+        urlBackgroundSelectedId,
         lyricsFontStyle,
         lyricsFontScale,
         lyricsCustomFontFamily,
@@ -170,6 +172,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleClearMonetBackgroundImage: onClearMonetBackgroundImage,
         handleUploadMonetPortraitImage: onUploadMonetPortraitImage,
         handleClearMonetPortraitImage: onClearMonetPortraitImage,
+        handleAddUrlBackgroundItem: onAddUrlBackgroundItem,
+        handleUpdateUrlBackgroundItem: onUpdateUrlBackgroundItem,
+        handleDeleteUrlBackgroundItem: onDeleteUrlBackgroundItem,
+        handleSetUrlBackgroundSelectedId: onSetUrlBackgroundSelectedId,
         handleImportCustomCappellaEmojiPack: onImportCappellaCustomEmojiPack,
         handleClearCustomCappellaEmojiPack: onClearCappellaCustomEmojiPack,
         handleImportCustomCappellaAvatar: onImportCappellaCustomAvatar,
@@ -2031,6 +2037,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onUploadMonetPortraitImage={onUploadMonetPortraitImage}
                         onClearMonetPortraitImage={onClearMonetPortraitImage}
                         isLoadingMonetPortraitImage={isLoadingMonetPortraitImage}
+                        urlBackgroundList={urlBackgroundList}
+                        urlBackgroundSelectedId={urlBackgroundSelectedId}
+                        onAddUrlBackgroundItem={onAddUrlBackgroundItem}
+                        onUpdateUrlBackgroundItem={onUpdateUrlBackgroundItem}
+                        onDeleteUrlBackgroundItem={onDeleteUrlBackgroundItem}
+                        onSetUrlBackgroundSelectedId={onSetUrlBackgroundSelectedId}
                         onImportCappellaCustomEmojiPack={onImportCappellaCustomEmojiPack}
                         onClearCappellaCustomEmojiPack={onClearCappellaCustomEmojiPack}
                         isLoadingCappellaCustomEmojiPack={isLoadingCappellaCustomEmojiPack}
@@ -2051,6 +2063,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         backgroundOpacity={backgroundOpacity}
                         visualizerOpacity={visualizerOpacity}
                         visualizerBackgroundMode={visualizerBackgroundMode}
+                        urlBackgroundList={urlBackgroundList}
+                        urlBackgroundSelectedId={urlBackgroundSelectedId}
                         classicTuning={classicTuning}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
