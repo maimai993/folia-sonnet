@@ -28,7 +28,10 @@ const UrlBackgroundLayer: React.FC<UrlBackgroundLayerProps> = ({
     // Defer iframe rendering until container has non-zero dimensions.
     // This prevents embedded page scripts from initialising with a 0x0 canvas/viewport,
     // which causes IndexSizeError and leaves the iframe permanently blank.
+    // Resets ready=false on selectedItem change so the dimension check re-runs fresh.
+    // Includes a max retry guard to prevent infinite rAF loop in extreme edge cases.
     useEffect(() => {
+        setReady(false);
         const el = containerRef.current;
         if (!el) return;
         const rect = el.getBoundingClientRect();
@@ -38,12 +41,15 @@ const UrlBackgroundLayer: React.FC<UrlBackgroundLayerProps> = ({
         }
         // Container not laid out yet — use rAF to wait for next paint.
         let cancelled = false;
+        let retryCount = 0;
+        const MAX_RETRIES = 2500; // ~10s at 250fps safety limit
         const check = () => {
-            if (cancelled) return;
+            if (cancelled || retryCount >= MAX_RETRIES) return;
             const r = el.getBoundingClientRect();
             if (r.width > 0 && r.height > 0) {
                 setReady(true);
             } else {
+                retryCount += 1;
                 requestAnimationFrame(check);
             }
         };
@@ -66,6 +72,7 @@ const UrlBackgroundLayer: React.FC<UrlBackgroundLayerProps> = ({
                     style={{
                         pointerEvents: 'none',
                     }}
+                    sandbox="allow-scripts"
                     allowFullScreen
                 />
             )}

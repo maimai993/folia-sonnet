@@ -367,7 +367,7 @@ export default {
     "visualizerBackgroundModeMonet": "莫奈",
     "visualizerBackgroundModeUrl": "URL",
     "urlBackgroundSettings": "URL 背景",
-    "urlBackgroundSettingsDesc": "将网页显示为播放页背景。",
+    "urlBackgroundSettingsDesc": "将网页显示为播放页背景。注意：部分网站禁止被嵌入其他页面中显示，可能无法正常加载。",
     "urlBackgroundNotePlaceholder": "备注（方便查看）",
     "urlBackgroundAdd": "添加 URL",
     "urlBackgroundEmpty": "暂无 URL，点击上方按钮添加",

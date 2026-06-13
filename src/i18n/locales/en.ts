@@ -365,7 +365,7 @@ export default {
     "visualizerBackgroundModeMonet": "Monet",
     "visualizerBackgroundModeUrl": "URL",
     "urlBackgroundSettings": "URL Background",
-    "urlBackgroundSettingsDesc": "Display a webpage as the player background.",
+    "urlBackgroundSettingsDesc": "Display a webpage as the player background. Note: some websites block being embedded in an iframe and may not display.",
     "urlBackgroundNotePlaceholder": "Note (for easy identification)",
     "urlBackgroundAdd": "Add URL",
     "urlBackgroundEmpty": "No URLs yet, click the button above to add one",
