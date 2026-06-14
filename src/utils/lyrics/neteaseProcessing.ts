@@ -64,9 +64,13 @@ export const processNeteaseLyrics = async (
                 if (chorusRes && chorusRes.code === 200) {
                     const ranges = chorusRes.chorus || chorusRes.data || [];
                     if (Array.isArray(ranges) && ranges.length > 0) {
-                        lyrics = applyNeteaseChorusByTime(lyrics, ranges);
+                        const parsedRanges = ranges.map((r: any) => ({
+                            startTime: (r.startTime ?? 0) / 1000,
+                            endTime: (r.endTime ?? 0) / 1000
+                        }));
+                        lyrics = applyNeteaseChorusByTime(lyrics, parsedRanges);
                         chorusApplied = true;
-                        console.log(`[processNeteaseLyrics] Applied API-based chorus detection for song ${options.songId}. Ranges:`, ranges);
+                        console.log(`[processNeteaseLyrics] Applied API-based chorus detection for song ${options.songId}. Ranges: ${JSON.stringify(parsedRanges)}`);
                     }
                 }
             } catch (error) {

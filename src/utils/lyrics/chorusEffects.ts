@@ -37,8 +37,8 @@ export const applyDetectedChorusEffects = (
 };
 
 export interface NeteaseChorusRange {
-    startTime: number; // in milliseconds
-    endTime: number; // in milliseconds
+    startTime: number; // in seconds
+    endTime: number; // in seconds
 }
 
 /**
@@ -72,8 +72,8 @@ export const applyNeteaseChorusByTime = (
             let matchedRangeIndex = -1;
             for (let i = 0; i < chorusRanges.length; i++) {
                 const range = chorusRanges[i];
-                const rangeStart = range.startTime / 1000;
-                const rangeEnd = range.endTime / 1000;
+                const rangeStart = range.startTime;
+                const rangeEnd = range.endTime;
 
                 if (lineStart < rangeEnd && lineEnd > rangeStart) {
                     matchedRangeIndex = i;
