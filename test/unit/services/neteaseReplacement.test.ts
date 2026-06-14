@@ -31,7 +31,12 @@ describe('netease unavailable song replacement', () => {
         vi.restoreAllMocks();
         vi.stubEnv('VITE_NETEASE_API_BASE', 'http://127.0.0.1:3000');
         vi.stubGlobal('localStorage', {
-            getItem: vi.fn(() => null),
+            getItem: vi.fn((key: string) => {
+                if (key === 'netease_anonymous_cookie') return 'mock-anon-cookie';
+                return null;
+            }),
+            setItem: vi.fn(),
+            removeItem: vi.fn(),
         });
         vi.stubGlobal('window', {});
         vi.stubGlobal('fetch', vi.fn());
@@ -168,5 +173,85 @@ describe('netease unavailable song replacement', () => {
         }) as any, '已下架')).toBe('其它版本可播');
 
         expect(getSongUnavailableTagText(createUnavailableSong() as any, '已下架')).toBe('已下架');
+    });
+
+    describe('fetchWithCreds anonymous cookie behavior', () => {
+        let storageMap: Record<string, string>;
+
+        beforeEach(() => {
+            storageMap = {};
+            vi.stubGlobal('localStorage', {
+                getItem: vi.fn((key: string) => storageMap[key] || null),
+                setItem: vi.fn((key: string, val: string) => { storageMap[key] = val; }),
+                removeItem: vi.fn((key: string) => { delete storageMap[key]; }),
+            });
+        });
+
+        it('uses stored logged-in cookie and does not fetch anonymous cookie', async () => {
+            storageMap['netease_cookie'] = 'real-login-cookie';
+            const fetchMock = vi.mocked(fetch);
+            fetchMock.mockResolvedValueOnce(mockJsonResponse({ code: 200 }) as any);
+
+            const { neteaseApi } = await import('@/services/netease');
+            await neteaseApi.getSongUrl(12345);
+
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+            expect(String(fetchMock.mock.calls[0]?.[0])).toContain('cookie=real-login-cookie');
+            expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('register/anonimous');
+            expect(storageMap['netease_anonymous_cookie']).toBeUndefined();
+        });
+
+        it('fetches anonymous cookie when unlogged-in and not cached', async () => {
+            const fetchMock = vi.mocked(fetch);
+            // First mock resolve: /register/anonimous
+            fetchMock.mockResolvedValueOnce(mockJsonResponse({ code: 200, cookie: 'anon-cookie-value' }) as any);
+            // Second mock resolve: the actual api request
+            fetchMock.mockResolvedValueOnce(mockJsonResponse({ code: 200 }) as any);
+
+            const { neteaseApi } = await import('@/services/netease');
+            await neteaseApi.getSongUrl(12345);
+
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+            expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/register/anonimous');
+            expect(String(fetchMock.mock.calls[1]?.[0])).toContain('cookie=anon-cookie-value');
+            expect(storageMap['netease_anonymous_cookie']).toBe('anon-cookie-value');
+        });
+
+        it('uses cached anonymous cookie when unlogged-in', async () => {
+            storageMap['netease_anonymous_cookie'] = 'cached-anon-cookie';
+            const fetchMock = vi.mocked(fetch);
+            fetchMock.mockResolvedValueOnce(mockJsonResponse({ code: 200 }) as any);
+
+            const { neteaseApi } = await import('@/services/netease');
+            await neteaseApi.getSongUrl(12345);
+
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+            expect(String(fetchMock.mock.calls[0]?.[0])).toContain('cookie=cached-anon-cookie');
+            expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('register/anonimous');
+        });
+
+        it('does not fetch anonymous cookie for login/status/logout endpoints', async () => {
+            const fetchMock = vi.mocked(fetch);
+            fetchMock.mockResolvedValueOnce(mockJsonResponse({ code: 200 }) as any);
+
+            const { neteaseApi } = await import('@/services/netease');
+            await neteaseApi.getLoginStatus();
+
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+            expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('cookie=');
+            expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('register/anonimous');
+        });
+
+        it('clears anonymous cookie cache on auth expiration (301, 401, 403)', async () => {
+            storageMap['netease_anonymous_cookie'] = 'expired-anon-cookie';
+            const fetchMock = vi.mocked(fetch);
+            fetchMock.mockResolvedValueOnce(mockJsonResponse({ code: 301 }) as any);
+
+            const { neteaseApi } = await import('@/services/netease');
+            await neteaseApi.getSongUrl(12345);
+
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+            expect(storageMap['netease_anonymous_cookie']).toBeUndefined();
+        });
     });
 });

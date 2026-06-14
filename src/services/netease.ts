@@ -79,14 +79,49 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
 
   const storedCookie = typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function' ? null : localStorage.getItem('netease_cookie');
 
-  if (storedCookie) {
+  let cookieToUse = storedCookie;
+
+  if (!cookieToUse) {
+    const isLoginOrStatusEndpoint =
+      endpoint.startsWith('/login') ||
+      endpoint.startsWith('/user/account') ||
+      endpoint.startsWith('/logout');
+
+    if (!isLoginOrStatusEndpoint) {
+      let anonCookie = typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function' ? null : localStorage.getItem('netease_anonymous_cookie');
+      if (!anonCookie && !endpoint.startsWith('/register/anonimous')) {
+        try {
+          const anonRes = await fetch(`${base}/register/anonimous?timestamp=${Date.now()}`).then(r => r.json());
+          if (anonRes && typeof anonRes.cookie === 'string' && anonRes.cookie) {
+            anonCookie = anonRes.cookie;
+            if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+              localStorage.setItem('netease_anonymous_cookie', anonCookie);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to fetch anonymous cookie', e);
+        }
+      }
+      cookieToUse = anonCookie;
+    }
+  }
+
+  if (cookieToUse) {
     // Append cookie to URL
     const sep = finalUrl.includes('?') ? '&' : '?';
-    finalUrl = `${finalUrl}${sep}cookie=${encodeURIComponent(storedCookie)}`;
+    finalUrl = `${finalUrl}${sep}cookie=${encodeURIComponent(cookieToUse)}`;
   }
 
   const res = await fetch(finalUrl, { ...defaultOptions, credentials: 'include' });
-  return res.json();
+  const data = await res.json();
+
+  if (!storedCookie && cookieToUse && (data?.code === 301 || data?.code === 401 || data?.code === 403)) {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.removeItem === 'function') {
+      localStorage.removeItem('netease_anonymous_cookie');
+    }
+  }
+
+  return data;
 };
 
 const toHttps = (url?: unknown) => {
