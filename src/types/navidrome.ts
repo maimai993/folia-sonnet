@@ -76,6 +76,7 @@ export interface SubsonicSong {
     artistId: string;
     type: 'music' | 'podcast' | 'audiobook';
     isVideo: boolean;
+    starred?: string;
 }
 
 // Album List Response
@@ -223,6 +224,7 @@ export interface NavidromeSong extends SongResult {
         path: string;
         bitRate?: number;
         suffix: string;
+        starred?: string;
     };
     // For lyrics matching (similar to local songs)
     matchedSongId?: number;

@@ -52,7 +52,7 @@ import { useSearchNavigationStore } from './stores/useSearchNavigationStore';
 import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
 import { clampMediaVolume } from './utils/appPlaybackHelpers';
-import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } from './utils/appPlaybackGuards';
+import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './utils/appPlaybackGuards';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -112,6 +112,7 @@ export default function App() {
     });
     const [isDevDebugOverlayVisible, setIsDevDebugOverlayVisible] = useState(false);
     const [navidromeEnabled, setNavidromeEnabledState] = useState(() => isNavidromeEnabled());
+    const [starredNavidromeSongIds, setStarredNavidromeSongIds] = useState<Set<string>>(new Set());
     const {
         closeSettings,
         isSettingsSubviewOpen,
@@ -127,6 +128,37 @@ export default function App() {
         homeLayoutStyle: state.homeLayoutStyle,
         setActiveGridViewCollection: state.setActiveGridViewCollection,
     })));
+
+    const loadNavidromeFavorites = useCallback(async () => {
+        if (!navidromeEnabled) {
+            setStarredNavidromeSongIds(new Set());
+            return;
+        }
+
+        const { getNavidromeConfig, navidromeApi } = await import('./services/navidromeService');
+        const config = getNavidromeConfig();
+        if (!config) return;
+
+        try {
+            const songs = await navidromeApi.getStarred2(config);
+            setStarredNavidromeSongIds(new Set(songs.map(song => song.id)));
+        } catch (error) {
+            console.warn('[App] Failed to load Navidrome favorites:', error);
+        }
+    }, [navidromeEnabled]);
+
+    useEffect(() => {
+        void loadNavidromeFavorites();
+    }, [loadNavidromeFavorites]);
+
+    const prevSettingsOpenRef = useRef(false);
+    useEffect(() => {
+        const isOpen = settingsModalState.isOpen;
+        if (!isOpen && prevSettingsOpenRef.current && navidromeEnabled) {
+            void loadNavidromeFavorites();
+        }
+        prevSettingsOpenRef.current = isOpen;
+    }, [settingsModalState.isOpen, navidromeEnabled, loadNavidromeFavorites]);
 
     // Player State
     const [playerState, setPlayerState] = useState<PlayerState>(PlayerState.IDLE);
@@ -770,6 +802,8 @@ export default function App() {
         setStatusMsg,
         setIsPanelOpen,
         setLikedSongIds,
+        starredNavidromeSongIds,
+        setStarredNavidromeSongIds,
         navigateToPlayer,
         persistLastPlaybackCache,
         restoreCachedThemeForSong,
@@ -1065,7 +1099,17 @@ export default function App() {
         lyrics,
         onRemoteExportCommand: handleExportCommand,
         onExternalPlayRequest: handleStageExternalPlayRequest,
-        isLiked: currentSong ? (isLocalPlaybackSong(currentSong) ? isLocalSongLiked(currentSong) : likedSongIds.has(currentSong.id)) : false,
+        isLiked: (() => {
+            if (!currentSong) return false;
+            if (isLocalPlaybackSong(currentSong)) {
+                return isLocalSongLiked(currentSong);
+            }
+            if (isNavidromePlaybackSong(currentSong)) {
+                const navidromeSong = resolveNavidromePlaybackCarrier(currentSong);
+                return navidromeSong ? starredNavidromeSongIds.has(navidromeSong.navidromeData.id) : false;
+            }
+            return likedSongIds.has(currentSong.id);
+        })(),
         onLike: handleLike,
     });
 
@@ -1690,7 +1734,17 @@ export default function App() {
         effectiveLoopMode,
         toggleLoop,
         handleLike,
-        isLiked: currentSong ? (isLocalPlaybackSong(currentSong) ? isLocalSongLiked(currentSong) : likedSongIds.has(currentSong.id)) : false,
+        isLiked: (() => {
+            if (!currentSong) return false;
+            if (isLocalPlaybackSong(currentSong)) {
+                return isLocalSongLiked(currentSong);
+            }
+            if (isNavidromePlaybackSong(currentSong)) {
+                const navidromeSong = resolveNavidromePlaybackCarrier(currentSong);
+                return navidromeSong ? starredNavidromeSongIds.has(navidromeSong.navidromeData.id) : false;
+            }
+            return likedSongIds.has(currentSong.id);
+        })(),
         generateAITheme: generateCurrentSongTheme,
         isGeneratingTheme,
         hasLyrics: !!lyrics,
@@ -1907,6 +1961,7 @@ export default function App() {
         isPanelOpen,
         isSyncing,
         likedSongIds,
+        starredNavidromeSongIds,
         localPlaylists,
         lyrics,
         navigateToHome,

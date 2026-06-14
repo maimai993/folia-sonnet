@@ -38,6 +38,7 @@ type UseLibraryPlaybackControllerParams = {
     lyrics: LyricData | null;
     playQueue: SongResult[];
     likedSongIds: Set<number>;
+    starredNavidromeSongIds: Set<string>;
     userId?: number;
     currentTime: MotionValue<number>;
     setCurrentSong: SetState<SongResult | null>;
@@ -52,6 +53,7 @@ type UseLibraryPlaybackControllerParams = {
     setStatusMsg: SetState<StatusMessage | null>;
     setIsPanelOpen: SetState<boolean>;
     setLikedSongIds: Dispatch<SetStateAction<Set<number>>>;
+    setStarredNavidromeSongIds: Dispatch<SetStateAction<Set<string>>>;
     navigateToPlayer: () => void;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
     restoreCachedThemeForSong: (songId: ThemeCacheSongKey, options?: {
@@ -74,6 +76,7 @@ export function useLibraryPlaybackController({
     lyrics,
     playQueue,
     likedSongIds,
+    starredNavidromeSongIds,
     userId,
     currentTime,
     setCurrentSong,
@@ -88,6 +91,7 @@ export function useLibraryPlaybackController({
     setStatusMsg,
     setIsPanelOpen,
     setLikedSongIds,
+    setStarredNavidromeSongIds,
     navigateToPlayer,
     persistLastPlaybackCache,
     restoreCachedThemeForSong,
@@ -1006,7 +1010,41 @@ export function useLibraryPlaybackController({
         }
 
         if (isNavidromePlaybackSong(currentSong)) {
-            setStatusMsg({ type: 'info', text: 'Navidrome 歌曲的收藏能力尚未接入' });
+            const navidromeSong = resolveNavidromePlaybackCarrier(currentSong);
+            if (!navidromeSong) return;
+
+            const config = getNavidromeConfig();
+            if (!config) {
+                setStatusMsg({ type: 'error', text: t('navidrome.notConfigured') || 'Navidrome 尚未配置' });
+                return;
+            }
+
+            const songId = navidromeSong.navidromeData.id;
+            const nextStarred = !starredNavidromeSongIds.has(songId);
+
+            try {
+                const success = nextStarred
+                    ? await navidromeApi.star(config, songId)
+                    : await navidromeApi.unstar(config, songId);
+
+                if (success) {
+                    setStarredNavidromeSongIds(prev => {
+                        const next = new Set(prev);
+                        if (nextStarred) next.add(songId);
+                        else next.delete(songId);
+                        return next;
+                    });
+                    setStatusMsg({
+                        type: 'success',
+                        text: nextStarred ? t('status.liked') : (t('status.unliked') || '已取消喜欢'),
+                    });
+                } else {
+                    setStatusMsg({ type: 'error', text: t('status.likeFailed') || '操作失败' });
+                }
+            } catch (error) {
+                console.error('[Navidrome Favorite] Failed to toggle favorite:', error);
+                setStatusMsg({ type: 'error', text: t('status.likeFailed') || '操作失败' });
+            }
             return;
         }
 
@@ -1024,7 +1062,17 @@ export function useLibraryPlaybackController({
             console.error('Like failed', error);
             setStatusMsg({ type: 'error', text: t('status.likeFailed') });
         }
-    }, [currentSong, isLocalSongLiked, likedSongIds, loadLocalPlaylists, setLikedSongIds, setStatusMsg, t]);
+    }, [
+        currentSong,
+        isLocalSongLiked,
+        likedSongIds,
+        starredNavidromeSongIds,
+        loadLocalPlaylists,
+        setLikedSongIds,
+        setStarredNavidromeSongIds,
+        setStatusMsg,
+        t,
+    ]);
 
     return {
         localSongs,

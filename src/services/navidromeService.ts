@@ -282,6 +282,28 @@ export const navidromeApi = {
         return [];
     },
 
+    // Star a song on the Navidrome server
+    star: async (config: NavidromeConfig, songId: string): Promise<boolean> => {
+        try {
+            const res = await fetchSubsonic<Record<string, never>>(config, 'star', { id: songId });
+            return res['subsonic-response'].status === 'ok';
+        } catch (e) {
+            console.error('[Navidrome] star failed:', e);
+        }
+        return false;
+    },
+
+    // Unstar a song on the Navidrome server
+    unstar: async (config: NavidromeConfig, songId: string): Promise<boolean> => {
+        try {
+            const res = await fetchSubsonic<Record<string, never>>(config, 'unstar', { id: songId });
+            return res['subsonic-response'].status === 'ok';
+        } catch (e) {
+            console.error('[Navidrome] unstar failed:', e);
+        }
+        return false;
+    },
+
     getArtists: async (config: NavidromeConfig): Promise<SubsonicArtist[]> => {
         try {
             const res = await fetchSubsonic<ArtistsIndexResponse>(config, 'getArtists');
@@ -439,6 +461,7 @@ export const navidromeApi = {
                 path: song.path,
                 bitRate: song.bitRate,
                 suffix: song.suffix,
+                starred: song.starred,
             },
         };
     },
