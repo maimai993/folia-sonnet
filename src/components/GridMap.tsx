@@ -658,6 +658,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                     dragControls.start(event);
                 }}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
+                style={{ touchAction: 'none' }}
             >
                 {items.length === 0 ? (
                     <div className="opacity-40 text-sm font-sans">{t('home.loadingLibrary') || 'No items found'}</div>
@@ -677,7 +678,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                                 isDraggingRef.current = false;
                             }, 50);
                         }}
-                        style={{ x: dragX, y: dragY, background: 'rgba(0,0,0,0)' }}
+                        style={{ x: dragX, y: dragY, background: 'rgba(0,0,0,0)', touchAction: 'none' }}
                         className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing bg-transparent"
                     >
                         {memoizedCards}

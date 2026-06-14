@@ -1664,6 +1664,7 @@ export const GridView: React.FC<GridViewProps> = ({
                     dragControls.start(event);
                 }}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
+                style={{ touchAction: 'none' }}
             >
                 <AnimatePresence>
                     {showSearchPanel && (
@@ -1753,7 +1754,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                 flushPendingBackgroundTracks();
                             }, 50);
                         }}
-                        style={{ x: dragX, y: dragY, background: 'rgba(0,0,0,0)' }}
+                        style={{ x: dragX, y: dragY, background: 'rgba(0,0,0,0)', touchAction: 'none' }}
                         className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing bg-transparent"
                     >
                         {memoizedCards}

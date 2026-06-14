@@ -292,7 +292,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     dragConstraints={{ left: -150, right: 0 }}
                                     dragElastic={0}
                                     dragMomentum={false}
-                                    style={{ x: offsetX }}
+                                    style={{ x: offsetX, touchAction: isEditingPosition ? 'none' : 'auto' }}
                                     onDragStart={() => {
                                         isDraggingRef.current = true;
                                     }}
@@ -386,6 +386,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                                 backgroundColor: colorWithAlpha(theme.backgroundColor, 0.86),
                                                 borderWidth: '1.5px',
                                                 borderStyle: 'solid',
+                                                touchAction: isEditingPosition ? 'none' : 'auto',
                                             }}
                                         />
 
