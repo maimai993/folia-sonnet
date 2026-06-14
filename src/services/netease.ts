@@ -704,8 +704,8 @@ export const neteaseApi = {
     return fetchWithCreds(`/personal_fm?timestamp=${Date.now()}`);
   },
 
-  getDailyRecommendPlaylists: async () => {
-    return fetchWithCreds(`/recommend/resource?timestamp=${Date.now()}`);
+  getPersonalizedPlaylists: async (limit = 35) => {
+    return fetchWithCreds(`/personalized?limit=${limit}`);
   },
 
   fmTrash: async (songId: number) => {

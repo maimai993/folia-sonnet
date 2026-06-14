@@ -280,19 +280,19 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 isFm: true,
             };
 
-            const recRes = await neteaseApi.getDailyRecommendPlaylists();
-            let recItems: any[] = [];
-            if (recRes.recommend) {
-                recItems = recRes.recommend.slice(0, 30).map((r: any) => ({
+            const personalizedRes = await neteaseApi.getPersonalizedPlaylists(35);
+            let personalizedItems: any[] = [];
+            if (personalizedRes.result) {
+                personalizedItems = personalizedRes.result.map((r: any) => ({
                     id: r.id,
                     name: r.name,
                     coverUrl: r.picUrl,
                     trackCount: r.trackCount,
-                    description: r.creator?.nickname || '每日推荐',
-                    summary: r.description || r.copywriter || ''
+                    description: r.copywriter || '推荐歌单',
+                    summary: r.copywriter || ''
                 }));
             }
-            setRadioItems([fmItem, ...recItems]);
+            setRadioItems([fmItem, ...personalizedItems]);
         } catch (e) {
             console.error('[Grid3D] Failed to fetch radio items', e);
         } finally {

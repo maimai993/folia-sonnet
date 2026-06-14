@@ -326,19 +326,19 @@ const Home: React.FC<HomeProps> = ({
                 isFm: true,
             };
 
-            const recRes = await neteaseApi.getDailyRecommendPlaylists();
-            let recItems: any[] = [];
-            if (recRes.recommend) {
-                recItems = recRes.recommend.slice(0, 30).map((r: any) => ({
+            const personalizedRes = await neteaseApi.getPersonalizedPlaylists(35);
+            let personalizedItems: any[] = [];
+            if (personalizedRes.result) {
+                personalizedItems = personalizedRes.result.map((r: any) => ({
                     id: r.id,
                     name: r.name,
                     coverUrl: r.picUrl,
                     trackCount: r.trackCount,
-                    description: r.creator?.nickname || '每日推荐'
+                    description: r.copywriter || '推荐歌单'
                 }));
             }
             
-            setRadioItems([fmItem, ...recItems]);
+            setRadioItems([fmItem, ...personalizedItems]);
             setRadioLoaded(true);
         } catch (e) {
             console.error("Failed to fetch radio data", e);
