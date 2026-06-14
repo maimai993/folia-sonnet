@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion, useTransform, type MotionValue } from 'framer-motion';
-import type { Theme } from '../../../types';
+import { AnimatePresence, motion, useTransform, MotionValue } from 'framer-motion';
+import type { Theme, AudioBands } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { colorWithAlpha, mixColors } from '../colorMix';
 import {
@@ -32,6 +32,8 @@ interface MonetLyricsRailProps {
     fontStack: string;
     keywordColoringEnabled: boolean;
     emptyText: string;
+    audioPower?: MotionValue<number>;
+    audioBands?: AudioBands;
 }
 
 interface MonetRailSize {
@@ -245,7 +247,10 @@ const MonetTimedTokenSpan: React.FC<{
     fontPx: number;
     fontStack: string;
     wordColorMatchers: WordColorMatcher[];
-}> = ({ entry, currentTime, accentColor, fontPx, fontStack, wordColorMatchers }) => {
+    isChorus?: boolean;
+    chorusAccentColor?: string;
+    audioPower?: MotionValue<number>;
+}> = ({ entry, currentTime, accentColor, fontPx, fontStack, wordColorMatchers, isChorus, chorusAccentColor, audioPower }) => {
     const lineRenderEndTime = useMemo(() => getLineRenderEndTime(entry.line), [entry.line]);
     const tokens = useMemo(() => buildMonetDisplayTokens(entry.line), [entry.line]);
     const wordColorRanges = useMemo(
@@ -261,6 +266,10 @@ const MonetTimedTokenSpan: React.FC<{
         [entry.tone.fontWeight, fontPx, fontStack],
     );
 
+    const resolvedAccentColor = isChorus && chorusAccentColor
+        ? mixColors(accentColor, chorusAccentColor, 0.48)
+        : accentColor;
+
     return (
         <span className="block w-full min-w-0 max-w-full whitespace-pre-wrap break-words">
             {tokens.map(token => (
@@ -273,10 +282,12 @@ const MonetTimedTokenSpan: React.FC<{
                         lineRenderEndTime={lineRenderEndTime}
                         currentTime={currentTime}
                         lineStatus={entry.status}
-                        wordColor={tokenColors.get(token.key) ?? accentColor}
+                        wordColor={tokenColors.get(token.key) ?? resolvedAccentColor}
                         baseColor={entry.tone.baseColor}
                         fontPx={fontPx}
                         fontSpec={fontSpec}
+                        isChorus={isChorus}
+                        audioPower={audioPower}
                     />
                 ) : (
                     <span key={token.key} style={{ color: entry.tone.baseColor }}>
@@ -299,6 +310,8 @@ const MonetWordSweep: React.FC<{
     baseColor: string;
     fontPx: number;
     fontSpec: string;
+    isChorus?: boolean;
+    audioPower?: MotionValue<number>;
 }> = ({
     text,
     startTime,
@@ -310,112 +323,115 @@ const MonetWordSweep: React.FC<{
     baseColor,
     fontPx,
     fontSpec,
+    isChorus,
+    audioPower,
 }) => {
-    const isLineActive = lineStatus === 'active';
-    const canRenderGlow = lineStatus === 'active' || lineStatus === 'passed';
-    const graphemeOffsets = useMemo(
-        () => measureMonetGraphemeOffsets(text, fontPx, fontSpec),
-        [text, fontPx, fontSpec],
-    );
+        const isLineActive = lineStatus === 'active';
+        const canRenderGlow = lineStatus === 'active' || lineStatus === 'passed';
+        const graphemeOffsets = useMemo(
+            () => measureMonetGraphemeOffsets(text, fontPx, fontSpec),
+            [text, fontPx, fontSpec],
+        );
 
-    const wordStatus = useTransform(currentTime, latest => (
-        isLineActive ? resolveMonetWordStatus(latest, startTime, endTime) : lineStatus
-    ));
+        const wordStatus = useTransform(currentTime, latest => (
+            isLineActive ? resolveMonetWordStatus(latest, startTime, endTime) : lineStatus
+        ));
 
-    const wordProgress = useTransform(currentTime, latest => {
-        if (!isLineActive || latest <= startTime) return 0;
-        if (latest >= endTime) return 1;
-        return (latest - startTime) / Math.max(0.001, endTime - startTime);
-    });
+        const wordProgress = useTransform(currentTime, latest => {
+            if (!isLineActive || latest <= startTime) return 0;
+            if (latest >= endTime) return 1;
+            return (latest - startTime) / Math.max(0.001, endTime - startTime);
+        });
 
-    const fillWidth = useTransform(wordProgress, progress => {
-        if (progress <= 0) return 0;
-        if (progress >= 1) return graphemeOffsets[graphemeOffsets.length - 1] ?? 0;
-        const graphemeCount = graphemeOffsets.length - 1;
-        const floatIndex = progress * graphemeCount;
-        const wholeIndex = Math.floor(floatIndex);
-        const fractional = floatIndex - wholeIndex;
-        const startWidth = graphemeOffsets[Math.min(wholeIndex, graphemeOffsets.length - 1)] ?? 0;
-        const endWidth = graphemeOffsets[Math.min(wholeIndex + 1, graphemeOffsets.length - 1)] ?? startWidth;
-        return startWidth + (endWidth - startWidth) * fractional;
-    });
+        const fillWidth = useTransform(wordProgress, progress => {
+            if (progress <= 0) return 0;
+            if (progress >= 1) return graphemeOffsets[graphemeOffsets.length - 1] ?? 0;
+            const graphemeCount = graphemeOffsets.length - 1;
+            const floatIndex = progress * graphemeCount;
+            const wholeIndex = Math.floor(floatIndex);
+            const fractional = floatIndex - wholeIndex;
+            const startWidth = graphemeOffsets[Math.min(wholeIndex, graphemeOffsets.length - 1)] ?? 0;
+            const endWidth = graphemeOffsets[Math.min(wholeIndex + 1, graphemeOffsets.length - 1)] ?? startWidth;
+            return startWidth + (endWidth - startWidth) * fractional;
+        });
 
-    const maskImage = useTransform(fillWidth, latest => {
-        const edgeSoftness = Math.max(Math.min(fontPx * 0.45, 16), 6);
-        const solidEnd = Math.max(latest - edgeSoftness, 0);
-        const featherStart = Math.max(latest - edgeSoftness * 0.55, 0);
-        const featherEnd = Math.max(latest, 0);
-        return `linear-gradient(90deg, rgba(0, 0, 0, 1) 0px, rgba(0, 0, 0, 1) ${solidEnd}px, rgba(0, 0, 0, 0.92) ${featherStart}px, rgba(0, 0, 0, 0) ${featherEnd}px, rgba(0, 0, 0, 0) 100%)`;
-    });
+        const maskImage = useTransform(fillWidth, latest => {
+            const edgeSoftness = Math.max(Math.min(fontPx * 0.45, 16), 6);
+            const solidEnd = Math.max(latest - edgeSoftness, 0);
+            const featherStart = Math.max(latest - edgeSoftness * 0.55, 0);
+            const featherEnd = Math.max(latest, 0);
+            return `linear-gradient(90deg, rgba(0, 0, 0, 1) 0px, rgba(0, 0, 0, 1) ${solidEnd}px, rgba(0, 0, 0, 0.92) ${featherStart}px, rgba(0, 0, 0, 0) ${featherEnd}px, rgba(0, 0, 0, 0) 100%)`;
+        });
 
-    const fillGradient = useTransform(wordProgress, progress => {
-        const color = mixColors(baseColor, wordColor, Math.min(progress, 1));
-        return `linear-gradient(90deg, ${color} 0%, ${colorWithAlpha(color, 0.92)} 68%, ${colorWithAlpha(color, 0.72)} 100%)`;
-    });
+        const fillGradient = useTransform(wordProgress, progress => {
+            const color = mixColors(baseColor, wordColor, Math.min(progress, 1));
+            return `linear-gradient(90deg, ${color} 0%, ${colorWithAlpha(color, 0.92)} 68%, ${colorWithAlpha(color, 0.72)} 100%)`;
+        });
 
-    const resolvedBaseColor = useTransform(wordStatus, status =>
-        (isLineActive && status === 'passed') || lineStatus === 'passed' ? wordColor : baseColor,
-    );
+        const resolvedBaseColor = useTransform(wordStatus, status =>
+            (isLineActive && status === 'passed') || lineStatus === 'passed' ? wordColor : baseColor,
+        );
 
-    const glowShadow = useTransform(currentTime, latest => {
-        if (!canRenderGlow || latest <= startTime) return 'none';
+        const glowShadow = useTransform(currentTime, latest => {
+            if (!canRenderGlow || latest <= startTime) return 'none';
 
-        const wordDuration = Math.max(0.001, endTime - startTime);
-        const glowRiseDuration = wordDuration * MONET_GLOW_RISE_DURATION_SCALE;
-        const glowPeakTime = startTime + glowRiseDuration;
-        const glowTailEndTime = Math.max(lineRenderEndTime, endTime + MONET_GLOW_PASS_TAIL_SECONDS);
-        let intensity: number;
-        if (latest <= glowPeakTime) {
-            intensity = (latest - startTime) / glowRiseDuration;
-        } else {
-            const decayDuration = Math.max(0.18, glowTailEndTime - glowPeakTime);
-            intensity = Math.max(0, 1 - (latest - glowPeakTime) / decayDuration);
-        }
+            const wordDuration = Math.max(0.001, endTime - startTime);
+            const glowRiseDuration = wordDuration * MONET_GLOW_RISE_DURATION_SCALE;
+            const glowPeakTime = startTime + glowRiseDuration;
+            const glowTailEndTime = Math.max(lineRenderEndTime, endTime + MONET_GLOW_PASS_TAIL_SECONDS);
+            let intensity: number;
+            if (latest <= glowPeakTime) {
+                intensity = (latest - startTime) / glowRiseDuration;
+            } else {
+                const decayDuration = Math.max(0.18, glowTailEndTime - glowPeakTime);
+                intensity = Math.max(0, 1 - (latest - glowPeakTime) / decayDuration);
+            }
 
-        if (intensity <= 0) return 'none';
+            if (intensity <= 0) return 'none';
 
-        const radiusOne = Math.round(fontPx * 0.15);
-        const radiusTwo = Math.round(fontPx * 0.35);
-        const glowColor = mixColors(baseColor, wordColor, Math.min(intensity, 1), intensity * 0.88);
-        return `0 0 ${radiusOne}px ${glowColor}, 0 0 ${radiusTwo}px ${glowColor}`;
-    });
+            const finalIntensity = isChorus ? intensity * 1.4 : intensity;
+            const radiusOne = Math.round(fontPx * (isChorus ? 0.24 : 0.15));
+            const radiusTwo = Math.round(fontPx * (isChorus ? 0.52 : 0.35));
+            const glowColor = mixColors(baseColor, wordColor, Math.min(finalIntensity, 1), finalIntensity * 0.88);
+            return `0 0 ${radiusOne}px ${glowColor}, 0 0 ${radiusTwo}px ${glowColor}`;
+        }) as unknown as MotionValue<string>;
 
-    return (
-        <span className="relative inline-block whitespace-pre-wrap break-words">
-            <motion.span style={{ color: resolvedBaseColor, textShadow: glowShadow }}>
-                {text}
-            </motion.span>
-            {isLineActive ? (
-                <motion.span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 block whitespace-pre-wrap break-words"
-                    style={{
-                        WebkitMaskImage: maskImage,
-                        maskImage,
-                        WebkitMaskSize: '100% 100%',
-                        maskSize: '100% 100%',
-                        WebkitMaskRepeat: 'no-repeat',
-                        maskRepeat: 'no-repeat',
-                        textShadow: 'none',
-                    }}
-                >
+        return (
+            <span className="relative inline-block whitespace-pre-wrap break-words">
+                <motion.span style={{ color: resolvedBaseColor, textShadow: glowShadow }}>
+                    {text}
+                </motion.span>
+                {isLineActive ? (
                     <motion.span
-                        className="block whitespace-pre-wrap break-words"
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 block whitespace-pre-wrap break-words"
                         style={{
-                            color: 'transparent',
-                            WebkitTextFillColor: 'transparent',
-                            backgroundImage: fillGradient,
-                            WebkitBackgroundClip: 'text',
-                            backgroundClip: 'text',
+                            WebkitMaskImage: maskImage,
+                            maskImage,
+                            WebkitMaskSize: '100% 100%',
+                            maskSize: '100% 100%',
+                            WebkitMaskRepeat: 'no-repeat',
+                            maskRepeat: 'no-repeat',
+                            textShadow: 'none',
                         }}
                     >
-                        {text}
+                        <motion.span
+                            className="block whitespace-pre-wrap break-words"
+                            style={{
+                                color: 'transparent',
+                                WebkitTextFillColor: 'transparent',
+                                backgroundImage: fillGradient,
+                                WebkitBackgroundClip: 'text',
+                                backgroundClip: 'text',
+                            }}
+                        >
+                            {text}
+                        </motion.span>
                     </motion.span>
-                </motion.span>
-            ) : null}
-        </span>
-    );
-};
+                ) : null}
+            </span>
+        );
+    };
 
 const MonetRailLine: React.FC<{
     entry: PositionedMonetLineEntry;
@@ -426,7 +442,8 @@ const MonetRailLine: React.FC<{
     fontStack: string;
     glowBufferPx: number;
     wordColorMatchers: WordColorMatcher[];
-}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, glowBufferPx, wordColorMatchers }) => {
+    audioPower?: MotionValue<number>;
+}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, glowBufferPx, wordColorMatchers, audioPower }) => {
     const initialOffset = entry.offset >= 0 ? 34 : -34;
     const exitOffset = entry.status === 'passed' || entry.offset < 0 ? -38 : 38;
     const textMask = getLineMask(entry.layout.isTextClipped, Math.max(lyricFontPx * 0.55, 12));
@@ -463,6 +480,21 @@ const MonetRailLine: React.FC<{
                 zIndex: entry.tone.zIndex,
             }}
         >
+            {entry.line.isChorus && (
+                <motion.div
+                    className="absolute inset-0 pointer-events-none -z-10 rounded-2xl"
+                    initial={{ opacity: 0 }}
+                    animate={{
+                        opacity: entry.status === 'active' ? 1 : 0,
+                        scale: entry.status === 'active' ? 1.02 : 0.96,
+                    }}
+                    transition={{ duration: 0.45, ease: 'easeOut' }}
+                    style={{
+                        background: `radial-gradient(circle at 50% 45%, ${colorWithAlpha(theme.accentColor, 0.14)} 0%, ${colorWithAlpha(theme.accentColor, 0.04)} 55%, transparent 82%)`,
+                        filter: 'blur(10px)',
+                    }}
+                />
+            )}
             <div
                 className="min-w-0 overflow-hidden"
                 style={{
@@ -499,6 +531,9 @@ const MonetRailLine: React.FC<{
                     fontPx={lyricFontPx}
                     fontStack={fontStack}
                     wordColorMatchers={wordColorMatchers}
+                    isChorus={entry.line.isChorus}
+                    chorusAccentColor={theme.accentColor}
+                    audioPower={audioPower}
                 />
             </div>
             {entry.status === 'active' && entry.line.translation ? (
@@ -547,6 +582,8 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     fontStack,
     keywordColoringEnabled,
     emptyText,
+    audioPower,
+    audioBands,
 }) => {
     const railRef = useRef<HTMLDivElement | null>(null);
     const railSize = useMonetRailSize(railRef);
@@ -594,6 +631,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
                             fontStack={fontStack}
                             glowBufferPx={MONET_GLOW_BUFFER_PX}
                             wordColorMatchers={wordColorMatchers}
+                            audioPower={audioPower}
                         />
                     ))}
                 </AnimatePresence>

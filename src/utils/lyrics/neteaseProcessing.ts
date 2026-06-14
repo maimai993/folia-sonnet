@@ -66,7 +66,7 @@ export const processNeteaseLyrics = async (
                     if (Array.isArray(ranges) && ranges.length > 0) {
                         lyrics = applyNeteaseChorusByTime(lyrics, ranges);
                         chorusApplied = true;
-                        console.log(`[processNeteaseLyrics] Applied API-based chorus detection for song ${options.songId}`);
+                        console.log(`[processNeteaseLyrics] Applied API-based chorus detection for song ${options.songId}. Ranges:`, ranges);
                     }
                 }
             } catch (error) {

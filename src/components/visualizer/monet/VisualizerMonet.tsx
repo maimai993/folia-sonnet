@@ -210,6 +210,8 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     fontStack={lyricFontStack}
                                     keywordColoringEnabled={monetTuning.keywordColoringEnabled}
                                     emptyText=""
+                                    audioPower={audioPower}
+                                    audioBands={audioBands}
                                 />
                             </motion.div>
 
