@@ -1073,8 +1073,8 @@ function getGeminiResponseSchema() {
         type: 'OBJECT',
         description: 'Theme optimized for light/daylight mode',
         properties: {
-          name: { type: 'STRING', description: 'A creative name for this light theme' },
-          description: { type: 'STRING', description: 'A creative 1-sentence description of the mood or visual concept' },
+          name: { type: 'STRING', description: 'A creative name for this light theme in Chinese, strictly limited to 10 characters or less' },
+          description: { type: 'STRING', description: 'A creative 1-sentence description of the mood or visual concept in Chinese, strictly limited to 15 to 30 Chinese characters' },
           backgroundColor: { type: 'STRING', description: 'Hex code for light background (whites, creams, pastels)' },
           primaryColor: { type: 'STRING', description: 'Hex code for main text (dark color for contrast)' },
           accentColor: { type: 'STRING', description: 'Hex code for highlighted text/effects' },
@@ -1103,8 +1103,8 @@ function getGeminiResponseSchema() {
         type: 'OBJECT',
         description: 'Theme optimized for dark/midnight mode',
         properties: {
-          name: { type: 'STRING', description: 'A creative name for this dark theme' },
-          description: { type: 'STRING', description: 'A creative 1-sentence description of the mood or visual concept' },
+          name: { type: 'STRING', description: 'A creative name for this dark theme in Chinese, strictly limited to 10 characters or less' },
+          description: { type: 'STRING', description: 'A creative 1-sentence description of the mood or visual concept in Chinese, strictly limited to 15 to 30 Chinese characters' },
           backgroundColor: { type: 'STRING', description: 'Hex code for dark background (deep colors)' },
           primaryColor: { type: 'STRING', description: 'Hex code for main text (light color for contrast)' },
           accentColor: { type: 'STRING', description: 'Hex code for highlighted text/effects' },
@@ -1189,8 +1189,8 @@ const THEME_JSON_SCHEMA = {
       additionalProperties: false,
       description: 'Theme optimized for light/daylight mode',
       properties: {
-        name: { type: 'string', description: 'A creative name for this light theme' },
-        description: { type: 'string', description: 'A creative 1-sentence description of the mood or visual concept' },
+        name: { type: 'string', description: 'A creative name for this light theme in Chinese, strictly limited to 10 characters or less' },
+        description: { type: 'string', description: 'A creative 1-sentence description of the mood or visual concept in Chinese, strictly limited to 15 to 30 Chinese characters' },
         backgroundColor: { type: 'string', description: 'Hex code for light background' },
         primaryColor: { type: 'string', description: 'Hex code for main text (dark)' },
         accentColor: { type: 'string', description: 'Hex code for highlighted text/effects' },
@@ -1221,8 +1221,8 @@ const THEME_JSON_SCHEMA = {
       additionalProperties: false,
       description: 'Theme optimized for dark/midnight mode',
       properties: {
-        name: { type: 'string', description: 'A creative name for this dark theme' },
-        description: { type: 'string', description: 'A creative 1-sentence description of the mood or visual concept' },
+        name: { type: 'string', description: 'A creative name for this dark theme in Chinese, strictly limited to 10 characters or less' },
+        description: { type: 'string', description: 'A creative 1-sentence description of the mood or visual concept in Chinese, strictly limited to 15 to 30 Chinese characters' },
         backgroundColor: { type: 'string', description: 'Hex code for dark background' },
         primaryColor: { type: 'string', description: 'Hex code for main text (light)' },
         accentColor: { type: 'string', description: 'Hex code for highlighted text/effects' },
@@ -1365,8 +1365,8 @@ function buildThemeSystemPrompt(includeSchemaText = false) {
 DUAL THEME REQUIREMENTS:
 1. Generate TWO complete themes: one optimized for LIGHT/DAYLIGHT mode, one for DARK/MIDNIGHT mode.
 2. Both themes should capture the SAME emotional essence of the source text, but with appropriate color palettes for their respective modes.
-3. The theme names should reflect both the mood AND the mode.
-4. The theme description should be a brief, emotional sentence in Chinese (10-20 characters) reflecting a stream-of-consciousness style with youth and literary characteristics, capturing a listener's immediate emotional reaction to this song. Do not write formal analytical text. Must be written from a first-person listener perspective.
+3. The theme names must be in Chinese and strictly limited to 10 characters or less. They should reflect both the mood AND the mode (e.g., "忧郁破晓" for light, "忧郁子夜" for dark).
+4. The theme description must be a brief, emotional sentence in Chinese (strictly limited to 15 to 30 Chinese characters) reflecting a stream-of-consciousness style with youth and literary characteristics, capturing a listener's immediate emotional reaction to this song. Do not write formal analytical text. Must be written from a first-person listener perspective.
    GUIDELINES FOR THE EXPRESSIVE STYLE:
    - Stream of Consciousness & Literary Vibe: Emphasize poetic, reflective, or introspective thoughts (e.g., emotional connection, existential thoughts, quiet solitude).
    - Youth & Nostalgia: Associate the mood with nostalgic memories of youth, dreams, seasons, or romantic longing.
