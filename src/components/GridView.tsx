@@ -1,6 +1,6 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2 } from 'lucide-react';
+import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
+import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme } from '../types';
 import { isSongMarkedUnavailable, getSongUnavailableTagText, neteaseApi } from '../services/netease';
@@ -453,6 +453,7 @@ export const GridView: React.FC<GridViewProps> = ({
 }) => {
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
+    const dragControls = useDragControls();
     const [focusedIndex, setFocusedIndex] = useState(0);
     const focusedIndexRef = useRef(0);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -598,6 +599,8 @@ export const GridView: React.FC<GridViewProps> = ({
     const [isEditMode, setIsEditMode] = useState(false);
     const [editableTitle, setEditableTitle] = useState(title);
     const [isSourceActionPending, setIsSourceActionPending] = useState(false);
+    const [playlistSubscribed, setPlaylistSubscribed] = useState<boolean | null>(null);
+    const [isSubscribing, setIsSubscribing] = useState(false);
     const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = useState(false);
     const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
@@ -930,6 +933,56 @@ export const GridView: React.FC<GridViewProps> = ({
 
     const canEditNeteasePlaylist = !usesExternalTracks && collection && collection.specialType !== 'cloud' && Boolean(currentUserId && collection.creator?.userId === currentUserId);
     const canEditPlaylist = Boolean(canEditNeteasePlaylist || isLocalPlaylistCollection || isNavidromePlaylistCollection);
+
+    const isNeteasePlaylist = collectionSource === 'netease' && collection?.type === 'playlist' && !isCloudDrive;
+    const showSubscribeButton = isNeteasePlaylist && !canEditNeteasePlaylist;
+
+    useEffect(() => {
+        let active = true;
+
+        const fetchPlaylistDetail = async () => {
+            if (!isNeteasePlaylist) {
+                setPlaylistSubscribed(null);
+                return;
+            }
+
+            try {
+                const res = await neteaseApi.getPlaylistDetailDynamic(Number(collection.id));
+                if (active && res.code === 200) {
+                    setPlaylistSubscribed(res.subscribed);
+                }
+            } catch (err) {
+                console.warn("[GridView] Failed to fetch playlist dynamic status:", err);
+            }
+        };
+
+        void fetchPlaylistDetail();
+
+        return () => {
+            active = false;
+        };
+    }, [collection?.id, isNeteasePlaylist]);
+
+    const handleToggleSubscribe = async () => {
+        if (!collection || isSubscribing) return;
+        setIsSubscribing(true);
+        try {
+            const nextSubscribed = !playlistSubscribed;
+            const res = await neteaseApi.subscribePlaylist(Number(collection.id), nextSubscribed);
+            if (res.code === 200) {
+                setPlaylistSubscribed(nextSubscribed);
+                if (onPlaylistMutated) {
+                    void onPlaylistMutated();
+                }
+            } else {
+                console.error("Failed to toggle playlist subscription", res);
+            }
+        } catch (e) {
+            console.error("Failed to toggle playlist subscription", e);
+        } finally {
+            setIsSubscribing(false);
+        }
+    };
 
     const handleRemoveTrack = useCallback(async (track: SongResult, trackIndex: number) => {
         if (!collection) return;
@@ -1584,6 +1637,32 @@ export const GridView: React.FC<GridViewProps> = ({
             {/* Honeycomb Drag/Viewport Canvas Area */}
             <div
                 ref={containerRef}
+                onPointerDown={(event) => {
+                    if (event.button !== 0) return; // 仅限鼠标左键或主要指针拖动
+
+                    const target = event.target as HTMLElement;
+                    // 如果点击了按钮、输入框、链接或设置面板，则不触发拖动
+                    if (
+                        target.closest('button') ||
+                        target.closest('input') ||
+                        target.closest('a') ||
+                        target.closest('textarea') ||
+                        target.closest('.theme-glass-panel')
+                    ) {
+                        return;
+                    }
+
+                    // 向上遍历判断是否在卡片内部点击了具有 cursor-pointer 的非卡片元素（例如歌手、专辑链接）
+                    let current: HTMLElement | null = target;
+                    while (current && !current.classList.contains('theme-polaroid-card')) {
+                        if (current.classList.contains('cursor-pointer')) {
+                            return;
+                        }
+                        current = current.parentElement;
+                    }
+
+                    dragControls.start(event);
+                }}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
             >
                 <AnimatePresence>
@@ -1660,6 +1739,8 @@ export const GridView: React.FC<GridViewProps> = ({
                 ) : (
                     <motion.div
                         drag
+                        dragListener={false}
+                        dragControls={dragControls}
                         dragConstraints={dragBounds}
                         dragElastic={0.05}
                         dragTransition={{ power: 0.16, timeConstant: 220 }}
@@ -1698,6 +1779,30 @@ export const GridView: React.FC<GridViewProps> = ({
                                     <img src={toHttps(infoPanelCoverUrl)} alt={collection.name} className="w-full h-full object-cover select-none pointer-events-none" />
                                 ) : (
                                     <Disc size={64} className="opacity-20 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                                )}
+                                {showSubscribeButton && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            void handleToggleSubscribe();
+                                        }}
+                                        disabled={isSubscribing}
+                                        className="absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg active:scale-90 z-10 border border-white/10 hover:scale-105 cursor-pointer backdrop-blur-md"
+                                        style={{
+                                            backgroundColor: isDaylight ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.5)',
+                                        }}
+                                        title={playlistSubscribed ? "取消收藏歌单" : "收藏歌单"}
+                                    >
+                                        {isSubscribing ? (
+                                            <Loader2 size={18} className="animate-spin opacity-60" style={{ color: 'var(--text-primary)' }} />
+                                        ) : (
+                                            <Star
+                                                size={18}
+                                                className={playlistSubscribed ? "text-yellow-500 fill-yellow-500" : "opacity-60 hover:opacity-100"}
+                                                style={{ color: playlistSubscribed ? undefined : 'var(--text-primary)' }}
+                                            />
+                                        )}
+                                    </button>
                                 )}
                             </div>
 

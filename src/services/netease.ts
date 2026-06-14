@@ -711,4 +711,13 @@ export const neteaseApi = {
   fmTrash: async (songId: number) => {
     return fetchWithCreds(`/fm_trash?id=${songId}&timestamp=${Date.now()}`);
   },
+
+  subscribePlaylist: async (id: number, subscribe = true) => {
+    const t = subscribe ? 1 : 2;
+    return fetchWithCreds(`/playlist/subscribe?t=${t}&id=${id}&timestamp=${Date.now()}`);
+  },
+
+  getPlaylistDetailDynamic: async (id: number) => {
+    return fetchWithCreds(`/playlist/detail/dynamic?id=${id}`);
+  },
 };

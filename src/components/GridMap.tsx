@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
+import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
 import { ChevronLeft, Disc } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Theme } from '../types';
@@ -147,6 +147,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 }) => {
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
+    const dragControls = useDragControls();
     const [focusedIndex, setFocusedIndex] = useState(0);
     const focusedIndexRef = useRef(0);
     const lastUpdateRef = useRef(0);
@@ -630,6 +631,32 @@ export const GridMap: React.FC<GridMapProps> = ({
             {/* Honeycomb Drag/Viewport Canvas Area */}
             <div
                 ref={containerRef}
+                onPointerDown={(event) => {
+                    if (event.button !== 0) return; // 仅限鼠标左键或主要指针拖动
+
+                    const target = event.target as HTMLElement;
+                    // 如果点击了按钮、输入框、链接等，则不触发拖动
+                    if (
+                        target.closest('button') ||
+                        target.closest('input') ||
+                        target.closest('a') ||
+                        target.closest('textarea') ||
+                        target.closest('.theme-glass-panel')
+                    ) {
+                        return;
+                    }
+
+                    // 向上遍历判断是否在卡片内部点击了具有 cursor-pointer 的非卡片元素
+                    let current: HTMLElement | null = target;
+                    while (current && !current.classList.contains('theme-polaroid-card')) {
+                        if (current.classList.contains('cursor-pointer')) {
+                            return;
+                        }
+                        current = current.parentElement;
+                    }
+
+                    dragControls.start(event);
+                }}
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
             >
                 {items.length === 0 ? (
@@ -637,6 +664,8 @@ export const GridMap: React.FC<GridMapProps> = ({
                 ) : (
                     <motion.div
                         drag
+                        dragListener={false}
+                        dragControls={dragControls}
                         dragConstraints={dragBounds}
                         dragElastic={0.05}
                         dragTransition={{ power: 0.16, timeConstant: 220 }}
