@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
 import { ChevronLeft, Palette, RotateCcw, Sun, Moon, Check } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
@@ -96,7 +96,7 @@ const normalizeDualTheme = (dualTheme: DualTheme): DualTheme => ({
     dark: normalizeTheme(dualTheme.dark, 'Theme Park Dark', 'Custom'),
 });
 
-const ThemePreviewLayer = React.memo<{
+const ThemePreviewLayer: React.FC<{
     theme: Theme;
     mode: EditableMode;
     isActive: boolean;
@@ -126,7 +126,7 @@ const ThemePreviewLayer = React.memo<{
     audioBands: AudioBands;
     clipPath: string;
     overlayAlign: 'top-left' | 'bottom-right';
-}>(({
+}> = ({
     theme,
     mode,
     isActive,
@@ -248,9 +248,9 @@ const ThemePreviewLayer = React.memo<{
                 </div>
             </div>
         );
-});
+    };
 
-const DiagonalThemePreview = React.memo<{
+const DiagonalThemePreview: React.FC<{
     lightTheme: Theme;
     darkTheme: Theme;
     activeMode: EditableMode;
@@ -279,7 +279,7 @@ const DiagonalThemePreview = React.memo<{
     audioPower: ReturnType<typeof useMotionValue<number>>;
     audioBands: AudioBands;
     onSelectMode: (mode: EditableMode) => void;
-}>(({
+}> = ({
     lightTheme,
     darkTheme,
     activeMode,
@@ -396,7 +396,7 @@ const DiagonalThemePreview = React.memo<{
 
             </div>
         );
-});
+    };
 
 const ThemePark: React.FC<ThemeParkProps> = ({
     initialTheme,
@@ -435,56 +435,11 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     const vocal = useMotionValue(0.2);
     const treble = useMotionValue(0.1);
     const [draftTheme, setDraftTheme] = useState<DualTheme>(() => normalizeDualTheme(initialTheme));
-    const [previewThemeState, setPreviewThemeState] = useState<DualTheme>(() => normalizeDualTheme(initialTheme));
     const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, 0));
     const [pickerState, setPickerState] = useState<PickerState>({
         mode: isDaylight ? 'light' : 'dark',
         key: 'accentColor',
     });
-
-    const handleSelectMode = useCallback((mode: EditableMode) => {
-        setPickerState(previous => ({ ...previous, mode }));
-    }, []);
-
-    const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const lastUpdateRef = useRef<number>(0);
-    const pendingThemeRef = useRef<DualTheme | null>(null);
-
-    // 节流更新预览主题，避免调色板拖动时高频重渲染复杂的歌词可视化组件
-    const updatePreviewThemeThrottled = (nextTheme: DualTheme) => {
-        pendingThemeRef.current = nextTheme;
-
-        const now = performance.now();
-        const elapsed = now - lastUpdateRef.current;
-        const THROTTLE_MS = 120;
-
-        const performUpdate = () => {
-            if (pendingThemeRef.current) {
-                setPreviewThemeState(pendingThemeRef.current);
-                pendingThemeRef.current = null;
-            }
-            lastUpdateRef.current = performance.now();
-            throttleTimeoutRef.current = null;
-        };
-
-        if (elapsed >= THROTTLE_MS) {
-            if (throttleTimeoutRef.current) {
-                clearTimeout(throttleTimeoutRef.current);
-                throttleTimeoutRef.current = null;
-            }
-            performUpdate();
-        } else if (!throttleTimeoutRef.current) {
-            throttleTimeoutRef.current = setTimeout(performUpdate, THROTTLE_MS - elapsed);
-        }
-    };
-
-    useEffect(() => {
-        return () => {
-            if (throttleTimeoutRef.current) {
-                clearTimeout(throttleTimeoutRef.current);
-            }
-        };
-    }, []);
 
     useEffect(() => {
         setPickerState(previous => ({
@@ -542,40 +497,29 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     const pickerField = COLOR_FIELDS.find(field => field.key === pickerState.key) ?? COLOR_FIELDS[0];
     const previewTheme = useMemo<DualTheme>(() => ({
         light: {
-            ...previewThemeState.light,
+            ...draftTheme.light,
             fontStyle: lyricsFontStyle,
             fontFamily: lyricsCustomFontFamily ?? undefined,
         },
         dark: {
-            ...previewThemeState.dark,
+            ...draftTheme.dark,
             fontStyle: lyricsFontStyle,
             fontFamily: lyricsCustomFontFamily ?? undefined,
         },
-    }), [previewThemeState, lyricsCustomFontFamily, lyricsFontStyle]);
+    }), [draftTheme, lyricsCustomFontFamily, lyricsFontStyle]);
 
     const updateColor = (mode: EditableMode, key: EditableColorKey, value: string) => {
-        setDraftTheme(previous => {
-            const next = {
-                ...previous,
-                [mode]: {
-                    ...previous[mode],
-                    [key]: value,
-                },
-            };
-            updatePreviewThemeThrottled(next);
-            return next;
-        });
+        setDraftTheme(previous => ({
+            ...previous,
+            [mode]: {
+                ...previous[mode],
+                [key]: value,
+            },
+        }));
     };
 
     const handleReset = () => {
-        const defaultTheme = normalizeDualTheme(initialTheme);
-        setDraftTheme(defaultTheme);
-        setPreviewThemeState(defaultTheme);
-        if (throttleTimeoutRef.current) {
-            clearTimeout(throttleTimeoutRef.current);
-            throttleTimeoutRef.current = null;
-        }
-        pendingThemeRef.current = null;
+        setDraftTheme(normalizeDualTheme(initialTheme));
     };
 
     const handleSave = () => {
@@ -685,7 +629,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                             currentLineIndex={currentLineIndex}
                             audioPower={audioPower}
                             audioBands={audioBands}
-                            onSelectMode={handleSelectMode}
+                            onSelectMode={(mode) => setPickerState(previous => ({ ...previous, mode }))}
                         />
                     </div>
 
