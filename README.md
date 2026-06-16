@@ -174,6 +174,15 @@ npm run contributors:generate
 
 请始终尊重数字版权，并在条件允许时通过官方平台支持正版音乐。
 
+## 致谢
+
+特别感谢以下项目和资源：
+
+- [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC)
+- [NeteaseCloudMusicApiEnhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced)
+- [chenglou/pretext](https://github.com/chenglou/pretext)
+
+
 ## 许可证
 
 本项目基于 `AGPL-3.0` 许可证开源。
