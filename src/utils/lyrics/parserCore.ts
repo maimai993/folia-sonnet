@@ -3,7 +3,7 @@ import type { TimedLyricFormat } from './formatDetection';
 import { annotateLyricLines } from './renderHints';
 import type { LyricProcessingOptions } from './types';
 
-export type LyricParseFormat = TimedLyricFormat | 'yrc' | 'qrc';
+export type LyricParseFormat = TimedLyricFormat | 'yrc' | 'qrc' | 'krc';
 
 interface TimedTextEntry {
     startTime: number;
@@ -847,6 +847,126 @@ export const parseEnhancedLRC = (
     };
 };
 
+/**
+ * Parses Kugou KRC lyric format.
+ * KRC is structured similar to QRC/YRC but uses angle brackets (<...>) for word tags
+ * and relative millisecond offsets instead of absolute timestamps.
+ */
+export const parseKRC = (
+    krcString: string,
+    translationString: string = '',
+    options: LyricProcessingOptions = {}
+): LyricData => {
+    const rawLinesData: Array<{
+        words: Word[];
+        startTime: number;
+        endTime: number;
+        fullText: string;
+    }> = [];
+
+    // Decode [language:...] tag from the KRC string itself if available
+    let embeddedTranslations: string[] = [];
+    const langMatch = krcString.match(/\[language:([^\]]*)\]/);
+    if (langMatch) {
+        try {
+            let cleanB64 = langMatch[1].trim();
+            while (cleanB64.length % 4 !== 0) {
+                cleanB64 += '=';
+            }
+            const decoded = typeof Buffer !== 'undefined'
+                ? Buffer.from(cleanB64, 'base64').toString('utf8')
+                : new TextDecoder('utf-8').decode(Uint8Array.from(atob(cleanB64), c => c.charCodeAt(0)));
+            const obj = JSON.parse(decoded);
+            const translationObj = obj.content?.find((item: any) => item.type === 1);
+            if (translationObj && Array.isArray(translationObj.lyricContent)) {
+                embeddedTranslations = translationObj.lyricContent.map((lines: any) => {
+                    if (Array.isArray(lines)) {
+                        return lines.join('').trim();
+                    }
+                    return String(lines).trim();
+                });
+            }
+        } catch (err) {
+            console.error('[Kugou KRC] Failed to decode/parse language tag:', err);
+        }
+    }
+
+    const translationEntries = parseTimedTextEntries(translationString).entries;
+    const rawLines = krcString.replace(/^\uFEFF/, '').split(/\r?\n/);
+    let isSorted = true;
+    let lastStartTime = Number.NEGATIVE_INFINITY;
+
+    for (const rawLine of rawLines) {
+        const lineMatch = rawLine.match(/^\[(\d+),(\d+)\](.*)/);
+        if (!lineMatch) {
+            continue;
+        }
+
+        const lineStartTimeMs = parseInt(lineMatch[1], 10);
+        const lineDurationMs = parseInt(lineMatch[2], 10);
+        const rest = lineMatch[3];
+        const lineStartTime = lineStartTimeMs / 1000;
+        const lineEndTime = (lineStartTimeMs + lineDurationMs) / 1000;
+
+        const words: Word[] = [];
+        let fullText = '';
+
+        const wordRegex = /\<(\d+),(\d+)(?:,\d+)?\>([^\<]*)/g;
+        let wordMatch: RegExpExecArray | null;
+
+        while ((wordMatch = wordRegex.exec(rest)) !== null) {
+            const wordStartOffsetMs = parseInt(wordMatch[1], 10);
+            const wordDurationMs = parseInt(wordMatch[2], 10);
+            const text = wordMatch[3];
+
+            // Note: KRC word start offset is relative to the line start time.
+            const wordStartMs = lineStartTimeMs + wordStartOffsetMs;
+
+            words.push({
+                text,
+                startTime: wordStartMs / 1000,
+                endTime: (wordStartMs + wordDurationMs) / 1000
+            });
+            fullText += text;
+        }
+
+        // If no word tags but text is present, build timed words
+        const trimmedRest = rest.trim();
+        if (words.length === 0 && trimmedRest.length > 0 && !trimmedRest.startsWith('[') && !trimmedRest.startsWith('<')) {
+            words.push(...buildTimedWords(trimmedRest, lineStartTime, lineEndTime));
+            fullText = trimmedRest;
+        }
+
+        if (words.length > 0) {
+            if (lineStartTime < lastStartTime) {
+                isSorted = false;
+            }
+            lastStartTime = lineStartTime;
+            rawLinesData.push({
+                words,
+                startTime: lineStartTime,
+                endTime: lineEndTime,
+                fullText
+            });
+        }
+    }
+
+    const sortedRawLines = sortByStartTimeIfNeeded(rawLinesData, isSorted);
+    const lines: Line[] = sortedRawLines.map((line, index) => {
+        let translation = embeddedTranslations[index] || undefined;
+        if (!translation && translationEntries.length > 0) {
+            const externalTrans = findTranslationsForSortedStartTimes([line.startTime], translationEntries);
+            translation = externalTrans[0] || undefined;
+        }
+        return {
+            ...line,
+            translation
+        };
+    });
+
+    return { lines: finalizeParsedLyricLines(lines, options) };
+};
+
 export const parseLyricsByFormat = (
     format: LyricParseFormat,
     content: string,
@@ -858,6 +978,8 @@ export const parseLyricsByFormat = (
             return parseYRC(content, translation, options);
         case 'qrc':
             return parseQRC(content, translation, options);
+        case 'krc':
+            return parseKRC(content, translation, options);
         case 'enhanced-lrc':
             return parseEnhancedLRC(content, translation, options);
         case 'vtt':

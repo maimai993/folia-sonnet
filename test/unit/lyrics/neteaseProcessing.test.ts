@@ -122,6 +122,7 @@ describe('neteaseProcessing', () => {
         );
 
         expect(getChorusMock).toHaveBeenCalledWith(12345);
+        expect(result.chorusRanges).toEqual([{ startTime: 19.5, endTime: 26 }]);
         expect(result.lyrics?.lines[0].isChorus).toBeUndefined();
         expect(result.lyrics?.lines[1].isChorus).toBe(true);
         expect(result.lyrics?.lines[1].chorusEffect).toBeDefined();

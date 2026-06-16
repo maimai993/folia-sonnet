@@ -4,6 +4,10 @@ import { neteaseApi } from './netease';
 import { getLocalPlaylists, saveLocalPlaylists } from './localPlaylistService';
 import { parseEmbeddedMetadataAsync, type EmbeddedMetadataResult } from '../utils/localMetadataWorkerClient';
 import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
+import { useSettingsUiStore } from '../stores/useSettingsUiStore';
+import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
+import { normalizeLyricMatchText } from '../utils/lyrics/matchScore';
+
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
 
@@ -1192,11 +1196,7 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
 
 // Helper function to normalize title for comparison
 function normalizeTitle(title: string): string {
-    return title
-        .toLowerCase()
-        .trim()
-        .replace(/[^\w\s\u4e00-\u9fa5]/g, '') // Remove punctuation except Chinese characters
-        .replace(/\s+/g, ''); // Remove all whitespace
+    return normalizeLyricMatchText(title).replace(/\s+/g, '');
 }
 
 // Helper function to check if two titles match
@@ -1227,6 +1227,9 @@ function isTitleMatch(localTitle: string, searchTitle: string): boolean {
 // Match lyrics for a local song using search API
 // If the song has local lyrics, this function will only fetch cover/metadata and skip online lyrics
 export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
+    if (song.matchedIsPureMusic) {
+        return null;
+    }
     try {
         // Build search query from metadata
         const searchQuery = song.artist
@@ -1274,6 +1277,46 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
 
             // Return null to indicate no NEW lyrics were fetched (local lyrics are used)
             return null;
+        }
+
+        // Check if we should automatically match the best word-by-word lyric
+        const settings = useSettingsUiStore.getState();
+        if (settings.enableAlternativeLyricSources && settings.autoUseBestLyric) {
+            const cleanTitle = song.title || song.fileName.replace(/\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i, '');
+            const bestMatch = await autoMatchBestLyric(cleanTitle, song.artist || '', song.duration, {
+                album: song.album
+            });
+            if (bestMatch && 'lyrics' in bestMatch) {
+                if (bestMatch.source === 'netease') {
+                    song.matchedSongId = bestMatch.id as number;
+                    song.matchedLyricsSource = 'netease';
+                    song.matchedLyrics = bestMatch.lyrics;
+                    song.matchedIsPureMusic = false;
+
+                    try {
+                        const detailRes = await neteaseApi.getSongDetail(bestMatch.id as number);
+                        const nSong = detailRes.songs?.[0];
+                        if (nSong) {
+                            song.matchedArtists = nSong.ar?.map((a: any) => a.name).join(', ');
+                            song.matchedAlbumId = nSong.al?.id || nSong.album?.id;
+                            song.matchedAlbumName = nSong.al?.name || nSong.album?.name;
+                            const coverUrl = nSong.al?.picUrl || nSong.album?.picUrl;
+                            if (coverUrl) {
+                                song.matchedCoverUrl = coverUrl.replace('http:', 'https:');
+                            }
+                        }
+                    } catch (err) {
+                        console.error('[LocalMusic] Failed to fetch NetEase song detail for metadata:', err);
+                    }
+                } else {
+                    song.matchedLyricsSource = bestMatch.source;
+                    song.matchedLyrics = bestMatch.lyrics;
+                    song.matchedIsPureMusic = false;
+                }
+
+                await saveLocalSong(song);
+                return bestMatch.lyrics;
+            }
         }
 
         // Fetch lyrics (only when NO local lyrics)

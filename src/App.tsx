@@ -120,6 +120,8 @@ export default function App() {
         settingsModalState,
         homeLayoutStyle,
         setActiveGridViewCollection,
+        enableAlternativeLyricSources,
+        handleToggleAlternativeLyricSources,
     } = useSettingsUiStore(useShallow(state => ({
         closeSettings: state.closeSettings,
         isSettingsSubviewOpen: state.isSubSettingsViewOpen,
@@ -127,6 +129,8 @@ export default function App() {
         settingsModalState: state.settingsModalState,
         homeLayoutStyle: state.homeLayoutStyle,
         setActiveGridViewCollection: state.setActiveGridViewCollection,
+        enableAlternativeLyricSources: state.enableAlternativeLyricSources,
+        handleToggleAlternativeLyricSources: state.handleToggleAlternativeLyricSources,
     })));
 
     const loadNavidromeFavorites = useCallback(async () => {
@@ -163,6 +167,9 @@ export default function App() {
     // Player State
     const [playerState, setPlayerState] = useState<PlayerState>(PlayerState.IDLE);
     const currentTime = useMotionValue(0);
+    useEffect(() => {
+        (window as any).__folia_current_time = currentTime;
+    }, [currentTime]);
     const [duration, setDuration] = useState(0);
     const [currentLineIndex, setCurrentLineIndex] = useState(-1);
     const [isFmMode, setIsFmMode] = useState(false);
@@ -199,6 +206,10 @@ export default function App() {
     const queueScrollRef = useRef<HTMLDivElement>(null);
     const shouldAutoPlay = useRef(false);
     const currentSongRef = useRef<number | null>(null);
+    const currentSongFullRef = useRef<SongResult | null>(null);
+    useEffect(() => {
+        currentSongFullRef.current = currentSong;
+    }, [currentSong]);
     const playbackRequestIdRef = useRef(0);
     const playbackAutoSkipCountRef = useRef(0);
     const pendingUnavailableSkipTimerRef = useRef<number | null>(null);
@@ -331,7 +342,7 @@ export default function App() {
     } = appPreferences;
 
     const setLyrics = useMemo(
-        () => createLyricsSetter(setLyricsState, lyricFilterPattern),
+        () => createLyricsSetter(setLyricsState, lyricFilterPattern, currentSongFullRef),
         [lyricFilterPattern],
     );
 
@@ -779,6 +790,7 @@ export default function App() {
         handleOnlineLyricMatchComplete,
         handleClearOnlineLyricsState,
         handleHomeMatchSong,
+        handleAutoMatchBestLyricForCurrentSong,
         handleLike,
     } = useLibraryPlaybackController({
         t: (key, fallback) => t(key, fallback ?? ''),
@@ -1363,7 +1375,12 @@ export default function App() {
         setMonetBackgroundTuning: handleSetMonetBackgroundTuning,
         toggleTransparentBackground: () => handleToggleTransparentPlayerBackground(!transparentPlayerBackground),
         toggleDaylightMode,
+        toggleAlternativeLyricSources: () => handleToggleAlternativeLyricSources(!enableAlternativeLyricSources),
+        enableAlternativeLyricSources,
+        runAutoMatchBestLyric: handleAutoMatchBestLyricForCurrentSong,
     }), [
+        enableAlternativeLyricSources,
+        handleAutoMatchBestLyricForCurrentSong,
         handleNextTrack,
         handlePrevTrack,
         handleSetVisualizerMode,
@@ -1385,6 +1402,7 @@ export default function App() {
         handleToggleTransparentPlayerBackground,
         transparentPlayerBackground,
         toggleDaylightMode,
+        handleToggleAlternativeLyricSources,
     ]);
     const commandPalette = useCommandPalette({
         currentView,

@@ -595,6 +595,9 @@ export function usePlaybackQueueController({
                 onStateChange: state => {
                     setCurrentSong(prev => prev?.id === song.id ? { ...prev, onlineLyricsState: state ?? undefined } : prev);
                 },
+                onAutoMatchStart: () => {
+                    setStatusMsg({ type: 'info', text: t('status.matchingBestLyrics') });
+                },
                 onDone: () => setIsLyricsLoading(false),
             });
         } catch (error) {

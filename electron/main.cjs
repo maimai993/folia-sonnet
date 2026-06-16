@@ -641,6 +641,46 @@ function setupFileSystemAccessPermissionHandlers() {
   });
 }
 
+function setupCorsBypassHandlers() {
+  const ses = session.defaultSession;
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...details.responseHeaders };
+    const originUrl = details.url;
+
+    let isTargetDomain = false;
+    try {
+      const parsedUrl = new URL(originUrl);
+      const hostname = parsedUrl.hostname;
+      isTargetDomain = hostname === 'qq.com' || hostname.endsWith('.qq.com') ||
+                       hostname === 'kugou.com' || hostname.endsWith('.kugou.com');
+    } catch (error) {
+      isTargetDomain = false;
+    }
+
+    if (isTargetDomain) {
+      removeCorsResponseHeaders(responseHeaders);
+      responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+      responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+      responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, PUT, DELETE'];
+    }
+
+    callback({ cancel: false, responseHeaders });
+  });
+}
+
+function removeCorsResponseHeaders(responseHeaders) {
+  for (const headerName of Object.keys(responseHeaders)) {
+    const normalizedHeaderName = headerName.toLowerCase();
+    if (
+      normalizedHeaderName === 'access-control-allow-origin' ||
+      normalizedHeaderName === 'access-control-allow-headers' ||
+      normalizedHeaderName === 'access-control-allow-methods'
+    ) {
+      delete responseHeaders[headerName];
+    }
+  }
+}
+
 function normalizeDebugSelector(selector) {
   if (typeof selector !== 'string') {
     return '';
@@ -1987,6 +2027,7 @@ app.whenReady().then(async () => {
   }
 
   setupFileSystemAccessPermissionHandlers();
+  setupCorsBypassHandlers();
 
   session.defaultSession.on('file-system-access-restricted', (event, details, callback) => {
     if (details.isDirectory) {

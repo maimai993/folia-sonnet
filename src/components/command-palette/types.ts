@@ -61,4 +61,7 @@ export type CommandPaletteContext = {
     setMonetBackgroundTuning: (patch: Partial<MonetBackgroundTuning>) => void;
     toggleTransparentBackground: () => void;
     toggleDaylightMode: () => void;
+    toggleAlternativeLyricSources: () => void;
+    enableAlternativeLyricSources: boolean;
+    runAutoMatchBestLyric: () => Promise<boolean>;
 };

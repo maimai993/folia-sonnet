@@ -132,6 +132,7 @@ export function buildUnifiedNavidromeSong(
         useOnlineMetadata?: boolean;
         matchedArtists?: string;
         matchedAlbumName?: string;
+        matchedLyricsSource?: 'netease' | 'qq' | 'kugou';
     }
 ): SongResult {
     const displayArtists = (options?.useOnlineMetadata && options.matchedArtists)
@@ -157,7 +158,8 @@ export function buildUnifiedNavidromeSong(
         al: displayAl,
         dt: navidromeSong.dt,
         isNavidrome: true,
-        navidromeData: navidromeSong
+        navidromeData: navidromeSong,
+        matchedLyricsSource: options?.matchedLyricsSource
     } as any;
 }
 

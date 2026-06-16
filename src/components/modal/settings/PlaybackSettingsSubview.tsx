@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Monitor, PlayCircle, RefreshCw } from 'lucide-react';
+import { Monitor, PlayCircle, RefreshCw, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { QueueAddBehavior, Theme } from '../../../types';
@@ -42,11 +42,19 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
     const { t } = useTranslation();
     const {
         audioOutputDeviceId,
+        autoUseBestLyric,
+        enableAlternativeLyricSources,
         queueAddBehavior,
+        onToggleAlternativeLyricSources,
+        onToggleAutoUseBestLyric,
         onQueueAddBehaviorChange,
     } = useSettingsUiStore(useShallow(state => ({
         audioOutputDeviceId: state.audioOutputDeviceId,
+        autoUseBestLyric: state.autoUseBestLyric,
+        enableAlternativeLyricSources: state.enableAlternativeLyricSources,
         queueAddBehavior: state.queueAddBehavior,
+        onToggleAlternativeLyricSources: state.handleToggleAlternativeLyricSources,
+        onToggleAutoUseBestLyric: state.handleToggleAutoUseBestLyric,
         onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
     })));
     const [audioOutputDevices, setAudioOutputDevices] = useState<AudioOutputDeviceOption[]>([]);
@@ -59,6 +67,19 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
         && typeof navigator.mediaDevices?.enumerateDevices === 'function'
         && 'setSinkId' in HTMLMediaElement.prototype;
     const accentOutlineColor = theme?.accentColor || (isDaylight ? '#44403c' : '#f4f4f5');
+    const toggleOffBackgroundClass = isDaylight ? 'bg-zinc-300/90' : 'bg-white/10';
+
+    const renderToggle = (checked: boolean, onChange: () => void) => (
+        <button
+            type="button"
+            onClick={onChange}
+            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${checked ? '' : toggleOffBackgroundClass}`}
+            style={{ backgroundColor: checked ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+            aria-pressed={checked}
+        >
+            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
+        </button>
+    );
 
     const getAccentOptionStyle = (selected: boolean) => (
         selected
@@ -192,6 +213,40 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                             );
                         })}
                     </div>
+                </div>
+            </section>
+
+            <section>
+                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+                    <Settings2 size={14} /> {t('options.lyrics') || '歌词'}
+                </h3>
+                <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
+                    <div className="p-4 flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                <Settings2 size={14} />
+                                {t('options.enableAlternativeLyricSources') || '更多歌词源'}
+                            </div>
+                            <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.enableAlternativeLyricSourcesDesc') || '启用备选歌词源（QQ音乐、酷狗音乐）'}
+                            </div>
+                        </div>
+                        {renderToggle(enableAlternativeLyricSources, () => onToggleAlternativeLyricSources(!enableAlternativeLyricSources))}
+                    </div>
+                    {enableAlternativeLyricSources && (
+                        <div className="p-4 flex items-center justify-between gap-4 border-t" style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.06))' }}>
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                    <Settings2 size={14} />
+                                    {t('options.autoUseBestLyric') || '自动使用最佳歌词'}
+                                </div>
+                                <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.autoUseBestLyricDesc') || '自动检索所有歌词源，若存在完美匹配的逐字歌词则自动优先采用。'}
+                                </div>
+                            </div>
+                            {renderToggle(autoUseBestLyric, () => onToggleAutoUseBestLyric(!autoUseBestLyric))}
+                        </div>
+                    )}
                 </div>
             </section>
 

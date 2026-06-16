@@ -35,14 +35,22 @@ const OnlineLyricsTab: React.FC<OnlineLyricsTabProps> = ({
     const hasImportedLyrics = Boolean(onlineLyricsState?.importedLyrics);
     const hasOverride = Boolean(onlineLyricsState?.hasOnlineOverride || onlineLyricsState?.importedLyrics);
     const activeSource = onlineLyricsState?.lyricsSource === 'imported' && hasImportedLyrics ? 'imported' : 'online';
+
+    const onlineSourceLabel = useMemo(() => {
+        const src = onlineLyricsState?.matchedLyricsSource;
+        if (src === 'qq') return 'QQ 音乐';
+        if (src === 'kugou') return '酷狗音乐';
+        return '网易云音乐';
+    }, [onlineLyricsState]);
+
     const availableSources = useMemo(
         () => (hasImportedLyrics
             ? [
-                { key: 'online' as const, label: t('localMusic.statusOnline') },
+                { key: 'online' as const, label: onlineSourceLabel },
                 { key: 'imported' as const, label: t('localMusic.statusImported') },
             ]
-            : [{ key: 'online' as const, label: t('localMusic.statusOnline') }]),
-        [hasImportedLyrics, t],
+            : [{ key: 'online' as const, label: onlineSourceLabel }]),
+        [hasImportedLyrics, onlineSourceLabel, t],
     );
 
     const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {

@@ -231,4 +231,32 @@ describe('parserCore', () => {
         expect(lyrics.lines[1].words[2].startTime).toBe(13.343);
         expect(lyrics.lines[1].words[2].endTime).toBe(13.548);
     });
+
+    it('parses KRC with relative word timings and embedded translation', () => {
+        const krcStr = [
+            '[1000,1200]<0,300,0>H<300,300,0>e<600,600,0>llo',
+            '[3000,1000]<0,500,0>Wo<500,500,0>rld',
+            '[language:eyJjb250ZW50IjpbeyJseXJpY0NvbnRlbnQiOltbIkhlbGxvIl0sWyJXb3JsZCJdXSwidHlwZSI6MX1dfQ==]'
+        ].join('\n');
+
+        const lyrics = parseLyricsByFormat('krc', krcStr);
+
+        expect(lyrics.lines).toHaveLength(2);
+        expect(lyrics.lines[0].startTime).toBe(1.0);
+        expect(lyrics.lines[0].endTime).toBe(2.2);
+        expect(lyrics.lines[0].fullText).toBe('Hello');
+        expect(lyrics.lines[0].translation).toBe('Hello');
+        expect(lyrics.lines[0].words).toHaveLength(3);
+        expect(lyrics.lines[0].words[0].text).toBe('H');
+        expect(lyrics.lines[0].words[0].startTime).toBe(1.0);
+        expect(lyrics.lines[0].words[0].endTime).toBe(1.3);
+        expect(lyrics.lines[0].words[2].text).toBe('llo');
+        expect(lyrics.lines[0].words[2].startTime).toBe(1.6);
+        expect(lyrics.lines[0].words[2].endTime).toBe(2.2);
+
+        expect(lyrics.lines[1].startTime).toBe(3.0);
+        expect(lyrics.lines[1].endTime).toBe(4.0);
+        expect(lyrics.lines[1].fullText).toBe('World');
+        expect(lyrics.lines[1].translation).toBe('World');
+    });
 });

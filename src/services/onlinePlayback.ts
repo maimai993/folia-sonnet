@@ -8,7 +8,9 @@ import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 import { detectTimedLyricFormat } from '../utils/lyrics/formatDetection';
 import { parseLyricsAsync } from '../utils/lyrics/workerClient';
-import { loadOnlineLyricsState, resolveOnlineLyrics } from '../utils/onlineLyricsState';
+import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState } from '../utils/onlineLyricsState';
+import { useSettingsUiStore } from '../stores/useSettingsUiStore';
+import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 
 const normalizeAudioUrl = (url?: string | null) => {
     if (!url) return null;
@@ -61,10 +63,11 @@ export async function loadOnlineSongLyrics(
         onLyrics: (lyrics: LyricData | null) => void;
         onPureMusicChange?: (isPureMusic: boolean) => void;
         onStateChange?: (state: OnlineLyricsState | null) => void;
+        onAutoMatchStart?: () => void;
         onDone: () => void;
     }
 ): Promise<void> {
-    const { isCurrent, onLyrics, onPureMusicChange, onStateChange, onDone } = callbacks;
+    const { isCurrent, onLyrics, onPureMusicChange, onStateChange, onAutoMatchStart, onDone } = callbacks;
     const lyricCacheKey = getOnlineSongCacheKey('lyric', song);
     const onlineLyricsState = await loadOnlineLyricsState(song);
 
@@ -121,6 +124,7 @@ export async function loadOnlineSongLyrics(
                     transLrc: null,
                     isPureMusic,
                     lyrics: null,
+                    chorusRanges: [],
                 };
             }
 
@@ -131,6 +135,7 @@ export async function loadOnlineSongLyrics(
                 transLrc: null,
                 isPureMusic,
                 lyrics,
+                chorusRanges: [],
             };
         })()
         : await (async () => {
@@ -141,11 +146,47 @@ export async function loadOnlineSongLyrics(
 
     if (!isCurrent()) return;
 
-    const resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
+    let resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
+    let finalState = onlineLyricsState;
+
+    const settings = useSettingsUiStore.getState();
+    if ((!resolvedLyrics || !resolvedLyrics.isWordByWord) && settings.enableAlternativeLyricSources && settings.autoUseBestLyric) {
+        try {
+            onAutoMatchStart?.();
+            const artistName = song.artists?.map(a => a.name).join(', ') || '';
+            const bestMatch = await autoMatchBestLyric(song.name, artistName, song.duration || song.dt || 0, {
+                album: song.album?.name || song.al?.name,
+                neteaseCandidate: {
+                    id: song.id,
+                    lyrics: parsedLyrics,
+                    isPureMusic: processed.isPureMusic,
+                    chorusRanges: processed.chorusRanges
+                }
+            });
+            if (bestMatch && 'lyrics' in bestMatch && (bestMatch.source === 'qq' || bestMatch.source === 'kugou')) {
+                const overrideState: OnlineLyricsState = {
+                    lyricsSource: 'online',
+                    matchedSongId: typeof bestMatch.id === 'number' ? bestMatch.id : parseInt(String(bestMatch.id), 10) || 0,
+                    hasOnlineOverride: true,
+                    onlineOverrideLyrics: bestMatch.lyrics,
+                    matchedLyricsSource: bestMatch.source,
+                };
+                await saveOnlineLyricsState(song, overrideState);
+                resolvedLyrics = bestMatch.lyrics;
+                finalState = overrideState;
+                onStateChange?.(overrideState);
+            }
+        } catch (error) {
+            console.warn('[OnlinePlayback] Failed to auto-match best lyric:', error);
+        }
+    }
+
+    if (!isCurrent()) return;
+
     const resolvedText = resolvedLyrics?.lines.map(line => line.fullText).join('\n') ?? '';
     onPureMusicChange?.(
-        onlineLyricsState?.lyricsSource === 'online' && typeof onlineLyricsState.matchedIsPureMusic === 'boolean'
-            ? onlineLyricsState.matchedIsPureMusic
+        finalState?.lyricsSource === 'online' && typeof finalState.matchedIsPureMusic === 'boolean'
+            ? finalState.matchedIsPureMusic
             : (resolvedLyrics ? isPureMusicLyricText(resolvedText) : processed.isPureMusic)
     );
 
@@ -156,6 +197,6 @@ export async function loadOnlineSongLyrics(
     }
 
     onLyrics(resolvedLyrics);
-    saveToCache(lyricCacheKey, parsedLyrics);
+    saveToCache(lyricCacheKey, resolvedLyrics);
     onDone();
 }

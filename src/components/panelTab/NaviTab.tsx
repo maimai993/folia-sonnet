@@ -37,14 +37,21 @@ const NaviTab: React.FC<NaviTabProps> = ({ currentSong, hasLyrics, onMatchOnline
     // Let's assume currentSong has useOnlineLyrics attached, or we simply check:
     const matchedLyrics = currentSong.matchedLyrics || (navidromeData as any)?.matchedLyrics;
     const songLyricsSource = (currentSong as any).lyricsSource ?? (navidromeData as any)?.lyricsSource;
+    const matchedLyricsSource = currentSong.matchedLyricsSource || (navidromeData as any)?.matchedLyricsSource;
     const hasMatchedLyrics = (matchedLyrics?.lines?.length ?? 0) > 0;
     const isOnline = hasMatchedLyrics && songLyricsSource === 'online';
     
     let lyricsSourceLabel = '无';
     if (isOnline) {
-        lyricsSourceLabel = '在线';
+        if (matchedLyricsSource === 'qq') {
+            lyricsSourceLabel = 'QQ 音乐';
+        } else if (matchedLyricsSource === 'kugou') {
+            lyricsSourceLabel = '酷狗音乐';
+        } else {
+            lyricsSourceLabel = '网易云音乐';
+        }
     } else if (hasLyrics) {
-        lyricsSourceLabel = 'navi';
+        lyricsSourceLabel = '服务器歌词';
     }
 
     return (

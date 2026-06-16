@@ -21,6 +21,7 @@ export interface LyricData {
   lines: Line[];
   title?: string;
   artist?: string;
+  isWordByWord?: boolean;
 }
 
 export interface Theme {
@@ -345,12 +346,12 @@ export interface MonetTuning {
 
 export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
   backgroundSource: 'cover-derived',
-  backgroundLayout: 'half-pane-gradient',
-  backgroundBlurPx: 2,
-  backgroundOverlayOpacity: 0.42,
+  backgroundLayout: 'full-overlay',
+  backgroundBlurPx: 6,
+  backgroundOverlayOpacity: 0.74,
   backgroundGrayscale: 0,
   backgroundSaturation: 1.05,
-  backgroundWash: 0.16,
+  backgroundWash: 0.34,
   backgroundHalfPaneOffsetX: 0,
   backgroundWashColorMode: 'theme',
   backgroundWashCustomColor: '#8fb7ff',
@@ -360,10 +361,10 @@ export const DEFAULT_MONET_TUNING: MonetTuning = {
   keywordColoringEnabled: true,
   showDescription: true,
   audioStyle: 'bar',
-  fontScale: 1.0,
+  fontScale: 1.2,
   portraitSource: 'cover',
   portraitOffsetX: 0,
-  portraitStyle: 'rectangular',
+  portraitStyle: 'square',
 };
 
 export interface StoredCappellaEmojiImage {
@@ -513,6 +514,8 @@ export interface SongResult {
   resourceState?: boolean;
   privilege?: SongPrivilege;
   onlineLyricsState?: OnlineLyricsState;
+  qqMid?: string;
+  kgHash?: string;
 }
 
 export interface OnlineLyricsState {
@@ -523,6 +526,7 @@ export interface OnlineLyricsState {
   onlineOverrideLyrics?: LyricData | null;
   matchedSongId?: number;
   matchedIsPureMusic?: boolean;
+  matchedLyricsSource?: 'netease' | 'qq' | 'kugou';
 }
 
 export interface SearchResponse {
@@ -575,6 +579,7 @@ export interface LocalSong {
   hasManualLyricSelection?: boolean;
   folderName?: string; // Name of the folder if imported via folder import
   noAutoMatch?: boolean; // If true, do not attempt to auto-match metadata
+  matchedLyricsSource?: 'netease' | 'qq' | 'kugou';
 
   // User preferences for online data override (set via LyricMatchModal)
   lyricsSource?: 'local' | 'embedded' | 'online';  // Explicit lyrics source selection; undefined = default priority (local > embedded > online)
