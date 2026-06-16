@@ -97,51 +97,67 @@ export async function loadOnlineSongLyrics(
     }
 
     if (prefetched?.lyrics) {
-        const prefetchedText = prefetched.lyrics.lines.map(line => line.fullText).join('\n');
         const preferredPrefetchedLyrics = resolveOnlineLyrics(onlineLyricsState, prefetched.lyrics);
         const effectiveLyrics = preferredPrefetchedLyrics ?? prefetched.lyrics;
-        const effectiveText = effectiveLyrics?.lines.map(line => line.fullText).join('\n') ?? '';
-        onPureMusicChange?.(
-            onlineLyricsState?.lyricsSource === 'online' && typeof onlineLyricsState.matchedIsPureMusic === 'boolean'
-                ? onlineLyricsState.matchedIsPureMusic
-                : (prefetched.lyricRaw?.isPureMusic || isPureMusicLyricText(effectiveText) || isPureMusicLyricText(prefetched.lyricRaw?.mainLrc))
-        );
-        onLyrics(effectiveLyrics);
-        saveToCache(lyricCacheKey, prefetched.lyrics);
-        onDone();
-        return;
+
+        const settings = useSettingsUiStore.getState();
+        const shouldAutoMatch = (!effectiveLyrics || !effectiveLyrics.isWordByWord) &&
+                                settings.enableAlternativeLyricSources &&
+                                settings.autoUseBestLyric;
+
+        if (!shouldAutoMatch) {
+            const effectiveText = effectiveLyrics?.lines.map(line => line.fullText).join('\n') ?? '';
+            onPureMusicChange?.(
+                onlineLyricsState?.lyricsSource === 'online' && typeof onlineLyricsState.matchedIsPureMusic === 'boolean'
+                    ? onlineLyricsState.matchedIsPureMusic
+                    : (prefetched.lyricRaw?.isPureMusic || isPureMusicLyricText(effectiveText) || isPureMusicLyricText(prefetched.lyricRaw?.mainLrc))
+            );
+            onLyrics(effectiveLyrics);
+            saveToCache(lyricCacheKey, prefetched.lyrics);
+            onDone();
+            return;
+        }
     }
 
-    const processed = isCloudSong(song) && userId
-        ? await (async () => {
-            const lyricRes = await neteaseApi.getCloudLyric(userId, song.id);
-            const mainLrc = extractCloudLyricText(lyricRes);
-            const isPureMusic = isPureMusicLyricText(mainLrc);
-            if (!mainLrc || isPureMusic) {
+    const processed = prefetched?.lyrics
+        ? {
+            mainLrc: prefetched.lyricRaw?.mainLrc ?? null,
+            yrcLrc: prefetched.lyricRaw?.yrcLrc ?? null,
+            transLrc: prefetched.lyricRaw?.transLrc ?? null,
+            isPureMusic: prefetched.lyricRaw?.isPureMusic ?? false,
+            lyrics: prefetched.lyrics,
+            chorusRanges: [],
+          }
+        : (isCloudSong(song) && userId
+            ? await (async () => {
+                const lyricRes = await neteaseApi.getCloudLyric(userId, song.id);
+                const mainLrc = extractCloudLyricText(lyricRes);
+                const isPureMusic = isPureMusicLyricText(mainLrc);
+                if (!mainLrc || isPureMusic) {
+                    return {
+                        mainLrc,
+                        yrcLrc: null,
+                        transLrc: null,
+                        isPureMusic,
+                        lyrics: null,
+                        chorusRanges: [],
+                    };
+                }
+
+                const lyrics = await parseLyricsAsync(detectTimedLyricFormat(mainLrc), mainLrc, '');
                 return {
                     mainLrc,
                     yrcLrc: null,
                     transLrc: null,
                     isPureMusic,
-                    lyrics: null,
+                    lyrics,
                     chorusRanges: [],
                 };
-            }
-
-            const lyrics = await parseLyricsAsync(detectTimedLyricFormat(mainLrc), mainLrc, '');
-            return {
-                mainLrc,
-                yrcLrc: null,
-                transLrc: null,
-                isPureMusic,
-                lyrics,
-                chorusRanges: [],
-            };
-        })()
-        : await (async () => {
-            const lyricRes = await neteaseApi.getLyric(song.id);
-            return processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes), { songId: song.id });
-        })();
+            })()
+            : await (async () => {
+                const lyricRes = await neteaseApi.getLyric(song.id);
+                return processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricRes), { songId: song.id });
+            })());
     const parsedLyrics = processed.lyrics;
 
     if (!isCurrent()) return;

@@ -5,7 +5,7 @@
  * Handles URL expiration (1200s TTL) and re-prefetches on queue changes.
  */
 
-import { SongResult, LyricData } from '../types';
+import { SongResult, LyricData, OnlineLyricsState } from '../types';
 import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from './netease';
 import { getFromCacheWithMigration } from './db';
 import { hasCachedAudio } from './audioCache';
@@ -14,6 +14,9 @@ import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 import { detectTimedLyricFormat } from '../utils/lyrics/formatDetection';
 import { parseLyricsAsync } from '../utils/lyrics/workerClient';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
+import { useSettingsUiStore } from '../stores/useSettingsUiStore';
+import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
+import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState } from '../utils/onlineLyricsState';
 
 // Prefetch configuration
 const PREFETCH_COUNT_NEXT = 2;  // Prefetch 2 songs ahead
@@ -181,6 +184,7 @@ const prefetchSong = async (
                                 transLrc: null,
                                 isPureMusic,
                                 lyrics: null,
+                                chorusRanges: [],
                             };
                         }
 
@@ -191,6 +195,7 @@ const prefetchSong = async (
                             transLrc: null,
                             isPureMusic,
                             lyrics,
+                            chorusRanges: [],
                         };
                     })()
                     : await (async () => {
@@ -203,10 +208,60 @@ const prefetchSong = async (
                     transLrc: processed.transLrc,
                     isPureMusic: processed.isPureMusic
                 };
-                data.lyrics = processed.lyrics;
+
+                let parsedLyrics = processed.lyrics;
+                let finalLyrics = parsedLyrics;
+
+                const onlineLyricsState = await loadOnlineLyricsState(song);
+                const resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
+
+                const settings = useSettingsUiStore.getState();
+                const hasWordByWord = resolvedLyrics?.isWordByWord === true;
+                const enableAlternative = settings.enableAlternativeLyricSources;
+                const autoUseBest = settings.autoUseBestLyric;
+
+                if (!hasWordByWord && enableAlternative && autoUseBest) {
+                    try {
+                        const artistName = song.artists?.map(a => a.name).join(', ') || '';
+                        const bestMatch = await autoMatchBestLyric(song.name, artistName, song.duration || song.dt || 0, {
+                            album: song.album?.name || song.al?.name,
+                            neteaseCandidate: {
+                                id: song.id,
+                                lyrics: parsedLyrics,
+                                isPureMusic: processed.isPureMusic,
+                                chorusRanges: (processed as any).chorusRanges || []
+                            }
+                        });
+                        if (bestMatch && 'lyrics' in bestMatch && (bestMatch.source === 'qq' || bestMatch.source === 'kugou')) {
+                            const overrideState: OnlineLyricsState = {
+                                lyricsSource: 'online',
+                                matchedSongId: typeof bestMatch.id === 'number' ? bestMatch.id : parseInt(String(bestMatch.id), 10) || 0,
+                                hasOnlineOverride: true,
+                                onlineOverrideLyrics: bestMatch.lyrics,
+                                matchedLyricsSource: bestMatch.source,
+                            };
+                            await saveOnlineLyricsState(song, overrideState);
+                            finalLyrics = bestMatch.lyrics;
+                        }
+                    } catch (error) {
+                        console.warn('[Prefetch] Failed to auto-match best lyric:', error);
+                    }
+                } else {
+                    console.log(
+                        `[Prefetch] Skipping autoMatchBestLyric for "${song.name}": ` +
+                        `hasWordByWord=${hasWordByWord}, ` +
+                        `enableAlternativeLyricSources=${enableAlternative}, ` +
+                        `autoUseBestLyric=${autoUseBest}`
+                    );
+                    if (resolvedLyrics) {
+                        finalLyrics = resolvedLyrics;
+                    }
+                }
+
+                data.lyrics = finalLyrics;
 
                 if (data.lyrics) {
-                    console.log(`[Prefetch] Parsed lyrics for: ${song.name}`);
+                    console.log(`[Prefetch] Parsed and processed lyrics for: ${song.name}`);
                 }
             }
         } catch (e) {
