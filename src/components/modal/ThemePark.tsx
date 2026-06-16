@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
-import { ChevronLeft, Palette, RotateCcw, Sun, Moon, Check } from 'lucide-react';
+import { ChevronLeft, Palette, RotateCcw, Sun, Moon, Check, Play, Pause } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import { useTranslation } from 'react-i18next';
 import VisualizerRenderer from '../visualizer/VisualizerRenderer';
@@ -124,7 +124,7 @@ const ThemePreviewLayer: React.FC<{
     currentLineIndex: number;
     audioPower: ReturnType<typeof useMotionValue<number>>;
     audioBands: AudioBands;
-    clipPath: string;
+    clipPath?: string;
     overlayAlign: 'top-left' | 'bottom-right';
 }> = ({
     theme,
@@ -250,10 +250,9 @@ const ThemePreviewLayer: React.FC<{
         );
     };
 
-const DiagonalThemePreview: React.FC<{
-    lightTheme: Theme;
-    darkTheme: Theme;
-    activeMode: EditableMode;
+const ThemePreview: React.FC<{
+    theme: Theme;
+    mode: EditableMode;
     visualizerMode: VisualizerMode;
     visualizerModeLabel: string;
     staticMode: boolean;
@@ -278,11 +277,11 @@ const DiagonalThemePreview: React.FC<{
     currentLineIndex: number;
     audioPower: ReturnType<typeof useMotionValue<number>>;
     audioBands: AudioBands;
-    onSelectMode: (mode: EditableMode) => void;
+    isPaused: boolean;
+    onTogglePause: () => void;
 }> = ({
-    lightTheme,
-    darkTheme,
-    activeMode,
+    theme,
+    mode,
     visualizerMode,
     visualizerModeLabel,
     staticMode,
@@ -307,9 +306,10 @@ const DiagonalThemePreview: React.FC<{
     currentLineIndex,
     audioPower,
     audioBands,
-    onSelectMode,
+    isPaused,
+    onTogglePause,
 }) => {
-        const borderColor = activeMode === 'light' ? lightTheme.accentColor : darkTheme.accentColor;
+        const borderColor = theme.accentColor;
 
         return (
             <div
@@ -318,23 +318,21 @@ const DiagonalThemePreview: React.FC<{
             >
                 <button
                     type="button"
-                    onClick={() => onSelectMode('light')}
-                    className="absolute left-0 top-0 z-20 h-[44%] w-[44%]"
-                    style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }}
-                    aria-label="Select light theme preview"
-                />
-                <button
-                    type="button"
-                    onClick={() => onSelectMode('dark')}
-                    className="absolute bottom-0 right-0 z-20 h-[44%] w-[44%]"
-                    style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
-                    aria-label="Select dark theme preview"
-                />
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onTogglePause();
+                    }}
+                    className="absolute right-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-zinc-950/40 text-white backdrop-blur-md transition-all hover:bg-zinc-950/60 hover:scale-105 active:scale-95 shadow-sm pointer-events-auto"
+                    title={isPaused ? "播放预览" : "暂停预览"}
+                    aria-label={isPaused ? "Play preview" : "Pause preview"}
+                >
+                    {isPaused ? <Play size={16} className="translate-x-[1px]" fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
+                </button>
 
                 <ThemePreviewLayer
-                    theme={lightTheme}
-                    mode="light"
-                    isActive={activeMode === 'light'}
+                    theme={theme}
+                    mode={mode}
+                    isActive={true}
                     visualizerMode={visualizerMode}
                     visualizerModeLabel={visualizerModeLabel}
                     staticMode={staticMode}
@@ -359,41 +357,8 @@ const DiagonalThemePreview: React.FC<{
                     currentLineIndex={currentLineIndex}
                     audioPower={audioPower}
                     audioBands={audioBands}
-                    clipPath="polygon(0 0, 100% 0, 0 100%)"
                     overlayAlign="top-left"
                 />
-                <ThemePreviewLayer
-                    theme={darkTheme}
-                    mode="dark"
-                    isActive={activeMode === 'dark'}
-                    visualizerMode={visualizerMode}
-                    visualizerModeLabel={visualizerModeLabel}
-                    staticMode={staticMode}
-                    backgroundOpacity={backgroundOpacity}
-                    visualizerOpacity={visualizerOpacity}
-                    visualizerBackgroundMode={visualizerBackgroundMode}
-                    urlBackgroundList={urlBackgroundList}
-                    urlBackgroundSelectedId={urlBackgroundSelectedId}
-                    classicTuning={classicTuning}
-                    cadenzaTuning={cadenzaTuning}
-                    partitaTuning={partitaTuning}
-                    fumeTuning={fumeTuning}
-                    cappellaTuning={cappellaTuning}
-                    monetBackgroundTuning={monetBackgroundTuning}
-                    monetTuning={monetTuning}
-                    cappellaCustomEmojiImages={cappellaCustomEmojiImages}
-                    cappellaCustomAvatarImages={cappellaCustomAvatarImages}
-                    monetBackgroundImage={monetBackgroundImage}
-                    monetPortraitImage={monetPortraitImage}
-                    lyricsFontScale={lyricsFontScale}
-                    currentTime={currentTime}
-                    currentLineIndex={currentLineIndex}
-                    audioPower={audioPower}
-                    audioBands={audioBands}
-                    clipPath="polygon(100% 0, 100% 100%, 0 100%)"
-                    overlayAlign="bottom-right"
-                />
-
             </div>
         );
     };
@@ -427,7 +392,8 @@ const ThemePark: React.FC<ThemeParkProps> = ({
 }) => {
     const { t } = useTranslation();
     const isMouseDownOnOverlayRef = useRef(false);
-    const currentTime = useMotionValue(0);
+    const [isPaused, setIsPaused] = useState(false);
+    const currentTime = useMotionValue(getPreviewPlaceholderStartOffset(visualizerMode, VIS_PLAYGROUND_PREVIEW_LOOP_DURATION));
     const audioPower = useMotionValue(0.24);
     const bass = useMotionValue(0.18);
     const lowMid = useMotionValue(0.15);
@@ -435,7 +401,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     const vocal = useMotionValue(0.2);
     const treble = useMotionValue(0.1);
     const [draftTheme, setDraftTheme] = useState<DualTheme>(() => normalizeDualTheme(initialTheme));
-    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, 0));
+    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, getPreviewPlaceholderStartOffset(visualizerMode, VIS_PLAYGROUND_PREVIEW_LOOP_DURATION)));
     const [pickerState, setPickerState] = useState<PickerState>({
         mode: isDaylight ? 'light' : 'dark',
         key: 'accentColor',
@@ -457,16 +423,25 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     }), [bass, lowMid, mid, vocal, treble]);
 
     useEffect(() => {
+        const offset = getPreviewPlaceholderStartOffset(visualizerMode, VIS_PLAYGROUND_PREVIEW_LOOP_DURATION);
+        currentTime.set(offset);
+    }, [visualizerMode, currentTime]);
+
+    useEffect(() => {
+        if (isPaused) {
+            return;
+        }
         let frameId = 0;
         const startedAt = performance.now();
-        const previewOffset = getPreviewPlaceholderStartOffset(visualizerMode, VIS_PLAYGROUND_PREVIEW_LOOP_DURATION);
+        const previewOffset = currentTime.get();
 
         const tick = (now: number) => {
             const elapsed = (previewOffset + (now - startedAt) / 1000) % VIS_PLAYGROUND_PREVIEW_LOOP_DURATION;
             currentTime.set(elapsed);
 
+            const waveTime = previewOffset * 1000 + (now - startedAt);
             const wave = (offset: number, speed: number, floor: number, amplitude: number) =>
-                floor + (Math.sin(now * speed + offset) * 0.5 + 0.5) * amplitude;
+                floor + (Math.sin(waveTime * speed + offset) * 0.5 + 0.5) * amplitude;
 
             audioPower.set(wave(0.2, 0.0024, 0.16, 0.18));
             bass.set(wave(0.9, 0.0032, 0.14, 0.2));
@@ -480,7 +455,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
 
         frameId = window.requestAnimationFrame(tick);
         return () => window.cancelAnimationFrame(frameId);
-    }, [audioPower, bass, currentTime, lowMid, mid, treble, visualizerMode, vocal]);
+    }, [isPaused, audioPower, bass, currentTime, lowMid, mid, treble, visualizerMode, vocal]);
 
     useMotionValueEvent(currentTime, 'change', latest => {
         const nextIndex = findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, latest);
@@ -601,10 +576,9 @@ const ThemePark: React.FC<ThemeParkProps> = ({
 
                 <div className="grid min-h-0 flex-1 gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.2fr)_380px] lg:items-stretch">
                     <div className="min-h-[300px] lg:min-h-0 lg:h-full">
-                        <DiagonalThemePreview
-                            lightTheme={previewTheme.light}
-                            darkTheme={previewTheme.dark}
-                            activeMode={pickerState.mode}
+                        <ThemePreview
+                            theme={previewTheme[pickerState.mode]}
+                            mode={pickerState.mode}
                             visualizerMode={visualizerMode}
                             visualizerModeLabel={visualizerModeLabel}
                             staticMode={staticMode}
@@ -629,7 +603,8 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                             currentLineIndex={currentLineIndex}
                             audioPower={audioPower}
                             audioBands={audioBands}
-                            onSelectMode={(mode) => setPickerState(previous => ({ ...previous, mode }))}
+                            isPaused={isPaused}
+                            onTogglePause={() => setIsPaused(p => !p)}
                         />
                     </div>
 
