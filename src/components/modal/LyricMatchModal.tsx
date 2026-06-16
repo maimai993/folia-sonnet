@@ -177,6 +177,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             }
             if (requestId !== searchRequestIdRef.current) return;
 
+            results.sort((a, b) => calculateMatchScore(songInfo, b) - calculateMatchScore(songInfo, a));
             setSearchResults(results);
 
             const localTitle = song.title || song.fileName.replace(/\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i, '');

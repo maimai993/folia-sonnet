@@ -124,6 +124,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
             } else if (source === 'kugou') {
                 results = await searchKugouLyrics(q);
             }
+            results.sort((a, b) => calculateMatchScore(songInfo, b) - calculateMatchScore(songInfo, a));
             setSearchResults(results);
 
             // Preselect exact match roughly
@@ -163,6 +164,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
 
                 if (!isCurrent) return;
 
+                results.sort((a, b) => calculateMatchScore(songInfo, b) - calculateMatchScore(songInfo, a));
                 setSearchResults(results);
                 const exactMatch = results.find(s => s.name.toLowerCase() === song.name.toLowerCase());
                 if (exactMatch) {

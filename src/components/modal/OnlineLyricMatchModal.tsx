@@ -76,6 +76,7 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
             } else if (source === 'kugou') {
                 results = await searchKugouLyrics(query);
             }
+            results.sort((a, b) => calculateMatchScore(songInfo, b) - calculateMatchScore(songInfo, a));
             setSearchResults(results);
             if (results.length > 0) {
                 setSelectedResult(results[0]);
@@ -114,6 +115,7 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                     return;
                 }
 
+                results.sort((a, b) => calculateMatchScore(songInfo, b) - calculateMatchScore(songInfo, a));
                 setSearchResults(results);
                 if (results.length > 0) {
                     setSelectedResult(results[0]);
