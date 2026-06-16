@@ -107,6 +107,42 @@ function calculateDurationScore(targetDurationMs: number, searchDurationMs: numb
 /**
  * Calculates component scores so automatic matching can distinguish title, artist, album, and duration misses.
  */
+function splitArtistsForMatch(artistText: string): string[] {
+    return artistText
+        .split(/[,&、\/]|feat\.?|ft\.?|featuring|与/i)
+        .map(a => normalizeLyricMatchText(a))
+        .filter(a => a.length > 0);
+}
+
+function calculateArtistSimilarity(target: string, search: string): number {
+    const tArtists = splitArtistsForMatch(target);
+    const sArtists = splitArtistsForMatch(search);
+    
+    if (tArtists.length === 0 || sArtists.length === 0) {
+        return stringSimilarity(target, search);
+    }
+    
+    let matchCount = 0;
+    for (const a1 of tArtists) {
+        for (const a2 of sArtists) {
+            if (a1 === a2 || (a1.length >= 3 && a2.includes(a1)) || (a2.length >= 3 && a1.includes(a2))) {
+                matchCount++;
+                break;
+            }
+        }
+    }
+    
+    const tokenSim = matchCount / Math.max(tArtists.length, sArtists.length);
+    const isMainArtistMatched = tArtists[0] && sArtists[0] && 
+        (tArtists[0] === sArtists[0] || 
+        (tArtists[0].length >= 3 && sArtists[0].includes(tArtists[0])) || 
+        (sArtists[0].length >= 3 && tArtists[0].includes(sArtists[0])));
+        
+    const mainBonus = isMainArtistMatched ? Math.max(tokenSim, 0.7) : tokenSim;
+    
+    return Math.max(mainBonus, stringSimilarity(target, search));
+}
+
 export function calculateMatchScoreDetails(
     song: { title: string; artist: string; durationMs: number; album?: string },
     result: SongResult
@@ -121,14 +157,14 @@ export function calculateMatchScoreDetails(
     const titleScore = titleSimilarity * SCORE_WEIGHTS.title;
 
     const artistSimilarity = song.artist.trim()
-        ? stringSimilarity(song.artist, searchArtist)
+        ? calculateArtistSimilarity(song.artist, searchArtist)
         : 1;
     const artistScore = artistSimilarity * SCORE_WEIGHTS.artist;
 
     const hasTargetAlbum = Boolean(song.album?.trim());
     const hasSearchAlbum = Boolean(searchAlbum.trim());
     const albumSimilarity = hasTargetAlbum && hasSearchAlbum
-        ? stringSimilarity(song.album || '', searchAlbum)
+        ? stringSimilarity(song.album || '', searchAlbum, normalizeTitleForMatch)
         : null;
     const albumScore = albumSimilarity === null
         ? (hasTargetAlbum ? 0 : SCORE_WEIGHTS.album)

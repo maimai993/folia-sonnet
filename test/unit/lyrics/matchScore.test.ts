@@ -148,4 +148,28 @@ describe('calculateMatchScore', () => {
         expect(exactDurationScore).toBe(100);
         expect(wrongDurationScore).toBeLessThan(75);
     });
+
+    it('strips feat. tags from album and handles partial artist arrays safely', () => {
+        const details = calculateMatchScoreDetails(
+            {
+                title: 'イグニッション',
+                artist: '*Luna, ゆある, ねんね',
+                album: 'イグニッション',
+                durationMs: 200000
+            },
+            {
+                id: 501,
+                name: 'イグニッション (feat. Yuaru、Nenne)',
+                artists: [{ id: 1, name: '*Luna' }],
+                album: { id: 1, name: 'イグニッション (feat. Yuaru、Nenne)' },
+                duration: 200000
+            }
+        );
+
+        expect(details.titleMatched).toBe(true);
+        expect(details.artistMatched).toBe(true);
+        expect(details.albumMatched).toBe(true);
+        expect(details.score).toBeGreaterThanOrEqual(90);
+    });
 });
+
