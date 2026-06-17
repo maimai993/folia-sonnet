@@ -5,6 +5,7 @@ import DesktopGrid3DSurface, { DesktopGrid3DAction } from '../../folia-grid/Desk
 import { LocalLibraryGroup, LocalPlaylist, LocalSong, Theme } from '../../../types';
 import { GridViewCollectionDescriptor, createLocalGridViewCollection } from './gridViewCollectionAdapters';
 import { buildLocalGrid3DGroups } from './localGrid3DModel';
+import { useDebouncedFocusSync } from '../../../hooks/useDebouncedFocusSync';
 
 // src/components/app/home/LocalGrid3DView.tsx
 // Desktop-only local music Grid3D overview that opens GridView instead of legacy carousel details.
@@ -80,6 +81,11 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
         };
     }, [localPlaylists, localSongs, t]);
 
+    const [localFolderIndex, setLocalFolderIndex] = useDebouncedFocusSync(focusedFolderIndex, setFocusedFolderIndex);
+    const [localAlbumIndex, setLocalAlbumIndex] = useDebouncedFocusSync(focusedAlbumIndex, setFocusedAlbumIndex);
+    const [localArtistIndex, setLocalArtistIndex] = useDebouncedFocusSync(focusedArtistIndex, setFocusedArtistIndex);
+    const [localPlaylistIndex, setLocalPlaylistIndex] = useDebouncedFocusSync(focusedPlaylistIndex, setFocusedPlaylistIndex);
+
     const [groupCoverObjectUrls, setGroupCoverObjectUrls] = useState<Record<string, string>>({});
 
     useEffect(() => {
@@ -135,8 +141,8 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             label: t('localMusic.foldersAndPlaylists'),
             icon: <FolderOpen size={13} />,
             items: groupsWithCovers.folders,
-            focusedIndex: focusedFolderIndex,
-            setFocusedIndex: setFocusedFolderIndex,
+            focusedIndex: localFolderIndex,
+            setFocusedIndex: setLocalFolderIndex,
             emptyMessage: t('localMusic.noFoldersFound'),
         },
         {
@@ -145,8 +151,8 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             label: t('localMusic.albums'),
             icon: <Disc3 size={13} />,
             items: groupsWithCovers.albums,
-            focusedIndex: focusedAlbumIndex,
-            setFocusedIndex: setFocusedAlbumIndex,
+            focusedIndex: localAlbumIndex,
+            setFocusedIndex: setLocalAlbumIndex,
             emptyMessage: t('localMusic.noAlbumsFound'),
         },
         {
@@ -155,8 +161,8 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             label: t('localMusic.artists'),
             icon: <User size={13} />,
             items: groupsWithCovers.artists,
-            focusedIndex: focusedArtistIndex,
-            setFocusedIndex: setFocusedArtistIndex,
+            focusedIndex: localArtistIndex,
+            setFocusedIndex: setLocalArtistIndex,
             emptyMessage: t('localMusic.noArtistsFound'),
         },
         {
@@ -165,20 +171,20 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             label: t('localMusic.customPlaylists') || t('home.playlists'),
             icon: <ListMusic size={13} />,
             items: groupsWithCovers.playlists,
-            focusedIndex: focusedPlaylistIndex,
-            setFocusedIndex: setFocusedPlaylistIndex,
+            focusedIndex: localPlaylistIndex,
+            setFocusedIndex: setLocalPlaylistIndex,
             emptyMessage: t('localMusic.noPlaylistsFound'),
         },
     ], [
-        focusedAlbumIndex,
-        focusedArtistIndex,
-        focusedFolderIndex,
-        focusedPlaylistIndex,
+        localAlbumIndex,
+        localArtistIndex,
+        localFolderIndex,
+        localPlaylistIndex,
         groupsWithCovers,
-        setFocusedAlbumIndex,
-        setFocusedArtistIndex,
-        setFocusedFolderIndex,
-        setFocusedPlaylistIndex,
+        setLocalAlbumIndex,
+        setLocalArtistIndex,
+        setLocalFolderIndex,
+        setLocalPlaylistIndex,
         t,
     ]);
 

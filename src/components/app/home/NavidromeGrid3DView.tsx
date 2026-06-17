@@ -11,6 +11,7 @@ import {
     GridViewCollectionDescriptor,
     NavidromeGridViewCollectionType,
 } from './gridViewCollectionAdapters';
+import { useDebouncedFocusSync } from '../../../hooks/useDebouncedFocusSync';
 
 // src/components/app/home/NavidromeGrid3DView.tsx
 // Desktop-only Navidrome Grid3D overview that opens GridView instead of legacy collection views.
@@ -46,6 +47,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
     hasFloatingPlayer = false,
 }) => {
     const { t } = useTranslation();
+    const [localAlbumIndex, setLocalAlbumIndex] = useDebouncedFocusSync(focusedAlbumIndex, setFocusedAlbumIndex);
     const [section, setSection] = useState<NaviSection>('albums');
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [focusedArtistIndex, setFocusedArtistIndex] = useState(0);
@@ -181,8 +183,8 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
     }, [albumItems, artistItems, externalSelection, onExternalSelectionHandled, onOpenGridView]);
 
     const currentItems = section === 'albums' ? albumItems : section === 'playlists' ? playlistItems : artistItems;
-    const focusedIndex = section === 'albums' ? focusedAlbumIndex : section === 'playlists' ? focusedPlaylistIndex : focusedArtistIndex;
-    const setFocusedIndex = section === 'albums' ? setFocusedAlbumIndex : section === 'playlists' ? setFocusedPlaylistIndex : setFocusedArtistIndex;
+    const focusedIndex = section === 'albums' ? localAlbumIndex : section === 'playlists' ? focusedPlaylistIndex : focusedArtistIndex;
+    const setFocusedIndex = section === 'albums' ? setLocalAlbumIndex : section === 'playlists' ? setFocusedPlaylistIndex : setFocusedArtistIndex;
     const emptyMessage = section === 'albums'
         ? t('navidrome.noAlbumsFound')
         : section === 'playlists'
