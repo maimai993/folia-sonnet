@@ -4,6 +4,7 @@ import { Map as MapIcon } from 'lucide-react';
 import GridMap from '../GridMap';
 import { Theme } from '../../types';
 import { Grid3DSlider, Grid3DSliderItem } from './Grid3DSlider';
+import { ChevronDown } from 'lucide-react';
 
 // src/components/folia-grid/DesktopGrid3DSurface.tsx
 // Shared desktop home surface that keeps Grid3D slider and GridMap controls visually consistent.
@@ -25,6 +26,7 @@ interface DesktopGrid3DSurfaceProps {
     focusedIndex: number;
     onFocusedIndexChange: (index: number) => void;
     onSelect: (item: Grid3DSliderItem, index: number) => void;
+    tabs?: DesktopGrid3DAction[];
     actions?: DesktopGrid3DAction[];
     isInteractive?: boolean;
     isLoading?: boolean;
@@ -41,6 +43,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     focusedIndex,
     onFocusedIndexChange,
     onSelect,
+    tabs = [],
     actions = [],
     isInteractive = true,
     isLoading = false,
@@ -50,6 +53,9 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     hasFloatingPlayer = false,
 }) => {
     const [showGridMap, setShowGridMap] = useState(false);
+    const [tabsExpanded, setTabsExpanded] = useState(false);
+
+    const activeTab = tabs.find(tab => tab.active) || tabs[0];
 
     return (
         <div className="w-full h-full min-h-0 flex flex-col justify-center relative">
@@ -71,8 +77,72 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                 </div>
             )}
 
-            {actions.length > 0 && (
+            {(actions.length > 0 || tabs.length > 0) && (
                 <div className="absolute top-2 right-4 z-10 flex max-w-[min(44rem,calc(50%-7rem))] flex-wrap items-center justify-end gap-2">
+                    <AnimatePresence mode="wait">
+                        {tabsExpanded ? (
+                            <motion.div
+                                key="expanded-tabs"
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -10 }}
+                                transition={{ duration: 0.15, ease: "easeOut" }}
+                                className="flex items-center gap-2"
+                            >
+                                {tabs.map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => {
+                                            if (tab.active) {
+                                                setTabsExpanded(false);
+                                            } else {
+                                                tab.onClick();
+                                                setTabsExpanded(false);
+                                            }
+                                        }}
+                                        disabled={tab.disabled}
+                                        title={tab.title}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg backdrop-blur-md border border-white/10 flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-45 ${
+                                            tab.active ? 'opacity-100' : 'opacity-55 hover:opacity-90'
+                                        }`}
+                                        style={{
+                                            backgroundColor: tab.active
+                                                ? (isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.14)')
+                                                : (isDaylight ? 'rgba(255,255,255,0.62)' : 'rgba(25,25,25,0.58)'),
+                                            color: 'var(--text-primary)',
+                                        }}
+                                    >
+                                        {tab.icon}
+                                        <span className="whitespace-nowrap">{tab.label}</span>
+                                    </button>
+                                ))}
+                            </motion.div>
+                        ) : (
+                            activeTab && (
+                                <motion.div
+                                    key="collapsed-tab"
+                                    initial={{ opacity: 0, x: 10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 10 }}
+                                    transition={{ duration: 0.15, ease: "easeOut" }}
+                                >
+                                    <button
+                                        onClick={() => setTabsExpanded(true)}
+                                        className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg backdrop-blur-md border border-white/10 flex items-center gap-1.5 opacity-100 hover:opacity-80"
+                                        style={{
+                                            backgroundColor: isDaylight ? 'rgba(255,255,255,0.62)' : 'rgba(25,25,25,0.58)',
+                                            color: 'var(--text-primary)',
+                                        }}
+                                    >
+                                        {activeTab.icon}
+                                        <span className="whitespace-nowrap">{activeTab.label}</span>
+                                        <ChevronDown size={14} className="ml-0.5 opacity-60" />
+                                    </button>
+                                </motion.div>
+                            )
+                        )}
+                    </AnimatePresence>
+
                     {actions.map(action => (
                         <button
                             key={action.id}

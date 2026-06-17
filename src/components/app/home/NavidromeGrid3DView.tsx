@@ -189,7 +189,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
             ? t('navidrome.noPlaylistsFound')
             : t('navidrome.noArtistsFound');
 
-    const actions: DesktopGrid3DAction[] = [
+    const tabs: DesktopGrid3DAction[] = [
         {
             id: 'albums',
             label: t('navidrome.albums'),
@@ -211,6 +211,9 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
             active: section === 'artists',
             onClick: () => setSection('artists'),
         },
+    ];
+
+    const actions: DesktopGrid3DAction[] = [
         {
             id: 'refresh',
             label: t('options.audioOutputRefresh') || 'Refresh',
@@ -255,6 +258,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
                                 : 'playlist';
                 onOpenGridView?.(createNavidromeGridViewCollection(item, descriptorType));
             }}
+            tabs={tabs}
             actions={actions}
             isLoading={isLoading}
             emptyMessage={emptyMessage}

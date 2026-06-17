@@ -184,14 +184,15 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
 
     const activeSection = sections.find(section => section.row === activeRow) ?? sections[0];
 
+    const tabs: DesktopGrid3DAction[] = sections.map(section => ({
+        id: section.key,
+        label: section.label,
+        icon: section.icon,
+        active: activeSection.row === section.row,
+        onClick: () => setActiveRow(section.row),
+    }));
+
     const actions: DesktopGrid3DAction[] = [
-        ...sections.map(section => ({
-            id: section.key,
-            label: section.label,
-            icon: section.icon,
-            active: activeSection.row === section.row,
-            onClick: () => setActiveRow(section.row),
-        })),
         {
             id: 'import-folder',
             label: isScanInProgress ? '扫描中' : isImporting ? t('localMusic.importing') : t('localMusic.importFolder'),
@@ -239,6 +240,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                     onOpenGridView?.(createLocalGridViewCollection(group));
                 }
             }}
+            tabs={tabs}
             actions={actions}
             emptyMessage={activeSection.emptyMessage}
             theme={theme}
