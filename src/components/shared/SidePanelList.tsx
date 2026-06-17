@@ -12,6 +12,7 @@ export interface SidePanelListProps<T> {
     renderItem: (item: T, index: number, style: React.CSSProperties) => React.ReactNode;
     itemHeight: number;
     isDaylight: boolean;
+    focusedIndex?: number;
 }
 
 export function SidePanelList<T>({
@@ -22,10 +23,12 @@ export function SidePanelList<T>({
     renderItem,
     itemHeight,
     isDaylight,
+    focusedIndex,
 }: SidePanelListProps<T>) {
     const { t } = useTranslation();
     const [listHeight, setListHeight] = useState(400);
-    const listRef = useRef<HTMLDivElement>(null);
+    const listContainerRef = useRef<HTMLDivElement>(null);
+    const virtualListRef = useRef<any>(null);
 
     const RowComponent = React.useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
         return <>{renderItem(items[index], index, style)}</>;
@@ -33,8 +36,8 @@ export function SidePanelList<T>({
 
     // Measure list container height for react-window
     useEffect(() => {
-        if (isOpen && listRef.current) {
-            const el = listRef.current;
+        if (isOpen && listContainerRef.current) {
+            const el = listContainerRef.current;
             setListHeight(el.clientHeight);
             const observer = new ResizeObserver(() => {
                 setListHeight(el.clientHeight);
@@ -43,6 +46,41 @@ export function SidePanelList<T>({
             return () => observer.disconnect();
         }
     }, [isOpen]);
+
+    const lastScrollTargetRef = useRef<number | null>(null);
+
+    // Scroll to focused index when opened or focused index changes
+    useEffect(() => {
+        if (isOpen && focusedIndex !== undefined && virtualListRef.current) {
+            // Use a small timeout to ensure the list has rendered first
+                const isInitialOpen = lastScrollTargetRef.current === null;
+                const delay = isInitialOpen ? 50 : 350; // Debounce subsequent scroll updates
+                
+                const timer = setTimeout(() => {
+                    const list = virtualListRef.current;
+                    if (!list) return;
+    
+                    // If opening panel for the first time
+                    if (isInitialOpen) {
+                        // Start from nearby (e.g. 8 items above) to create a short smooth scroll effect
+                        const jumpIndex = Math.max(0, focusedIndex - 8);
+                        list.scrollToRow({ index: jumpIndex, align: 'start', behavior: 'auto' });
+                        
+                        setTimeout(() => {
+                            list.scrollToRow({ index: focusedIndex, align: 'center', behavior: 'smooth' });
+                        }, 50);
+                    } else {
+                        // If already open, just smoothly scroll to the target directly
+                        list.scrollToRow({ index: focusedIndex, align: 'center', behavior: 'smooth' });
+                    }
+                    
+                    lastScrollTargetRef.current = focusedIndex;
+                }, delay);
+                return () => clearTimeout(timer);
+            } else if (!isOpen) {
+                lastScrollTargetRef.current = null;
+            }
+    }, [isOpen, focusedIndex]);
 
     return (
         <AnimatePresence>
@@ -72,13 +110,14 @@ export function SidePanelList<T>({
                     </div>
 
                     {/* List Area */}
-                    <div ref={listRef} className="flex-1 overflow-hidden relative rounded-xl">
+                    <div ref={listContainerRef} className="flex-1 overflow-hidden relative rounded-xl">
                         {items.length === 0 ? (
                             <div className="absolute inset-0 flex items-center justify-center opacity-50 text-sm">
                                 {t('home.loadingLibrary') || 'No items'}
                             </div>
                         ) : (
                             <VirtualList
+                                listRef={virtualListRef}
                                 style={{ height: listHeight, width: '100%' }}
                                 rowCount={items.length}
                                 rowHeight={itemHeight}
@@ -102,7 +141,8 @@ export const TrackListItem = React.memo<{
     onPlay: () => void;
     onAddToQueue?: () => void;
     isUnavailable?: boolean;
-}>(({ track, index, style, onPlay, onAddToQueue, isUnavailable }) => {
+    isActive?: boolean;
+}>(({ track, index, style, onPlay, onAddToQueue, isUnavailable, isActive }) => {
     const { t } = useTranslation();
     const coverUrl = track.al?.picUrl || track.album?.picUrl || '';
     const artistName = track.ar?.[0]?.name || track.artists?.[0]?.name || 'Unknown Artist';
@@ -117,7 +157,9 @@ export const TrackListItem = React.memo<{
                 className={`flex items-center gap-3 p-2 rounded-lg transition-colors w-full h-full ${
                     isUnavailable 
                         ? 'opacity-40 cursor-not-allowed' 
-                        : 'hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer group'
+                        : isActive
+                            ? 'bg-black/10 dark:bg-white/10 cursor-pointer group'
+                            : 'hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer group'
                 }`}
             >
                 <div className="relative w-10 h-10 shrink-0 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800">
@@ -163,7 +205,8 @@ export const CollectionListItem = React.memo<{
     index: number;
     style: React.CSSProperties;
     onClick: () => void;
-}>(({ item, index, style, onClick }) => {
+    isActive?: boolean;
+}>(({ item, index, style, onClick, isActive }) => {
     return (
         <div 
             style={style} 
@@ -171,7 +214,11 @@ export const CollectionListItem = React.memo<{
         >
             <div 
                 onClick={onClick}
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer w-full h-full"
+                className={`flex items-center gap-3 p-2 rounded-lg transition-colors w-full h-full ${
+                    isActive
+                        ? 'bg-black/10 dark:bg-white/10 cursor-pointer group'
+                        : 'hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer group'
+                }`}
             >
                 <div className="w-10 h-10 shrink-0 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800 relative">
                     {item.coverUrl && (

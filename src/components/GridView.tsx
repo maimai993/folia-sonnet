@@ -2036,6 +2036,7 @@ export const GridView: React.FC<GridViewProps> = ({
                     items={displayTracks}
                     itemHeight={60}
                     isDaylight={isDaylight}
+                    focusedIndex={focusedIndex}
                     renderItem={(track, index, style) => (
                         <TrackListItem
                             key={`${track.id}-${index}`}
@@ -2043,6 +2044,7 @@ export const GridView: React.FC<GridViewProps> = ({
                             index={index}
                             style={style}
                             isUnavailable={isSongMarkedUnavailable(track)}
+                            isActive={index === focusedIndex}
                             onPlay={() => {
                                 onSelectTrack?.(track, playableTracks);
                             }}

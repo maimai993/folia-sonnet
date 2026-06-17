@@ -838,12 +838,14 @@ export const GridMap: React.FC<GridMapProps> = ({
                 items={displayItems}
                 itemHeight={60}
                 isDaylight={isDaylight}
+                focusedIndex={focusedIndex}
                 renderItem={(item, index, style) => (
                     <CollectionListItem
                         key={`${item.id}-${index}`}
                         item={item}
                         index={index}
                         style={style}
+                        isActive={index === focusedIndex}
                         onClick={() => {
                             onSelectCollection(item.rawCollection || item, index);
                             setShowSidePanel(false);
