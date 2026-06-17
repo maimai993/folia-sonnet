@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, Disc } from 'lucide-react';
+import { ChevronLeft, Disc, Search, X, List } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Theme } from '../types';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
+import { SidePanelList, CollectionListItem } from './shared/SidePanelList';
 
 // src/components/GridMap.tsx
 // Hexagonal honeycomb layout showing all collections (playlists, albums, radios).
@@ -155,6 +156,65 @@ export const GridMap: React.FC<GridMapProps> = ({
     const isDraggingRef = useRef(false);
     const wheelTargetRef = useRef({ x: 0, y: 0 });
 
+    const [showSearchPanel, setShowSearchPanel] = useState(false);
+    const [draftSearchQuery, setDraftSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const deferredSearchQuery = useDeferredValue(searchQuery);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
+    const isComposingSearchRef = useRef(false);
+
+    const [showSidePanel, setShowSidePanel] = useState(false);
+
+    useEffect(() => {
+        if (!showSearchPanel) return;
+        const id = requestAnimationFrame(() => {
+            searchInputRef.current?.focus();
+            searchInputRef.current?.setSelectionRange(draftSearchQuery.length, draftSearchQuery.length);
+        });
+        return () => cancelAnimationFrame(id);
+    }, [draftSearchQuery.length, showSearchPanel]);
+
+    useEffect(() => {
+        const handleSearchTyping = (event: KeyboardEvent) => {
+            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+                if (event.key === 'Escape' && showSearchPanel) {
+                    setShowSearchPanel(false);
+                    setDraftSearchQuery('');
+                    setSearchQuery('');
+                }
+                return;
+            }
+
+            if (event.key === '/' || (event.ctrlKey && event.key === 'f') || (event.metaKey && event.key === 'f')) {
+                event.preventDefault();
+                setShowSearchPanel(true);
+                return;
+            }
+
+            if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && /[a-zA-Z0-9\u4e00-\u9fa5]/.test(event.key)) {
+                setShowSearchPanel(true);
+                setDraftSearchQuery(event.key);
+                setSearchQuery(event.key);
+            }
+        };
+
+        window.addEventListener('keydown', handleSearchTyping);
+        return () => window.removeEventListener('keydown', handleSearchTyping);
+    }, [showSearchPanel]);
+
+    const displayItems = useMemo(() => {
+        const query = deferredSearchQuery.trim().toLowerCase();
+        if (!query) return items;
+
+        return items.filter(item => {
+            return (
+                item.name?.toLowerCase().includes(query) ||
+                item.description?.toLowerCase().includes(query) ||
+                item.summary?.toLowerCase().includes(query)
+            );
+        });
+    }, [items, deferredSearchQuery]);
+
     // Track responsive container size to scale grid card dimensions dynamically
     const [containerSize, setContainerSize] = useState(() => {
         if (typeof window === 'undefined') {
@@ -276,7 +336,7 @@ export const GridMap: React.FC<GridMapProps> = ({
         renderedIndexesRef,
         updateRenderedIndexesForViewport,
     } = useFoliaHexViewport({
-        itemCount: items.length,
+        itemCount: displayItems.length,
         spacingX: layoutConfig.spacingX,
         spacingY: layoutConfig.spacingY,
         renderRadius,
@@ -312,7 +372,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     // Handles mouse wheel events and animates viewport translation offsets
     const handleViewportWheel = useCallback((event: WheelEvent) => {
-        if (items.length === 0 || event.ctrlKey) return;
+        if (displayItems.length === 0 || event.ctrlKey) return;
 
         event.preventDefault();
         const deltaScale = (event.deltaMode === 1
@@ -384,10 +444,10 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     // Center on the first item initially
     useEffect(() => {
-        if (items.length > 0) {
+        if (displayItems.length > 0) {
             centerOnIndex(0, false);
         }
-    }, [items.length]);
+    }, [displayItems.length]);
 
     useEffect(() => {
         updateRenderedIndexesForViewport(dragX.get(), dragY.get(), true);
@@ -397,7 +457,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     const memoizedCards = useMemo(() => {
         return renderedIndexes.map((idx) => {
-            const item = items[idx];
+            const item = displayItems[idx];
             const coord = baseCoords[idx];
             if (!item || !coord) return null;
 
@@ -440,7 +500,7 @@ export const GridMap: React.FC<GridMapProps> = ({
         });
     }, [
         renderedIndexes,
-        items,
+        displayItems,
         baseCoords,
         isDaylight,
         layoutConfig.cardWidth,
@@ -556,7 +616,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 
             if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
                 e.preventDefault();
-                if (items.length === 0) return;
+                if (displayItems.length === 0) return;
 
                 const curr = baseCoords[focusedIndex];
                 let bestNextIdx = focusedIndex;
@@ -591,7 +651,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [focusedIndex, baseCoords, items.length]);
+    }, [focusedIndex, baseCoords, displayItems.length]);
 
     return (
         <motion.div
@@ -660,8 +720,75 @@ export const GridMap: React.FC<GridMapProps> = ({
                 className="w-full flex-1 relative flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
                 style={{ touchAction: 'none' }}
             >
-                {items.length === 0 ? (
-                    <div className="opacity-40 text-sm font-sans">{t('home.loadingLibrary') || 'No items found'}</div>
+                <AnimatePresence>
+                    {showSearchPanel && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -12, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                            className="absolute top-24 left-1/2 z-[85] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 pointer-events-auto"
+                        >
+                            <div className="relative rounded-full border shadow-2xl backdrop-blur-2xl theme-glass-panel">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 opacity-40 w-4 h-4" />
+                                <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    value={draftSearchQuery}
+                                    onChange={(event) => {
+                                        const nextValue = event.target.value;
+                                        setDraftSearchQuery(nextValue);
+                                        if (!isComposingSearchRef.current) {
+                                            setSearchQuery(nextValue);
+                                        }
+                                    }}
+                                    onCompositionStart={() => {
+                                        isComposingSearchRef.current = true;
+                                    }}
+                                    onCompositionEnd={(event) => {
+                                        isComposingSearchRef.current = false;
+                                        const nextValue = event.currentTarget.value;
+                                        setDraftSearchQuery(nextValue);
+                                        setSearchQuery(nextValue);
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Escape') {
+                                            setShowSearchPanel(false);
+                                            setDraftSearchQuery('');
+                                            setSearchQuery('');
+                                        }
+                                    }}
+                                    placeholder={`${t('home.gridSearchPlaceholder') || 'Filter collections...'} (Esc)`}
+                                    className="w-full rounded-full bg-transparent py-3 pl-11 pr-11 text-sm font-medium outline-none placeholder:text-current placeholder:opacity-40"
+                                    style={{ color: 'var(--text-primary)' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (draftSearchQuery) {
+                                            setDraftSearchQuery('');
+                                            setSearchQuery('');
+                                            searchInputRef.current?.focus();
+                                        } else {
+                                            setShowSearchPanel(false);
+                                        }
+                                    }}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-45 transition-opacity hover:opacity-90 cursor-pointer"
+                                    aria-label={draftSearchQuery ? "Clear" : "Close"}
+                                >
+                                    <X size={15} />
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {displayItems.length === 0 ? (
+                    <div className="opacity-40 text-sm font-sans">
+                        {deferredSearchQuery.trim().length > 0 
+                            ? (t('home.gridSearchNoResults') || 'No matching cards') 
+                            : (t('home.loadingLibrary') || 'No items found')}
+                    </div>
                 ) : (
                     <motion.div
                         drag
@@ -685,6 +812,45 @@ export const GridMap: React.FC<GridMapProps> = ({
                     </motion.div>
                 )}
             </div>
+
+            {/* Bottom Right Floating Button */}
+            {items.length > 0 && (
+                <button
+                    onClick={() => setShowSidePanel(true)}
+                    className="fixed bottom-6 right-6 z-[80] w-12 h-12 rounded-full flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95 pointer-events-auto border"
+                    style={{
+                        backgroundColor: isDaylight ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.5)',
+                        backdropFilter: 'blur(12px)',
+                        borderColor: isDaylight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)',
+                        color: 'var(--text-primary)'
+                    }}
+                    title={t('playlist.viewCollections') || 'View Collections'}
+                >
+                    <List size={22} />
+                </button>
+            )}
+
+            {/* Collections Cut-in Side Panel */}
+            <SidePanelList
+                isOpen={showSidePanel}
+                onClose={() => setShowSidePanel(false)}
+                title={title || 'Collections'}
+                items={displayItems}
+                itemHeight={60}
+                isDaylight={isDaylight}
+                renderItem={(item, index, style) => (
+                    <CollectionListItem
+                        key={`${item.id}-${index}`}
+                        item={item}
+                        index={index}
+                        style={style}
+                        onClick={() => {
+                            onSelectCollection(item.rawCollection || item, index);
+                            setShowSidePanel(false);
+                        }}
+                    />
+                )}
+            />
         </motion.div>
     );
 };

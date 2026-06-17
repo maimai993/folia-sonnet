@@ -268,6 +268,14 @@ const Home: React.FC<HomeProps> = ({
         }
     }, [viewTab, user, albumsLoaded]);
 
+    useEffect(() => {
+        const handleRefreshAlbums = () => {
+            setAlbumsLoaded(false);
+        };
+        window.addEventListener('folia-refresh-favorite-albums', handleRefreshAlbums);
+        return () => window.removeEventListener('folia-refresh-favorite-albums', handleRefreshAlbums);
+    }, []);
+
     const fetchFavoriteAlbums = async () => {
         setLoadingAlbums(true);
         try {

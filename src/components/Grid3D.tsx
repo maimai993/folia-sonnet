@@ -263,6 +263,19 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         }
     };
 
+    const fetchFavoriteAlbumsRef = useRef(fetchFavoriteAlbums);
+    useEffect(() => {
+        fetchFavoriteAlbumsRef.current = fetchFavoriteAlbums;
+    });
+
+    useEffect(() => {
+        const handleRefreshAlbums = () => {
+            void fetchFavoriteAlbumsRef.current();
+        };
+        window.addEventListener('folia-refresh-favorite-albums', handleRefreshAlbums);
+        return () => window.removeEventListener('folia-refresh-favorite-albums', handleRefreshAlbums);
+    }, []);
+
     const fetchRadioItems = async () => {
         setLoadingRadio(true);
         try {

@@ -1,6 +1,6 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2, Star } from 'lucide-react';
+import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2, Star, List } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme } from '../types';
 import { isSongMarkedUnavailable, getSongUnavailableTagText, neteaseApi } from '../services/netease';
@@ -11,6 +11,7 @@ import { saveToCache, getFromCache, removeFromCache } from '../services/db';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 import PlaylistSelectionDialog from './shared/PlaylistSelectionDialog';
 import TextInputDialog from './shared/TextInputDialog';
+import { SidePanelList, TrackListItem } from './shared/SidePanelList';
 
 export interface GridViewSourceActions {
     local?: {
@@ -604,6 +605,7 @@ export const GridView: React.FC<GridViewProps> = ({
     const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = useState(false);
     const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
+    const [showSidePanel, setShowSidePanel] = useState(false);
     const [showSearchPanel, setShowSearchPanel] = useState(false);
     const [draftSearchQuery, setDraftSearchQuery] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -935,50 +937,68 @@ export const GridView: React.FC<GridViewProps> = ({
     const canEditPlaylist = Boolean(canEditNeteasePlaylist || isLocalPlaylistCollection || isNavidromePlaylistCollection);
 
     const isNeteasePlaylist = collectionSource === 'netease' && collection?.type === 'playlist' && !isCloudDrive;
-    const showSubscribeButton = isNeteasePlaylist && !canEditNeteasePlaylist;
+    const isNeteaseAlbum = collectionSource === 'netease' && collection?.type === 'album' && !isCloudDrive;
+    const showSubscribeButton = (isNeteasePlaylist && !canEditNeteasePlaylist) || isNeteaseAlbum;
 
     useEffect(() => {
         let active = true;
 
-        const fetchPlaylistDetail = async () => {
-            if (!isNeteasePlaylist) {
-                setPlaylistSubscribed(null);
-                return;
-            }
-
-            try {
-                const res = await neteaseApi.getPlaylistDetailDynamic(Number(collection.id));
-                if (active && res.code === 200) {
-                    setPlaylistSubscribed(res.subscribed);
+        const fetchCollectionDetail = async () => {
+            if (isNeteasePlaylist) {
+                try {
+                    const res = await neteaseApi.getPlaylistDetailDynamic(Number(collection.id));
+                    if (active && res.code === 200) {
+                        setPlaylistSubscribed(res.subscribed);
+                    }
+                } catch (err) {
+                    console.warn("[GridView] Failed to fetch playlist dynamic status:", err);
                 }
-            } catch (err) {
-                console.warn("[GridView] Failed to fetch playlist dynamic status:", err);
+            } else if (isNeteaseAlbum) {
+                try {
+                    const res = await neteaseApi.getAlbumDetailDynamic(Number(collection.id));
+                    if (active && res.code === 200) {
+                        setPlaylistSubscribed(res.isSub);
+                    }
+                } catch (err) {
+                    console.warn("[GridView] Failed to fetch album dynamic status:", err);
+                }
+            } else {
+                setPlaylistSubscribed(null);
             }
         };
 
-        void fetchPlaylistDetail();
+        void fetchCollectionDetail();
 
         return () => {
             active = false;
         };
-    }, [collection?.id, isNeteasePlaylist]);
+    }, [collection?.id, isNeteasePlaylist, isNeteaseAlbum]);
 
     const handleToggleSubscribe = async () => {
         if (!collection || isSubscribing) return;
         setIsSubscribing(true);
         try {
             const nextSubscribed = !playlistSubscribed;
-            const res = await neteaseApi.subscribePlaylist(Number(collection.id), nextSubscribed);
-            if (res.code === 200) {
+            let res;
+            if (isNeteasePlaylist) {
+                res = await neteaseApi.subscribePlaylist(Number(collection.id), nextSubscribed);
+            } else if (isNeteaseAlbum) {
+                res = await neteaseApi.subscribeAlbum(Number(collection.id), nextSubscribed);
+            }
+
+            if (res && res.code === 200) {
                 setPlaylistSubscribed(nextSubscribed);
+                if (isNeteaseAlbum) {
+                    window.dispatchEvent(new CustomEvent('folia-refresh-favorite-albums'));
+                }
                 if (onPlaylistMutated) {
                     void onPlaylistMutated();
                 }
             } else {
-                console.error("Failed to toggle playlist subscription", res);
+                console.error("Failed to toggle collection subscription", res);
             }
         } catch (e) {
-            console.error("Failed to toggle playlist subscription", e);
+            console.error("Failed to toggle collection subscription", e);
         } finally {
             setIsSubscribing(false);
         }
@@ -1792,7 +1812,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                         style={{
                                             backgroundColor: isDaylight ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.5)',
                                         }}
-                                        title={playlistSubscribed ? "取消收藏歌单" : "收藏歌单"}
+                                        title={playlistSubscribed ? (isNeteaseAlbum ? "取消收藏专辑" : "取消收藏歌单") : (isNeteaseAlbum ? "收藏专辑" : "收藏歌单")}
                                     >
                                         {isSubscribing ? (
                                             <Loader2 size={18} className="animate-spin opacity-60" style={{ color: 'var(--text-primary)' }} />
@@ -1989,6 +2009,50 @@ export const GridView: React.FC<GridViewProps> = ({
                 }}
                 isDaylight={isDaylight}
             />
+
+            {/* Bottom Right Floating Button */}
+            {mode === 'tracks' && displayTracks.length > 0 && (
+                <button
+                    onClick={() => setShowSidePanel(true)}
+                    className="fixed bottom-6 right-6 z-[80] w-12 h-12 rounded-full flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95 pointer-events-auto border"
+                    style={{
+                        backgroundColor: isDaylight ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.5)',
+                        backdropFilter: 'blur(12px)',
+                        borderColor: isDaylight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)',
+                        color: 'var(--text-primary)'
+                    }}
+                    title={t('playlist.viewTracks') || 'View Tracks'}
+                >
+                    <List size={22} />
+                </button>
+            )}
+
+            {/* Tracks Cut-in Side Panel */}
+            {mode === 'tracks' && (
+                <SidePanelList
+                    isOpen={showSidePanel}
+                    onClose={() => setShowSidePanel(false)}
+                    title={collection?.name || title}
+                    items={displayTracks}
+                    itemHeight={60}
+                    isDaylight={isDaylight}
+                    renderItem={(track, index, style) => (
+                        <TrackListItem
+                            key={`${track.id}-${index}`}
+                            track={track}
+                            index={index}
+                            style={style}
+                            isUnavailable={isSongMarkedUnavailable(track)}
+                            onPlay={() => {
+                                onSelectTrack?.(track, playableTracks);
+                            }}
+                            onAddToQueue={onAddTrackToQueue ? () => {
+                                onAddTrackToQueue(track);
+                            } : undefined}
+                        />
+                    )}
+                />
+            )}
         </motion.div>
     );
 };
