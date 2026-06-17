@@ -15,6 +15,10 @@ export interface SidePanelListProps<T> {
     focusedIndex?: number;
 }
 
+const RowComponent = React.memo(({ index, style, items, renderItem }: any) => {
+    return <>{renderItem(items[index], index, style)}</>;
+});
+
 export function SidePanelList<T>({
     isOpen,
     onClose,
@@ -30,9 +34,7 @@ export function SidePanelList<T>({
     const listContainerRef = useRef<HTMLDivElement>(null);
     const virtualListRef = useRef<any>(null);
 
-    const RowComponent = React.useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
-        return <>{renderItem(items[index], index, style)}</>;
-    }, [items, renderItem]);
+    const rowProps = React.useMemo(() => ({ items, renderItem }), [items, renderItem]);
 
     // Measure list container height for react-window
     useEffect(() => {
@@ -121,7 +123,7 @@ export function SidePanelList<T>({
                                 style={{ height: listHeight, width: '100%' }}
                                 rowCount={items.length}
                                 rowHeight={itemHeight}
-                                rowProps={{}}
+                                rowProps={rowProps}
                                 rowComponent={RowComponent}
                                 className="overflow-x-hidden custom-scrollbar"
                             />
