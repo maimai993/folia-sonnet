@@ -381,18 +381,23 @@ const MonetWordSweep: React.FC<{
             const glowTailEndTime = Math.max(lineRenderEndTime, endTime + MONET_GLOW_PASS_TAIL_SECONDS);
             let intensity: number;
             if (latest <= glowPeakTime) {
-                intensity = (latest - startTime) / glowRiseDuration;
+                const progress = Math.min(1, Math.max(0, (latest - startTime) / glowRiseDuration));
+                // 使用 Smoothstep (ease-in-out) 曲线，让发光开始和到达峰值时都平滑过渡
+                intensity = progress * progress * (3 - 2 * progress);
             } else {
                 const decayDuration = Math.max(0.18, glowTailEndTime - glowPeakTime);
-                intensity = Math.max(0, 1 - (latest - glowPeakTime) / decayDuration);
+                const decayProgress = Math.min(1, Math.max(0, (latest - glowPeakTime) / decayDuration));
+                const remaining = 1 - decayProgress;
+                // 使用平方缓出曲线 (ease-out decay)，让发光衰退初期较快，尾部逐渐变暗并平滑消失
+                intensity = remaining * remaining;
             }
 
             if (intensity <= 0) return 'none';
 
-            const finalIntensity = isChorus ? intensity * 1.4 : intensity;
-            const radiusOne = Math.round(fontPx * (isChorus ? 0.24 : 0.15));
-            const radiusTwo = Math.round(fontPx * (isChorus ? 0.52 : 0.35));
-            const glowColor = mixColors(baseColor, wordColor, Math.min(finalIntensity, 1), finalIntensity * 0.88);
+            const radiusOne = Math.round(fontPx * (isChorus ? 0.45 : 0.28));
+            const radiusTwo = Math.round(fontPx * (isChorus ? 0.90 : 0.65));
+            const maxAlpha = isChorus ? 1.0 : 0.88;
+            const glowColor = mixColors(baseColor, wordColor, intensity, intensity * maxAlpha);
             return `0 0 ${radiusOne}px ${glowColor}, 0 0 ${radiusTwo}px ${glowColor}`;
         }) as unknown as MotionValue<string>;
 
