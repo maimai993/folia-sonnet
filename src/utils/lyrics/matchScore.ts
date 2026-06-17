@@ -1,7 +1,12 @@
 import { SongResult } from '../../types';
 import { normalizeLyricMatchDurationMs } from './duration';
 
+import * as wanakana from 'wanakana';
+import * as OpenCC from 'opencc-js';
+
 // src/utils/lyrics/matchScore.ts
+
+const t2sConverter = OpenCC.Converter({ from: 't', to: 'cn' });
 
 const SCORE_WEIGHTS = {
     title: 45,
@@ -30,7 +35,10 @@ export type MatchScoreDetails = {
  * Removes punctuation and symbols while preserving letters across languages.
  */
 export function normalizeLyricMatchText(value: string): string {
-    return value
+    const romajiValue = wanakana.toRomaji(value);
+    const simpValue = t2sConverter(romajiValue);
+
+    return simpValue
         .toLowerCase()
         .replace(/[\p{P}\p{S}]/gu, '')
         .replace(/\s+/g, ' ')

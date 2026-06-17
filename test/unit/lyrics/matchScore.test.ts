@@ -5,7 +5,7 @@ import { calculateMatchScore, calculateMatchScoreDetails, normalizeLyricMatchTex
 
 describe('calculateMatchScore', () => {
     it('keeps non-Chinese international letters while removing punctuation', () => {
-        expect(normalizeLyricMatchText('さよならの夏 - Café!')).toBe('さよならの夏 café');
+        expect(normalizeLyricMatchText('さよならの夏 - Café!')).toBe('sayonarano夏 café');
         expect(normalizeLyricMatchText('안녕, мир?')).toBe('안녕 мир');
     });
 
@@ -170,6 +170,28 @@ describe('calculateMatchScore', () => {
         expect(details.artistMatched).toBe(true);
         expect(details.albumMatched).toBe(true);
         expect(details.score).toBeGreaterThanOrEqual(90);
+    });
+
+    it('normalizes traditional chinese to simplified and katakana to romaji', () => {
+        const details = calculateMatchScoreDetails(
+            {
+                title: '深藍',
+                artist: 'ルルティア',
+                album: 'NODE from R',
+                durationMs: 200000
+            },
+            {
+                id: 601,
+                name: '深蓝',
+                artists: [{ id: 1, name: 'RURUTIA' }],
+                album: { id: 1, name: 'NODE from R' },
+                duration: 200000
+            }
+        );
+
+        expect(details.titleMatched).toBe(true);
+        expect(details.artistMatched).toBe(true);
+        expect(details.score).toBeGreaterThanOrEqual(95);
     });
 });
 
