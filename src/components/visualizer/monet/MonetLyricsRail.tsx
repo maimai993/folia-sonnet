@@ -388,8 +388,8 @@ const MonetWordSweep: React.FC<{
                 const decayDuration = Math.max(0.18, glowTailEndTime - glowPeakTime);
                 const decayProgress = Math.min(1, Math.max(0, (latest - glowPeakTime) / decayDuration));
                 const remaining = 1 - decayProgress;
-                // 使用平方缓出曲线 (ease-out decay)，让发光衰退初期较快，尾部逐渐变暗并平滑消失
-                intensity = remaining * remaining;
+                // 使用 Smoothstep (ease-in-out)，让衰退初期缓慢（有“驻留”感），然后再平滑消失
+                intensity = remaining * remaining * (3 - 2 * remaining);
             }
 
             if (intensity <= 0) return 'none';
