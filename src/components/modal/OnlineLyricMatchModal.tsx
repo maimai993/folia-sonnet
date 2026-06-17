@@ -225,7 +225,11 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                                 return (
                                     <button
                                         key={t.id}
-                                        onClick={() => setSource(t.id as any)}
+                                        onClick={() => {
+                                            setSelectedResult(null);
+                                            setSearchResults([]);
+                                            setSource(t.id as any);
+                                        }}
                                         className={`pb-2 border-b-2 text-sm transition-all px-1 cursor-pointer ${activeTabClass}`}
                                     >
                                         {t.label}

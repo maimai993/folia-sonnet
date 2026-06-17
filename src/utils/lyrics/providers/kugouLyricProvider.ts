@@ -151,6 +151,7 @@ async function requestKugou(url: string, params: Record<string, any>, module: st
 export async function searchKugouLyrics(keyword: string, page = 1, pageSize = 20): Promise<SongResult[]> {
   const pagesize = pageSize;
   const searchKeyword = buildKugouLyricSearchQuery(keyword);
+  if (!searchKeyword) return [];
   const params = {
     sorttype: '0',
     keyword: searchKeyword,

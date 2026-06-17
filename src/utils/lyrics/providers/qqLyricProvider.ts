@@ -89,6 +89,9 @@ function detectIsQrc(content: string): boolean {
  * Searches songs on QQ Music.
  */
 export async function searchQQLyrics(keyword: string, page = 1, pageSize = 20): Promise<SongResult[]> {
+  const safeKeyword = keyword.trim();
+  if (!safeKeyword) return [];
+
   const pagesize = pageSize;
   const param = {
     search_id: String(
@@ -97,7 +100,7 @@ export async function searchQQLyrics(keyword: string, page = 1, pageSize = 20): 
       )
     ),
     remoteplace: "search.android.keyboard",
-    query: keyword,
+    query: safeKeyword.length > 60 ? safeKeyword.slice(0, 60) : safeKeyword,
     search_type: 0, // 0 = SONG
     num_per_page: pagesize,
     page_num: page,
