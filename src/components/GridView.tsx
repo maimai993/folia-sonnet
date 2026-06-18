@@ -169,7 +169,7 @@ export const PolaroidCard = React.memo<{
 
         return (
             <div
-                className="rounded-xl p-3 flex flex-col items-center border backdrop-blur-md transition-shadow duration-300 shadow-lg hover:shadow-2xl theme-polaroid-card"
+                className="rounded-xl p-3 flex flex-col items-center border transition-shadow duration-300 shadow-lg hover:shadow-2xl theme-polaroid-card"
                 style={{
                     width: dynamicWidth,
                     minHeight: dynamicHeight,
