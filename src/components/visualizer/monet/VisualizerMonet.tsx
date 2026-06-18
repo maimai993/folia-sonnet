@@ -130,14 +130,16 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
             audioBands={audioBands}
             sharedProps={props}
         >
-            <motion.div
-                key={`decor-${introKey}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 2.2, ease: 'easeOut' }}
-            >
-                <MonetFloatingDecor theme={theme} staticMode={staticMode} />
-            </motion.div>
+            {showText && (
+                <motion.div
+                    key={`decor-${introKey}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 2.2, ease: 'easeOut' }}
+                >
+                    <MonetFloatingDecor theme={theme} staticMode={staticMode} />
+                </motion.div>
+            )}
 
             <div className="relative z-10 flex h-full w-full items-center justify-center overflow-hidden">
                 <div className="flex h-full w-full max-w-[1520px] flex-row items-center overflow-hidden">
