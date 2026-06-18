@@ -223,6 +223,11 @@ declare global {
     updatedAt: number;
   }
 
+  interface ElectronRemoteControlDragPoint {
+    screenX: number;
+    screenY: number;
+  }
+
   interface StageMediaSession {
     id: string;
     title: string;
@@ -315,6 +320,9 @@ declare global {
       closeRemoteControl: () => Promise<boolean>;
       getRemoteControlAlwaysOnTop: () => Promise<boolean>;
       setRemoteControlAlwaysOnTop: (alwaysOnTop: boolean) => Promise<boolean>;
+      startRemoteControlDrag: (point: ElectronRemoteControlDragPoint) => Promise<boolean>;
+      moveRemoteControlDrag: (point: ElectronRemoteControlDragPoint) => Promise<boolean>;
+      endRemoteControlDrag: () => Promise<boolean>;
       publishRemoteControlSnapshot: (snapshot: ElectronRemoteControlSnapshot) => Promise<boolean>;
       getRemoteControlSnapshot: () => Promise<ElectronRemoteControlSnapshot | null>;
       sendRemoteControlCommand: (command: ElectronRemoteControlCommand) => Promise<boolean>;
