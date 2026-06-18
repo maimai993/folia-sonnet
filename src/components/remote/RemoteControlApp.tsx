@@ -33,6 +33,7 @@ const formatTime = (seconds: number) => {
 const REMOTE_CONTROL_DOCUMENT_TITLE = 'Folia Remote';
 const REMOTE_VIDEO_EXPORT_PRESET_VALUES_STORAGE_KEY = 'remote_video_export_preset_values';
 const REMOTE_BACKGROUND_MODE_STORAGE_KEY = 'remote_background_mode';
+const REMOTE_TITLEBAR_REVEAL_THRESHOLD = 44;
 
 type BackgroundMode = 'default' | 'cover' | 'transparent';
 
@@ -112,9 +113,6 @@ const RemoteControlApp: React.FC = () => {
     const [showLyricsOverlay, setShowLyricsOverlay] = useState(false);
     const isDraggingRef = useRef(false);
     const lastSeekTimeRef = useRef(0);
-    const remoteWindowDragPointerIdRef = useRef<number | null>(null);
-    const remoteWindowDragFrameRef = useRef<number | null>(null);
-    const remoteWindowDragLastPointRef = useRef<ElectronRemoteControlDragPoint | null>(null);
     const exportPresets = useMemo(() => createVideoExportPresets(presetValues), [presetValues]);
     const selectedPreset = exportPresets.find(preset => preset.id === selectedPresetId) ?? exportPresets[1];
 
@@ -163,14 +161,18 @@ const RemoteControlApp: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        const handleMouseMove = (event: MouseEvent) => {
+            const nextRevealed = event.clientY <= REMOTE_TITLEBAR_REVEAL_THRESHOLD;
+            setWindowControlsRevealed(prev => (prev === nextRevealed ? prev : nextRevealed));
+        };
+        const handleMouseLeave = () => setWindowControlsRevealed(false);
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseleave', handleMouseLeave);
+
         return () => {
-            if (remoteWindowDragFrameRef.current !== null) {
-                cancelAnimationFrame(remoteWindowDragFrameRef.current);
-                remoteWindowDragFrameRef.current = null;
-            }
-            remoteWindowDragPointerIdRef.current = null;
-            remoteWindowDragLastPointRef.current = null;
-            void window.electron?.endRemoteControlDrag?.();
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseleave', handleMouseLeave);
         };
     }, []);
 
@@ -251,6 +253,7 @@ const RemoteControlApp: React.FC = () => {
     }), [snapshot.coverUrl]);
 
     const noDragStyle = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
+    const dragStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties;
 
     const progressPercent = duration > 0 ? (progressValue / duration) * 100 : 0;
 
@@ -347,84 +350,6 @@ const RemoteControlApp: React.FC = () => {
         });
     };
 
-    const queueRemoteWindowDragMove = (point: ElectronRemoteControlDragPoint) => {
-        remoteWindowDragLastPointRef.current = point;
-        if (remoteWindowDragFrameRef.current !== null) {
-            return;
-        }
-
-        remoteWindowDragFrameRef.current = requestAnimationFrame(() => {
-            remoteWindowDragFrameRef.current = null;
-            const nextPoint = remoteWindowDragLastPointRef.current;
-            if (nextPoint) {
-                void window.electron?.moveRemoteControlDrag?.(nextPoint);
-            }
-        });
-    };
-
-    const finishRemoteWindowDrag = (point?: ElectronRemoteControlDragPoint) => {
-        remoteWindowDragPointerIdRef.current = null;
-        if (remoteWindowDragFrameRef.current !== null) {
-            cancelAnimationFrame(remoteWindowDragFrameRef.current);
-            remoteWindowDragFrameRef.current = null;
-        }
-        if (point) {
-            remoteWindowDragLastPointRef.current = point;
-        }
-
-        const finalPoint = remoteWindowDragLastPointRef.current;
-        remoteWindowDragLastPointRef.current = null;
-        const movePromise = finalPoint ? window.electron?.moveRemoteControlDrag?.(finalPoint) : null;
-        if (movePromise) {
-            void movePromise.finally(() => {
-                void window.electron?.endRemoteControlDrag?.();
-            });
-            return;
-        }
-
-        void window.electron?.endRemoteControlDrag?.();
-    };
-
-    // Keeps the custom titlebar hoverable while still allowing the frameless remote window to move.
-    const handleRemoteTitlebarPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (event.button !== 0) {
-            return;
-        }
-
-        event.preventDefault();
-        setWindowControlsRevealed(true);
-        remoteWindowDragPointerIdRef.current = event.pointerId;
-        const startPoint = { screenX: event.screenX, screenY: event.screenY };
-        remoteWindowDragLastPointRef.current = startPoint;
-        try {
-            event.currentTarget.setPointerCapture(event.pointerId);
-        } catch {
-            // Pointer capture can fail if the event target is already gone.
-        }
-        void window.electron?.startRemoteControlDrag?.(startPoint);
-    };
-
-    const handleRemoteTitlebarPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (remoteWindowDragPointerIdRef.current !== event.pointerId) {
-            return;
-        }
-
-        queueRemoteWindowDragMove({ screenX: event.screenX, screenY: event.screenY });
-    };
-
-    const handleRemoteTitlebarPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (remoteWindowDragPointerIdRef.current !== event.pointerId) {
-            return;
-        }
-
-        try {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-        } catch {
-            // Pointer capture may already be released by the platform.
-        }
-        finishRemoteWindowDrag({ screenX: event.screenX, screenY: event.screenY });
-    };
-
     return (
         <main
             className={`h-screen w-screen bg-transparent p-1 select-none transition-colors duration-300 ${isDaylight ? 'text-zinc-900' : 'text-white'
@@ -483,30 +408,20 @@ const RemoteControlApp: React.FC = () => {
 
                 <div
                     className="absolute inset-x-0 top-0 z-20 h-11"
-                    style={noDragStyle}
-                    onPointerDown={handleRemoteTitlebarPointerDown}
-                    onPointerMove={handleRemoteTitlebarPointerMove}
-                    onPointerUp={handleRemoteTitlebarPointerEnd}
-                    onPointerCancel={handleRemoteTitlebarPointerEnd}
-                    onMouseEnter={() => {
-                        setWindowControlsRevealed(true);
-                    }}
-                    onMouseLeave={() => {
-                        setWindowControlsRevealed(false);
-                    }}
+                    style={dragStyle}
                 >
                     <div
                         className={`absolute right-2.5 top-2.5 flex items-center gap-1 transition duration-200 ${windowControlsRevealed ? 'opacity-100' : 'opacity-0'
                             }`}
-                        style={noDragStyle}
+                        style={{
+                            ...noDragStyle,
+                            pointerEvents: windowControlsRevealed ? 'auto' : 'none',
+                        }}
                         onFocus={() => {
                             setWindowControlsRevealed(true);
                         }}
                         onMouseEnter={() => {
                             setWindowControlsRevealed(true);
-                        }}
-                        onPointerDown={(event) => {
-                            event.stopPropagation();
                         }}
                     >
                         <button

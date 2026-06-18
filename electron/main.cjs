@@ -41,7 +41,6 @@ let remoteControlWindow = null;
 let appTray = null;
 let latestRemoteControlSnapshot = null;
 let remoteControlAlwaysOnTop = false;
-let remoteControlDragState = null;
 let mainWindowAlwaysOnTop = false;
 let mainWindowClickThroughEnabled = false;
 let mainWindowClickThroughUnlockHover = false;
@@ -577,16 +576,6 @@ function isTrustedRemoteControlContents(webContents) {
     webContents &&
     webContents.id === remoteControlWindow.webContents.id
   );
-}
-
-function readRemoteControlDragPoint(point) {
-  const screenX = Number(point?.screenX);
-  const screenY = Number(point?.screenY);
-  if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) {
-    return null;
-  }
-
-  return { screenX, screenY };
 }
 
 function getMainWindowUrl() {
@@ -1892,7 +1881,6 @@ function createRemoteControlWindow() {
     if (remoteControlWindow === win) {
       remoteControlWindow = null;
     }
-    remoteControlDragState = null;
   });
 
   return win;
@@ -2457,68 +2445,6 @@ ipcMain.handle('remote-control-set-always-on-top', (event, nextAlwaysOnTop) => {
   applyRemoteControlAlwaysOnTop(remoteControlWindow);
 
   return remoteControlAlwaysOnTop;
-});
-
-ipcMain.handle('remote-control-drag-start', (event, point) => {
-  if (!isTrustedRemoteControlContents(event.sender)) {
-    throw new Error('Untrusted renderer attempted to drag the remote control window.');
-  }
-  if (!remoteControlWindow || remoteControlWindow.isDestroyed()) {
-    return false;
-  }
-
-  const dragPoint = readRemoteControlDragPoint(point);
-  if (!dragPoint) {
-    remoteControlDragState = null;
-    return false;
-  }
-
-  const [windowX, windowY] = remoteControlWindow.getPosition();
-  const { width, height } = remoteControlWindow.getBounds();
-  remoteControlDragState = {
-    pointerX: dragPoint.screenX,
-    pointerY: dragPoint.screenY,
-    windowX,
-    windowY,
-    width,
-    height,
-  };
-
-  return true;
-});
-
-ipcMain.handle('remote-control-drag-move', (event, point) => {
-  if (!isTrustedRemoteControlContents(event.sender)) {
-    throw new Error('Untrusted renderer attempted to drag the remote control window.');
-  }
-  if (!remoteControlDragState || !remoteControlWindow || remoteControlWindow.isDestroyed()) {
-    return false;
-  }
-
-  const dragPoint = readRemoteControlDragPoint(point);
-  if (!dragPoint) {
-    return false;
-  }
-
-  const nextX = Math.round(remoteControlDragState.windowX + dragPoint.screenX - remoteControlDragState.pointerX);
-  const nextY = Math.round(remoteControlDragState.windowY + dragPoint.screenY - remoteControlDragState.pointerY);
-  remoteControlWindow.setBounds({
-    x: nextX,
-    y: nextY,
-    width: remoteControlDragState.width,
-    height: remoteControlDragState.height,
-  }, false);
-
-  return true;
-});
-
-ipcMain.handle('remote-control-drag-end', (event) => {
-  if (!isTrustedRemoteControlContents(event.sender)) {
-    throw new Error('Untrusted renderer attempted to end remote control dragging.');
-  }
-
-  remoteControlDragState = null;
-  return true;
 });
 
 ipcMain.handle('remote-control-publish-snapshot', (event, snapshot) => {
