@@ -427,21 +427,15 @@ const RemoteControlApp: React.FC = () => {
 
     return (
         <main
-            className={`group h-screen w-screen bg-transparent p-1 select-none transition-colors duration-300 ${isDaylight ? 'text-zinc-900' : 'text-white'
+            className={`h-screen w-screen bg-transparent p-1 select-none transition-colors duration-300 ${isDaylight ? 'text-zinc-900' : 'text-white'
                 }`}
-            onMouseEnter={() => {
-                setWindowControlsRevealed(true);
-            }}
-            onMouseLeave={() => {
-                setWindowControlsRevealed(false);
-            }}
         >
             <div className={`relative flex h-full w-full rounded-[20px] border p-4 items-center justify-center overflow-hidden transition-colors duration-300 ${backgroundMode === 'transparent' ? 'border-transparent' : (isDaylight ? 'border-black/10' : 'border-white/10')
                 }`}>
                 {/* Transparent mode titlebar backdrop */}
                 {backgroundMode === 'transparent' && (
                     <div
-                        className={`absolute top-0 left-0 right-0 h-11 pointer-events-none transition-opacity duration-200 z-10 backdrop-blur-md ${windowControlsRevealed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        className={`absolute top-0 left-0 right-0 h-11 pointer-events-none transition-opacity duration-200 z-10 backdrop-blur-md ${windowControlsRevealed ? 'opacity-100' : 'opacity-0'
                             } ${isDaylight
                                 ? 'bg-white/40 border-b border-black/10 shadow-sm'
                                 : 'bg-black/40 border-b border-white/10 shadow-md'
@@ -502,7 +496,7 @@ const RemoteControlApp: React.FC = () => {
                     }}
                 >
                     <div
-                        className={`absolute right-2.5 top-2.5 flex items-center gap-1 transition duration-200 ${windowControlsRevealed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        className={`absolute right-2.5 top-2.5 flex items-center gap-1 transition duration-200 ${windowControlsRevealed ? 'opacity-100' : 'opacity-0'
                             }`}
                         style={noDragStyle}
                         onFocus={() => {
