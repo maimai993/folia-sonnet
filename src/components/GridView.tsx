@@ -6,6 +6,7 @@ import { SongResult, Theme } from '../types';
 import { isSongMarkedUnavailable, getSongUnavailableTagText, neteaseApi } from '../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { formatSongName } from '../utils/songNameFormatter';
+import { getSizedCoverUrl } from '../utils/coverUrl';
 import { colorWithAlpha } from './visualizer/colorMix';
 import { saveToCache, getFromCache, removeFromCache } from '../services/db';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
@@ -371,28 +372,7 @@ export const PolaroidCard = React.memo<{
         );
     }
 );
-/**
- * 获取低分辨率的封面图片 URL，通过 CDN 参数压缩图片分辨率，
- * 从而在拉伸时利用浏览器原生双线性插值实现无性能开销的模糊效果。
- */
-const getLowResCoverUrl = (url: string): string => {
-    if (!url) return '';
-    try {
-        const urlObj = new URL(url);
-        if (urlObj.hostname.includes('126.net')) {
-            return `${urlObj.origin}${urlObj.pathname}?param=150y150`;
-        } else if (urlObj.pathname.includes('getCoverArt')) {
-            urlObj.searchParams.set('size', '150');
-            return urlObj.toString();
-        }
-        return url;
-    } catch {
-        if (url.includes('126.net')) {
-            return url.split('?')[0] + '?param=150y150';
-        }
-        return url;
-    }
-};
+const getLowResCoverUrl = (url: string): string => getSizedCoverUrl(url, 150);
 
 const toHttps = (url?: string): string => {
     if (!url) return '';

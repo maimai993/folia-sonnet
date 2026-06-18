@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Play, Plus } from 'lucide-react';
 import { List as VirtualList } from 'react-window';
 import { useTranslation } from 'react-i18next';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 
 export interface SidePanelListProps<T> {
     isOpen: boolean;
@@ -167,7 +168,7 @@ export const TrackListItem = React.memo<{
                 <div className="relative w-10 h-10 shrink-0 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800">
                     {coverUrl && (
                         <img 
-                            src={`${coverUrl}?param=50y50`} 
+                            src={getSizedCoverUrl(coverUrl, 50)} 
                             alt={track.name}
                             className="w-full h-full object-cover"
                             loading="lazy"

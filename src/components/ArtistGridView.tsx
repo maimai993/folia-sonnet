@@ -8,6 +8,7 @@ import { buildLocalQueue } from '../services/playbackAdapters';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { neteaseApi } from '../services/netease';
 import { createCoverPlaceholder } from '../utils/coverPlaceholders';
+import { getSizedCoverUrl } from '../utils/coverUrl';
 import { PolaroidCard } from './GridView';
 import { HexGridCoord, CubeCoord, getHexCubicSpiral } from './folia-grid/hexViewport';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
@@ -137,24 +138,7 @@ export const buildArtistGridCoords = (
     return coords;
 };
 
-const getLowResCoverUrl = (url: string): string => {
-    if (!url) return '';
-    try {
-        const urlObj = new URL(url);
-        if (urlObj.hostname.includes('126.net')) {
-            return `${urlObj.origin}${urlObj.pathname}?param=150y150`;
-        } else if (urlObj.pathname.includes('getCoverArt')) {
-            urlObj.searchParams.set('size', '150');
-            return urlObj.toString();
-        }
-        return url;
-    } catch {
-        if (url.includes('126.net')) {
-            return url.split('?')[0] + '?param=150y150';
-        }
-        return url;
-    }
-};
+const getLowResCoverUrl = (url: string): string => getSizedCoverUrl(url, 150);
 
 const toHttps = (url?: string): string => {
     if (!url) return '';
