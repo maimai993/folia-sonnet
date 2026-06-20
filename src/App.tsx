@@ -38,6 +38,7 @@ import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useElectronPlaybackBridge } from './hooks/useElectronPlaybackBridge';
 import { useElectronVideoExportController } from './hooks/useElectronVideoExportController';
+import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { usePlaybackInteractionBridge } from './hooks/usePlaybackInteractionBridge';
@@ -704,6 +705,7 @@ export default function App() {
         syncNowPlayingClock,
         getNowPlayingDisplayTime,
         loadStageSessionIntoPlayback,
+        restoreStagePlaybackHandoff,
         clearPersistedStagePlaybackCache,
         openStagePlayer,
         leaveStagePlayback,
@@ -744,6 +746,65 @@ export default function App() {
         setDuration,
         setStatusMsg,
         navigateToPlayer,
+    });
+
+    const {
+        restoreStatus: windowPlaybackHandoffRestoreStatus,
+        toggleTransparentModeWithHandoff,
+    } = useElectronWindowPlaybackHandoff({
+        isElectronWindow,
+        audioQuality,
+        userId: user?.userId,
+        activePlaybackContext,
+        setActivePlaybackContext,
+        currentView,
+        navigateToPlayer,
+        currentSong,
+        lyrics,
+        cachedCoverUrl,
+        audioSrc,
+        playQueue,
+        isFmMode,
+        playerState,
+        duration,
+        currentLineIndex,
+        currentTime,
+        audioRef,
+        mainPlaybackSnapshotRef,
+        stageStatus,
+        stageSource,
+        stageLyricsClockRef,
+        nowPlayingTrack,
+        nowPlayingLyricPayload,
+        nowPlayingPaused,
+        nowPlayingProgressMs,
+        nowPlayingProgressQuality,
+        getNowPlayingDisplayTime,
+        restoreStagePlaybackHandoff,
+        setCurrentSong,
+        setLyrics,
+        setCachedCoverUrl,
+        setAudioSrc,
+        setPlayQueue,
+        setIsFmMode,
+        setIsLyricsLoading,
+        setPlayerState,
+        setCurrentLineIndex,
+        setDuration,
+        setStatusMsg,
+        blobUrlRef,
+        shouldAutoPlayRef: shouldAutoPlay,
+        pendingResumeTimeRef,
+        lastAudioRecoverySourceRef,
+        currentOnlineAudioUrlFetchedAtRef,
+        isPlayerChromeHidden,
+        setIsPlayerChromeHidden,
+        showTransparentWindowBorder,
+        setShowTransparentWindowBorder,
+        transparentPlayerBackground,
+        applyTransparentPlayerBackground: handleToggleTransparentPlayerBackground,
+        restoreCachedThemeForSong,
+        persistLastPlaybackCache,
     });
 
     const { openCurrentNavidromeAlbum, openCurrentNavidromeArtist } = createNavidromeNavigation({
@@ -844,6 +905,7 @@ export default function App() {
         clearPersistedStagePlaybackCache,
         loadLocalSongs,
         loadLocalPlaylists,
+        canRestoreSession: windowPlaybackHandoffRestoreStatus === 'none',
     });
 
     const {
@@ -1379,7 +1441,9 @@ export default function App() {
         setVisualizerMode: handleSetVisualizerMode,
         setVisualizerBackgroundMode: handleSetVisualizerBackgroundMode,
         setMonetBackgroundTuning: handleSetMonetBackgroundTuning,
-        toggleTransparentBackground: () => handleToggleTransparentPlayerBackground(!transparentPlayerBackground),
+        toggleTransparentBackground: () => {
+            void toggleTransparentModeWithHandoff(!transparentPlayerBackground);
+        },
         toggleDaylightMode,
         toggleAlternativeLyricSources: () => handleToggleAlternativeLyricSources(!enableAlternativeLyricSources),
         enableAlternativeLyricSources,
@@ -1405,8 +1469,8 @@ export default function App() {
         t,
         toggleLoop,
         togglePlay,
-        handleToggleTransparentPlayerBackground,
         transparentPlayerBackground,
+        toggleTransparentModeWithHandoff,
         toggleDaylightMode,
         handleToggleAlternativeLyricSources,
     ]);
@@ -2141,6 +2205,7 @@ export default function App() {
         loadStageSessionIntoPlayback,
         nowPlayingConnectionStatus,
         onAudioOutputDeviceChange: handleAudioOutputDeviceChange,
+        onToggleTransparentPlayerBackground: toggleTransparentModeWithHandoff,
     }), [
         activePlaybackContext,
         clearPersistedStagePlaybackCache,
@@ -2159,6 +2224,7 @@ export default function App() {
         stageStatus,
         themeController,
         themeParkSeedTheme,
+        toggleTransparentModeWithHandoff,
     ]);
     const appDialogsModel = useMemo(() => buildAppDialogsModel({
         statusMsg,

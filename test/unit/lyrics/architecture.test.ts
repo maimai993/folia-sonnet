@@ -29,7 +29,7 @@ describe('lyrics architecture', () => {
     it('keeps Netease call sites on the shared processing helper', async () => {
         const callSites = [
             'src/hooks/useLibraryPlaybackController.ts',
-            'src/hooks/useSessionRestoreController.ts',
+            'src/components/app/playback/restorePlaybackSource.ts',
             'src/services/prefetchService.ts',
             'src/services/onlinePlayback.ts',
             'src/services/localMusicService.ts',

@@ -1,4 +1,15 @@
-import type { LyricData, PlayerState, SongResult, StageLoopMode, StageLyricsSession, StageMediaSession, StageStatus } from '../types';
+import type {
+    LyricData,
+    NowPlayingLyricPayload,
+    NowPlayingTrackSnapshot,
+    PlayerState,
+    SongResult,
+    StageLoopMode,
+    StageLyricsSession,
+    StageMediaSession,
+    StageSource,
+    StageStatus,
+} from '../types';
 
 // Shared playback-specific types extracted from App.tsx.
 export type PlaybackNavigationOptions = {
@@ -46,6 +57,40 @@ export type NowPlayingClockState = {
     baseTimeSec: number;
     startedAtMs: number | null;
     durationSec: number;
+};
+
+export type WindowPlaybackHandoffUiState = {
+    currentView: 'home' | 'player';
+    playerChromeHidden: boolean;
+    mainWindowBorderVisible: boolean;
+    transparentModeEnabled: boolean;
+};
+
+export type WindowPlaybackHandoffNowPlayingState = {
+    track: NowPlayingTrackSnapshot | null;
+    lyricPayload: NowPlayingLyricPayload | null;
+    paused: boolean;
+    progressMs: number;
+    progressQuality: 'precise' | 'coarse';
+    displayTimeSec: number;
+};
+
+export type WindowPlaybackHandoffStageState = {
+    status: StageStatus | null;
+    source: StageSource | null;
+    playback: PlaybackSnapshot | null;
+    lyricsClock: StageLyricsClockState | null;
+};
+
+export type WindowPlaybackHandoff = {
+    version: 1;
+    capturedAt: number;
+    activePlaybackContext: 'main' | 'stage';
+    mainPlayback: PlaybackSnapshot | null;
+    activePlayback: PlaybackSnapshot | null;
+    stage: WindowPlaybackHandoffStageState;
+    nowPlaying: WindowPlaybackHandoffNowPlayingState;
+    ui: WindowPlaybackHandoffUiState;
 };
 
 export type StageEntryKeyOptions = {

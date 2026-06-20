@@ -34,6 +34,7 @@ type BuildSettingsDialogModelParams = {
     loadStageSessionIntoPlayback: (session: any) => Promise<void>;
     nowPlayingConnectionStatus?: NowPlayingConnectionStatus;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
+    onToggleTransparentPlayerBackground: (enabled: boolean) => Promise<void> | void;
 };
 
 // Builds the global settings dialog props without tying the modal to Home.
@@ -56,6 +57,7 @@ export const buildSettingsDialogModel = ({
     loadStageSessionIntoPlayback,
     nowPlayingConnectionStatus,
     onAudioOutputDeviceChange,
+    onToggleTransparentPlayerBackground,
 }: BuildSettingsDialogModelParams): SettingsDialogProps | null => {
     if (!state.isOpen) {
         return null;
@@ -81,6 +83,7 @@ export const buildSettingsDialogModel = ({
         stageSource,
         nowPlayingConnectionStatus,
         onAudioOutputDeviceChange,
+        onToggleTransparentPlayerBackground,
         initialTab: state.initialTab,
         initialSubview: state.initialSubview ?? null,
         onClose,

@@ -1034,9 +1034,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleTransparentPlayerBackground: (enable) => {
         setStoredBoolean('transparent_player_background', enable);
         set({ transparentPlayerBackground: enable });
-        if (window.electron?.setWindowTransparentMode) {
-            void window.electron.setWindowTransparentMode(enable);
-        }
         notify(get, {
             type: 'info',
             text: enable ? '播放页透明背景已开启' : '播放页透明背景已关闭',

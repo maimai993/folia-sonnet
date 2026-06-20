@@ -302,7 +302,18 @@ declare global {
       closeWindow: () => Promise<boolean>;
       isWindowMaximized: () => Promise<boolean>;
       getWindowTransparentMode: () => Promise<boolean>;
-      setWindowTransparentMode: (enabled: boolean) => Promise<boolean>;
+      setWindowTransparentMode: (
+        enabled: boolean,
+        handoff?: import('./types/appPlayback').WindowPlaybackHandoff | null,
+      ) => Promise<boolean>;
+      consumeWindowPlaybackHandoff: () => Promise<import('./types/appPlayback').WindowPlaybackHandoff | null>;
+      submitWindowPlaybackHandoff: (
+        requestId: string,
+        handoff: import('./types/appPlayback').WindowPlaybackHandoff | null,
+      ) => Promise<boolean>;
+      onWindowPlaybackHandoffRequested: (
+        callback: (payload: { requestId: string }) => void,
+      ) => () => void;
       getMainWindowClickThroughEnabled: () => Promise<boolean>;
       setMainWindowClickThroughEnabled: (enabled: boolean) => Promise<boolean>;
       setMainWindowClickThroughUnlockHover: (active: boolean) => Promise<boolean>;

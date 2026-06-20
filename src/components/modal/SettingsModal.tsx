@@ -50,6 +50,7 @@ interface SettingsModalProps {
     onToggleNowPlayingStage?: (enabled: boolean) => Promise<void> | void;
     nowPlayingConnectionStatus?: NowPlayingConnectionStatus;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
+    onToggleTransparentPlayerBackground?: (enabled: boolean) => Promise<void> | void;
     aiTheme?: DualTheme | null;
     customTheme?: DualTheme | null;
 }
@@ -84,6 +85,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     onToggleNowPlayingStage,
     nowPlayingConnectionStatus = 'disabled',
     onAudioOutputDeviceChange,
+    onToggleTransparentPlayerBackground,
     aiTheme,
     customTheme,
 }) => {
@@ -141,7 +143,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
         handleToggleHidePlayerTranslationSubtitle: onToggleHidePlayerTranslationSubtitle,
         handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
-        handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackground,
+        handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackgroundFromStore,
         handleToggleDisableVisualizerVignette: onToggleDisableVisualizerVignette,
         handleToggleDisableVisualizerGeometricBackground: onToggleDisableVisualizerGeometricBackground,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
@@ -188,6 +190,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetHomeLayoutStyle: onChangeHomeLayoutStyle,
         handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
     } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    const resolvedToggleTransparentPlayerBackground = onToggleTransparentPlayerBackground ?? onToggleTransparentPlayerBackgroundFromStore;
     const setIsSubSettingsViewOpen = useSettingsUiStore(state => state.setIsSubSettingsViewOpen);
     const [activeTab, setActiveTab] = useState<'help' | 'options'>(initialTab);
     const [showVisPlayground, setShowVisPlayground] = useState(false);
@@ -2172,7 +2175,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onOpenVisPlayground={() => setShowVisPlayground(true)}
                         onToggleCustomThemePreferred={onToggleCustomThemePreferred}
                         onToggleSongThemeAutoSwitch={onToggleSongThemeAutoSwitch}
-                        onToggleTransparentPlayerBackground={onToggleTransparentPlayerBackground}
+                        onToggleTransparentPlayerBackground={resolvedToggleTransparentPlayerBackground}
                         onSaveCustomTheme={onSaveCustomTheme}
                         settingsCardClass={settingsCardClass}
                         songThemeAutoSwitchEnabled={songThemeAutoSwitchEnabled}

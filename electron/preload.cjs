@@ -31,7 +31,14 @@ contextBridge.exposeInMainWorld('electron', {
     closeWindow: () => ipcRenderer.invoke('window-close'),
     isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
     getWindowTransparentMode: () => ipcRenderer.invoke('window-get-transparent-mode'),
-    setWindowTransparentMode: (enabled) => ipcRenderer.invoke('window-set-transparent-mode', enabled),
+    setWindowTransparentMode: (enabled, handoff) => ipcRenderer.invoke('window-set-transparent-mode', enabled, handoff),
+    consumeWindowPlaybackHandoff: () => ipcRenderer.invoke('window-playback-handoff-consume'),
+    submitWindowPlaybackHandoff: (requestId, handoff) => ipcRenderer.invoke('window-playback-handoff-submit', requestId, handoff),
+    onWindowPlaybackHandoffRequested: (callback) => {
+        const listener = (_event, payload) => callback(payload);
+        ipcRenderer.on('window-playback-handoff-requested', listener);
+        return () => ipcRenderer.removeListener('window-playback-handoff-requested', listener);
+    },
     getMainWindowClickThroughEnabled: () => ipcRenderer.invoke('window-get-click-through'),
     setMainWindowClickThroughEnabled: (enabled) => ipcRenderer.invoke('window-set-click-through', enabled),
     setMainWindowClickThroughUnlockHover: (active) => ipcRenderer.invoke('window-set-click-through-unlock-hover', active),

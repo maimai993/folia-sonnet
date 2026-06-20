@@ -4,6 +4,7 @@ const path = require('path');
 const Store = require('electron-store').default || require('electron-store');
 const crypto = require('crypto');
 const { createStageApi } = require('./stageApi.cjs');
+const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
 const isAppImageRuntime =
   process.platform === 'linux' &&
@@ -47,6 +48,8 @@ let mainWindowClickThroughUnlockHover = false;
 let mainWindowSkipTaskbarEnabled = false;
 let videoExportWindowRestoreState = null;
 let autoUpdater = null;
+const windowPlaybackHandoffStore = createWindowPlaybackHandoffStore();
+const pendingWindowPlaybackHandoffRequests = new Map();
 const DEFAULT_WINDOW_BOUNDS = {
   width: 1200,
   height: 800,
@@ -69,6 +72,7 @@ const FOLIA_RELEASES_URL = 'https://github.com/chthollyphile/folia-major/release
 const FOLIA_LATEST_RELEASE_API_URL = 'https://api.github.com/repos/chthollyphile/folia-major/releases/latest';
 const WINDOWS_APP_USER_MODEL_ID = 'top.izuna.foliamajor';
 const REMOTE_CONTROL_WINDOW_TITLE = 'Folia Remote';
+const WINDOW_PLAYBACK_HANDOFF_REQUEST_TIMEOUT_MS = 800;
 const bundledAppIconPath = path.join(__dirname, '../build/icon.png');
 const extraResourceIconPath = path.join(process.resourcesPath, 'icon.png');
 const bundledMacTrayIconPath = path.join(__dirname, '../build/trayTemplate.png');
@@ -1751,6 +1755,67 @@ function isTransparentPlayerBackgroundEnabled() {
   return Boolean(store.get(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY));
 }
 
+function rememberWindowPlaybackHandoff(handoff) {
+  if (!handoff) {
+    return false;
+  }
+
+  return windowPlaybackHandoffStore.save(handoff);
+}
+
+function resolvePendingWindowPlaybackHandoffRequest(requestId, handoff) {
+  const pendingRequest = pendingWindowPlaybackHandoffRequests.get(requestId);
+  rememberWindowPlaybackHandoff(handoff);
+
+  if (!pendingRequest) {
+    return false;
+  }
+
+  clearTimeout(pendingRequest.timeoutId);
+  pendingWindowPlaybackHandoffRequests.delete(requestId);
+  pendingRequest.resolve(handoff || null);
+  return true;
+}
+
+function requestWindowPlaybackHandoff(timeoutMs = WINDOW_PLAYBACK_HANDOFF_REQUEST_TIMEOUT_MS) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return Promise.resolve(null);
+  }
+
+  const requestId = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : crypto.randomBytes(16).toString('hex');
+
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      pendingWindowPlaybackHandoffRequests.delete(requestId);
+      resolve(null);
+    }, timeoutMs);
+
+    pendingWindowPlaybackHandoffRequests.set(requestId, {
+      resolve,
+      timeoutId,
+    });
+
+    try {
+      mainWindow.webContents.send('window-playback-handoff-requested', { requestId });
+    } catch (error) {
+      clearTimeout(timeoutId);
+      pendingWindowPlaybackHandoffRequests.delete(requestId);
+      console.warn('[Electron] Failed to request window playback handoff', error);
+      resolve(null);
+    }
+  });
+}
+
+function clearPendingWindowPlaybackHandoffRequests() {
+  for (const [requestId, pendingRequest] of pendingWindowPlaybackHandoffRequests.entries()) {
+    clearTimeout(pendingRequest.timeoutId);
+    pendingRequest.resolve(null);
+    pendingWindowPlaybackHandoffRequests.delete(requestId);
+  }
+}
+
 function patchRemoteControlSnapshot(patch) {
   if (!latestRemoteControlSnapshot) {
     return;
@@ -1996,8 +2061,9 @@ function createWindow(options = {}) {
   return win;
 }
 
-function recreateMainWindowWithTransparencyMode(enabled) {
+function recreateMainWindowWithTransparencyMode(enabled, handoff = null) {
   store.set(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, Boolean(enabled));
+  rememberWindowPlaybackHandoff(handoff);
 
   if (!mainWindow || mainWindow.isDestroyed()) {
     const createdWindow = createWindow();
@@ -2019,6 +2085,23 @@ function recreateMainWindowWithTransparencyMode(enabled) {
   });
 
   return nextWindow;
+}
+
+async function setMainWindowTransparentMode(enabled, handoff = null) {
+  const nextEnabled = Boolean(enabled);
+  patchRemoteControlSnapshot({
+    transparentModeEnabled: nextEnabled,
+    mainWindowClickThroughEnabled: false,
+  });
+  mainWindowClickThroughEnabled = false;
+  mainWindowClickThroughUnlockHover = false;
+  recreateMainWindowWithTransparencyMode(nextEnabled, handoff);
+  return true;
+}
+
+async function setMainWindowTransparentModeFromRemote(enabled) {
+  const handoff = await requestWindowPlaybackHandoff();
+  return setMainWindowTransparentMode(enabled, handoff);
 }
 
 app.whenReady().then(async () => {
@@ -2072,9 +2155,14 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  clearPendingWindowPlaybackHandoffRequests();
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  clearPendingWindowPlaybackHandoffRequests();
 });
 
 // Settings Management IPC
@@ -2304,19 +2392,32 @@ ipcMain.handle('window-get-transparent-mode', (event) => {
   return isTransparentPlayerBackgroundEnabled();
 });
 
-ipcMain.handle('window-set-transparent-mode', (event, enabled) => {
+ipcMain.handle('window-set-transparent-mode', async (event, enabled, handoff) => {
   if (!isTrustedMainWindowContents(event.sender)) {
     return false;
   }
 
-  patchRemoteControlSnapshot({
-    transparentModeEnabled: Boolean(enabled),
-    mainWindowClickThroughEnabled: false,
-  });
-  mainWindowClickThroughEnabled = false;
-  mainWindowClickThroughUnlockHover = false;
-  recreateMainWindowWithTransparencyMode(Boolean(enabled));
-  return true;
+  return setMainWindowTransparentMode(Boolean(enabled), handoff);
+});
+
+ipcMain.handle('window-playback-handoff-consume', (event) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    return null;
+  }
+
+  return windowPlaybackHandoffStore.consume();
+});
+
+ipcMain.handle('window-playback-handoff-submit', (event, requestId, handoff) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    return false;
+  }
+
+  if (typeof requestId !== 'string' || !requestId.trim()) {
+    return rememberWindowPlaybackHandoff(handoff);
+  }
+
+  return resolvePendingWindowPlaybackHandoffRequest(requestId, handoff);
 });
 
 ipcMain.handle('window-get-click-through', (event) => {
@@ -2491,25 +2592,11 @@ ipcMain.handle('remote-control-send-command', (event, command) => {
 
   if (command?.type === 'set-transparent-mode-enabled') {
     const nextEnabled = Boolean(command.enabled);
-    patchRemoteControlSnapshot({
-      transparentModeEnabled: nextEnabled,
-      mainWindowClickThroughEnabled: false,
-    });
-    mainWindowClickThroughEnabled = false;
-    mainWindowClickThroughUnlockHover = false;
-    recreateMainWindowWithTransparencyMode(nextEnabled);
-    return true;
+    return setMainWindowTransparentModeFromRemote(nextEnabled);
   }
 
   if (command?.type === 'disable-transparent-mode') {
-    patchRemoteControlSnapshot({
-      transparentModeEnabled: false,
-      mainWindowClickThroughEnabled: false,
-    });
-    mainWindowClickThroughEnabled = false;
-    mainWindowClickThroughUnlockHover = false;
-    recreateMainWindowWithTransparencyMode(false);
-    return true;
+    return setMainWindowTransparentModeFromRemote(false);
   }
 
   if (command?.type === 'resize-main-window') {

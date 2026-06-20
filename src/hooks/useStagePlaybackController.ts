@@ -34,6 +34,7 @@ import type {
     NowPlayingClockState,
     PlaybackSnapshot,
     StageLyricsClockState,
+    WindowPlaybackHandoff,
 } from '../types/appPlayback';
 
 // src/hooks/useStagePlaybackController.ts
@@ -541,7 +542,7 @@ export function useStagePlaybackController({
         };
     }, []);
 
-    const loadStageSessionIntoPlayback = useCallback(async (session: StageMediaSession | null, options: { autoplay?: boolean; } = {}) => {
+    const loadStageSessionIntoPlayback = useCallback(async (session: StageMediaSession | null, options: LoadPlaybackOptions = {}) => {
         if (!session) {
             currentSongRef.current = null;
             resetStageLyricsClock();
@@ -551,8 +552,6 @@ export function useStagePlaybackController({
 
         resetStageLyricsClock();
         const stageSong = buildStagePlaybackSong(session);
-        shouldAutoPlayRef.current = options.autoplay ?? true;
-        pendingResumeTimeRef.current = null;
         currentSongRef.current = stageSong.id;
         setIsLyricsLoading(false);
         let parsedLyrics: LyricData | null = null;
@@ -573,9 +572,13 @@ export function useStagePlaybackController({
         setAudioSrc(session.audioSrc);
         setPlayQueue([]);
         setIsFmMode(false);
-        setPlayerState(PlayerState.IDLE);
+        pendingResumeTimeRef.current = typeof options.resumeTime === 'number'
+            ? Math.max(0, options.resumeTime)
+            : null;
+        shouldAutoPlayRef.current = options.playerState === PlayerState.PLAYING || (options.autoplay ?? true);
+        setPlayerState(options.playerState ?? PlayerState.IDLE);
         setCurrentLineIndex(-1);
-        currentTime.set(0);
+        currentTime.set(typeof options.resumeTime === 'number' ? Math.max(0, options.resumeTime) : 0);
         setDuration(Math.max(0, (session.durationMs || 0) / 1000));
     }, [
         buildStagePlaybackSong,
@@ -757,6 +760,97 @@ export function useStagePlaybackController({
         setLyrics,
         setPlayQueue,
         shouldAutoPlayRef,
+        syncNowPlayingDisplaySurface,
+    ]);
+
+    const restoreStagePlaybackHandoff = useCallback(async (handoff: WindowPlaybackHandoff) => {
+        const nextStageStatus = handoff.stage.status;
+        const stageSnapshot = handoff.stage.playback ?? handoff.activePlayback;
+        mainPlaybackSnapshotRef.current = handoff.mainPlayback;
+
+        if (nextStageStatus) {
+            setStageStatus(nextStageStatus);
+        }
+
+        if (handoff.activePlaybackContext !== 'stage') {
+            return;
+        }
+
+        setActivePlaybackContext('stage');
+
+        if (handoff.stage.source === 'now-playing') {
+            const nextNowPlaying = handoff.nowPlaying;
+            nowPlayingTrackRef.current = nextNowPlaying.track;
+            nowPlayingLyricPayloadRef.current = nextNowPlaying.lyricPayload;
+            nowPlayingPausedRef.current = nextNowPlaying.paused;
+            nowPlayingProgressMsRef.current = Math.max(0, nextNowPlaying.progressMs);
+            nowPlayingProgressQualityRef.current = nextNowPlaying.progressQuality;
+            setNowPlayingTrack(nextNowPlaying.track);
+            setNowPlayingLyricPayload(nextNowPlaying.lyricPayload);
+            setNowPlayingPaused(nextNowPlaying.paused);
+            setNowPlayingProgressMs(Math.max(0, nextNowPlaying.progressMs));
+            setNowPlayingProgressQuality(nextNowPlaying.progressQuality);
+
+            const durationSec = Math.max(
+                0,
+                (nextNowPlaying.track?.durationMs ?? nextNowPlaying.lyricPayload?.durationMs ?? 0) / 1000,
+            );
+            const fallbackDisplayTime = Math.max(0, nextNowPlaying.progressMs / 1000);
+            const displayTimeSec = clampNowPlayingTimeSec(
+                Number.isFinite(nextNowPlaying.displayTimeSec)
+                    ? nextNowPlaying.displayTimeSec
+                    : fallbackDisplayTime,
+                durationSec || fallbackDisplayTime,
+            );
+            syncNowPlayingClock(displayTimeSec, Math.max(durationSec, displayTimeSec), nextNowPlaying.paused);
+            currentTime.set(displayTimeSec);
+            setDuration(Math.max(durationSec, stageSnapshot?.duration ?? 0, displayTimeSec));
+            setPlayerState(nextNowPlaying.paused ? PlayerState.PAUSED : PlayerState.PLAYING);
+
+            if (nextNowPlaying.track || nextNowPlaying.lyricPayload) {
+                nowPlayingContentLoadKeyRef.current = null;
+                const requestId = nowPlayingContentLoadRequestIdRef.current + 1;
+                nowPlayingContentLoadRequestIdRef.current = requestId;
+                await loadNowPlayingIntoPlayback(nextNowPlaying.track, nextNowPlaying.lyricPayload, requestId);
+                syncNowPlayingDisplaySurface(displayTimeSec);
+            } else if (stageSnapshot) {
+                applyPlaybackSnapshot(stageSnapshot);
+            }
+            return;
+        }
+
+        const nextEntryKind = nextStageStatus?.activeEntryKind ?? null;
+        if (nextEntryKind === 'lyrics') {
+            await loadStageLyricsIntoPlayback(nextStageStatus?.lyricsSession ?? null, {
+                resumeTime: stageSnapshot?.currentTime,
+                playerState: stageSnapshot?.playerState ?? PlayerState.PAUSED,
+                autoplay: stageSnapshot?.playerState === PlayerState.PLAYING,
+            });
+            return;
+        }
+
+        if (nextEntryKind === 'media') {
+            await loadStageSessionIntoPlayback(nextStageStatus?.mediaSession ?? null, {
+                resumeTime: stageSnapshot?.currentTime,
+                playerState: stageSnapshot?.playerState ?? PlayerState.IDLE,
+                autoplay: stageSnapshot?.playerState === PlayerState.PLAYING,
+            });
+            return;
+        }
+
+        if (stageSnapshot) {
+            applyPlaybackSnapshot(stageSnapshot);
+        }
+    }, [
+        applyPlaybackSnapshot,
+        currentTime,
+        loadNowPlayingIntoPlayback,
+        loadStageLyricsIntoPlayback,
+        loadStageSessionIntoPlayback,
+        setActivePlaybackContext,
+        setDuration,
+        setPlayerState,
+        syncNowPlayingClock,
         syncNowPlayingDisplaySurface,
     ]);
 
@@ -1230,6 +1324,7 @@ export function useStagePlaybackController({
         syncNowPlayingClock,
         getNowPlayingDisplayTime,
         loadStageSessionIntoPlayback,
+        restoreStagePlaybackHandoff,
         clearPersistedStagePlaybackCache,
         openStagePlayer,
         leaveStagePlayback,
