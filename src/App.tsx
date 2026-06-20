@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { ChevronLeft } from 'lucide-react';
 import { loadCachedOrFetchCover } from './services/coverCache';
 import VisualizerRenderer from './components/visualizer/VisualizerRenderer';
 import CommandPalette from './components/command-palette/CommandPalette';
@@ -2487,6 +2488,22 @@ export default function App() {
                     />
                 )}
             </div>
+
+            {currentView === 'player' && isObsBrowserSourceRendering && (
+                <div className="absolute left-0 top-0 z-30 h-[120px] w-[120px] pointer-events-auto group">
+                    <button
+                        type="button"
+                        aria-label={t('ui.backToHome')}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            navigateToHome();
+                        }}
+                        className="absolute top-6 left-6 h-10 w-10 rounded-full flex items-center justify-center transition-all duration-200 ease-out backdrop-blur-md bg-black/20 hover:bg-white/10 text-white/60 opacity-0 scale-[0.92] -translate-x-1.5 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:translate-x-0 group-hover:pointer-events-auto"
+                    >
+                        <ChevronLeft size={20} />
+                    </button>
+                </div>
+            )}
 
             {currentView === 'player' && activePlaybackContext === 'stage' && (!stageActiveEntryKind || stageSource === 'now-playing') && !currentSong && (
                 <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center px-6">
