@@ -173,7 +173,10 @@ export function useElectronWindowPlaybackHandoff({
     const [restoreStatus, setRestoreStatus] = useState<WindowPlaybackHandoffRestoreStatus>(() => (
         isElectronWindow && window.electron?.consumeWindowPlaybackHandoff ? 'checking' : 'none'
     ));
-    const hasCheckedRestoreHandoffRef = useRef(false);
+    const consumeHandoffPromiseRef = useRef<Promise<WindowPlaybackHandoff | null> | null>(null);
+    const hasCompletedRestoreCheckRef = useRef(false);
+    const isRestoringHandoffRef = useRef(false);
+    const restoreWindowPlaybackHandoffRef = useRef<((handoff: WindowPlaybackHandoff) => Promise<boolean>) | null>(null);
 
     const captureWindowPlaybackHandoff = useCallback((): WindowPlaybackHandoff => {
         const activePlayback = buildPlaybackSnapshot({
@@ -369,6 +372,7 @@ export function useElectronWindowPlaybackHandoff({
         setIsPlayerChromeHidden,
         setShowTransparentWindowBorder,
     ]);
+    restoreWindowPlaybackHandoffRef.current = restoreWindowPlaybackHandoff;
 
     const toggleTransparentModeWithHandoff = useCallback(async (enabled: boolean) => {
         if (isElectronWindow && window.electron?.setWindowTransparentMode) {
@@ -394,40 +398,41 @@ export function useElectronWindowPlaybackHandoff({
             return;
         }
 
-        if (hasCheckedRestoreHandoffRef.current) {
+        if (hasCompletedRestoreCheckRef.current || isRestoringHandoffRef.current) {
             return;
         }
-        hasCheckedRestoreHandoffRef.current = true;
 
-        let disposed = false;
+        isRestoringHandoffRef.current = true;
+
+        if (!consumeHandoffPromiseRef.current) {
+            consumeHandoffPromiseRef.current = window.electron.consumeWindowPlaybackHandoff();
+        }
 
         const consumeHandoff = async () => {
             try {
-                const handoff = await window.electron!.consumeWindowPlaybackHandoff();
+                const handoff = await consumeHandoffPromiseRef.current;
+
                 if (!handoff) {
-                    if (!disposed) {
-                        setRestoreStatus('none');
-                    }
+                    hasCompletedRestoreCheckRef.current = true;
+                    isRestoringHandoffRef.current = false;
+                    setRestoreStatus('none');
                     return;
                 }
 
-                const restored = await restoreWindowPlaybackHandoff(handoff);
-                if (!disposed) {
-                    setRestoreStatus(restored ? 'restored' : 'none');
-                }
+                const restored = await restoreWindowPlaybackHandoffRef.current?.(handoff) ?? false;
+                hasCompletedRestoreCheckRef.current = true;
+                isRestoringHandoffRef.current = false;
+                setRestoreStatus(restored ? 'restored' : 'none');
             } catch (error) {
                 console.warn('[Electron] Failed to consume window playback handoff', error);
-                if (!disposed) {
-                    setRestoreStatus('none');
-                }
+                hasCompletedRestoreCheckRef.current = true;
+                isRestoringHandoffRef.current = false;
+                setRestoreStatus('none');
             }
         };
 
         void consumeHandoff();
-        return () => {
-            disposed = true;
-        };
-    }, [isElectronWindow, restoreWindowPlaybackHandoff]);
+    }, [isElectronWindow]);
 
     return {
         captureWindowPlaybackHandoff,
