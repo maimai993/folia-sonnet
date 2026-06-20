@@ -375,37 +375,21 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                             </div>
 
                             {navidromeConfigured && navidromeServerProfile && (
-                                <div className="border-t border-white/10 pt-3 space-y-2">
-                                    <div className="text-[10px] uppercase tracking-[0.16em] opacity-40" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('navidrome.serverProfile') || 'Server Profile'}
-                                    </div>
-                                    <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs">
-                                        <span className="opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('navidrome.server') || 'Server'}
-                                        </span>
-                                        <span className="truncate" style={{ color: 'var(--text-primary)' }} title={navidromeServerLabel}>
-                                            {navidromeServerLabel}
-                                        </span>
-                                        <span className="opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('navidrome.user') || 'User'}
-                                        </span>
-                                        <span className="truncate" style={{ color: 'var(--text-primary)' }} title={navidromeServerProfile.user?.username || navidromeUsername}>
+                                <div className="border-t border-white/10 pt-3">
+                                    <div className="flex items-center justify-center text-xs opacity-80 overflow-hidden whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
+                                        <span className="truncate" title={navidromeServerLabel}>{navidromeServerLabel}</span>
+                                        <span className="opacity-50 mx-1.5 shrink-0">·</span>
+                                        <span className="truncate" title={navidromeServerProfile.user?.username || navidromeUsername}>
                                             {navidromeServerProfile.user?.username || navidromeUsername}
                                         </span>
-                                        <span className="opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('navidrome.openSubsonic') || 'OpenSubsonic'}
-                                        </span>
-                                        <span style={{ color: 'var(--text-primary)' }}>
-                                            {navidromeServerProfile.openSubsonic
-                                                ? `${t('navidrome.enabled') || 'Enabled'} · ${navidromeExtensionCount}`
-                                                : (t('navidrome.notAvailable') || 'Not available')}
-                                        </span>
-                                        <span className="opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('navidrome.musicFolders') || 'Libraries'}
-                                        </span>
-                                        <span style={{ color: 'var(--text-primary)' }}>
-                                            {navidromeFolderCount}
-                                        </span>
+                                        {navidromeServerProfile.openSubsonic && (
+                                            <>
+                                                <span className="opacity-50 mx-1.5 shrink-0">·</span>
+                                                <span className="shrink-0">OpenSubsonic ({navidromeExtensionCount})</span>
+                                            </>
+                                        )}
+                                        <span className="opacity-50 mx-1.5 shrink-0">·</span>
+                                        <span className="shrink-0">{t('navidrome.musicFolders') || 'Libraries'} ({navidromeFolderCount})</span>
                                     </div>
                                 </div>
                             )}
