@@ -19,10 +19,6 @@ type AlbumOverlayProps = React.ComponentProps<typeof AlbumView>;
 type ArtistOverlayProps = React.ComponentProps<typeof ArtistView>;
 
 export type AppOverlaysModel = {
-    homeOverlay?: {
-        isVisible: boolean;
-        content: React.ReactNode;
-    } | null;
     searchOverlay?: SearchOverlayProps | null;
     detailOverlay?: (
         | { type: 'playlist'; props: PlaylistOverlayProps }
@@ -39,7 +35,6 @@ type BuildAppOverlaysModelParams = {
     isSearchOpen: boolean;
     topOverlay: any;
     overlayStack: any[];
-    homeContent: React.ReactNode;
     theme: any;
     isDaylight: boolean;
     closeSearchView: () => void;
@@ -91,7 +86,6 @@ export const buildAppOverlaysModel = ({
     isSearchOpen,
     topOverlay,
     overlayStack,
-    homeContent,
     theme,
     isDaylight,
     closeSearchView,
@@ -135,9 +129,6 @@ export const buildAppOverlaysModel = ({
     onSeekMainAudio,
     noTrackText,
 }: BuildAppOverlaysModelParams): AppOverlaysModel => ({
-    homeOverlay: currentView === 'home' && !isOverlayVisible && !isSearchOpen
-        ? { isVisible: true, content: homeContent }
-        : null,
     searchOverlay: currentView === 'home'
         ? {
             theme,

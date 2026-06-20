@@ -1,5 +1,5 @@
 import React from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import FloatingPlayerControls from '../../FloatingPlayerControls';
 import SearchResultsOverlay from '../../SearchResultsOverlay';
 import DevDebugOverlay from '../../DevDebugOverlay';
@@ -15,7 +15,6 @@ type AppOverlaysProps = {
 
 const AppOverlays: React.FC<AppOverlaysProps> = ({ model }) => {
     const {
-        homeOverlay,
         searchOverlay,
         detailOverlay,
         debugOverlay,
@@ -24,20 +23,6 @@ const AppOverlays: React.FC<AppOverlaysProps> = ({ model }) => {
 
     return (
         <>
-            <AnimatePresence>
-                {homeOverlay?.isVisible && (
-                    <motion.div
-                        className="absolute inset-0 z-50"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.5, ease: 'easeInOut' }}
-                    >
-                        {homeOverlay.content}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
             {searchOverlay && <SearchResultsOverlay {...searchOverlay} />}
 
             <AnimatePresence>

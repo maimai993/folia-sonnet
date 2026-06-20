@@ -2023,14 +2023,12 @@ export default function App() {
         handlePlayerPanelArtistSelect,
         navigateDirectHome,
     ]);
-    const homeContent = useMemo(() => <Home model={homeModel} />, [homeModel]);
     const appOverlaysModel = useMemo(() => buildAppOverlaysModel({
         currentView,
         isOverlayVisible,
         isSearchOpen,
         topOverlay,
         overlayStack,
-        homeContent,
         theme,
         isDaylight,
         closeSearchView,
@@ -2093,7 +2091,6 @@ export default function App() {
         handleSearchResultAlbumSelect,
         handleSearchResultArtistSelect,
         handleSearchResultPlay,
-        homeContent,
         isDaylight,
         isDev,
         isDevDebugOverlayVisible,
@@ -2373,7 +2370,7 @@ export default function App() {
 
             {/* Home Mount Point */}
             <div
-                className="absolute inset-0 z-0"
+                className="absolute inset-0 z-10"
                 style={{
                     opacity: shouldShowHomeSurface ? 1 : 0,
                     pointerEvents: shouldShowHomeSurface ? 'auto' : 'none',
