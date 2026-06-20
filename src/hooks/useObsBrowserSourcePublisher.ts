@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MotionValue } from 'framer-motion';
 import type {
     AudioBands,
@@ -30,13 +30,15 @@ import type {
     ObsBrowserSourceConfig,
     ObsBrowserSourceStatus,
 } from '../types/obsBrowserSource';
-import { downsampleObsSpectrum } from '../utils/obsBrowserSource';
+import { downsampleObsSpectrum, resolveObsBrowserSourceClockTime } from '../utils/obsBrowserSource';
 
 // src/hooks/useObsBrowserSourcePublisher.ts
 // Publishes the single playback surface to the local OBS browser source.
 
 const OBS_CLOCK_INTERVAL_MS = 250;
-const OBS_AUDIO_INTERVAL_MS = 100;
+const OBS_AUDIO_INTERVAL_MS = 50;
+const OBS_CLOCK_JUMP_THRESHOLD_SEC = 0.35;
+const OBS_CLOCK_JUMP_MIN_INTERVAL_MS = 80;
 type UseObsBrowserSourcePublisherOptions = {
     isElectronWindow: boolean;
     activePlaybackContext: PlaybackContext;
@@ -140,6 +142,8 @@ export const useObsBrowserSourcePublisher = ({
 }: UseObsBrowserSourcePublisherOptions) => {
     const [status, setStatus] = useState<ObsBrowserSourceStatus>(() => emptyObsStatus());
     const isExternallyRendering = status.enabled && status.clientCount > 0;
+    const lastPublishedClockRef = useRef<ObsBrowserSourceClock | null>(null);
+    const lastClockPublishMsRef = useRef(0);
 
     const refreshStatus = useCallback(async () => {
         if (!isElectronWindow || !window.electron?.getObsBrowserSourceStatus) {
@@ -256,6 +260,19 @@ export const useObsBrowserSourcePublisher = ({
         sentAtMs: Date.now(),
     }), [audioBands, audioPower]);
 
+    const publishClock = useCallback(() => {
+        if (!window.electron?.publishObsBrowserSourceClock) {
+            return;
+        }
+
+        const nextClock = buildClock();
+        lastPublishedClockRef.current = nextClock;
+        lastClockPublishMsRef.current = nextClock.sentAtMs;
+        void window.electron.publishObsBrowserSourceClock(nextClock).catch(error => {
+            console.warn('[OBS] Failed to publish browser source clock', error);
+        });
+    }, [buildClock]);
+
     useEffect(() => {
         if (!status.enabled || !window.electron?.publishObsBrowserSourceConfig) {
             return;
@@ -267,20 +284,38 @@ export const useObsBrowserSourcePublisher = ({
     }, [config, status.enabled]);
 
     useEffect(() => {
-        if (!status.enabled || !window.electron?.publishObsBrowserSourceClock) {
+        if (!isExternallyRendering || !window.electron?.publishObsBrowserSourceClock) {
             return;
         }
-
-        const publishClock = () => {
-            void window.electron?.publishObsBrowserSourceClock(buildClock()).catch(error => {
-                console.warn('[OBS] Failed to publish browser source clock', error);
-            });
-        };
 
         publishClock();
         const intervalId = window.setInterval(publishClock, OBS_CLOCK_INTERVAL_MS);
         return () => window.clearInterval(intervalId);
-    }, [buildClock, status.enabled]);
+    }, [isExternallyRendering, publishClock]);
+
+    useEffect(() => {
+        if (!isExternallyRendering) {
+            return;
+        }
+
+        // Detect seek-like jumps without turning the playback clock into per-frame IPC traffic.
+        return currentTime.on('change', (nextTime) => {
+            const lastClock = lastPublishedClockRef.current;
+            if (!lastClock) {
+                return;
+            }
+
+            const nowMs = Date.now();
+            if (nowMs - lastClockPublishMsRef.current < OBS_CLOCK_JUMP_MIN_INTERVAL_MS) {
+                return;
+            }
+
+            const expectedTime = resolveObsBrowserSourceClockTime(lastClock, nowMs);
+            if (Math.abs(nextTime - expectedTime) >= OBS_CLOCK_JUMP_THRESHOLD_SEC) {
+                publishClock();
+            }
+        });
+    }, [currentTime, isExternallyRendering, publishClock]);
 
     useEffect(() => {
         if (!isExternallyRendering || !window.electron?.publishObsBrowserSourceAudio) {

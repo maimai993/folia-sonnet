@@ -25,9 +25,9 @@ const buildEventSourceUrl = () => {
 const ObsBrowserSourceApp: React.FC = () => {
     const { t } = useTranslation();
     const [config, setConfig] = useState<ObsBrowserSourceConfig | null>(null);
-    const [clock, setClock] = useState<ObsBrowserSourceClock | null>(null);
     const [connected, setConnected] = useState(false);
     const [currentLineIndex, setCurrentLineIndex] = useState(-1);
+    const [playbackState, setPlaybackState] = useState<PlayerState>(PlayerState.IDLE);
     const currentLineIndexRef = useRef(-1);
     const clockRef = useRef<ObsBrowserSourceClock | null>(null);
     const configRef = useRef<ObsBrowserSourceConfig | null>(null);
@@ -56,10 +56,6 @@ const ObsBrowserSourceApp: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        clockRef.current = clock;
-    }, [clock]);
-
-    useEffect(() => {
         configRef.current = config;
     }, [config]);
 
@@ -74,7 +70,10 @@ const ObsBrowserSourceApp: React.FC = () => {
         });
         eventSource.addEventListener('clock', event => {
             const nextClock = JSON.parse((event as MessageEvent).data) as ObsBrowserSourceClock;
-            setClock(nextClock);
+            clockRef.current = nextClock;
+            setPlaybackState(prev => (
+                prev === nextClock.playerState ? prev : nextClock.playerState
+            ));
         });
         eventSource.addEventListener('audio', event => {
             const nextAudio = JSON.parse((event as MessageEvent).data) as ObsBrowserSourceAudio;
@@ -145,7 +144,7 @@ const ObsBrowserSourceApp: React.FC = () => {
                 useCoverColorBg={config.useCoverColorBg}
                 seed={config.seed}
                 staticMode={config.staticMode}
-                paused={clock?.playerState !== PlayerState.PLAYING}
+                paused={playbackState !== PlayerState.PLAYING}
                 backgroundOpacity={config.backgroundOpacity}
                 visualizerOpacity={config.visualizerOpacity}
                 transparentBackground={config.transparentBackground}
