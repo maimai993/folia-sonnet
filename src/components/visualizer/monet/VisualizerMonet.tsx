@@ -247,7 +247,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                             initial={{ opacity: 0, x: 50, scale: 0.95, rotate: 1 }}
                             animate={{ opacity: 1, x: 0, scale: 1, rotate: 0 }}
                             transition={{ duration: 1.6, ease: [0.25, 1, 0.5, 1], delay: 0.25 }}
-                            className="hidden min-w-0 items-center justify-center overflow-visible px-3 pr-5 sm:pr-8 md:flex lg:justify-end lg:pr-10 xl:pr-12"
+                            className="hidden min-w-0 items-center justify-center overflow-visible px-3 pr-5 sm:pr-8 md:flex lg:justify-end lg:pr-10 xl:pr-12 select-none"
                             style={{ flex: '0 0 clamp(220px, 28vw, 430px)' }}
                         >
                             {/* Bounding box wrapper that stays in the default position */}
@@ -337,6 +337,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                         <motion.div
                                             onPointerDown={(e) => {
                                                 if (isEditingPosition) {
+                                                    e.preventDefault();
                                                     dragControls.start(e);
                                                 }
                                             }}
