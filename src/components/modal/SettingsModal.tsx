@@ -20,6 +20,7 @@ import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
 import { selectSettingsUiSnapshot, type SettingsSubviewId, useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
+import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
 
 
 interface SettingsModalProps {
@@ -49,6 +50,10 @@ interface SettingsModalProps {
     onClearStageState?: () => Promise<void> | void;
     onToggleNowPlayingStage?: (enabled: boolean) => Promise<void> | void;
     nowPlayingConnectionStatus?: NowPlayingConnectionStatus;
+    obsBrowserSourceStatus?: ObsBrowserSourceStatus | null;
+    onToggleObsBrowserSource?: (enabled: boolean) => Promise<void> | void;
+    onRegenerateObsBrowserSourceToken?: () => Promise<void> | void;
+    onSetObsBrowserSourceSize?: (size: { width: number; height: number }) => Promise<void> | void;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
     aiTheme?: DualTheme | null;
     customTheme?: DualTheme | null;
@@ -83,6 +88,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     onClearStageState,
     onToggleNowPlayingStage,
     nowPlayingConnectionStatus = 'disabled',
+    obsBrowserSourceStatus = null,
+    onToggleObsBrowserSource,
+    onRegenerateObsBrowserSourceToken,
+    onSetObsBrowserSourceSize,
     onAudioOutputDeviceChange,
     aiTheme,
     customTheme,
@@ -2254,9 +2263,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         stage={{
                             enableNowPlayingStage,
                             nowPlayingConnectionStatus,
+                            obsBrowserSourceStatus,
                             onCopyText: copyText,
+                            onRegenerateObsBrowserSourceToken,
                             onRegenerateStageToken,
+                            onSetObsBrowserSourceSize,
                             onStageSourceChange,
+                            onToggleObsBrowserSource,
                             onToggleNowPlayingStage,
                             onToggleStageMode,
                             setStageActionStatus,
