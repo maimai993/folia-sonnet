@@ -47,10 +47,13 @@ let mainWindowClickThroughUnlockHover = false;
 let mainWindowSkipTaskbarEnabled = false;
 let videoExportWindowRestoreState = null;
 let autoUpdater = null;
+let pendingWindowStateSave = null;
+let windowStateSaveTimer = null;
 const DEFAULT_WINDOW_BOUNDS = {
   width: 1200,
   height: 800,
 };
+const WINDOW_STATE_SAVE_DEBOUNCE_MS = 300;
 const CACHE_DIRECTORY_SETTING_KEY = 'CACHE_DIRECTORY';
 const ENABLE_UPDATE_CHECK_SETTING_KEY = 'ENABLE_UPDATE_CHECK';
 const ENABLE_AUTO_UPDATE_SETTING_KEY = 'ENABLE_AUTO_UPDATE';
@@ -238,19 +241,54 @@ function ensureWindowBoundsVisible(bounds) {
   };
 }
 
-function saveWindowState(win) {
+function persistWindowStateSnapshot(snapshot) {
+  if (!snapshot) {
+    return;
+  }
+
+  const nextState = {
+    WINDOW_IS_MAXIMIZED: snapshot.isMaximized,
+  };
+
+  if (!snapshot.isMaximized && snapshot.bounds) {
+    nextState.WINDOW_BOUNDS = snapshot.bounds;
+  }
+
+  store.set(nextState);
+}
+
+function clearWindowStateSaveTimer() {
+  if (windowStateSaveTimer) {
+    clearTimeout(windowStateSaveTimer);
+    windowStateSaveTimer = null;
+  }
+}
+
+function saveWindowState(win, options = {}) {
   if (!win || win.isDestroyed()) {
     return;
   }
 
   const isMaximized = win.isMaximized();
-  store.set('WINDOW_IS_MAXIMIZED', isMaximized);
+  const snapshot = {
+    isMaximized,
+    bounds: isMaximized ? null : win.getBounds(),
+  };
 
-  if (isMaximized) {
+  if (options.deferred) {
+    pendingWindowStateSave = snapshot;
+    clearWindowStateSaveTimer();
+    windowStateSaveTimer = setTimeout(() => {
+      persistWindowStateSnapshot(pendingWindowStateSave);
+      pendingWindowStateSave = null;
+      windowStateSaveTimer = null;
+    }, WINDOW_STATE_SAVE_DEBOUNCE_MS);
     return;
   }
 
-  store.set('WINDOW_BOUNDS', win.getBounds());
+  pendingWindowStateSave = null;
+  clearWindowStateSaveTimer();
+  persistWindowStateSnapshot(snapshot);
 }
 
 function isWindowsThumbarSupported() {
@@ -1965,10 +2003,10 @@ function createWindow(options = {}) {
   applyMainWindowMouseIgnoreState();
   updateWindowThumbarButtons();
   win.on('resize', () => {
-    saveWindowState(win);
+    saveWindowState(win, { deferred: true });
   });
   win.on('move', () => {
-    saveWindowState(win);
+    saveWindowState(win, { deferred: true });
   });
   win.on('maximize', () => {
     saveWindowState(win);
