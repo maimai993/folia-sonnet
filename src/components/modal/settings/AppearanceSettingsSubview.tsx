@@ -29,6 +29,7 @@ type AppearanceSettingsSubviewProps = {
     onToggleCustomThemePreferred: (enabled: boolean) => void;
     onToggleSongThemeAutoSwitch: (enabled: boolean) => void;
     onToggleTransparentPlayerBackground: (enabled: boolean) => void;
+    onToggleAutoHidePlayerChrome: (enabled: boolean) => void;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
     settingsCardClass: string;
     songThemeAutoSwitchEnabled: boolean;
@@ -36,6 +37,7 @@ type AppearanceSettingsSubviewProps = {
     themeParkInitialTheme: DualTheme;
     toggleOffBackgroundClass: string;
     transparentPlayerBackground: boolean;
+    autoHidePlayerChrome: boolean;
     utilityGhostButtonClass: string;
     homeLayoutStyle: 'carousel' | 'grid';
     onChangeHomeLayoutStyle: (style: 'carousel' | 'grid') => void;
@@ -334,6 +336,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     onToggleCustomThemePreferred,
     onToggleSongThemeAutoSwitch,
     onToggleTransparentPlayerBackground,
+    onToggleAutoHidePlayerChrome,
     onSaveCustomTheme,
     settingsCardClass,
     songThemeAutoSwitchEnabled,
@@ -341,6 +344,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     themeParkInitialTheme,
     toggleOffBackgroundClass,
     transparentPlayerBackground,
+    autoHidePlayerChrome,
     utilityGhostButtonClass,
     homeLayoutStyle,
     onChangeHomeLayoutStyle,
@@ -699,6 +703,23 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             style={{ backgroundColor: transparentPlayerBackground ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
                         >
                             <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${transparentPlayerBackground ? 'translate-x-6' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                    <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.autoHidePlayerChrome') || '自动隐藏控制栏'}
+                            </div>
+                            <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.autoHidePlayerChromeDesc') || '开启后，当鼠标离开窗口超过 3 秒，自动隐藏播放页的进度条和右侧按钮。'}
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => onToggleAutoHidePlayerChrome(!autoHidePlayerChrome)}
+                            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!autoHidePlayerChrome ? toggleOffBackgroundClass : ''}`}
+                            style={{ backgroundColor: autoHidePlayerChrome ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                        >
+                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${autoHidePlayerChrome ? 'translate-x-6' : 'translate-x-0'}`} />
                         </button>
                     </div>
                 </div>

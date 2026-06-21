@@ -688,6 +688,7 @@ type SettingsUiState = {
     hidePlayerTranslationSubtitle: boolean;
     hidePlayerRightPanelButton: boolean;
     transparentPlayerBackground: boolean;
+    autoHidePlayerChrome: boolean;
     disableVisualizerVignette: boolean;
     disableVisualizerGeometricBackground: boolean;
     minimizeToTray: boolean;
@@ -770,6 +771,7 @@ type SettingsUiState = {
     handleToggleHidePlayerTranslationSubtitle: (enable: boolean) => void;
     handleToggleHidePlayerRightPanelButton: (enable: boolean) => void;
     handleToggleTransparentPlayerBackground: (enable: boolean) => void;
+    handleToggleAutoHidePlayerChrome: (enable: boolean) => void;
     handleToggleDisableVisualizerVignette: (disable: boolean) => void;
     handleToggleDisableVisualizerGeometricBackground: (disable: boolean) => void;
     handleToggleMinimizeToTray: (enable: boolean) => void;
@@ -846,6 +848,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     hidePlayerTranslationSubtitle: getStoredBoolean('hide_player_translation_subtitle', false),
     hidePlayerRightPanelButton: getStoredBoolean('hide_player_right_panel_button', false),
     transparentPlayerBackground: getStoredBoolean('transparent_player_background', false),
+    autoHidePlayerChrome: getStoredBoolean('auto_hide_player_chrome', false),
     disableVisualizerVignette: getStoredBoolean('disable_visualizer_vignette', false),
     disableVisualizerGeometricBackground: getStoredBoolean('disable_visualizer_geometric_background', false),
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
@@ -912,6 +915,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     setTransparentPlayerBackgroundFromSystem: (enabled) => {
         setStoredBoolean('transparent_player_background', enabled);
         set({ transparentPlayerBackground: enabled });
+    },
+    handleToggleAutoHidePlayerChrome: (enabled: boolean) => {
+        localStorage.setItem('auto_hide_player_chrome', enabled ? 'true' : 'false');
+        set({ autoHidePlayerChrome: enabled });
     },
     setDesktopPreferenceSnapshot: (settings) => {
         const patch: Partial<SettingsUiState> = {};
@@ -1688,6 +1695,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
     hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
     transparentPlayerBackground: state.transparentPlayerBackground,
+    autoHidePlayerChrome: state.autoHidePlayerChrome,
     disableVisualizerVignette: state.disableVisualizerVignette,
     disableVisualizerGeometricBackground: state.disableVisualizerGeometricBackground,
     minimizeToTray: state.minimizeToTray,
@@ -1743,6 +1751,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
     handleToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
     handleToggleTransparentPlayerBackground: state.handleToggleTransparentPlayerBackground,
+    handleToggleAutoHidePlayerChrome: state.handleToggleAutoHidePlayerChrome,
     handleToggleDisableVisualizerVignette: state.handleToggleDisableVisualizerVignette,
     handleToggleDisableVisualizerGeometricBackground: state.handleToggleDisableVisualizerGeometricBackground,
     handleToggleMinimizeToTray: state.handleToggleMinimizeToTray,

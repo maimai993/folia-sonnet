@@ -103,6 +103,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         hidePlayerTranslationSubtitle,
         hidePlayerRightPanelButton,
         transparentPlayerBackground,
+        autoHidePlayerChrome,
         disableVisualizerVignette,
         disableVisualizerGeometricBackground,
         minimizeToTray,
@@ -149,6 +150,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleHidePlayerTranslationSubtitle: onToggleHidePlayerTranslationSubtitle,
         handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
         handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackground,
+        handleToggleAutoHidePlayerChrome: onToggleAutoHidePlayerChrome,
         handleToggleDisableVisualizerVignette: onToggleDisableVisualizerVignette,
         handleToggleDisableVisualizerGeometricBackground: onToggleDisableVisualizerGeometricBackground,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
@@ -2176,6 +2178,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onToggleCustomThemePreferred={onToggleCustomThemePreferred}
                         onToggleSongThemeAutoSwitch={onToggleSongThemeAutoSwitch}
                         onToggleTransparentPlayerBackground={onToggleTransparentPlayerBackground}
+                        onToggleAutoHidePlayerChrome={onToggleAutoHidePlayerChrome}
                         onSaveCustomTheme={onSaveCustomTheme}
                         settingsCardClass={settingsCardClass}
                         songThemeAutoSwitchEnabled={songThemeAutoSwitchEnabled}
@@ -2183,6 +2186,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         themeParkInitialTheme={themeParkInitialTheme}
                         toggleOffBackgroundClass={toggleOffBackgroundClass}
                         transparentPlayerBackground={transparentPlayerBackground}
+                        autoHidePlayerChrome={autoHidePlayerChrome}
                         utilityGhostButtonClass={utilityGhostButtonClass}
                         homeLayoutStyle={homeLayoutStyle}
                         onChangeHomeLayoutStyle={onChangeHomeLayoutStyle}

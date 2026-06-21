@@ -265,6 +265,7 @@ export default function App() {
         hidePlayerTranslationSubtitle,
         hidePlayerRightPanelButton,
         transparentPlayerBackground,
+        autoHidePlayerChrome,
         disableVisualizerVignette,
         disableVisualizerGeometricBackground,
         minimizeToTray,
@@ -1233,6 +1234,47 @@ export default function App() {
     useEffect(() => {
         localStorage.setItem(PLAYER_CHROME_HIDDEN_STORAGE_KEY, String(isPlayerChromeHidden));
     }, [isPlayerChromeHidden]);
+
+    useEffect(() => {
+        if (!autoHidePlayerChrome) return;
+
+        let timeoutId: number;
+        let isThrottled = false;
+        let rafId: number;
+
+        const handleMouseLeave = () => {
+            window.clearTimeout(timeoutId);
+            timeoutId = window.setTimeout(() => {
+                setIsPlayerChromeHidden(true);
+            }, 3000);
+        };
+
+        const handleMouseEnter = () => {
+            window.clearTimeout(timeoutId);
+            setIsPlayerChromeHidden(prev => prev ? false : prev);
+        };
+
+        const throttledMouseMove = () => {
+            if (isThrottled) return;
+            isThrottled = true;
+            rafId = requestAnimationFrame(() => {
+                handleMouseEnter();
+                isThrottled = false;
+            });
+        };
+
+        document.addEventListener('mouseleave', handleMouseLeave);
+        document.addEventListener('mouseenter', handleMouseEnter);
+        document.addEventListener('mousemove', throttledMouseMove);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+            cancelAnimationFrame(rafId);
+            document.removeEventListener('mouseleave', handleMouseLeave);
+            document.removeEventListener('mouseenter', handleMouseEnter);
+            document.removeEventListener('mousemove', throttledMouseMove);
+        };
+    }, [autoHidePlayerChrome]);
 
     useEffect(() => {
         const body = document.body;
