@@ -17,6 +17,14 @@ type BuildStagePlayerSnapshotArgs = {
     coverUrl: string | null;
 };
 
+type ResolveStagePlayerPositionSecArgs = {
+    activePlaybackContext: 'main' | 'stage';
+    isExternalPlaybackSourceActive: boolean;
+    audioCurrentTimeSec: number | null | undefined;
+    motionCurrentTimeSec: number;
+    syntheticStageLyricsTimeSec?: number;
+};
+
 const getSongArtists = (song: SongResult | null): string => {
     if (!song) {
         return '';
@@ -113,6 +121,33 @@ const resolvePlaybackContext = (
     }
 
     return 'normal-playback';
+};
+
+// Picks the most authoritative clock for the public player snapshot.
+export const resolveStagePlayerPositionSec = ({
+    activePlaybackContext,
+    isExternalPlaybackSourceActive,
+    audioCurrentTimeSec,
+    motionCurrentTimeSec,
+    syntheticStageLyricsTimeSec,
+}: ResolveStagePlayerPositionSecArgs): number => {
+    if (Number.isFinite(audioCurrentTimeSec)) {
+        return Math.max(0, audioCurrentTimeSec ?? 0);
+    }
+
+    if (
+        activePlaybackContext === 'stage'
+        && !isExternalPlaybackSourceActive
+        && Number.isFinite(syntheticStageLyricsTimeSec)
+    ) {
+        return Math.max(0, syntheticStageLyricsTimeSec ?? 0);
+    }
+
+    if (Number.isFinite(motionCurrentTimeSec)) {
+        return Math.max(0, motionCurrentTimeSec);
+    }
+
+    return 0;
 };
 
 export const buildStagePlayerSnapshot = ({

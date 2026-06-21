@@ -6,7 +6,7 @@ import { PlayerState } from '../types';
 import type { SongResult, LyricData } from '../types';
 import type { RemoteControlCommand, RemoteControlSnapshot } from '../types/remoteControl';
 import type { VideoExportState } from '../types/videoExport';
-import { buildStagePlayerSnapshot } from '../utils/stagePlayerSnapshot';
+import { buildStagePlayerSnapshot, resolveStagePlayerPositionSec } from '../utils/stagePlayerSnapshot';
 
 // Bridges Electron-specific shell features without coupling to UI components.
 type UseElectronPlaybackBridgeOptions = {
@@ -35,6 +35,7 @@ type UseElectronPlaybackBridgeOptions = {
     mediaSessionPauseRef: RefObject<() => void>;
     mediaSessionPrevRef: RefObject<() => void>;
     mediaSessionNextRef: RefObject<() => Promise<void> | void>;
+    getSyntheticStageLyricsTime?: () => number;
     syncStageLyricsClock?: (timeSec: number, endTimeSec: number, nextPlayerState: PlayerState, startTimeSec?: number) => void;
     taskbarHasTrackRef: RefObject<boolean>;
     taskbarPlayerStateRef: RefObject<PlayerState>;
@@ -73,6 +74,7 @@ export const useElectronPlaybackBridge = ({
     mediaSessionPauseRef,
     mediaSessionPrevRef,
     mediaSessionNextRef,
+    getSyntheticStageLyricsTime,
     syncStageLyricsClock,
     taskbarHasTrackRef,
     taskbarPlayerStateRef,
@@ -130,7 +132,13 @@ export const useElectronPlaybackBridge = ({
             currentIndex >= 0 && currentIndex < playQueue.length - 1 ||
             (effectiveLoopMode === 'all' && playQueue.length > 1)
         );
-        const positionSec = audioRef.current?.currentTime ?? currentTime.get();
+        const positionSec = resolveStagePlayerPositionSec({
+            activePlaybackContext,
+            isExternalPlaybackSourceActive: isNowPlayingStageActive,
+            audioCurrentTimeSec: audioRef.current?.currentTime,
+            motionCurrentTimeSec: currentTime.get(),
+            syntheticStageLyricsTimeSec: getSyntheticStageLyricsTime?.(),
+        });
 
         return buildStagePlayerSnapshot({
             activePlaybackContext,
@@ -262,7 +270,7 @@ export const useElectronPlaybackBridge = ({
             window.clearInterval(intervalId);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activePlaybackContext, cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, isFmMode, isNowPlayingStageActive, playQueue, playerState]);
+    }, [activePlaybackContext, cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, getSyntheticStageLyricsTime, isFmMode, isNowPlayingStageActive, playQueue, playerState]);
 
     useEffect(() => {
         if (!window.electron?.onRemoteControlCommand) {

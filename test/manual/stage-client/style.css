@@ -243,6 +243,11 @@ pre {
     background: rgba(251, 113, 133, 0.92);
 }
 
+.method-ws {
+    color: #2e1065;
+    background: rgba(196, 181, 253, 0.92);
+}
+
 .meta-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -373,6 +378,19 @@ textarea {
 .request-preview,
 .response-output {
     min-height: 136px;
+}
+
+.scroll-box {
+    max-height: 320px;
+    overflow: auto;
+}
+
+.response-output.scroll-box {
+    max-height: 360px;
+}
+
+.ws-log.scroll-box {
+    max-height: 420px;
 }
 
 .compact {

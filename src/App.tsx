@@ -1111,6 +1111,7 @@ export default function App() {
         mediaSessionPauseRef,
         mediaSessionPrevRef,
         mediaSessionNextRef,
+        getSyntheticStageLyricsTime,
         syncStageLyricsClock,
         taskbarHasTrackRef,
         taskbarPlayerStateRef,
