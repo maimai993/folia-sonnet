@@ -176,7 +176,7 @@ export function usePlaybackQueueController({
 }: UsePlaybackQueueControllerParams) {
     const [pendingUnavailableReplacement, setPendingUnavailableReplacement] = useState<UnavailableReplacementRequest | null>(null);
 
-    const appendNeteaseSongsToMainQueue = useCallback((songs: SongResult[]) => {
+    const appendNeteaseSongsToMainQueue = useCallback((songs: SongResult[], options?: { suppressToast?: boolean }) => {
         if (songs.length === 0) {
             return false;
         }
@@ -214,12 +214,14 @@ export function usePlaybackQueueController({
 
         if (changed && affectedSongs.length > 0) {
             void persistLastPlaybackCache(queueAnchorSong, nextQueue);
-            setStatusMsg({
-                type: 'success',
-                text: queueAddBehavior === 'next' ? '已插入到下一首' : (t('status.queueUpdated') || '已添加到播放队列'),
-                nonce: Date.now(),
-                durationMs: 1200,
-            });
+            if (!options?.suppressToast) {
+                setStatusMsg({
+                    type: 'success',
+                    text: queueAddBehavior === 'next' ? '已插入到下一首' : (t('status.queueUpdated') || '已添加到播放队列'),
+                    nonce: Date.now(),
+                    durationMs: 1200,
+                });
+            }
             return true;
         }
 
@@ -883,7 +885,7 @@ export function usePlaybackQueueController({
             }
 
             if (request.appendToQueue) {
-                appendNeteaseSongsToMainQueue([song]);
+                appendNeteaseSongsToMainQueue([song], { suppressToast: true });
             } else {
                 await playSong(song, [song], false, { shouldNavigateToPlayer: true });
             }
@@ -1031,12 +1033,6 @@ export function usePlaybackQueueController({
 
             setPlayQueue(nextQueue);
             void persistLastPlaybackCache(currentSong, nextQueue);
-            setStatusMsg({
-                type: 'success',
-                text: t('status.queueUpdated') || '已更新播放队列',
-                nonce: Date.now(),
-                durationMs: 1200,
-            });
             await complete(true);
         } catch (error) {
             console.warn('[Stage] Failed to handle player queue request', error);
