@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useMotionValue } from 'framer-motion';
+import { useMotionValue, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { loadCachedOrFetchCover } from './services/coverCache';
@@ -109,6 +109,9 @@ export default function App() {
     // UI State
     const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+    // Auto-close the player panel when leaving the player view
+    // (Effect moved to after useAppNavigation where currentView is defined)
     const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>('cover');
     const [isPlayerChromeHidden, setIsPlayerChromeHidden] = useState(() => {
         const saved = localStorage.getItem(PLAYER_CHROME_HIDDEN_STORAGE_KEY);
@@ -647,6 +650,14 @@ export default function App() {
         handleArtistSelect: navigateToNeteaseArtist,
         popOverlay,
     } = useAppNavigation();
+
+    // Auto-close the player panel when leaving the player view
+    useEffect(() => {
+        if (currentView !== 'player' && isPanelOpen) {
+            setIsPanelOpen(false);
+        }
+    }, [currentView, isPanelOpen]);
+
     const {
         isSearchOpen,
         searchQuery,
@@ -1087,7 +1098,9 @@ export default function App() {
         resumePlayback,
     });
 
-    useElectronPlaybackBridge({
+    const {
+        publishStagePlayerPlaybackUpdate,
+    } = useElectronPlaybackBridge({
         isElectronWindow,
         setIsTitlebarRevealed,
         isPlayerChromeHidden,
@@ -1095,9 +1108,12 @@ export default function App() {
         showTransparentWindowBorder,
         setShowTransparentWindowBorder,
         transparentPlayerBackground,
+        activePlaybackContext,
+        isStagePlayerSnapshotEnabled: stageStatus?.enabled === true,
         mainWindowClickThroughEnabled: isMainWindowClickThroughEnabled,
         isNowPlayingControlDisabledRef,
         audioRef,
+        audioSrc,
         currentTime,
         duration,
         currentSong,
@@ -1112,6 +1128,8 @@ export default function App() {
         mediaSessionPauseRef,
         mediaSessionPrevRef,
         mediaSessionNextRef,
+        getSyntheticStageLyricsTime,
+        syncStageLyricsClock,
         taskbarHasTrackRef,
         taskbarPlayerStateRef,
         exportState,
@@ -1551,8 +1569,9 @@ export default function App() {
                 void audioRef.current.play();
                 setPlayerState(PlayerState.PLAYING);
             }
+            void publishStagePlayerPlaybackUpdate();
         }
-    }, []);
+    }, [publishStagePlayerPlaybackUpdate]);
 
     const handleUnifiedAlbumSelect = useCallback((albumId: number) => {
         if (homeLayoutStyle === 'grid') {
@@ -2118,6 +2137,7 @@ export default function App() {
         isPlayerChromeHidden,
         shouldHidePlayerProgressBar,
         onSeekMainAudio: seekMainAudio,
+        onStagePlayerSeek: publishStagePlayerPlaybackUpdate,
         noTrackText: t('ui.noTrack'),
     }), [
         activePlaybackContext,
@@ -2154,6 +2174,7 @@ export default function App() {
         playOnlineQueueFromStart,
         playSong,
         popOverlay,
+        publishStagePlayerPlaybackUpdate,
         refreshUserData,
         seekMainAudio,
         setPlayerState,
@@ -2424,15 +2445,24 @@ export default function App() {
             <div
                 className="absolute inset-0 z-10"
                 style={{
-                    opacity: shouldShowHomeSurface ? 1 : 0,
                     pointerEvents: shouldShowHomeSurface ? 'auto' : 'none',
-                    transition: 'opacity 0.25s ease-in-out',
+                    visibility: shouldShowHomeSurface ? 'visible' : 'hidden',
+                    transition: shouldShowHomeSurface 
+                        ? 'visibility 0s linear 0s' 
+                        : 'visibility 0s linear 0.25s',
                     display: isHomeFullyHidden ? 'none' : 'block',
                 }}
             >
-                {currentView === 'home' || currentView === 'player' ? (
-                    <Home model={homeModel} isHomeFullyHidden={isHomeFullyHidden} />
-                ) : null}
+                <motion.div
+                    className="absolute inset-0"
+                    initial={false}
+                    animate={{ opacity: shouldShowHomeSurface ? 1 : 0 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                >
+                    {currentView === 'home' || currentView === 'player' ? (
+                        <Home model={homeModel} isHomeFullyHidden={isHomeFullyHidden} />
+                    ) : null}
+                </motion.div>
             </div>
 
             {/* --- VISUALIZER (Background Layer & Main Click Target) --- */}

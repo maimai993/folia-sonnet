@@ -35,6 +35,43 @@ body {
 }
 
 button,
+/* Documentation-first styling for the manual Folia Stage API console. */
+
+:root {
+    color-scheme: dark;
+    --stage-bg: radial-gradient(circle at top left, rgba(14, 165, 233, 0.22), transparent 30%),
+        radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 26%),
+        linear-gradient(180deg, #020617 0%, #0f172a 52%, #020617 100%);
+    --stage-panel: rgba(15, 23, 42, 0.84);
+    --stage-panel-strong: rgba(2, 6, 23, 0.9);
+    --stage-border: rgba(148, 163, 184, 0.18);
+    --stage-text: #e2e8f0;
+    --stage-muted: rgba(226, 232, 240, 0.72);
+    --stage-accent: #7dd3fc;
+    --stage-accent-strong: #38bdf8;
+    --stage-accent-soft: rgba(56, 189, 248, 0.12);
+    --stage-get: #38bdf8;
+    --stage-post: #4ade80;
+    --stage-delete: #fb7185;
+    --stage-code: rgba(15, 23, 42, 0.78);
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+html,
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--stage-bg);
+    color: var(--stage-text);
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+button,
 input,
 textarea,
 select {
@@ -45,6 +82,33 @@ code,
 pre {
     font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
 }
+
+/* Syntax Highlighting */
+.json-key { color: #7dd3fc; font-weight: 500; }
+.json-string { color: #86efac; }
+.json-number { color: #fde047; }
+.json-boolean { color: #c084fc; font-weight: 600; }
+.json-null { color: #94a3b8; font-style: italic; }
+
+.req-method { color: #f472b6; font-weight: 700; }
+.req-url { color: #e2e8f0; }
+.req-label { color: rgba(148, 163, 184, 0.8); font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.curl-command { color: #f472b6; font-weight: bold; }
+.curl-flag { color: #7dd3fc; }
+.curl-string { color: #86efac; }
+
+.status-sending { color: #94a3b8; font-style: italic; }
+.status-ok { color: #4ade80; font-weight: bold; }
+.status-error { color: #f87171; font-weight: bold; }
+
+/* Modern aesthetics */
+::selection { background: rgba(56, 189, 248, 0.3); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
 
 .stage-client-shell {
     min-height: 100vh;
@@ -63,10 +127,16 @@ pre {
 .docs-sidebar,
 .hero,
 .doc-card {
-    border: 1px solid var(--stage-border);
+    border: 1px solid rgba(255, 255, 255, 0.05);
     background: var(--stage-panel);
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
-    backdrop-filter: blur(24px);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(32px);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+}
+
+.doc-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(125, 211, 252, 0.15);
 }
 
 .docs-sidebar {
@@ -243,6 +313,11 @@ pre {
     background: rgba(251, 113, 133, 0.92);
 }
 
+.method-ws {
+    color: #2e1065;
+    background: rgba(196, 181, 253, 0.92);
+}
+
 .meta-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -324,6 +399,17 @@ label {
     color: var(--stage-muted);
 }
 
+.inline-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.inline-toggle input {
+    width: auto;
+}
+
 input,
 textarea,
 select {
@@ -334,6 +420,15 @@ select {
     background: rgba(2, 6, 23, 0.74);
     color: var(--stage-text);
     padding: 12px 14px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--stage-accent);
+    box-shadow: 0 0 0 3px var(--stage-accent-soft);
 }
 
 input[type='file'] {
@@ -359,11 +454,14 @@ textarea {
     margin: 12px 0 0;
     padding: 16px;
     border-radius: 18px;
-    background: var(--stage-code);
-    border: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(2, 6, 23, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.3);
     white-space: pre-wrap;
     word-break: break-word;
     overflow: auto;
+    font-size: 13.5px;
+    line-height: 1.6;
 }
 
 .code-example {
@@ -373,6 +471,19 @@ textarea {
 .request-preview,
 .response-output {
     min-height: 136px;
+}
+
+.scroll-box {
+    max-height: 320px;
+    overflow: auto;
+}
+
+.response-output.scroll-box {
+    max-height: 360px;
+}
+
+.ws-log.scroll-box {
+    max-height: 420px;
 }
 
 .compact {

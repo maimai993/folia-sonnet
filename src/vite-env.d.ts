@@ -34,6 +34,8 @@ declare global {
 
   type ElectronRemoteControlCommand =
     | { type: 'play-pause' }
+    | { type: 'play' }
+    | { type: 'pause' }
     | { type: 'previous' }
     | { type: 'next' }
     | { type: 'seek'; time: number }
@@ -266,9 +268,12 @@ declare global {
     requestId: string;
     ok: boolean;
     error?: string | null;
+    result?: unknown;
   }
 
   interface StageStatus {
+    domain?: 'stage-input';
+    direction?: 'outside-in';
     enabled: boolean;
     modeEnabled?: boolean;
     source?: StageSource | null;
@@ -277,6 +282,98 @@ declare global {
     activeEntryKind: StageActiveEntryKind | null;
     lyricsSession: StageLyricsSession | null;
     mediaSession: StageMediaSession | null;
+  }
+
+  type StagePlayerPlaybackContext = 'normal-playback' | 'stage-session' | 'external-playback-source';
+
+  interface StagePlayerCurrent {
+    id: string;
+    source: string;
+    title: string;
+    artist: string;
+    album: string;
+    durationMs: number;
+    coverUrl: string | null;
+  }
+
+  interface StagePlayerControlCapabilities {
+    play: boolean;
+    pause: boolean;
+    resume: boolean;
+    seek: boolean;
+    previous: boolean;
+    next: boolean;
+  }
+
+  interface StagePlayerQueueCapabilities {
+    append: boolean;
+    insertNext: boolean;
+    remove: boolean;
+    move: boolean;
+    select: boolean;
+    clear: boolean;
+  }
+
+  interface StagePlayerQueueItem extends StagePlayerCurrent {
+    queueItemId: string;
+  }
+
+  interface StagePlayerQueueSummary {
+    currentIndex: number;
+    length: number;
+    revision?: string;
+  }
+
+  interface StagePlayerQueueSnapshot extends StagePlayerQueueSummary {
+    items: StagePlayerQueueItem[];
+  }
+
+  interface StagePlayerQueueWindow extends StagePlayerQueueSummary {
+    items: StagePlayerQueueItem[];
+    offset: number;
+    limit: number;
+    returned: number;
+    hasMore: boolean;
+    nextOffset: number | null;
+  }
+
+  interface StagePlayerSnapshot {
+    playbackContext: StagePlayerPlaybackContext;
+    current: StagePlayerCurrent | null;
+    playerState: string;
+    positionMs: number;
+    durationMs: number;
+    sampledAtMs: number;
+    updatedAt: number;
+    controlCapabilities: StagePlayerControlCapabilities;
+    queueCapabilities: StagePlayerQueueCapabilities;
+    queue: StagePlayerQueueSnapshot;
+  }
+
+  interface StagePlayerControlRequest {
+    requestId: string;
+    action: 'next' | 'prev' | 'pause' | 'resume' | 'seek';
+    positionMs?: number;
+  }
+
+  interface StagePlayerQueueRequest {
+    requestId: string;
+    action: 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear';
+    songId?: number;
+    songIds?: number[];
+    queueItemId?: string;
+    fromQueueItemId?: string;
+    fromIndex?: number;
+    toIndex?: number;
+    index?: number;
+  }
+
+  interface StagePlayerRequestResult {
+    requestId: string;
+    ok: boolean;
+    error?: string | null;
+    snapshot?: StagePlayerSnapshot;
+    result?: unknown;
   }
 
   interface Window {
@@ -346,9 +443,14 @@ declare global {
       regenerateStageToken: () => Promise<StageStatus>;
       clearStageState: () => Promise<StageStatus>;
       completeStageExternalPlayRequest: (result: StageExternalPlayResult) => Promise<boolean>;
+      publishStagePlayerSnapshot: (snapshot: StagePlayerSnapshot, options?: { forcePlaybackEvent?: boolean }) => Promise<StagePlayerSnapshot>;
+      completeStagePlayerControlRequest: (result: StagePlayerRequestResult) => Promise<boolean>;
+      completeStagePlayerQueueRequest: (result: StagePlayerRequestResult) => Promise<boolean>;
       onStageSessionUpdated: (callback: (status: StageStatus) => void) => () => void;
       onStageSessionCleared: (callback: (status: StageStatus) => void) => () => void;
       onStageExternalPlayRequest: (callback: (request: StageExternalPlayRequest) => void) => () => void;
+      onStagePlayerControlRequest: (callback: (request: StagePlayerControlRequest) => void) => () => void;
+      onStagePlayerQueueRequest: (callback: (request: StagePlayerQueueRequest) => void) => () => void;
     };
   }
 }

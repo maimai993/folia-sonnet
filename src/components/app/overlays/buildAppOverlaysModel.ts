@@ -76,6 +76,7 @@ type BuildAppOverlaysModelParams = {
     isPlayerChromeHidden: boolean;
     shouldHidePlayerProgressBar: boolean;
     onSeekMainAudio: (time: number) => void;
+    onStagePlayerSeek: () => Promise<unknown>;
     noTrackText: string;
 };
 
@@ -127,6 +128,7 @@ export const buildAppOverlaysModel = ({
     isPlayerChromeHidden,
     shouldHidePlayerProgressBar,
     onSeekMainAudio,
+    onStagePlayerSeek,
     noTrackText,
 }: BuildAppOverlaysModelParams): AppOverlaysModel => ({
     searchOverlay: currentView === 'home'
@@ -232,6 +234,7 @@ export const buildAppOverlaysModel = ({
                     if (playerState !== PlayerState.PLAYING) {
                         setPlayerState(PlayerState.PLAYING);
                     }
+                    void onStagePlayerSeek();
                 } else {
                     onSeekMainAudio(time);
                 }

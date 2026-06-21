@@ -16,9 +16,9 @@ export interface SidePanelListProps<T> {
     focusedIndex?: number;
 }
 
-const RowComponent = React.memo(({ index, style, items, renderItem }: any) => {
+const RowComponent = ({ index, style, items, renderItem }: any): React.ReactElement => {
     return <>{renderItem(items[index], index, style)}</>;
-});
+};
 
 export function SidePanelList<T>({
     isOpen,

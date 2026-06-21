@@ -2762,6 +2762,30 @@ ipcMain.handle('stage-complete-external-play', (event, result) => {
   return stageApi.completeStageExternalPlayRequest(result);
 });
 
+ipcMain.handle('stage-publish-player-snapshot', (event, snapshot, options) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to publish Stage player state.');
+  }
+
+  return stageApi.publishStagePlayerSnapshot(snapshot, options);
+});
+
+ipcMain.handle('stage-complete-player-control', (event, result) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to complete a Stage player control request.');
+  }
+
+  return stageApi.completeStagePlayerControlRequest(result);
+});
+
+ipcMain.handle('stage-complete-player-queue', (event, result) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to complete a Stage player queue request.');
+  }
+
+  return stageApi.completeStagePlayerQueueRequest(result);
+});
+
 ipcMain.handle('thumbar-update-buttons', (event, state) => {
   if (!isTrustedMainWindowContents(event.sender)) {
     throw new Error('Untrusted renderer attempted to update taskbar controls.');

@@ -80,6 +80,7 @@ describe('Monet tuning and lyric helpers', () => {
             showDescription: true,
             portraitOffsetX: 0,
             portraitStyle: 'square',
+            showPortraitDragHanger: true,
         });
 
         expect(resolveStoredMonetTuning({
