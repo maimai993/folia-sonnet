@@ -50,7 +50,9 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         homeViewTab: state.homeViewTab,
         setHomeViewTab: state.setHomeViewTab,
     })));
-    const [collectionHistory, setCollectionHistory] = useState<GridViewCollectionDescriptor[]>([]);
+    const [collectionHistory, setCollectionHistory] = useState<GridViewCollectionDescriptor[]>(() => (
+        activeGridViewCollection ? [activeGridViewCollection] : []
+    ));
     const selectedCollection = collectionHistory[collectionHistory.length - 1] || null;
     const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);
     const [externalTracksLoading, setExternalTracksLoading] = useState(false);
