@@ -22,8 +22,8 @@
                     <a href="#status">GET /stage/status</a>
                     <a href="#lyrics">POST /stage/lyrics</a>
                     <a href="#session">POST /stage/session</a>
-                    <a href="#search">POST /stage/search</a>
-                    <a href="#play">POST /stage/play</a>
+                    <a href="#search">POST /stage/player/search</a>
+                    <a href="#play">POST /stage/player/play</a>
                     <a href="#clear">DELETE /stage/state</a>
                 </nav>
             </aside>
@@ -101,12 +101,12 @@
                         </article>
                         <article class="endpoint-chip-card">
                             <span class="method-chip method-post">POST</span>
-                            <code>/stage/search</code>
+                            <code>/stage/player/search</code>
                             <p class="hint">Search Netease songs.</p>
                         </article>
                         <article class="endpoint-chip-card">
                             <span class="method-chip method-post">POST</span>
-                            <code>/stage/play</code>
+                            <code>/stage/player/play</code>
                             <p class="hint">Trigger Folia playback.</p>
                         </article>
                         <article class="endpoint-chip-card">
@@ -324,13 +324,13 @@
                     <div class="section-header">
                         <div>
                             <p class="section-kicker">Endpoint</p>
-                            <h3><span class="method-chip method-post">POST</span><code>/stage/search</code></h3>
+                            <h3><span class="method-chip method-post">POST</span><code>/stage/player/search</code></h3>
                         </div>
                         <button id="run-search" type="button">Send Request</button>
                     </div>
                     <div class="endpoint-layout">
                         <article class="doc-card">
-                            <p class="hint">搜索网易云结果，返回歌曲列表。结果可直接触发 `/stage/play` 或追加到主播放器队列。</p>
+                            <p class="hint">搜索网易云结果，返回歌曲列表。结果可直接触发 `/stage/player/play` 或追加到主播放器队列。</p>
                             <div class="meta-grid">
                                 <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
                                 <div><span class="meta-label">Content-Type</span><span>application/json</span></div>
@@ -367,12 +367,12 @@
                     <div class="section-header">
                         <div>
                             <p class="section-kicker">Endpoint</p>
-                            <h3><span class="method-chip method-post">POST</span><code>/stage/play</code></h3>
+                            <h3><span class="method-chip method-post">POST</span><code>/stage/player/play</code></h3>
                         </div>
                     </div>
                     <div class="endpoint-layout">
                         <article class="doc-card">
-                            <p class="hint">从外部触发 Folia 主播放器点歌。在/stage/search 返回的搜索结果中进行调试</p>
+                            <p class="hint">从外部触发 Folia 主播放器点歌。在 /stage/player/search 返回的搜索结果中进行调试</p>
                             <div class="meta-grid">
                                 <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
                                 <div><span class="meta-label">Trigger</span><span>Search result action</span></div>
@@ -387,7 +387,7 @@
                         </article>
                         <article class="doc-card">
                             <h4>Live request preview</h4>
-                            <p class="hint">点击搜索结果中的 `Play In Folia` 或 `Add To Queue` 后，这里会显示实际发送的 `/stage/play` 请求。</p>
+                            <p class="hint">点击搜索结果中的 `Play In Folia` 或 `Add To Queue` 后，这里会显示实际发送的 `/stage/player/play` 请求。</p>
                             <pre id="play-preview" class="request-preview">Search results can be played directly back into Folia.</pre>
                             <div id="play-status" class="status-line">No request sent yet.</div>
                             <pre id="play-response" class="response-output compact"></pre>

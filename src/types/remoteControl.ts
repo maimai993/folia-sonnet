@@ -5,6 +5,8 @@ import type { VideoExportPreset, VideoExportStartMode, VideoExportState } from '
 // Shared payloads for the Electron remote control window.
 export type RemoteControlCommand =
     | { type: 'play-pause' }
+    | { type: 'play' }
+    | { type: 'pause' }
     | { type: 'previous' }
     | { type: 'next' }
     | { type: 'seek'; time: number }

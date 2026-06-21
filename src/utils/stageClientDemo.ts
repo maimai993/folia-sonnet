@@ -301,7 +301,7 @@ export const buildStageSearchRequest = (input: StageSearchRequestInput): StageRe
     }
 
     return {
-        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/search`,
+        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/player/search`,
         transport: 'json',
         init: {
             method: 'POST',
@@ -323,7 +323,7 @@ export const buildStagePlayRequest = (input: StagePlayRequestInput): StageReques
     }
 
     return {
-        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/play`,
+        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/player/play`,
         transport: 'json',
         init: {
             method: 'POST',

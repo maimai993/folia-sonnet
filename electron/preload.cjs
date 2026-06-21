@@ -75,6 +75,9 @@ contextBridge.exposeInMainWorld('electron', {
     regenerateStageToken: () => ipcRenderer.invoke('stage-regenerate-token'),
     clearStageState: () => ipcRenderer.invoke('stage-clear-state'),
     completeStageExternalPlayRequest: (result) => ipcRenderer.invoke('stage-complete-external-play', result),
+    publishStagePlayerSnapshot: (snapshot) => ipcRenderer.invoke('stage-publish-player-snapshot', snapshot),
+    completeStagePlayerControlRequest: (result) => ipcRenderer.invoke('stage-complete-player-control', result),
+    completeStagePlayerQueueRequest: (result) => ipcRenderer.invoke('stage-complete-player-queue', result),
     onStageSessionUpdated: (callback) => {
         const listener = (_event, status) => callback(status);
         ipcRenderer.on('stage-session-updated', listener);
@@ -89,6 +92,16 @@ contextBridge.exposeInMainWorld('electron', {
         const listener = (_event, request) => callback(request);
         ipcRenderer.on('stage-external-play-request', listener);
         return () => ipcRenderer.removeListener('stage-external-play-request', listener);
+    },
+    onStagePlayerControlRequest: (callback) => {
+        const listener = (_event, request) => callback(request);
+        ipcRenderer.on('stage-player-control-request', listener);
+        return () => ipcRenderer.removeListener('stage-player-control-request', listener);
+    },
+    onStagePlayerQueueRequest: (callback) => {
+        const listener = (_event, request) => callback(request);
+        ipcRenderer.on('stage-player-queue-request', listener);
+        return () => ipcRenderer.removeListener('stage-player-queue-request', listener);
     },
     debugGetRenderedFonts: (selector) => ipcRenderer.invoke('debug-get-rendered-fonts', selector),
 });

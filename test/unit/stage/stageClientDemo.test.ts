@@ -158,7 +158,7 @@ describe('stageClientDemo helpers', () => {
             limit: 5,
         });
 
-        expect(result.endpoint).toBe('http://127.0.0.1:32107/stage/search');
+        expect(result.endpoint).toBe('http://127.0.0.1:32107/stage/player/search');
         expect(JSON.parse(String(result.init.body))).toEqual({
             query: 'Mili',
             limit: 5,
@@ -182,7 +182,7 @@ describe('stageClientDemo helpers', () => {
             songId: 123456,
         });
 
-        expect(result.endpoint).toBe('http://127.0.0.1:32107/stage/play');
+        expect(result.endpoint).toBe('http://127.0.0.1:32107/stage/player/play');
         expect(JSON.parse(String(result.init.body))).toEqual({
             songId: 123456,
         });
