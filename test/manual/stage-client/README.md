@@ -67,7 +67,7 @@ Stage API 当前接口清单：
   用于把外部搜索请求转交给 Folia 当前接入的搜索通道，返回可供后续播放器点播接口消费的候选结果。旧 `/stage/search` 仍可用，但响应会标记 `deprecated: true`。
 
 - `POST /stage/player/play`
-  用于请求 Folia 主播放器播放一首歌，支持直接播放，也支持通过 `appendToQueue: true` 仅追加到主队列。当进行追加操作时，响应中会额外包含 `changed`、`deduplicated` 和 `affectedCount` 字段，以表明本次插入是否被完全或部分去重。
+  用于请求 Folia 主播放器播放一首歌，支持直接播放，也支持通过 `appendToQueue: true` 仅追加到主队列。当进行追加操作时，响应中会额外包含 `changed`、`deduplicated` 和 `affectedCount` 字段，以表明本次插入是否被完全或部分去重。（注：Folia 存在严格的队列去重机制，同一歌曲不会在队列中出现两次。若追加的歌曲已存在于队列中，它会被直接移动到目标位置而不会产生副本。）
   旧 `/stage/play` 仍可用，但响应会标记 `deprecated: true`。
 
 - `GET /stage/player/status`
@@ -80,7 +80,7 @@ Stage API 当前接口清单：
   用于发送播放器控制指令，支持 `next`、`prev`、`pause`、`resume`、`seek`。`seek` 指令需要合法的非负整数 `positionMs`，否则会返回 `400 INVALID_STAGE_PLAYER_SEEK_POSITION`。不支持当前播放上下文时返回 `409`。
 
 - `GET /stage/player/queue` / `POST /stage/player/queue`
-  用于读取和编辑正常播放器队列。编辑 action 支持 `append`、`insert-next`、`remove`、`move`、`select`、`clear`；`select` 可通过 `index` 或 `queueItemId` 切到指定队列项播放（通过 `queueItemId` 操作时，会严格校验 `source` 和 `id` 是否与当前队列项匹配）。当使用 `append` 或 `insert-next` 追加歌曲时，由于队列存在同源歌曲排重逻辑，响应中将包含 `changed`、`deduplicated` 和 `affectedCount` 字段以表明实际插入结果。Stage 外部推送 session 和外部播放源接入下的舞台模式为只读。
+  用于读取和编辑正常播放器队列。编辑 action 支持 `append`、`insert-next`、`remove`、`move`、`select`、`clear`；`select` 可通过 `index` 或 `queueItemId` 切到指定队列项播放（通过 `queueItemId` 操作时，会严格校验 `source` 和 `id` 是否与当前队列项匹配）。当使用 `append` 或 `insert-next` 追加歌曲时，由于队列存在同源歌曲排重逻辑，同一首歌曲不会在队列中出现两次，若歌曲已存在则会被直接移动到目标位置。响应中将包含 `changed`、`deduplicated` 和 `affectedCount` 字段以表明实际插入结果。Stage 外部推送 session 和外部播放源接入下的舞台模式为只读。
 
 - `WS /stage/player/ws`
   用于订阅播放器状态事件，鉴权复用 Bearer token，也支持 `?token=`。连接后会收到一次 `STATUS` 当前状态，之后仅在曲目、播放语义或队列发生变化时按 `TRACK_CHANGED`、`PLAYBACK_UPDATED`、`QUEUE_UPDATED` 推送。
