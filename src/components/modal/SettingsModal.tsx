@@ -593,17 +593,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             : enableNowPlayingStage
     );
     const nowPlayingConnected = nowPlayingEnabled && nowPlayingConnectionStatus === 'connected';
-    const stageConnected = stageEnabled && (
-        activeStageSource === 'now-playing'
-            ? nowPlayingConnected
-            : stageHasActiveSession
-    );
+    const stageConnected = stageEnabled && activeStageSource === 'stage-api';
     const integrationStatusItems = [
-        ...(stageEnabled
+        ...(stageConnected
             ? [{
                 key: 'stage',
-                label: stageConnected ? 'Stage 已连接' : 'Stage 未连接',
-                tone: stageConnected ? 'success' as const : 'error' as const,
+                label: 'Stage 已连接',
+                tone: 'success' as const,
             }]
             : []),
         ...(nowPlayingEnabled
