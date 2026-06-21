@@ -1646,10 +1646,12 @@ function createStageApi({
     );
     const action = normalizeStageText(payload.action);
     const status = ensureStagePlayerControlAllowed(action);
-    const positionMs = action === 'seek' ? Math.max(0, normalizeStageInteger(payload.positionMs, -1)) : undefined;
-
-    if (action === 'seek' && positionMs < 0) {
-      throw createStageValidationError('Stage player seek requires a non-negative positionMs.', 'INVALID_STAGE_PLAYER_SEEK_POSITION');
+    let positionMs;
+    if (action === 'seek') {
+      positionMs = normalizeStageInteger(payload.positionMs, -1);
+      if (positionMs < 0) {
+        throw createStageValidationError('Stage player seek requires a non-negative positionMs.', 'INVALID_STAGE_PLAYER_SEEK_POSITION');
+      }
     }
 
     await requestStagePlayerControl({

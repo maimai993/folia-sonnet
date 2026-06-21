@@ -118,6 +118,24 @@ const playerWsStatus = getElement<HTMLElement>('player-ws-status');
 const playerWsLog = getElement<HTMLElement>('player-ws-log');
 
 const formatJson = (value: unknown) => JSON.stringify(value, null, 2);
+const syntaxHighlightJson = (json: string) => {
+    let formatted = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return formatted.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+                cls = 'json-key';
+            } else {
+                cls = 'json-string';
+            }
+        } else if (/true|false/.test(match)) {
+            cls = 'json-boolean';
+        } else if (/null/.test(match)) {
+            cls = 'json-null';
+        }
+        return `<span class="${cls}">${match}</span>`;
+    });
+};
 const normalizeText = (value?: string | null) => value?.trim() ?? '';
 let playerSocket: WebSocket | null = null;
 
@@ -151,14 +169,19 @@ const summarizeBody = (body: BodyInit | null | undefined) => {
 };
 
 const renderRequestPreview = (target: HTMLElement, request: StageRequestBuildResult) => {
-    target.textContent = [
-        `${request.init.method || 'GET'} ${request.endpoint}`,
+    const formattedHeaders = formatJson(request.init.headers || {});
+    const bodyStr = summarizeBody(request.init.body as BodyInit | null | undefined);
+    
+    target.innerHTML = [
+        `<span class="req-method">${request.init.method || 'GET'}</span> <span class="req-url">${request.endpoint}</span>`,
         '',
-        `Transport: ${request.transport}`,
+        `<span class="req-label">Transport:</span> ${request.transport}`,
         '',
-        `Headers: ${formatJson(request.init.headers || {})}`,
+        `<span class="req-label">Headers:</span>\n${syntaxHighlightJson(formattedHeaders)}`,
         '',
-        `Body: ${summarizeBody(request.init.body as BodyInit | null | undefined)}`,
+        `<span class="req-label">Body:</span>\n${
+            bodyStr.startsWith('{') || bodyStr.startsWith('[') ? syntaxHighlightJson(bodyStr) : bodyStr.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        }`,
     ].join('\n');
 };
 
@@ -193,7 +216,13 @@ const toCurl = (request: StageRequestBuildResult) => {
 
 const renderExample = (target: HTMLElement, builder: () => StageRequestBuildResult) => {
     try {
-        target.textContent = toCurl(builder());
+        const curlStr = toCurl(builder());
+        const highlighted = curlStr
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/^(curl\b.*)/, '<span class="curl-command">$1</span>')
+            .replace(/(-X\s+\w+|-H|-d|-F)/g, '<span class="curl-flag">$1</span>')
+            .replace(/('.*?'|".*?")/g, '<span class="curl-string">$1</span>');
+        target.innerHTML = highlighted;
     } catch (error) {
         renderExampleError(target, error);
     }
@@ -204,19 +233,20 @@ const updateRequestResult = async (
     responseTarget: HTMLElement,
     request: StageRequestBuildResult,
 ) => {
-    statusTarget.textContent = 'Sending...';
+    statusTarget.innerHTML = '<span class="status-sending">Sending...</span>';
     try {
         const response = await fetch(request.endpoint, request.init);
         const text = await response.text();
-        statusTarget.textContent = `${response.status} ${response.statusText}`;
+        const statusClass = response.ok ? 'status-ok' : 'status-error';
+        statusTarget.innerHTML = `<span class="${statusClass}">${response.status} ${response.statusText}</span>`;
 
         try {
-            responseTarget.textContent = formatJson(JSON.parse(text));
+            responseTarget.innerHTML = syntaxHighlightJson(formatJson(JSON.parse(text)));
         } catch {
             responseTarget.textContent = text || '(empty response)';
         }
     } catch (error) {
-        statusTarget.textContent = 'Request failed.';
+        statusTarget.innerHTML = '<span class="status-error">Request failed.</span>';
         responseTarget.textContent = error instanceof Error ? error.message : String(error);
     }
 };
@@ -239,7 +269,7 @@ const renderSearchResults = (songs: StageSearchResult[]) => {
                     <button type="button" class="secondary" data-queue-song="${song.songId}">Add To Queue</button>
                 </div>
             </div>
-            <pre class="request-preview compact">${formatJson(song)}</pre>
+            <pre class="request-preview compact">${syntaxHighlightJson(formatJson(song))}</pre>
         </article>
     `).join('');
 };
@@ -459,16 +489,17 @@ const runSessionRequest = async () => {
 const runSearchRequest = async () => {
     const request = buildSearchRequestFromInputs();
     renderRequestPreview(searchPreview, request);
-    searchStatus.textContent = 'Sending...';
+    searchStatus.innerHTML = '<span class="status-sending">Sending...</span>';
 
     try {
         const response = await fetch(request.endpoint, request.init);
         const payload = await response.json();
-        searchStatus.textContent = `${response.status} ${response.statusText}`;
-        searchResponse.textContent = formatJson(payload);
+        const statusClass = response.ok ? 'status-ok' : 'status-error';
+        searchStatus.innerHTML = `<span class="${statusClass}">${response.status} ${response.statusText}</span>`;
+        searchResponse.innerHTML = syntaxHighlightJson(formatJson(payload));
         renderSearchResults(Array.isArray(payload?.songs) ? payload.songs : []);
     } catch (error) {
-        searchStatus.textContent = 'Request failed.';
+        searchStatus.innerHTML = '<span class="status-error">Request failed.</span>';
         searchResponse.textContent = error instanceof Error ? error.message : String(error);
         renderSearchResults([]);
     }
@@ -519,12 +550,14 @@ const runPlayerQueuePostRequest = async () => {
 };
 
 const appendPlayerWebSocketLog = (entry: unknown) => {
-    const currentText = playerWsLog.textContent === 'No events yet.' ? '' : playerWsLog.textContent || '';
-    const nextText = [
-        currentText,
-        `[${new Date().toLocaleTimeString()}] ${typeof entry === 'string' ? entry : formatJson(entry)}`,
-    ].filter(Boolean).join('\n\n');
-    playerWsLog.textContent = nextText;
+    if (playerWsLog.textContent === 'No events yet.') {
+        playerWsLog.innerHTML = '';
+    }
+    const formatted = typeof entry === 'string' ? entry.replace(/</g, '&lt;').replace(/>/g, '&gt;') : syntaxHighlightJson(formatJson(entry));
+    const logEntry = document.createElement('div');
+    logEntry.className = 'ws-log-entry';
+    logEntry.innerHTML = `<span class="req-label">[${new Date().toLocaleTimeString()}]</span>\n${formatted}`;
+    playerWsLog.appendChild(logEntry);
     playerWsLog.scrollTop = playerWsLog.scrollHeight;
 };
 

@@ -502,7 +502,7 @@
                             <h4>Body fields</h4>
                             <dl class="field-list">
                                 <div><dt>action</dt><dd>`next`、`prev`、`pause`、`resume` 或 `seek`。</dd></div>
-                                <div><dt>positionMs</dt><dd>`seek` 时必填，非负毫秒。</dd></div>
+                                <div><dt>positionMs</dt><dd>`seek` 时必填，非负整数，无效值会返回 `400`。</dd></div>
                             </dl>
                             <h4>cURL example</h4>
                             <pre id="player-control-example" class="code-example scroll-box"></pre>
@@ -559,8 +559,8 @@
                             <h4>POST action</h4>
                             <dl class="field-list">
                                 <div><dt>append / insert-next</dt><dd>需要 `songId` 或 `songIds`。</dd></div>
-                                <div><dt>remove / select</dt><dd>需要 `queueItemId` 或 `index`，`select` 会切到该队列项播放。</dd></div>
-                                <div><dt>move</dt><dd>需要 `fromQueueItemId` 或 `fromIndex`，并提供 `toIndex`。</dd></div>
+                                <div><dt>remove / select</dt><dd>需要 `queueItemId` 或 `index`，`select` 会切到该队列项播放。使用 `queueItemId` 时会严格校验项匹配度。</dd></div>
+                                <div><dt>move</dt><dd>需要 `fromQueueItemId` 或 `fromIndex`，并提供 `toIndex`。使用 `queueItemId` 时会严格校验项匹配度。</dd></div>
                                 <div><dt>clear</dt><dd>清空队列中非当前播放项。</dd></div>
                             </dl>
                             <h4>cURL example</h4>

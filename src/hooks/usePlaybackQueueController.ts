@@ -912,8 +912,25 @@ export function usePlaybackQueueController({
             return -1;
         }
 
-        const encodedIndex = Number(queueItemId.split(':').pop());
-        return Number.isInteger(encodedIndex) && encodedIndex >= 0 && encodedIndex < queue.length ? encodedIndex : -1;
+        const parts = queueItemId.split(':');
+        const encodedIndex = Number(parts.pop());
+        if (!Number.isInteger(encodedIndex) || encodedIndex < 0 || encodedIndex >= queue.length) {
+            return -1;
+        }
+
+        if (parts.length >= 2) {
+            const expectedSource = parts[0];
+            const expectedId = parts.slice(1).join(':');
+            const song = queue[encodedIndex];
+            const actualSource = isLocalPlaybackSong(song) ? 'local' : isNavidromePlaybackSong(song) ? 'navidrome' : 'netease';
+            const actualId = String(song.id ?? `${actualSource}-${encodedIndex}`);
+
+            if (expectedSource !== actualSource || expectedId !== actualId) {
+                return -1;
+            }
+        }
+
+        return encodedIndex;
     }, []);
 
     const loadStageQueueSongs = useCallback(async (request: { songId?: number; songIds?: number[]; }) => {
