@@ -178,7 +178,7 @@ export function usePlaybackQueueController({
 
     const appendNeteaseSongsToMainQueue = useCallback((songs: SongResult[], options?: { suppressToast?: boolean }) => {
         if (songs.length === 0) {
-            return false;
+            return { changed: false, deduplicated: false, affectedCount: 0 };
         }
 
         const mainSnapshot = activePlaybackContext === 'stage' ? mainPlaybackSnapshotRef.current : null;
@@ -214,18 +214,21 @@ export function usePlaybackQueueController({
 
         if (changed && affectedSongs.length > 0) {
             void persistLastPlaybackCache(queueAnchorSong, nextQueue);
-            if (!options?.suppressToast) {
-                setStatusMsg({
-                    type: 'success',
-                    text: queueAddBehavior === 'next' ? '已插入到下一首' : (t('status.queueUpdated') || '已添加到播放队列'),
-                    nonce: Date.now(),
-                    durationMs: 1200,
-                });
-            }
-            return true;
         }
 
-        return false;
+        if (changed && affectedSongs.length > 0 && !options?.suppressToast) {
+            if (queueAddBehavior === 'next') {
+                setStatusMsg({ type: 'success', text: t('added_to_next_play'), nonce: Date.now(), durationMs: 1200 });
+            } else {
+                setStatusMsg({ type: 'success', text: t('added_to_play_queue'), nonce: Date.now(), durationMs: 1200 });
+            }
+        }
+
+        return {
+            changed,
+            deduplicated: nextQueue.length - baseQueue.length < queueableSongs.length,
+            affectedCount: affectedSongs.length,
+        };
     }, [activePlaybackContext, currentSong, mainPlaybackSnapshotRef, persistLastPlaybackCache, playQueue, queueAddBehavior, setPlayQueue, setStatusMsg, t]);
 
     const addNeteaseSongToQueue = useCallback((song: SongResult) => {
@@ -884,14 +887,16 @@ export function usePlaybackQueueController({
                 throw new Error(`Song ${request.songId} was not found.`);
             }
 
+            let actionData: any = undefined;
             if (request.appendToQueue) {
-                appendNeteaseSongsToMainQueue([song], { suppressToast: true });
+                actionData = appendNeteaseSongsToMainQueue([song], { suppressToast: true });
             } else {
                 await playSong(song, [song], false, { shouldNavigateToPlayer: true });
             }
             await window.electron?.completeStageExternalPlayRequest?.({
                 requestId: request.requestId,
                 ok: true,
+                result: actionData,
             });
         } catch (error) {
             console.warn('[Stage] Failed to handle external play request', error);
@@ -973,11 +978,12 @@ export function usePlaybackQueueController({
         toIndex?: number;
         index?: number;
     }) => {
-        const complete = async (ok: boolean, error?: unknown) => {
+        const complete = async (ok: boolean, error?: string | null, result?: any) => {
             await window.electron?.completeStagePlayerQueueRequest?.({
                 requestId: request.requestId,
                 ok,
                 error: ok ? null : error instanceof Error ? error.message : String(error),
+                result,
             });
         };
 
@@ -989,16 +995,22 @@ export function usePlaybackQueueController({
             const baseQueue = playQueue.length > 0 ? [...playQueue] : (currentSong ? [currentSong] : []);
             let nextQueue = baseQueue;
 
+            let actionData: any = undefined;
+
             if (request.action === 'append' || request.action === 'insert-next') {
                 const songs = await loadStageQueueSongs(request);
-                const insertIndex = request.action === 'insert-next'
-                    ? Math.max(0, (currentSong ? baseQueue.findIndex(song => song.id === currentSong.id) : -1) + 1)
-                    : baseQueue.length;
-                nextQueue = [
-                    ...baseQueue.slice(0, insertIndex),
-                    ...songs,
-                    ...baseQueue.slice(insertIndex),
-                ];
+                const { nextQueue: newQueue, affectedSongs, changed } = applyQueueAddBehavior({
+                    queue: baseQueue,
+                    songs,
+                    currentSong,
+                    behavior: request.action === 'append' ? 'append' : 'next',
+                });
+                nextQueue = newQueue;
+                actionData = {
+                    changed,
+                    affectedCount: affectedSongs.length,
+                    deduplicated: nextQueue.length - baseQueue.length < songs.length,
+                };
             } else if (request.action === 'remove') {
                 const removeIndex = resolveStageQueueIndex(baseQueue, request);
                 if (removeIndex < 0) {
@@ -1033,7 +1045,7 @@ export function usePlaybackQueueController({
 
             setPlayQueue(nextQueue);
             void persistLastPlaybackCache(currentSong, nextQueue);
-            await complete(true);
+            await complete(true, null, actionData);
         } catch (error) {
             console.warn('[Stage] Failed to handle player queue request', error);
             await complete(false, error);

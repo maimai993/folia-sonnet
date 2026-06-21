@@ -1602,10 +1602,13 @@ function createStageApi({
       throw createStageValidationError('Stage player play payload requires a positive integer songId.', 'INVALID_STAGE_PLAYER_PLAY_SONG_ID');
     }
 
-    await requestStageSongPlay(songId, { appendToQueue });
+    const result = await requestStageSongPlay(songId, { appendToQueue });
     return withStagePlayerOutsideInMetadata({
       ...(deprecated ? { deprecated: true, replacement: '/stage/player/play' } : {}),
       ok: true,
+      ...(result?.changed !== undefined ? { changed: result.changed } : {}),
+      ...(result?.deduplicated !== undefined ? { deduplicated: result.deduplicated } : {}),
+      ...(result?.affectedCount !== undefined ? { affectedCount: result.affectedCount } : {}),
       songId,
       appendToQueue,
     });
@@ -1707,7 +1710,7 @@ function createStageApi({
     const action = normalizeStageText(payload.action);
     const status = ensureStagePlayerQueueAllowed(action);
 
-    await requestStagePlayerQueueOperation({
+    const result = await requestStagePlayerQueueOperation({
       action,
       songId: Number.isInteger(Number(payload.songId)) ? Number(payload.songId) : undefined,
       songIds: Array.isArray(payload.songIds) ? payload.songIds.map(Number).filter((songId) => Number.isInteger(songId) && songId > 0) : undefined,
@@ -1722,6 +1725,9 @@ function createStageApi({
       accepted: true,
       action,
       playbackContext: status.playbackContext,
+      ...(result?.changed !== undefined ? { changed: result.changed } : {}),
+      ...(result?.deduplicated !== undefined ? { deduplicated: result.deduplicated } : {}),
+      ...(result?.affectedCount !== undefined ? { affectedCount: result.affectedCount } : {}),
       queue: buildStagePlayerQueueStatus().queue,
     });
   };
