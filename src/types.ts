@@ -215,6 +215,7 @@ export interface StagePlayerQueueCapabilities {
   insertNext: boolean;
   remove: boolean;
   move: boolean;
+  select: boolean;
   clear: boolean;
 }
 
@@ -249,7 +250,7 @@ export interface StagePlayerControlRequest {
 
 export interface StagePlayerQueueRequest {
   requestId: string;
-  action: 'append' | 'insert-next' | 'remove' | 'move' | 'clear';
+  action: 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear';
   songId?: number;
   songIds?: number[];
   queueItemId?: string;

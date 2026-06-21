@@ -203,6 +203,7 @@ export const buildStagePlayerSnapshot = ({
             insertNext: canEditQueue,
             remove: canEditQueue,
             move: canEditQueue,
+            select: canEditQueue,
             clear: canEditQueue,
         },
         queue: {

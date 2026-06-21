@@ -559,7 +559,7 @@
                             <h4>POST action</h4>
                             <dl class="field-list">
                                 <div><dt>append / insert-next</dt><dd>需要 `songId` 或 `songIds`。</dd></div>
-                                <div><dt>remove</dt><dd>需要 `queueItemId` 或 `index`。</dd></div>
+                                <div><dt>remove / select</dt><dd>需要 `queueItemId` 或 `index`，`select` 会切到该队列项播放。</dd></div>
                                 <div><dt>move</dt><dd>需要 `fromQueueItemId` 或 `fromIndex`，并提供 `toIndex`。</dd></div>
                                 <div><dt>clear</dt><dd>清空队列中非当前播放项。</dd></div>
                             </dl>
@@ -576,6 +576,7 @@
                                         <option value="insert-next">insert-next</option>
                                         <option value="remove">remove</option>
                                         <option value="move">move</option>
+                                        <option value="select">select</option>
                                         <option value="clear">clear</option>
                                     </select>
                                 </label>
@@ -625,7 +626,7 @@
                     </div>
                     <div class="endpoint-layout">
                         <article class="doc-card">
-                            <p class="hint">订阅播放器事件。连接后会立即收到当前状态，之后按 `TRACK_CHANGED`、`PLAYBACK_UPDATED`、`QUEUE_UPDATED` 推送。</p>
+                            <p class="hint">订阅播放器事件。连接后会立即收到 `STATUS` 当前状态，之后仅按 `TRACK_CHANGED`、`PLAYBACK_UPDATED`、`QUEUE_UPDATED` 推送变化。</p>
                             <div class="meta-grid">
                                 <div><span class="meta-label">Auth</span><span>Bearer token or ?token=</span></div>
                                 <div><span class="meta-label">Transport</span><span>WebSocket</span></div>

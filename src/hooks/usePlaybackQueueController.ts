@@ -945,7 +945,7 @@ export function usePlaybackQueueController({
 
     const handleStagePlayerQueueRequest = useCallback(async (request: {
         requestId: string;
-        action: 'append' | 'insert-next' | 'remove' | 'move' | 'clear';
+        action: 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear';
         songId?: number;
         songIds?: number[];
         queueItemId?: string;
@@ -998,6 +998,14 @@ export function usePlaybackQueueController({
                 nextQueue = [...baseQueue];
                 const [movedSong] = nextQueue.splice(fromIndex, 1);
                 nextQueue.splice(toIndex, 0, movedSong);
+            } else if (request.action === 'select') {
+                const selectIndex = resolveStageQueueIndex(baseQueue, request);
+                if (selectIndex < 0) {
+                    throw new Error('Queue select requires a valid queueItemId or index.');
+                }
+                await playSong(baseQueue[selectIndex], baseQueue, isFmMode, { shouldNavigateToPlayer: true });
+                await complete(true);
+                return;
             } else if (request.action === 'clear') {
                 nextQueue = currentSong ? [currentSong] : [];
             } else {
@@ -1017,7 +1025,7 @@ export function usePlaybackQueueController({
             console.warn('[Stage] Failed to handle player queue request', error);
             await complete(false, error);
         }
-    }, [activePlaybackContext, currentSong, isNowPlayingStageActive, loadStageQueueSongs, persistLastPlaybackCache, playQueue, resolveStageQueueIndex, setPlayQueue, setStatusMsg, t]);
+    }, [activePlaybackContext, currentSong, isFmMode, isNowPlayingStageActive, loadStageQueueSongs, persistLastPlaybackCache, playQueue, playSong, resolveStageQueueIndex, setPlayQueue, setStatusMsg, t]);
 
     useEffect(() => {
         if (!window.electron?.onStagePlayerQueueRequest) {

@@ -47,6 +47,7 @@ const STAGE_PLAYER_QUEUE_ACTION_CAPABILITIES = {
   'insert-next': 'insertNext',
   remove: 'remove',
   move: 'move',
+  select: 'select',
   clear: 'clear',
 };
 
@@ -193,6 +194,7 @@ function createStageApi({
   let stagePlayerSnapshot = null;
   let stagePlayerTrackKey = null;
   let stagePlayerQueueKey = null;
+  let stagePlayerPlaybackKey = null;
   let musicMetadataModulePromise = null;
 
   const logStage = (level, message, details) => {
@@ -329,6 +331,7 @@ function createStageApi({
       insertNext: Boolean(provided.insertNext ?? canEditQueue),
       remove: Boolean(provided.remove ?? canEditQueue),
       move: Boolean(provided.move ?? canEditQueue),
+      select: Boolean(provided.select ?? canEditQueue),
       clear: Boolean(provided.clear ?? canEditQueue),
     };
   };
@@ -475,6 +478,21 @@ function createStageApi({
       ? snapshot.queue.items.map((item) => item.queueItemId).join('|')
       : '';
 
+  const getStagePlayerPlaybackKey = (snapshot) => {
+    if (!snapshot) {
+      return '';
+    }
+
+    return JSON.stringify({
+      playbackContext: snapshot.playbackContext,
+      playerState: snapshot.playerState,
+      durationMs: snapshot.durationMs,
+      positionMs: snapshot.playerState === 'PLAYING' ? null : snapshot.positionMs,
+      controlCapabilities: snapshot.controlCapabilities,
+      queueCapabilities: snapshot.queueCapabilities,
+    });
+  };
+
   const broadcastStageEvent = (channel) => {
     const mainWindow = getMainWindow();
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -526,18 +544,20 @@ function createStageApi({
     stagePlayerSnapshot = normalizeStagePlayerSnapshot(snapshot);
     const nextTrackKey = getStagePlayerTrackKey(stagePlayerSnapshot);
     const nextQueueKey = getStagePlayerQueueKey(stagePlayerSnapshot);
+    const nextPlaybackKey = getStagePlayerPlaybackKey(stagePlayerSnapshot);
     const status = buildStagePlayerStatus();
 
     if (stagePlayerTrackKey !== null && stagePlayerTrackKey !== nextTrackKey) {
       broadcastStagePlayerWebSocketEvent('TRACK_CHANGED', status);
     } else if (stagePlayerQueueKey !== null && stagePlayerQueueKey !== nextQueueKey) {
       broadcastStagePlayerWebSocketEvent('QUEUE_UPDATED', status);
-    } else {
+    } else if (stagePlayerPlaybackKey !== null && stagePlayerPlaybackKey !== nextPlaybackKey) {
       broadcastStagePlayerWebSocketEvent('PLAYBACK_UPDATED', status);
     }
 
     stagePlayerTrackKey = nextTrackKey;
     stagePlayerQueueKey = nextQueueKey;
+    stagePlayerPlaybackKey = nextPlaybackKey;
     return status;
   };
 
@@ -572,7 +592,7 @@ function createStageApi({
       webSocket.on('close', () => {
         stagePlayerWebSockets.delete(webSocket);
       });
-      sendStagePlayerWebSocketEvent(webSocket, 'PLAYBACK_UPDATED', buildStagePlayerStatus());
+      sendStagePlayerWebSocketEvent(webSocket, 'STATUS', buildStagePlayerStatus());
     });
   };
 

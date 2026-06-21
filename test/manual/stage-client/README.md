@@ -80,10 +80,10 @@ Stage API 当前接口清单：
   用于发送播放器控制指令，支持 `next`、`prev`、`pause`、`resume`、`seek`。不支持当前播放上下文时返回 `409`。
 
 - `GET /stage/player/queue` / `POST /stage/player/queue`
-  用于读取和编辑正常播放器队列。编辑 action 支持 `append`、`insert-next`、`remove`、`move`、`clear`；Stage 外部推送 session 和外部播放源接入下的舞台模式为只读。
+  用于读取和编辑正常播放器队列。编辑 action 支持 `append`、`insert-next`、`remove`、`move`、`select`、`clear`；`select` 可通过 `index` 或 `queueItemId` 切到指定队列项播放。Stage 外部推送 session 和外部播放源接入下的舞台模式为只读。
 
 - `WS /stage/player/ws`
-  用于订阅播放器状态事件，鉴权复用 Bearer token，也支持 `?token=`。连接后会收到当前状态，之后按 `TRACK_CHANGED`、`PLAYBACK_UPDATED`、`QUEUE_UPDATED` 推送。
+  用于订阅播放器状态事件，鉴权复用 Bearer token，也支持 `?token=`。连接后会收到一次 `STATUS` 当前状态，之后仅在曲目、播放语义或队列发生变化时按 `TRACK_CHANGED`、`PLAYBACK_UPDATED`、`QUEUE_UPDATED` 推送。
 
 - `DELETE /stage/state`
   用于清空当前 Stage 持有的会话状态，通常会移除已注入的歌词、媒体上下文和相关临时数据。

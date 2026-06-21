@@ -258,6 +258,12 @@ describe('stageClientDemo helpers', () => {
             fromQueueItemId: 'netease:1:0',
             toIndex: 1,
         });
+        const selectResult = buildStagePlayerQueueRequest({
+            baseUrl: 'http://127.0.0.1:32107',
+            token: 'demo-token',
+            action: 'select',
+            index: 2,
+        });
 
         expect(getResult.endpoint).toBe('http://127.0.0.1:32107/stage/player/queue');
         expect(getResult.init.method).toBe('GET');
@@ -266,11 +272,20 @@ describe('stageClientDemo helpers', () => {
             fromQueueItemId: 'netease:1:0',
             toIndex: 1,
         });
+        expect(JSON.parse(String(selectResult.init.body))).toEqual({
+            action: 'select',
+            index: 2,
+        });
         expect(validateStagePlayerQueueRequestInput({
             baseUrl: 'http://127.0.0.1:32107',
             token: 'demo-token',
             action: 'remove',
         })).toBe('Queue remove requires queueItemId or index.');
+        expect(validateStagePlayerQueueRequestInput({
+            baseUrl: 'http://127.0.0.1:32107',
+            token: 'demo-token',
+            action: 'select',
+        })).toBe('Queue select requires queueItemId or index.');
     });
 
     it('builds a tokenized player websocket URL', () => {

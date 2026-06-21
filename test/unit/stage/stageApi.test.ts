@@ -159,6 +159,7 @@ const publishNormalPlayerSnapshot = (stageApi: ReturnType<typeof createStageApi>
         insertNext: true,
         remove: true,
         move: true,
+        select: true,
         clear: true,
     },
     queue: {
@@ -175,6 +176,52 @@ const publishNormalPlayerSnapshot = (stageApi: ReturnType<typeof createStageApi>
         }],
     },
     ...overrides,
+});
+
+const waitForWebSocketMessage = (socket: WebSocket, timeoutMs = 500) => new Promise<any>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('Timed out waiting for WebSocket message.'));
+    }, timeoutMs);
+    const cleanup = () => {
+        clearTimeout(timeout);
+        socket.off('message', handleMessage);
+        socket.off('error', handleError);
+    };
+    const handleMessage = (data: any) => {
+        cleanup();
+        resolve(JSON.parse(String(data)));
+    };
+    const handleError = (error: Error) => {
+        cleanup();
+        reject(error);
+    };
+
+    socket.once('message', handleMessage);
+    socket.once('error', handleError);
+});
+
+const expectNoWebSocketMessage = (socket: WebSocket, timeoutMs = 100) => new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+        cleanup();
+        resolve();
+    }, timeoutMs);
+    const cleanup = () => {
+        clearTimeout(timeout);
+        socket.off('message', handleMessage);
+        socket.off('error', handleError);
+    };
+    const handleMessage = (data: any) => {
+        cleanup();
+        reject(new Error(`Unexpected WebSocket message: ${String(data)}`));
+    };
+    const handleError = (error: Error) => {
+        cleanup();
+        reject(error);
+    };
+
+    socket.once('message', handleMessage);
+    socket.once('error', handleError);
 });
 
 const activeCleanups: Array<() => Promise<void>> = [];
@@ -476,6 +523,7 @@ describe('stageApi http contract', () => {
             queueCapabilities: {
                 append: true,
                 insertNext: true,
+                select: true,
             },
             queue: {
                 currentIndex: 0,
@@ -599,6 +647,26 @@ describe('stageApi http contract', () => {
             action: 'insert-next',
             songId: 99,
         });
+
+        const selectResponse = await fetch(`${context.baseUrl}/stage/player/queue`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${context.token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'select', index: 0 }),
+        });
+        const selectPayload = await selectResponse.json();
+        expect(selectPayload).toMatchObject({
+            domain: 'player-playback',
+            direction: 'outside-in',
+            accepted: true,
+            action: 'select',
+        });
+        expect(receivedQueueRequests[1]).toMatchObject({
+            action: 'select',
+            index: 0,
+        });
     });
 
     it('streams player WebSocket events with token authentication', async () => {
@@ -611,20 +679,21 @@ describe('stageApi http contract', () => {
             socket.close();
         });
 
-        const firstMessage = await new Promise<any>((resolve, reject) => {
-            socket.once('message', data => resolve(JSON.parse(String(data))));
-            socket.once('error', reject);
-        });
+        const firstMessage = await waitForWebSocketMessage(socket);
         expect(firstMessage).toMatchObject({
-            event: 'PLAYBACK_UPDATED',
+            event: 'STATUS',
             domain: 'player-playback',
             direction: 'inside-out',
         });
 
-        const nextMessagePromise = new Promise<any>((resolve, reject) => {
-            socket.once('message', data => resolve(JSON.parse(String(data))));
-            socket.once('error', reject);
+        publishNormalPlayerSnapshot(context.stageApi, {
+            playerState: 'PLAYING',
+            positionMs: 2000,
+            sampledAtMs: Date.now(),
         });
+        await expectNoWebSocketMessage(socket);
+
+        const nextMessagePromise = waitForWebSocketMessage(socket);
         publishNormalPlayerSnapshot(context.stageApi, {
             current: {
                 id: '43',

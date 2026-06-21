@@ -53,7 +53,7 @@ export interface StagePlayerControlRequestInput {
 export interface StagePlayerQueueRequestInput {
     baseUrl: string;
     token: string;
-    action: 'append' | 'insert-next' | 'remove' | 'move' | 'clear';
+    action: 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear';
     songId?: number;
     songIds?: number[];
     queueItemId?: string;
@@ -200,8 +200,8 @@ export const validateStagePlayerQueueRequestInput = (input: StagePlayerQueueRequ
         return baseAuthError;
     }
 
-    if (!['append', 'insert-next', 'remove', 'move', 'clear'].includes(input.action)) {
-        return 'Queue action must be append, insert-next, remove, move, or clear.';
+    if (!['append', 'insert-next', 'remove', 'move', 'select', 'clear'].includes(input.action)) {
+        return 'Queue action must be append, insert-next, remove, move, select, or clear.';
     }
 
     if ((input.action === 'append' || input.action === 'insert-next') && !input.songId && (!input.songIds || input.songIds.length === 0)) {
@@ -218,6 +218,10 @@ export const validateStagePlayerQueueRequestInput = (input: StagePlayerQueueRequ
 
     if (input.action === 'remove' && !input.queueItemId && !Number.isInteger(input.index)) {
         return 'Queue remove requires queueItemId or index.';
+    }
+
+    if (input.action === 'select' && !input.queueItemId && !Number.isInteger(input.index)) {
+        return 'Queue select requires queueItemId or index.';
     }
 
     return null;

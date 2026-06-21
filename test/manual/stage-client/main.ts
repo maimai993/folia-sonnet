@@ -289,11 +289,11 @@ const buildPlayerControlRequestFromInputs = () => buildStagePlayerControlRequest
 const buildPlayerQueueRequestFromInputs = () => buildStagePlayerQueueRequest({
     baseUrl: baseUrlInput.value,
     token: tokenInput.value,
-    action: playerQueueActionInput.value as 'append' | 'insert-next' | 'remove' | 'move' | 'clear',
+    action: playerQueueActionInput.value as 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear',
     songId: Number(playerQueueSongIdInput.value) || undefined,
     queueItemId: playerQueueItemIdInput.value,
     fromQueueItemId: playerQueueFromItemIdInput.value,
-    index: playerQueueActionInput.value === 'remove' && playerQueueIndexInput.value !== '' ? Number(playerQueueIndexInput.value) : undefined,
+    index: (playerQueueActionInput.value === 'remove' || playerQueueActionInput.value === 'select') && playerQueueIndexInput.value !== '' ? Number(playerQueueIndexInput.value) : undefined,
     fromIndex: playerQueueActionInput.value === 'move' && playerQueueIndexInput.value !== '' ? Number(playerQueueIndexInput.value) : undefined,
     toIndex: playerQueueToIndexInput.value === '' ? undefined : Number(playerQueueToIndexInput.value),
 });
