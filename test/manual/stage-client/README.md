@@ -27,6 +27,8 @@ npm run stage:client
 - 右侧同屏显示最终请求预览和实际响应
 - `POST /stage/player/play` 通过搜索结果按钮联动触发，便于模拟真实对接流程
 
+需要对接外部程序时，请参考 [Stage API 请求与响应 Schema](./API_SCHEMA.md)，其中按接口列出了请求参数、响应参数、字段类型和主要错误条件。
+
 Stage API 当前接口清单：
 
 - `GET /stage/health`
