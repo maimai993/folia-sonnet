@@ -108,6 +108,9 @@ const playerQueueItemIdInput = getElement<HTMLInputElement>('player-queue-item-i
 const playerQueueFromItemIdInput = getElement<HTMLInputElement>('player-queue-from-item-id');
 const playerQueueIndexInput = getElement<HTMLInputElement>('player-queue-index');
 const playerQueueToIndexInput = getElement<HTMLInputElement>('player-queue-to-index');
+const playerQueueOffsetInput = getElement<HTMLInputElement>('player-queue-offset');
+const playerQueueLimitInput = getElement<HTMLInputElement>('player-queue-limit');
+const playerQueueAroundCurrentInput = getElement<HTMLInputElement>('player-queue-around-current');
 const playerQueuePreview = getElement<HTMLElement>('player-queue-preview');
 const playerQueueStatus = getElement<HTMLElement>('player-queue-status');
 const playerQueueResponse = getElement<HTMLElement>('player-queue-response');
@@ -327,7 +330,11 @@ const buildPlayerQueueRequestFromInputs = () => buildStagePlayerQueueRequest({
     toIndex: playerQueueToIndexInput.value === '' ? undefined : Number(playerQueueToIndexInput.value),
 });
 
-const buildPlayerQueueGetRequestFromInputs = () => buildStagePlayerQueueGetRequest(baseUrlInput.value, tokenInput.value);
+const buildPlayerQueueGetRequestFromInputs = () => buildStagePlayerQueueGetRequest(baseUrlInput.value, tokenInput.value, {
+    offset: playerQueueOffsetInput.value === '' ? undefined : Number(playerQueueOffsetInput.value),
+    limit: playerQueueLimitInput.value === '' ? undefined : Number(playerQueueLimitInput.value),
+    around: playerQueueAroundCurrentInput.checked ? 'current' : undefined,
+});
 
 const renderPlayerWebSocketPreview = () => {
     try {

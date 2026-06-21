@@ -148,6 +148,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         fontScale: clampValue(monetTuning.fontScale ?? DEFAULT_MONET_TUNING.fontScale, 0.7, 1.5, DEFAULT_MONET_TUNING.fontScale),
         portraitSource: monetTuning.portraitSource ?? DEFAULT_MONET_TUNING.portraitSource,
         portraitStyle: monetTuning.portraitStyle ?? DEFAULT_MONET_TUNING.portraitStyle ?? 'rectangular',
+        showPortraitDragHanger: monetTuning.showPortraitDragHanger ?? DEFAULT_MONET_TUNING.showPortraitDragHanger,
     };
 
     const keywordColoringOptions = useMemo<PresetOption<boolean>[]>(() => ([
@@ -173,6 +174,10 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     const portraitStyleOptions = useMemo<PresetOption<'rectangular' | 'square'>[]>(() => ([
         { value: 'rectangular', label: t('options.monetPortraitStyleRectangular') || '长方形' },
         { value: 'square', label: t('options.monetPortraitStyleSquare') || '正方形' },
+    ]), [t]);
+    const showPortraitDragHangerOptions = useMemo<PresetOption<boolean>[]>(() => ([
+        { value: true, label: t('options.monetPortraitDragHangerShow') || '显示' },
+        { value: false, label: t('options.monetPortraitDragHangerHide') || '隐藏' },
     ]), [t]);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -264,6 +269,15 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     value={resolvedTuning.portraitStyle}
                     options={portraitStyleOptions}
                     onChange={(value) => onMonetTuningChange?.({ portraitStyle: value })}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
+
+                <PresetGroup
+                    label={t('options.monetPortraitDragHanger') || '拖拽调整按钮'}
+                    value={resolvedTuning.showPortraitDragHanger}
+                    options={showPortraitDragHangerOptions}
+                    onChange={(value) => onMonetTuningChange?.({ showPortraitDragHanger: value })}
                     isDaylight={isDaylight}
                     theme={theme}
                 />

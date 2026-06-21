@@ -503,6 +503,7 @@ export const resolveStoredMonetTuning = (parsed: StoredMonetTuningInput): MonetT
         ? Math.min(0, Math.max(-150, parsed.portraitOffsetX))
         : (DEFAULT_MONET_TUNING.portraitOffsetX ?? 0),
     portraitStyle: parsed.portraitStyle === 'rectangular' ? 'rectangular' : DEFAULT_MONET_TUNING.portraitStyle,
+    showPortraitDragHanger: parsed.showPortraitDragHanger ?? DEFAULT_MONET_TUNING.showPortraitDragHanger,
 });
 const readStoredMonetBackgroundTuning = (): MonetBackgroundTuning => {
     if (typeof window === 'undefined') {

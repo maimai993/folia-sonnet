@@ -178,6 +178,17 @@ const publishNormalPlayerSnapshot = (stageApi: ReturnType<typeof createStageApi>
     ...overrides,
 });
 
+const buildStageQueueItems = (count: number) => Array.from({ length: count }, (_, index) => ({
+    queueItemId: `netease:${42 + index}:${index}`,
+    id: String(42 + index),
+    source: 'netease',
+    title: `Track ${index + 1}`,
+    artist: 'Folia',
+    album: 'Stage',
+    durationMs: 180000 + index,
+    coverUrl: null,
+}));
+
 const waitForWebSocketMessage = (socket: WebSocket, timeoutMs = 500) => new Promise<any>((resolve, reject) => {
     const timeout = setTimeout(() => {
         cleanup();
@@ -530,6 +541,7 @@ describe('stageApi http contract', () => {
                 length: 1,
             },
         });
+        expect(payload.queue.items).toBeUndefined();
     });
 
     it('reports precise player time with playback compensation only while playing', async () => {
@@ -629,9 +641,15 @@ describe('stageApi http contract', () => {
             onQueueRequest: payload => receivedQueueRequests.push(payload),
         });
         activeCleanups.push(context.cleanup);
-        publishNormalPlayerSnapshot(context.stageApi);
+        const queueItems = buildStageQueueItems(3);
+        publishNormalPlayerSnapshot(context.stageApi, {
+            queue: {
+                currentIndex: 1,
+                items: queueItems,
+            },
+        });
 
-        const getResponse = await fetch(`${context.baseUrl}/stage/player/queue`, {
+        const getResponse = await fetch(`${context.baseUrl}/stage/player/queue?offset=1&limit=1`, {
             headers: { Authorization: `Bearer ${context.token}` },
         });
         const getPayload = await getResponse.json();
@@ -639,8 +657,30 @@ describe('stageApi http contract', () => {
             domain: 'player-playback',
             direction: 'inside-out',
             queue: {
-                length: 1,
+                currentIndex: 1,
+                length: 3,
+                offset: 1,
+                limit: 1,
+                returned: 1,
+                hasMore: true,
+                nextOffset: 2,
+                items: [{
+                    id: '43',
+                    queueItemId: 'netease:43:1',
+                }],
             },
+        });
+
+        const emptyWindowResponse = await fetch(`${context.baseUrl}/stage/player/queue?offset=99&limit=1`, {
+            headers: { Authorization: `Bearer ${context.token}` },
+        });
+        const emptyWindowPayload = await emptyWindowResponse.json();
+        expect(emptyWindowPayload.queue).toMatchObject({
+            length: 3,
+            offset: 3,
+            returned: 0,
+            hasMore: false,
+            items: [],
         });
 
         const postResponse = await fetch(`${context.baseUrl}/stage/player/queue`, {
@@ -658,6 +698,11 @@ describe('stageApi http contract', () => {
             accepted: true,
             action: 'insert-next',
         });
+        expect(postPayload.queue).toMatchObject({
+            currentIndex: 1,
+            length: 3,
+        });
+        expect(postPayload.queue.items).toBeUndefined();
         expect(receivedQueueRequests[0]).toMatchObject({
             action: 'insert-next',
             songId: 99,
@@ -700,6 +745,7 @@ describe('stageApi http contract', () => {
             domain: 'player-playback',
             direction: 'inside-out',
         });
+        expect(firstMessage.queue.items).toBeUndefined();
 
         publishNormalPlayerSnapshot(context.stageApi, {
             playerState: 'PLAYING',
@@ -728,5 +774,6 @@ describe('stageApi http contract', () => {
                 title: 'Next Track',
             },
         });
+        expect(nextMessage.queue.items).toBeUndefined();
     });
 });

@@ -63,6 +63,12 @@ export interface StagePlayerQueueRequestInput {
     index?: number;
 }
 
+export interface StagePlayerQueueGetOptions {
+    offset?: number;
+    limit?: number;
+    around?: 'current';
+}
+
 export interface StageRequestBuildResult {
     endpoint: string;
     init: RequestInit;
@@ -462,14 +468,25 @@ export const buildStagePlayerControlRequest = (input: StagePlayerControlRequestI
     };
 };
 
-export const buildStagePlayerQueueGetRequest = (baseUrl: string, token: string): StageRequestBuildResult => {
+export const buildStagePlayerQueueGetRequest = (baseUrl: string, token: string, options: StagePlayerQueueGetOptions = {}): StageRequestBuildResult => {
     const baseAuthError = validateStageBaseAuth(baseUrl, token);
     if (baseAuthError) {
         throw new Error(baseAuthError);
     }
 
+    const endpoint = new URL(`${normalizeStageBaseUrl(baseUrl)}/stage/player/queue`);
+    if (Number.isInteger(options.offset) && Number(options.offset) >= 0) {
+        endpoint.searchParams.set('offset', String(Math.floor(Number(options.offset))));
+    }
+    if (Number.isInteger(options.limit) && Number(options.limit) > 0) {
+        endpoint.searchParams.set('limit', String(Math.floor(Number(options.limit))));
+    }
+    if (options.around === 'current') {
+        endpoint.searchParams.set('around', 'current');
+    }
+
     return {
-        endpoint: `${normalizeStageBaseUrl(baseUrl)}/stage/player/queue`,
+        endpoint: endpoint.toString(),
         transport: 'json',
         init: {
             method: 'GET',

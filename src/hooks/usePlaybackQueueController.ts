@@ -956,7 +956,7 @@ export function usePlaybackQueueController({
         toIndex?: number;
         index?: number;
     }) => {
-        const complete = async (ok: boolean, error?: string | null, result?: any) => {
+        const complete = async (ok: boolean, error?: unknown, result?: any) => {
             await window.electron?.completeStagePlayerQueueRequest?.({
                 requestId: request.requestId,
                 ok,

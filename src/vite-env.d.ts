@@ -263,6 +263,7 @@ declare global {
     requestId: string;
     ok: boolean;
     error?: string | null;
+    result?: unknown;
   }
 
   interface StageStatus {
@@ -312,10 +313,23 @@ declare global {
     queueItemId: string;
   }
 
-  interface StagePlayerQueueSnapshot {
-    items: StagePlayerQueueItem[];
+  interface StagePlayerQueueSummary {
     currentIndex: number;
     length: number;
+    revision?: string;
+  }
+
+  interface StagePlayerQueueSnapshot extends StagePlayerQueueSummary {
+    items: StagePlayerQueueItem[];
+  }
+
+  interface StagePlayerQueueWindow extends StagePlayerQueueSummary {
+    items: StagePlayerQueueItem[];
+    offset: number;
+    limit: number;
+    returned: number;
+    hasMore: boolean;
+    nextOffset: number | null;
   }
 
   interface StagePlayerSnapshot {

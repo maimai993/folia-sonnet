@@ -250,7 +250,11 @@ describe('stageClientDemo helpers', () => {
     });
 
     it('builds player queue get and edit requests', () => {
-        const getResult = buildStagePlayerQueueGetRequest('http://127.0.0.1:32107', 'demo-token');
+        const getResult = buildStagePlayerQueueGetRequest('http://127.0.0.1:32107', 'demo-token', {
+            offset: 20,
+            limit: 50,
+            around: 'current',
+        });
         const editResult = buildStagePlayerQueueRequest({
             baseUrl: 'http://127.0.0.1:32107',
             token: 'demo-token',
@@ -265,7 +269,7 @@ describe('stageClientDemo helpers', () => {
             index: 2,
         });
 
-        expect(getResult.endpoint).toBe('http://127.0.0.1:32107/stage/player/queue');
+        expect(getResult.endpoint).toBe('http://127.0.0.1:32107/stage/player/queue?offset=20&limit=50&around=current');
         expect(getResult.init.method).toBe('GET');
         expect(JSON.parse(String(editResult.init.body))).toEqual({
             action: 'move',

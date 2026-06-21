@@ -440,7 +440,7 @@
                     </div>
                     <div class="endpoint-layout">
                         <article class="doc-card">
-                            <p class="hint">读取 Folia 播放器域状态，包含当前曲目、播放上下文、控制能力和队列摘要。响应方向为 inside-out。</p>
+                            <p class="hint">读取 Folia 播放器域状态，包含当前曲目、播放上下文、控制能力和队列摘要。不会返回完整队列 items。</p>
                             <div class="meta-grid">
                                 <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
                                 <div><span class="meta-label">Response</span><span>JSON</span></div>
@@ -551,7 +551,7 @@
                     </div>
                     <div class="endpoint-layout">
                         <article class="doc-card">
-                            <p class="hint">读取或编辑正常播放器队列。Stage 外部推送 session 与外部播放源舞台模式下为只读。</p>
+                            <p class="hint">读取或编辑正常播放器队列。GET 默认返回 100 条队列窗口，支持 offset、limit 和 around=current。</p>
                             <div class="meta-grid">
                                 <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
                                 <div><span class="meta-label">Content-Type</span><span>application/json for POST</span></div>
@@ -605,6 +605,20 @@
                                     <input id="player-queue-to-index" type="number" min="0" placeholder="1" />
                                 </label>
                             </div>
+                            <div class="grid two">
+                                <label>
+                                    <span>GET offset</span>
+                                    <input id="player-queue-offset" type="number" min="0" value="0" />
+                                </label>
+                                <label>
+                                    <span>GET limit</span>
+                                    <input id="player-queue-limit" type="number" min="1" max="500" value="100" />
+                                </label>
+                            </div>
+                            <label class="inline-toggle">
+                                <input id="player-queue-around-current" type="checkbox" />
+                                <span>Center GET window around current track</span>
+                            </label>
                             <pre id="player-queue-preview" class="request-preview scroll-box"></pre>
                             <div id="player-queue-status" class="status-line">No request sent yet.</div>
                             <pre id="player-queue-response" class="response-output compact scroll-box"></pre>
@@ -626,7 +640,7 @@
                     </div>
                     <div class="endpoint-layout">
                         <article class="doc-card">
-                            <p class="hint">订阅播放器事件。连接后会立即收到 `STATUS` 当前状态，之后仅按 `TRACK_CHANGED`、`PLAYBACK_UPDATED`、`QUEUE_UPDATED` 推送变化。</p>
+                            <p class="hint">订阅播放器事件。事件只推送队列摘要；需要完整队列窗口时调用 GET /stage/player/queue。</p>
                             <div class="meta-grid">
                                 <div><span class="meta-label">Auth</span><span>Bearer token or ?token=</span></div>
                                 <div><span class="meta-label">Transport</span><span>WebSocket</span></div>

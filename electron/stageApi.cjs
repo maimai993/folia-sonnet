@@ -20,6 +20,8 @@ const STAGE_MULTIPART_FIELD_COUNT_LIMIT = 10;
 const STAGE_SESSION_RETENTION_LIMIT = 12;
 const STAGE_PLAY_REQUEST_TIMEOUT_MS = 15_000;
 const STAGE_PLAYER_REQUEST_TIMEOUT_MS = 10_000;
+const STAGE_PLAYER_QUEUE_DEFAULT_LIMIT = 100;
+const STAGE_PLAYER_QUEUE_MAX_LIMIT = 500;
 const STAGE_LYRICS_FORMAT_VALUES = new Set(['lrc', 'enhanced-lrc', 'vtt', 'yrc', 'qrc']);
 const STAGE_INPUT_METADATA = Object.freeze({
   domain: 'stage-input',
@@ -455,7 +457,7 @@ function createStageApi({
       updatedAt: snapshot.updatedAt,
       controlCapabilities: snapshot.controlCapabilities,
       queueCapabilities: snapshot.queueCapabilities,
-      queue: snapshot.queue,
+      queue: buildStagePlayerQueueSummary(snapshot),
     });
   };
 
@@ -477,6 +479,41 @@ function createStageApi({
     Array.isArray(snapshot?.queue?.items)
       ? snapshot.queue.items.map((item) => item.queueItemId).join('|')
       : '';
+
+  const getStagePlayerQueueRevision = (snapshot) =>
+    crypto.createHash('sha1').update(getStagePlayerQueueKey(snapshot)).digest('hex');
+
+  const buildStagePlayerQueueSummary = (snapshot) => {
+    const queue = snapshot?.queue || getFallbackStagePlayerSnapshot().queue;
+    return {
+      currentIndex: normalizeStageInteger(queue.currentIndex, -1),
+      length: Math.max(0, normalizeStageInteger(queue.length ?? queue.items?.length, 0)),
+      revision: getStagePlayerQueueRevision(snapshot),
+    };
+  };
+
+  const normalizeStagePlayerQueueWindow = (requestUrl, queue) => {
+    const length = Math.max(0, normalizeStageInteger(queue?.length ?? queue?.items?.length, 0));
+    const rawLimit = normalizeStageInteger(requestUrl?.searchParams?.get('limit'), STAGE_PLAYER_QUEUE_DEFAULT_LIMIT);
+    const limit = Math.max(1, Math.min(STAGE_PLAYER_QUEUE_MAX_LIMIT, rawLimit));
+    const around = normalizeStageText(requestUrl?.searchParams?.get('around'));
+    let offset = Math.max(0, normalizeStageInteger(requestUrl?.searchParams?.get('offset'), 0));
+
+    if (around === 'current') {
+      const currentIndex = normalizeStageInteger(queue?.currentIndex, -1);
+      offset = currentIndex >= 0 ? Math.max(0, currentIndex - Math.floor(limit / 2)) : 0;
+    }
+
+    if (length <= 0) {
+      offset = 0;
+    } else if (around === 'current') {
+      offset = Math.min(offset, Math.max(0, length - limit));
+    } else {
+      offset = Math.min(offset, length);
+    }
+
+    return { offset, limit };
+  };
 
   const getStagePlayerPlaybackKey = (snapshot) => {
     if (!snapshot) {
@@ -1688,12 +1725,25 @@ function createStageApi({
     return status;
   };
 
-  const buildStagePlayerQueueStatus = (direction = 'inside-out') => {
+  const buildStagePlayerQueueStatus = (direction = 'inside-out', requestUrl = null) => {
     const status = buildStagePlayerStatus();
+    const snapshot = stagePlayerSnapshot || getFallbackStagePlayerSnapshot();
+    const queue = snapshot.queue || getFallbackStagePlayerSnapshot().queue;
+    const { offset, limit } = normalizeStagePlayerQueueWindow(requestUrl, queue);
+    const items = Array.isArray(queue.items) ? queue.items.slice(offset, offset + limit) : [];
+    const nextOffset = offset + items.length < queue.length ? offset + items.length : null;
     const payload = {
       playbackContext: status.playbackContext,
       queueCapabilities: status.queueCapabilities,
-      queue: status.queue,
+      queue: {
+        ...buildStagePlayerQueueSummary(snapshot),
+        items,
+        offset,
+        limit,
+        returned: items.length,
+        hasMore: nextOffset !== null,
+        nextOffset,
+      },
     };
 
     return direction === 'outside-in'
@@ -1728,7 +1778,7 @@ function createStageApi({
       ...(result?.changed !== undefined ? { changed: result.changed } : {}),
       ...(result?.deduplicated !== undefined ? { deduplicated: result.deduplicated } : {}),
       ...(result?.affectedCount !== undefined ? { affectedCount: result.affectedCount } : {}),
-      queue: buildStagePlayerQueueStatus().queue,
+      queue: buildStagePlayerQueueSummary(stagePlayerSnapshot || getFallbackStagePlayerSnapshot()),
     });
   };
 
@@ -1831,7 +1881,7 @@ function createStageApi({
     }
 
     if (pathname === '/stage/player/queue' && req.method === 'GET') {
-      sendStageJson(res, 200, buildStagePlayerQueueStatus());
+      sendStageJson(res, 200, buildStagePlayerQueueStatus('inside-out', requestUrl));
       return;
     }
 

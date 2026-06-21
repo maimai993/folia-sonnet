@@ -196,6 +196,7 @@ const compressMonet = (t: any): any => ({
     mps: t.portraitSource,
     pox: t.portraitOffsetX,
     mpy: t.portraitStyle,
+    mpdh: t.showPortraitDragHanger,
 });
 const decompressMonet = (o: any): any => ({
     keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_MONET_TUNING.keywordColoringEnabled,
@@ -205,6 +206,7 @@ const decompressMonet = (o: any): any => ({
     portraitSource: o.mps || DEFAULT_MONET_TUNING.portraitSource,
     portraitOffsetX: o.pox !== undefined ? o.pox : DEFAULT_MONET_TUNING.portraitOffsetX,
     portraitStyle: o.mpy || DEFAULT_MONET_TUNING.portraitStyle,
+    showPortraitDragHanger: o.mpdh !== undefined ? o.mpdh : DEFAULT_MONET_TUNING.showPortraitDragHanger,
 });
 
 export const compressConfig = (config: any): string => {

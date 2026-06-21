@@ -399,6 +399,17 @@ label {
     color: var(--stage-muted);
 }
 
+.inline-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.inline-toggle input {
+    width: auto;
+}
+
 input,
 textarea,
 select {
