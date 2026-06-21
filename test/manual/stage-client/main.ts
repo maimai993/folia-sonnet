@@ -171,7 +171,6 @@ const summarizeBody = (body: BodyInit | null | undefined) => {
 const renderRequestPreview = (target: HTMLElement, request: StageRequestBuildResult) => {
     const formattedHeaders = formatJson(request.init.headers || {});
     const bodyStr = summarizeBody(request.init.body as BodyInit | null | undefined);
-    
     target.innerHTML = [
         `<span class="req-method">${request.init.method || 'GET'}</span> <span class="req-url">${request.endpoint}</span>`,
         '',
