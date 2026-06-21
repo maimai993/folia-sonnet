@@ -43,6 +43,26 @@ export interface StagePlayRequestInput {
     appendToQueue?: boolean;
 }
 
+export interface StagePlayerControlRequestInput {
+    baseUrl: string;
+    token: string;
+    action: 'next' | 'prev' | 'pause' | 'resume' | 'seek';
+    positionMs?: number;
+}
+
+export interface StagePlayerQueueRequestInput {
+    baseUrl: string;
+    token: string;
+    action: 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear';
+    songId?: number;
+    songIds?: number[];
+    queueItemId?: string;
+    fromQueueItemId?: string;
+    fromIndex?: number;
+    toIndex?: number;
+    index?: number;
+}
+
 export interface StageRequestBuildResult {
     endpoint: string;
     init: RequestInit;
@@ -152,6 +172,56 @@ export const validateStagePlayRequestInput = (input: StagePlayRequestInput): str
 
     if (!Number.isInteger(input.songId) || input.songId <= 0) {
         return 'songId must be a positive integer.';
+    }
+
+    return null;
+};
+
+export const validateStagePlayerControlRequestInput = (input: StagePlayerControlRequestInput): string | null => {
+    const baseAuthError = validateStageBaseAuth(input.baseUrl, input.token);
+    if (baseAuthError) {
+        return baseAuthError;
+    }
+
+    if (!['next', 'prev', 'pause', 'resume', 'seek'].includes(input.action)) {
+        return 'Control action must be next, prev, pause, resume, or seek.';
+    }
+
+    if (input.action === 'seek' && (!Number.isFinite(input.positionMs) || Number(input.positionMs) < 0)) {
+        return 'Seek requires a non-negative positionMs.';
+    }
+
+    return null;
+};
+
+export const validateStagePlayerQueueRequestInput = (input: StagePlayerQueueRequestInput): string | null => {
+    const baseAuthError = validateStageBaseAuth(input.baseUrl, input.token);
+    if (baseAuthError) {
+        return baseAuthError;
+    }
+
+    if (!['append', 'insert-next', 'remove', 'move', 'select', 'clear'].includes(input.action)) {
+        return 'Queue action must be append, insert-next, remove, move, select, or clear.';
+    }
+
+    if ((input.action === 'append' || input.action === 'insert-next') && !input.songId && (!input.songIds || input.songIds.length === 0)) {
+        return 'Queue append actions require songId or songIds.';
+    }
+
+    if (input.action === 'move' && !input.fromQueueItemId && !Number.isInteger(input.fromIndex)) {
+        return 'Queue move requires fromQueueItemId or fromIndex.';
+    }
+
+    if (input.action === 'move' && !Number.isInteger(input.toIndex)) {
+        return 'Queue move requires toIndex.';
+    }
+
+    if (input.action === 'remove' && !input.queueItemId && !Number.isInteger(input.index)) {
+        return 'Queue remove requires queueItemId or index.';
+    }
+
+    if (input.action === 'select' && !input.queueItemId && !Number.isInteger(input.index)) {
+        return 'Queue select requires queueItemId or index.';
     }
 
     return null;
@@ -301,7 +371,7 @@ export const buildStageSearchRequest = (input: StageSearchRequestInput): StageRe
     }
 
     return {
-        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/search`,
+        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/player/search`,
         transport: 'json',
         init: {
             method: 'POST',
@@ -323,7 +393,7 @@ export const buildStagePlayRequest = (input: StagePlayRequestInput): StageReques
     }
 
     return {
-        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/play`,
+        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/player/play`,
         transport: 'json',
         init: {
             method: 'POST',
@@ -336,4 +406,113 @@ export const buildStagePlayRequest = (input: StagePlayRequestInput): StageReques
             }),
         },
     };
+};
+
+export const buildStagePlayerStatusRequest = (baseUrl: string, token: string): StageRequestBuildResult => {
+    const baseAuthError = validateStageBaseAuth(baseUrl, token);
+    if (baseAuthError) {
+        throw new Error(baseAuthError);
+    }
+
+    return {
+        endpoint: `${normalizeStageBaseUrl(baseUrl)}/stage/player/status`,
+        transport: 'json',
+        init: {
+            method: 'GET',
+            headers: buildStageBearerHeaders(token),
+        },
+    };
+};
+
+export const buildStagePlayerTimeRequest = (baseUrl: string, token: string): StageRequestBuildResult => {
+    const baseAuthError = validateStageBaseAuth(baseUrl, token);
+    if (baseAuthError) {
+        throw new Error(baseAuthError);
+    }
+
+    return {
+        endpoint: `${normalizeStageBaseUrl(baseUrl)}/stage/player/time`,
+        transport: 'json',
+        init: {
+            method: 'GET',
+            headers: buildStageBearerHeaders(token),
+        },
+    };
+};
+
+export const buildStagePlayerControlRequest = (input: StagePlayerControlRequestInput): StageRequestBuildResult => {
+    const validationError = validateStagePlayerControlRequestInput(input);
+    if (validationError) {
+        throw new Error(validationError);
+    }
+
+    return {
+        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/player/control`,
+        transport: 'json',
+        init: {
+            method: 'POST',
+            headers: buildStageBearerHeaders(input.token, {
+                'Content-Type': 'application/json',
+            }),
+            body: JSON.stringify({
+                action: input.action,
+                ...(input.action === 'seek' ? { positionMs: Math.floor(Number(input.positionMs)) } : {}),
+            }),
+        },
+    };
+};
+
+export const buildStagePlayerQueueGetRequest = (baseUrl: string, token: string): StageRequestBuildResult => {
+    const baseAuthError = validateStageBaseAuth(baseUrl, token);
+    if (baseAuthError) {
+        throw new Error(baseAuthError);
+    }
+
+    return {
+        endpoint: `${normalizeStageBaseUrl(baseUrl)}/stage/player/queue`,
+        transport: 'json',
+        init: {
+            method: 'GET',
+            headers: buildStageBearerHeaders(token),
+        },
+    };
+};
+
+export const buildStagePlayerQueueRequest = (input: StagePlayerQueueRequestInput): StageRequestBuildResult => {
+    const validationError = validateStagePlayerQueueRequestInput(input);
+    if (validationError) {
+        throw new Error(validationError);
+    }
+
+    return {
+        endpoint: `${normalizeStageBaseUrl(input.baseUrl)}/stage/player/queue`,
+        transport: 'json',
+        init: {
+            method: 'POST',
+            headers: buildStageBearerHeaders(input.token, {
+                'Content-Type': 'application/json',
+            }),
+            body: JSON.stringify({
+                action: input.action,
+                ...(input.songId ? { songId: input.songId } : {}),
+                ...(input.songIds?.length ? { songIds: input.songIds } : {}),
+                ...(normalizeText(input.queueItemId) ? { queueItemId: normalizeText(input.queueItemId) } : {}),
+                ...(normalizeText(input.fromQueueItemId) ? { fromQueueItemId: normalizeText(input.fromQueueItemId) } : {}),
+                ...(Number.isInteger(input.fromIndex) ? { fromIndex: input.fromIndex } : {}),
+                ...(Number.isInteger(input.toIndex) ? { toIndex: input.toIndex } : {}),
+                ...(Number.isInteger(input.index) ? { index: input.index } : {}),
+            }),
+        },
+    };
+};
+
+export const buildStagePlayerWebSocketUrl = (baseUrl: string, token: string) => {
+    const baseAuthError = validateStageBaseAuth(baseUrl, token);
+    if (baseAuthError) {
+        throw new Error(baseAuthError);
+    }
+
+    const normalizedBaseUrl = normalizeStageBaseUrl(baseUrl);
+    const wsBaseUrl = normalizedBaseUrl.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+    return `${wsBaseUrl}/stage/player/ws?token=${encodeURIComponent(normalizeText(token))}`;
 };

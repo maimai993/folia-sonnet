@@ -177,6 +177,8 @@ export interface StageExternalPlayResult {
 }
 
 export interface StageStatus {
+  domain?: 'stage-input';
+  direction?: 'outside-in';
   enabled: boolean;
   modeEnabled?: boolean;
   source?: StageSource | null;
@@ -185,6 +187,85 @@ export interface StageStatus {
   activeEntryKind: StageActiveEntryKind | null;
   lyricsSession: StageLyricsSession | null;
   mediaSession: StageMediaSession | null;
+}
+
+export type StagePlayerPlaybackContext = 'normal-playback' | 'stage-session' | 'external-playback-source';
+
+export interface StagePlayerCurrent {
+  id: string;
+  source: string;
+  title: string;
+  artist: string;
+  album: string;
+  durationMs: number;
+  coverUrl: string | null;
+}
+
+export interface StagePlayerControlCapabilities {
+  play: boolean;
+  pause: boolean;
+  resume: boolean;
+  seek: boolean;
+  previous: boolean;
+  next: boolean;
+}
+
+export interface StagePlayerQueueCapabilities {
+  append: boolean;
+  insertNext: boolean;
+  remove: boolean;
+  move: boolean;
+  select: boolean;
+  clear: boolean;
+}
+
+export interface StagePlayerQueueItem extends StagePlayerCurrent {
+  queueItemId: string;
+}
+
+export interface StagePlayerQueueSnapshot {
+  items: StagePlayerQueueItem[];
+  currentIndex: number;
+  length: number;
+}
+
+export interface StagePlayerSnapshot {
+  playbackContext: StagePlayerPlaybackContext;
+  current: StagePlayerCurrent | null;
+  playerState: PlayerState;
+  positionMs: number;
+  durationMs: number;
+  sampledAtMs: number;
+  updatedAt: number;
+  controlCapabilities: StagePlayerControlCapabilities;
+  queueCapabilities: StagePlayerQueueCapabilities;
+  queue: StagePlayerQueueSnapshot;
+}
+
+export interface StagePlayerControlRequest {
+  requestId: string;
+  action: 'next' | 'prev' | 'pause' | 'resume' | 'seek';
+  positionMs?: number;
+}
+
+export interface StagePlayerQueueRequest {
+  requestId: string;
+  action: 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear';
+  songId?: number;
+  songIds?: number[];
+  queueItemId?: string;
+  fromQueueItemId?: string;
+  fromIndex?: number;
+  toIndex?: number;
+  index?: number;
+}
+
+export interface StagePlayerRequestResult {
+  requestId: string;
+  ok: boolean;
+  error?: string | null;
+  snapshot?: StagePlayerSnapshot;
+  result?: unknown;
 }
 
 export type NowPlayingConnectionStatus = 'disabled' | 'connecting' | 'connected' | 'error';

@@ -107,6 +107,9 @@ export default function App() {
     // UI State
     const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+    // Auto-close the player panel when leaving the player view
+    // (Effect moved to after useAppNavigation where currentView is defined)
     const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>('cover');
     const [isPlayerChromeHidden, setIsPlayerChromeHidden] = useState(() => {
         const saved = localStorage.getItem(PLAYER_CHROME_HIDDEN_STORAGE_KEY);
@@ -645,6 +648,14 @@ export default function App() {
         handleArtistSelect: navigateToNeteaseArtist,
         popOverlay,
     } = useAppNavigation();
+
+    // Auto-close the player panel when leaving the player view
+    useEffect(() => {
+        if (currentView !== 'player' && isPanelOpen) {
+            setIsPanelOpen(false);
+        }
+    }, [currentView, isPanelOpen]);
+
     const {
         isSearchOpen,
         searchQuery,
@@ -1093,6 +1104,7 @@ export default function App() {
         showTransparentWindowBorder,
         setShowTransparentWindowBorder,
         transparentPlayerBackground,
+        activePlaybackContext,
         mainWindowClickThroughEnabled: isMainWindowClickThroughEnabled,
         isNowPlayingControlDisabledRef,
         audioRef,
@@ -1110,6 +1122,8 @@ export default function App() {
         mediaSessionPauseRef,
         mediaSessionPrevRef,
         mediaSessionNextRef,
+        getSyntheticStageLyricsTime,
+        syncStageLyricsClock,
         taskbarHasTrackRef,
         taskbarPlayerStateRef,
         exportState,

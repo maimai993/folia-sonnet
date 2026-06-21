@@ -3,6 +3,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const Busboy = require('busboy');
+const { WebSocket, WebSocketServer } = require('ws');
 const { finished } = require('stream/promises');
 
 // Stage API server for desktop-local integrations. External tools can push
@@ -18,7 +19,37 @@ const STAGE_MULTIPART_PART_COUNT_LIMIT = 10;
 const STAGE_MULTIPART_FIELD_COUNT_LIMIT = 10;
 const STAGE_SESSION_RETENTION_LIMIT = 12;
 const STAGE_PLAY_REQUEST_TIMEOUT_MS = 15_000;
+const STAGE_PLAYER_REQUEST_TIMEOUT_MS = 10_000;
 const STAGE_LYRICS_FORMAT_VALUES = new Set(['lrc', 'enhanced-lrc', 'vtt', 'yrc', 'qrc']);
+const STAGE_INPUT_METADATA = Object.freeze({
+  domain: 'stage-input',
+  direction: 'outside-in',
+});
+const STAGE_PLAYER_INSIDE_OUT_METADATA = Object.freeze({
+  domain: 'player-playback',
+  direction: 'inside-out',
+});
+const STAGE_PLAYER_OUTSIDE_IN_METADATA = Object.freeze({
+  domain: 'player-playback',
+  direction: 'outside-in',
+});
+const STAGE_PLAYER_CONTEXT_VALUES = new Set(['normal-playback', 'stage-session', 'external-playback-source']);
+const STAGE_PLAYER_STATE_VALUES = new Set(['IDLE', 'PLAYING', 'PAUSED']);
+const STAGE_PLAYER_CONTROL_ACTION_CAPABILITIES = {
+  next: 'next',
+  prev: 'previous',
+  pause: 'pause',
+  resume: 'resume',
+  seek: 'seek',
+};
+const STAGE_PLAYER_QUEUE_ACTION_CAPABILITIES = {
+  append: 'append',
+  'insert-next': 'insertNext',
+  remove: 'remove',
+  move: 'move',
+  select: 'select',
+  clear: 'clear',
+};
 
 class StageApiError extends Error {
   constructor(message, details = {}) {
@@ -156,6 +187,14 @@ function createStageApi({
   };
   const stageSessionAssetIndex = new Map();
   const pendingExternalPlayRequests = new Map();
+  const pendingStagePlayerControlRequests = new Map();
+  const pendingStagePlayerQueueRequests = new Map();
+  const stagePlayerWebSockets = new Set();
+  let stagePlayerWebSocketServer = null;
+  let stagePlayerSnapshot = null;
+  let stagePlayerTrackKey = null;
+  let stagePlayerQueueKey = null;
+  let stagePlayerPlaybackKey = null;
   let musicMetadataModulePromise = null;
 
   const logStage = (level, message, details) => {
@@ -230,7 +269,22 @@ function createStageApi({
     return `${baseUrl}?v=${encodeURIComponent(String(version))}`;
   };
 
-  const buildStageStatus = () => ({
+  const withStageInputMetadata = (payload) => ({
+    ...STAGE_INPUT_METADATA,
+    ...payload,
+  });
+
+  const withStagePlayerInsideOutMetadata = (payload) => ({
+    ...STAGE_PLAYER_INSIDE_OUT_METADATA,
+    ...payload,
+  });
+
+  const withStagePlayerOutsideInMetadata = (payload) => ({
+    ...STAGE_PLAYER_OUTSIDE_IN_METADATA,
+    ...payload,
+  });
+
+  const buildStageStatus = () => withStageInputMetadata({
     enabled: isStageEnabled(),
     modeEnabled: isStageModeEnabled(),
     source: isStageModeEnabled() ? getStageModeSource() : null,
@@ -241,6 +295,204 @@ function createStageApi({
     mediaSession: stageMediaSession,
   });
 
+  const normalizeStageNumber = (value, fallback = 0) => {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : fallback;
+  };
+
+  const normalizeStageInteger = (value, fallback = 0) => Math.floor(normalizeStageNumber(value, fallback));
+
+  const normalizeStagePlayerContext = (value) =>
+    STAGE_PLAYER_CONTEXT_VALUES.has(value) ? value : 'normal-playback';
+
+  const normalizeStagePlayerState = (value) =>
+    STAGE_PLAYER_STATE_VALUES.has(value) ? value : 'IDLE';
+
+  const buildStagePlayerControlCapabilities = (context, current, provided = {}) => {
+    const hasCurrent = Boolean(current);
+    const canControlTransport = context !== 'external-playback-source' && hasCurrent;
+    const isNormalPlayback = context === 'normal-playback';
+
+    return {
+      play: Boolean(provided.play ?? canControlTransport),
+      pause: Boolean(provided.pause ?? canControlTransport),
+      resume: Boolean(provided.resume ?? canControlTransport),
+      seek: Boolean(provided.seek ?? canControlTransport),
+      previous: Boolean(isNormalPlayback && provided.previous),
+      next: Boolean(isNormalPlayback && provided.next),
+    };
+  };
+
+  const buildStagePlayerQueueCapabilities = (context, provided = {}) => {
+    const canEditQueue = context === 'normal-playback';
+
+    return {
+      append: Boolean(provided.append ?? canEditQueue),
+      insertNext: Boolean(provided.insertNext ?? canEditQueue),
+      remove: Boolean(provided.remove ?? canEditQueue),
+      move: Boolean(provided.move ?? canEditQueue),
+      select: Boolean(provided.select ?? canEditQueue),
+      clear: Boolean(provided.clear ?? canEditQueue),
+    };
+  };
+
+  const normalizeStagePlayerCurrent = (value) => {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    const id = normalizeStageText(value.id);
+    const title = normalizeStageText(value.title);
+    if (!id && !title) {
+      return null;
+    }
+
+    return {
+      id: id || title,
+      source: normalizeStageText(value.source) || 'unknown',
+      title: title || 'Unknown Song',
+      artist: normalizeStageText(value.artist) || '',
+      album: normalizeStageText(value.album) || '',
+      durationMs: Math.max(0, normalizeStageInteger(value.durationMs, 0)),
+      coverUrl: normalizeStageText(value.coverUrl) || null,
+    };
+  };
+
+  const normalizeStagePlayerQueueItem = (item, index) => {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    const current = normalizeStagePlayerCurrent(item.current || item);
+    if (!current) {
+      return null;
+    }
+
+    return {
+      queueItemId: normalizeStageText(item.queueItemId) || `${current.source}:${current.id}:${index}`,
+      ...current,
+    };
+  };
+
+  const normalizeStagePlayerQueue = (queue) => {
+    const items = Array.isArray(queue?.items)
+      ? queue.items.map(normalizeStagePlayerQueueItem).filter(Boolean)
+      : [];
+    const currentIndex = normalizeStageInteger(queue?.currentIndex, -1);
+
+    return {
+      items,
+      currentIndex: currentIndex >= 0 && currentIndex < items.length ? currentIndex : -1,
+      length: items.length,
+    };
+  };
+
+  const normalizeStagePlayerSnapshot = (snapshot) => {
+    const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+    const playbackContext = normalizeStagePlayerContext(source.playbackContext);
+    const current = normalizeStagePlayerCurrent(source.current);
+    const queue = normalizeStagePlayerQueue(source.queue);
+    const durationMs = Math.max(0, normalizeStageInteger(source.durationMs ?? current?.durationMs, 0));
+    const positionMs = Math.max(0, normalizeStageInteger(source.positionMs, 0));
+    const sampledAtMs = Math.max(0, normalizeStageInteger(source.sampledAtMs, Date.now()));
+
+    return {
+      playbackContext,
+      current,
+      playerState: normalizeStagePlayerState(source.playerState),
+      positionMs: durationMs > 0 ? Math.min(positionMs, durationMs) : positionMs,
+      durationMs,
+      sampledAtMs,
+      updatedAt: Math.max(0, normalizeStageInteger(source.updatedAt, Date.now())),
+      controlCapabilities: buildStagePlayerControlCapabilities(playbackContext, current, source.controlCapabilities),
+      queueCapabilities: buildStagePlayerQueueCapabilities(playbackContext, source.queueCapabilities),
+      queue,
+    };
+  };
+
+  const getFallbackStagePlayerSnapshot = () => normalizeStagePlayerSnapshot({
+    playbackContext: 'normal-playback',
+    current: null,
+    playerState: 'IDLE',
+    positionMs: 0,
+    durationMs: 0,
+    sampledAtMs: Date.now(),
+    updatedAt: Date.now(),
+    queue: {
+      items: [],
+      currentIndex: -1,
+    },
+  });
+
+  const resolveStagePlayerSnapshotTime = (snapshot) => {
+    const source = snapshot || getFallbackStagePlayerSnapshot();
+    const sampledAtMs = Date.now();
+    let positionMs = source.positionMs;
+
+    if (source.playerState === 'PLAYING' && Number.isFinite(source.sampledAtMs)) {
+      positionMs += Math.max(0, sampledAtMs - source.sampledAtMs);
+    }
+
+    const durationMs = Math.max(0, normalizeStageInteger(source.durationMs, 0));
+    return {
+      positionMs: durationMs > 0 ? Math.min(Math.max(0, Math.floor(positionMs)), durationMs) : Math.max(0, Math.floor(positionMs)),
+      durationMs,
+      sampledAtMs,
+    };
+  };
+
+  const buildStagePlayerStatus = () => {
+    const snapshot = stagePlayerSnapshot || getFallbackStagePlayerSnapshot();
+    const time = resolveStagePlayerSnapshotTime(snapshot);
+
+    return withStagePlayerInsideOutMetadata({
+      playbackContext: snapshot.playbackContext,
+      current: snapshot.current,
+      playerState: snapshot.playerState,
+      positionMs: time.positionMs,
+      durationMs: time.durationMs,
+      sampledAtMs: time.sampledAtMs,
+      updatedAt: snapshot.updatedAt,
+      controlCapabilities: snapshot.controlCapabilities,
+      queueCapabilities: snapshot.queueCapabilities,
+      queue: snapshot.queue,
+    });
+  };
+
+  const buildStagePlayerTime = () => {
+    const status = buildStagePlayerStatus();
+    return withStagePlayerInsideOutMetadata({
+      playbackContext: status.playbackContext,
+      playerState: status.playerState,
+      positionMs: status.positionMs,
+      durationMs: status.durationMs,
+      sampledAtMs: status.sampledAtMs,
+    });
+  };
+
+  const getStagePlayerTrackKey = (snapshot) =>
+    snapshot?.current ? `${snapshot.current.source}:${snapshot.current.id}` : 'none';
+
+  const getStagePlayerQueueKey = (snapshot) =>
+    Array.isArray(snapshot?.queue?.items)
+      ? snapshot.queue.items.map((item) => item.queueItemId).join('|')
+      : '';
+
+  const getStagePlayerPlaybackKey = (snapshot) => {
+    if (!snapshot) {
+      return '';
+    }
+
+    return JSON.stringify({
+      playbackContext: snapshot.playbackContext,
+      playerState: snapshot.playerState,
+      durationMs: snapshot.durationMs,
+      positionMs: snapshot.playerState === 'PLAYING' ? null : snapshot.positionMs,
+      controlCapabilities: snapshot.controlCapabilities,
+      queueCapabilities: snapshot.queueCapabilities,
+    });
+  };
+
   const broadcastStageEvent = (channel) => {
     const mainWindow = getMainWindow();
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -248,6 +500,112 @@ function createStageApi({
     }
 
     mainWindow.webContents.send(channel, buildStageStatus());
+  };
+
+  const sendStagePlayerWebSocketEvent = (socket, event, payload = buildStagePlayerStatus()) => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    socket.send(JSON.stringify({
+      event,
+      ...payload,
+    }));
+    return true;
+  };
+
+  const broadcastStagePlayerWebSocketEvent = (event, payload = buildStagePlayerStatus()) => {
+    for (const socket of stagePlayerWebSockets) {
+      sendStagePlayerWebSocketEvent(socket, event, payload);
+    }
+  };
+
+  const closeStagePlayerWebSockets = (code = 1001, reason = 'Stage player socket closed.') => {
+    for (const socket of stagePlayerWebSockets) {
+      try {
+        socket.close(code, reason);
+      } catch (error) {
+        logStage('warn', 'Failed to close a Stage player WebSocket.', error);
+      }
+    }
+    stagePlayerWebSockets.clear();
+
+    if (stagePlayerWebSocketServer) {
+      try {
+        stagePlayerWebSocketServer.close();
+      } catch (error) {
+        logStage('warn', 'Failed to close Stage player WebSocket server.', error);
+      }
+      stagePlayerWebSocketServer = null;
+    }
+  };
+
+  const publishStagePlayerSnapshot = (snapshot) => {
+    stagePlayerSnapshot = normalizeStagePlayerSnapshot(snapshot);
+    const nextTrackKey = getStagePlayerTrackKey(stagePlayerSnapshot);
+    const nextQueueKey = getStagePlayerQueueKey(stagePlayerSnapshot);
+    const nextPlaybackKey = getStagePlayerPlaybackKey(stagePlayerSnapshot);
+    const status = buildStagePlayerStatus();
+
+    if (stagePlayerTrackKey !== null && stagePlayerTrackKey !== nextTrackKey) {
+      broadcastStagePlayerWebSocketEvent('TRACK_CHANGED', status);
+    } else if (stagePlayerQueueKey !== null && stagePlayerQueueKey !== nextQueueKey) {
+      broadcastStagePlayerWebSocketEvent('QUEUE_UPDATED', status);
+    } else if (stagePlayerPlaybackKey !== null && stagePlayerPlaybackKey !== nextPlaybackKey) {
+      broadcastStagePlayerWebSocketEvent('PLAYBACK_UPDATED', status);
+    }
+
+    stagePlayerTrackKey = nextTrackKey;
+    stagePlayerQueueKey = nextQueueKey;
+    stagePlayerPlaybackKey = nextPlaybackKey;
+    return status;
+  };
+
+  const rejectStageWebSocketUpgrade = (socket, statusCode, message) => {
+    socket.write(`HTTP/1.1 ${statusCode} ${message}\r\nConnection: close\r\n\r\n`);
+    socket.destroy();
+  };
+
+  const handleStageWebSocketUpgrade = (req, socket, head) => {
+    const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
+    if (requestUrl.pathname !== '/stage/player/ws') {
+      rejectStageWebSocketUpgrade(socket, 404, 'Not Found');
+      return;
+    }
+
+    if (!isStageEnabled()) {
+      rejectStageWebSocketUpgrade(socket, 503, 'Service Unavailable');
+      return;
+    }
+
+    if (!matchesStageBearerToken(req, requestUrl)) {
+      rejectStageWebSocketUpgrade(socket, 401, 'Unauthorized');
+      return;
+    }
+
+    if (!stagePlayerWebSocketServer) {
+      stagePlayerWebSocketServer = new WebSocketServer({ noServer: true });
+    }
+
+    stagePlayerWebSocketServer.handleUpgrade(req, socket, head, (webSocket) => {
+      stagePlayerWebSockets.add(webSocket);
+      webSocket.on('close', () => {
+        stagePlayerWebSockets.delete(webSocket);
+      });
+      sendStagePlayerWebSocketEvent(webSocket, 'STATUS', buildStagePlayerStatus());
+    });
+  };
+
+  const clearPendingStagePlayerRequests = (pendingRequests, reason, code) => {
+    for (const [requestId, pendingRequest] of pendingRequests.entries()) {
+      clearTimeout(pendingRequest.timer);
+      pendingRequest.reject(new StageApiError(reason, {
+        statusCode: 503,
+        code,
+        details: { requestId },
+      }));
+    }
+    pendingRequests.clear();
   };
 
   const ensureStageSessionsDirectory = async () => {
@@ -1079,6 +1437,92 @@ function createStageApi({
     });
   };
 
+  const requestStagePlayerRendererAction = async (channel, pendingRequests, requestPrefix, payload, unavailableCode) => {
+    const mainWindow = getMainWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      throw new StageApiError('Folia main window is unavailable for Stage player requests.', {
+        statusCode: 503,
+        code: unavailableCode,
+      });
+    }
+
+    const requestId = `${requestPrefix}-${Date.now()}-${crypto.randomUUID()}`;
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingRequests.delete(requestId);
+        reject(new StageApiError('Stage player request timed out.', {
+          statusCode: 504,
+          code: 'STAGE_PLAYER_REQUEST_TIMEOUT',
+          details: { requestId },
+        }));
+      }, STAGE_PLAYER_REQUEST_TIMEOUT_MS);
+
+      pendingRequests.set(requestId, { resolve, reject, timer });
+      mainWindow.webContents.send(channel, {
+        requestId,
+        ...payload,
+      });
+    });
+  };
+
+  const completeStagePlayerRendererRequest = (pendingRequests, { requestId, ok, error, snapshot, result } = {}) => {
+    const normalizedRequestId = normalizeStageText(requestId);
+    if (!normalizedRequestId) {
+      return false;
+    }
+
+    const pendingRequest = pendingRequests.get(normalizedRequestId);
+    if (!pendingRequest) {
+      return false;
+    }
+
+    clearTimeout(pendingRequest.timer);
+    pendingRequests.delete(normalizedRequestId);
+
+    if (snapshot) {
+      publishStagePlayerSnapshot(snapshot);
+    }
+
+    if (ok) {
+      pendingRequest.resolve(result || { ok: true });
+      return true;
+    }
+
+    pendingRequest.reject(new StageApiError(normalizeStageText(error) || 'Renderer rejected the Stage player request.', {
+      statusCode: 502,
+      code: 'STAGE_PLAYER_REQUEST_REJECTED',
+      details: {
+        requestId: normalizedRequestId,
+      },
+    }));
+    return true;
+  };
+
+  const requestStagePlayerControl = (payload) =>
+    requestStagePlayerRendererAction(
+      'stage-player-control-request',
+      pendingStagePlayerControlRequests,
+      'stage-player-control',
+      payload,
+      'STAGE_PLAYER_CONTROL_UNAVAILABLE',
+    );
+
+  const requestStagePlayerQueueOperation = (payload) =>
+    requestStagePlayerRendererAction(
+      'stage-player-queue-request',
+      pendingStagePlayerQueueRequests,
+      'stage-player-queue',
+      payload,
+      'STAGE_PLAYER_QUEUE_UNAVAILABLE',
+    );
+
+  const completeStagePlayerControlRequest = (result) =>
+    completeStagePlayerRendererRequest(pendingStagePlayerControlRequests, result);
+
+  const completeStagePlayerQueueRequest = (result) =>
+    completeStagePlayerRendererRequest(pendingStagePlayerQueueRequests, result);
+
   const completeStageExternalPlayRequest = ({ requestId, ok, error } = {}) => {
     const normalizedRequestId = normalizeStageText(requestId);
     if (!normalizedRequestId) {
@@ -1106,6 +1550,186 @@ function createStageApi({
       },
     }));
     return true;
+  };
+
+  const readStageJsonPayload = async (req, errorMessage, errorCode) => {
+    const requestBody = await readRequestBodyWithLimit(req, STAGE_JSON_BODY_LIMIT_BYTES);
+    try {
+      return JSON.parse(requestBody.toString('utf-8') || '{}');
+    } catch (error) {
+      throw new StageApiError(errorMessage, {
+        statusCode: 400,
+        code: errorCode,
+        details: {
+          reason: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  };
+
+  const handleStagePlayerSearchRequest = async (req, { deprecated = false } = {}) => {
+    const payload = await readStageJsonPayload(
+      req,
+      'Failed to parse Stage player search JSON payload.',
+      'INVALID_STAGE_PLAYER_SEARCH_JSON',
+    );
+    const query = normalizeStageText(payload.query);
+    const limit = Number.isFinite(payload.limit) ? Math.max(1, Math.min(50, Math.floor(payload.limit))) : 10;
+    if (!query) {
+      throw createStageValidationError('Stage player search query is required.', 'INVALID_STAGE_PLAYER_SEARCH_QUERY');
+    }
+
+    const songs = searchStageSongs
+      ? await searchStageSongs(query, limit)
+      : await defaultSearchStageSongs(query, limit);
+
+    return withStagePlayerOutsideInMetadata({
+      ...(deprecated ? { deprecated: true, replacement: '/stage/player/search' } : {}),
+      query,
+      songs,
+    });
+  };
+
+  const handleStagePlayerPlayRequest = async (req, { deprecated = false } = {}) => {
+    const payload = await readStageJsonPayload(
+      req,
+      'Failed to parse Stage player play JSON payload.',
+      'INVALID_STAGE_PLAYER_PLAY_JSON',
+    );
+    const songId = Number(payload.songId);
+    const appendToQueue = payload.appendToQueue === true;
+    if (!Number.isInteger(songId) || songId <= 0) {
+      throw createStageValidationError('Stage player play payload requires a positive integer songId.', 'INVALID_STAGE_PLAYER_PLAY_SONG_ID');
+    }
+
+    const result = await requestStageSongPlay(songId, { appendToQueue });
+    return withStagePlayerOutsideInMetadata({
+      ...(deprecated ? { deprecated: true, replacement: '/stage/player/play' } : {}),
+      ok: true,
+      ...(result?.changed !== undefined ? { changed: result.changed } : {}),
+      ...(result?.deduplicated !== undefined ? { deduplicated: result.deduplicated } : {}),
+      ...(result?.affectedCount !== undefined ? { affectedCount: result.affectedCount } : {}),
+      songId,
+      appendToQueue,
+    });
+  };
+
+  const throwStagePlayerUnsupported = (message, code, details) => {
+    throw new StageApiError(message, {
+      statusCode: 409,
+      code,
+      details,
+    });
+  };
+
+  const ensureStagePlayerControlAllowed = (action) => {
+    const status = buildStagePlayerStatus();
+    const capabilityKey = STAGE_PLAYER_CONTROL_ACTION_CAPABILITIES[action];
+    if (!capabilityKey) {
+      throw createStageValidationError('Unsupported Stage player control action.', 'INVALID_STAGE_PLAYER_CONTROL_ACTION', {
+        action,
+      });
+    }
+
+    if (!status.controlCapabilities?.[capabilityKey]) {
+      throwStagePlayerUnsupported('Control action is not supported in the current playback context.', 'STAGE_PLAYER_CONTROL_UNSUPPORTED', {
+        action,
+        playbackContext: status.playbackContext,
+      });
+    }
+
+    return status;
+  };
+
+  const handleStagePlayerControlRequest = async (req) => {
+    const payload = await readStageJsonPayload(
+      req,
+      'Failed to parse Stage player control JSON payload.',
+      'INVALID_STAGE_PLAYER_CONTROL_JSON',
+    );
+    const action = normalizeStageText(payload.action);
+    const status = ensureStagePlayerControlAllowed(action);
+    let positionMs;
+    if (action === 'seek') {
+      positionMs = normalizeStageInteger(payload.positionMs, -1);
+      if (positionMs < 0) {
+        throw createStageValidationError('Stage player seek requires a non-negative positionMs.', 'INVALID_STAGE_PLAYER_SEEK_POSITION');
+      }
+    }
+
+    await requestStagePlayerControl({
+      action,
+      ...(positionMs !== undefined ? { positionMs } : {}),
+    });
+
+    return withStagePlayerOutsideInMetadata({
+      accepted: true,
+      action,
+      playbackContext: status.playbackContext,
+    });
+  };
+
+  const ensureStagePlayerQueueAllowed = (action) => {
+    const status = buildStagePlayerStatus();
+    const capabilityKey = STAGE_PLAYER_QUEUE_ACTION_CAPABILITIES[action];
+    if (!capabilityKey) {
+      throw createStageValidationError('Unsupported Stage player queue action.', 'INVALID_STAGE_PLAYER_QUEUE_ACTION', {
+        action,
+      });
+    }
+
+    if (!status.queueCapabilities?.[capabilityKey]) {
+      throwStagePlayerUnsupported('Queue action is not supported in the current playback context.', 'STAGE_PLAYER_QUEUE_UNSUPPORTED', {
+        action,
+        playbackContext: status.playbackContext,
+      });
+    }
+
+    return status;
+  };
+
+  const buildStagePlayerQueueStatus = (direction = 'inside-out') => {
+    const status = buildStagePlayerStatus();
+    const payload = {
+      playbackContext: status.playbackContext,
+      queueCapabilities: status.queueCapabilities,
+      queue: status.queue,
+    };
+
+    return direction === 'outside-in'
+      ? withStagePlayerOutsideInMetadata(payload)
+      : withStagePlayerInsideOutMetadata(payload);
+  };
+
+  const handleStagePlayerQueueRequest = async (req) => {
+    const payload = await readStageJsonPayload(
+      req,
+      'Failed to parse Stage player queue JSON payload.',
+      'INVALID_STAGE_PLAYER_QUEUE_JSON',
+    );
+    const action = normalizeStageText(payload.action);
+    const status = ensureStagePlayerQueueAllowed(action);
+
+    const result = await requestStagePlayerQueueOperation({
+      action,
+      songId: Number.isInteger(Number(payload.songId)) ? Number(payload.songId) : undefined,
+      songIds: Array.isArray(payload.songIds) ? payload.songIds.map(Number).filter((songId) => Number.isInteger(songId) && songId > 0) : undefined,
+      queueItemId: normalizeStageText(payload.queueItemId) || undefined,
+      fromQueueItemId: normalizeStageText(payload.fromQueueItemId) || undefined,
+      fromIndex: Number.isInteger(Number(payload.fromIndex)) ? Number(payload.fromIndex) : undefined,
+      toIndex: Number.isInteger(Number(payload.toIndex)) ? Number(payload.toIndex) : undefined,
+      index: Number.isInteger(Number(payload.index)) ? Number(payload.index) : undefined,
+    });
+
+    return withStagePlayerOutsideInMetadata({
+      accepted: true,
+      action,
+      playbackContext: status.playbackContext,
+      ...(result?.changed !== undefined ? { changed: result.changed } : {}),
+      ...(result?.deduplicated !== undefined ? { deduplicated: result.deduplicated } : {}),
+      ...(result?.affectedCount !== undefined ? { affectedCount: result.affectedCount } : {}),
+      queue: buildStagePlayerQueueStatus().queue,
+    });
   };
 
   const handleStageHttpRequest = async (req, res) => {
@@ -1196,6 +1820,21 @@ function createStageApi({
       return;
     }
 
+    if (pathname === '/stage/player/status' && req.method === 'GET') {
+      sendStageJson(res, 200, buildStagePlayerStatus());
+      return;
+    }
+
+    if (pathname === '/stage/player/time' && req.method === 'GET') {
+      sendStageJson(res, 200, buildStagePlayerTime());
+      return;
+    }
+
+    if (pathname === '/stage/player/queue' && req.method === 'GET') {
+      sendStageJson(res, 200, buildStagePlayerQueueStatus());
+      return;
+    }
+
     if (pathname === '/stage/state' && req.method === 'DELETE') {
       await clearStageStateData();
       broadcastStageEvent('stage-session-cleared');
@@ -1265,57 +1904,33 @@ function createStageApi({
       return;
     }
 
+    if (pathname === '/stage/player/search' && req.method === 'POST') {
+      sendStageJson(res, 200, await handleStagePlayerSearchRequest(req));
+      return;
+    }
+
     if (pathname === '/stage/search' && req.method === 'POST') {
-      const requestBody = await readRequestBodyWithLimit(req, STAGE_JSON_BODY_LIMIT_BYTES);
-      let payload;
-      try {
-        payload = JSON.parse(requestBody.toString('utf-8') || '{}');
-      } catch (error) {
-        throw new StageApiError('Failed to parse Stage search JSON payload.', {
-          statusCode: 400,
-          code: 'INVALID_STAGE_SEARCH_JSON',
-          details: {
-            reason: error instanceof Error ? error.message : String(error),
-          },
-        });
-      }
+      sendStageJson(res, 200, await handleStagePlayerSearchRequest(req, { deprecated: true }));
+      return;
+    }
 
-      const query = normalizeStageText(payload.query);
-      const limit = Number.isFinite(payload.limit) ? Math.max(1, Math.min(50, Math.floor(payload.limit))) : 10;
-      if (!query) {
-        throw createStageValidationError('Stage search query is required.', 'INVALID_STAGE_SEARCH_QUERY');
-      }
-
-      const songs = searchStageSongs
-        ? await searchStageSongs(query, limit)
-        : await defaultSearchStageSongs(query, limit);
-      sendStageJson(res, 200, { query, songs });
+    if (pathname === '/stage/player/play' && req.method === 'POST') {
+      sendStageJson(res, 200, await handleStagePlayerPlayRequest(req));
       return;
     }
 
     if (pathname === '/stage/play' && req.method === 'POST') {
-      const requestBody = await readRequestBodyWithLimit(req, STAGE_JSON_BODY_LIMIT_BYTES);
-      let payload;
-      try {
-        payload = JSON.parse(requestBody.toString('utf-8') || '{}');
-      } catch (error) {
-        throw new StageApiError('Failed to parse Stage play JSON payload.', {
-          statusCode: 400,
-          code: 'INVALID_STAGE_PLAY_JSON',
-          details: {
-            reason: error instanceof Error ? error.message : String(error),
-          },
-        });
-      }
+      sendStageJson(res, 200, await handleStagePlayerPlayRequest(req, { deprecated: true }));
+      return;
+    }
 
-      const songId = Number(payload.songId);
-      const appendToQueue = payload.appendToQueue === true;
-      if (!Number.isInteger(songId) || songId <= 0) {
-        throw createStageValidationError('Stage play payload requires a positive integer songId.', 'INVALID_STAGE_PLAY_SONG_ID');
-      }
+    if (pathname === '/stage/player/control' && req.method === 'POST') {
+      sendStageJson(res, 200, await handleStagePlayerControlRequest(req));
+      return;
+    }
 
-      await requestStageSongPlay(songId, { appendToQueue });
-      sendStageJson(res, 200, { ok: true, songId, appendToQueue });
+    if (pathname === '/stage/player/queue' && req.method === 'POST') {
+      sendStageJson(res, 200, await handleStagePlayerQueueRequest(req));
       return;
     }
 
@@ -1326,10 +1941,14 @@ function createStageApi({
   const stopStageServer = async () => {
     if (!stageServer) {
       await clearStageStateData();
+      closeStagePlayerWebSockets();
       return;
     }
 
     clearPendingExternalPlayRequests('Stage server stopped.');
+    clearPendingStagePlayerRequests(pendingStagePlayerControlRequests, 'Stage server stopped.', 'STAGE_PLAYER_CONTROL_UNAVAILABLE');
+    clearPendingStagePlayerRequests(pendingStagePlayerQueueRequests, 'Stage server stopped.', 'STAGE_PLAYER_QUEUE_UNAVAILABLE');
+    closeStagePlayerWebSockets();
 
     await new Promise((resolve) => {
       stageServer.close((error) => {
@@ -1341,6 +1960,9 @@ function createStageApi({
     });
 
     stageServer = null;
+    stagePlayerSnapshot = null;
+    stagePlayerTrackKey = null;
+    stagePlayerQueueKey = null;
     await clearStageStateData();
   };
 
@@ -1354,6 +1976,7 @@ function createStageApi({
     }
 
     await ensureStageSessionsDirectory();
+    stagePlayerWebSocketServer = new WebSocketServer({ noServer: true });
     stageServer = http.createServer((req, res) => {
       Promise.resolve(handleStageHttpRequest(req, res)).catch((error) => {
         if (error instanceof StageApiError) {
@@ -1375,6 +1998,7 @@ function createStageApi({
         });
       });
     });
+    stageServer.on('upgrade', handleStageWebSocketUpgrade);
 
     await new Promise((resolve, reject) => {
       stageServer.once('error', reject);
@@ -1416,6 +2040,7 @@ function createStageApi({
     const nextToken = crypto.randomBytes(32).toString('base64url');
     store.set(stageApiTokenSettingKey, nextToken);
     logStage('info', 'Regenerated Stage bearer token.');
+    closeStagePlayerWebSockets(1008, 'Stage bearer token changed.');
 
     if (isStageEnabled()) {
       await startStageServerIfNeeded();
@@ -1431,6 +2056,9 @@ function createStageApi({
     clearStageState,
     clearStageStateData,
     completeStageExternalPlayRequest,
+    completeStagePlayerControlRequest,
+    completeStagePlayerQueueRequest,
+    publishStagePlayerSnapshot,
     logStage,
     regenerateStageToken,
     setStageEnabled,
