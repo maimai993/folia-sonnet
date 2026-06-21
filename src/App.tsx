@@ -49,6 +49,7 @@ import { usePlaybackQueueController } from './hooks/usePlaybackQueueController';
 import { usePlaybackTransportController } from './hooks/usePlaybackTransportController';
 import { usePlaybackVisualizerBridge } from './hooks/usePlaybackVisualizerBridge';
 import { useObsBrowserSourcePublisher } from './hooks/useObsBrowserSourcePublisher';
+import { ObsBrowserSourceLyrics } from './components/obs/ObsBrowserSourceLyrics';
 import { useSessionRestoreController } from './hooks/useSessionRestoreController';
 import { useStagePlaybackController } from './hooks/useStagePlaybackController';
 import { useThemeController } from './hooks/useThemeController';
@@ -2520,19 +2521,15 @@ export default function App() {
             </div>
 
             {currentView === 'player' && isObsBrowserSourceRendering && (
-                <div className="absolute left-0 top-0 z-30 h-[120px] w-[120px] pointer-events-auto group">
-                    <button
-                        type="button"
-                        aria-label={t('ui.backToHome')}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            navigateToHome();
-                        }}
-                        className="absolute top-6 left-6 h-10 w-10 rounded-full flex items-center justify-center transition-all duration-200 ease-out backdrop-blur-md bg-black/20 hover:bg-white/10 text-white/60 opacity-0 scale-[0.92] -translate-x-1.5 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:translate-x-0 group-hover:pointer-events-auto"
-                    >
-                        <ChevronLeft size={20} />
-                    </button>
-                </div>
+                <ObsBrowserSourceLyrics
+                    lyrics={lyrics}
+                    currentLineIndex={currentLineIndex}
+                    visualizerTheme={visualizerTheme}
+                    lyricsFontScale={lyricsFontScale}
+                    shouldHidePlayerTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
+                    isDaylight={isDaylight}
+                    navigateToHome={navigateToHome}
+                />
             )}
 
             {currentView === 'player' && activePlaybackContext === 'stage' && (!stageActiveEntryKind || stageSource === 'now-playing') && !currentSong && (
