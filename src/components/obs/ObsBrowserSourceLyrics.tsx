@@ -24,6 +24,17 @@ export const ObsBrowserSourceLyrics: React.FC<ObsBrowserSourceLyricsProps> = ({
 }) => {
     const { t } = useTranslation();
 
+    const [effectiveIndex, setEffectiveIndex] = React.useState(() => Math.max(0, currentLineIndex));
+
+    React.useEffect(() => {
+        if (currentLineIndex !== -1) {
+            setEffectiveIndex(currentLineIndex);
+        } else if (effectiveIndex >= (lyrics?.lines.length || 0)) {
+            // Edge case: song changed, effectiveIndex is out of bounds
+            setEffectiveIndex(0);
+        }
+    }, [currentLineIndex, lyrics]);
+
     return (
         <>
             <div className="absolute left-0 top-0 z-30 h-[120px] w-[120px] pointer-events-auto group">
@@ -39,15 +50,15 @@ export const ObsBrowserSourceLyrics: React.FC<ObsBrowserSourceLyricsProps> = ({
                     <ChevronLeft size={20} />
                 </button>
             </div>
-            
+
             {/* 静态暗角 (Static Vignette) */}
-            <div 
-                className={`absolute inset-0 z-0 pointer-events-none ${isDaylight ? 'opacity-30 mix-blend-multiply' : 'opacity-[0.65]'} bg-[radial-gradient(ellipse_at_center,transparent_0%,#000_100%)]`} 
+            <div
+                className={`absolute inset-0 z-0 pointer-events-none ${isDaylight ? 'opacity-30 mix-blend-multiply' : 'opacity-[0.65]'} bg-[radial-gradient(ellipse_at_center,transparent_0%,#000_100%)]`}
             />
 
             <div className="absolute inset-0 z-0 flex flex-col items-center justify-center pointer-events-none px-12 pb-16 gap-8">
                 {[-1, 0, 1].map((offset) => {
-                    const lineIndex = currentLineIndex + offset;
+                    const lineIndex = effectiveIndex + offset;
                     const line = lyrics?.lines[lineIndex];
                     if (!line) {
                         return <div key={`empty-${offset}`} className="h-20" />;
