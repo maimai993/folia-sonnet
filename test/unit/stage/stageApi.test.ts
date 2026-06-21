@@ -130,7 +130,7 @@ const withStageApi = async (options: {
     };
 };
 
-const publishNormalPlayerSnapshot = (stageApi: ReturnType<typeof createStageApi>, overrides: Record<string, any> = {}) => stageApi.publishStagePlayerSnapshot({
+const publishNormalPlayerSnapshot = (stageApi: ReturnType<typeof createStageApi>, overrides: Record<string, any> = {}, options?: Record<string, any>) => stageApi.publishStagePlayerSnapshot({
     playbackContext: 'normal-playback',
     current: {
         id: '42',
@@ -176,7 +176,7 @@ const publishNormalPlayerSnapshot = (stageApi: ReturnType<typeof createStageApi>
         }],
     },
     ...overrides,
-});
+}, options);
 
 const buildStageQueueItems = (count: number) => Array.from({ length: count }, (_, index) => ({
     queueItemId: `netease:${42 + index}:${index}`,
@@ -750,9 +750,53 @@ describe('stageApi http contract', () => {
         publishNormalPlayerSnapshot(context.stageApi, {
             playerState: 'PLAYING',
             positionMs: 2000,
+            durationMs: 30024,
             sampledAtMs: Date.now(),
         });
         await expectNoWebSocketMessage(socket);
+
+        const seekMessagePromise = waitForWebSocketMessage(socket);
+        publishNormalPlayerSnapshot(context.stageApi, {
+            playerState: 'PLAYING',
+            positionMs: 5000,
+            durationMs: 30024,
+            sampledAtMs: Date.now(),
+        }, { forcePlaybackEvent: true });
+        const seekMessage = await seekMessagePromise;
+        expect(seekMessage).toMatchObject({
+            event: 'PLAYBACK_UPDATED',
+            domain: 'player-playback',
+            direction: 'inside-out',
+            playbackContext: 'normal-playback',
+            playerState: 'PLAYING',
+            durationMs: 30024,
+        });
+        expect(seekMessage.positionMs).toBeGreaterThanOrEqual(5000);
+        expect(seekMessage.positionMs).toBeLessThanOrEqual(10000);
+        expect(seekMessage.current).toBeUndefined();
+        expect(seekMessage.controlCapabilities).toBeUndefined();
+        expect(seekMessage.queue).toBeUndefined();
+
+        const pauseMessagePromise = waitForWebSocketMessage(socket);
+        publishNormalPlayerSnapshot(context.stageApi, {
+            playerState: 'PAUSED',
+            positionMs: 2500,
+            durationMs: 30024,
+            sampledAtMs: Date.now(),
+        });
+        const pauseMessage = await pauseMessagePromise;
+        expect(pauseMessage).toMatchObject({
+            event: 'PLAYBACK_UPDATED',
+            domain: 'player-playback',
+            direction: 'inside-out',
+            playbackContext: 'normal-playback',
+            playerState: 'PAUSED',
+            positionMs: 2500,
+            durationMs: 30024,
+        });
+        expect(pauseMessage.current).toBeUndefined();
+        expect(pauseMessage.controlCapabilities).toBeUndefined();
+        expect(pauseMessage.queue).toBeUndefined();
 
         const nextMessagePromise = waitForWebSocketMessage(socket);
         publishNormalPlayerSnapshot(context.stageApi, {
@@ -774,6 +818,8 @@ describe('stageApi http contract', () => {
                 title: 'Next Track',
             },
         });
+        expect(nextMessage.positionMs).toBeUndefined();
+        expect(nextMessage.durationMs).toBeUndefined();
         expect(nextMessage.queue.items).toBeUndefined();
     });
 });

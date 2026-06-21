@@ -640,7 +640,7 @@
                     </div>
                     <div class="endpoint-layout">
                         <article class="doc-card">
-                            <p class="hint">订阅播放器事件。事件只推送队列摘要；需要完整队列窗口时调用 GET /stage/player/queue。</p>
+                            <p class="hint">订阅播放器事件。TRACK_CHANGED 不携带 positionMs / durationMs；PLAYBACK_UPDATED 只推送播放时间和状态。</p>
                             <div class="meta-grid">
                                 <div><span class="meta-label">Auth</span><span>Bearer token or ?token=</span></div>
                                 <div><span class="meta-label">Transport</span><span>WebSocket</span></div>

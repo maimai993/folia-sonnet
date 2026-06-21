@@ -2425,12 +2425,12 @@ ipcMain.handle('stage-complete-external-play', (event, result) => {
   return stageApi.completeStageExternalPlayRequest(result);
 });
 
-ipcMain.handle('stage-publish-player-snapshot', (event, snapshot) => {
+ipcMain.handle('stage-publish-player-snapshot', (event, snapshot, options) => {
   if (!isTrustedMainWindowContents(event.sender)) {
     throw new Error('Untrusted renderer attempted to publish Stage player state.');
   }
 
-  return stageApi.publishStagePlayerSnapshot(snapshot);
+  return stageApi.publishStagePlayerSnapshot(snapshot, options);
 });
 
 ipcMain.handle('stage-complete-player-control', (event, result) => {

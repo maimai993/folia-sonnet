@@ -205,7 +205,9 @@ export const buildStagePlayerSnapshot = ({
     const hasCurrent = Boolean(currentSong);
     const canControlTransport = playbackContext !== 'external-playback-source' && hasCurrent;
     const canEditQueue = playbackContext === 'normal-playback';
-    const safeDurationMs = Math.max(0, Math.floor(durationMs || getSongDurationMs(currentSong)));
+    const safeDurationMs = Math.max(0, Math.floor(
+        Number.isFinite(durationMs) && durationMs > 0 ? durationMs : getSongDurationMs(currentSong),
+    ));
 
     return {
         playbackContext,

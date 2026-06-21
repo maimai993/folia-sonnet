@@ -472,6 +472,29 @@ function createStageApi({
     });
   };
 
+  const buildStagePlayerQueueEvent = () => {
+    const status = buildStagePlayerStatus();
+    return withStagePlayerInsideOutMetadata({
+      playbackContext: status.playbackContext,
+      queueCapabilities: status.queueCapabilities,
+      queue: status.queue,
+    });
+  };
+
+  const buildStagePlayerTrackEvent = () => {
+    const status = buildStagePlayerStatus();
+    return withStagePlayerInsideOutMetadata({
+      playbackContext: status.playbackContext,
+      current: status.current,
+      playerState: status.playerState,
+      sampledAtMs: status.sampledAtMs,
+      updatedAt: status.updatedAt,
+      controlCapabilities: status.controlCapabilities,
+      queueCapabilities: status.queueCapabilities,
+      queue: status.queue,
+    });
+  };
+
   const getStagePlayerTrackKey = (snapshot) =>
     snapshot?.current ? `${snapshot.current.source}:${snapshot.current.id}` : 'none';
 
@@ -523,10 +546,7 @@ function createStageApi({
     return JSON.stringify({
       playbackContext: snapshot.playbackContext,
       playerState: snapshot.playerState,
-      durationMs: snapshot.durationMs,
-      positionMs: snapshot.playerState === 'PLAYING' ? null : snapshot.positionMs,
-      controlCapabilities: snapshot.controlCapabilities,
-      queueCapabilities: snapshot.queueCapabilities,
+      positionMs: snapshot.playerState === 'PAUSED' ? snapshot.positionMs : null,
     });
   };
 
@@ -577,19 +597,20 @@ function createStageApi({
     }
   };
 
-  const publishStagePlayerSnapshot = (snapshot) => {
+  const publishStagePlayerSnapshot = (snapshot, options = {}) => {
     stagePlayerSnapshot = normalizeStagePlayerSnapshot(snapshot);
     const nextTrackKey = getStagePlayerTrackKey(stagePlayerSnapshot);
     const nextQueueKey = getStagePlayerQueueKey(stagePlayerSnapshot);
     const nextPlaybackKey = getStagePlayerPlaybackKey(stagePlayerSnapshot);
     const status = buildStagePlayerStatus();
+    const forcePlaybackEvent = options && options.forcePlaybackEvent === true;
 
     if (stagePlayerTrackKey !== null && stagePlayerTrackKey !== nextTrackKey) {
-      broadcastStagePlayerWebSocketEvent('TRACK_CHANGED', status);
+      broadcastStagePlayerWebSocketEvent('TRACK_CHANGED', buildStagePlayerTrackEvent());
     } else if (stagePlayerQueueKey !== null && stagePlayerQueueKey !== nextQueueKey) {
-      broadcastStagePlayerWebSocketEvent('QUEUE_UPDATED', status);
-    } else if (stagePlayerPlaybackKey !== null && stagePlayerPlaybackKey !== nextPlaybackKey) {
-      broadcastStagePlayerWebSocketEvent('PLAYBACK_UPDATED', status);
+      broadcastStagePlayerWebSocketEvent('QUEUE_UPDATED', buildStagePlayerQueueEvent());
+    } else if (forcePlaybackEvent || (stagePlayerPlaybackKey !== null && stagePlayerPlaybackKey !== nextPlaybackKey)) {
+      broadcastStagePlayerWebSocketEvent('PLAYBACK_UPDATED', buildStagePlayerTime());
     }
 
     stagePlayerTrackKey = nextTrackKey;

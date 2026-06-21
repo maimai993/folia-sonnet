@@ -18,9 +18,11 @@ type UseElectronPlaybackBridgeOptions = {
     setShowTransparentWindowBorder: React.Dispatch<React.SetStateAction<boolean>>;
     transparentPlayerBackground: boolean;
     activePlaybackContext: 'main' | 'stage';
+    isStagePlayerSnapshotEnabled: boolean;
     mainWindowClickThroughEnabled: boolean;
     isNowPlayingControlDisabledRef: RefObject<boolean>;
     audioRef: RefObject<HTMLAudioElement | null>;
+    audioSrc: string | null;
     currentTime: MotionValue<number>;
     duration: number;
     currentSong: SongResult | null;
@@ -57,9 +59,11 @@ export const useElectronPlaybackBridge = ({
     setShowTransparentWindowBorder,
     transparentPlayerBackground,
     activePlaybackContext,
+    isStagePlayerSnapshotEnabled,
     mainWindowClickThroughEnabled,
     isNowPlayingControlDisabledRef,
     audioRef,
+    audioSrc,
     currentTime,
     duration,
     currentSong,
@@ -86,6 +90,29 @@ export const useElectronPlaybackBridge = ({
     isLiked,
     onLike,
 }: UseElectronPlaybackBridgeOptions) => {
+    const resolveAudioSourceHref = (source: string | null | undefined) => {
+        if (!source) {
+            return '';
+        }
+
+        try {
+            return new URL(source, window.location.href).href;
+        } catch {
+            return source;
+        }
+    };
+
+    const isAudioElementUsingCurrentSource = () => {
+        const audioElement = audioRef.current;
+        if (!audioElement || !audioSrc) {
+            return false;
+        }
+
+        const expectedSource = resolveAudioSourceHref(audioSrc);
+        const currentSource = resolveAudioSourceHref(audioElement.currentSrc || audioElement.src);
+        return Boolean(expectedSource && currentSource && expectedSource === currentSource);
+    };
+
     const buildRemoteSnapshot = (options: { includeLyrics?: boolean } = {}): RemoteControlSnapshot => {
         const hasActiveTrack = !isNowPlayingStageActive && Boolean(currentSong);
         const currentIndex = currentSong ? playQueue.findIndex(song => song.id === currentSong.id) : -1;
@@ -124,6 +151,8 @@ export const useElectronPlaybackBridge = ({
     };
 
     const buildCurrentStagePlayerSnapshot = () => {
+        const audioElement = audioRef.current;
+        const isCurrentAudioSource = isAudioElementUsingCurrentSource();
         const hasActiveTrack = !isNowPlayingStageActive && Boolean(currentSong);
         const currentIndex = currentSong ? playQueue.findIndex(song => song.id === currentSong.id) : -1;
         const canGoPrevious = hasActiveTrack && (currentIndex > 0 || (effectiveLoopMode === 'all' && playQueue.length > 1));
@@ -135,10 +164,16 @@ export const useElectronPlaybackBridge = ({
         const positionSec = resolveStagePlayerPositionSec({
             activePlaybackContext,
             isExternalPlaybackSourceActive: isNowPlayingStageActive,
-            audioCurrentTimeSec: audioRef.current?.currentTime,
+            audioCurrentTimeSec: isCurrentAudioSource ? audioElement?.currentTime : undefined,
             motionCurrentTimeSec: currentTime.get(),
             syntheticStageLyricsTimeSec: getSyntheticStageLyricsTime?.(),
         });
+        const audioDurationSec = isCurrentAudioSource && Number.isFinite(audioElement?.duration) && (audioElement?.duration ?? 0) > 0
+            ? audioElement?.duration ?? 0
+            : 0;
+        const snapshotDurationSec = audioDurationSec > 0 || activePlaybackContext === 'main'
+            ? audioDurationSec
+            : duration;
 
         return buildStagePlayerSnapshot({
             activePlaybackContext,
@@ -147,11 +182,24 @@ export const useElectronPlaybackBridge = ({
             playQueue,
             playerState,
             positionMs: positionSec * 1000,
-            durationMs: duration * 1000,
+            durationMs: snapshotDurationSec * 1000,
             canGoPrevious,
             canGoNext,
             coverUrl: coverUrl || cachedCoverUrl,
         });
+    };
+
+    const publishStagePlayerPlaybackUpdate = () => {
+        if (!isStagePlayerSnapshotEnabled) {
+            return Promise.resolve(null);
+        }
+
+        const publishStageSnapshot = window.electron?.publishStagePlayerSnapshot;
+        if (!publishStageSnapshot) {
+            return Promise.resolve(null);
+        }
+
+        return publishStageSnapshot(buildCurrentStagePlayerSnapshot(), { forcePlaybackEvent: true });
     };
 
     useEffect(() => {
@@ -253,7 +301,7 @@ export const useElectronPlaybackBridge = ({
     }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground, isLiked]);
 
     useEffect(() => {
-        if (!window.electron?.publishStagePlayerSnapshot) {
+        if (!isStagePlayerSnapshotEnabled || !window.electron?.publishStagePlayerSnapshot) {
             return;
         }
 
@@ -270,7 +318,7 @@ export const useElectronPlaybackBridge = ({
             window.clearInterval(intervalId);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activePlaybackContext, cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, getSyntheticStageLyricsTime, isFmMode, isNowPlayingStageActive, playQueue, playerState]);
+    }, [activePlaybackContext, audioSrc, cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, getSyntheticStageLyricsTime, isFmMode, isNowPlayingStageActive, isStagePlayerSnapshotEnabled, playQueue, playerState]);
 
     useEffect(() => {
         if (!window.electron?.onRemoteControlCommand) {
@@ -341,7 +389,7 @@ export const useElectronPlaybackBridge = ({
                 }
                 currentTime.set(nextTime);
                 void window.electron?.publishRemoteControlSnapshot(buildRemoteSnapshot());
-                void window.electron?.publishStagePlayerSnapshot?.(buildCurrentStagePlayerSnapshot());
+                void publishStagePlayerPlaybackUpdate();
                 return;
             }
 
@@ -405,8 +453,9 @@ export const useElectronPlaybackBridge = ({
                         syncStageLyricsClock?.(nextTime, duration, taskbarPlayerStateRef.current);
                     }
                     currentTime.set(nextTime);
-                    void window.electron?.publishStagePlayerSnapshot?.(buildCurrentStagePlayerSnapshot());
-                    complete(request.requestId, true);
+                    void publishStagePlayerPlaybackUpdate()
+                        .then(() => complete(request.requestId, true))
+                        .catch(error => complete(request.requestId, false, error));
                     return;
                 }
 
@@ -427,4 +476,8 @@ export const useElectronPlaybackBridge = ({
             void onExternalPlayRequest(request);
         });
     }, [onExternalPlayRequest]);
+
+    return {
+        publishStagePlayerPlaybackUpdate,
+    };
 };

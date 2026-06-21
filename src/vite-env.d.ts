@@ -431,7 +431,7 @@ declare global {
       regenerateStageToken: () => Promise<StageStatus>;
       clearStageState: () => Promise<StageStatus>;
       completeStageExternalPlayRequest: (result: StageExternalPlayResult) => Promise<boolean>;
-      publishStagePlayerSnapshot: (snapshot: StagePlayerSnapshot) => Promise<StagePlayerSnapshot>;
+      publishStagePlayerSnapshot: (snapshot: StagePlayerSnapshot, options?: { forcePlaybackEvent?: boolean }) => Promise<StagePlayerSnapshot>;
       completeStagePlayerControlRequest: (result: StagePlayerRequestResult) => Promise<boolean>;
       completeStagePlayerQueueRequest: (result: StagePlayerRequestResult) => Promise<boolean>;
       onStageSessionUpdated: (callback: (status: StageStatus) => void) => () => void;

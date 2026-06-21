@@ -1096,7 +1096,9 @@ export default function App() {
         resumePlayback,
     });
 
-    useElectronPlaybackBridge({
+    const {
+        publishStagePlayerPlaybackUpdate,
+    } = useElectronPlaybackBridge({
         isElectronWindow,
         setIsTitlebarRevealed,
         isPlayerChromeHidden,
@@ -1105,9 +1107,11 @@ export default function App() {
         setShowTransparentWindowBorder,
         transparentPlayerBackground,
         activePlaybackContext,
+        isStagePlayerSnapshotEnabled: stageStatus?.enabled === true,
         mainWindowClickThroughEnabled: isMainWindowClickThroughEnabled,
         isNowPlayingControlDisabledRef,
         audioRef,
+        audioSrc,
         currentTime,
         duration,
         currentSong,
@@ -1517,8 +1521,9 @@ export default function App() {
                 void audioRef.current.play();
                 setPlayerState(PlayerState.PLAYING);
             }
+            void publishStagePlayerPlaybackUpdate();
         }
-    }, []);
+    }, [publishStagePlayerPlaybackUpdate]);
 
     const handleUnifiedAlbumSelect = useCallback((albumId: number) => {
         if (homeLayoutStyle === 'grid') {
@@ -2084,6 +2089,7 @@ export default function App() {
         isPlayerChromeHidden,
         shouldHidePlayerProgressBar,
         onSeekMainAudio: seekMainAudio,
+        onStagePlayerSeek: publishStagePlayerPlaybackUpdate,
         noTrackText: t('ui.noTrack'),
     }), [
         activePlaybackContext,
@@ -2120,6 +2126,7 @@ export default function App() {
         playOnlineQueueFromStart,
         playSong,
         popOverlay,
+        publishStagePlayerPlaybackUpdate,
         refreshUserData,
         seekMainAudio,
         setPlayerState,

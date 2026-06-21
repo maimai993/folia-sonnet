@@ -75,7 +75,7 @@ contextBridge.exposeInMainWorld('electron', {
     regenerateStageToken: () => ipcRenderer.invoke('stage-regenerate-token'),
     clearStageState: () => ipcRenderer.invoke('stage-clear-state'),
     completeStageExternalPlayRequest: (result) => ipcRenderer.invoke('stage-complete-external-play', result),
-    publishStagePlayerSnapshot: (snapshot) => ipcRenderer.invoke('stage-publish-player-snapshot', snapshot),
+    publishStagePlayerSnapshot: (snapshot, options) => ipcRenderer.invoke('stage-publish-player-snapshot', snapshot, options),
     completeStagePlayerControlRequest: (result) => ipcRenderer.invoke('stage-complete-player-control', result),
     completeStagePlayerQueueRequest: (result) => ipcRenderer.invoke('stage-complete-player-queue', result),
     onStageSessionUpdated: (callback) => {

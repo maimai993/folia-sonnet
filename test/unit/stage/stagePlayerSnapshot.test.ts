@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildStagePlayerSnapshot,
     buildStagePlayerQueueItemId,
     resolveStagePlayerPositionSec,
     resolveStagePlayerQueueItemIndex,
 } from '@/utils/stagePlayerSnapshot';
-import type { SongResult } from '@/types';
+import { PlayerState, type SongResult } from '@/types';
 
 // Keeps Stage player snapshot clock selection stable across stage-session variants.
 
@@ -71,5 +72,34 @@ describe('stage player queue item ids', () => {
 
         expect(resolveStagePlayerQueueItemIndex(queue, buildStagePlayerQueueItemId(queue[1], 1))).toBe(1);
         expect(resolveStagePlayerQueueItemIndex(queue, buildStagePlayerQueueItemId(queue[1], 0))).toBe(-1);
+    });
+});
+
+describe('stage player snapshot duration', () => {
+    const song: SongResult = {
+        id: 42,
+        name: 'Metadata Duration Song',
+        artists: [],
+        album: { id: 0, name: '', picUrl: '' },
+        duration: 211906,
+        dt: 211906,
+    };
+
+    it('falls back to current track metadata duration when playback duration is unknown', () => {
+        const snapshot = buildStagePlayerSnapshot({
+            activePlaybackContext: 'main',
+            isExternalPlaybackSourceActive: false,
+            currentSong: song,
+            playQueue: [song],
+            playerState: PlayerState.IDLE,
+            positionMs: 0,
+            durationMs: 0,
+            canGoPrevious: false,
+            canGoNext: false,
+            coverUrl: null,
+        });
+
+        expect(snapshot.durationMs).toBe(211906);
+        expect(snapshot.current?.durationMs).toBe(211906);
     });
 });
