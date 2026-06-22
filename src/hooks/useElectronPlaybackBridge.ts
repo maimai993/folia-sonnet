@@ -16,7 +16,7 @@ import {
 import { resolveStagePlayerPositionSec } from '../utils/stagePlayerSnapshot';
 
 // Bridges Electron-specific shell features without coupling to UI components.
-const DISCORD_PRESENCE_SNAPSHOT_INTERVAL_MS = 15_000;
+const DISCORD_PRESENCE_SNAPSHOT_INTERVAL_MS = 1000;
 
 type UseElectronPlaybackBridgeOptions = {
     isElectronWindow: boolean;
