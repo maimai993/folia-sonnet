@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.on('window-playback-handoff-requested', listener);
         return () => ipcRenderer.removeListener('window-playback-handoff-requested', listener);
     },
+    setNativeTheme: (themeSource) => ipcRenderer.invoke('window-set-native-theme', themeSource),
     getMainWindowClickThroughEnabled: () => ipcRenderer.invoke('window-get-click-through'),
     setMainWindowClickThroughEnabled: (enabled) => ipcRenderer.invoke('window-set-click-through', enabled),
     setMainWindowClickThroughUnlockHover: (active) => ipcRenderer.invoke('window-set-click-through-unlock-hover', active),
@@ -48,6 +49,17 @@ contextBridge.exposeInMainWorld('electron', {
         const listener = (_event, state) => callback(state);
         ipcRenderer.on('main-window-click-through-changed', listener);
         return () => ipcRenderer.removeListener('main-window-click-through-changed', listener);
+    },
+    getObsBrowserSourceStatus: () => ipcRenderer.invoke('obs-browser-source-get-status'),
+    setObsBrowserSourceEnabled: (enabled) => ipcRenderer.invoke('obs-browser-source-set-enabled', enabled),
+    regenerateObsBrowserSourceToken: () => ipcRenderer.invoke('obs-browser-source-regenerate-token'),
+    publishObsBrowserSourceConfig: (config) => ipcRenderer.invoke('obs-browser-source-publish-config', config),
+    publishObsBrowserSourceClock: (clock) => ipcRenderer.invoke('obs-browser-source-publish-clock', clock),
+    publishObsBrowserSourceAudio: (audio) => ipcRenderer.invoke('obs-browser-source-publish-audio', audio),
+    onObsBrowserSourceStatusChanged: (callback) => {
+        const listener = (_event, status) => callback(status);
+        ipcRenderer.on('obs-browser-source-status-changed', listener);
+        return () => ipcRenderer.removeListener('obs-browser-source-status-changed', listener);
     },
     updateTaskbarControls: (state) => ipcRenderer.invoke('thumbar-update-buttons', state),
     onTaskbarControl: (callback) => {
@@ -82,6 +94,9 @@ contextBridge.exposeInMainWorld('electron', {
     regenerateStageToken: () => ipcRenderer.invoke('stage-regenerate-token'),
     clearStageState: () => ipcRenderer.invoke('stage-clear-state'),
     completeStageExternalPlayRequest: (result) => ipcRenderer.invoke('stage-complete-external-play', result),
+    publishStagePlayerSnapshot: (snapshot, options) => ipcRenderer.invoke('stage-publish-player-snapshot', snapshot, options),
+    completeStagePlayerControlRequest: (result) => ipcRenderer.invoke('stage-complete-player-control', result),
+    completeStagePlayerQueueRequest: (result) => ipcRenderer.invoke('stage-complete-player-queue', result),
     onStageSessionUpdated: (callback) => {
         const listener = (_event, status) => callback(status);
         ipcRenderer.on('stage-session-updated', listener);
@@ -96,6 +111,16 @@ contextBridge.exposeInMainWorld('electron', {
         const listener = (_event, request) => callback(request);
         ipcRenderer.on('stage-external-play-request', listener);
         return () => ipcRenderer.removeListener('stage-external-play-request', listener);
+    },
+    onStagePlayerControlRequest: (callback) => {
+        const listener = (_event, request) => callback(request);
+        ipcRenderer.on('stage-player-control-request', listener);
+        return () => ipcRenderer.removeListener('stage-player-control-request', listener);
+    },
+    onStagePlayerQueueRequest: (callback) => {
+        const listener = (_event, request) => callback(request);
+        ipcRenderer.on('stage-player-queue-request', listener);
+        return () => ipcRenderer.removeListener('stage-player-queue-request', listener);
     },
     debugGetRenderedFonts: (selector) => ipcRenderer.invoke('debug-get-rendered-fonts', selector),
 });

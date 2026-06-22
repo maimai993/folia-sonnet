@@ -4,12 +4,20 @@ import {
     buildStageHealthRequest,
     buildStageLyricsRequest,
     buildStagePlayRequest,
+    buildStagePlayerControlRequest,
+    buildStagePlayerQueueGetRequest,
+    buildStagePlayerQueueRequest,
+    buildStagePlayerStatusRequest,
+    buildStagePlayerTimeRequest,
+    buildStagePlayerWebSocketUrl,
     buildStageSearchRequest,
     buildStageSessionRequest,
     buildStageStatusRequest,
     shouldUseStageMultipart,
     validateStageLyricsRequestInput,
     validateStagePlayRequestInput,
+    validateStagePlayerControlRequestInput,
+    validateStagePlayerQueueRequestInput,
     validateStageSearchRequestInput,
     validateStageSessionRequestInput,
 } from '@/utils/stageClientDemo';
@@ -158,7 +166,7 @@ describe('stageClientDemo helpers', () => {
             limit: 5,
         });
 
-        expect(result.endpoint).toBe('http://127.0.0.1:32107/stage/search');
+        expect(result.endpoint).toBe('http://127.0.0.1:32107/stage/player/search');
         expect(JSON.parse(String(result.init.body))).toEqual({
             query: 'Mili',
             limit: 5,
@@ -182,7 +190,7 @@ describe('stageClientDemo helpers', () => {
             songId: 123456,
         });
 
-        expect(result.endpoint).toBe('http://127.0.0.1:32107/stage/play');
+        expect(result.endpoint).toBe('http://127.0.0.1:32107/stage/player/play');
         expect(JSON.parse(String(result.init.body))).toEqual({
             songId: 123456,
         });
@@ -210,5 +218,83 @@ describe('stageClientDemo helpers', () => {
         });
 
         expect(error).toBe('songId must be a positive integer.');
+    });
+
+    it('builds player status and time requests', () => {
+        const status = buildStagePlayerStatusRequest('http://127.0.0.1:32107/', 'demo-token');
+        const time = buildStagePlayerTimeRequest('http://127.0.0.1:32107/', 'demo-token');
+
+        expect(status.endpoint).toBe('http://127.0.0.1:32107/stage/player/status');
+        expect(time.endpoint).toBe('http://127.0.0.1:32107/stage/player/time');
+        expect(status.init.headers).toEqual({ Authorization: 'Bearer demo-token' });
+    });
+
+    it('builds player control requests', () => {
+        const result = buildStagePlayerControlRequest({
+            baseUrl: 'http://127.0.0.1:32107',
+            token: 'demo-token',
+            action: 'seek',
+            positionMs: 30000,
+        });
+
+        expect(result.endpoint).toBe('http://127.0.0.1:32107/stage/player/control');
+        expect(JSON.parse(String(result.init.body))).toEqual({
+            action: 'seek',
+            positionMs: 30000,
+        });
+        expect(validateStagePlayerControlRequestInput({
+            baseUrl: 'http://127.0.0.1:32107',
+            token: 'demo-token',
+            action: 'seek',
+        })).toBe('Seek requires a non-negative positionMs.');
+    });
+
+    it('builds player queue get and edit requests', () => {
+        const getResult = buildStagePlayerQueueGetRequest('http://127.0.0.1:32107', 'demo-token', {
+            offset: 20,
+            limit: 50,
+            around: 'current',
+        });
+        const editResult = buildStagePlayerQueueRequest({
+            baseUrl: 'http://127.0.0.1:32107',
+            token: 'demo-token',
+            action: 'move',
+            fromQueueItemId: 'netease:1:0',
+            toIndex: 1,
+        });
+        const selectResult = buildStagePlayerQueueRequest({
+            baseUrl: 'http://127.0.0.1:32107',
+            token: 'demo-token',
+            action: 'select',
+            index: 2,
+        });
+
+        expect(getResult.endpoint).toBe('http://127.0.0.1:32107/stage/player/queue?offset=20&limit=50&around=current');
+        expect(getResult.init.method).toBe('GET');
+        expect(JSON.parse(String(editResult.init.body))).toEqual({
+            action: 'move',
+            fromQueueItemId: 'netease:1:0',
+            toIndex: 1,
+        });
+        expect(JSON.parse(String(selectResult.init.body))).toEqual({
+            action: 'select',
+            index: 2,
+        });
+        expect(validateStagePlayerQueueRequestInput({
+            baseUrl: 'http://127.0.0.1:32107',
+            token: 'demo-token',
+            action: 'remove',
+        })).toBe('Queue remove requires queueItemId or index.');
+        expect(validateStagePlayerQueueRequestInput({
+            baseUrl: 'http://127.0.0.1:32107',
+            token: 'demo-token',
+            action: 'select',
+        })).toBe('Queue select requires queueItemId or index.');
+    });
+
+    it('builds a tokenized player websocket URL', () => {
+        expect(buildStagePlayerWebSocketUrl('http://127.0.0.1:32107/', 'demo-token')).toBe(
+            'ws://127.0.0.1:32107/stage/player/ws?token=demo-token'
+        );
     });
 });

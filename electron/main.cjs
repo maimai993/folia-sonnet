@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, nativeImage, desktopCapturer, Menu, Tray } = require('electron');
+const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, nativeImage, desktopCapturer, Menu, Tray, nativeTheme } = require('electron');
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const Store = require('electron-store').default || require('electron-store');
 const crypto = require('crypto');
@@ -41,6 +42,11 @@ let mainWindow = null;
 let remoteControlWindow = null;
 let appTray = null;
 let latestRemoteControlSnapshot = null;
+let obsBrowserSourceServer = null;
+let latestObsBrowserSourceConfig = null;
+let latestObsBrowserSourceClock = null;
+let latestObsBrowserSourceAudio = null;
+const obsBrowserSourceClients = new Set();
 let remoteControlAlwaysOnTop = false;
 let mainWindowAlwaysOnTop = false;
 let mainWindowClickThroughEnabled = false;
@@ -50,10 +56,13 @@ let videoExportWindowRestoreState = null;
 let autoUpdater = null;
 const windowPlaybackHandoffStore = createWindowPlaybackHandoffStore();
 const pendingWindowPlaybackHandoffRequests = new Map();
+let pendingWindowStateSave = null;
+let windowStateSaveTimer = null;
 const DEFAULT_WINDOW_BOUNDS = {
   width: 1200,
   height: 800,
 };
+const WINDOW_STATE_SAVE_DEBOUNCE_MS = 300;
 const CACHE_DIRECTORY_SETTING_KEY = 'CACHE_DIRECTORY';
 const ENABLE_UPDATE_CHECK_SETTING_KEY = 'ENABLE_UPDATE_CHECK';
 const ENABLE_AUTO_UPDATE_SETTING_KEY = 'ENABLE_AUTO_UPDATE';
@@ -62,12 +71,17 @@ const STAGE_MODE_ENABLED_SETTING_KEY = 'STAGE_MODE_ENABLED';
 const STAGE_MODE_SOURCE_SETTING_KEY = 'STAGE_MODE_SOURCE';
 const STAGE_API_TOKEN_SETTING_KEY = 'STAGE_API_TOKEN';
 const STAGE_API_PORT_SETTING_KEY = 'STAGE_API_PORT';
+const OBS_BROWSER_SOURCE_ENABLED_SETTING_KEY = 'OBS_BROWSER_SOURCE_ENABLED';
+const OBS_BROWSER_SOURCE_TOKEN_SETTING_KEY = 'OBS_BROWSER_SOURCE_TOKEN';
+const OBS_BROWSER_SOURCE_PORT_SETTING_KEY = 'OBS_BROWSER_SOURCE_PORT';
 const MINIMIZE_TO_TRAY_SETTING_KEY = 'MINIMIZE_TO_TRAY';
 const HIDE_TASKBAR_ICON_SETTING_KEY = 'HIDE_TASKBAR_ICON';
 const REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY = 'REMOTE_CONTROL_ALWAYS_ON_TOP';
 const MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY = 'MAIN_WINDOW_ALWAYS_ON_TOP';
 const TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY = 'TRANSPARENT_PLAYER_BACKGROUND';
+
 const DEFAULT_STAGE_API_PORT = 32107;
+const DEFAULT_OBS_BROWSER_SOURCE_PORT = 32108;
 const FOLIA_RELEASES_URL = 'https://github.com/chthollyphile/folia-major/releases';
 const FOLIA_LATEST_RELEASE_API_URL = 'https://api.github.com/repos/chthollyphile/folia-major/releases/latest';
 const WINDOWS_APP_USER_MODEL_ID = 'top.izuna.foliamajor';
@@ -174,7 +188,61 @@ function getPublicSettings() {
     [REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true),
     [MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, false),
     [TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY]: readStoredBoolean(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, false),
+    'enable_player_page_native_blur': store.get('enable_player_page_native_blur') === true,
   };
+}
+
+function getConfiguredObsBrowserSourcePort() {
+  const storedPort = Number(store.get(OBS_BROWSER_SOURCE_PORT_SETTING_KEY));
+  if (Number.isInteger(storedPort) && storedPort > 0 && storedPort <= 65535) {
+    return storedPort;
+  }
+  return DEFAULT_OBS_BROWSER_SOURCE_PORT;
+}
+
+function isObsBrowserSourceEnabled() {
+  return Boolean(store.get(OBS_BROWSER_SOURCE_ENABLED_SETTING_KEY));
+}
+
+function getObsBrowserSourceToken({ generateIfMissing = false } = {}) {
+  const existing = store.get(OBS_BROWSER_SOURCE_TOKEN_SETTING_KEY);
+  if (typeof existing === 'string' && existing.trim()) {
+    return existing;
+  }
+
+  if (!generateIfMissing) {
+    return null;
+  }
+
+  const nextToken = crypto.randomBytes(32).toString('base64url');
+  store.set(OBS_BROWSER_SOURCE_TOKEN_SETTING_KEY, nextToken);
+  return nextToken;
+}
+
+function buildObsBrowserSourceUrl() {
+  const token = getObsBrowserSourceToken({ generateIfMissing: isObsBrowserSourceEnabled() });
+  if (!token) {
+    return null;
+  }
+
+  return `http://127.0.0.1:${getConfiguredObsBrowserSourcePort()}/obs?obs=1&token=${encodeURIComponent(token)}`;
+}
+
+function buildObsBrowserSourceStatus() {
+  const token = getObsBrowserSourceToken({ generateIfMissing: isObsBrowserSourceEnabled() });
+  return {
+    enabled: isObsBrowserSourceEnabled(),
+    port: getConfiguredObsBrowserSourcePort(),
+    token,
+    url: token ? buildObsBrowserSourceUrl() : null,
+    clientCount: obsBrowserSourceClients.size,
+  };
+}
+
+function broadcastObsBrowserSourceStatus() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('obs-browser-source-status-changed', buildObsBrowserSourceStatus());
+  }
 }
 
 mainWindowSkipTaskbarEnabled = readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false);
@@ -242,19 +310,54 @@ function ensureWindowBoundsVisible(bounds) {
   };
 }
 
-function saveWindowState(win) {
+function persistWindowStateSnapshot(snapshot) {
+  if (!snapshot) {
+    return;
+  }
+
+  const nextState = {
+    WINDOW_IS_MAXIMIZED: snapshot.isMaximized,
+  };
+
+  if (!snapshot.isMaximized && snapshot.bounds) {
+    nextState.WINDOW_BOUNDS = snapshot.bounds;
+  }
+
+  store.set(nextState);
+}
+
+function clearWindowStateSaveTimer() {
+  if (windowStateSaveTimer) {
+    clearTimeout(windowStateSaveTimer);
+    windowStateSaveTimer = null;
+  }
+}
+
+function saveWindowState(win, options = {}) {
   if (!win || win.isDestroyed()) {
     return;
   }
 
   const isMaximized = win.isMaximized();
-  store.set('WINDOW_IS_MAXIMIZED', isMaximized);
+  const snapshot = {
+    isMaximized,
+    bounds: isMaximized ? null : win.getBounds(),
+  };
 
-  if (isMaximized) {
+  if (options.deferred) {
+    pendingWindowStateSave = snapshot;
+    clearWindowStateSaveTimer();
+    windowStateSaveTimer = setTimeout(() => {
+      persistWindowStateSnapshot(pendingWindowStateSave);
+      pendingWindowStateSave = null;
+      windowStateSaveTimer = null;
+    }, WINDOW_STATE_SAVE_DEBOUNCE_MS);
     return;
   }
 
-  store.set('WINDOW_BOUNDS', win.getBounds());
+  pendingWindowStateSave = null;
+  clearWindowStateSaveTimer();
+  persistWindowStateSnapshot(snapshot);
 }
 
 function isWindowsThumbarSupported() {
@@ -1751,6 +1854,215 @@ function loadAppEntry(win, query = {}) {
   win.loadFile(path.join(__dirname, '../dist/index.html'), { query });
 }
 
+function getStaticContentType(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === '.html') return 'text/html; charset=utf-8';
+  if (extension === '.js' || extension === '.mjs') return 'text/javascript; charset=utf-8';
+  if (extension === '.css') return 'text/css; charset=utf-8';
+  if (extension === '.json') return 'application/json; charset=utf-8';
+  if (extension === '.svg') return 'image/svg+xml';
+  if (extension === '.png') return 'image/png';
+  if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
+  if (extension === '.webp') return 'image/webp';
+  if (extension === '.woff2') return 'font/woff2';
+  if (extension === '.woff') return 'font/woff';
+  return 'application/octet-stream';
+}
+
+function sendObsJson(res, statusCode, payload) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(JSON.stringify(payload));
+}
+
+function sendObsText(res, statusCode, text, contentType = 'text/plain; charset=utf-8') {
+  res.writeHead(statusCode, {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(text);
+}
+
+function matchesObsBrowserSourceToken(requestUrl) {
+  const expectedToken = getObsBrowserSourceToken({ generateIfMissing: false });
+  if (!expectedToken) {
+    return false;
+  }
+  return requestUrl.searchParams.get('token') === expectedToken;
+}
+
+function sendObsEvent(res, eventName, payload) {
+  res.write(`event: ${eventName}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function broadcastObsBrowserSourceEvent(eventName, payload) {
+  for (const client of Array.from(obsBrowserSourceClients)) {
+    sendObsEvent(client, eventName, payload);
+  }
+}
+
+function sendObsBrowserSourceBootstrapEvents(res) {
+  if (latestObsBrowserSourceConfig) {
+    sendObsEvent(res, 'config', latestObsBrowserSourceConfig);
+  }
+  if (latestObsBrowserSourceClock) {
+    sendObsEvent(res, 'clock', latestObsBrowserSourceClock);
+  }
+  if (latestObsBrowserSourceAudio) {
+    sendObsEvent(res, 'audio', latestObsBrowserSourceAudio);
+  }
+}
+
+async function serveObsStaticFile(req, res, pathname) {
+  const distRoot = path.resolve(__dirname, '../dist');
+  const normalizedPath = pathname === '/' || pathname === '/obs'
+    ? '/index.html'
+    : pathname;
+  const requestedPath = path.resolve(distRoot, `.${decodeURIComponent(normalizedPath)}`);
+
+  if (!requestedPath.startsWith(distRoot)) {
+    sendObsText(res, 403, 'Forbidden');
+    return;
+  }
+
+  try {
+    const stat = await fs.promises.stat(requestedPath);
+    if (!stat.isFile()) {
+      sendObsText(res, 404, 'Not found');
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': getStaticContentType(requestedPath),
+      'Cache-Control': requestedPath.endsWith('index.html') ? 'no-store' : 'public, max-age=31536000, immutable',
+    });
+    fs.createReadStream(requestedPath).pipe(res);
+  } catch {
+    sendObsText(res, 404, 'Not found');
+  }
+}
+
+async function handleObsBrowserSourceHttpRequest(req, res) {
+  const requestUrl = new URL(req.url || '/', `http://127.0.0.1:${getConfiguredObsBrowserSourcePort()}`);
+  const pathname = requestUrl.pathname;
+
+  if (pathname === '/obs/health' && req.method === 'GET') {
+    sendObsJson(res, 200, buildObsBrowserSourceStatus());
+    return;
+  }
+
+  if (!isObsBrowserSourceEnabled()) {
+    sendObsJson(res, 503, { error: 'OBS browser source is disabled.' });
+    return;
+  }
+
+  if (pathname === '/obs/events' && req.method === 'GET') {
+    if (!matchesObsBrowserSourceToken(requestUrl)) {
+      sendObsJson(res, 401, { error: 'Unauthorized.' });
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-store',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.write(': connected\n\n');
+    obsBrowserSourceClients.add(res);
+    sendObsBrowserSourceBootstrapEvents(res);
+    broadcastObsBrowserSourceStatus();
+
+    req.on('close', () => {
+      obsBrowserSourceClients.delete(res);
+      broadcastObsBrowserSourceStatus();
+    });
+    return;
+  }
+
+  if (pathname === '/obs' && req.method === 'GET') {
+    if (!matchesObsBrowserSourceToken(requestUrl)) {
+      sendObsJson(res, 401, { error: 'Unauthorized.' });
+      return;
+    }
+
+    if (isElectronDevRuntime()) {
+      const devUrl = new URL('http://localhost:3000');
+      devUrl.searchParams.set('obs', '1');
+      devUrl.searchParams.set('token', requestUrl.searchParams.get('token') || '');
+      devUrl.searchParams.set('obsPort', String(getConfiguredObsBrowserSourcePort()));
+      res.writeHead(302, { Location: devUrl.toString() });
+      res.end();
+      return;
+    }
+  }
+
+  await serveObsStaticFile(req, res, pathname);
+}
+
+async function startObsBrowserSourceServerIfNeeded() {
+  if (!isObsBrowserSourceEnabled()) {
+    return;
+  }
+
+  getObsBrowserSourceToken({ generateIfMissing: true });
+  if (obsBrowserSourceServer) {
+    return;
+  }
+
+  obsBrowserSourceServer = http.createServer((req, res) => {
+    Promise.resolve(handleObsBrowserSourceHttpRequest(req, res)).catch((error) => {
+      console.error('[OBS] Unhandled browser source request failure.', error);
+      sendObsJson(res, 500, { error: 'Internal OBS browser source error.' });
+    });
+  });
+
+  await new Promise((resolve, reject) => {
+    obsBrowserSourceServer.once('error', reject);
+    obsBrowserSourceServer.listen(getConfiguredObsBrowserSourcePort(), '127.0.0.1', () => {
+      obsBrowserSourceServer.off('error', reject);
+      resolve();
+    });
+  });
+
+  console.log(`[OBS] Browser source listening on ${buildObsBrowserSourceUrl()}.`);
+  broadcastObsBrowserSourceStatus();
+}
+
+async function stopObsBrowserSourceServer() {
+  for (const client of Array.from(obsBrowserSourceClients)) {
+    client.end();
+  }
+  obsBrowserSourceClients.clear();
+
+  if (!obsBrowserSourceServer) {
+    broadcastObsBrowserSourceStatus();
+    return;
+  }
+
+  const server = obsBrowserSourceServer;
+  obsBrowserSourceServer = null;
+  await new Promise((resolve) => {
+    server.close(() => resolve());
+  });
+  broadcastObsBrowserSourceStatus();
+}
+
+async function syncObsBrowserSourceServerState() {
+  if (isObsBrowserSourceEnabled()) {
+    await startObsBrowserSourceServerIfNeeded();
+  } else {
+    await stopObsBrowserSourceServer();
+  }
+  return buildObsBrowserSourceStatus();
+}
+
 function isTransparentPlayerBackgroundEnabled() {
   return Boolean(store.get(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY));
 }
@@ -1993,13 +2305,16 @@ function createWindow(options = {}) {
   const { bounds: storedBounds, isMaximized } = getStoredWindowState();
   const windowBounds = ensureWindowBoundsVisible(storedBounds);
   const useTransparentWindow = isTransparentPlayerBackgroundEnabled();
+  const enableNativeBlur = store.get('enable_player_page_native_blur') === true;
   const win = new BrowserWindow({
     ...windowBounds,
     minWidth: 350,
     minHeight: 100,
     frame: false,
     transparent: useTransparentWindow,
-    backgroundColor: useTransparentWindow ? '#00000000' : '#09090b',
+    backgroundColor: (useTransparentWindow || enableNativeBlur) ? '#00000000' : '#09090b',
+    vibrancy: (!useTransparentWindow && enableNativeBlur) && process.platform === 'darwin' ? 'fullscreen-ui' : undefined,
+    backgroundMaterial: (!useTransparentWindow && enableNativeBlur) && process.platform === 'win32' ? 'acrylic' : undefined,
     titleBarStyle: 'hidden',
     autoHideMenuBar: true,
     icon: APP_ICON_PATH,
@@ -2030,10 +2345,10 @@ function createWindow(options = {}) {
   applyMainWindowMouseIgnoreState();
   updateWindowThumbarButtons();
   win.on('resize', () => {
-    saveWindowState(win);
+    saveWindowState(win, { deferred: true });
   });
   win.on('move', () => {
-    saveWindowState(win);
+    saveWindowState(win, { deferred: true });
   });
   win.on('maximize', () => {
     saveWindowState(win);
@@ -2140,6 +2455,11 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error('[Stage] Failed to start stage server during app startup', error);
   }
+  try {
+    await startObsBrowserSourceServerIfNeeded();
+  } catch (error) {
+    console.error('[OBS] Failed to start browser source server during app startup', error);
+  }
   ensureTray();
   createWindow();
   focusMainWindow();
@@ -2166,6 +2486,10 @@ app.on('before-quit', () => {
 });
 
 // Settings Management IPC
+ipcMain.handle('window-set-native-theme', (event, themeSource) => {
+  nativeTheme.themeSource = themeSource;
+});
+
 ipcMain.handle('get-settings', () => {
   return getPublicSettings();
 });
@@ -2182,6 +2506,20 @@ ipcMain.handle('save-settings', (event, key, value) => {
   }
 
   store.set(key, nextValue);
+
+  if (key === 'enable_player_page_native_blur') {
+    if (!isTransparentPlayerBackgroundEnabled()) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const enableNativeBlur = Boolean(nextValue);
+        mainWindow.setBackgroundColor(enableNativeBlur ? '#00000000' : '#09090b');
+        if (process.platform === 'darwin') {
+          mainWindow.setVibrancy(enableNativeBlur ? 'fullscreen-ui' : null);
+        } else if (process.platform === 'win32') {
+          mainWindow.setBackgroundMaterial(enableNativeBlur ? 'acrylic' : 'none');
+        }
+      }
+    }
+  }
 
   if (key === ENABLE_UPDATE_CHECK_SETTING_KEY) {
     if (Boolean(nextValue)) {
@@ -2464,6 +2802,66 @@ ipcMain.handle('window-set-always-on-top', (event, enabled) => {
   return setMainWindowAlwaysOnTop(enabled);
 });
 
+ipcMain.handle('obs-browser-source-get-status', () => {
+  return buildObsBrowserSourceStatus();
+});
+
+ipcMain.handle('obs-browser-source-set-enabled', async (event, enabled) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to toggle OBS browser source.');
+  }
+
+  store.set(OBS_BROWSER_SOURCE_ENABLED_SETTING_KEY, Boolean(enabled));
+  return syncObsBrowserSourceServerState();
+});
+
+ipcMain.handle('obs-browser-source-regenerate-token', (event) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to regenerate OBS browser source token.');
+  }
+
+  const nextToken = crypto.randomBytes(32).toString('base64url');
+  store.set(OBS_BROWSER_SOURCE_TOKEN_SETTING_KEY, nextToken);
+  broadcastObsBrowserSourceStatus();
+  return buildObsBrowserSourceStatus();
+});
+
+ipcMain.handle('obs-browser-source-publish-config', (event, config) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to publish OBS browser source config.');
+  }
+
+  latestObsBrowserSourceConfig = config || null;
+  if (latestObsBrowserSourceConfig) {
+    broadcastObsBrowserSourceEvent('config', latestObsBrowserSourceConfig);
+  }
+  return true;
+});
+
+ipcMain.handle('obs-browser-source-publish-clock', (event, clock) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to publish OBS browser source clock.');
+  }
+
+  latestObsBrowserSourceClock = clock || null;
+  if (latestObsBrowserSourceClock) {
+    broadcastObsBrowserSourceEvent('clock', latestObsBrowserSourceClock);
+  }
+  return true;
+});
+
+ipcMain.handle('obs-browser-source-publish-audio', (event, audio) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to publish OBS browser source audio.');
+  }
+
+  latestObsBrowserSourceAudio = audio || null;
+  if (latestObsBrowserSourceAudio) {
+    broadcastObsBrowserSourceEvent('audio', latestObsBrowserSourceAudio);
+  }
+  return true;
+});
+
 ipcMain.handle('stage-get-status', () => {
   return stageApi.buildStageStatus();
 });
@@ -2486,6 +2884,30 @@ ipcMain.handle('stage-complete-external-play', (event, result) => {
   }
 
   return stageApi.completeStageExternalPlayRequest(result);
+});
+
+ipcMain.handle('stage-publish-player-snapshot', (event, snapshot, options) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to publish Stage player state.');
+  }
+
+  return stageApi.publishStagePlayerSnapshot(snapshot, options);
+});
+
+ipcMain.handle('stage-complete-player-control', (event, result) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to complete a Stage player control request.');
+  }
+
+  return stageApi.completeStagePlayerControlRequest(result);
+});
+
+ipcMain.handle('stage-complete-player-queue', (event, result) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to complete a Stage player queue request.');
+  }
+
+  return stageApi.completeStagePlayerQueueRequest(result);
 });
 
 ipcMain.handle('thumbar-update-buttons', (event, state) => {

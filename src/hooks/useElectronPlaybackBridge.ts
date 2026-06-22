@@ -6,6 +6,7 @@ import { PlayerState } from '../types';
 import type { SongResult, LyricData } from '../types';
 import type { RemoteControlCommand, RemoteControlSnapshot } from '../types/remoteControl';
 import type { VideoExportState } from '../types/videoExport';
+import { buildStagePlayerSnapshot, resolveStagePlayerPositionSec } from '../utils/stagePlayerSnapshot';
 
 // Bridges Electron-specific shell features without coupling to UI components.
 type UseElectronPlaybackBridgeOptions = {
@@ -16,9 +17,12 @@ type UseElectronPlaybackBridgeOptions = {
     showTransparentWindowBorder: boolean;
     setShowTransparentWindowBorder: React.Dispatch<React.SetStateAction<boolean>>;
     transparentPlayerBackground: boolean;
+    activePlaybackContext: 'main' | 'stage';
+    isStagePlayerSnapshotEnabled: boolean;
     mainWindowClickThroughEnabled: boolean;
     isNowPlayingControlDisabledRef: RefObject<boolean>;
     audioRef: RefObject<HTMLAudioElement | null>;
+    audioSrc: string | null;
     currentTime: MotionValue<number>;
     duration: number;
     currentSong: SongResult | null;
@@ -33,6 +37,8 @@ type UseElectronPlaybackBridgeOptions = {
     mediaSessionPauseRef: RefObject<() => void>;
     mediaSessionPrevRef: RefObject<() => void>;
     mediaSessionNextRef: RefObject<() => Promise<void> | void>;
+    getSyntheticStageLyricsTime?: () => number;
+    syncStageLyricsClock?: (timeSec: number, endTimeSec: number, nextPlayerState: PlayerState, startTimeSec?: number) => void;
     taskbarHasTrackRef: RefObject<boolean>;
     taskbarPlayerStateRef: RefObject<PlayerState>;
     exportState: VideoExportState;
@@ -52,9 +58,12 @@ export const useElectronPlaybackBridge = ({
     showTransparentWindowBorder,
     setShowTransparentWindowBorder,
     transparentPlayerBackground,
+    activePlaybackContext,
+    isStagePlayerSnapshotEnabled,
     mainWindowClickThroughEnabled,
     isNowPlayingControlDisabledRef,
     audioRef,
+    audioSrc,
     currentTime,
     duration,
     currentSong,
@@ -69,6 +78,8 @@ export const useElectronPlaybackBridge = ({
     mediaSessionPauseRef,
     mediaSessionPrevRef,
     mediaSessionNextRef,
+    getSyntheticStageLyricsTime,
+    syncStageLyricsClock,
     taskbarHasTrackRef,
     taskbarPlayerStateRef,
     exportState,
@@ -79,6 +90,29 @@ export const useElectronPlaybackBridge = ({
     isLiked,
     onLike,
 }: UseElectronPlaybackBridgeOptions) => {
+    const resolveAudioSourceHref = (source: string | null | undefined) => {
+        if (!source) {
+            return '';
+        }
+
+        try {
+            return new URL(source, window.location.href).href;
+        } catch {
+            return source;
+        }
+    };
+
+    const isAudioElementUsingCurrentSource = () => {
+        const audioElement = audioRef.current;
+        if (!audioElement || !audioSrc) {
+            return false;
+        }
+
+        const expectedSource = resolveAudioSourceHref(audioSrc);
+        const currentSource = resolveAudioSourceHref(audioElement.currentSrc || audioElement.src);
+        return Boolean(expectedSource && currentSource && expectedSource === currentSource);
+    };
+
     const buildRemoteSnapshot = (options: { includeLyrics?: boolean } = {}): RemoteControlSnapshot => {
         const hasActiveTrack = !isNowPlayingStageActive && Boolean(currentSong);
         const currentIndex = currentSong ? playQueue.findIndex(song => song.id === currentSong.id) : -1;
@@ -114,6 +148,58 @@ export const useElectronPlaybackBridge = ({
             mainWindowWidth: window.innerWidth,
             mainWindowHeight: window.innerHeight,
         };
+    };
+
+    const buildCurrentStagePlayerSnapshot = () => {
+        const audioElement = audioRef.current;
+        const isCurrentAudioSource = isAudioElementUsingCurrentSource();
+        const hasActiveTrack = !isNowPlayingStageActive && Boolean(currentSong);
+        const currentIndex = currentSong ? playQueue.findIndex(song => song.id === currentSong.id) : -1;
+        const canGoPrevious = hasActiveTrack && (currentIndex > 0 || (effectiveLoopMode === 'all' && playQueue.length > 1));
+        const canGoNext = hasActiveTrack && (
+            isFmMode ||
+            currentIndex >= 0 && currentIndex < playQueue.length - 1 ||
+            (effectiveLoopMode === 'all' && playQueue.length > 1)
+        );
+        const positionSec = resolveStagePlayerPositionSec({
+            activePlaybackContext,
+            isExternalPlaybackSourceActive: isNowPlayingStageActive,
+            audioCurrentTimeSec: isCurrentAudioSource ? audioElement?.currentTime : undefined,
+            motionCurrentTimeSec: currentTime.get(),
+            syntheticStageLyricsTimeSec: getSyntheticStageLyricsTime?.(),
+        });
+        const audioDurationSec = isCurrentAudioSource && Number.isFinite(audioElement?.duration) && (audioElement?.duration ?? 0) > 0
+            ? audioElement?.duration ?? 0
+            : 0;
+        const snapshotDurationSec = audioDurationSec > 0 || activePlaybackContext === 'main'
+            ? audioDurationSec
+            : duration;
+
+        return buildStagePlayerSnapshot({
+            activePlaybackContext,
+            isExternalPlaybackSourceActive: isNowPlayingStageActive,
+            currentSong,
+            playQueue,
+            playerState,
+            positionMs: positionSec * 1000,
+            durationMs: snapshotDurationSec * 1000,
+            canGoPrevious,
+            canGoNext,
+            coverUrl: coverUrl || cachedCoverUrl,
+        });
+    };
+
+    const publishStagePlayerPlaybackUpdate = () => {
+        if (!isStagePlayerSnapshotEnabled) {
+            return Promise.resolve(null);
+        }
+
+        const publishStageSnapshot = window.electron?.publishStagePlayerSnapshot;
+        if (!publishStageSnapshot) {
+            return Promise.resolve(null);
+        }
+
+        return publishStageSnapshot(buildCurrentStagePlayerSnapshot(), { forcePlaybackEvent: true });
     };
 
     useEffect(() => {
@@ -215,6 +301,26 @@ export const useElectronPlaybackBridge = ({
     }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground, isLiked]);
 
     useEffect(() => {
+        if (!isStagePlayerSnapshotEnabled || !window.electron?.publishStagePlayerSnapshot) {
+            return;
+        }
+
+        const publish = () => {
+            void window.electron?.publishStagePlayerSnapshot(buildCurrentStagePlayerSnapshot()).catch((error) => {
+                console.warn('[Stage] Failed to publish player snapshot', error);
+            });
+        };
+
+        publish();
+        const intervalId = window.setInterval(publish, 1000);
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activePlaybackContext, audioSrc, cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, getSyntheticStageLyricsTime, isFmMode, isNowPlayingStageActive, isStagePlayerSnapshotEnabled, playQueue, playerState]);
+
+    useEffect(() => {
         if (!window.electron?.onRemoteControlCommand) {
             return;
         }
@@ -257,18 +363,33 @@ export const useElectronPlaybackBridge = ({
                 return;
             }
 
+            if (command.type === 'pause') {
+                mediaSessionPauseRef.current();
+                return;
+            }
+
+            if (command.type === 'play') {
+                void mediaSessionPlayRef.current();
+                return;
+            }
+
             if (command.type === 'seek') {
                 const audioElement = audioRef.current;
-                if (!audioElement || !Number.isFinite(command.time)) {
+                if (!Number.isFinite(command.time)) {
                     return;
                 }
 
-                const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : audioElement.duration;
+                const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : audioElement?.duration;
                 const upperBound = Number.isFinite(safeDuration) && safeDuration > 0 ? safeDuration : command.time;
                 const nextTime = Math.max(0, Math.min(command.time, upperBound));
-                audioElement.currentTime = nextTime;
+                if (audioElement) {
+                    audioElement.currentTime = nextTime;
+                } else if (activePlaybackContext === 'stage') {
+                    syncStageLyricsClock?.(nextTime, duration, taskbarPlayerStateRef.current);
+                }
                 currentTime.set(nextTime);
                 void window.electron?.publishRemoteControlSnapshot(buildRemoteSnapshot());
+                void publishStagePlayerPlaybackUpdate();
                 return;
             }
 
@@ -281,7 +402,70 @@ export const useElectronPlaybackBridge = ({
 
         return window.electron.onRemoteControlCommand(runCommand);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteExportCommand, setIsPlayerChromeHidden, setShowTransparentWindowBorder, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
+    }, [activePlaybackContext, audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteExportCommand, setIsPlayerChromeHidden, setShowTransparentWindowBorder, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
+
+    useEffect(() => {
+        if (!window.electron?.onStagePlayerControlRequest) {
+            return;
+        }
+
+        const complete = (requestId: string, ok: boolean, error?: unknown) => {
+            void window.electron?.completeStagePlayerControlRequest?.({
+                requestId,
+                ok,
+                error: ok ? null : error instanceof Error ? error.message : String(error),
+            });
+        };
+
+        return window.electron.onStagePlayerControlRequest((request) => {
+            try {
+                if (isNowPlayingControlDisabledRef.current || !taskbarHasTrackRef.current) {
+                    throw new Error('Player controls are disabled in the current context.');
+                }
+
+                if (request.action === 'prev') {
+                    mediaSessionPrevRef.current();
+                    complete(request.requestId, true);
+                    return;
+                }
+
+                if (request.action === 'next') {
+                    void Promise.resolve(mediaSessionNextRef.current()).then(() => complete(request.requestId, true)).catch(error => complete(request.requestId, false, error));
+                    return;
+                }
+
+                if (request.action === 'pause') {
+                    mediaSessionPauseRef.current();
+                    complete(request.requestId, true);
+                    return;
+                }
+
+                if (request.action === 'resume') {
+                    void mediaSessionPlayRef.current().then(() => complete(request.requestId, true)).catch(error => complete(request.requestId, false, error));
+                    return;
+                }
+
+                if (request.action === 'seek') {
+                    const nextTime = Math.max(0, (request.positionMs ?? 0) / 1000);
+                    if (audioRef.current) {
+                        audioRef.current.currentTime = nextTime;
+                    } else if (activePlaybackContext === 'stage') {
+                        syncStageLyricsClock?.(nextTime, duration, taskbarPlayerStateRef.current);
+                    }
+                    currentTime.set(nextTime);
+                    void publishStagePlayerPlaybackUpdate()
+                        .then(() => complete(request.requestId, true))
+                        .catch(error => complete(request.requestId, false, error));
+                    return;
+                }
+
+                throw new Error(`Unsupported Stage player control action: ${request.action}`);
+            } catch (error) {
+                complete(request.requestId, false, error);
+            }
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activePlaybackContext, audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef]);
 
     useEffect(() => {
         if (!window.electron?.onStageExternalPlayRequest || !onExternalPlayRequest) {
@@ -292,4 +476,8 @@ export const useElectronPlaybackBridge = ({
             void onExternalPlayRequest(request);
         });
     }, [onExternalPlayRequest]);
+
+    return {
+        publishStagePlayerPlaybackUpdate,
+    };
 };

@@ -20,6 +20,7 @@ import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
 import { selectSettingsUiSnapshot, type SettingsSubviewId, useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
+import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
 
 
 interface SettingsModalProps {
@@ -49,6 +50,9 @@ interface SettingsModalProps {
     onClearStageState?: () => Promise<void> | void;
     onToggleNowPlayingStage?: (enabled: boolean) => Promise<void> | void;
     nowPlayingConnectionStatus?: NowPlayingConnectionStatus;
+    obsBrowserSourceStatus?: ObsBrowserSourceStatus | null;
+    onToggleObsBrowserSource?: (enabled: boolean) => Promise<void> | void;
+    onRegenerateObsBrowserSourceToken?: () => Promise<void> | void;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
     onToggleTransparentPlayerBackground?: (enabled: boolean) => Promise<void> | void;
     aiTheme?: DualTheme | null;
@@ -84,6 +88,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     onClearStageState,
     onToggleNowPlayingStage,
     nowPlayingConnectionStatus = 'disabled',
+    obsBrowserSourceStatus = null,
+    onToggleObsBrowserSource,
+    onRegenerateObsBrowserSourceToken,
     onAudioOutputDeviceChange,
     onToggleTransparentPlayerBackground,
     aiTheme,
@@ -98,6 +105,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         hidePlayerTranslationSubtitle,
         hidePlayerRightPanelButton,
         transparentPlayerBackground,
+        autoHidePlayerChrome,
         disableVisualizerVignette,
         disableVisualizerGeometricBackground,
         minimizeToTray,
@@ -144,6 +152,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleHidePlayerTranslationSubtitle: onToggleHidePlayerTranslationSubtitle,
         handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
         handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackgroundFromStore,
+        handleToggleAutoHidePlayerChrome: onToggleAutoHidePlayerChrome,
         handleToggleDisableVisualizerVignette: onToggleDisableVisualizerVignette,
         handleToggleDisableVisualizerGeometricBackground: onToggleDisableVisualizerGeometricBackground,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
@@ -596,17 +605,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             : enableNowPlayingStage
     );
     const nowPlayingConnected = nowPlayingEnabled && nowPlayingConnectionStatus === 'connected';
-    const stageConnected = stageEnabled && (
-        activeStageSource === 'now-playing'
-            ? nowPlayingConnected
-            : stageHasActiveSession
-    );
+    const stageConnected = stageEnabled && activeStageSource === 'stage-api';
     const integrationStatusItems = [
-        ...(stageEnabled
+        ...(stageConnected
             ? [{
                 key: 'stage',
-                label: stageConnected ? 'Stage 已连接' : 'Stage 未连接',
-                tone: stageConnected ? 'success' as const : 'error' as const,
+                label: 'Stage 已连接',
+                tone: 'success' as const,
             }]
             : []),
         ...(nowPlayingEnabled
@@ -2176,6 +2181,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onToggleCustomThemePreferred={onToggleCustomThemePreferred}
                         onToggleSongThemeAutoSwitch={onToggleSongThemeAutoSwitch}
                         onToggleTransparentPlayerBackground={resolvedToggleTransparentPlayerBackground}
+                        onToggleAutoHidePlayerChrome={onToggleAutoHidePlayerChrome}
                         onSaveCustomTheme={onSaveCustomTheme}
                         settingsCardClass={settingsCardClass}
                         songThemeAutoSwitchEnabled={songThemeAutoSwitchEnabled}
@@ -2183,6 +2189,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         themeParkInitialTheme={themeParkInitialTheme}
                         toggleOffBackgroundClass={toggleOffBackgroundClass}
                         transparentPlayerBackground={transparentPlayerBackground}
+                        autoHidePlayerChrome={autoHidePlayerChrome}
                         utilityGhostButtonClass={utilityGhostButtonClass}
                         homeLayoutStyle={homeLayoutStyle}
                         onChangeHomeLayoutStyle={onChangeHomeLayoutStyle}
@@ -2257,9 +2264,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         stage={{
                             enableNowPlayingStage,
                             nowPlayingConnectionStatus,
+                            obsBrowserSourceStatus,
                             onCopyText: copyText,
+                            onRegenerateObsBrowserSourceToken,
                             onRegenerateStageToken,
                             onStageSourceChange,
+                            onToggleObsBrowserSource,
                             onToggleNowPlayingStage,
                             onToggleStageMode,
                             setStageActionStatus,

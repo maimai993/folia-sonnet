@@ -9,6 +9,7 @@ import type {
 } from '../../../types';
 import type { useThemeController } from '../../../hooks/useThemeController';
 import { type SettingsModalState, useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
 
 // src/components/app/dialogs/buildSettingsDialogModel.ts
 
@@ -35,6 +36,8 @@ type BuildSettingsDialogModelParams = {
     nowPlayingConnectionStatus?: NowPlayingConnectionStatus;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
     onToggleTransparentPlayerBackground: (enabled: boolean) => Promise<void> | void;
+    obsBrowserSourceStatus?: ObsBrowserSourceStatus | null;
+    refreshObsBrowserSourceStatus?: () => Promise<ObsBrowserSourceStatus>;
 };
 
 // Builds the global settings dialog props without tying the modal to Home.
@@ -58,6 +61,8 @@ export const buildSettingsDialogModel = ({
     nowPlayingConnectionStatus,
     onAudioOutputDeviceChange,
     onToggleTransparentPlayerBackground,
+    obsBrowserSourceStatus,
+    refreshObsBrowserSourceStatus,
 }: BuildSettingsDialogModelParams): SettingsDialogProps | null => {
     if (!state.isOpen) {
         return null;
@@ -82,6 +87,19 @@ export const buildSettingsDialogModel = ({
         stageStatus,
         stageSource,
         nowPlayingConnectionStatus,
+        obsBrowserSourceStatus,
+        onToggleObsBrowserSource: async (enabled) => {
+            const nextStatus = await window.electron?.setObsBrowserSourceEnabled?.(enabled);
+            if (!nextStatus) {
+                await refreshObsBrowserSourceStatus?.();
+            }
+        },
+        onRegenerateObsBrowserSourceToken: async () => {
+            const nextStatus = await window.electron?.regenerateObsBrowserSourceToken?.();
+            if (!nextStatus) {
+                await refreshObsBrowserSourceStatus?.();
+            }
+        },
         onAudioOutputDeviceChange,
         onToggleTransparentPlayerBackground,
         initialTab: state.initialTab,

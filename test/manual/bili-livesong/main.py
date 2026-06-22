@@ -37,7 +37,7 @@ async def process_song_request(song_name: str):
             search_payload = {"query": song_name, "limit": 1}
 
             async with session.post(
-                f"{BASE_URL}/stage/search",
+                f"{BASE_URL}/stage/player/search",
                 json=search_payload,
                 headers=headers,
             ) as res:
@@ -66,7 +66,7 @@ async def process_song_request(song_name: str):
             play_payload = {"songId": song_id, "appendToQueue": True}
 
             async with session.post(
-                f"{BASE_URL}/stage/play",
+                f"{BASE_URL}/stage/player/play",
                 json=play_payload,
                 headers=headers,
             ) as res:

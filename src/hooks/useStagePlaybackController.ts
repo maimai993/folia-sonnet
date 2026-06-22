@@ -95,6 +95,8 @@ type NowPlayingDebugInfo = {
     lastError: string | null;
 };
 
+const EMPTY_STAGE_ENTRY_KEY = '__empty-stage-entry__';
+
 // Keeps Stage / Now Playing state isolated from the main player snapshot.
 export function useStagePlaybackController({
     t,
@@ -253,7 +255,7 @@ export function useStagePlaybackController({
         setLyrics(null);
         setCachedCoverUrl(null);
         setAudioSrc(null);
-        setPlayQueue([]);
+        setPlayQueue(current => current.length === 0 ? current : []);
         setIsFmMode(false);
         setIsLyricsLoading(false);
         setPlayerState(PlayerState.IDLE);
@@ -1142,7 +1144,10 @@ export function useStagePlaybackController({
 
         const nextStageEntryKey = buildStageEntryKey(stageActiveEntryKind, stageLyricsSession, stageMediaSession);
         if (!nextStageEntryKey) {
-            lastLoadedStageEntryKeyRef.current = null;
+            if (lastLoadedStageEntryKeyRef.current === EMPTY_STAGE_ENTRY_KEY) {
+                return;
+            }
+            lastLoadedStageEntryKeyRef.current = EMPTY_STAGE_ENTRY_KEY;
             if (activePlaybackContext === 'stage') {
                 void loadStageSessionIntoPlayback(null);
             } else {

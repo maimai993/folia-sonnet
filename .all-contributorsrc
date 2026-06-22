@@ -113,9 +113,37 @@
       "contributions": [
         "bug"
       ]
+    },
+    {
+      "login": "Enkianssus",
+      "name": "Enkianssus",
+      "avatar_url": "https://avatars.githubusercontent.com/u/69905090?v=4",
+      "profile": "https://github.com/Enkianssus",
+      "contributions": [
+        "ideas"
+      ]
+    },
+    {
+      "login": "pwupink",
+      "name": "不会飞的麻将",
+      "avatar_url": "https://avatars.githubusercontent.com/u/122716454?v=4",
+      "profile": "https://github.com/pwupink",
+      "contributions": [
+        "ideas"
+      ]
+    },
+    {
+      "login": "streamstack-cn",
+      "name": "streamstack-cn",
+      "avatar_url": "https://avatars.githubusercontent.com/u/270505056?v=4",
+      "profile": "https://github.com/streamstack-cn",
+      "contributions": [
+        "ideas"
+      ]
     }
   ],
   "commit": false,
   "commitConvention": "none",
-  "skipCi": true
+  "skipCi": true,
+  "commitType": "docs"
 }

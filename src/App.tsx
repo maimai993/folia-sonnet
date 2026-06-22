@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useMotionValue } from 'framer-motion';
+import { useMotionValue, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { ChevronLeft } from 'lucide-react';
 import { loadCachedOrFetchCover } from './services/coverCache';
 import VisualizerRenderer from './components/visualizer/VisualizerRenderer';
 import CommandPalette from './components/command-palette/CommandPalette';
@@ -48,6 +49,8 @@ import { useNavidromeScrobbleReporter } from './hooks/useNavidromeScrobbleReport
 import { usePlaybackQueueController } from './hooks/usePlaybackQueueController';
 import { usePlaybackTransportController } from './hooks/usePlaybackTransportController';
 import { usePlaybackVisualizerBridge } from './hooks/usePlaybackVisualizerBridge';
+import { useObsBrowserSourcePublisher } from './hooks/useObsBrowserSourcePublisher';
+import { ObsBrowserSourceLyrics } from './components/obs/ObsBrowserSourceLyrics';
 import { useSessionRestoreController } from './hooks/useSessionRestoreController';
 import { useStagePlaybackController } from './hooks/useStagePlaybackController';
 import { useThemeController } from './hooks/useThemeController';
@@ -108,6 +111,9 @@ export default function App() {
     // UI State
     const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+    // Auto-close the player panel when leaving the player view
+    // (Effect moved to after useAppNavigation where currentView is defined)
     const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>('cover');
     const [isPlayerChromeHidden, setIsPlayerChromeHidden] = useState(() => {
         const saved = localStorage.getItem(PLAYER_CHROME_HIDDEN_STORAGE_KEY);
@@ -260,6 +266,8 @@ export default function App() {
         hidePlayerTranslationSubtitle,
         hidePlayerRightPanelButton,
         transparentPlayerBackground,
+        enablePlayerPageNativeBlur,
+        autoHidePlayerChrome,
         disableVisualizerVignette,
         disableVisualizerGeometricBackground,
         minimizeToTray,
@@ -646,6 +654,14 @@ export default function App() {
         handleArtistSelect: navigateToNeteaseArtist,
         popOverlay,
     } = useAppNavigation();
+
+    // Auto-close the player panel when leaving the player view
+    useEffect(() => {
+        if (currentView !== 'player' && isPanelOpen) {
+            setIsPanelOpen(false);
+        }
+    }, [currentView, isPanelOpen]);
+
     const {
         isSearchOpen,
         searchQuery,
@@ -1147,7 +1163,9 @@ export default function App() {
         resumePlayback,
     });
 
-    useElectronPlaybackBridge({
+    const {
+        publishStagePlayerPlaybackUpdate,
+    } = useElectronPlaybackBridge({
         isElectronWindow,
         setIsTitlebarRevealed,
         isPlayerChromeHidden,
@@ -1155,9 +1173,12 @@ export default function App() {
         showTransparentWindowBorder,
         setShowTransparentWindowBorder,
         transparentPlayerBackground,
+        activePlaybackContext,
+        isStagePlayerSnapshotEnabled: stageStatus?.enabled === true,
         mainWindowClickThroughEnabled: isMainWindowClickThroughEnabled,
         isNowPlayingControlDisabledRef,
         audioRef,
+        audioSrc,
         currentTime,
         duration,
         currentSong,
@@ -1172,6 +1193,8 @@ export default function App() {
         mediaSessionPauseRef,
         mediaSessionPrevRef,
         mediaSessionNextRef,
+        getSyntheticStageLyricsTime,
+        syncStageLyricsClock,
         taskbarHasTrackRef,
         taskbarPlayerStateRef,
         exportState,
@@ -1252,7 +1275,8 @@ export default function App() {
     });
 
     const usesCustomWindowChrome = isElectronWindow;
-    const shouldUseTransparentAppBackground = currentView === 'player' && transparentPlayerBackground;
+    const isPlayerPageTransparent = transparentPlayerBackground || enablePlayerPageNativeBlur;
+    const shouldUseTransparentAppBackground = currentView === 'player' && isPlayerPageTransparent;
     const appStyle = useMemo(() => buildAppStyle({
         bgMode,
         isDaylight,
@@ -1276,11 +1300,58 @@ export default function App() {
     }, [isPlayerChromeHidden]);
 
     useEffect(() => {
+        if (!autoHidePlayerChrome) return;
+
+        let timeoutId: number;
+        let isThrottled = false;
+        let rafId: number;
+
+        const showAndResetTimer = () => {
+            setIsPlayerChromeHidden(false);
+            window.clearTimeout(timeoutId);
+            timeoutId = window.setTimeout(() => {
+                setIsPlayerChromeHidden(true);
+            }, 3000);
+        };
+
+        const handleMouseOut = (e: MouseEvent) => {
+            if (!e.relatedTarget || (e.clientY <= 0 || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight)) {
+                window.clearTimeout(timeoutId);
+                timeoutId = window.setTimeout(() => {
+                    setIsPlayerChromeHidden(true);
+                }, 300);
+            }
+        };
+
+        const throttledMouseMove = () => {
+            if (isThrottled) return;
+            isThrottled = true;
+            rafId = requestAnimationFrame(() => {
+                showAndResetTimer();
+                isThrottled = false;
+            });
+        };
+
+        // Initialize timer
+        showAndResetTimer();
+
+        window.addEventListener('mouseout', handleMouseOut);
+        window.addEventListener('mousemove', throttledMouseMove);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+            cancelAnimationFrame(rafId);
+            window.removeEventListener('mouseout', handleMouseOut);
+            window.removeEventListener('mousemove', throttledMouseMove);
+        };
+    }, [autoHidePlayerChrome]);
+
+    useEffect(() => {
         const body = document.body;
         const html = document.documentElement;
         const previousBodyBackgroundColor = body.style.backgroundColor;
         const previousHtmlBackgroundColor = html.style.backgroundColor;
-        const shouldUseTransparentDocumentBackground = isElectronWindow && transparentPlayerBackground;
+        const shouldUseTransparentDocumentBackground = isElectronWindow && isPlayerPageTransparent;
 
         if (shouldUseTransparentDocumentBackground) {
             body.style.backgroundColor = 'transparent';
@@ -1294,7 +1365,7 @@ export default function App() {
             body.style.backgroundColor = previousBodyBackgroundColor;
             html.style.backgroundColor = previousHtmlBackgroundColor;
         };
-    }, [isElectronWindow, transparentPlayerBackground]);
+    }, [isElectronWindow, isPlayerPageTransparent]);
 
     useEffect(() => {
         if (!isElectronWindow || !window.electron?.getMainWindowClickThroughEnabled || !window.electron?.onMainWindowClickThroughChanged) {
@@ -1404,6 +1475,52 @@ export default function App() {
         stageActiveEntryKind,
     ]);
     const isSettingsModalOpen = settingsModalState.isOpen;
+    const {
+        obsBrowserSourceStatus,
+        isObsBrowserSourceRendering,
+        refreshObsBrowserSourceStatus,
+    } = useObsBrowserSourcePublisher({
+        isElectronWindow,
+        activePlaybackContext,
+        stageSource,
+        currentSong,
+        lyrics,
+        coverUrl,
+        currentTime,
+        duration,
+        playerState,
+        theme: visualizerTheme,
+        isDaylight,
+        visualizerMode,
+        visualizerBackgroundMode,
+        lyricsFontScale,
+        backgroundOpacity,
+        visualizerOpacity,
+        subtitleOverlayOpacity,
+        transparentBackground: isPlayerPageTransparent,
+        useCoverColorBg,
+        staticMode,
+        disableGeometricBackground: disableVisualizerGeometricBackground,
+        disableVignette: disableVisualizerVignette,
+        hideTranslationSubtitle: shouldHidePlayerTranslationSubtitle,
+        seed: visualizerGeometrySeed,
+        audioPower,
+        audioBands,
+        classicTuning,
+        cadenzaTuning,
+        partitaTuning,
+        fumeTuning,
+        cappellaTuning,
+        cappellaCustomEmojiImages,
+        cappellaCustomAvatarImages,
+        tiltTuning,
+        monetBackgroundTuning,
+        monetTuning,
+        monetBackgroundImage,
+        monetPortraitImage,
+        urlBackgroundList,
+        urlBackgroundSelectedId,
+    });
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
     const toggleDaylightMode = useCallback(() => {
         handleToggleDaylight(!isDaylight);
@@ -1444,12 +1561,15 @@ export default function App() {
         toggleTransparentBackground: () => {
             void toggleTransparentModeWithHandoff(!transparentPlayerBackground);
         },
+        transparentPlayerBackground,
+        enablePlayerPageNativeBlur,
         toggleDaylightMode,
         toggleAlternativeLyricSources: () => handleToggleAlternativeLyricSources(!enableAlternativeLyricSources),
         enableAlternativeLyricSources,
         runAutoMatchBestLyric: handleAutoMatchBestLyricForCurrentSong,
     }), [
         enableAlternativeLyricSources,
+        enablePlayerPageNativeBlur,
         handleAutoMatchBestLyricForCurrentSong,
         handleNextTrack,
         handlePrevTrack,
@@ -1567,8 +1687,9 @@ export default function App() {
                 void audioRef.current.play();
                 setPlayerState(PlayerState.PLAYING);
             }
+            void publishStagePlayerPlaybackUpdate();
         }
-    }, []);
+    }, [publishStagePlayerPlaybackUpdate]);
 
     const handleUnifiedAlbumSelect = useCallback((albumId: number) => {
         if (homeLayoutStyle === 'grid') {
@@ -1749,7 +1870,7 @@ export default function App() {
         minimizeToTray,
         hideTaskbarIcon,
         openPlayerOnLaunch,
-        transparentPlayerBackground,
+        isPlayerPageTransparent,
         isCustomThemePreferred,
         isDaylight,
         isLoadingCappellaCustomEmojiPack,
@@ -1799,7 +1920,7 @@ export default function App() {
         staticMode,
         theme,
         themeParkSeedTheme,
-        transparentPlayerBackground,
+        isPlayerPageTransparent,
         user,
         visualizerMode,
         handleAudioOutputDeviceChange,
@@ -2087,14 +2208,12 @@ export default function App() {
         handlePlayerPanelArtistSelect,
         navigateDirectHome,
     ]);
-    const homeContent = useMemo(() => <Home model={homeModel} />, [homeModel]);
     const appOverlaysModel = useMemo(() => buildAppOverlaysModel({
         currentView,
         isOverlayVisible,
         isSearchOpen,
         topOverlay,
         overlayStack,
-        homeContent,
         theme,
         isDaylight,
         closeSearchView,
@@ -2136,6 +2255,7 @@ export default function App() {
         isPlayerChromeHidden,
         shouldHidePlayerProgressBar,
         onSeekMainAudio: seekMainAudio,
+        onStagePlayerSeek: publishStagePlayerPlaybackUpdate,
         noTrackText: t('ui.noTrack'),
     }), [
         activePlaybackContext,
@@ -2157,7 +2277,6 @@ export default function App() {
         handleSearchResultAlbumSelect,
         handleSearchResultArtistSelect,
         handleSearchResultPlay,
-        homeContent,
         isDaylight,
         isDev,
         isDevDebugOverlayVisible,
@@ -2173,6 +2292,7 @@ export default function App() {
         playOnlineQueueFromStart,
         playSong,
         popOverlay,
+        publishStagePlayerPlaybackUpdate,
         refreshUserData,
         seekMainAudio,
         setPlayerState,
@@ -2204,6 +2324,8 @@ export default function App() {
         clearPersistedStagePlaybackCache,
         loadStageSessionIntoPlayback,
         nowPlayingConnectionStatus,
+        obsBrowserSourceStatus,
+        refreshObsBrowserSourceStatus,
         onAudioOutputDeviceChange: handleAudioOutputDeviceChange,
         onToggleTransparentPlayerBackground: toggleTransparentModeWithHandoff,
     }), [
@@ -2219,6 +2341,8 @@ export default function App() {
         loadCurrentSongLyricPreview,
         loadStageSessionIntoPlayback,
         nowPlayingConnectionStatus,
+        obsBrowserSourceStatus,
+        refreshObsBrowserSourceStatus,
         settingsModalState,
         stageSource,
         stageStatus,
@@ -2439,17 +2563,26 @@ export default function App() {
 
             {/* Home Mount Point */}
             <div
-                className="absolute inset-0 z-0"
+                className="absolute inset-0 z-10"
                 style={{
-                    opacity: shouldShowHomeSurface ? 1 : 0,
                     pointerEvents: shouldShowHomeSurface ? 'auto' : 'none',
-                    transition: 'opacity 0.25s ease-in-out',
+                    visibility: shouldShowHomeSurface ? 'visible' : 'hidden',
+                    transition: shouldShowHomeSurface
+                        ? 'visibility 0s linear 0s'
+                        : 'visibility 0s linear 0.25s',
                     display: isHomeFullyHidden ? 'none' : 'block',
                 }}
             >
-                {currentView === 'home' || currentView === 'player' ? (
-                    <Home model={homeModel} isHomeFullyHidden={isHomeFullyHidden} />
-                ) : null}
+                <motion.div
+                    className="absolute inset-0"
+                    initial={false}
+                    animate={{ opacity: shouldShowHomeSurface ? 1 : 0 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                >
+                    {currentView === 'home' || currentView === 'player' ? (
+                        <Home model={homeModel} isHomeFullyHidden={isHomeFullyHidden} />
+                    ) : null}
+                </motion.div>
             </div>
 
             {/* --- VISUALIZER (Background Layer & Main Click Target) --- */}
@@ -2457,52 +2590,66 @@ export default function App() {
                 className="absolute inset-0 z-0"
                 onClick={handleContainerClick}
             >
-                <VisualizerRenderer
-                    mode={visualizerMode}
-                    currentTime={currentTime}
-                    currentLineIndex={currentLineIndex}
-                    lines={lyrics?.lines || []}
-                    theme={visualizerTheme}
-                    isDaylight={isDaylight}
-                    audioPower={audioPower}
-                    audioBands={audioBands}
-                    songTitle={currentSong?.name}
-                    songArtist={currentSongArtist}
-                    songAlbum={currentSongAlbum}
-                    coverUrl={getCoverUrl()}
-                    showText={currentView === 'player' && !isSettingsModalOpen}
-                    useCoverColorBg={useCoverColorBg}
-                    seed={visualizerGeometrySeed}
-                    staticMode={staticMode}
-                    paused={shouldPauseVisualizerBackground}
-                    backgroundOpacity={backgroundOpacity}
-                    visualizerOpacity={visualizerOpacity}
-                    transparentBackground={currentView === 'player' && transparentPlayerBackground && !isSettingsModalOpen}
-                    disableGeometricBackground={disableVisualizerGeometricBackground || isSettingsSubviewOpen}
-                    disableVignette={disableVisualizerVignette}
-                    visualizerBackgroundMode={visualizerBackgroundMode}
-                    lyricsFontScale={lyricsFontScale}
-                    subtitleOverlayOpacity={subtitleOverlayOpacity}
-                    isPlayerChromeHidden={isPlayerChromeHidden}
-                    hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
-                    classicTuning={classicTuning}
-                    cadenzaTuning={cadenzaTuning}
-                    partitaTuning={partitaTuning}
-                    fumeTuning={fumeTuning}
-                    cappellaTuning={cappellaTuning}
-                    tiltTuning={tiltTuning}
-                    monetBackgroundTuning={monetBackgroundTuning}
-                    monetTuning={monetTuning}
-                    onMonetTuningChange={handleSetMonetTuning}
-                    cappellaCustomEmojiImages={cappellaCustomEmojiImages}
-                    cappellaCustomAvatarImages={cappellaCustomAvatarImages}
-                    monetBackgroundImage={monetBackgroundImage}
-                    monetPortraitImage={monetPortraitImage}
-                    urlBackgroundList={urlBackgroundList}
-                    urlBackgroundSelectedId={urlBackgroundSelectedId}
-                    onBack={navigateToHome}
-                />
+                {!isObsBrowserSourceRendering && (
+                    <VisualizerRenderer
+                        mode={visualizerMode}
+                        currentTime={currentTime}
+                        currentLineIndex={currentLineIndex}
+                        lines={lyrics?.lines || []}
+                        theme={visualizerTheme}
+                        isDaylight={isDaylight}
+                        audioPower={audioPower}
+                        audioBands={audioBands}
+                        songTitle={currentSong?.name}
+                        songArtist={currentSongArtist}
+                        songAlbum={currentSongAlbum}
+                        coverUrl={getCoverUrl()}
+                        showText={currentView === 'player' && !isSettingsModalOpen}
+                        useCoverColorBg={useCoverColorBg}
+                        seed={visualizerGeometrySeed}
+                        staticMode={staticMode}
+                        paused={shouldPauseVisualizerBackground}
+                        backgroundOpacity={backgroundOpacity}
+                        visualizerOpacity={visualizerOpacity}
+                        transparentBackground={currentView === 'player' && isPlayerPageTransparent && !isSettingsModalOpen}
+                        disableGeometricBackground={disableVisualizerGeometricBackground || isSettingsSubviewOpen}
+                        disableVignette={disableVisualizerVignette}
+                        visualizerBackgroundMode={visualizerBackgroundMode}
+                        lyricsFontScale={lyricsFontScale}
+                        subtitleOverlayOpacity={subtitleOverlayOpacity}
+                        isPlayerChromeHidden={isPlayerChromeHidden}
+                        hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
+                        classicTuning={classicTuning}
+                        cadenzaTuning={cadenzaTuning}
+                        partitaTuning={partitaTuning}
+                        fumeTuning={fumeTuning}
+                        cappellaTuning={cappellaTuning}
+                        tiltTuning={tiltTuning}
+                        monetBackgroundTuning={monetBackgroundTuning}
+                        monetTuning={monetTuning}
+                        onMonetTuningChange={handleSetMonetTuning}
+                        cappellaCustomEmojiImages={cappellaCustomEmojiImages}
+                        cappellaCustomAvatarImages={cappellaCustomAvatarImages}
+                        monetBackgroundImage={monetBackgroundImage}
+                        monetPortraitImage={monetPortraitImage}
+                        urlBackgroundList={urlBackgroundList}
+                        urlBackgroundSelectedId={urlBackgroundSelectedId}
+                        onBack={navigateToHome}
+                    />
+                )}
             </div>
+
+            {currentView === 'player' && isObsBrowserSourceRendering && (
+                <ObsBrowserSourceLyrics
+                    lyrics={lyrics}
+                    currentLineIndex={currentLineIndex}
+                    visualizerTheme={visualizerTheme}
+                    lyricsFontScale={lyricsFontScale}
+                    shouldHidePlayerTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
+                    isDaylight={isDaylight}
+                    navigateToHome={navigateToHome}
+                />
+            )}
 
             {currentView === 'player' && activePlaybackContext === 'stage' && (!stageActiveEntryKind || stageSource === 'now-playing') && !currentSong && (
                 <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center px-6">

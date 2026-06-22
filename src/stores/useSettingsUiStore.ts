@@ -503,6 +503,7 @@ export const resolveStoredMonetTuning = (parsed: StoredMonetTuningInput): MonetT
         ? Math.min(0, Math.max(-150, parsed.portraitOffsetX))
         : (DEFAULT_MONET_TUNING.portraitOffsetX ?? 0),
     portraitStyle: parsed.portraitStyle === 'rectangular' ? 'rectangular' : DEFAULT_MONET_TUNING.portraitStyle,
+    showPortraitDragHanger: parsed.showPortraitDragHanger ?? DEFAULT_MONET_TUNING.showPortraitDragHanger,
 });
 const readStoredMonetBackgroundTuning = (): MonetBackgroundTuning => {
     if (typeof window === 'undefined') {
@@ -687,6 +688,8 @@ type SettingsUiState = {
     hidePlayerTranslationSubtitle: boolean;
     hidePlayerRightPanelButton: boolean;
     transparentPlayerBackground: boolean;
+    enablePlayerPageNativeBlur: boolean;
+    autoHidePlayerChrome: boolean;
     disableVisualizerVignette: boolean;
     disableVisualizerGeometricBackground: boolean;
     minimizeToTray: boolean;
@@ -742,6 +745,7 @@ type SettingsUiState = {
     setStatusSetter: (setter: StatusSetter | null) => void;
     setAudioQuality: (quality: AudioQuality) => void;
     setTransparentPlayerBackgroundFromSystem: (enabled: boolean) => void;
+    handleTogglePlayerPageNativeBlur: (enable: boolean) => void;
     setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; }) => void;
     setStoredCappellaEmojiPack: (pack: StoredCappellaEmojiImage[]) => void;
     setCappellaCustomEmojiImages: (images: CappellaEmojiImage[]) => void;
@@ -769,6 +773,7 @@ type SettingsUiState = {
     handleToggleHidePlayerTranslationSubtitle: (enable: boolean) => void;
     handleToggleHidePlayerRightPanelButton: (enable: boolean) => void;
     handleToggleTransparentPlayerBackground: (enable: boolean) => void;
+    handleToggleAutoHidePlayerChrome: (enable: boolean) => void;
     handleToggleDisableVisualizerVignette: (disable: boolean) => void;
     handleToggleDisableVisualizerGeometricBackground: (disable: boolean) => void;
     handleToggleMinimizeToTray: (enable: boolean) => void;
@@ -845,6 +850,8 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     hidePlayerTranslationSubtitle: getStoredBoolean('hide_player_translation_subtitle', false),
     hidePlayerRightPanelButton: getStoredBoolean('hide_player_right_panel_button', false),
     transparentPlayerBackground: getStoredBoolean('transparent_player_background', false),
+    enablePlayerPageNativeBlur: getStoredBoolean('enable_player_page_native_blur', false),
+    autoHidePlayerChrome: getStoredBoolean('auto_hide_player_chrome', false),
     disableVisualizerVignette: getStoredBoolean('disable_visualizer_vignette', false),
     disableVisualizerGeometricBackground: getStoredBoolean('disable_visualizer_geometric_background', false),
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
@@ -911,6 +918,17 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     setTransparentPlayerBackgroundFromSystem: (enabled) => {
         setStoredBoolean('transparent_player_background', enabled);
         set({ transparentPlayerBackground: enabled });
+    },
+    handleTogglePlayerPageNativeBlur: (enable) => {
+        setStoredBoolean('enable_player_page_native_blur', enable);
+        set({ enablePlayerPageNativeBlur: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('enable_player_page_native_blur', enable);
+        }
+    },
+    handleToggleAutoHidePlayerChrome: (enabled: boolean) => {
+        localStorage.setItem('auto_hide_player_chrome', enabled ? 'true' : 'false');
+        set({ autoHidePlayerChrome: enabled });
     },
     setDesktopPreferenceSnapshot: (settings) => {
         const patch: Partial<SettingsUiState> = {};
@@ -1193,6 +1211,9 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     setDaylightPreference: (enabled) => {
         setStoredBoolean('default_theme_daylight', enabled);
         set({ isDaylight: enabled });
+        if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
+            void window.electron.setNativeTheme(enabled ? 'light' : 'dark');
+        }
     },
     handleSetVisualizerMode: (mode) => {
         const entry = getVisualizerRegistryEntry(mode);
@@ -1684,6 +1705,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
     hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
     transparentPlayerBackground: state.transparentPlayerBackground,
+    autoHidePlayerChrome: state.autoHidePlayerChrome,
     disableVisualizerVignette: state.disableVisualizerVignette,
     disableVisualizerGeometricBackground: state.disableVisualizerGeometricBackground,
     minimizeToTray: state.minimizeToTray,
@@ -1739,6 +1761,9 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
     handleToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
     handleToggleTransparentPlayerBackground: state.handleToggleTransparentPlayerBackground,
+    enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
+    handleTogglePlayerPageNativeBlur: state.handleTogglePlayerPageNativeBlur,
+    handleToggleAutoHidePlayerChrome: state.handleToggleAutoHidePlayerChrome,
     handleToggleDisableVisualizerVignette: state.handleToggleDisableVisualizerVignette,
     handleToggleDisableVisualizerGeometricBackground: state.handleToggleDisableVisualizerGeometricBackground,
     handleToggleMinimizeToTray: state.handleToggleMinimizeToTray,
@@ -1797,3 +1822,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleMute: state.handleToggleMute,
     handleToggleLoopMode: state.handleToggleLoopMode,
 });
+
+if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
+    void window.electron.setNativeTheme(useSettingsUiStore.getState().isDaylight ? 'light' : 'dark');
+}

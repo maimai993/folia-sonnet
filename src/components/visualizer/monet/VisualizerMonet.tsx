@@ -334,60 +334,62 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                         }}
                                     >
                                         {/* Hanger / Black-White Bar */}
-                                        <motion.div
-                                            onPointerDown={(e) => {
-                                                if (isEditingPosition) {
-                                                    e.preventDefault();
-                                                    dragControls.start(e);
-                                                }
-                                            }}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (isDraggingRef.current) return;
-                                                
-                                                if (!isEditingPosition) {
-                                                    setIsEditingPosition(true);
-                                                } else {
-                                                    const finalOffset = Math.round(offsetX.get());
-                                                    handleSetMonetTuning?.({
-                                                        ...monetTuning,
-                                                        portraitOffsetX: finalOffset,
-                                                    });
-                                                    setIsEditingPosition(false);
-                                                }
-                                            }}
-                                            onMouseEnter={() => setIsHangerHovered(true)}
-                                            onMouseLeave={() => setIsHangerHovered(false)}
-                                            className="absolute -top-3 right-8 z-20 h-14 w-3 rounded-full shadow-md cursor-pointer transition-transform duration-200 hover:scale-y-105 active:scale-y-95"
-                                            animate={isEditingPosition ? {
-                                                borderColor: [
-                                                    colorWithAlpha(theme.accentColor, 0.3),
-                                                    colorWithAlpha(theme.accentColor, 1.0),
-                                                    colorWithAlpha(theme.accentColor, 0.3)
-                                                ],
-                                                boxShadow: [
-                                                    `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
-                                                    `0 0 10px ${colorWithAlpha(theme.accentColor, 0.65)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
-                                                    `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
-                                                ]
-                                            } : {
-                                                borderColor: isHangerHovered
-                                                    ? colorWithAlpha(theme.primaryColor, 0.36)
-                                                    : colorWithAlpha(theme.primaryColor, 0),
-                                                boxShadow: `0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
-                                            }}
-                                            transition={isEditingPosition ? {
-                                                duration: 1.5,
-                                                repeat: Infinity,
-                                                ease: "easeInOut"
-                                            } : { duration: 0.2 }}
-                                            style={{
-                                                backgroundColor: colorWithAlpha(theme.backgroundColor, 0.86),
-                                                borderWidth: '1.5px',
-                                                borderStyle: 'solid',
-                                                touchAction: isEditingPosition ? 'none' : 'auto',
-                                            }}
-                                        />
+                                        {monetTuning.showPortraitDragHanger && (
+                                            <motion.div
+                                                onPointerDown={(e) => {
+                                                    if (isEditingPosition) {
+                                                        e.preventDefault();
+                                                        dragControls.start(e);
+                                                    }
+                                                }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (isDraggingRef.current) return;
+                                                    
+                                                    if (!isEditingPosition) {
+                                                        setIsEditingPosition(true);
+                                                    } else {
+                                                        const finalOffset = Math.round(offsetX.get());
+                                                        handleSetMonetTuning?.({
+                                                            ...monetTuning,
+                                                            portraitOffsetX: finalOffset,
+                                                        });
+                                                        setIsEditingPosition(false);
+                                                    }
+                                                }}
+                                                onMouseEnter={() => setIsHangerHovered(true)}
+                                                onMouseLeave={() => setIsHangerHovered(false)}
+                                                className="absolute -top-3 right-8 z-20 h-14 w-3 rounded-full shadow-md cursor-pointer transition-transform duration-200 hover:scale-y-105 active:scale-y-95"
+                                                animate={isEditingPosition ? {
+                                                    borderColor: [
+                                                        colorWithAlpha(theme.accentColor, 0.3),
+                                                        colorWithAlpha(theme.accentColor, 1.0),
+                                                        colorWithAlpha(theme.accentColor, 0.3)
+                                                    ],
+                                                    boxShadow: [
+                                                        `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
+                                                        `0 0 10px ${colorWithAlpha(theme.accentColor, 0.65)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
+                                                        `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
+                                                    ]
+                                                } : {
+                                                    borderColor: isHangerHovered
+                                                        ? colorWithAlpha(theme.primaryColor, 0.36)
+                                                        : colorWithAlpha(theme.primaryColor, 0),
+                                                    boxShadow: `0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
+                                                }}
+                                                transition={isEditingPosition ? {
+                                                    duration: 1.5,
+                                                    repeat: Infinity,
+                                                    ease: "easeInOut"
+                                                } : { duration: 0.2 }}
+                                                style={{
+                                                    backgroundColor: colorWithAlpha(theme.backgroundColor, 0.86),
+                                                    borderWidth: '1.5px',
+                                                    borderStyle: 'solid',
+                                                    touchAction: isEditingPosition ? 'none' : 'auto',
+                                                }}
+                                            />
+                                        )}
 
                                         {/* Square cover with enhanced shadow, no transparent border */}
                                         {monetTuning.portraitStyle === 'square' ? (

@@ -5,6 +5,12 @@ import {
     buildStageHealthRequest,
     buildStageLyricsRequest,
     buildStagePlayRequest,
+    buildStagePlayerControlRequest,
+    buildStagePlayerQueueGetRequest,
+    buildStagePlayerQueueRequest,
+    buildStagePlayerStatusRequest,
+    buildStagePlayerTimeRequest,
+    buildStagePlayerWebSocketUrl,
     buildStageSearchRequest,
     buildStageSessionRequest,
     buildStageStatusRequest,
@@ -79,8 +85,62 @@ const playStatus = getElement<HTMLElement>('play-status');
 const playResponse = getElement<HTMLElement>('play-response');
 const playExample = getElement<HTMLElement>('play-example');
 
+const playerStatusPreview = getElement<HTMLElement>('player-status-preview');
+const playerStatusStatus = getElement<HTMLElement>('player-status-status');
+const playerStatusResponse = getElement<HTMLElement>('player-status-response');
+const playerStatusExample = getElement<HTMLElement>('player-status-example');
+
+const playerTimePreview = getElement<HTMLElement>('player-time-preview');
+const playerTimeStatus = getElement<HTMLElement>('player-time-status');
+const playerTimeResponse = getElement<HTMLElement>('player-time-response');
+const playerTimeExample = getElement<HTMLElement>('player-time-example');
+
+const playerControlActionInput = getElement<HTMLSelectElement>('player-control-action');
+const playerControlPositionInput = getElement<HTMLInputElement>('player-control-position');
+const playerControlPreview = getElement<HTMLElement>('player-control-preview');
+const playerControlStatus = getElement<HTMLElement>('player-control-status');
+const playerControlResponse = getElement<HTMLElement>('player-control-response');
+const playerControlExample = getElement<HTMLElement>('player-control-example');
+
+const playerQueueActionInput = getElement<HTMLSelectElement>('player-queue-action');
+const playerQueueSongIdInput = getElement<HTMLInputElement>('player-queue-song-id');
+const playerQueueItemIdInput = getElement<HTMLInputElement>('player-queue-item-id');
+const playerQueueFromItemIdInput = getElement<HTMLInputElement>('player-queue-from-item-id');
+const playerQueueIndexInput = getElement<HTMLInputElement>('player-queue-index');
+const playerQueueToIndexInput = getElement<HTMLInputElement>('player-queue-to-index');
+const playerQueueOffsetInput = getElement<HTMLInputElement>('player-queue-offset');
+const playerQueueLimitInput = getElement<HTMLInputElement>('player-queue-limit');
+const playerQueueAroundCurrentInput = getElement<HTMLInputElement>('player-queue-around-current');
+const playerQueuePreview = getElement<HTMLElement>('player-queue-preview');
+const playerQueueStatus = getElement<HTMLElement>('player-queue-status');
+const playerQueueResponse = getElement<HTMLElement>('player-queue-response');
+const playerQueueExample = getElement<HTMLElement>('player-queue-example');
+
+const playerWsPreview = getElement<HTMLElement>('player-ws-preview');
+const playerWsStatus = getElement<HTMLElement>('player-ws-status');
+const playerWsLog = getElement<HTMLElement>('player-ws-log');
+
 const formatJson = (value: unknown) => JSON.stringify(value, null, 2);
+const syntaxHighlightJson = (json: string) => {
+    let formatted = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return formatted.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+                cls = 'json-key';
+            } else {
+                cls = 'json-string';
+            }
+        } else if (/true|false/.test(match)) {
+            cls = 'json-boolean';
+        } else if (/null/.test(match)) {
+            cls = 'json-null';
+        }
+        return `<span class="${cls}">${match}</span>`;
+    });
+};
 const normalizeText = (value?: string | null) => value?.trim() ?? '';
+let playerSocket: WebSocket | null = null;
 
 const summarizeBody = (body: BodyInit | null | undefined) => {
     if (!body) {
@@ -112,14 +172,18 @@ const summarizeBody = (body: BodyInit | null | undefined) => {
 };
 
 const renderRequestPreview = (target: HTMLElement, request: StageRequestBuildResult) => {
-    target.textContent = [
-        `${request.init.method || 'GET'} ${request.endpoint}`,
+    const formattedHeaders = formatJson(request.init.headers || {});
+    const bodyStr = summarizeBody(request.init.body as BodyInit | null | undefined);
+    target.innerHTML = [
+        `<span class="req-method">${request.init.method || 'GET'}</span> <span class="req-url">${request.endpoint}</span>`,
         '',
-        `Transport: ${request.transport}`,
+        `<span class="req-label">Transport:</span> ${request.transport}`,
         '',
-        `Headers: ${formatJson(request.init.headers || {})}`,
+        `<span class="req-label">Headers:</span>\n${syntaxHighlightJson(formattedHeaders)}`,
         '',
-        `Body: ${summarizeBody(request.init.body as BodyInit | null | undefined)}`,
+        `<span class="req-label">Body:</span>\n${
+            bodyStr.startsWith('{') || bodyStr.startsWith('[') ? syntaxHighlightJson(bodyStr) : bodyStr.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        }`,
     ].join('\n');
 };
 
@@ -154,7 +218,13 @@ const toCurl = (request: StageRequestBuildResult) => {
 
 const renderExample = (target: HTMLElement, builder: () => StageRequestBuildResult) => {
     try {
-        target.textContent = toCurl(builder());
+        const curlStr = toCurl(builder());
+        const highlighted = curlStr
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/^(curl\b.*)/, '<span class="curl-command">$1</span>')
+            .replace(/(-X\s+\w+|-H|-d|-F)/g, '<span class="curl-flag">$1</span>')
+            .replace(/('.*?'|".*?")/g, '<span class="curl-string">$1</span>');
+        target.innerHTML = highlighted;
     } catch (error) {
         renderExampleError(target, error);
     }
@@ -165,19 +235,20 @@ const updateRequestResult = async (
     responseTarget: HTMLElement,
     request: StageRequestBuildResult,
 ) => {
-    statusTarget.textContent = 'Sending...';
+    statusTarget.innerHTML = '<span class="status-sending">Sending...</span>';
     try {
         const response = await fetch(request.endpoint, request.init);
         const text = await response.text();
-        statusTarget.textContent = `${response.status} ${response.statusText}`;
+        const statusClass = response.ok ? 'status-ok' : 'status-error';
+        statusTarget.innerHTML = `<span class="${statusClass}">${response.status} ${response.statusText}</span>`;
 
         try {
-            responseTarget.textContent = formatJson(JSON.parse(text));
+            responseTarget.innerHTML = syntaxHighlightJson(formatJson(JSON.parse(text)));
         } catch {
             responseTarget.textContent = text || '(empty response)';
         }
     } catch (error) {
-        statusTarget.textContent = 'Request failed.';
+        statusTarget.innerHTML = '<span class="status-error">Request failed.</span>';
         responseTarget.textContent = error instanceof Error ? error.message : String(error);
     }
 };
@@ -200,7 +271,7 @@ const renderSearchResults = (songs: StageSearchResult[]) => {
                     <button type="button" class="secondary" data-queue-song="${song.songId}">Add To Queue</button>
                 </div>
             </div>
-            <pre class="request-preview compact">${formatJson(song)}</pre>
+            <pre class="request-preview compact">${syntaxHighlightJson(formatJson(song))}</pre>
         </article>
     `).join('');
 };
@@ -235,6 +306,43 @@ const buildSearchRequestFromInputs = () => buildStageSearchRequest({
     query: searchQueryInput.value,
     limit: Number(searchLimitInput.value) || 10,
 });
+
+const buildPlayerStatusRequestFromInputs = () => buildStagePlayerStatusRequest(baseUrlInput.value, tokenInput.value);
+
+const buildPlayerTimeRequestFromInputs = () => buildStagePlayerTimeRequest(baseUrlInput.value, tokenInput.value);
+
+const buildPlayerControlRequestFromInputs = () => buildStagePlayerControlRequest({
+    baseUrl: baseUrlInput.value,
+    token: tokenInput.value,
+    action: playerControlActionInput.value as 'next' | 'prev' | 'pause' | 'resume' | 'seek',
+    positionMs: Number(playerControlPositionInput.value),
+});
+
+const buildPlayerQueueRequestFromInputs = () => buildStagePlayerQueueRequest({
+    baseUrl: baseUrlInput.value,
+    token: tokenInput.value,
+    action: playerQueueActionInput.value as 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear',
+    songId: Number(playerQueueSongIdInput.value) || undefined,
+    queueItemId: playerQueueItemIdInput.value,
+    fromQueueItemId: playerQueueFromItemIdInput.value,
+    index: (playerQueueActionInput.value === 'remove' || playerQueueActionInput.value === 'select') && playerQueueIndexInput.value !== '' ? Number(playerQueueIndexInput.value) : undefined,
+    fromIndex: playerQueueActionInput.value === 'move' && playerQueueIndexInput.value !== '' ? Number(playerQueueIndexInput.value) : undefined,
+    toIndex: playerQueueToIndexInput.value === '' ? undefined : Number(playerQueueToIndexInput.value),
+});
+
+const buildPlayerQueueGetRequestFromInputs = () => buildStagePlayerQueueGetRequest(baseUrlInput.value, tokenInput.value, {
+    offset: playerQueueOffsetInput.value === '' ? undefined : Number(playerQueueOffsetInput.value),
+    limit: playerQueueLimitInput.value === '' ? undefined : Number(playerQueueLimitInput.value),
+    around: playerQueueAroundCurrentInput.checked ? 'current' : undefined,
+});
+
+const renderPlayerWebSocketPreview = () => {
+    try {
+        playerWsPreview.textContent = buildStagePlayerWebSocketUrl(baseUrlInput.value, tokenInput.value);
+    } catch (error) {
+        renderExampleError(playerWsPreview, error);
+    }
+};
 
 const renderLiveExamples = () => {
     renderExample(healthExample, () => buildStageHealthRequest(baseUrlInput.value));
@@ -279,6 +387,10 @@ const renderLiveExamples = () => {
         songId: 123456,
         appendToQueue: false,
     }));
+    renderExample(playerStatusExample, buildPlayerStatusRequestFromInputs);
+    renderExample(playerTimeExample, buildPlayerTimeRequestFromInputs);
+    renderExample(playerControlExample, buildPlayerControlRequestFromInputs);
+    renderExample(playerQueueExample, buildPlayerQueueGetRequestFromInputs);
 };
 
 const renderStaticPreviews = () => {
@@ -317,6 +429,32 @@ const renderStaticPreviews = () => {
     } catch (error) {
         renderExampleError(searchPreview, error);
     }
+
+    try {
+        renderRequestPreview(playerStatusPreview, buildPlayerStatusRequestFromInputs());
+    } catch (error) {
+        renderExampleError(playerStatusPreview, error);
+    }
+
+    try {
+        renderRequestPreview(playerTimePreview, buildPlayerTimeRequestFromInputs());
+    } catch (error) {
+        renderExampleError(playerTimePreview, error);
+    }
+
+    try {
+        renderRequestPreview(playerControlPreview, buildPlayerControlRequestFromInputs());
+    } catch (error) {
+        renderExampleError(playerControlPreview, error);
+    }
+
+    try {
+        renderRequestPreview(playerQueuePreview, buildPlayerQueueRequestFromInputs());
+    } catch (error) {
+        renderExampleError(playerQueuePreview, error);
+    }
+
+    renderPlayerWebSocketPreview();
 };
 
 const rerenderDocs = () => {
@@ -357,16 +495,17 @@ const runSessionRequest = async () => {
 const runSearchRequest = async () => {
     const request = buildSearchRequestFromInputs();
     renderRequestPreview(searchPreview, request);
-    searchStatus.textContent = 'Sending...';
+    searchStatus.innerHTML = '<span class="status-sending">Sending...</span>';
 
     try {
         const response = await fetch(request.endpoint, request.init);
         const payload = await response.json();
-        searchStatus.textContent = `${response.status} ${response.statusText}`;
-        searchResponse.textContent = formatJson(payload);
+        const statusClass = response.ok ? 'status-ok' : 'status-error';
+        searchStatus.innerHTML = `<span class="${statusClass}">${response.status} ${response.statusText}</span>`;
+        searchResponse.innerHTML = syntaxHighlightJson(formatJson(payload));
         renderSearchResults(Array.isArray(payload?.songs) ? payload.songs : []);
     } catch (error) {
-        searchStatus.textContent = 'Request failed.';
+        searchStatus.innerHTML = '<span class="status-error">Request failed.</span>';
         searchResponse.textContent = error instanceof Error ? error.message : String(error);
         renderSearchResults([]);
     }
@@ -381,6 +520,102 @@ const runPlayRequest = async (songId: number, appendToQueue = false) => {
     });
     renderRequestPreview(playPreview, request);
     await updateRequestResult(playStatus, playResponse, request);
+};
+
+const runPlayerStatusRequest = async () => {
+    const request = buildPlayerStatusRequestFromInputs();
+    renderRequestPreview(playerStatusPreview, request);
+    await updateRequestResult(playerStatusStatus, playerStatusResponse, request);
+};
+
+const runPlayerTimeRequest = async () => {
+    const request = buildPlayerTimeRequestFromInputs();
+    renderRequestPreview(playerTimePreview, request);
+    await updateRequestResult(playerTimeStatus, playerTimeResponse, request);
+};
+
+const runPlayerControlRequest = async (action?: 'next' | 'prev' | 'pause' | 'resume' | 'seek') => {
+    if (action) {
+        playerControlActionInput.value = action;
+    }
+    const request = buildPlayerControlRequestFromInputs();
+    renderRequestPreview(playerControlPreview, request);
+    await updateRequestResult(playerControlStatus, playerControlResponse, request);
+};
+
+const runPlayerQueueGetRequest = async () => {
+    const request = buildPlayerQueueGetRequestFromInputs();
+    renderRequestPreview(playerQueuePreview, request);
+    await updateRequestResult(playerQueueStatus, playerQueueResponse, request);
+};
+
+const runPlayerQueuePostRequest = async () => {
+    const request = buildPlayerQueueRequestFromInputs();
+    renderRequestPreview(playerQueuePreview, request);
+    await updateRequestResult(playerQueueStatus, playerQueueResponse, request);
+};
+
+const appendPlayerWebSocketLog = (entry: unknown) => {
+    if (playerWsLog.textContent === 'No events yet.') {
+        playerWsLog.innerHTML = '';
+    }
+    const formatted = typeof entry === 'string' ? entry.replace(/</g, '&lt;').replace(/>/g, '&gt;') : syntaxHighlightJson(formatJson(entry));
+    const logEntry = document.createElement('div');
+    logEntry.className = 'ws-log-entry';
+    logEntry.innerHTML = `<span class="req-label">[${new Date().toLocaleTimeString()}]</span>\n${formatted}`;
+    playerWsLog.appendChild(logEntry);
+    playerWsLog.scrollTop = playerWsLog.scrollHeight;
+};
+
+const connectPlayerWebSocket = () => {
+    if (playerSocket && playerSocket.readyState === WebSocket.OPEN) {
+        playerWsStatus.textContent = 'Already connected.';
+        return;
+    }
+
+    let url: string;
+    try {
+        url = buildStagePlayerWebSocketUrl(baseUrlInput.value, tokenInput.value);
+        playerWsPreview.textContent = url;
+    } catch (error) {
+        playerWsStatus.textContent = 'Connection build failed.';
+        appendPlayerWebSocketLog(error instanceof Error ? error.message : String(error));
+        return;
+    }
+
+    playerWsStatus.textContent = 'Connecting...';
+    playerSocket = new WebSocket(url);
+    playerSocket.addEventListener('open', () => {
+        playerWsStatus.textContent = 'Connected.';
+        appendPlayerWebSocketLog('Socket opened.');
+    });
+    playerSocket.addEventListener('message', (event) => {
+        try {
+            appendPlayerWebSocketLog(JSON.parse(String(event.data)));
+        } catch {
+            appendPlayerWebSocketLog(String(event.data));
+        }
+    });
+    playerSocket.addEventListener('close', (event) => {
+        playerWsStatus.textContent = `Disconnected (${event.code || 'no code'}).`;
+        appendPlayerWebSocketLog(`Socket closed: ${event.reason || 'no reason'}`);
+        playerSocket = null;
+    });
+    playerSocket.addEventListener('error', () => {
+        playerWsStatus.textContent = 'Socket error.';
+        appendPlayerWebSocketLog('Socket error.');
+    });
+};
+
+const disconnectPlayerWebSocket = () => {
+    if (!playerSocket) {
+        playerWsStatus.textContent = 'Disconnected.';
+        return;
+    }
+
+    playerSocket.close(1000, 'Manual disconnect');
+    playerSocket = null;
+    playerWsStatus.textContent = 'Disconnecting...';
 };
 
 getElement<HTMLButtonElement>('run-health').addEventListener('click', () => {
@@ -417,6 +652,60 @@ getElement<HTMLButtonElement>('run-search').addEventListener('click', () => {
     });
 });
 
+getElement<HTMLButtonElement>('run-player-status').addEventListener('click', () => {
+    void runPlayerStatusRequest().catch((error) => {
+        playerStatusStatus.textContent = 'Request build failed.';
+        playerStatusResponse.textContent = error instanceof Error ? error.message : String(error);
+    });
+});
+
+getElement<HTMLButtonElement>('run-player-time').addEventListener('click', () => {
+    void runPlayerTimeRequest().catch((error) => {
+        playerTimeStatus.textContent = 'Request build failed.';
+        playerTimeResponse.textContent = error instanceof Error ? error.message : String(error);
+    });
+});
+
+getElement<HTMLButtonElement>('run-player-control').addEventListener('click', () => {
+    void runPlayerControlRequest().catch((error) => {
+        playerControlStatus.textContent = 'Request build failed.';
+        playerControlResponse.textContent = error instanceof Error ? error.message : String(error);
+    });
+});
+
+document.querySelectorAll<HTMLElement>('[data-control-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+        const action = button.dataset.controlAction as 'next' | 'prev' | 'pause' | 'resume' | undefined;
+        if (!action) {
+            return;
+        }
+        void runPlayerControlRequest(action).catch((error) => {
+            playerControlStatus.textContent = 'Request build failed.';
+            playerControlResponse.textContent = error instanceof Error ? error.message : String(error);
+        });
+    });
+});
+
+getElement<HTMLButtonElement>('run-player-queue-get').addEventListener('click', () => {
+    void runPlayerQueueGetRequest().catch((error) => {
+        playerQueueStatus.textContent = 'Request build failed.';
+        playerQueueResponse.textContent = error instanceof Error ? error.message : String(error);
+    });
+});
+
+getElement<HTMLButtonElement>('run-player-queue-post').addEventListener('click', () => {
+    void runPlayerQueuePostRequest().catch((error) => {
+        playerQueueStatus.textContent = 'Request build failed.';
+        playerQueueResponse.textContent = error instanceof Error ? error.message : String(error);
+    });
+});
+
+getElement<HTMLButtonElement>('connect-player-ws').addEventListener('click', connectPlayerWebSocket);
+getElement<HTMLButtonElement>('disconnect-player-ws').addEventListener('click', disconnectPlayerWebSocket);
+getElement<HTMLButtonElement>('clear-player-ws-log').addEventListener('click', () => {
+    playerWsLog.textContent = 'No events yet.';
+});
+
 searchResults.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
@@ -447,11 +736,23 @@ searchResults.addEventListener('click', (event) => {
     lyricsFormatInput,
     searchQueryInput,
     searchLimitInput,
+    playerControlActionInput,
+    playerControlPositionInput,
+    playerQueueActionInput,
+    playerQueueSongIdInput,
+    playerQueueItemIdInput,
+    playerQueueFromItemIdInput,
+    playerQueueIndexInput,
+    playerQueueToIndexInput,
 ].forEach((element) => {
     element.addEventListener('input', rerenderDocs);
 });
 
 [audioFileInput, lyricsFileInput, coverFileInput].forEach((element) => {
+    element.addEventListener('change', rerenderDocs);
+});
+
+[playerControlActionInput, playerQueueActionInput].forEach((element) => {
     element.addEventListener('change', rerenderDocs);
 });
 

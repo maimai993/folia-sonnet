@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { getCachedCoverUrl } from '../services/coverCache';
@@ -14,6 +14,7 @@ import type { NextTrackOptions, PlaybackNavigationOptions, SkipPromptMessageKey,
 import type { NavidromeSong } from '../types/navidrome';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
 import { applyQueueAddBehavior } from '../utils/queueAddBehavior';
+import { resolveStagePlayerQueueItemIndex } from '../utils/stagePlayerSnapshot';
 
 // src/hooks/usePlaybackQueueController.ts
 
@@ -176,9 +177,9 @@ export function usePlaybackQueueController({
 }: UsePlaybackQueueControllerParams) {
     const [pendingUnavailableReplacement, setPendingUnavailableReplacement] = useState<UnavailableReplacementRequest | null>(null);
 
-    const appendNeteaseSongsToMainQueue = useCallback((songs: SongResult[]) => {
+    const appendNeteaseSongsToMainQueue = useCallback((songs: SongResult[], options?: { suppressToast?: boolean }) => {
         if (songs.length === 0) {
-            return false;
+            return { changed: false, deduplicated: false, affectedCount: 0 };
         }
 
         const mainSnapshot = activePlaybackContext === 'stage' ? mainPlaybackSnapshotRef.current : null;
@@ -214,16 +215,21 @@ export function usePlaybackQueueController({
 
         if (changed && affectedSongs.length > 0) {
             void persistLastPlaybackCache(queueAnchorSong, nextQueue);
-            setStatusMsg({
-                type: 'success',
-                text: queueAddBehavior === 'next' ? '已插入到下一首' : (t('status.queueUpdated') || '已添加到播放队列'),
-                nonce: Date.now(),
-                durationMs: 1200,
-            });
-            return true;
         }
 
-        return false;
+        if (changed && affectedSongs.length > 0 && !options?.suppressToast) {
+            if (queueAddBehavior === 'next') {
+                setStatusMsg({ type: 'success', text: t('added_to_next_play'), nonce: Date.now(), durationMs: 1200 });
+            } else {
+                setStatusMsg({ type: 'success', text: t('added_to_play_queue'), nonce: Date.now(), durationMs: 1200 });
+            }
+        }
+
+        return {
+            changed,
+            deduplicated: nextQueue.length - baseQueue.length < queueableSongs.length,
+            affectedCount: affectedSongs.length,
+        };
     }, [activePlaybackContext, currentSong, mainPlaybackSnapshotRef, persistLastPlaybackCache, playQueue, queueAddBehavior, setPlayQueue, setStatusMsg, t]);
 
     const addNeteaseSongToQueue = useCallback((song: SongResult) => {
@@ -882,14 +888,16 @@ export function usePlaybackQueueController({
                 throw new Error(`Song ${request.songId} was not found.`);
             }
 
+            let actionData: any = undefined;
             if (request.appendToQueue) {
-                appendNeteaseSongsToMainQueue([song]);
+                actionData = appendNeteaseSongsToMainQueue([song], { suppressToast: true });
             } else {
                 await playSong(song, [song], false, { shouldNavigateToPlayer: true });
             }
             await window.electron?.completeStageExternalPlayRequest?.({
                 requestId: request.requestId,
                 ok: true,
+                result: actionData,
             });
         } catch (error) {
             console.warn('[Stage] Failed to handle external play request', error);
@@ -900,6 +908,137 @@ export function usePlaybackQueueController({
             });
         }
     }, [appendNeteaseSongsToMainQueue, playSong]);
+
+    const resolveStageQueueIndex = useCallback((queue: SongResult[], request: { queueItemId?: string; fromQueueItemId?: string; index?: number; fromIndex?: number; }) => {
+        const requestedIndex = Number.isInteger(request.index) ? request.index : request.fromIndex;
+        if (Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < queue.length) {
+            return requestedIndex;
+        }
+
+        return resolveStagePlayerQueueItemIndex(queue, request.queueItemId || request.fromQueueItemId);
+    }, []);
+
+    const loadStageQueueSongs = useCallback(async (request: { songId?: number; songIds?: number[]; }) => {
+        const songIds = Array.isArray(request.songIds) && request.songIds.length > 0
+            ? request.songIds
+            : Number.isInteger(request.songId) && request.songId > 0
+                ? [request.songId]
+                : [];
+
+        if (songIds.length === 0) {
+            throw new Error('Queue append requires songId or songIds.');
+        }
+
+        const songs: SongResult[] = [];
+        for (const songId of songIds) {
+            const detail = await neteaseApi.getSongDetail(songId);
+            const song = (detail?.songs || [])[0] as SongResult | undefined;
+            if (song && !isSongMarkedUnavailable(song)) {
+                songs.push(song);
+            }
+        }
+
+        if (songs.length === 0) {
+            throw new Error('No queueable songs were found.');
+        }
+
+        return songs;
+    }, []);
+
+    const handleStagePlayerQueueRequest = useCallback(async (request: {
+        requestId: string;
+        action: 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear';
+        songId?: number;
+        songIds?: number[];
+        queueItemId?: string;
+        fromQueueItemId?: string;
+        fromIndex?: number;
+        toIndex?: number;
+        index?: number;
+    }) => {
+        const complete = async (ok: boolean, error?: unknown, result?: any) => {
+            await window.electron?.completeStagePlayerQueueRequest?.({
+                requestId: request.requestId,
+                ok,
+                error: ok ? null : error instanceof Error ? error.message : String(error),
+                result,
+            });
+        };
+
+        try {
+            if (activePlaybackContext !== 'main' || isNowPlayingStageActive) {
+                throw new Error('Queue editing is not supported in the current playback context.');
+            }
+
+            const baseQueue = playQueue.length > 0 ? [...playQueue] : (currentSong ? [currentSong] : []);
+            let nextQueue = baseQueue;
+
+            let actionData: any = undefined;
+
+            if (request.action === 'append' || request.action === 'insert-next') {
+                const songs = await loadStageQueueSongs(request);
+                const { nextQueue: newQueue, affectedSongs, changed } = applyQueueAddBehavior({
+                    queue: baseQueue,
+                    songs,
+                    currentSong,
+                    behavior: request.action === 'append' ? 'append' : 'next',
+                });
+                nextQueue = newQueue;
+                actionData = {
+                    changed,
+                    affectedCount: affectedSongs.length,
+                    deduplicated: nextQueue.length - baseQueue.length < songs.length,
+                };
+            } else if (request.action === 'remove') {
+                const removeIndex = resolveStageQueueIndex(baseQueue, request);
+                if (removeIndex < 0) {
+                    throw new Error('Queue item was not found.');
+                }
+                if (currentSong && baseQueue[removeIndex]?.id === currentSong.id) {
+                    throw new Error('Removing the current track is not supported.');
+                }
+                nextQueue = baseQueue.filter((_, index) => index !== removeIndex);
+            } else if (request.action === 'move') {
+                const fromIndex = resolveStageQueueIndex(baseQueue, request);
+                const toIndex = Number.isInteger(request.toIndex) ? request.toIndex : -1;
+                if (fromIndex < 0 || toIndex < 0 || toIndex >= baseQueue.length) {
+                    throw new Error('Queue move requires valid from and to indexes.');
+                }
+                nextQueue = [...baseQueue];
+                const [movedSong] = nextQueue.splice(fromIndex, 1);
+                nextQueue.splice(toIndex, 0, movedSong);
+            } else if (request.action === 'select') {
+                const selectIndex = resolveStageQueueIndex(baseQueue, request);
+                if (selectIndex < 0) {
+                    throw new Error('Queue select requires a valid queueItemId or index.');
+                }
+                await playSong(baseQueue[selectIndex], baseQueue, isFmMode, { shouldNavigateToPlayer: true });
+                await complete(true);
+                return;
+            } else if (request.action === 'clear') {
+                nextQueue = currentSong ? [currentSong] : [];
+            } else {
+                throw new Error(`Unsupported queue action: ${request.action}`);
+            }
+
+            setPlayQueue(nextQueue);
+            void persistLastPlaybackCache(currentSong, nextQueue);
+            await complete(true, null, actionData);
+        } catch (error) {
+            console.warn('[Stage] Failed to handle player queue request', error);
+            await complete(false, error);
+        }
+    }, [activePlaybackContext, currentSong, isFmMode, isNowPlayingStageActive, loadStageQueueSongs, persistLastPlaybackCache, playQueue, playSong, resolveStageQueueIndex, setPlayQueue, setStatusMsg, t]);
+
+    useEffect(() => {
+        if (!window.electron?.onStagePlayerQueueRequest) {
+            return;
+        }
+
+        return window.electron.onStagePlayerQueueRequest((request) => {
+            void handleStagePlayerQueueRequest(request);
+        });
+    }, [handleStagePlayerQueueRequest]);
 
     const shuffleQueue = useCallback(() => {
         if (isNowPlayingStageActive) return;
