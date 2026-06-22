@@ -550,6 +550,7 @@ interface StagePlayerPlayResponse extends StagePlayerOutsideInMetadata {
   changed?: boolean;
   deduplicated?: boolean;
   affectedCount?: number;
+  diff?: StagePlayerQueueDiff;
 }
 ```
 
@@ -561,6 +562,7 @@ interface StagePlayerPlayResponse extends StagePlayerOutsideInMetadata {
 | `changed` | `boolean` 可选 | 队列追加时，队列是否发生变化。 |
 | `deduplicated` | `boolean` 可选 | 队列追加时，是否发生同源歌曲去重或移动。 |
 | `affectedCount` | `number` 可选 | 队列追加时，实际影响的歌曲数量。 |
+| `diff` | `StagePlayerQueueDiff` 可选 | 队列追加时的队列差异。若 `requiresReload: true`，客户端应重新调用 `GET /stage/player/queue` 校准本地队列。 |
 
 ### 主要错误
 

@@ -174,6 +174,7 @@ export interface StageExternalPlayResult {
   requestId: string;
   ok: boolean;
   error?: string | null;
+  baseSnapshot?: StagePlayerSnapshot;
   snapshot?: StagePlayerSnapshot;
   result?: unknown;
 }

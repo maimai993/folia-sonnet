@@ -69,7 +69,7 @@ Stage API 当前接口清单：
   用于把外部搜索请求转交给 Folia 当前接入的搜索通道，返回可供后续播放器点播接口消费的候选结果。旧 `/stage/search` 仍可用，但响应会标记 `deprecated: true`。
 
 - `POST /stage/player/play`
-  用于请求 Folia 主播放器播放一首歌，支持直接播放，也支持通过 `appendToQueue: true` 仅追加到主队列。当进行追加操作时，响应中会额外包含 `changed`、`deduplicated` 和 `affectedCount` 字段，以表明本次插入是否被完全或部分去重。（注：Folia 存在严格的队列去重机制，同一歌曲不会在队列中出现两次。若追加的歌曲已存在于队列中，它会被直接移动到目标位置而不会产生副本。）
+  用于请求 Folia 主播放器播放一首歌，支持直接播放，也支持通过 `appendToQueue: true` 仅追加到主队列。当进行追加操作时，响应中会额外包含 `changed`、`deduplicated`、`affectedCount` 和可选 `diff` 字段，以表明本次插入是否被完全或部分去重，并帮助外部客户端同步队列；若 `diff.requiresReload` 为 `true`，应调用 `GET /stage/player/queue` 重拉队列。（注：Folia 存在严格的队列去重机制，同一歌曲不会在队列中出现两次。若追加的歌曲已存在于队列中，它会被直接移动到目标位置而不会产生副本。）
   旧 `/stage/play` 仍可用，但响应会标记 `deprecated: true`。
 
 - `GET /stage/player/status`

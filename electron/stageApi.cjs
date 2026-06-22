@@ -1602,7 +1602,7 @@ function createStageApi({
   const completeStagePlayerQueueRequest = (result) =>
     completeStagePlayerRendererRequest(pendingStagePlayerQueueRequests, result);
 
-  const completeStageExternalPlayRequest = ({ requestId, ok, error, snapshot, result } = {}) => {
+  const completeStageExternalPlayRequest = ({ requestId, ok, error, baseSnapshot, snapshot, result } = {}) => {
     const normalizedRequestId = normalizeStageText(requestId);
     if (!normalizedRequestId) {
       return false;
@@ -1616,12 +1616,14 @@ function createStageApi({
     clearTimeout(pendingRequest.timer);
     pendingExternalPlayRequests.delete(normalizedRequestId);
 
+    const previousSnapshot = baseSnapshot || stagePlayerSnapshot || getFallbackStagePlayerSnapshot();
     if (snapshot) {
       publishStagePlayerSnapshot(snapshot);
     }
+    const nextSnapshot = stagePlayerSnapshot || getFallbackStagePlayerSnapshot();
 
     if (ok) {
-      pendingRequest.resolve(result || { ok: true });
+      pendingRequest.resolve(withStagePlayerQueueDiffRevisions(result || { ok: true }, previousSnapshot, nextSnapshot));
       return true;
     }
 
@@ -1692,6 +1694,7 @@ function createStageApi({
       ...(result?.changed !== undefined ? { changed: result.changed } : {}),
       ...(result?.deduplicated !== undefined ? { deduplicated: result.deduplicated } : {}),
       ...(result?.affectedCount !== undefined ? { affectedCount: result.affectedCount } : {}),
+      ...(result?.diff ? { diff: result.diff } : {}),
       songId,
       appendToQueue,
     });

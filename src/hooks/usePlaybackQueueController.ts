@@ -188,7 +188,7 @@ export function usePlaybackQueueController({
 
     const appendNeteaseSongsToMainQueue = useCallback((songs: SongResult[], options?: { suppressToast?: boolean }) => {
         if (songs.length === 0) {
-            return { changed: false, deduplicated: false, affectedCount: 0 };
+            return { changed: false, deduplicated: false, affectedCount: 0, baseQueue: [], affectedSongs: [], addBehavior: queueAddBehavior };
         }
 
         const mainSnapshot = activePlaybackContext === 'stage' ? mainPlaybackSnapshotRef.current : null;
@@ -239,7 +239,10 @@ export function usePlaybackQueueController({
             deduplicated: nextQueue.length - baseQueue.length < queueableSongs.length,
             affectedCount: affectedSongs.length,
             currentSong: queueAnchorSong,
+            baseQueue,
             queue: nextQueue,
+            affectedSongs,
+            addBehavior: queueAddBehavior,
         };
     }, [activePlaybackContext, currentSong, mainPlaybackSnapshotRef, persistLastPlaybackCache, playQueue, queueAddBehavior, setPlayQueue, setStatusMsg, t]);
 
@@ -977,10 +980,22 @@ export function usePlaybackQueueController({
             }
 
             let actionData: any = undefined;
+            let baseSnapshot: StagePlayerSnapshot | undefined;
             let snapshot: StagePlayerSnapshot | undefined;
             if (request.appendToQueue) {
                 actionData = appendNeteaseSongsToMainQueue([song], { suppressToast: true });
+                baseSnapshot = buildStageQueueOperationSnapshot(actionData.currentSong ?? currentSong, actionData.baseQueue ?? playQueue);
                 snapshot = buildStageQueueOperationSnapshot(actionData.currentSong ?? currentSong, actionData.queue ?? playQueue);
+                actionData = {
+                    ...actionData,
+                    diff: buildStageQueueAddDiffDraft(
+                        actionData.addBehavior === 'next' ? 'insert-next' : 'append',
+                        actionData.baseQueue ?? [],
+                        actionData.queue ?? [],
+                        actionData.affectedSongs ?? [],
+                        snapshot,
+                    ),
+                };
             } else {
                 await playSong(song, [song], false, { shouldNavigateToPlayer: true });
             }
@@ -988,6 +1003,7 @@ export function usePlaybackQueueController({
                 requestId: request.requestId,
                 ok: true,
                 result: actionData,
+                baseSnapshot,
                 snapshot,
             });
         } catch (error) {
@@ -998,7 +1014,7 @@ export function usePlaybackQueueController({
                 error: error instanceof Error ? error.message : String(error),
             });
         }
-    }, [appendNeteaseSongsToMainQueue, buildStageQueueOperationSnapshot, currentSong, playQueue, playSong]);
+    }, [appendNeteaseSongsToMainQueue, buildStageQueueAddDiffDraft, buildStageQueueOperationSnapshot, currentSong, playQueue, playSong]);
 
     const resolveStageQueueIndex = useCallback((queue: SongResult[], request: { queueItemId?: string; fromQueueItemId?: string; index?: number; fromIndex?: number; }) => {
         const requestedIndex = Number.isInteger(request.index) ? request.index : request.fromIndex;
