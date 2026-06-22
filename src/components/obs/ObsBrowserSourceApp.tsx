@@ -28,6 +28,8 @@ const ObsBrowserSourceApp: React.FC = () => {
     const [connected, setConnected] = useState(false);
     const [currentLineIndex, setCurrentLineIndex] = useState(-1);
     const [playbackState, setPlaybackState] = useState<PlayerState>(PlayerState.IDLE);
+    const [obsScale, setObsScale] = useState(1);
+    const [obsDimensions, setObsDimensions] = useState({ width: '100vw', height: '100vh' });
     const currentLineIndexRef = useRef(-1);
     const clockRef = useRef<ObsBrowserSourceClock | null>(null);
     const configRef = useRef<ObsBrowserSourceConfig | null>(null);
@@ -58,6 +60,53 @@ const ObsBrowserSourceApp: React.FC = () => {
     useEffect(() => {
         configRef.current = config;
     }, [config]);
+
+    useEffect(() => {
+        let isHandlingResize = false;
+        
+        const handleResize = () => {
+            if (isHandlingResize) return;
+            isHandlingResize = true;
+            
+            try {
+                const isPortrait = window.innerHeight > window.innerWidth;
+                const baseWidth = isPortrait ? 1080 : 1920;
+                
+                // Read the physical dimensions from documentElement to avoid infinite loops when mocking innerWidth
+                const realWidth = window.document.documentElement.clientWidth;
+                const realHeight = window.document.documentElement.clientHeight;
+                
+                const scale = Math.max(1, realWidth / baseWidth);
+                setObsScale(scale);
+                setObsDimensions({
+                    width: `${realWidth / scale}px`,
+                    height: `${realHeight / scale}px`
+                });
+
+                // Globally override devicePixelRatio and window size for the OBS browser source.
+                // This forces all child components to naturally render and layout exactly
+                // as if they were in a 1920x1080 screen, while natively maintaining 4K text rasterization.
+                try {
+                    Object.defineProperty(window, 'devicePixelRatio', { get: () => scale, configurable: true });
+                    Object.defineProperty(window, 'innerWidth', { get: () => realWidth / scale, configurable: true });
+                    Object.defineProperty(window, 'innerHeight', { get: () => realHeight / scale, configurable: true });
+                } catch {
+                    // Ignore
+                }
+                
+                // Force an event so any visualizer that caches window dimensions updates to the mocked size
+                if (scale > 1.0) {
+                    window.dispatchEvent(new Event('resize'));
+                }
+            } finally {
+                isHandlingResize = false;
+            }
+        };
+        handleResize();
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     useEffect(() => {
         const eventSource = new EventSource(buildEventSourceUrl());
@@ -121,8 +170,11 @@ const ObsBrowserSourceApp: React.FC = () => {
 
     return (
         <div
-            className="h-screen w-screen overflow-hidden"
+            className="overflow-hidden"
             style={{
+                width: obsDimensions.width,
+                height: obsDimensions.height,
+                zoom: obsScale,
                 backgroundColor: config.transparentBackground ? 'transparent' : config.theme.backgroundColor,
                 color: config.theme.primaryColor,
             }}

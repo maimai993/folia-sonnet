@@ -98,7 +98,7 @@ interface CappellaIntensityConfig {
         rowExitY: number;
         rowExitScale: number;
         rowExitDuration: number;
-        avatarSpring: { stiffness: number; damping: number; mass: number };
+        avatarSpring: { stiffness: number; damping: number; mass: number; };
         activeScale: number;
         passedScale: number;
         passedOpacity: number;
@@ -371,13 +371,13 @@ const buildCappellaMessages = (
                 avatarIndex: RIGHT_AVATAR_INDEX,
             }
             : shouldCarrySender
-            ? lastLyricSender
-            : {
-                side: resolvedSide,
-                avatarIndex: resolvedSide === 'left'
-                    ? nextLeftAvatarCursor
-                    : RIGHT_AVATAR_INDEX,
-            };
+                ? lastLyricSender
+                : {
+                    side: resolvedSide,
+                    avatarIndex: resolvedSide === 'left'
+                        ? nextLeftAvatarCursor
+                        : RIGHT_AVATAR_INDEX,
+                };
 
         const isInterlude = line.fullText === INTERLUDE_TEXT;
         const emoImage = isInterlude && showEmoMessages
@@ -487,7 +487,7 @@ const buildCappellaMessages = (
 const getLineCharacters = (line: Line) => Array.from(line.fullText);
 
 const getWordTextRanges = (line: Line) => {
-    const ranges: Array<{ start: number; end: number } | null> = [];
+    const ranges: Array<{ start: number; end: number; } | null> = [];
     let searchCursor = 0;
 
     line.words.forEach(word => {
@@ -1028,7 +1028,7 @@ const AnimatedBubbleFrame: React.FC<{
     children: React.ReactNode;
     className: string;
     floatingAdornment?: React.ReactNode;
-    targetSize?: { width: number; height: number };
+    targetSize?: { width: number; height: number; };
     style: React.CSSProperties;
 }> = ({ children, className, floatingAdornment, targetSize, style }) => {
     return (
@@ -1195,7 +1195,7 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
                 paddingX: bubblePaddingX,
                 paddingY: bubblePaddingY,
             })
-        : null,
+            : null,
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [bubbleFontSize, bubblePaddingX, bubblePaddingY, isActiveMessage, lineHeightPx, maxTextWidth, message, metricsCache, theme]
     );
@@ -1409,9 +1409,8 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
                     )
                     : (
                         <AnimatedBubbleFrame
-                            className={`relative rounded-3xl shadow-lg transition-[min-height,box-shadow,background-color] duration-200 ease-out ${
-                                isRight ? 'rounded-br-md' : 'rounded-bl-md'
-                            }`}
+                            className={`relative rounded-3xl shadow-lg transition-[min-height,box-shadow,background-color] duration-200 ease-out ${isRight ? 'rounded-br-md' : 'rounded-bl-md'
+                                }`}
                             floatingAdornment={timedData ? (
                                 <CappellaTimestamp
                                     line={timedData.line}
@@ -1551,13 +1550,6 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
     });
 
     useEffect(() => {
-        const nextVisibleLineIndex = getVisibleLineIndexAtTime(lines, currentTime.get());
-
-        visibleLineIndexRef.current = nextVisibleLineIndex;
-        setVisibleLineIndex(nextVisibleLineIndex);
-    }, [currentTime, lines]);
-
-    useEffect(() => {
         const handleResize = () => {
             setViewportSize({
                 width: window.innerWidth,
@@ -1568,6 +1560,14 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
+
+    useEffect(() => {
+        const nextVisibleLineIndex = getVisibleLineIndexAtTime(lines, currentTime.get());
+
+        visibleLineIndexRef.current = nextVisibleLineIndex;
+        setVisibleLineIndex(nextVisibleLineIndex);
+    }, [currentTime, lines]);
+
 
     useMotionValueEvent(currentTime, 'change', latest => {
         const nextVisibleLineIndex = getVisibleLineIndexAtTime(lines, latest);
