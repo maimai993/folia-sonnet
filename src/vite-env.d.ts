@@ -293,6 +293,7 @@ declare global {
     requestId: string;
     ok: boolean;
     error?: string | null;
+    snapshot?: StagePlayerSnapshot;
     result?: unknown;
   }
 
@@ -360,6 +361,20 @@ declare global {
     returned: number;
     hasMore: boolean;
     nextOffset: number | null;
+  }
+
+  type StagePlayerQueueDiffOp =
+    | { op: 'insert'; index: number; item: StagePlayerQueueItem }
+    | { op: 'remove'; index: number }
+    | { op: 'move'; from: number; to: number }
+    | { op: 'clear' }
+    | { op: 'select'; index: number };
+
+  interface StagePlayerQueueDiff {
+    baseRevision: string;
+    revision: string;
+    ops: StagePlayerQueueDiffOp[];
+    requiresReload?: true;
   }
 
   interface StagePlayerSnapshot {

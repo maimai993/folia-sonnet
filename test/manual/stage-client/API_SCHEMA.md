@@ -254,6 +254,20 @@ interface StagePlayerQueueWindow extends StagePlayerQueueSummary {
   nextOffset: number | null;
 }
 
+type StagePlayerQueueDiffOp =
+  | { op: 'insert'; index: number; item: StagePlayerQueueItem }
+  | { op: 'remove'; index: number }
+  | { op: 'move'; from: number; to: number }
+  | { op: 'clear' }
+  | { op: 'select'; index: number };
+
+interface StagePlayerQueueDiff {
+  baseRevision: string;
+  revision: string;
+  ops: StagePlayerQueueDiffOp[];
+  requiresReload?: true;
+}
+
 interface StagePlayerSnapshot extends StagePlayerInsideOutMetadata {
   playbackContext: StagePlayerPlaybackContext;
   current: StagePlayerCurrent | null;
@@ -280,6 +294,10 @@ interface StagePlayerSnapshot extends StagePlayerInsideOutMetadata {
 | `controlCapabilities` | `StagePlayerControlCapabilities` | 当前上下文允许的播放控制。 |
 | `queueCapabilities` | `StagePlayerQueueCapabilities` | 当前上下文允许的队列操作。 |
 | `queue` | `StagePlayerQueueSummary` | 队列摘要；`GET /stage/player/status` 不返回完整 `items`。 |
+| `StagePlayerQueueDiff.baseRevision` | `string` | 本次编辑前的队列 revision。客户端本地 revision 不一致时应重新拉取队列。 |
+| `StagePlayerQueueDiff.revision` | `string` | 本次编辑后的队列 revision。 |
+| `StagePlayerQueueDiff.ops` | `StagePlayerQueueDiffOp[]` | 可顺序应用到 `baseRevision` 队列上的紧凑操作。 |
+| `StagePlayerQueueDiff.requiresReload` | `true` 可选 | 当前变化无法用紧凑 diff 安全表达；客户端应忽略 `ops` 并调用 `GET /stage/player/queue` 重拉。 |
 
 ## `GET /stage/health`
 
@@ -733,6 +751,7 @@ interface StagePlayerQueuePostResponse extends StagePlayerOutsideInMetadata {
   changed?: boolean;
   deduplicated?: boolean;
   affectedCount?: number;
+  diff?: StagePlayerQueueDiff;
   queue: StagePlayerQueueSummary;
 }
 ```
@@ -745,6 +764,7 @@ interface StagePlayerQueuePostResponse extends StagePlayerOutsideInMetadata {
 | `changed` | `boolean` 可选 | 队列是否发生变化。 |
 | `deduplicated` | `boolean` 可选 | 插入歌曲时是否发生同源歌曲去重或移动。 |
 | `affectedCount` | `number` 可选 | 实际影响的队列项数量。 |
+| `diff` | `StagePlayerQueueDiff` 可选 | 操作前后队列差异。若 `requiresReload: true`，客户端应重新调用 `GET /stage/player/queue` 校准本地队列。 |
 | `queue` | `StagePlayerQueueSummary` | 操作后的队列摘要，不包含完整 `items`。 |
 
 ### 主要错误
@@ -824,7 +844,9 @@ interface StagePlayerWebSocketQueueUpdatedMessage
   extends StagePlayerInsideOutMetadata {
   event: 'QUEUE_UPDATED';
   playbackContext: StagePlayerPlaybackContext;
+  current: StagePlayerCurrent | null;
   queueCapabilities: StagePlayerQueueCapabilities;
+  previousQueue?: StagePlayerQueueSummary;
   queue: StagePlayerQueueSummary;
 }
 ```
@@ -834,7 +856,7 @@ interface StagePlayerWebSocketQueueUpdatedMessage
 | `STATUS` | 完整 `StagePlayerSnapshot`，但 `queue` 仍是摘要，不含完整 `items`。 |
 | `TRACK_CHANGED` | 当前曲目、播放状态、能力和队列摘要；不包含 `positionMs` / `durationMs`。 |
 | `PLAYBACK_UPDATED` | 播放时间和播放状态；不包含当前曲目、能力、队列。 |
-| `QUEUE_UPDATED` | 队列能力和队列摘要；不包含完整 `items`。 |
+| `QUEUE_UPDATED` | 当前曲目、队列能力、变化前后队列摘要；不包含完整 `items`。 |
 
 需要完整队列详情时，调用 `GET /stage/player/queue`。
 

@@ -472,11 +472,13 @@ function createStageApi({
     });
   };
 
-  const buildStagePlayerQueueEvent = () => {
+  const buildStagePlayerQueueEvent = (previousSnapshot = null) => {
     const status = buildStagePlayerStatus();
     return withStagePlayerInsideOutMetadata({
       playbackContext: status.playbackContext,
+      current: status.current,
       queueCapabilities: status.queueCapabilities,
+      ...(previousSnapshot ? { previousQueue: buildStagePlayerQueueSummary(previousSnapshot) } : {}),
       queue: status.queue,
     });
   };
@@ -512,6 +514,22 @@ function createStageApi({
       currentIndex: normalizeStageInteger(queue.currentIndex, -1),
       length: Math.max(0, normalizeStageInteger(queue.length ?? queue.items?.length, 0)),
       revision: getStagePlayerQueueRevision(snapshot),
+    };
+  };
+
+  const withStagePlayerQueueDiffRevisions = (result, previousSnapshot, nextSnapshot) => {
+    if (!result || typeof result !== 'object' || !result.diff || typeof result.diff !== 'object') {
+      return result;
+    }
+
+    return {
+      ...result,
+      diff: {
+        baseRevision: getStagePlayerQueueRevision(previousSnapshot),
+        revision: getStagePlayerQueueRevision(nextSnapshot),
+        ops: Array.isArray(result.diff.ops) ? result.diff.ops : [],
+        ...(result.diff.requiresReload === true ? { requiresReload: true } : {}),
+      },
     };
   };
 
@@ -598,6 +616,7 @@ function createStageApi({
   };
 
   const publishStagePlayerSnapshot = (snapshot, options = {}) => {
+    const previousSnapshot = stagePlayerSnapshot;
     stagePlayerSnapshot = normalizeStagePlayerSnapshot(snapshot);
     const nextTrackKey = getStagePlayerTrackKey(stagePlayerSnapshot);
     const nextQueueKey = getStagePlayerQueueKey(stagePlayerSnapshot);
@@ -608,7 +627,7 @@ function createStageApi({
     if (stagePlayerTrackKey !== null && stagePlayerTrackKey !== nextTrackKey) {
       broadcastStagePlayerWebSocketEvent('TRACK_CHANGED', buildStagePlayerTrackEvent());
     } else if (stagePlayerQueueKey !== null && stagePlayerQueueKey !== nextQueueKey) {
-      broadcastStagePlayerWebSocketEvent('QUEUE_UPDATED', buildStagePlayerQueueEvent());
+      broadcastStagePlayerWebSocketEvent('QUEUE_UPDATED', buildStagePlayerQueueEvent(previousSnapshot));
     } else if (forcePlaybackEvent || (stagePlayerPlaybackKey !== null && stagePlayerPlaybackKey !== nextPlaybackKey)) {
       broadcastStagePlayerWebSocketEvent('PLAYBACK_UPDATED', buildStagePlayerTime());
     }
@@ -1538,12 +1557,14 @@ function createStageApi({
     clearTimeout(pendingRequest.timer);
     pendingRequests.delete(normalizedRequestId);
 
+    const previousSnapshot = stagePlayerSnapshot || getFallbackStagePlayerSnapshot();
     if (snapshot) {
       publishStagePlayerSnapshot(snapshot);
     }
+    const nextSnapshot = stagePlayerSnapshot || getFallbackStagePlayerSnapshot();
 
     if (ok) {
-      pendingRequest.resolve(result || { ok: true });
+      pendingRequest.resolve(withStagePlayerQueueDiffRevisions(result || { ok: true }, previousSnapshot, nextSnapshot));
       return true;
     }
 
@@ -1581,7 +1602,7 @@ function createStageApi({
   const completeStagePlayerQueueRequest = (result) =>
     completeStagePlayerRendererRequest(pendingStagePlayerQueueRequests, result);
 
-  const completeStageExternalPlayRequest = ({ requestId, ok, error } = {}) => {
+  const completeStageExternalPlayRequest = ({ requestId, ok, error, snapshot, result } = {}) => {
     const normalizedRequestId = normalizeStageText(requestId);
     if (!normalizedRequestId) {
       return false;
@@ -1595,8 +1616,12 @@ function createStageApi({
     clearTimeout(pendingRequest.timer);
     pendingExternalPlayRequests.delete(normalizedRequestId);
 
+    if (snapshot) {
+      publishStagePlayerSnapshot(snapshot);
+    }
+
     if (ok) {
-      pendingRequest.resolve(true);
+      pendingRequest.resolve(result || { ok: true });
       return true;
     }
 
@@ -1799,6 +1824,7 @@ function createStageApi({
       ...(result?.changed !== undefined ? { changed: result.changed } : {}),
       ...(result?.deduplicated !== undefined ? { deduplicated: result.deduplicated } : {}),
       ...(result?.affectedCount !== undefined ? { affectedCount: result.affectedCount } : {}),
+      ...(result?.diff ? { diff: result.diff } : {}),
       queue: buildStagePlayerQueueSummary(stagePlayerSnapshot || getFallbackStagePlayerSnapshot()),
     });
   };

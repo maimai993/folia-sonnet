@@ -174,6 +174,7 @@ export interface StageExternalPlayResult {
   requestId: string;
   ok: boolean;
   error?: string | null;
+  snapshot?: StagePlayerSnapshot;
   result?: unknown;
 }
 
@@ -241,6 +242,20 @@ export interface StagePlayerQueueWindow extends StagePlayerQueueSummary {
   returned: number;
   hasMore: boolean;
   nextOffset: number | null;
+}
+
+export type StagePlayerQueueDiffOp =
+  | { op: 'insert'; index: number; item: StagePlayerQueueItem }
+  | { op: 'remove'; index: number }
+  | { op: 'move'; from: number; to: number }
+  | { op: 'clear' }
+  | { op: 'select'; index: number };
+
+export interface StagePlayerQueueDiff {
+  baseRevision: string;
+  revision: string;
+  ops: StagePlayerQueueDiffOp[];
+  requiresReload?: true;
 }
 
 export interface StagePlayerSnapshot {

@@ -8,7 +8,7 @@ import { getOnlineSongCacheKey, isSongMarkedUnavailable, neteaseApi } from '../s
 import { getPrefetchedData, invalidateAndRefetch, prefetchNearbySongs } from '../services/prefetchService';
 import type { ThemeCacheSongKey } from '../services/themeCache';
 import { loadOnlineLyricsState } from '../utils/onlineLyricsState';
-import { PlayerState, type HomeViewTab, type StagePlayerSnapshot } from '../types';
+import { PlayerState, type HomeViewTab, type StagePlayerQueueDiffOp, type StagePlayerSnapshot } from '../types';
 import type { LocalSong, QueueAddBehavior, SongResult, StatusMessage, UnifiedSong } from '../types';
 import type { NextTrackOptions, PlaybackNavigationOptions, SkipPromptMessageKey, UnavailableReplacementRequest } from '../types/appPlayback';
 import type { NavidromeSong } from '../types/navidrome';
@@ -119,6 +119,11 @@ const UNAVAILABLE_SKIP_CONFIRM_INTERVAL_MS = 1000;
 
 const getStageSnapshotSongDurationMs = (song: SongResult | null, fallbackSec = 0): number => {
     return Math.max(0, Math.floor(song?.duration || song?.dt || fallbackSec * 1000 || 0));
+};
+
+type StagePlayerQueueDiffDraft = {
+    ops: StagePlayerQueueDiffOp[];
+    requiresReload?: true;
 };
 
 // Owns queue navigation, online playback loading, and search-triggered playback.
@@ -233,6 +238,8 @@ export function usePlaybackQueueController({
             changed,
             deduplicated: nextQueue.length - baseQueue.length < queueableSongs.length,
             affectedCount: affectedSongs.length,
+            currentSong: queueAnchorSong,
+            queue: nextQueue,
         };
     }, [activePlaybackContext, currentSong, mainPlaybackSnapshotRef, persistLastPlaybackCache, playQueue, queueAddBehavior, setPlayQueue, setStatusMsg, t]);
 
@@ -884,44 +891,6 @@ export function usePlaybackQueueController({
         });
     }, [clearPendingUnavailableSkip, currentSong, handleNextTrack, loopMode, playQueue, playbackAutoSkipCountRef, setPlayerState, showTimedSkipPrompt]);
 
-    const handleStageExternalPlayRequest = useCallback(async (request: { requestId: string; songId: number; appendToQueue?: boolean; }) => {
-        try {
-            const detail = await neteaseApi.getSongDetail(request.songId);
-            const song = (detail?.songs || [])[0] as SongResult | undefined;
-            if (!song) {
-                throw new Error(`Song ${request.songId} was not found.`);
-            }
-
-            let actionData: any = undefined;
-            if (request.appendToQueue) {
-                actionData = appendNeteaseSongsToMainQueue([song], { suppressToast: true });
-            } else {
-                await playSong(song, [song], false, { shouldNavigateToPlayer: true });
-            }
-            await window.electron?.completeStageExternalPlayRequest?.({
-                requestId: request.requestId,
-                ok: true,
-                result: actionData,
-            });
-        } catch (error) {
-            console.warn('[Stage] Failed to handle external play request', error);
-            await window.electron?.completeStageExternalPlayRequest?.({
-                requestId: request.requestId,
-                ok: false,
-                error: error instanceof Error ? error.message : String(error),
-            });
-        }
-    }, [appendNeteaseSongsToMainQueue, playSong]);
-
-    const resolveStageQueueIndex = useCallback((queue: SongResult[], request: { queueItemId?: string; fromQueueItemId?: string; index?: number; fromIndex?: number; }) => {
-        const requestedIndex = Number.isInteger(request.index) ? request.index : request.fromIndex;
-        if (Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < queue.length) {
-            return requestedIndex;
-        }
-
-        return resolveStagePlayerQueueItemIndex(queue, request.queueItemId || request.fromQueueItemId);
-    }, []);
-
     const buildStageQueueOperationSnapshot = useCallback((
         nextCurrentSong: SongResult | null,
         nextQueue: SongResult[],
@@ -953,6 +922,92 @@ export function usePlaybackQueueController({
             coverUrl: nextCurrentSong?.al?.picUrl || nextCurrentSong?.album?.picUrl || null,
         });
     }, [activePlaybackContext, audioRef, currentTime, isFmMode, isNowPlayingStageActive, loopMode, playerState]);
+
+    const buildReloadQueueDiffDraft = useCallback((): StagePlayerQueueDiffDraft => ({
+        ops: [],
+        requiresReload: true,
+    }), []);
+
+    const buildStageQueueAddDiffDraft = useCallback((
+        action: 'append' | 'insert-next',
+        baseQueue: SongResult[],
+        nextQueue: SongResult[],
+        affectedSongs: SongResult[],
+        snapshot: StagePlayerSnapshot,
+    ): StagePlayerQueueDiffDraft => {
+        const workingQueue = [...baseQueue];
+        const ops: StagePlayerQueueDiffOp[] = [];
+        const orderedAffectedSongs = action === 'append' ? [...affectedSongs].reverse() : affectedSongs;
+
+        for (const song of orderedAffectedSongs) {
+            const targetIndex = nextQueue.findIndex(candidate => candidate.id === song.id);
+            if (targetIndex < 0 || targetIndex > workingQueue.length) {
+                return buildReloadQueueDiffDraft();
+            }
+
+            const currentIndex = workingQueue.findIndex(candidate => candidate.id === song.id);
+            if (currentIndex < 0) {
+                const item = snapshot.queue.items[targetIndex];
+                if (!item) {
+                    return buildReloadQueueDiffDraft();
+                }
+                ops.push({ op: 'insert', index: targetIndex, item });
+                workingQueue.splice(targetIndex, 0, song);
+                continue;
+            }
+
+            if (currentIndex !== targetIndex) {
+                const [movedSong] = workingQueue.splice(currentIndex, 1);
+                workingQueue.splice(targetIndex, 0, movedSong);
+                ops.push({ op: 'move', from: currentIndex, to: targetIndex });
+            }
+        }
+
+        const matchesNextQueue = workingQueue.length === nextQueue.length
+            && workingQueue.every((song, index) => song.id === nextQueue[index]?.id);
+        return matchesNextQueue ? { ops } : buildReloadQueueDiffDraft();
+    }, [buildReloadQueueDiffDraft]);
+
+    const handleStageExternalPlayRequest = useCallback(async (request: { requestId: string; songId: number; appendToQueue?: boolean; }) => {
+        try {
+            const detail = await neteaseApi.getSongDetail(request.songId);
+            const song = (detail?.songs || [])[0] as SongResult | undefined;
+            if (!song) {
+                throw new Error(`Song ${request.songId} was not found.`);
+            }
+
+            let actionData: any = undefined;
+            let snapshot: StagePlayerSnapshot | undefined;
+            if (request.appendToQueue) {
+                actionData = appendNeteaseSongsToMainQueue([song], { suppressToast: true });
+                snapshot = buildStageQueueOperationSnapshot(actionData.currentSong ?? currentSong, actionData.queue ?? playQueue);
+            } else {
+                await playSong(song, [song], false, { shouldNavigateToPlayer: true });
+            }
+            await window.electron?.completeStageExternalPlayRequest?.({
+                requestId: request.requestId,
+                ok: true,
+                result: actionData,
+                snapshot,
+            });
+        } catch (error) {
+            console.warn('[Stage] Failed to handle external play request', error);
+            await window.electron?.completeStageExternalPlayRequest?.({
+                requestId: request.requestId,
+                ok: false,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }, [appendNeteaseSongsToMainQueue, buildStageQueueOperationSnapshot, currentSong, playQueue, playSong]);
+
+    const resolveStageQueueIndex = useCallback((queue: SongResult[], request: { queueItemId?: string; fromQueueItemId?: string; index?: number; fromIndex?: number; }) => {
+        const requestedIndex = Number.isInteger(request.index) ? request.index : request.fromIndex;
+        if (Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < queue.length) {
+            return requestedIndex;
+        }
+
+        return resolveStagePlayerQueueItemIndex(queue, request.queueItemId || request.fromQueueItemId);
+    }, []);
 
     const loadStageQueueSongs = useCallback(async (request: { songId?: number; songIds?: number[]; }) => {
         const songIds = Array.isArray(request.songIds) && request.songIds.length > 0
@@ -1011,6 +1066,7 @@ export function usePlaybackQueueController({
             let nextQueue = baseQueue;
 
             let actionData: any = undefined;
+            let diffDraft: StagePlayerQueueDiffDraft | undefined;
 
             if (request.action === 'append' || request.action === 'insert-next') {
                 const songs = await loadStageQueueSongs(request);
@@ -1026,6 +1082,8 @@ export function usePlaybackQueueController({
                     affectedCount: affectedSongs.length,
                     deduplicated: nextQueue.length - baseQueue.length < songs.length,
                 };
+                const nextSnapshot = buildStageQueueOperationSnapshot(currentSong, nextQueue);
+                diffDraft = buildStageQueueAddDiffDraft(request.action, baseQueue, nextQueue, affectedSongs, nextSnapshot);
             } else if (request.action === 'remove') {
                 const removeIndex = resolveStageQueueIndex(baseQueue, request);
                 if (removeIndex < 0) {
@@ -1035,6 +1093,7 @@ export function usePlaybackQueueController({
                     throw new Error('Removing the current track is not supported.');
                 }
                 nextQueue = baseQueue.filter((_, index) => index !== removeIndex);
+                diffDraft = { ops: [{ op: 'remove', index: removeIndex }] };
             } else if (request.action === 'move') {
                 const fromIndex = resolveStageQueueIndex(baseQueue, request);
                 const toIndex = Number.isInteger(request.toIndex) ? request.toIndex : -1;
@@ -1044,6 +1103,7 @@ export function usePlaybackQueueController({
                 nextQueue = [...baseQueue];
                 const [movedSong] = nextQueue.splice(fromIndex, 1);
                 nextQueue.splice(toIndex, 0, movedSong);
+                diffDraft = fromIndex === toIndex ? { ops: [] } : { ops: [{ op: 'move', from: fromIndex, to: toIndex }] };
             } else if (request.action === 'select') {
                 const selectIndex = resolveStageQueueIndex(baseQueue, request);
                 if (selectIndex < 0) {
@@ -1051,17 +1111,31 @@ export function usePlaybackQueueController({
                 }
                 const selectedSong = baseQueue[selectIndex];
                 await playSong(selectedSong, baseQueue, isFmMode, { shouldNavigateToPlayer: true });
-                await complete(true, null, undefined, buildStageQueueOperationSnapshot(selectedSong, baseQueue));
+                await complete(
+                    true,
+                    null,
+                    { diff: { ops: [{ op: 'select', index: selectIndex }] } },
+                    buildStageQueueOperationSnapshot(selectedSong, baseQueue),
+                );
                 return;
             } else if (request.action === 'clear') {
                 nextQueue = currentSong ? [currentSong] : [];
+                diffDraft = currentSong ? buildReloadQueueDiffDraft() : { ops: [{ op: 'clear' }] };
             } else {
                 throw new Error(`Unsupported queue action: ${request.action}`);
             }
 
             setPlayQueue(nextQueue);
             void persistLastPlaybackCache(currentSong, nextQueue);
-            await complete(true, null, actionData, buildStageQueueOperationSnapshot(currentSong, nextQueue));
+            await complete(
+                true,
+                null,
+                {
+                    ...actionData,
+                    ...(diffDraft ? { diff: diffDraft } : {}),
+                },
+                buildStageQueueOperationSnapshot(currentSong, nextQueue),
+            );
         } catch (error) {
             console.warn('[Stage] Failed to handle player queue request', error);
             await complete(false, error);

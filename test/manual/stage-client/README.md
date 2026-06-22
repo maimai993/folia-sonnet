@@ -82,10 +82,10 @@ Stage API 当前接口清单：
   用于发送播放器控制指令，支持 `next`、`prev`、`pause`、`resume`、`seek`。`seek` 指令需要合法的非负整数 `positionMs`，否则会返回 `400 INVALID_STAGE_PLAYER_SEEK_POSITION`。不支持当前播放上下文时返回 `409`。
 
 - `GET /stage/player/queue` / `POST /stage/player/queue`
-  用于读取和编辑正常播放器队列。`GET` 默认返回最多 100 条 `items`，支持 `offset`、`limit` 和 `around=current` 查询参数，`limit` 最大 500。编辑 action 支持 `append`、`insert-next`、`remove`、`move`、`select`、`clear`；`select` 可通过 `index` 或 `queueItemId` 切到指定队列项播放（通过 `queueItemId` 操作时，会严格校验 `source` 和 `id` 是否与当前队列项匹配）。当使用 `append` 或 `insert-next` 追加歌曲时，由于队列存在同源歌曲排重逻辑，同一首歌曲不会在队列中出现两次，若歌曲已存在则会被直接移动到目标位置。编辑响应只返回队列摘要，并包含 `changed`、`deduplicated` 和 `affectedCount` 字段以表明实际插入结果。Stage 外部推送 session 和外部播放源接入下的舞台模式为只读。
+  用于读取和编辑正常播放器队列。`GET` 默认返回最多 100 条 `items`，支持 `offset`、`limit` 和 `around=current` 查询参数，`limit` 最大 500。编辑 action 支持 `append`、`insert-next`、`remove`、`move`、`select`、`clear`；`select` 可通过 `index` 或 `queueItemId` 切到指定队列项播放（通过 `queueItemId` 操作时，会严格校验 `source` 和 `id` 是否与当前队列项匹配）。当使用 `append` 或 `insert-next` 追加歌曲时，由于队列存在同源歌曲排重逻辑，同一首歌曲不会在队列中出现两次，若歌曲已存在则会被直接移动到目标位置。编辑响应只返回队列摘要，并包含 `changed`、`deduplicated`、`affectedCount` 和可选 `diff`；若 `diff.requiresReload` 为 `true`，外部客户端应调用 `GET /stage/player/queue` 重拉队列。Stage 外部推送 session 和外部播放源接入下的舞台模式为只读。
 
 - `WS /stage/player/ws`
-  用于订阅播放器状态事件，鉴权复用 Bearer token，也支持 `?token=`。连接后会收到一次 `STATUS` 当前状态，之后仅在曲目、播放语义或队列发生变化时按 `TRACK_CHANGED`、`PLAYBACK_UPDATED`、`QUEUE_UPDATED` 推送。`TRACK_CHANGED` 不携带 `positionMs` / `durationMs`，`PLAYBACK_UPDATED` 只携带播放时间和状态，`QUEUE_UPDATED` 只携带队列摘要；需要队列详情时请调用分页版 `GET /stage/player/queue`。
+  用于订阅播放器状态事件，鉴权复用 Bearer token，也支持 `?token=`。连接后会收到一次 `STATUS` 当前状态，之后仅在曲目、播放语义或队列发生变化时按 `TRACK_CHANGED`、`PLAYBACK_UPDATED`、`QUEUE_UPDATED` 推送。`TRACK_CHANGED` 不携带 `positionMs` / `durationMs`，`PLAYBACK_UPDATED` 只携带播放时间和状态，`QUEUE_UPDATED` 携带当前曲目、变化前后队列摘要和队列能力，但不携带完整 `items`；需要队列详情时请调用分页版 `GET /stage/player/queue`。
 
 - `DELETE /stage/state`
   用于清空当前 Stage 持有的会话状态，通常会移除已注入的歌词、媒体上下文和相关临时数据。
