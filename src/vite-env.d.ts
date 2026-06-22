@@ -123,6 +123,17 @@ declare global {
     discordPresenceEnabled: boolean;
   }
 
+  interface ElectronDiscordPresenceSnapshot {
+    hasTrack: boolean;
+    title: string | null;
+    artist: string | null;
+    coverUrl: string | null;
+    currentTime: number;
+    duration: number;
+    playerState: string;
+    updatedAt: number;
+  }
+
   interface ElectronMainWindowClickThroughState {
     enabled: boolean;
   }
@@ -444,6 +455,7 @@ declare global {
       publishObsBrowserSourceClock: (clock: ElectronObsBrowserSourceClock) => Promise<boolean>;
       publishObsBrowserSourceAudio: (audio: ElectronObsBrowserSourceAudio) => Promise<boolean>;
       getDiscordPresenceStatus: () => Promise<ElectronDiscordPresenceStatus>;
+      publishDiscordPresenceSnapshot: (snapshot: ElectronDiscordPresenceSnapshot) => Promise<ElectronDiscordPresenceStatus>;
       getPlaybackSyncBridgeStatus: () => Promise<ElectronPlaybackSyncBridgeStatus>;
       onPlaybackSyncBridgeStatusChanged: (callback: (status: ElectronPlaybackSyncBridgeStatus) => void) => () => void;
       onDiscordPresenceStatusChanged: (callback: (status: ElectronDiscordPresenceStatus) => void) => () => void;

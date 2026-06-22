@@ -2923,6 +2923,14 @@ ipcMain.handle('discord-presence-get-status', (event) => {
   return discordPresence.getStatus();
 });
 
+ipcMain.handle('discord-presence-publish-snapshot', (event, snapshot) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to publish Discord presence state.');
+  }
+
+  return discordPresence.publishSnapshot(snapshot);
+});
+
 ipcMain.handle('playback-sync-bridge-get-status', (event) => {
   if (!isTrustedMainWindowContents(event.sender)) {
     throw new Error('Untrusted renderer attempted to read playback sync bridge status.');
@@ -3057,7 +3065,6 @@ ipcMain.handle('remote-control-publish-snapshot', (event, snapshot) => {
   if (latestRemoteControlSnapshot) {
     sendRemoteControlSnapshot(latestRemoteControlSnapshot);
   }
-  void discordPresence.publishSnapshot(latestRemoteControlSnapshot);
   return true;
 });
 

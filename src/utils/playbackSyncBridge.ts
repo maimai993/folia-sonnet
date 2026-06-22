@@ -71,6 +71,17 @@ export interface RemoteControlSnapshotOptions {
     includeLyrics?: boolean;
 }
 
+export interface DiscordPresenceSnapshot {
+    hasTrack: boolean;
+    title: string | null;
+    artist: string | null;
+    coverUrl: string | null;
+    currentTime: number;
+    duration: number;
+    playerState: PlayerState;
+    updatedAt: number;
+}
+
 const clampFiniteNumber = (value: number, fallback = 0): number => {
     return Number.isFinite(value) ? value : fallback;
 };
@@ -218,6 +229,19 @@ export const buildStagePlayerSnapshotFromPlaybackSyncBridge = (
     canGoPrevious: model.canGoPrevious,
     canGoNext: model.canGoNext,
     coverUrl: model.coverUrl,
+});
+
+export const buildDiscordPresenceSnapshotFromPlaybackSyncBridge = (
+    model: PlaybackSyncBridgeModel,
+): DiscordPresenceSnapshot => ({
+    hasTrack: model.hasTrack,
+    title: model.title,
+    artist: model.artist,
+    coverUrl: model.coverUrl,
+    currentTime: model.currentTimeSec,
+    duration: model.durationSec,
+    playerState: model.playerState,
+    updatedAt: model.sampledAt,
 });
 
 export const buildTaskbarControlsFromPlaybackSyncBridge = (model: PlaybackSyncBridgeModel) => ({

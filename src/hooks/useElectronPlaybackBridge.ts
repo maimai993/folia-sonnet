@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import type { RefObject } from 'react';
 import type { MotionValue } from 'framer-motion';
@@ -7,6 +7,7 @@ import type { SongResult, LyricData } from '../types';
 import type { RemoteControlCommand, RemoteControlSnapshot } from '../types/remoteControl';
 import type { VideoExportState } from '../types/videoExport';
 import {
+    buildDiscordPresenceSnapshotFromPlaybackSyncBridge,
     buildPlaybackSyncBridgeModel,
     buildRemoteControlSnapshotFromPlaybackSyncBridge,
     buildStagePlayerSnapshotFromPlaybackSyncBridge,
@@ -15,6 +16,8 @@ import {
 import { resolveStagePlayerPositionSec } from '../utils/stagePlayerSnapshot';
 
 // Bridges Electron-specific shell features without coupling to UI components.
+const DISCORD_PRESENCE_SNAPSHOT_INTERVAL_MS = 15_000;
+
 type UseElectronPlaybackBridgeOptions = {
     isElectronWindow: boolean;
     setIsTitlebarRevealed: React.Dispatch<React.SetStateAction<boolean>>;
@@ -102,6 +105,16 @@ export const useElectronPlaybackBridge = ({
     onLike,
 }: UseElectronPlaybackBridgeOptions) => {
     const [playbackSyncBridgeStatus, setPlaybackSyncBridgeStatus] = useState<ElectronPlaybackSyncBridgeStatus>(() => emptyPlaybackSyncBridgeStatus());
+    const stageSnapshotCacheRef = useRef<{
+        playQueue: SongResult[];
+        currentSong: SongResult | null;
+        activePlaybackContext: 'main' | 'stage';
+        isStageActive: boolean;
+        canGoPrevious: boolean;
+        canGoNext: boolean;
+        coverUrl: string | null;
+        snapshot: ReturnType<typeof buildStagePlayerSnapshotFromPlaybackSyncBridge>;
+    } | null>(null);
 
     const resolveAudioSourceHref = (source: string | null | undefined) => {
         if (!source) {
@@ -178,8 +191,63 @@ export const useElectronPlaybackBridge = ({
         );
     };
 
+    const buildDiscordPresenceSnapshot = () => {
+        return buildDiscordPresenceSnapshotFromPlaybackSyncBridge(buildPlaybackSyncBridgeModelFromCurrentState());
+    };
+
     const buildCurrentStagePlayerSnapshot = () => {
-        return buildStagePlayerSnapshotFromPlaybackSyncBridge(buildPlaybackSyncBridgeModelFromCurrentState());
+        const model = buildPlaybackSyncBridgeModelFromCurrentState();
+        const cache = stageSnapshotCacheRef.current;
+        if (
+            cache &&
+            cache.playQueue === model.playQueue &&
+            cache.currentSong === model.currentSong &&
+            cache.activePlaybackContext === model.activePlaybackContext &&
+            cache.isStageActive === model.isStageActive &&
+            cache.canGoPrevious === model.canGoPrevious &&
+            cache.canGoNext === model.canGoNext &&
+            cache.coverUrl === model.coverUrl
+        ) {
+            const now = Date.now();
+            const positionMs = Math.max(0, Math.floor(model.stagePositionSec * 1000));
+            const durationMs = Math.max(0, Math.floor(model.stageDurationSec * 1000));
+            const snapshot = {
+                ...cache.snapshot,
+                playerState: model.playerState,
+                positionMs,
+                durationMs,
+                sampledAtMs: now,
+                updatedAt: now,
+                current: cache.snapshot.current
+                    ? { ...cache.snapshot.current, durationMs, coverUrl: model.coverUrl || cache.snapshot.current.coverUrl }
+                    : null,
+            };
+            stageSnapshotCacheRef.current = { ...cache, snapshot };
+            return snapshot;
+        }
+
+        const snapshot = buildStagePlayerSnapshotFromPlaybackSyncBridge(model);
+        stageSnapshotCacheRef.current = {
+            playQueue: model.playQueue,
+            currentSong: model.currentSong,
+            activePlaybackContext: model.activePlaybackContext,
+            isStageActive: model.isStageActive,
+            canGoPrevious: model.canGoPrevious,
+            canGoNext: model.canGoNext,
+            coverUrl: model.coverUrl,
+            snapshot,
+        };
+        return snapshot;
+    };
+
+    const publishDiscordPresenceSnapshot = () => {
+        if (!window.electron?.publishDiscordPresenceSnapshot) {
+            return;
+        }
+
+        void window.electron.publishDiscordPresenceSnapshot(buildDiscordPresenceSnapshot()).catch((error) => {
+            console.warn('[Discord] Failed to publish presence snapshot', error);
+        });
     };
 
     const publishStagePlayerPlaybackUpdate = () => {
@@ -276,8 +344,7 @@ export const useElectronPlaybackBridge = ({
     }, [isElectronWindow]);
 
     useEffect(() => {
-        const shouldPublishRemoteSnapshot = playbackSyncBridgeStatus.remoteControlOpen || playbackSyncBridgeStatus.discordPresenceEnabled;
-        if (!shouldPublishRemoteSnapshot) {
+        if (!playbackSyncBridgeStatus.remoteControlOpen) {
             return;
         }
 
@@ -303,6 +370,17 @@ export const useElectronPlaybackBridge = ({
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, mainWindowClickThroughEnabled, playbackSyncBridgeStatus, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground, isLiked]);
+
+    useEffect(() => {
+        if (!playbackSyncBridgeStatus.discordPresenceEnabled || !window.electron?.publishDiscordPresenceSnapshot) {
+            return;
+        }
+
+        publishDiscordPresenceSnapshot();
+        const intervalId = window.setInterval(publishDiscordPresenceSnapshot, DISCORD_PRESENCE_SNAPSHOT_INTERVAL_MS);
+        return () => window.clearInterval(intervalId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cachedCoverUrl, coverUrl, currentSong, duration, isNowPlayingStageActive, playbackSyncBridgeStatus.discordPresenceEnabled, playerState]);
 
     useEffect(() => {
         if (!isStagePlayerSnapshotEnabled || !window.electron?.publishStagePlayerSnapshot) {
@@ -393,6 +471,7 @@ export const useElectronPlaybackBridge = ({
                 }
                 currentTime.set(nextTime);
                 void window.electron?.publishRemoteControlSnapshot(buildRemoteSnapshot());
+                publishDiscordPresenceSnapshot();
                 void publishStagePlayerPlaybackUpdate();
                 return;
             }

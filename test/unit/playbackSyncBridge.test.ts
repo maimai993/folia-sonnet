@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PlayerState, type SongResult } from '../../src/types';
 import {
+    buildDiscordPresenceSnapshotFromPlaybackSyncBridge,
     buildPlaybackSyncBridgeModel,
     buildRemoteControlSnapshotFromPlaybackSyncBridge,
     buildStagePlayerSnapshotFromPlaybackSyncBridge,
@@ -85,6 +86,16 @@ describe('playbackSyncBridge', () => {
             canGoPrevious: true,
             canGoNext: true,
             isPlaying: true,
+        });
+        expect(buildDiscordPresenceSnapshotFromPlaybackSyncBridge(model)).toEqual({
+            hasTrack: true,
+            title: 'Current Song',
+            artist: 'Artist 2',
+            coverUrl: 'https://example.com/cached.jpg',
+            currentTime: 42,
+            duration: 180,
+            playerState: PlayerState.PLAYING,
+            updatedAt: 1234,
         });
     });
 
