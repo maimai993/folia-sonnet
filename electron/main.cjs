@@ -278,6 +278,19 @@ const discordPresence = createDiscordPresenceController({
   },
 });
 
+function buildPlaybackSyncBridgeStatus() {
+  return {
+    remoteControlOpen: Boolean(remoteControlWindow && !remoteControlWindow.isDestroyed()),
+    discordPresenceEnabled: readStoredBoolean(DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY, false),
+  };
+}
+
+function broadcastPlaybackSyncBridgeStatus() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('playback-sync-bridge-status-changed', buildPlaybackSyncBridgeStatus());
+  }
+}
+
 function getStoredWindowState() {
   const storedBounds = store.get('WINDOW_BOUNDS');
   const storedMaximized = store.get('WINDOW_IS_MAXIMIZED');
@@ -1917,9 +1930,15 @@ function sendObsEvent(res, eventName, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+function sendSerializedObsEvent(res, eventName, serializedPayload) {
+  res.write(`event: ${eventName}\n`);
+  res.write(`data: ${serializedPayload}\n\n`);
+}
+
 function broadcastObsBrowserSourceEvent(eventName, payload) {
+  const serializedPayload = JSON.stringify(payload);
   for (const client of Array.from(obsBrowserSourceClients)) {
-    sendObsEvent(client, eventName, payload);
+    sendSerializedObsEvent(client, eventName, serializedPayload);
   }
 }
 
@@ -2223,6 +2242,7 @@ function createRemoteControlWindow() {
     applyRemoteControlAlwaysOnTop(remoteControlWindow);
     remoteControlWindow.show();
     remoteControlWindow.focus();
+    broadcastPlaybackSyncBridgeStatus();
     return remoteControlWindow;
   }
 
@@ -2256,6 +2276,7 @@ function createRemoteControlWindow() {
   });
 
   remoteControlWindow = win;
+  broadcastPlaybackSyncBridgeStatus();
   win.on('page-title-updated', (event) => {
     event.preventDefault();
     win.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
@@ -2275,6 +2296,7 @@ function createRemoteControlWindow() {
     if (remoteControlWindow === win) {
       remoteControlWindow = null;
     }
+    broadcastPlaybackSyncBridgeStatus();
   });
 
   return win;
@@ -2589,6 +2611,7 @@ ipcMain.handle('save-settings', (event, key, value) => {
     key === DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY
   ) {
     void discordPresence.refresh();
+    broadcastPlaybackSyncBridgeStatus();
   }
 
   return getPublicSettings();
@@ -2898,6 +2921,14 @@ ipcMain.handle('discord-presence-get-status', (event) => {
   }
 
   return discordPresence.getStatus();
+});
+
+ipcMain.handle('playback-sync-bridge-get-status', (event) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to read playback sync bridge status.');
+  }
+
+  return buildPlaybackSyncBridgeStatus();
 });
 
 ipcMain.handle('stage-get-status', () => {

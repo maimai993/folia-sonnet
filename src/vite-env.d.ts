@@ -118,6 +118,11 @@ declare global {
     mainWindowHeight?: number;
   }
 
+  interface ElectronPlaybackSyncBridgeStatus {
+    remoteControlOpen: boolean;
+    discordPresenceEnabled: boolean;
+  }
+
   interface ElectronMainWindowClickThroughState {
     enabled: boolean;
   }
@@ -439,6 +444,8 @@ declare global {
       publishObsBrowserSourceClock: (clock: ElectronObsBrowserSourceClock) => Promise<boolean>;
       publishObsBrowserSourceAudio: (audio: ElectronObsBrowserSourceAudio) => Promise<boolean>;
       getDiscordPresenceStatus: () => Promise<ElectronDiscordPresenceStatus>;
+      getPlaybackSyncBridgeStatus: () => Promise<ElectronPlaybackSyncBridgeStatus>;
+      onPlaybackSyncBridgeStatusChanged: (callback: (status: ElectronPlaybackSyncBridgeStatus) => void) => () => void;
       onDiscordPresenceStatusChanged: (callback: (status: ElectronDiscordPresenceStatus) => void) => () => void;
       onObsBrowserSourceStatusChanged: (callback: (status: ElectronObsBrowserSourceStatus) => void) => () => void;
       updateTaskbarControls: (state: ElectronTaskbarControlState) => Promise<boolean>;

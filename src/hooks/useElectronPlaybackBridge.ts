@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type React from 'react';
 import type { RefObject } from 'react';
 import type { MotionValue } from 'framer-motion';
@@ -6,7 +6,13 @@ import { PlayerState } from '../types';
 import type { SongResult, LyricData } from '../types';
 import type { RemoteControlCommand, RemoteControlSnapshot } from '../types/remoteControl';
 import type { VideoExportState } from '../types/videoExport';
-import { buildStagePlayerSnapshot, resolveStagePlayerPositionSec } from '../utils/stagePlayerSnapshot';
+import {
+    buildPlaybackSyncBridgeModel,
+    buildRemoteControlSnapshotFromPlaybackSyncBridge,
+    buildStagePlayerSnapshotFromPlaybackSyncBridge,
+    buildTaskbarControlsFromPlaybackSyncBridge,
+} from '../utils/playbackSyncBridge';
+import { resolveStagePlayerPositionSec } from '../utils/stagePlayerSnapshot';
 
 // Bridges Electron-specific shell features without coupling to UI components.
 type UseElectronPlaybackBridgeOptions = {
@@ -50,6 +56,11 @@ type UseElectronPlaybackBridgeOptions = {
     onLike?: () => void;
 };
 
+const emptyPlaybackSyncBridgeStatus = (): ElectronPlaybackSyncBridgeStatus => ({
+    remoteControlOpen: false,
+    discordPresenceEnabled: false,
+});
+
 export const useElectronPlaybackBridge = ({
     isElectronWindow,
     setIsTitlebarRevealed,
@@ -90,6 +101,8 @@ export const useElectronPlaybackBridge = ({
     isLiked,
     onLike,
 }: UseElectronPlaybackBridgeOptions) => {
+    const [playbackSyncBridgeStatus, setPlaybackSyncBridgeStatus] = useState<ElectronPlaybackSyncBridgeStatus>(() => emptyPlaybackSyncBridgeStatus());
+
     const resolveAudioSourceHref = (source: string | null | undefined) => {
         if (!source) {
             return '';
@@ -113,55 +126,11 @@ export const useElectronPlaybackBridge = ({
         return Boolean(expectedSource && currentSource && expectedSource === currentSource);
     };
 
-    const buildRemoteSnapshot = (options: { includeLyrics?: boolean } = {}): RemoteControlSnapshot => {
-        const hasActiveTrack = !isNowPlayingStageActive && Boolean(currentSong);
-        const currentIndex = currentSong ? playQueue.findIndex(song => song.id === currentSong.id) : -1;
-        const canGoPrevious = hasActiveTrack && (currentIndex > 0 || (effectiveLoopMode === 'all' && playQueue.length > 1));
-        const canGoNext = hasActiveTrack && (
-            isFmMode ||
-            currentIndex >= 0 && currentIndex < playQueue.length - 1 ||
-            (effectiveLoopMode === 'all' && playQueue.length > 1)
-        );
-
-        return {
-            hasTrack: hasActiveTrack,
-            title: currentSong?.name ?? null,
-            artist: currentSong?.artists?.map(artist => artist.name).join(', ') || null,
-            coverUrl: coverUrl || cachedCoverUrl,
-            currentTime: audioRef.current?.currentTime ?? currentTime.get(),
-            duration,
-            playerState,
-            canGoPrevious,
-            canGoNext,
-            controlsDisabled: isNowPlayingControlDisabledRef.current || !hasActiveTrack,
-            isStageActive: isNowPlayingStageActive,
-            transparentModeEnabled: transparentPlayerBackground,
-            mainWindowClickThroughEnabled,
-            mainWindowAlwaysOnTop: false,
-            mainWindowBorderVisible: showTransparentWindowBorder,
-            playerChromeHidden: isPlayerChromeHidden,
-            exportState,
-            isDaylight,
-            ...(options.includeLyrics ? { lyrics } : {}),
-            isLiked,
-            updatedAt: Date.now(),
-            mainWindowWidth: window.innerWidth,
-            mainWindowHeight: window.innerHeight,
-        };
-    };
-
-    const buildCurrentStagePlayerSnapshot = () => {
+    const buildPlaybackSyncBridgeModelFromCurrentState = () => {
         const audioElement = audioRef.current;
         const isCurrentAudioSource = isAudioElementUsingCurrentSource();
-        const hasActiveTrack = !isNowPlayingStageActive && Boolean(currentSong);
-        const currentIndex = currentSong ? playQueue.findIndex(song => song.id === currentSong.id) : -1;
-        const canGoPrevious = hasActiveTrack && (currentIndex > 0 || (effectiveLoopMode === 'all' && playQueue.length > 1));
-        const canGoNext = hasActiveTrack && (
-            isFmMode ||
-            currentIndex >= 0 && currentIndex < playQueue.length - 1 ||
-            (effectiveLoopMode === 'all' && playQueue.length > 1)
-        );
-        const positionSec = resolveStagePlayerPositionSec({
+        const currentTimeSec = audioElement?.currentTime ?? currentTime.get();
+        const stagePositionSec = resolveStagePlayerPositionSec({
             activePlaybackContext,
             isExternalPlaybackSourceActive: isNowPlayingStageActive,
             audioCurrentTimeSec: isCurrentAudioSource ? audioElement?.currentTime : undefined,
@@ -171,22 +140,46 @@ export const useElectronPlaybackBridge = ({
         const audioDurationSec = isCurrentAudioSource && Number.isFinite(audioElement?.duration) && (audioElement?.duration ?? 0) > 0
             ? audioElement?.duration ?? 0
             : 0;
-        const snapshotDurationSec = audioDurationSec > 0 || activePlaybackContext === 'main'
+        const stageDurationSec = audioDurationSec > 0 || activePlaybackContext === 'main'
             ? audioDurationSec
             : duration;
 
-        return buildStagePlayerSnapshot({
+        return buildPlaybackSyncBridgeModel({
             activePlaybackContext,
-            isExternalPlaybackSourceActive: isNowPlayingStageActive,
             currentSong,
             playQueue,
+            currentTimeSec,
+            stagePositionSec,
+            durationSec: duration,
+            stageDurationSec,
             playerState,
-            positionMs: positionSec * 1000,
-            durationMs: snapshotDurationSec * 1000,
-            canGoPrevious,
-            canGoNext,
-            coverUrl: coverUrl || cachedCoverUrl,
+            coverUrl,
+            cachedCoverUrl,
+            effectiveLoopMode,
+            isFmMode,
+            isStageActive: isNowPlayingStageActive,
+            controlsDisabled: isNowPlayingControlDisabledRef.current,
+            transparentModeEnabled: transparentPlayerBackground,
+            mainWindowClickThroughEnabled,
+            mainWindowBorderVisible: showTransparentWindowBorder,
+            playerChromeHidden: isPlayerChromeHidden,
+            exportState,
+            isDaylight,
+            isLiked,
+            mainWindowWidth: window.innerWidth,
+            mainWindowHeight: window.innerHeight,
         });
+    };
+
+    const buildRemoteSnapshot = (options: { includeLyrics?: boolean } = {}): RemoteControlSnapshot => {
+        return buildRemoteControlSnapshotFromPlaybackSyncBridge(
+            buildPlaybackSyncBridgeModelFromCurrentState(),
+            { includeLyrics: options.includeLyrics, lyrics },
+        );
+    };
+
+    const buildCurrentStagePlayerSnapshot = () => {
+        return buildStagePlayerSnapshotFromPlaybackSyncBridge(buildPlaybackSyncBridgeModelFromCurrentState());
     };
 
     const publishStagePlayerPlaybackUpdate = () => {
@@ -257,26 +250,37 @@ export const useElectronPlaybackBridge = ({
             return;
         }
 
-        const hasActiveTrack = !isNowPlayingStageActive && Boolean(currentSong);
-        const currentIndex = currentSong ? playQueue.findIndex(song => song.id === currentSong.id) : -1;
-        const canGoPrevious = !isNowPlayingStageActive && (currentIndex > 0 || (effectiveLoopMode === 'all' && playQueue.length > 1));
-        const canGoNext = hasActiveTrack && (
-            isFmMode ||
-            currentIndex >= 0 && currentIndex < playQueue.length - 1 ||
-            (effectiveLoopMode === 'all' && playQueue.length > 1)
-        );
-
-        void window.electron.updateTaskbarControls({
-            hasActiveTrack,
-            canGoPrevious,
-            canGoNext,
-            isPlaying: !isNowPlayingStageActive && hasActiveTrack && playerState === PlayerState.PLAYING,
-        }).catch((error) => {
+        void window.electron.updateTaskbarControls(
+            buildTaskbarControlsFromPlaybackSyncBridge(buildPlaybackSyncBridgeModelFromCurrentState())
+        ).catch((error) => {
             console.warn('[Electron] Failed to update Windows taskbar controls', error);
         });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentSong, effectiveLoopMode, isFmMode, isNowPlayingStageActive, playQueue, playerState]);
 
     useEffect(() => {
+        if (!isElectronWindow) {
+            setPlaybackSyncBridgeStatus(emptyPlaybackSyncBridgeStatus());
+            return;
+        }
+
+        void window.electron?.getPlaybackSyncBridgeStatus?.().then(status => {
+            setPlaybackSyncBridgeStatus(status);
+        }).catch((error) => {
+            console.warn('[Electron] Failed to read playback sync bridge status', error);
+        });
+
+        return window.electron?.onPlaybackSyncBridgeStatusChanged?.(status => {
+            setPlaybackSyncBridgeStatus(status);
+        });
+    }, [isElectronWindow]);
+
+    useEffect(() => {
+        const shouldPublishRemoteSnapshot = playbackSyncBridgeStatus.remoteControlOpen || playbackSyncBridgeStatus.discordPresenceEnabled;
+        if (!shouldPublishRemoteSnapshot) {
+            return;
+        }
+
         if (!window.electron?.publishRemoteControlSnapshot) {
             return;
         }
@@ -298,7 +302,7 @@ export const useElectronPlaybackBridge = ({
             window.removeEventListener('resize', handleResize);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, mainWindowClickThroughEnabled, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground, isLiked]);
+    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, mainWindowClickThroughEnabled, playbackSyncBridgeStatus, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground, isLiked]);
 
     useEffect(() => {
         if (!isStagePlayerSnapshotEnabled || !window.electron?.publishStagePlayerSnapshot) {
