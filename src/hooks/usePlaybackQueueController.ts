@@ -8,13 +8,13 @@ import { getOnlineSongCacheKey, isSongMarkedUnavailable, neteaseApi } from '../s
 import { getPrefetchedData, invalidateAndRefetch, prefetchNearbySongs } from '../services/prefetchService';
 import type { ThemeCacheSongKey } from '../services/themeCache';
 import { loadOnlineLyricsState } from '../utils/onlineLyricsState';
-import { PlayerState, type HomeViewTab } from '../types';
+import { PlayerState, type HomeViewTab, type StagePlayerSnapshot } from '../types';
 import type { LocalSong, QueueAddBehavior, SongResult, StatusMessage, UnifiedSong } from '../types';
 import type { NextTrackOptions, PlaybackNavigationOptions, SkipPromptMessageKey, UnavailableReplacementRequest } from '../types/appPlayback';
 import type { NavidromeSong } from '../types/navidrome';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
 import { applyQueueAddBehavior } from '../utils/queueAddBehavior';
-import { resolveStagePlayerQueueItemIndex } from '../utils/stagePlayerSnapshot';
+import { buildStagePlayerSnapshot, resolveStagePlayerQueueItemIndex } from '../utils/stagePlayerSnapshot';
 
 // src/hooks/usePlaybackQueueController.ts
 
@@ -116,6 +116,10 @@ type UsePlaybackQueueControllerParams = {
 const MAX_UNAVAILABLE_AUTO_SKIP_COUNT = 2;
 const UNAVAILABLE_SKIP_CONFIRM_TIMEOUT_MS = 5000;
 const UNAVAILABLE_SKIP_CONFIRM_INTERVAL_MS = 1000;
+
+const getStageSnapshotSongDurationMs = (song: SongResult | null, fallbackSec = 0): number => {
+    return Math.max(0, Math.floor(song?.duration || song?.dt || fallbackSec * 1000 || 0));
+};
 
 // Owns queue navigation, online playback loading, and search-triggered playback.
 export function usePlaybackQueueController({
@@ -918,6 +922,38 @@ export function usePlaybackQueueController({
         return resolveStagePlayerQueueItemIndex(queue, request.queueItemId || request.fromQueueItemId);
     }, []);
 
+    const buildStageQueueOperationSnapshot = useCallback((
+        nextCurrentSong: SongResult | null,
+        nextQueue: SongResult[],
+    ): StagePlayerSnapshot => {
+        const queueCurrentIndex = nextCurrentSong ? nextQueue.findIndex(song => song.id === nextCurrentSong.id) : -1;
+        const hasQueueNeighbors = nextQueue.length > 1;
+        const hasCurrentSong = Boolean(nextCurrentSong);
+        const audioElement = audioRef.current;
+        const audioCurrentTimeSec = Number.isFinite(audioElement?.currentTime) ? audioElement?.currentTime ?? 0 : currentTime.get();
+        const audioDurationSec = Number.isFinite(audioElement?.duration) && (audioElement?.duration ?? 0) > 0
+            ? audioElement?.duration ?? 0
+            : 0;
+        const fallbackDurationMs = getStageSnapshotSongDurationMs(nextCurrentSong, audioDurationSec);
+
+        return buildStagePlayerSnapshot({
+            activePlaybackContext,
+            isExternalPlaybackSourceActive: isNowPlayingStageActive,
+            currentSong: nextCurrentSong,
+            playQueue: nextQueue,
+            playerState,
+            positionMs: Math.max(0, Math.floor(audioCurrentTimeSec * 1000)),
+            durationMs: fallbackDurationMs,
+            canGoPrevious: hasCurrentSong && (queueCurrentIndex > 0 || (loopMode === 'all' && hasQueueNeighbors)),
+            canGoNext: hasCurrentSong && (
+                isFmMode
+                || queueCurrentIndex >= 0 && queueCurrentIndex < nextQueue.length - 1
+                || (loopMode === 'all' && hasQueueNeighbors)
+            ),
+            coverUrl: nextCurrentSong?.al?.picUrl || nextCurrentSong?.album?.picUrl || null,
+        });
+    }, [activePlaybackContext, audioRef, currentTime, isFmMode, isNowPlayingStageActive, loopMode, playerState]);
+
     const loadStageQueueSongs = useCallback(async (request: { songId?: number; songIds?: number[]; }) => {
         const songIds = Array.isArray(request.songIds) && request.songIds.length > 0
             ? request.songIds
@@ -956,12 +992,13 @@ export function usePlaybackQueueController({
         toIndex?: number;
         index?: number;
     }) => {
-        const complete = async (ok: boolean, error?: unknown, result?: any) => {
+        const complete = async (ok: boolean, error?: unknown, result?: any, snapshot?: StagePlayerSnapshot) => {
             await window.electron?.completeStagePlayerQueueRequest?.({
                 requestId: request.requestId,
                 ok,
                 error: ok ? null : error instanceof Error ? error.message : String(error),
                 result,
+                snapshot,
             });
         };
 
@@ -1012,8 +1049,9 @@ export function usePlaybackQueueController({
                 if (selectIndex < 0) {
                     throw new Error('Queue select requires a valid queueItemId or index.');
                 }
-                await playSong(baseQueue[selectIndex], baseQueue, isFmMode, { shouldNavigateToPlayer: true });
-                await complete(true);
+                const selectedSong = baseQueue[selectIndex];
+                await playSong(selectedSong, baseQueue, isFmMode, { shouldNavigateToPlayer: true });
+                await complete(true, null, undefined, buildStageQueueOperationSnapshot(selectedSong, baseQueue));
                 return;
             } else if (request.action === 'clear') {
                 nextQueue = currentSong ? [currentSong] : [];
@@ -1023,12 +1061,12 @@ export function usePlaybackQueueController({
 
             setPlayQueue(nextQueue);
             void persistLastPlaybackCache(currentSong, nextQueue);
-            await complete(true, null, actionData);
+            await complete(true, null, actionData, buildStageQueueOperationSnapshot(currentSong, nextQueue));
         } catch (error) {
             console.warn('[Stage] Failed to handle player queue request', error);
             await complete(false, error);
         }
-    }, [activePlaybackContext, currentSong, isFmMode, isNowPlayingStageActive, loadStageQueueSongs, persistLastPlaybackCache, playQueue, playSong, resolveStageQueueIndex, setPlayQueue, setStatusMsg, t]);
+    }, [activePlaybackContext, buildStageQueueOperationSnapshot, currentSong, isFmMode, isNowPlayingStageActive, loadStageQueueSongs, persistLastPlaybackCache, playQueue, playSong, resolveStageQueueIndex, setPlayQueue, setStatusMsg, t]);
 
     useEffect(() => {
         if (!window.electron?.onStagePlayerQueueRequest) {
