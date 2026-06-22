@@ -6,6 +6,7 @@ const Store = require('electron-store').default || require('electron-store');
 const crypto = require('crypto');
 const { createStageApi } = require('./stageApi.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
+const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = require('./discordPresence.cjs');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
 const isAppImageRuntime =
   process.platform === 'linux' &&
@@ -74,6 +75,8 @@ const STAGE_API_PORT_SETTING_KEY = 'STAGE_API_PORT';
 const OBS_BROWSER_SOURCE_ENABLED_SETTING_KEY = 'OBS_BROWSER_SOURCE_ENABLED';
 const OBS_BROWSER_SOURCE_TOKEN_SETTING_KEY = 'OBS_BROWSER_SOURCE_TOKEN';
 const OBS_BROWSER_SOURCE_PORT_SETTING_KEY = 'OBS_BROWSER_SOURCE_PORT';
+const DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY = 'DISCORD_RICH_PRESENCE_ENABLED';
+const DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY = 'DISCORD_RICH_PRESENCE_APPLICATION_ID';
 const MINIMIZE_TO_TRAY_SETTING_KEY = 'MINIMIZE_TO_TRAY';
 const HIDE_TASKBAR_ICON_SETTING_KEY = 'HIDE_TASKBAR_ICON';
 const REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY = 'REMOTE_CONTROL_ALWAYS_ON_TOP';
@@ -188,6 +191,10 @@ function getPublicSettings() {
     [REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true),
     [MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, false),
     [TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY]: readStoredBoolean(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, false),
+    [DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY]: readStoredBoolean(DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY, false),
+    [DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY]: typeof store.get(DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY) === 'string'
+      ? store.get(DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY)
+      : '',
     'enable_player_page_native_blur': store.get('enable_player_page_native_blur') === true,
   };
 }
@@ -259,6 +266,16 @@ const stageApi = createStageApi({
   stageApiPortSettingKey: STAGE_API_PORT_SETTING_KEY,
   defaultStageApiPort: DEFAULT_STAGE_API_PORT,
   getNeteasePort: () => assignedPort,
+});
+
+const discordPresence = createDiscordPresenceController({
+  getApplicationId: () => store.get(DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY) || DEFAULT_DISCORD_APPLICATION_ID,
+  isEnabled: () => readStoredBoolean(DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY, false),
+  onStatusChange: (status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('discord-presence-status-changed', status);
+    }
+  },
 });
 
 function getStoredWindowState() {
@@ -2483,6 +2500,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   clearPendingWindowPlaybackHandoffRequests();
+  void discordPresence.destroy();
 });
 
 // Settings Management IPC
@@ -2500,9 +2518,14 @@ ipcMain.handle('save-settings', (event, key, value) => {
     key === MINIMIZE_TO_TRAY_SETTING_KEY ||
     key === HIDE_TASKBAR_ICON_SETTING_KEY ||
     key === REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY ||
-    key === TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY
+    key === TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY ||
+    key === DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY
   ) {
     nextValue = Boolean(value);
+  }
+
+  if (key === DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY) {
+    nextValue = typeof value === 'string' ? value.trim() : '';
   }
 
   store.set(key, nextValue);
@@ -2559,6 +2582,13 @@ ipcMain.handle('save-settings', (event, key, value) => {
     void stageApi.syncStageModeState?.().catch((error) => {
       console.error('[Stage] Failed to sync Stage mode source setting', error);
     });
+  }
+
+  if (
+    key === DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY ||
+    key === DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY
+  ) {
+    void discordPresence.refresh();
   }
 
   return getPublicSettings();
@@ -2862,6 +2892,14 @@ ipcMain.handle('obs-browser-source-publish-audio', (event, audio) => {
   return true;
 });
 
+ipcMain.handle('discord-presence-get-status', (event) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to read Discord presence status.');
+  }
+
+  return discordPresence.getStatus();
+});
+
 ipcMain.handle('stage-get-status', () => {
   return stageApi.buildStageStatus();
 });
@@ -2988,6 +3026,7 @@ ipcMain.handle('remote-control-publish-snapshot', (event, snapshot) => {
   if (latestRemoteControlSnapshot) {
     sendRemoteControlSnapshot(latestRemoteControlSnapshot);
   }
+  void discordPresence.publishSnapshot(latestRemoteControlSnapshot);
   return true;
 });
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Check, Loader2, Server, Trash2 } from 'lucide-react';
+import { Activity, AlertCircle, Check, Loader2, Server, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { NowPlayingConnectionStatus, StageSource, StageStatus, Theme } from '../../../types';
 import type { NavidromeServerProfile } from '../../../types/navidrome';
@@ -58,8 +58,19 @@ export type IntegrationNavidromeModel = {
     testNavidromeConnection: () => Promise<void> | void;
 };
 
+export type IntegrationDiscordModel = {
+    applicationId: string;
+    defaultApplicationId?: string | null;
+    enabled: boolean;
+    onApplicationIdChange: (applicationId: string) => void;
+    onSaveApplicationId: () => Promise<void> | void;
+    onToggle: (enabled: boolean) => Promise<void> | void;
+    status?: ElectronDiscordPresenceStatus | null;
+};
+
 type IntegrationSettingsSubviewProps = {
     chrome: IntegrationSettingsChrome;
+    discord: IntegrationDiscordModel;
     navidrome: IntegrationNavidromeModel;
     stage: IntegrationStageModel;
 };
@@ -79,6 +90,7 @@ const getNowPlayingStatusLabel = (status: NowPlayingConnectionStatus) => {
 
 const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
     chrome,
+    discord,
     navidrome,
     stage,
 }) => {
@@ -126,9 +138,24 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         setNavidromeUsername,
         testNavidromeConnection,
     } = navidrome;
+    const {
+        applicationId: discordApplicationId,
+        defaultApplicationId: discordDefaultApplicationId,
+        enabled: discordPresenceEnabled,
+        onApplicationIdChange: onDiscordApplicationIdChange,
+        onSaveApplicationId: onSaveDiscordApplicationId,
+        onToggle: onToggleDiscordPresence,
+        status: discordPresenceStatus,
+    } = discord;
     const { t } = useTranslation();
     const [obsAddressCopied, setObsAddressCopied] = useState(false);
     const nowPlayingStatusLabel = getNowPlayingStatusLabel(nowPlayingConnectionStatus);
+    const discordPresenceStatusLabel = (() => {
+        if (!discordPresenceStatus?.enabled) return t('options.discordPresenceDisabled') || 'Disabled';
+        if (!discordPresenceStatus.configured) return t('options.discordPresenceMissingId') || 'Missing Application ID';
+        if (discordPresenceStatus.connected) return t('options.discordPresenceConnected') || 'Connected';
+        return t('options.discordPresenceDisconnected') || 'Disconnected';
+    })();
     const navidromeExtensionCount = navidromeServerProfile?.openSubsonicExtensions.length ?? 0;
     const navidromeFolderCount = navidromeServerProfile?.musicFolders.length ?? 0;
     const navidromeServerLabel = navidromeServerProfile?.serverVersion
@@ -149,6 +176,72 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
 
     return (
         <>
+            {isElectron && (
+                <section>
+                    <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+                        <Activity size={14} /> {t('options.discordRichPresence') || 'Discord Rich Presence'}
+                    </h3>
+                    <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.enableDiscordRichPresence') || 'Enable Discord playback status'}
+                                </div>
+                                <div className="text-[10px] opacity-40 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.discordRichPresenceDesc') || 'Show the current Folia track in Discord desktop. Requires Discord to be running and a Discord Application ID.'}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => void onToggleDiscordPresence(!discordPresenceEnabled)}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors ${!discordPresenceEnabled ? toggleOffBackgroundClass : ''}`}
+                                style={{ backgroundColor: discordPresenceEnabled ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                aria-label={t('options.enableDiscordRichPresence') || 'Enable Discord playback status'}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${discordPresenceEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="block text-[10px] uppercase tracking-[0.16em] opacity-40" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.discordApplicationIdOverride') || 'Application ID override'}
+                            </label>
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                                <input
+                                    value={discordApplicationId}
+                                    onChange={(event) => onDiscordApplicationIdChange(event.target.value)}
+                                    placeholder={discordDefaultApplicationId || '1518508445483925645'}
+                                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none transition-colors focus:border-white/25"
+                                    style={{ color: 'var(--text-primary)' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => void onSaveDiscordApplicationId()}
+                                    className="px-3 py-2 bg-white/10 hover:bg-white/15 rounded-lg text-xs transition-colors"
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    {t('options.saveDiscordApplicationId') || 'Save ID'}
+                                </button>
+                            </div>
+                            <div className="text-[10px] opacity-40" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.discordApplicationIdDesc') || 'Leave empty to use Folia default. Only fill this when testing another Discord application.'}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-2 py-1 rounded-full text-[10px] ${discordPresenceStatus?.connected ? successBgColor : errorBgColor} ${discordPresenceStatus?.connected ? successTextColor : errorTextColor}`}>
+                                {discordPresenceStatusLabel}
+                            </span>
+                            {discordPresenceStatus?.error && (
+                                <span className="text-[10px] opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                    {discordPresenceStatus.error}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </section>
+            )}
+
             {isElectron && obsBrowserSourceStatus && (
                 <section>
                     <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>

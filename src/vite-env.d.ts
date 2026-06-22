@@ -127,6 +127,15 @@ declare global {
   type ElectronObsBrowserSourceClock = import('./types/obsBrowserSource').ObsBrowserSourceClock;
   type ElectronObsBrowserSourceAudio = import('./types/obsBrowserSource').ObsBrowserSourceAudio;
 
+  interface ElectronDiscordPresenceStatus {
+    enabled: boolean;
+    configured: boolean;
+    connected: boolean;
+    error: string | null;
+    applicationId: string | null;
+    updatedAt: number;
+  }
+
   type ElectronUpdateStatusValue =
     | 'disabled'
     | 'idle'
@@ -429,6 +438,8 @@ declare global {
       publishObsBrowserSourceConfig: (config: ElectronObsBrowserSourceConfig) => Promise<boolean>;
       publishObsBrowserSourceClock: (clock: ElectronObsBrowserSourceClock) => Promise<boolean>;
       publishObsBrowserSourceAudio: (audio: ElectronObsBrowserSourceAudio) => Promise<boolean>;
+      getDiscordPresenceStatus: () => Promise<ElectronDiscordPresenceStatus>;
+      onDiscordPresenceStatusChanged: (callback: (status: ElectronDiscordPresenceStatus) => void) => () => void;
       onObsBrowserSourceStatusChanged: (callback: (status: ElectronObsBrowserSourceStatus) => void) => () => void;
       updateTaskbarControls: (state: ElectronTaskbarControlState) => Promise<boolean>;
       onTaskbarControl: (callback: (action: ElectronTaskbarControlAction) => void) => () => void;

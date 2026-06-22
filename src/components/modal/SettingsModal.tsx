@@ -251,10 +251,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         USE_SYSTEM_PROXY_FOR_AI: false,
         ENABLE_UPDATE_CHECK: true,
         ENABLE_AUTO_UPDATE: false,
-        STAGE_MODE_SOURCE: 'stage-api'
+        STAGE_MODE_SOURCE: 'stage-api',
+        DISCORD_RICH_PRESENCE_ENABLED: false,
+        DISCORD_RICH_PRESENCE_APPLICATION_ID: '',
     });
     const [electronSaveStatus, setElectronSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [updateStatus, setUpdateStatus] = useState<ElectronUpdateStatus | null>(null);
+    const [discordPresenceStatus, setDiscordPresenceStatus] = useState<ElectronDiscordPresenceStatus | null>(null);
     const [cacheDirectory, setCacheDirectory] = useState<string>('');
     const [cacheDirectoryIsDefault, setCacheDirectoryIsDefault] = useState(true);
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
@@ -278,6 +281,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             (window as any).electron.getUpdateStatus?.().then((status: ElectronUpdateStatus) => {
                 setUpdateStatus(status);
             });
+            (window as any).electron.getDiscordPresenceStatus?.().then((status: ElectronDiscordPresenceStatus) => {
+                setDiscordPresenceStatus(status);
+            });
         }
     }, []);
 
@@ -288,6 +294,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
         return window.electron.onUpdateStatusChanged((status) => {
             setUpdateStatus(status);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!window.electron?.onDiscordPresenceStatusChanged) {
+            return;
+        }
+
+        return window.electron.onDiscordPresenceStatusChanged((status) => {
+            setDiscordPresenceStatus(status);
         });
     }, []);
 
@@ -364,8 +380,37 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
             await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
             await (window as any).electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
+            await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
+            await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_APPLICATION_ID', electronSettings.DISCORD_RICH_PRESENCE_APPLICATION_ID);
             setElectronSaveStatus('saved');
             setTimeout(() => setElectronSaveStatus('idle'), 2000);
+        }
+    };
+
+    const handleToggleDiscordPresence = async (enabled: boolean) => {
+        const nextSettings = {
+            ...electronSettings,
+            DISCORD_RICH_PRESENCE_ENABLED: enabled,
+        };
+        setElectronSettings(nextSettings);
+        await window.electron?.saveSettings?.('DISCORD_RICH_PRESENCE_ENABLED', enabled);
+        const status = await window.electron?.getDiscordPresenceStatus?.();
+        if (status) {
+            setDiscordPresenceStatus(status);
+        }
+    };
+
+    const handleSaveDiscordPresenceApplicationId = async () => {
+        const nextApplicationId = electronSettings.DISCORD_RICH_PRESENCE_APPLICATION_ID.trim();
+        const nextSettings = {
+            ...electronSettings,
+            DISCORD_RICH_PRESENCE_APPLICATION_ID: nextApplicationId,
+        };
+        setElectronSettings(nextSettings);
+        await window.electron?.saveSettings?.('DISCORD_RICH_PRESENCE_APPLICATION_ID', nextApplicationId);
+        const status = await window.electron?.getDiscordPresenceStatus?.();
+        if (status) {
+            setDiscordPresenceStatus(status);
         }
     };
 
@@ -2260,6 +2305,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             setNavidromeUrl,
                             setNavidromeUsername,
                             testNavidromeConnection,
+                        }}
+                        discord={{
+                            applicationId: electronSettings.DISCORD_RICH_PRESENCE_APPLICATION_ID,
+                            defaultApplicationId: discordPresenceStatus?.applicationId ?? '1518508445483925645',
+                            enabled: electronSettings.DISCORD_RICH_PRESENCE_ENABLED,
+                            onApplicationIdChange: (applicationId) => setElectronSettings(prev => ({
+                                ...prev,
+                                DISCORD_RICH_PRESENCE_APPLICATION_ID: applicationId,
+                            })),
+                            onSaveApplicationId: handleSaveDiscordPresenceApplicationId,
+                            onToggle: handleToggleDiscordPresence,
+                            status: discordPresenceStatus,
                         }}
                         stage={{
                             enableNowPlayingStage,

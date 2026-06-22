@@ -56,6 +56,12 @@ contextBridge.exposeInMainWorld('electron', {
     publishObsBrowserSourceConfig: (config) => ipcRenderer.invoke('obs-browser-source-publish-config', config),
     publishObsBrowserSourceClock: (clock) => ipcRenderer.invoke('obs-browser-source-publish-clock', clock),
     publishObsBrowserSourceAudio: (audio) => ipcRenderer.invoke('obs-browser-source-publish-audio', audio),
+    getDiscordPresenceStatus: () => ipcRenderer.invoke('discord-presence-get-status'),
+    onDiscordPresenceStatusChanged: (callback) => {
+        const listener = (_event, status) => callback(status);
+        ipcRenderer.on('discord-presence-status-changed', listener);
+        return () => ipcRenderer.removeListener('discord-presence-status-changed', listener);
+    },
     onObsBrowserSourceStatusChanged: (callback) => {
         const listener = (_event, status) => callback(status);
         ipcRenderer.on('obs-browser-source-status-changed', listener);
