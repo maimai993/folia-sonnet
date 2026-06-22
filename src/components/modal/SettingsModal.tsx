@@ -253,7 +253,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         ENABLE_AUTO_UPDATE: false,
         STAGE_MODE_SOURCE: 'stage-api',
         DISCORD_RICH_PRESENCE_ENABLED: false,
-        DISCORD_RICH_PRESENCE_APPLICATION_ID: '',
     });
     const [electronSaveStatus, setElectronSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [updateStatus, setUpdateStatus] = useState<ElectronUpdateStatus | null>(null);
@@ -381,7 +380,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
             await (window as any).electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
             await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
-            await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_APPLICATION_ID', electronSettings.DISCORD_RICH_PRESENCE_APPLICATION_ID);
             setElectronSaveStatus('saved');
             setTimeout(() => setElectronSaveStatus('idle'), 2000);
         }
@@ -394,20 +392,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         };
         setElectronSettings(nextSettings);
         await window.electron?.saveSettings?.('DISCORD_RICH_PRESENCE_ENABLED', enabled);
-        const status = await window.electron?.getDiscordPresenceStatus?.();
-        if (status) {
-            setDiscordPresenceStatus(status);
-        }
-    };
-
-    const handleSaveDiscordPresenceApplicationId = async () => {
-        const nextApplicationId = electronSettings.DISCORD_RICH_PRESENCE_APPLICATION_ID.trim();
-        const nextSettings = {
-            ...electronSettings,
-            DISCORD_RICH_PRESENCE_APPLICATION_ID: nextApplicationId,
-        };
-        setElectronSettings(nextSettings);
-        await window.electron?.saveSettings?.('DISCORD_RICH_PRESENCE_APPLICATION_ID', nextApplicationId);
         const status = await window.electron?.getDiscordPresenceStatus?.();
         if (status) {
             setDiscordPresenceStatus(status);
@@ -1168,7 +1152,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     播放控制
                                                 </div>
                                                 <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                    播放队列，行为，音频
+                                                    播放行为，歌词来源，音频
                                                 </div>
                                             </div>
                                         </div>
@@ -1191,7 +1175,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     连接与集成
                                                 </div>
                                                 <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                    Stage、Now Playing 和 Navidrome 相关设置。
+                                                    外部程序接入设置。
                                                 </div>
                                                 {integrationStatusItems.length > 0 && (
                                                     <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
@@ -2195,7 +2179,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 isOpen: showPlaybackSettings,
                 onClose: () => closeSubviewOrModal(() => setShowPlaybackSettings(false)),
                 title: '播放控制',
-                description: '播放队列，行为，音频输出等设置。',
+                description: '播放行为，歌词来源，音频输出等设置。',
                 children: (
                     <PlaybackSettingsSubview
                         isOpen={showPlaybackSettings}
@@ -2277,7 +2261,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 isOpen: showIntegrationSettings,
                 onClose: () => closeSubviewOrModal(() => setShowIntegrationSettings(false)),
                 title: '集成设置',
-                description: 'Stage、Now Playing 和 Navidrome 连接。',
+                description: '外部程序接入设置。',
                 children: (
                     <IntegrationSettingsSubview
                         chrome={{
@@ -2307,14 +2291,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             testNavidromeConnection,
                         }}
                         discord={{
-                            applicationId: electronSettings.DISCORD_RICH_PRESENCE_APPLICATION_ID,
-                            defaultApplicationId: discordPresenceStatus?.applicationId ?? '1518508445483925645',
                             enabled: electronSettings.DISCORD_RICH_PRESENCE_ENABLED,
-                            onApplicationIdChange: (applicationId) => setElectronSettings(prev => ({
-                                ...prev,
-                                DISCORD_RICH_PRESENCE_APPLICATION_ID: applicationId,
-                            })),
-                            onSaveApplicationId: handleSaveDiscordPresenceApplicationId,
                             onToggle: handleToggleDiscordPresence,
                             status: discordPresenceStatus,
                         }}

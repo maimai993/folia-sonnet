@@ -76,7 +76,6 @@ const OBS_BROWSER_SOURCE_ENABLED_SETTING_KEY = 'OBS_BROWSER_SOURCE_ENABLED';
 const OBS_BROWSER_SOURCE_TOKEN_SETTING_KEY = 'OBS_BROWSER_SOURCE_TOKEN';
 const OBS_BROWSER_SOURCE_PORT_SETTING_KEY = 'OBS_BROWSER_SOURCE_PORT';
 const DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY = 'DISCORD_RICH_PRESENCE_ENABLED';
-const DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY = 'DISCORD_RICH_PRESENCE_APPLICATION_ID';
 const MINIMIZE_TO_TRAY_SETTING_KEY = 'MINIMIZE_TO_TRAY';
 const HIDE_TASKBAR_ICON_SETTING_KEY = 'HIDE_TASKBAR_ICON';
 const REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY = 'REMOTE_CONTROL_ALWAYS_ON_TOP';
@@ -192,9 +191,6 @@ function getPublicSettings() {
     [MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, false),
     [TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY]: readStoredBoolean(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, false),
     [DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY]: readStoredBoolean(DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY, false),
-    [DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY]: typeof store.get(DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY) === 'string'
-      ? store.get(DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY)
-      : '',
     'enable_player_page_native_blur': store.get('enable_player_page_native_blur') === true,
   };
 }
@@ -269,7 +265,7 @@ const stageApi = createStageApi({
 });
 
 const discordPresence = createDiscordPresenceController({
-  getApplicationId: () => store.get(DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY) || DEFAULT_DISCORD_APPLICATION_ID,
+  getApplicationId: () => DEFAULT_DISCORD_APPLICATION_ID,
   isEnabled: () => readStoredBoolean(DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY, false),
   onStatusChange: (status) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -2535,6 +2531,10 @@ ipcMain.handle('get-settings', () => {
 });
 
 ipcMain.handle('save-settings', (event, key, value) => {
+  if (key === 'DISCORD_RICH_PRESENCE_APPLICATION_ID') {
+    return getPublicSettings();
+  }
+
   let nextValue = value;
   if (
     key === MINIMIZE_TO_TRAY_SETTING_KEY ||
@@ -2544,10 +2544,6 @@ ipcMain.handle('save-settings', (event, key, value) => {
     key === DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY
   ) {
     nextValue = Boolean(value);
-  }
-
-  if (key === DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY) {
-    nextValue = typeof value === 'string' ? value.trim() : '';
   }
 
   store.set(key, nextValue);
@@ -2606,10 +2602,7 @@ ipcMain.handle('save-settings', (event, key, value) => {
     });
   }
 
-  if (
-    key === DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY ||
-    key === DISCORD_RICH_PRESENCE_APPLICATION_ID_SETTING_KEY
-  ) {
+  if (key === DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY) {
     void discordPresence.refresh();
     broadcastPlaybackSyncBridgeStatus();
   }

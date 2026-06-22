@@ -6,7 +6,7 @@ import type { NavidromeServerProfile } from '../../../types/navidrome';
 import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
 
 // src/components/modal/settings/IntegrationSettingsSubview.tsx
-// Integration settings for Stage, Now Playing, and Navidrome.
+// Integration settings for Discord, Stage, Now Playing, OBS, and Navidrome.
 
 type NavidromeTestStatus = 'idle' | 'testing' | 'success' | 'failed';
 type StageActionStatus = 'idle' | 'regenerating';
@@ -59,11 +59,7 @@ export type IntegrationNavidromeModel = {
 };
 
 export type IntegrationDiscordModel = {
-    applicationId: string;
-    defaultApplicationId?: string | null;
     enabled: boolean;
-    onApplicationIdChange: (applicationId: string) => void;
-    onSaveApplicationId: () => Promise<void> | void;
     onToggle: (enabled: boolean) => Promise<void> | void;
     status?: ElectronDiscordPresenceStatus | null;
 };
@@ -139,11 +135,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         testNavidromeConnection,
     } = navidrome;
     const {
-        applicationId: discordApplicationId,
-        defaultApplicationId: discordDefaultApplicationId,
         enabled: discordPresenceEnabled,
-        onApplicationIdChange: onDiscordApplicationIdChange,
-        onSaveApplicationId: onSaveDiscordApplicationId,
         onToggle: onToggleDiscordPresence,
         status: discordPresenceStatus,
     } = discord;
@@ -152,7 +144,6 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
     const nowPlayingStatusLabel = getNowPlayingStatusLabel(nowPlayingConnectionStatus);
     const discordPresenceStatusLabel = (() => {
         if (!discordPresenceStatus?.enabled) return t('options.discordPresenceDisabled') || 'Disabled';
-        if (!discordPresenceStatus.configured) return t('options.discordPresenceMissingId') || 'Missing Application ID';
         if (discordPresenceStatus.connected) return t('options.discordPresenceConnected') || 'Connected';
         return t('options.discordPresenceDisconnected') || 'Disconnected';
     })();
@@ -188,7 +179,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                     {t('options.enableDiscordRichPresence') || 'Enable Discord playback status'}
                                 </div>
                                 <div className="text-[10px] opacity-40 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.discordRichPresenceDesc') || 'Show the current Folia track in Discord desktop. Requires Discord to be running and a Discord Application ID.'}
+                                    {t('options.discordRichPresenceDesc') || 'Show the current Folia track in Discord desktop. Folia connects with its built-in application identity.'}
                                 </div>
                             </div>
                             <button
@@ -200,32 +191,6 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                             >
                                 <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${discordPresenceEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
                             </button>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="block text-[10px] uppercase tracking-[0.16em] opacity-40" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.discordApplicationIdOverride') || 'Application ID override'}
-                            </label>
-                            <div className="flex flex-col gap-2 sm:flex-row">
-                                <input
-                                    value={discordApplicationId}
-                                    onChange={(event) => onDiscordApplicationIdChange(event.target.value)}
-                                    placeholder={discordDefaultApplicationId || '1518508445483925645'}
-                                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none transition-colors focus:border-white/25"
-                                    style={{ color: 'var(--text-primary)' }}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => void onSaveDiscordApplicationId()}
-                                    className="px-3 py-2 bg-white/10 hover:bg-white/15 rounded-lg text-xs transition-colors"
-                                    style={{ color: 'var(--text-primary)' }}
-                                >
-                                    {t('options.saveDiscordApplicationId') || 'Save ID'}
-                                </button>
-                            </div>
-                            <div className="text-[10px] opacity-40" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.discordApplicationIdDesc') || 'Leave empty to use Folia default. Only fill this when testing another Discord application.'}
-                            </div>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">

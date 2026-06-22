@@ -176,7 +176,7 @@ function createDiscordPresenceController({
       await destroyClient();
       publishStatus({
         connected: false,
-        error: enabled ? 'Discord Application ID is required.' : null,
+        error: enabled ? 'Discord application identity is unavailable.' : null,
       });
       return null;
     }
