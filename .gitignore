@@ -32,6 +32,7 @@ release/
 packaging/aur/folia-major-bin/FIRST_RELEASE.md
 packaging/aur/folia-major-bin/README.md
 .codex
+.codex-tmp
 
 test/test-song/*
 test/test-ReplayGain
