@@ -23,6 +23,14 @@ declare global {
     count: number;
   }
 
+  interface ElectronLyricProxyResponse {
+    ok: boolean;
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    bodyText: string;
+  }
+
   interface ElectronTaskbarControlState {
     hasActiveTrack: boolean;
     canGoPrevious: boolean;
@@ -439,6 +447,14 @@ declare global {
       getAudioCacheStats: () => Promise<ElectronAudioCacheStats>;
       clearAudioCache: () => Promise<boolean>;
       generateTheme: (lyricsText: string, options?: { isPureMusic?: boolean; songTitle?: string }) => Promise<any>;
+      fetchLyricProxy: (
+        url: string,
+        init?: {
+          method?: string;
+          headers?: Record<string, string>;
+          body?: string;
+        },
+      ) => Promise<ElectronLyricProxyResponse>;
       getNeteasePort: () => Promise<number>;
       minimizeWindow: () => Promise<boolean>;
       toggleMaximizeWindow: () => Promise<boolean>;

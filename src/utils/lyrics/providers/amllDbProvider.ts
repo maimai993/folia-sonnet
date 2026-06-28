@@ -6,8 +6,14 @@ import { parseLyricsByFormat } from '../parserCore';
 const AMLL_DB_BASE_URL = 'https://amll-ttml-db.stevexmh.net';
 const AMLL_DB_CACHE_LIMIT = 200;
 const AMLL_DB_FETCH_TIMEOUT_MS = 5000;
-const isElectron = typeof window !== 'undefined' && (window as any).electron;
 const lyricsCache = new Map<string, Promise<LyricData | null>>();
+
+function getElectronBridge() {
+    if (typeof window === 'undefined') {
+        return undefined;
+    }
+    return window.electron;
+}
 
 export const buildAmllDbLyricsUrl = (platform: AmllDbPlatform, musicId: number | string): string => (
     `${AMLL_DB_BASE_URL}/${platform}/${encodeURIComponent(String(musicId))}?format=ttml`
@@ -15,8 +21,29 @@ export const buildAmllDbLyricsUrl = (platform: AmllDbPlatform, musicId: number |
 
 const buildAmllDbRequestUrl = (platform: AmllDbPlatform, musicId: number | string): string => {
     const targetUrl = buildAmllDbLyricsUrl(platform, musicId);
-    return isElectron ? targetUrl : `/api/lyric-proxy?url=${encodeURIComponent(targetUrl)}`;
+    return getElectronBridge() ? targetUrl : `/api/lyric-proxy?url=${encodeURIComponent(targetUrl)}`;
 };
+
+async function requestAmllDb(platform: AmllDbPlatform, musicId: number | string): Promise<{ ok: boolean; status: number; text: () => Promise<string> }> {
+    const requestUrl = buildAmllDbRequestUrl(platform, musicId);
+    const electronBridge = getElectronBridge();
+
+    if (electronBridge?.fetchLyricProxy) {
+        const response = await electronBridge.fetchLyricProxy(requestUrl, {
+            method: 'GET',
+        });
+        return {
+            ok: response.ok,
+            status: response.status,
+            text: async () => response.bodyText,
+        };
+    }
+
+    return fetch(requestUrl, {
+        credentials: 'omit',
+        signal: AbortSignal.timeout(AMLL_DB_FETCH_TIMEOUT_MS),
+    });
+}
 
 export function clearAmllDbLyricsCache(): void {
     lyricsCache.clear();
@@ -27,10 +54,7 @@ async function fetchAmllDbLyricsUncached(
     musicId: number | string,
 ): Promise<LyricData | null> {
     try {
-        const response = await fetch(buildAmllDbRequestUrl(platform, musicId), {
-            credentials: 'omit',
-            signal: AbortSignal.timeout(AMLL_DB_FETCH_TIMEOUT_MS),
-        });
+        const response = await requestAmllDb(platform, musicId);
         if (!response.ok) {
             return null;
         }

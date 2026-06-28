@@ -77,6 +77,29 @@ describe('amllDbProvider', () => {
         expect(parseLyricsByFormatMock).not.toHaveBeenCalled();
     });
 
+    it('treats AMLL 404 as empty success in electron proxy mode', async () => {
+        vi.stubGlobal('window', {
+            electron: {
+                fetchLyricProxy: vi.fn().mockResolvedValue({
+                    ok: true,
+                    status: 204,
+                    statusText: 'No Content',
+                    headers: {},
+                    bodyText: '',
+                }),
+            },
+        });
+
+        const result = await fetchAmllDbLyrics('qq', 105094238);
+
+        expect(window.electron?.fetchLyricProxy).toHaveBeenCalledWith(
+            'https://amll-ttml-db.stevexmh.net/qq/105094238?format=ttml',
+            { method: 'GET' },
+        );
+        expect(result).toBeNull();
+        expect(parseLyricsByFormatMock).not.toHaveBeenCalled();
+    });
+
     it('reuses cached fetch results for the same platform id', async () => {
         fetchMock.mockResolvedValue({
             ok: true,
