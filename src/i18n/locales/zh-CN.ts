@@ -89,6 +89,7 @@ export default {
       "search-netease": { "title": "搜索网易云", "description": "搜索网易云音乐" },
       "queue": { "title": "队列", "description": "搜索当前播放队列" },
       "settings-help": { "title": "打开帮助", "description": "打开帮助和快捷键" },
+      "show-user-guide": { "title": "打开用户指引", "description": "查看应用使用指南" },
       "settings-options": { "title": "打开选项", "description": "打开设置中心" },
       "settings-appearance": { "title": "外观设置", "description": "打开视觉和外观设置" },
       "settings-playback": { "title": "播放设置", "description": "打开播放行为设置" },
@@ -791,5 +792,26 @@ export default {
   "timeline": {
     "title": "时间线",
     "noLyrics": "无歌词"
+  },
+  "userGuide": {
+    "title": "欢迎使用 Folia",
+    "subtitle": "这里有一些提示，希望能帮到你。",
+    "commandPalette": {
+      "title": "命令面板",
+      "desc": "在播放页面按下 S键 即可打开命令面板，快速访问功能与设置。"
+    },
+    "typeToSearch": {
+      "title": "全局搜索",
+      "desc": "在任意歌曲海报墙中按下任意字母或数字键，即可直接开始搜索当前列表。"
+    },
+    "gotIt": "我知道了",
+    "showGuide": "查看用户指引",
+    "next": "下一页",
+    "back": "返回",
+    "page2Title": "命令与快捷键",
+    "page2Subtitle": "掌握这些快捷操作可以获得最佳体验。",
+    "shortcuts": "快捷键",
+    "commands": "全部命令",
+    "commandsDesc": "输入任意命令的拼音、汉字或英文均可快速触发。"
   }
 } as const;

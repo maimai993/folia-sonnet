@@ -201,6 +201,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
     const resolvedToggleTransparentPlayerBackground = onToggleTransparentPlayerBackground ?? onToggleTransparentPlayerBackgroundFromStore;
     const setIsSubSettingsViewOpen = useSettingsUiStore(state => state.setIsSubSettingsViewOpen);
+    const setIsUserGuideModalOpen = useSettingsUiStore(state => state.setIsUserGuideModalOpen);
     const [activeTab, setActiveTab] = useState<'help' | 'options'>(initialTab);
     const [showVisPlayground, setShowVisPlayground] = useState(false);
     const [showThemePark, setShowThemePark] = useState(false);
@@ -1029,23 +1030,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         <span>{t('help.seekBackward')} / {t('help.seekForward')}</span>
                                         <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">← / →</kbd>
                                     </li>
-                                    <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                        <span>{t('help.hidePlayerChrome')}</span>
-                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">H</kbd>
-                                    </li>
-                                    <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                        <span>{t('help.toggleRightPanel') || '切换右侧面板'}</span>
-                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">P</kbd>
-                                    </li>
-                                    <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                        <span>{t('help.openCommandPalette') || '打开命令面板'}</span>
-                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">S</kbd>
-                                    </li>
-                                    <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                        <span>{t('help.browserFullscreen')}</span>
-                                        <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">F11</kbd>
-                                    </li>
+
                                 </ul>
+                            </div>
+
+                            {/* User Guide Button */}
+                            <div className="mt-6 flex justify-center">
+                                <button
+                                    onClick={() => {
+                                        setIsUserGuideModalOpen(true);
+                                        onClose();
+                                    }}
+                                    className="px-6 py-2 bg-white/10 hover:bg-white/20 transition-colors rounded-full text-sm font-medium flex items-center gap-2"
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <Command size={16} />
+                                    {t('userGuide.showGuide', 'Show User Guide')}
+                                </button>
                             </div>
 
                             {/* Author Info (Moved from Footer) */}

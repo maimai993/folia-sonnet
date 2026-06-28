@@ -219,6 +219,17 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createQueueSearchCommand(),
 
     createSettingsCommand('settings-help', 'Open Help', 'Open help and shortcuts', ['help', '帮助', 'bangzhu', 'bz'], 'help'),
+    {
+        id: 'show-user-guide',
+        group: 'settings',
+        title: 'Show User Guide',
+        description: 'Open the user guide tutorial',
+        keywords: ['guide', 'help', 'tutorial', '用户指引', '指南', '帮助', 'yonghuzhiyin', 'zhinan', 'yhzy', 'zn'],
+        execute: (_input, context) => {
+            context.setIsUserGuideModalOpen(true);
+            return true;
+        },
+    },
     createSettingsCommand('settings-options', 'Open Options', 'Open the options center', ['settings', 'options', '设置', '选项', 'shezhi', 'xuanxiang', 'sz', 'xx'], 'options'),
     createSettingsCommand('settings-appearance', 'Appearance settings', 'Open visual and appearance settings', ['appearance', 'visual settings', '外观', '视觉', 'waiguan', 'shijue', 'wg', 'sj'], 'options', 'appearance'),
     createSettingsCommand('settings-playback', 'Playback settings', 'Open playback behavior settings', ['playback settings', 'playback', '播放', '播放设置', 'bofang', 'bofangshezhi', 'bf', 'bfsz'], 'options', 'playback'),

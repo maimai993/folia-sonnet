@@ -13,6 +13,7 @@ import AppDialogs from './components/app/dialogs/AppDialogs';
 import { createCopySongInfoSuccessHandler } from './components/app/dialogs/createCopySongInfoSuccessHandler';
 import { buildSettingsDialogModel } from './components/app/dialogs/buildSettingsDialogModel';
 import AppOverlays from './components/app/overlays/AppOverlays';
+import { UserGuideModal } from './components/modal/UserGuideModal';
 import { buildAppDialogsModel } from './components/app/dialogs/buildAppDialogsModel';
 import { buildHomeModel } from './components/app/home/buildHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
@@ -132,6 +133,9 @@ export default function App() {
         setActiveGridViewCollection,
         enableAlternativeLyricSources,
         handleToggleAlternativeLyricSources,
+        lastSeenGuideVersion,
+        setLastSeenGuideVersion,
+        setIsUserGuideModalOpen,
     } = useSettingsUiStore(useShallow(state => ({
         closeSettings: state.closeSettings,
         isSettingsSubviewOpen: state.isSubSettingsViewOpen,
@@ -141,7 +145,17 @@ export default function App() {
         setActiveGridViewCollection: state.setActiveGridViewCollection,
         enableAlternativeLyricSources: state.enableAlternativeLyricSources,
         handleToggleAlternativeLyricSources: state.handleToggleAlternativeLyricSources,
+        lastSeenGuideVersion: state.lastSeenGuideVersion,
+        setLastSeenGuideVersion: state.setLastSeenGuideVersion,
+        setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     })));
+
+    useEffect(() => {
+        if (typeof __APP_VERSION__ !== 'undefined' && lastSeenGuideVersion !== __APP_VERSION__) {
+            setIsUserGuideModalOpen(true);
+            setLastSeenGuideVersion(__APP_VERSION__);
+        }
+    }, [lastSeenGuideVersion, setLastSeenGuideVersion, setIsUserGuideModalOpen]);
 
     const loadNavidromeFavorites = useCallback(async () => {
         if (!navidromeEnabled) {
@@ -1579,6 +1593,7 @@ export default function App() {
         toggleAlternativeLyricSources: () => handleToggleAlternativeLyricSources(!enableAlternativeLyricSources),
         enableAlternativeLyricSources,
         runAutoMatchBestLyric: handleAutoMatchBestLyricForCurrentSong,
+        setIsUserGuideModalOpen,
     }), [
         enableAlternativeLyricSources,
         enablePlayerPageNativeBlur,
@@ -1607,6 +1622,7 @@ export default function App() {
         toggleTransparentModeWithHandoff,
         toggleDaylightMode,
         handleToggleAlternativeLyricSources,
+        setIsUserGuideModalOpen,
     ]);
     const commandPalette = useCommandPalette({
         currentView,
@@ -2723,6 +2739,7 @@ export default function App() {
             />
 
             <AppDialogs model={appDialogsModel} />
+            <UserGuideModal />
         </AppShell>
     );
 }

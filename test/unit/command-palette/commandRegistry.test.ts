@@ -29,6 +29,9 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     toggleAlternativeLyricSources: vi.fn(),
     enableAlternativeLyricSources: false,
     runAutoMatchBestLyric: vi.fn(async () => true),
+    setIsUserGuideModalOpen: vi.fn(),
+    playQueue: [],
+    playSong: vi.fn(),
     ...overrides,
 });
 

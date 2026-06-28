@@ -16,6 +16,10 @@ import { getLyricProviderPreferenceLabel } from '../utils/lyrics/lyricSourceLabe
 // Shared settings state and actions used by App, Home, and SettingsModal.
 
 export type StatusSetter = React.Dispatch<React.SetStateAction<StatusMessage | null>>;
+export const CACHE_SIZE_KEY = 'folia_cache_size';
+const ENABLE_MEDIA_CACHE_KEY = 'folia_enable_media_cache';
+const LAST_SEEN_GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';
+
 export type AudioQuality = 'exhigh' | 'lossless' | 'hires';
 export type SettingsModalInitialTab = 'help' | 'options';
 export type SettingsSubviewId = 'appearance' | 'playback' | 'integration' | 'storage' | 'desktop' | 'lab' | 'visualizer' | 'themePark' | 'lyricFilter';
@@ -743,6 +747,10 @@ type SettingsUiState = {
     setActiveGridViewCollection: (collection: any | null) => void;
     isSubSettingsViewOpen: boolean;
     settingsModalState: SettingsModalState;
+    lastSeenGuideVersion: string | null;
+    isUserGuideModalOpen: boolean;
+    setLastSeenGuideVersion: (version: string) => void;
+    setIsUserGuideModalOpen: (isOpen: boolean) => void;
     setStatusSetter: (setter: StatusSetter | null) => void;
     setAudioQuality: (quality: AudioQuality) => void;
     setTransparentPlayerBackgroundFromSystem: (enabled: boolean) => void;
@@ -792,7 +800,7 @@ type SettingsUiState = {
     handleSetUrlBackgroundSelectedId: (id: string | null) => void;
     handleSetUrlBackgroundList: (items: UrlBackgroundItem[]) => void;
     handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
-    setDaylightPreference: (enabled: boolean) => void;
+    setDaylightPreference: (isDaylight: boolean) => void;
     handleSetVisualizerMode: (mode: VisualizerMode) => void;
     handleSetClassicTuning: (patch: Partial<ClassicTuning>) => void;
     handleResetClassicTuning: () => void;
@@ -858,7 +866,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
     openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
-    enableMediaCache: getStoredBoolean('enable_media_cache', false),
+    enableMediaCache: getStoredBoolean(ENABLE_MEDIA_CACHE_KEY, false),
     backgroundOpacity: readStoredBackgroundOpacity(),
     subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
     visualizerOpacity: readStoredVisualizerOpacity(),
@@ -909,6 +917,15 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         initialTab: 'help',
         initialSubview: null,
     },
+    lastSeenGuideVersion: typeof window !== 'undefined' ? localStorage.getItem(LAST_SEEN_GUIDE_VERSION_STORAGE_KEY) : null,
+    isUserGuideModalOpen: false,
+    setLastSeenGuideVersion: (version) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(LAST_SEEN_GUIDE_VERSION_STORAGE_KEY, version);
+        }
+        set({ lastSeenGuideVersion: version });
+    },
+    setIsUserGuideModalOpen: (isOpen) => set({ isUserGuideModalOpen: isOpen }),
     setStatusSetter: (setter) => set({ statusSetter: setter }),
     setAudioQuality: (quality) => {
         if (typeof window !== 'undefined') {
@@ -1721,6 +1738,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     urlBackgroundSelectedId: state.urlBackgroundSelectedId,
     visualizerFrameRate: state.visualizerFrameRate,
     isDaylight: state.isDaylight,
+    lastSeenGuideVersion: state.lastSeenGuideVersion,
+    isUserGuideModalOpen: state.isUserGuideModalOpen,
     visualizerMode: state.visualizerMode,
     homeLayoutStyle: state.homeLayoutStyle,
     handleSetHomeLayoutStyle: state.handleSetHomeLayoutStyle,
@@ -1783,6 +1802,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetUrlBackgroundList: state.handleSetUrlBackgroundList,
     handleSetVisualizerFrameRate: state.handleSetVisualizerFrameRate,
     setDaylightPreference: state.setDaylightPreference,
+    setLastSeenGuideVersion: state.setLastSeenGuideVersion,
+    setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     handleSetVisualizerMode: state.handleSetVisualizerMode,
     handleSetClassicTuning: state.handleSetClassicTuning,
     handleResetClassicTuning: state.handleResetClassicTuning,

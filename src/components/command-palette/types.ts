@@ -66,4 +66,5 @@ export type CommandPaletteContext = {
     toggleAlternativeLyricSources: () => void;
     enableAlternativeLyricSources: boolean;
     runAutoMatchBestLyric: () => Promise<boolean>;
+    setIsUserGuideModalOpen: (isOpen: boolean) => void;
 };

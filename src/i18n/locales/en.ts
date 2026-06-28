@@ -789,5 +789,26 @@ export default {
   "timeline": {
     "title": "Timeline",
     "noLyrics": "No lyrics"
+  },
+  "userGuide": {
+    "title": "Welcome to Folia",
+    "subtitle": "Here are some tips to help you navigate.",
+    "commandPalette": {
+      "title": "Command Palette",
+      "desc": "Press the \"s\" key on the playback page to open the Command Palette and access commands quickly."
+    },
+    "typeToSearch": {
+      "title": "Instant Search",
+      "desc": "Press any key in a song list to instantly start searching."
+    },
+    "gotIt": "Got it",
+    "showGuide": "Show User Guide",
+    "next": "Next",
+    "back": "Back",
+    "page2Title": "Commands & Shortcuts",
+    "page2Subtitle": "Master shortcuts for the best experience.",
+    "shortcuts": "Shortcuts",
+    "commands": "All Commands",
+    "commandsDesc": "You can trigger commands by typing English, Chinese characters, or Pinyin."
   }
 } as const;
