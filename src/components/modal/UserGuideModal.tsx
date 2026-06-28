@@ -4,8 +4,9 @@ import { Command, Keyboard, Search, X, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { COMMAND_PALETTE_COMMANDS } from '../command-palette/commandRegistry';
+import type { Theme } from '../../types';
 
-export const UserGuideModal: React.FC = () => {
+export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) => {
     const { t } = useTranslation();
     const isUserGuideModalOpen = useSettingsUiStore(state => state.isUserGuideModalOpen);
     const setIsUserGuideModalOpen = useSettingsUiStore(state => state.setIsUserGuideModalOpen);
@@ -65,8 +66,14 @@ export const UserGuideModal: React.FC = () => {
                     >
                         {/* Decorative background blobs */}
                         <div className="absolute inset-0 pointer-events-none z-0">
-                            <div className={`absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'bg-blue-400/20' : 'bg-blue-500/10'}`} />
-                            <div className={`absolute -bottom-24 -left-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'bg-purple-400/20' : 'bg-purple-500/10'}`} />
+                            <div 
+                                className={`absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                                style={{ backgroundColor: theme?.accentColor || (isDaylight ? '#60a5fa' : '#3b82f6') }} 
+                            />
+                            <div 
+                                className={`absolute -bottom-24 -left-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                                style={{ backgroundColor: theme?.secondaryColor || theme?.accentColor || (isDaylight ? '#c084fc' : '#a855f7') }} 
+                            />
                         </div>
 
                         <button

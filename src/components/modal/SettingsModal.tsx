@@ -660,8 +660,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         || 'Unknown server';
 
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
-    const glassBg = isDaylight ? 'bg-white/82' : 'bg-zinc-900/95';
-    const subviewPanelBg = isDaylight ? 'bg-zinc-200' : 'bg-zinc-900';
+    const glassBg = isDaylight ? 'bg-white' : 'bg-[#18181b]';
+    const subviewPanelBg = isDaylight ? 'bg-zinc-50' : 'bg-[#18181b]';
     const borderColor = isDaylight ? 'border-black/5' : 'border-white/10';
     const textColor = isDaylight ? 'text-zinc-800' : 'text-zinc-100';
     const successTextColor = isDaylight ? 'text-green-600' : 'text-green-400';
@@ -828,17 +828,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={shellTransition}
-                    className="fixed inset-0 backdrop-blur-xl p-3 sm:p-5"
+                    className="fixed inset-0 p-3 sm:p-5"
                     style={{ backgroundColor: overlayBackground, zIndex }}
                     onClick={(event) => handleBackdropClose(event, handleClose)}
                 >
                     <motion.div
                         {...panelMotion}
                         transition={shellTransition}
-                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${subviewPanelBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
+                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${subviewPanelBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)] relative`}
                         onClick={(event) => event.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6">
+                        {/* Decorative background blobs */}
+                        <div className="absolute inset-0 pointer-events-none z-0">
+                            <div 
+                                className={`absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                                style={{ backgroundColor: theme?.accentColor || (isDaylight ? '#60a5fa' : '#3b82f6') }} 
+                            />
+                            <div 
+                                className={`absolute -bottom-24 -left-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                                style={{ backgroundColor: theme?.secondaryColor || theme?.accentColor || (isDaylight ? '#c084fc' : '#a855f7') }} 
+                            />
+                        </div>
+                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6 relative z-10">
                             <div className="flex items-center gap-3 min-w-0">
                                 <button
                                     type="button"
@@ -859,7 +870,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             </div>
                             {action ?? null}
                         </div>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6 relative z-10">
                             <div className="space-y-8">
                                 {children}
                             </div>
@@ -927,7 +938,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             exit={{ opacity: 0 }}
             transition={shellTransition}
             data-folia-keyboard-window="true"
-            className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-xl px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+            className="fixed inset-0 z-[100] flex items-center justify-center px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
             style={{ backgroundColor: overlayBackground }}
             onClick={(event) => handleBackdropClose(event, onClose)}
         >
@@ -937,6 +948,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 className={`${glassBg} border ${borderColor} p-8 rounded-3xl max-w-lg w-full relative shadow-2xl overflow-hidden flex flex-col max-h-[85vh]`}
                 onClick={(event) => event.stopPropagation()}
             >
+                {/* Decorative background blobs */}
+                <div className="absolute inset-0 pointer-events-none z-0">
+                    <div 
+                        className={`absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                        style={{ backgroundColor: theme?.accentColor || (isDaylight ? '#60a5fa' : '#3b82f6') }} 
+                    />
+                    <div 
+                        className={`absolute -bottom-24 -left-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                        style={{ backgroundColor: theme?.secondaryColor || theme?.accentColor || (isDaylight ? '#c084fc' : '#a855f7') }} 
+                    />
+                </div>
+                
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 opacity-30 hover:opacity-100 rounded-full bg-white/5 p-1 transition-colors z-20"
@@ -946,7 +969,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
 
                 {/* Header / Tabs */}
-                <h2 className="text-2xl font-bold mb-6 flex items-center gap-4 shrink-0" style={{ color: 'var(--text-primary)' }}>
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-4 shrink-0 relative z-10" style={{ color: 'var(--text-primary)' }}>
                     <span
                         className={`cursor-pointer transition-opacity ${activeTab === 'help' ? 'opacity-100' : 'opacity-40 hover:opacity-80'}`}
                         onClick={() => setActiveTab('help')}
@@ -962,7 +985,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </span>
                 </h2>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 relative z-10">
                     <AnimatePresence mode="wait" initial={false}>
                     {activeTab === 'help' ? (
                         <motion.div

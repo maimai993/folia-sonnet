@@ -2739,7 +2739,7 @@ export default function App() {
             />
 
             <AppDialogs model={appDialogsModel} />
-            <UserGuideModal />
+            <UserGuideModal theme={themeController.activeTheme} />
         </AppShell>
     );
 }
