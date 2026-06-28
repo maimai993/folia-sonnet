@@ -784,8 +784,12 @@ function setupCorsBypassHandlers() {
     try {
       const parsedUrl = new URL(originUrl);
       const hostname = parsedUrl.hostname;
-      isTargetDomain = hostname === 'qq.com' || hostname.endsWith('.qq.com') ||
-                       hostname === 'kugou.com' || hostname.endsWith('.kugou.com');
+      isTargetDomain =
+        hostname === 'qq.com' ||
+        hostname.endsWith('.qq.com') ||
+        hostname === 'kugou.com' ||
+        hostname.endsWith('.kugou.com') ||
+        hostname === 'amll-ttml-db.stevexmh.net';
     } catch (error) {
       isTargetDomain = false;
     }
@@ -2347,6 +2351,8 @@ function createWindow(options = {}) {
     minHeight: 100,
     frame: false,
     transparent: useTransparentWindow,
+    hasShadow: !useTransparentWindow,
+    thickFrame: process.platform === 'win32' ? !useTransparentWindow : undefined,
     backgroundColor: (useTransparentWindow || enableNativeBlur) ? '#00000000' : '#09090b',
     vibrancy: (!useTransparentWindow && enableNativeBlur) && process.platform === 'darwin' ? 'fullscreen-ui' : undefined,
     backgroundMaterial: (!useTransparentWindow && enableNativeBlur) && process.platform === 'win32' ? 'acrylic' : undefined,

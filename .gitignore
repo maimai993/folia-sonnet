@@ -41,3 +41,5 @@ test-results/
 .codex-remote-attachments
 test/manual/lyric-output/*
 test/manual/lyric-audit-output/*    
+.agents/
+skills-lock.json
