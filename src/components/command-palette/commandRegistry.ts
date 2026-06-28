@@ -1,4 +1,4 @@
-import { PlayerState, type HomeViewTab, type VisualizerMode, type VisualizerBackgroundMode, type MonetBackgroundTuning } from '../../types';
+import { PlayerState, type HomeViewTab, type SongResult, type VisualizerMode, type VisualizerBackgroundMode, type MonetBackgroundTuning } from '../../types';
 import type { PanelTab } from '../UnifiedPanel';
 import type {
     CommandPaletteCommand,
@@ -13,6 +13,27 @@ import type {
 const MAX_COMMAND_MATCHES = 10;
 
 const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+
+const getSongArtistLabel = (song: SongResult) => {
+    const artists = song.ar?.length ? song.ar : song.artists;
+    return artists?.map(artist => artist.name).filter(Boolean).join(', ') || '';
+};
+
+const getSongAlbumLabel = (song: SongResult) => song.al?.name || song.album?.name || '';
+
+const buildQueueSearchText = (song: SongResult, index: number) => [
+    String(index + 1),
+    song.name,
+    getSongArtistLabel(song),
+    getSongAlbumLabel(song),
+    ...(song.alia ?? []),
+    ...(song.tns ?? []),
+].filter(Boolean).join(' ');
+
+const buildQueueSongDescription = (song: SongResult, index: number, context: CommandPaletteContext) => {
+    const metadata = [getSongArtistLabel(song), getSongAlbumLabel(song)].filter(Boolean).join(' · ');
+    return metadata || context.t('commandPalette.queueIndex', 'Queue #{{index}}').replace('{{index}}', String(index + 1));
+};
 
 const getSearchSourceLabel = (sourceTab: HomeViewTab, context: CommandPaletteContext) => {
     if (sourceTab === 'local') {
@@ -99,6 +120,25 @@ const createSearchCommand = (
     execute: (input, context) => runSearch(input, resolveSource(context), context),
 });
 
+const createQueueSearchCommand = (): CommandPaletteCommand => ({
+    id: 'queue',
+    group: 'playback',
+    title: 'Queue',
+    description: 'Search the current play queue',
+    keywords: ['queue', '播放队列', '队列搜索', 'duilie', 'duiliesousuo', 'dl', 'dlss'],
+    placeholder: 'queue song name / artist / index',
+    requiresInput: true,
+    getPreview: (input, context) => {
+        const trimmedInput = input.trim();
+        if (!trimmedInput) {
+            return context.t('commandPalette.previewQueueSearchEmpty', 'Type a song name, artist, album, or queue index');
+        }
+        return context.t('commandPalette.previewQueueSearch', 'Search current queue: {{query}}')
+            .replace('{{query}}', trimmedInput);
+    },
+    execute: () => false,
+});
+
 const createSettingsCommand = (
     id: string,
     title: string,
@@ -176,6 +216,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createSearchCommand('search-local', 'Search local songs', 'Search local library', ['local', 'local search', 'search local', '本地', '本地音乐', 'bendi', 'bendiyinyue', 'bd', 'bdyy'], () => 'local'),
     createSearchCommand('search-navidrome', 'Search Navidrome songs', 'Search Navidrome library', ['navi', 'navidrome', 'search navidrome', '导航', '服务器', 'fuwuqi', 'fwq'], () => 'navidrome'),
     createSearchCommand('search-netease', 'Search NetEase songs', 'Search NetEase Cloud Music', ['netease', 'cloud', 'search netease', '网易云', '网抑云', 'wangyiyun', 'wyy'], () => 'playlist'),
+    createQueueSearchCommand(),
 
     createSettingsCommand('settings-help', 'Open Help', 'Open help and shortcuts', ['help', '帮助', 'bangzhu', 'bz'], 'help'),
     createSettingsCommand('settings-options', 'Open Options', 'Open the options center', ['settings', 'options', '设置', '选项', 'shezhi', 'xuanxiang', 'sz', 'xx'], 'options'),
@@ -395,7 +436,60 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     },
 ];
 
-export const getCommandPaletteMatches = (query: string, context?: CommandPaletteContext): CommandPaletteMatch[] => {
+export const getQueueSongMatches = (query: string, context: CommandPaletteContext): CommandPaletteMatch[] => {
+    const normalizedQuery = normalize(query);
+
+    if (!normalizedQuery) {
+        return context.playQueue.slice(0, MAX_COMMAND_MATCHES).map((song, index) => ({
+            command: createQueueSongCommand(song, index, context),
+            score: 100 - index,
+            input: '',
+        }));
+    }
+
+    return context.playQueue
+        .map((song, index) => {
+            const normalizedSearchText = normalize(buildQueueSearchText(song, index));
+            if (!normalizedSearchText.includes(normalizedQuery)) {
+                return null;
+            }
+
+            const startsWithQuery = normalizedSearchText.startsWith(normalizedQuery)
+                || normalize(song.name).startsWith(normalizedQuery)
+                || String(index + 1).startsWith(normalizedQuery);
+
+            return {
+                command: createQueueSongCommand(song, index, context),
+                score: startsWithQuery ? 120 - index : 80 - index,
+                input: query,
+            };
+        })
+        .filter((match): match is CommandPaletteMatch => Boolean(match))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, MAX_COMMAND_MATCHES);
+};
+
+const createQueueSongCommand = (
+    song: SongResult,
+    index: number,
+    context: CommandPaletteContext
+): CommandPaletteCommand => ({
+    id: `queue-song-${index}-${song.id}`,
+    group: 'playback',
+    title: song.name,
+    description: buildQueueSongDescription(song, index, context),
+    keywords: [`#${index + 1}`],
+    execute: async (_input, commandContext) => {
+        await commandContext.playSong(song, commandContext.playQueue);
+        return true;
+    },
+});
+
+export const getCommandPaletteMatches = (
+    query: string,
+    context?: CommandPaletteContext,
+    recentCommandIds: string[] = []
+): CommandPaletteMatch[] => {
     const normalizedQuery = normalize(query);
 
     const filteredCommands = COMMAND_PALETTE_COMMANDS.filter(command => {
@@ -421,9 +515,15 @@ export const getCommandPaletteMatches = (query: string, context?: CommandPalette
     });
 
     if (!normalizedQuery) {
-        return filteredCommands.slice(0, MAX_COMMAND_MATCHES).map((command, index) => ({
+        const recentCommands = recentCommandIds
+            .map(commandId => filteredCommands.find(command => command.id === commandId))
+            .filter((command): command is CommandPaletteCommand => Boolean(command) && !command.requiresInput);
+        const recentCommandIdSet = new Set(recentCommands.map(command => command.id));
+        const defaultCommands = filteredCommands.filter(command => !recentCommandIdSet.has(command.id));
+
+        return [...recentCommands, ...defaultCommands].slice(0, MAX_COMMAND_MATCHES).map((command, index) => ({
             command,
-            score: 100 - index,
+            score: recentCommandIdSet.has(command.id) ? 130 - index : 100 - index,
             input: '',
         }));
     }

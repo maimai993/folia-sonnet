@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { SearchReturnView } from '../../stores/useSearchNavigationStore';
-import type { HomeViewTab, LocalSong, PlayerState, VisualizerMode, VisualizerBackgroundMode, MonetBackgroundTuning } from '../../types';
+import type { HomeViewTab, LocalSong, PlayerState, SongResult, VisualizerMode, VisualizerBackgroundMode, MonetBackgroundTuning } from '../../types';
 import type { PanelTab } from '../UnifiedPanel';
 import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/useSettingsUiStore';
 
@@ -56,6 +56,8 @@ export type CommandPaletteContext = {
     handleNextTrack: () => void;
     handlePrevTrack: () => void;
     shuffleQueue: () => void;
+    playQueue: SongResult[];
+    playSong: (song: SongResult, queue?: SongResult[]) => void | Promise<void>;
     setVisualizerMode: (mode: VisualizerMode) => void;
     setVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
     setMonetBackgroundTuning: (patch: Partial<MonetBackgroundTuning>) => void;

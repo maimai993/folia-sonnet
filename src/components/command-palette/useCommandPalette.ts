@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getCommandPaletteMatches, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
+import { getCommandPaletteMatches, getQueueSongMatches, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
+import { isRecordableRecentCommand, readRecentCommandIds, recordRecentCommandId } from './recentCommands';
 import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch } from './types';
 
 // src/components/command-palette/useCommandPalette.ts
@@ -35,11 +36,14 @@ export const useCommandPalette = ({
     const [activeIndex, setActiveIndex] = useState(0);
     const [activeCommand, setActiveCommand] = useState<CommandPaletteCommand | null>(null);
     const [isExecuting, setIsExecuting] = useState(false);
+    const [recentCommandIds, setRecentCommandIds] = useState<string[]>(() => readRecentCommandIds());
 
     const matches = useMemo(() => {
         let list: CommandPaletteMatch[];
         if (!activeCommand) {
-            list = getCommandPaletteMatches(matchQuery, context);
+            list = getCommandPaletteMatches(matchQuery, context, recentCommandIds);
+        } else if (activeCommand.id === 'queue') {
+            list = getQueueSongMatches(matchQuery, context);
         } else {
             const inputCommands = COMMAND_PALETTE_COMMANDS.filter(cmd => cmd.requiresInput);
             const activeMatch: CommandPaletteMatch = {
@@ -71,7 +75,7 @@ export const useCommandPalette = ({
                 previewText,
             };
         });
-    }, [activeCommand, matchQuery, context]);
+    }, [activeCommand, matchQuery, context, recentCommandIds]);
 
     const activePreview = useMemo(() => {
         const match = matches[activeIndex];
@@ -125,6 +129,9 @@ export const useCommandPalette = ({
         try {
             const didExecute = await match.command.execute(input, context);
             if (didExecute) {
+                if (isRecordableRecentCommand(match.command, COMMAND_PALETTE_COMMANDS)) {
+                    setRecentCommandIds(currentCommandIds => recordRecentCommandId(match.command.id, currentCommandIds));
+                }
                 close();
             }
             return didExecute;
