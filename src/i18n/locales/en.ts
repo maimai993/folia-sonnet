@@ -802,12 +802,27 @@ export default {
       "title": "Instant Search",
       "desc": "Press any key in a song list to instantly start searching."
     },
+    "posterSearch": {
+      "entryTitle": "Start from a poster wall",
+      "entryDesc": "When a song poster wall is focused, type letters, numbers, or Chinese characters to search the current list.",
+      "escapeTitle": "Close search",
+      "escapeDesc": "Press Esc to close the poster-wall search panel."
+    },
+    "theme": {
+      "title": "Color themes",
+      "desc": "Customize Folia with your own light and dark color themes, or generate an AI theme from the current song.",
+      "customDesc": "Open Theme Park from visual settings or the command palette to edit and save custom light and dark colors.",
+      "aiDesc": "When AI theme settings are configured, Folia can create song-aware colors and optionally auto-apply cached song themes."
+    },
     "gotIt": "Got it",
     "showGuide": "Show User Guide",
     "next": "Next",
     "back": "Back",
     "page2Title": "Commands & Shortcuts",
     "page2Subtitle": "Master shortcuts for the best experience.",
+    "shortcutsPageTitle": "Player shortcuts",
+    "shortcutsPageSubtitle": "Keyboard controls available on the player page.",
+    "commandsPageTitle": "Command palette",
     "shortcuts": "Shortcuts",
     "commands": "All Commands",
     "commandsDesc": "You can trigger commands by typing English, Chinese characters, or Pinyin."

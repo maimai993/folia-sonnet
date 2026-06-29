@@ -805,12 +805,27 @@ export default {
       "title": "全局搜索",
       "desc": "在任意歌曲海报墙中按下任意字母或数字键，即可直接开始搜索当前列表。"
     },
+    "posterSearch": {
+      "entryTitle": "从海报墙开始",
+      "entryDesc": "当歌曲海报墙处于当前视图时，直接输入字母、数字或中文字符即可搜索当前列表。",
+      "escapeTitle": "关闭搜索",
+      "escapeDesc": "按下 Esc 可以关闭海报墙搜索面板。"
+    },
+    "theme": {
+      "title": "配色主题",
+      "desc": "可以手动定制亮色 / 暗色配色，也可以根据当前歌曲生成 AI 主题。",
+      "customDesc": "从视觉设置或命令面板打开 Theme Park，编辑并保存自定义亮色与暗色配色。",
+      "aiDesc": "配置 AI 主题设置后，Folia 可以根据歌曲生成配色，并可自动应用已缓存的歌曲主题。"
+    },
     "gotIt": "我知道了",
     "showGuide": "使用指南",
     "next": "下一页",
     "back": "返回",
     "page2Title": "命令与快捷键",
     "page2Subtitle": "在播放页面可以使用如下快捷操作",
+    "shortcutsPageTitle": "播放页快捷键",
+    "shortcutsPageSubtitle": "播放页面可用的键盘操作",
+    "commandsPageTitle": "命令面板",
     "shortcuts": "播放页快捷键",
     "commands": "全部命令",
     "commandsDesc": "输入任意命令的拼音、汉字或英文均可快速触发。"
