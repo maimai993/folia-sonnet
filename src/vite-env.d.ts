@@ -31,6 +31,13 @@ declare global {
     bodyText: string;
   }
 
+  interface ElectronNeteaseApiStatus {
+    status: 'starting' | 'running' | 'error';
+    port: number | null;
+    error: string | null;
+    updatedAt: number;
+  }
+
   interface ElectronTaskbarControlState {
     hasActiveTrack: boolean;
     canGoPrevious: boolean;
@@ -456,6 +463,8 @@ declare global {
         },
       ) => Promise<ElectronLyricProxyResponse>;
       getNeteasePort: () => Promise<number>;
+      getNeteaseApiStatus: () => Promise<ElectronNeteaseApiStatus>;
+      onNeteaseApiStatusChanged: (callback: (status: ElectronNeteaseApiStatus) => void) => () => void;
       minimizeWindow: () => Promise<boolean>;
       toggleMaximizeWindow: () => Promise<boolean>;
       closeWindow: () => Promise<boolean>;

@@ -21,6 +21,7 @@ export default {
     "noSongPlaying": "No song is playing",
     "enterSongId": "Enter Song ID or Import File",
     "apiNotConfigured": "API Base URL not configured.",
+    "neteaseApiStartupFailed": "NetEase API failed to start. Some online features are unavailable.",
     "searchError": "Search error.",
     "generatingTheme": "AI is dreaming up a theme...",
     "themeApplied": "Applied theme: {{themeName}}",

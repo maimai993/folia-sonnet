@@ -1879,6 +1879,39 @@ const { serveNcmApi } = require('@neteasecloudmusicapienhanced/api/server');
 
 const net = require('net');
 let assignedPort = 30000; // default fallback
+const NETEASE_API_STATUS_CHANNEL = 'netease-api-status-changed';
+let neteaseApiStatus = {
+  status: 'starting',
+  port: null,
+  error: null,
+  updatedAt: Date.now(),
+};
+
+function serializeError(error) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+
+  return 'Unknown error';
+}
+
+function updateNeteaseApiStatus(nextStatus) {
+  neteaseApiStatus = {
+    ...neteaseApiStatus,
+    ...nextStatus,
+    updatedAt: Date.now(),
+  };
+
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send(NETEASE_API_STATUS_CHANNEL, neteaseApiStatus);
+    }
+  });
+}
 
 async function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -1925,13 +1958,16 @@ async function initializeNcmApiRuntime() {
 }
 
 async function startApi() {
+  updateNeteaseApiStatus({ status: 'starting', port: null, error: null });
   try {
     const freePort = await getFreePort();
     await initializeNcmApiRuntime();
     await serveNcmApi({ port: freePort });
     assignedPort = freePort;
+    updateNeteaseApiStatus({ status: 'running', port: assignedPort, error: null });
     console.log('Netease API started on port', assignedPort);
   } catch (e) {
+    updateNeteaseApiStatus({ status: 'error', port: null, error: serializeError(e) });
     console.error('Failed to start Netease API', e);
   }
 }
@@ -2796,6 +2832,10 @@ ipcMain.handle('clear-audio-cache', async () => {
 // Retrieve dynamic port of local Netease API Server
 ipcMain.handle('get-netease-port', () => {
   return assignedPort;
+});
+
+ipcMain.handle('get-netease-api-status', () => {
+  return neteaseApiStatus;
 });
 
 ipcMain.handle('window-minimize', () => {

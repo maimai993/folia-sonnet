@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('electron', {
     generateTheme: (lyricsText, options) => ipcRenderer.invoke('generate-theme', lyricsText, options),
     fetchLyricProxy: (url, init) => ipcRenderer.invoke('lyric-proxy-fetch', url, init),
     getNeteasePort: () => ipcRenderer.invoke('get-netease-port'),
+    getNeteaseApiStatus: () => ipcRenderer.invoke('get-netease-api-status'),
+    onNeteaseApiStatusChanged: (callback) => {
+        const listener = (_event, status) => callback(status);
+        ipcRenderer.on('netease-api-status-changed', listener);
+        return () => ipcRenderer.removeListener('netease-api-status-changed', listener);
+    },
     minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
     toggleMaximizeWindow: () => ipcRenderer.invoke('window-toggle-maximize'),
     closeWindow: () => ipcRenderer.invoke('window-close'),

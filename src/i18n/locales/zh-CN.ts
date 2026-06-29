@@ -21,6 +21,7 @@ export default {
     "noSongPlaying": "当前没有正在播放的歌曲",
     "enterSongId": "请输入歌曲ID或导入文件",
     "apiNotConfigured": "API基础URL未配置。",
+    "neteaseApiStartupFailed": "网易云接口启动失败，部分在线功能不可用",
     "searchError": "搜索错误。",
     "generatingTheme": "少女祈祷中...",
     "themeApplied": "已应用主题: {{themeName}}",

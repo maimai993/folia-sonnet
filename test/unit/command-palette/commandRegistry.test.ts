@@ -26,7 +26,6 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     setMonetBackgroundTuning: vi.fn(),
     toggleTransparentBackground: vi.fn(),
     toggleDaylightMode: vi.fn(),
-    toggleAlternativeLyricSources: vi.fn(),
     enableAlternativeLyricSources: false,
     runAutoMatchBestLyric: vi.fn(async () => true),
     setIsUserGuideModalOpen: vi.fn(),

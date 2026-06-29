@@ -39,6 +39,7 @@ import { useAppNavigation } from './hooks/useAppNavigation';
 import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useElectronPlaybackBridge } from './hooks/useElectronPlaybackBridge';
+import { useElectronNeteaseApiStatus } from './hooks/useElectronNeteaseApiStatus';
 import { useElectronVideoExportController } from './hooks/useElectronVideoExportController';
 import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
@@ -113,6 +114,7 @@ export default function App() {
     // UI State
     const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
+    useElectronNeteaseApiStatus(setStatusMsg, t);
 
     // Auto-close the player panel when leaving the player view
     // (Effect moved to after useAppNavigation where currentView is defined)
@@ -2738,7 +2740,7 @@ export default function App() {
             />
 
             <AppDialogs model={appDialogsModel} />
-            <UserGuideModal theme={themeController.activeTheme} />
+            <UserGuideModal theme={theme} />
         </AppShell>
     );
 }

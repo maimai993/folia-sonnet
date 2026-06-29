@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import { Command, Keyboard, Search, X, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
@@ -25,7 +26,7 @@ export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) =>
 
     const cardBg = isDaylight ? 'bg-zinc-50 border border-zinc-100 hover:bg-zinc-100' : 'bg-zinc-800/50 border border-zinc-700/50 hover:bg-zinc-800';
 
-    const pageVariants = {
+    const pageVariants: Variants = {
         initial: (direction: number) => ({
             x: direction > 0 ? 30 : -30,
             opacity: 0,
