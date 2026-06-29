@@ -805,7 +805,7 @@ export default {
       "desc": "在任意歌曲海报墙中按下任意字母或数字键，即可直接开始搜索当前列表。"
     },
     "gotIt": "我知道了",
-    "showGuide": "查看用户指引",
+    "showGuide": "使用指南",
     "next": "下一页",
     "back": "返回",
     "page2Title": "命令与快捷键",

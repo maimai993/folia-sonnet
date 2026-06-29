@@ -60,7 +60,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 }) => {
     const { t } = useTranslation();
     const inputRef = useRef<HTMLInputElement | null>(null);
-    const panelBg = isDaylight ? 'bg-white/90 text-zinc-950' : 'bg-zinc-950/90 text-white';
+    const panelBg = isDaylight ? 'bg-white/70 text-zinc-950' : 'bg-zinc-950/70 text-white';
     const itemActiveBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
     const itemIdleBg = isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/5';
 
@@ -140,7 +140,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                     onMouseDown={onClose}
                 >
                     <motion.div
-                        className={`w-full max-w-2xl overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-2xl ${panelBg}`}
+                        className={`w-full max-w-2xl overflow-hidden rounded-3xl border shadow-2xl ${panelBg}`}
                         style={{
                             borderColor: isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)',
                             color: 'var(--text-primary)',
@@ -167,11 +167,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                             )}
                             {activeCommand && (
                                 <div
-                                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium border transition-all ${
-                                        isDaylight
-                                            ? 'bg-zinc-100 border-zinc-200 text-zinc-800'
-                                            : 'bg-zinc-800/80 border-zinc-700 text-zinc-200'
-                                    }`}
+                                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium border transition-all ${isDaylight
+                                        ? 'bg-zinc-100 border-zinc-200 text-zinc-800'
+                                        : 'bg-zinc-800/80 border-zinc-700 text-zinc-200'
+                                        }`}
                                     style={{ borderColor: isDaylight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.15)' }}
                                 >
                                     <span>{t(`commandPalette.commands.${activeCommand.id}.title`, activeCommand.title)}</span>
@@ -273,9 +272,8 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                                 <div className="flex items-center gap-2">
                                                     <span className="truncate text-sm font-medium">{title}</span>
                                                     <span
-                                                        className={`shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] ${
-                                                            isDaylight ? 'bg-black/8 text-zinc-700' : 'bg-white/10 text-zinc-200'
-                                                        }`}
+                                                        className={`shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] ${isDaylight ? 'bg-black/8 text-zinc-700' : 'bg-white/10 text-zinc-200'
+                                                            }`}
                                                     >
                                                         {commandHint}
                                                     </span>

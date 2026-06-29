@@ -133,10 +133,21 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                     <motion.div
                         {...panelMotion}
                         transition={shellTransition}
-                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${subviewPanelBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
+                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${subviewPanelBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)] relative`}
                         onClick={(event) => event.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6">
+                        {/* Decorative background blobs */}
+                        <div className="absolute inset-0 pointer-events-none z-0">
+                            <div 
+                                className={`absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                                style={{ backgroundColor: theme?.accentColor || (isDaylight ? '#60a5fa' : '#3b82f6') }} 
+                            />
+                            <div 
+                                className={`absolute -bottom-24 -left-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                                style={{ backgroundColor: theme?.secondaryColor || theme?.accentColor || (isDaylight ? '#c084fc' : '#a855f7') }} 
+                            />
+                        </div>
+                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6 relative z-10">
                             <div className="flex items-center gap-3 min-w-0">
                                 <button
                                     type="button"
@@ -177,7 +188,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6 relative z-10">
                             <div className="space-y-4">
                                 <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
                                     <div className="space-y-1">
