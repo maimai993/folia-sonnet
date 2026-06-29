@@ -460,7 +460,7 @@ const Home: React.FC<HomeProps> = ({
                     <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto z-20 relative p-4 md:p-8 gap-y-4 md:gap-y-0">
                             {/* Left: Title & Help */}
                             <div className="flex items-center justify-start order-1 md:order-none">
-                                <h1 className="text-2xl font-bold tracking-tight opacity-90 flex items-center gap-3">
+                                <h1 className="text-2xl font-bold tracking-tight opacity-90 flex items-center gap-3 select-none">
                                     Folia
                                 </h1>
                                 <button
@@ -535,7 +535,7 @@ const Home: React.FC<HomeProps> = ({
                             </div>
 
                             {/* Center: Tab Switcher */}
-                            <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1">
+                            <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1 select-none">
                                 <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
                                     <div className="inline-flex items-center gap-0">
                                         {homeTabs.map((tab) => {
@@ -554,7 +554,7 @@ const Home: React.FC<HomeProps> = ({
                                                             transition={{ type: 'spring', stiffness: 460, damping: 36, mass: 0.9 }}
                                                         />
                                                     )}
-                                                    <span className="relative z-10">{tab.label}</span>
+                                                    <span className="relative z-10 select-none">{tab.label}</span>
                                                 </button>
                                             );
                                         })}
