@@ -14,6 +14,7 @@ import { createCopySongInfoSuccessHandler } from './components/app/dialogs/creat
 import { buildSettingsDialogModel } from './components/app/dialogs/buildSettingsDialogModel';
 import AppOverlays from './components/app/overlays/AppOverlays';
 import { UserGuideModal } from './components/modal/UserGuideModal';
+import { USER_GUIDE_AUTO_OPEN_VERSION } from './components/modal/userGuideContent';
 import { buildAppDialogsModel } from './components/app/dialogs/buildAppDialogsModel';
 import { buildHomeModel } from './components/app/home/buildHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
@@ -153,7 +154,11 @@ export default function App() {
     })));
 
     useEffect(() => {
-        if (typeof __APP_VERSION__ !== 'undefined' && lastSeenGuideVersion !== __APP_VERSION__) {
+        if (
+            typeof __APP_VERSION__ !== 'undefined' &&
+            USER_GUIDE_AUTO_OPEN_VERSION === __APP_VERSION__ &&
+            lastSeenGuideVersion !== __APP_VERSION__
+        ) {
             setIsUserGuideModalOpen(true);
             setLastSeenGuideVersion(__APP_VERSION__);
         }
