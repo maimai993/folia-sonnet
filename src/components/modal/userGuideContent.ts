@@ -11,7 +11,7 @@ export type UserGuideShortcut = {
 export type GuidePage = 1 | 2 | 3 | 4 | 5;
 
 export const USER_GUIDE_PAGE_COUNT = 5;
-export const USER_GUIDE_AUTO_OPEN_VERSION: string | null = '0.5.17';
+export const USER_GUIDE_AUTO_OPEN_VERSION: string | null = '0.5.16';
 
 export const PLAYER_PAGE_SHORTCUTS: UserGuideShortcut[] = [
     {
