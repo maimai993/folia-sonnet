@@ -30,6 +30,106 @@ const dedupeSongIds = (songIds: string[]) => {
     return deduped;
 };
 
+const DUPLICATE_IMPORT_ROOT_SUFFIX = /\s\(\d+\)$/;
+
+const getRootFolderName = (song: LocalSong): string => {
+    const pathLike = song.filePath || song.folderName || '';
+    return pathLike.split('/')[0] || '';
+};
+
+const getDuplicateImportRootBase = (rootFolderName: string): string => (
+    rootFolderName.replace(DUPLICATE_IMPORT_ROOT_SUFFIX, '')
+);
+
+const getRelativePathWithoutRoot = (song: LocalSong): string | null => {
+    if (!song.filePath) {
+        return null;
+    }
+
+    const rootFolderName = getRootFolderName(song);
+    return rootFolderName && song.filePath.startsWith(`${rootFolderName}/`)
+        ? song.filePath.slice(rootFolderName.length + 1)
+        : song.filePath;
+};
+
+const getDuplicateImportSongKey = (song: LocalSong): string | null => {
+    const relativePath = getRelativePathWithoutRoot(song);
+    if (!relativePath || typeof song.fileSize !== 'number' || typeof song.fileLastModified !== 'number') {
+        return null;
+    }
+
+    return `${getDuplicateImportRootBase(getRootFolderName(song))}::${relativePath}::${song.fileSize}::${song.fileLastModified}`;
+};
+
+const isPreferredDuplicateImportCanonical = (candidate: LocalSong, current: LocalSong): boolean => {
+    const candidateRoot = getRootFolderName(candidate);
+    const currentRoot = getRootFolderName(current);
+    const candidateLooksDuplicated = DUPLICATE_IMPORT_ROOT_SUFFIX.test(candidateRoot);
+    const currentLooksDuplicated = DUPLICATE_IMPORT_ROOT_SUFFIX.test(currentRoot);
+
+    if (candidateLooksDuplicated !== currentLooksDuplicated) {
+        return !candidateLooksDuplicated;
+    }
+
+    if ((candidate.addedAt || 0) !== (current.addedAt || 0)) {
+        return (candidate.addedAt || 0) < (current.addedAt || 0);
+    }
+
+    return candidate.id.localeCompare(current.id) < 0;
+};
+
+const buildDuplicateImportCanonicalSongIds = (songs: LocalSong[]): Map<string, string> => {
+    const canonicalSongs = new Map<string, LocalSong>();
+
+    songs.forEach(song => {
+        const duplicateKey = getDuplicateImportSongKey(song);
+        if (!duplicateKey) {
+            return;
+        }
+
+        const currentCanonical = canonicalSongs.get(duplicateKey);
+        if (!currentCanonical || isPreferredDuplicateImportCanonical(song, currentCanonical)) {
+            canonicalSongs.set(duplicateKey, song);
+        }
+    });
+
+    return new Map(Array.from(canonicalSongs.entries()).map(([duplicateKey, song]) => [duplicateKey, song.id]));
+};
+
+const repairPlaylistSongIds = (
+    songIds: string[],
+    validSongById: Map<string, LocalSong>,
+    duplicateCanonicalSongIds: Map<string, string>
+): { songIds: string[]; changed: boolean; } => {
+    const seen = new Set<string>();
+    const repairedSongIds: string[] = [];
+    let changed = false;
+
+    songIds.forEach(songId => {
+        const song = validSongById.get(songId);
+        if (!song) {
+            changed = true;
+            return;
+        }
+
+        const duplicateKey = getDuplicateImportSongKey(song);
+        const canonicalSongId = duplicateKey ? duplicateCanonicalSongIds.get(duplicateKey) || songId : songId;
+        if (canonicalSongId !== songId) {
+            changed = true;
+        }
+
+        if (seen.has(canonicalSongId)) {
+            changed = true;
+            return;
+        }
+
+        seen.add(canonicalSongId);
+        repairedSongIds.push(canonicalSongId);
+    });
+
+    return { songIds: repairedSongIds, changed };
+};
+
 const normalizeSongIdRef = (value: LegacyPlaylistSongRef): string | null => {
     if (typeof value === 'string') {
         return value;
@@ -116,15 +216,17 @@ const persistPlaylists = async (playlists: LocalPlaylist[]) => {
 export const getLocalPlaylists = async (): Promise<LocalPlaylist[]> => {
     const cached = await getFromCache<LegacyLocalPlaylist[]>(LOCAL_PLAYLISTS_CACHE_KEY);
     const cachedPlaylists = Array.isArray(cached) ? cached : [];
-    const validSongIds = new Set((await getLocalSongs()).map(song => song.id));
+    const localSongs = await getLocalSongs();
+    const validSongById = new Map(localSongs.map(song => [song.id, song]));
+    const duplicateCanonicalSongIds = buildDuplicateImportCanonicalSongIds(localSongs);
     let shouldPersist = cachedPlaylists.some(playlistNeedsNormalization);
     const playlists = cachedPlaylists.map(normalizePlaylist).map(playlist => {
-        const prunedSongIds = playlist.songIds.filter(songId => validSongIds.has(songId));
-        if (prunedSongIds.length !== playlist.songIds.length) {
+        const repaired = repairPlaylistSongIds(playlist.songIds, validSongById, duplicateCanonicalSongIds);
+        if (repaired.changed) {
             shouldPersist = true;
             return {
                 ...playlist,
-                songIds: prunedSongIds,
+                songIds: repaired.songIds,
             };
         }
 

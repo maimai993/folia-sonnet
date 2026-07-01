@@ -141,6 +141,29 @@ async function getImportDirectoryHandle(expectedRootName?: string): Promise<File
     return await window.showDirectoryPicker();
 }
 
+async function findImportedRootForHandle(dirHandle: FileSystemDirectoryHandle): Promise<string | null> {
+    const dirHandles = await getDirHandles();
+    const selectedHandle = dirHandle as FileSystemDirectoryHandle & {
+        isSameEntry?: (other: FileSystemHandle) => Promise<boolean>;
+    };
+
+    if (!selectedHandle.isSameEntry) {
+        return null;
+    }
+
+    for (const [rootFolderName, persistedHandle] of Object.entries(dirHandles)) {
+        try {
+            if (await selectedHandle.isSameEntry(persistedHandle)) {
+                return rootFolderName;
+            }
+        } catch (error) {
+            console.warn(`[LocalMusic][Import] Failed to compare imported directory with "${rootFolderName}":`, error);
+        }
+    }
+
+    return null;
+}
+
 // Generate UUID for local songs
 function generateId(): string {
     return `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1053,10 +1076,20 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
         const importStartedAt = performance.now();
 
         let rootFolderName = expectedRootName || dirHandle.name;
+        let isRescanningExistingRoot = Boolean(expectedRootName);
+
+        // If the picked directory is already imported, rescan the existing root instead of duplicating it.
+        if (!expectedRootName) {
+            const existingRootName = await findImportedRootForHandle(dirHandle);
+            if (existingRootName) {
+                rootFolderName = existingRootName;
+                isRescanningExistingRoot = true;
+                console.log(`[LocalMusic][Import] Directory "${dirHandle.name}" already imported as "${rootFolderName}", rescanning existing root.`);
+            }
+        }
 
         // If it's a new import (no expectedRootName), ensure the root folder name is unique
-        if (!expectedRootName) {
-            const { getLocalSongs } = await import('./db');
+        if (!expectedRootName && !isRescanningExistingRoot) {
             const allSongs = await getLocalSongs();
             
             // Collect existing root folder names (the part before the first '/')

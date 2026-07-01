@@ -14,6 +14,7 @@ import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist 
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
 import {
     GridViewCollectionDescriptor,
+    LocalGridViewCollectionDescriptor,
     isLocalGridViewCollection,
     isNavidromeGridViewCollection,
     resolveLocalGridViewCoverSource,
@@ -37,10 +38,36 @@ type StoredGridViewCollection = {
 };
 
 export const GRID_VIEW_ACTIVE_COLLECTION_KEY = 'folia_gridview_active_collection';
+const LOCAL_TRACK_COVER_OBJECT_URL_LIMIT = 120;
 
 const getPersistentCoverUrl = (url?: string) => (
     url && !url.startsWith('blob:') ? url : undefined
 );
+
+const resolveLiveLocalCollection = (
+    collection: LocalGridViewCollectionDescriptor,
+    legacyProps: LegacyHomeProps
+): LocalGridViewCollectionDescriptor | null => {
+    if (!collection.playlistId) {
+        return collection;
+    }
+
+    const playlist = legacyProps.localPlaylists.find(item => item.id === collection.playlistId);
+    if (!playlist) {
+        return null;
+    }
+
+    const validSongIds = new Set(legacyProps.localSongs.map(song => song.id));
+    const songIds = playlist.songIds.filter(songId => validSongIds.has(songId));
+
+    return {
+        ...collection,
+        name: playlist.name,
+        songIds,
+        trackCount: songIds.length,
+        isVirtual: playlist.isFavorite,
+    };
+};
 
 const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, children }) => {
     const activeGridViewCollection = useSettingsUiStore(state => state.activeGridViewCollection);
@@ -61,27 +88,34 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
     const selectedCollectionKey = selectedCollection
         ? `${selectedCollection.source}:${selectedCollection.type}:${String(selectedCollection.id)}`
         : '';
-    const displaySelectedCollection = useMemo(() => {
-        if (!selectedCollection) {
-            return null;
-        }
-
-        if (!isLocalGridViewCollection(selectedCollection)) {
+    const liveSelectedCollection = useMemo(() => {
+        if (!selectedCollection || !isLocalGridViewCollection(selectedCollection)) {
             return selectedCollection;
         }
 
+        return resolveLiveLocalCollection(selectedCollection, legacyProps);
+    }, [legacyProps.localPlaylists, legacyProps.localSongs, selectedCollection]);
+    const displaySelectedCollection = useMemo(() => {
+        if (!liveSelectedCollection) {
+            return null;
+        }
+
+        if (!isLocalGridViewCollection(liveSelectedCollection)) {
+            return liveSelectedCollection;
+        }
+
         const coverUrl = resolvedLocalCollectionCoverUrl
-            || getPersistentCoverUrl(selectedCollection.coverUrl)
-            || getPersistentCoverUrl(selectedCollection.coverImgUrl)
-            || getPersistentCoverUrl(selectedCollection.picUrl);
+            || getPersistentCoverUrl(liveSelectedCollection.coverUrl)
+            || getPersistentCoverUrl(liveSelectedCollection.coverImgUrl)
+            || getPersistentCoverUrl(liveSelectedCollection.picUrl);
 
         return {
-            ...selectedCollection,
+            ...liveSelectedCollection,
             coverUrl,
             coverImgUrl: coverUrl,
             picUrl: coverUrl,
         };
-    }, [resolvedLocalCollectionCoverUrl, selectedCollection]);
+    }, [liveSelectedCollection, resolvedLocalCollectionCoverUrl]);
 
     useEffect(() => {
         if (collectionHistory.length > 0) return;
@@ -216,8 +250,18 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         }
 
         if (isLocalGridViewCollection(selectedCollection)) {
-            const resolvedTracks = resolveLocalGridViewTracks(selectedCollection, legacyProps.localSongs) as UnifiedSong[];
-            const collectionCoverSource = resolveLocalGridViewCoverSource(selectedCollection, legacyProps.localSongs);
+            if (!liveSelectedCollection || !isLocalGridViewCollection(liveSelectedCollection)) {
+                closeGridView();
+                return;
+            }
+
+            const resolvedTracks = resolveLocalGridViewTracks(liveSelectedCollection, legacyProps.localSongs) as UnifiedSong[];
+            if (liveSelectedCollection.songIds.length > 0 && resolvedTracks.length === 0) {
+                closeGridView();
+                return;
+            }
+
+            const collectionCoverSource = resolveLocalGridViewCoverSource(liveSelectedCollection, legacyProps.localSongs);
             const createdUrls: string[] = [];
             let collectionCoverObjectUrl: string | null = null;
 
@@ -237,7 +281,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                     return track;
                 }
 
-                if (localData.embeddedCover) {
+                if (localData.embeddedCover && createdUrls.length < LOCAL_TRACK_COVER_OBJECT_URL_LIMIT) {
                     const url = URL.createObjectURL(localData.embeddedCover);
                     createdUrls.push(url);
                     return {
@@ -294,7 +338,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         return () => {
             cancelled = true;
         };
-    }, [legacyProps.localSongs, selectedCollection]);
+    }, [closeGridView, legacyProps.localSongs, liveSelectedCollection, selectedCollection]);
 
     const refreshNavidromePlaylists = useCallback(async () => {
         const config = getNavidromeConfig();
