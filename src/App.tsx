@@ -1563,6 +1563,28 @@ export default function App() {
         }
         return searchSourceTab;
     }, [currentSong, searchSourceTab]);
+    const toggleBrowserFullscreen = useCallback(async () => {
+        if (typeof window !== 'undefined' && window.electron?.toggleFullscreenWindow) {
+            return window.electron.toggleFullscreenWindow();
+        }
+
+        if (typeof document === 'undefined') {
+            return false;
+        }
+
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+                return true;
+            }
+
+            await document.documentElement.requestFullscreen();
+            return true;
+        } catch (error) {
+            console.warn('[CommandPalette] Failed to toggle browser fullscreen:', error);
+            return false;
+        }
+    }, []);
     const commandPaletteContext = useMemo(() => ({
         currentSearchSourceTab: currentSearchSourceTabInPalette,
         localSongs,
@@ -1572,6 +1594,7 @@ export default function App() {
         navigateToHome,
         navigateToPlayer,
         navigateToSearch,
+        toggleBrowserFullscreen,
         setHomeViewTab,
         setPanelTab,
         setIsPanelOpen,
@@ -1617,6 +1640,7 @@ export default function App() {
         shuffleQueue,
         submitSearch,
         t,
+        toggleBrowserFullscreen,
         toggleLoop,
         togglePlay,
         transparentPlayerBackground,

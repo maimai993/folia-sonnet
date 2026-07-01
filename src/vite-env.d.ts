@@ -467,6 +467,7 @@ declare global {
       onNeteaseApiStatusChanged: (callback: (status: ElectronNeteaseApiStatus) => void) => () => void;
       minimizeWindow: () => Promise<boolean>;
       toggleMaximizeWindow: () => Promise<boolean>;
+      toggleFullscreenWindow: () => Promise<boolean>;
       closeWindow: () => Promise<boolean>;
       isWindowMaximized: () => Promise<boolean>;
       getWindowTransparentMode: () => Promise<boolean>;

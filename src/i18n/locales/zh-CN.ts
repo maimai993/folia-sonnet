@@ -105,6 +105,7 @@ export default {
       "settings-lyric-filter": { "title": "歌词过滤", "description": "打开歌词过滤设置" },
       "navigate-home": { "title": "回到首页", "description": "返回首页视图" },
       "navigate-player": { "title": "回到播放器", "description": "返回播放器视图" },
+      "browser-fullscreen": { "title": "全屏", "description": "切换浏览器全屏" },
       "home-playlist": { "title": "打开歌单", "description": "打开歌单首页 tab" },
       "home-local": { "title": "打开本地音乐", "description": "打开本地音乐 tab" },
       "home-albums": { "title": "打开专辑", "description": "打开专辑 tab" },

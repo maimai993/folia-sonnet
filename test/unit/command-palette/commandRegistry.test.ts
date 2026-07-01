@@ -12,6 +12,7 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     navigateToHome: vi.fn(),
     navigateToPlayer: vi.fn(),
     navigateToSearch: vi.fn(),
+    toggleBrowserFullscreen: vi.fn(async () => true),
     setHomeViewTab: vi.fn(),
     setPanelTab: vi.fn(),
     setIsPanelOpen: vi.fn(),
@@ -146,7 +147,7 @@ describe('command palette registry', () => {
         expect(context.openSettings).toHaveBeenCalledWith('options', 'themePark');
     });
 
-    it('executes navigation commands', () => {
+    it('executes navigation commands', async () => {
         const context = createContext();
         
         const [matchHome] = getCommandPaletteMatches('home');
@@ -158,6 +159,11 @@ describe('command palette registry', () => {
         expect(matchPlayer.command.id).toBe('navigate-player');
         matchPlayer.command.execute('', context);
         expect(context.navigateToPlayer).toHaveBeenCalled();
+
+        const [matchFullscreen] = getCommandPaletteMatches('浏览器全屏');
+        expect(matchFullscreen.command.id).toBe('browser-fullscreen');
+        await matchFullscreen.command.execute('', context);
+        expect(context.toggleBrowserFullscreen).toHaveBeenCalled();
     });
 
     it('executes home tab navigation commands', () => {

@@ -265,6 +265,14 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
             return true;
         },
     },
+    {
+        id: 'browser-fullscreen',
+        group: 'navigation',
+        title: 'Fullscreen',
+        description: 'Toggle browser fullscreen',
+        keywords: ['fullscreen', 'full screen', 'f11', 'browser fullscreen', '全屏', '浏览器全屏', 'quanping', 'liulanqiquanping', 'qp', 'llqqp'],
+        execute: (_input, context) => context.toggleBrowserFullscreen(),
+    },
     createHomeTabCommand('playlist', 'Open playlists', 'Open playlist home tab', ['playlist', 'playlists', '歌单', 'gedan', 'gd']),
     createHomeTabCommand('local', 'Open local music', 'Open local music tab', ['local music', 'local', '本地', '本地音乐', 'bendi', 'bendiyinyue', 'bd', 'bdyy']),
     createHomeTabCommand('albums', 'Open albums', 'Open albums tab', ['albums', 'album', '专辑', 'zhuanji', 'zj']),

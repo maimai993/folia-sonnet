@@ -39,6 +39,7 @@ export type CommandPaletteContext = {
     navigateToHome: () => void;
     navigateToPlayer: () => void;
     navigateToSearch: (args: { query: string; sourceTab: HomeViewTab; replace?: boolean; returnView?: SearchReturnView; }) => void;
+    toggleBrowserFullscreen: () => Promise<boolean>;
     setHomeViewTab: (tab: HomeViewTab) => void;
     setPanelTab: (tab: PanelTab) => void;
     setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;

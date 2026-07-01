@@ -2866,6 +2866,16 @@ ipcMain.handle('window-toggle-maximize', () => {
   return true;
 });
 
+ipcMain.handle('window-toggle-fullscreen', (event) => {
+  if (!isTrustedMainWindowContents(event.sender) || !mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  const nextFullscreen = !mainWindow.isFullScreen();
+  mainWindow.setFullScreen(nextFullscreen);
+  return nextFullscreen;
+});
+
 ipcMain.handle('window-close', () => {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return false;

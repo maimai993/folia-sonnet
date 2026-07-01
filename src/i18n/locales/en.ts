@@ -104,6 +104,7 @@ export default {
       "settings-lyric-filter": { "title": "Lyric filter", "description": "Open lyric filter settings" },
       "navigate-home": { "title": "Go home", "description": "Return to home view" },
       "navigate-player": { "title": "Go player", "description": "Return to player view" },
+      "browser-fullscreen": { "title": "Fullscreen", "description": "Toggle browser fullscreen" },
       "home-playlist": { "title": "Open playlists", "description": "Open playlist home tab" },
       "home-local": { "title": "Open local music", "description": "Open local music tab" },
       "home-albums": { "title": "Open albums", "description": "Open albums tab" },

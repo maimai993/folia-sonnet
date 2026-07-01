@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('electron', {
     },
     minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
     toggleMaximizeWindow: () => ipcRenderer.invoke('window-toggle-maximize'),
+    toggleFullscreenWindow: () => ipcRenderer.invoke('window-toggle-fullscreen'),
     closeWindow: () => ipcRenderer.invoke('window-close'),
     isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
     getWindowTransparentMode: () => ipcRenderer.invoke('window-get-transparent-mode'),
