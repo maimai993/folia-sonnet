@@ -13,6 +13,7 @@ import {
     saveStoredLastAppliedThemePointer,
     saveStoredThemeAutoSwitchEnabled,
 } from '../services/themePreferences';
+import { FALLBACK_AI_DUAL_THEME, sanitizeDualTheme, sanitizeTheme } from '../services/themeSanitizer';
 import { extractColors } from '../utils/colorExtractor';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import {
@@ -213,7 +214,7 @@ export function useThemeController({
         dualTheme: DualTheme,
         options?: { respectCustomPreference?: boolean }
     ) => {
-        const normalizedDualTheme = applyStoredAnimationIntensityToDualTheme(dualTheme);
+        const normalizedDualTheme = applyStoredAnimationIntensityToDualTheme(sanitizeDualTheme(dualTheme));
         setLegacyTheme(null);
         setAiTheme(normalizedDualTheme);
         void saveToCache('last_dual_theme', normalizedDualTheme);
@@ -227,7 +228,9 @@ export function useThemeController({
         nextLegacyTheme: Theme,
         options?: { respectCustomPreference?: boolean }
     ) => {
-        const normalizedLegacyTheme = applyStoredAnimationIntensityToTheme(nextLegacyTheme);
+        const normalizedLegacyTheme = applyStoredAnimationIntensityToTheme(
+            sanitizeTheme(nextLegacyTheme, FALLBACK_AI_DUAL_THEME.dark),
+        );
         setAiTheme(null);
         setLegacyTheme(normalizedLegacyTheme);
         void saveToCache('last_theme', normalizedLegacyTheme);
@@ -425,7 +428,7 @@ export function useThemeController({
                 isPureMusic,
                 songTitle: songTitle || undefined,
             });
-            const normalizedDualTheme = applyStoredAnimationIntensityToDualTheme(dualTheme);
+            const normalizedDualTheme = applyStoredAnimationIntensityToDualTheme(sanitizeDualTheme(dualTheme));
             applyDualTheme(normalizedDualTheme);
 
             const selectedTheme = getSelectedDualTheme(normalizedDualTheme, isDaylight);
