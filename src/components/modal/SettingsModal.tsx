@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Monitor, PlayCircle, Loader2, Server, Check, AlertCircle, FlaskConical, ChevronLeft, ChevronRight, RefreshCw, Download, ExternalLink, Sparkles, Palette } from 'lucide-react';
+import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Monitor, PlayCircle, Loader2, Server, Check, AlertCircle, FlaskConical, ChevronLeft, ChevronRight, RefreshCw, Download, ExternalLink, Sparkles, Palette, CircleHelp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
 import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type TiltTuning, type StoredCustomLyricsFont, type VisualizerMode } from '../../types';
@@ -16,6 +16,7 @@ import IntegrationSettingsSubview from './settings/IntegrationSettingsSubview';
 import LabSettingsModal from './settings/LabSettingsModal';
 import PlaybackSettingsSubview from './settings/PlaybackSettingsSubview';
 import StorageSettingsSection from './settings/StorageSettingsSection';
+import { AiHelpPromptModal } from './AiHelpPromptModal';
 import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
 import { selectSettingsUiSnapshot, type SettingsSubviewId, useSettingsUiStore } from '../../stores/useSettingsUiStore';
@@ -216,6 +217,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [showDesktopSettings, setShowDesktopSettings] = useState(false);
     const [showLabSettings, setShowLabSettings] = useState(false);
     const [showLyricFilterSettings, setShowLyricFilterSettings] = useState(false);
+    const [showAiHelpPrompt, setShowAiHelpPrompt] = useState(false);
     const [versionCopied, setVersionCopied] = useState(false);
     const [stageAddressCopied, setStageAddressCopied] = useState(false);
     const [authorClickCount, setAuthorClickCount] = useState(0);
@@ -1065,7 +1067,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             </div>
 
                             {/* User Guide Button */}
-                            <div className="mt-6 flex justify-center">
+                            <div className="mt-6 flex flex-wrap justify-center gap-3">
                                 <button
                                     onClick={() => {
                                         setIsUserGuideModalOpen(true);
@@ -1076,6 +1078,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 >
                                     <Command size={16} />
                                     {t('userGuide.showGuide', 'Show User Guide')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAiHelpPrompt(true)}
+                                    className="px-6 py-2 bg-white/10 hover:bg-white/20 transition-colors rounded-full text-sm font-medium flex items-center gap-2"
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <CircleHelp size={16} />
+                                    {t('aiHelp.openButton', 'Need help?')}
                                 </button>
                             </div>
 
@@ -2426,6 +2437,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 loadPreviewLyrics={loadLyricFilterPreview}
                 onClose={() => closeSubviewOrModal(() => setShowLyricFilterSettings(false))}
                 onSave={onSaveLyricFilterPattern}
+            />
+            <AiHelpPromptModal
+                isOpen={showAiHelpPrompt}
+                isDaylight={isDaylight}
+                theme={theme}
+                onClose={() => setShowAiHelpPrompt(false)}
+                onCopyText={copyText}
             />
         </motion.div>
     );

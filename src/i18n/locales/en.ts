@@ -830,5 +830,13 @@ export default {
     "shortcuts": "Shortcuts",
     "commands": "All Commands",
     "commandsDesc": "You can trigger commands by typing English, Chinese characters, or Pinyin."
+  },
+  "aiHelp": {
+    "openButton": "Need help?",
+    "title": "Need help?",
+    "description": "Go to the official site of the AI model you use, write down your issue, then paste this prompt so the AI can use Folia docs and source context while helping you.",
+    "usageHint": "How to use it: open the official site for the model you use, describe your specific problem first, then paste this prompt below your question and send both together.",
+    "copyPrompt": "Copy prompt",
+    "prompt": "I am using the folia-major music player on GitHub and need help with a problem.\n\nFolia Guide: {{guideUrl}}\nFolia repository: {{repoUrl}}\n\nPlease use these references as context, then help me understand and solve the problem I describe next. If any information is missing, ask what I should provide before making uncertain assumptions."
   }
 } as const;

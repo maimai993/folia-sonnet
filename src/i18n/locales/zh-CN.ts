@@ -833,5 +833,13 @@ export default {
     "shortcuts": "播放页快捷键",
     "commands": "全部命令",
     "commandsDesc": "输入任意命令的拼音、汉字或英文均可快速触发。"
+  },
+  "aiHelp": {
+    "openButton": "遇到问题？",
+    "title": "遇到问题？",
+    "description": "你可以到自己使用的 AI 模型官方网站，先写下遇到的问题，再粘贴这段提示词，让 AI 结合 Folia 文档和源码仓库协助排查。",
+    "usageHint": "用法：打开AI聊天软件，先描述你的具体问题，然后把这段提示词粘贴到问题后面一起发送(需要使用具有联网搜索能力的模型）。",
+    "copyPrompt": "复制提示词",
+    "prompt": "我正在使用 GitHub 上的 folia-major 音乐播放器，遇到了一个问题，需要你协助排查。\n\nFolia 使用指南：{{guideUrl}}\nFolia 源码仓库：{{repoUrl}}\n\n请把这些资料作为上下文，结合我接下来描述的问题，帮我判断可能原因并给出处理步骤。如果信息不足，请先询问我需要补充什么，不要直接做不确定的假设。"
   }
 } as const;
