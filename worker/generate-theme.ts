@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { sanitizeDualTheme } from '../src/services/themeSanitizer';
+import { sanitizeDualTheme } from '../shared/themeSanitizer.mjs';
 
 const THEME_GENERATION_PROMPT_PREFIX = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.
 

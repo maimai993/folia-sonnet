@@ -1,4 +1,4 @@
-import { sanitizeDualTheme } from '../src/services/themeSanitizer';
+import { sanitizeDualTheme } from '../shared/themeSanitizer.mjs';
 
 type WorkerEnv = {
     OPENAI_API_KEY?: string;

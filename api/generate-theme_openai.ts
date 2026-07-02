@@ -1,4 +1,4 @@
-import { sanitizeDualTheme } from "../src/services/themeSanitizer";
+import { sanitizeDualTheme } from "../shared/themeSanitizer.mjs";
 
 export const config = {
     runtime: 'edge', // Use edge runtime for fetch support
