@@ -130,7 +130,11 @@ const AppShell: React.FC<AppShellProps> = ({
                             </button>
                         </div>
                         <div className="pointer-events-auto absolute top-0 right-0 z-10 h-full">
-                            <WindowControls revealed={isTitlebarRevealed} isDaylight={isDaylight} />
+                            <WindowControls
+                                revealed={isTitlebarRevealed}
+                                isDaylight={isDaylight}
+                                isMainWindowClickThroughEnabled={isMainWindowClickThroughEnabled}
+                            />
                         </div>
                     </div>
                 </div>
