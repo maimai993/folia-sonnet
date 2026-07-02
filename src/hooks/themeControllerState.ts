@@ -224,6 +224,27 @@ export const getBaseThemeForMode = ({
     return isDaylight ? daylightTheme : defaultTheme;
 };
 
+export const buildDefaultCustomDualTheme = ({
+    defaultTheme,
+    daylightTheme,
+}: {
+    defaultTheme: Theme;
+    daylightTheme: Theme;
+}): DualTheme => applyStoredAnimationIntensityToDualTheme({
+    light: {
+        ...daylightTheme,
+        wordColors: [],
+        lyricsIcons: [],
+        provider: 'Custom',
+    },
+    dark: {
+        ...defaultTheme,
+        wordColors: [],
+        lyricsIcons: [],
+        provider: 'Custom',
+    },
+});
+
 export const resolveBgModeTheme = ({
     mode,
     aiTheme,

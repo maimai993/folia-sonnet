@@ -24,6 +24,7 @@ import { extractColors } from '../utils/colorExtractor';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import {
     buildBuiltinDualTheme,
+    buildDefaultCustomDualTheme,
     getBaseThemeForMode,
     resolveBgModeTheme,
 } from './themeControllerState';
@@ -129,7 +130,10 @@ export function useThemeController({
     t: (key: string, options?: Record<string, unknown>) => string;
 }) {
     const getBaseTheme = () => getBaseThemeForMode({ defaultTheme, daylightTheme, isDaylight });
-    const initialCustomTheme = useMemo(readStoredCustomTheme, []);
+    const storedCustomTheme = useMemo(readStoredCustomTheme, []);
+    const initialCustomTheme = useMemo(() => (
+        storedCustomTheme ?? buildDefaultCustomDualTheme({ defaultTheme, daylightTheme })
+    ), [daylightTheme, defaultTheme, storedCustomTheme]);
     const initialThemePreferenceState = useMemo<ThemePreferenceSwitchState>(() => {
         const customPreferred = Boolean(initialCustomTheme && readStoredCustomPreferred());
         if (customPreferred) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildDefaultCustomDualTheme,
     buildBuiltinDualTheme,
     getBaseThemeForMode,
     resolveBgModeTheme
@@ -61,6 +62,34 @@ describe('themeControllerState', () => {
         });
 
         expect(nextTheme).toBe(daylightTheme);
+    });
+
+    it('builds an initial custom theme from the default light and dark themes', () => {
+        const initialCustomTheme = buildDefaultCustomDualTheme({
+            defaultTheme,
+            daylightTheme
+        });
+
+        expect(initialCustomTheme.light).toMatchObject({
+            name: daylightTheme.name,
+            backgroundColor: daylightTheme.backgroundColor,
+            primaryColor: daylightTheme.primaryColor,
+            accentColor: daylightTheme.accentColor,
+            secondaryColor: daylightTheme.secondaryColor,
+            provider: 'Custom'
+        });
+        expect(initialCustomTheme.dark).toMatchObject({
+            name: defaultTheme.name,
+            backgroundColor: defaultTheme.backgroundColor,
+            primaryColor: defaultTheme.primaryColor,
+            accentColor: defaultTheme.accentColor,
+            secondaryColor: defaultTheme.secondaryColor,
+            provider: 'Custom'
+        });
+        expect(initialCustomTheme.light.wordColors).toEqual([]);
+        expect(initialCustomTheme.dark.wordColors).toEqual([]);
+        expect(initialCustomTheme.light.lyricsIcons).toEqual([]);
+        expect(initialCustomTheme.dark.lyricsIcons).toEqual([]);
     });
 
     it('preserves visual tokens while using AI foreground in daylight default background mode', () => {
