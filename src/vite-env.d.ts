@@ -151,6 +151,7 @@ declare global {
 
   interface ElectronMainWindowClickThroughState {
     enabled: boolean;
+    unlockHoverActive?: boolean;
   }
 
   type ElectronObsBrowserSourceStatus = import('./types/obsBrowserSource').ObsBrowserSourceStatus;

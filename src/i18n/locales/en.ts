@@ -818,6 +818,14 @@ export default {
       "customDesc": "Open Theme Park from visual settings or the command palette to edit and save custom light and dark colors.",
       "aiDesc": "When AI theme settings are configured, Folia can create song-aware colors and optionally auto-apply cached song themes."
     },
+    "clickThrough": {
+      "title": "Click-through recovery",
+      "desc": "When click-through is enabled, you can use the system tray icon to switch it if the window controls are hidden or hard to reach.",
+      "trayTitle": "Use the tray icon",
+      "trayDesc": "Right-click the Folia system tray icon, then choose the click-through option to turn it on or off.",
+      "lockTitle": "Use the lock button",
+      "lockDesc": "You can also move to the top titlebar hotspot to reveal the lock button, then click it to turn click-through off."
+    },
     "gotIt": "Got it",
     "showGuide": "Show User Guide",
     "next": "Next",

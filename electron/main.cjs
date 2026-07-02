@@ -53,6 +53,7 @@ let remoteControlAlwaysOnTop = false;
 let mainWindowAlwaysOnTop = false;
 let mainWindowClickThroughEnabled = false;
 let mainWindowClickThroughUnlockHover = false;
+let mainWindowClickThroughUnlockHoverTimer = null;
 let mainWindowSkipTaskbarEnabled = false;
 let videoExportWindowRestoreState = null;
 let autoUpdater = null;
@@ -60,6 +61,13 @@ const windowPlaybackHandoffStore = createWindowPlaybackHandoffStore();
 const pendingWindowPlaybackHandoffRequests = new Map();
 let pendingWindowStateSave = null;
 let windowStateSaveTimer = null;
+const MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOTSPOT = {
+  width: 48,
+  height: 40,
+  rightInset: 176,
+  topInset: 4,
+};
+const MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOVER_INTERVAL_MS = 80;
 const DEFAULT_WINDOW_BOUNDS = {
   width: 1200,
   height: 800,
@@ -2290,9 +2298,57 @@ function publishMainWindowClickThroughState() {
 
   mainWindow.webContents.send('main-window-click-through-changed', {
     enabled: mainWindowClickThroughEnabled,
+    unlockHoverActive: mainWindowClickThroughUnlockHover,
   });
   refreshTrayMenu();
   return true;
+}
+
+function isCursorInsideMainWindowClickThroughUnlockHotspot() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  const bounds = mainWindow.getBounds();
+  const cursor = screen.getCursorScreenPoint();
+  const hotspotRight = bounds.x + bounds.width - MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOTSPOT.rightInset;
+  const hotspotLeft = hotspotRight - MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOTSPOT.width;
+  const hotspotTop = bounds.y + MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOTSPOT.topInset;
+  const hotspotBottom = hotspotTop + MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOTSPOT.height;
+
+  return cursor.x >= hotspotLeft
+    && cursor.x <= hotspotRight
+    && cursor.y >= hotspotTop
+    && cursor.y <= hotspotBottom;
+}
+
+function syncMainWindowClickThroughUnlockHoverFromCursor() {
+  if (!mainWindowClickThroughEnabled) {
+    return false;
+  }
+
+  return setMainWindowClickThroughUnlockHover(isCursorInsideMainWindowClickThroughUnlockHotspot());
+}
+
+function startMainWindowClickThroughUnlockHoverMonitor() {
+  if (mainWindowClickThroughUnlockHoverTimer) {
+    return;
+  }
+
+  syncMainWindowClickThroughUnlockHoverFromCursor();
+  mainWindowClickThroughUnlockHoverTimer = setInterval(
+    syncMainWindowClickThroughUnlockHoverFromCursor,
+    MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOVER_INTERVAL_MS
+  );
+}
+
+function stopMainWindowClickThroughUnlockHoverMonitor() {
+  if (!mainWindowClickThroughUnlockHoverTimer) {
+    return;
+  }
+
+  clearInterval(mainWindowClickThroughUnlockHoverTimer);
+  mainWindowClickThroughUnlockHoverTimer = null;
 }
 
 function applyMainWindowMouseIgnoreState() {
@@ -2312,9 +2368,13 @@ function setMainWindowClickThroughEnabled(enabled) {
   mainWindowClickThroughEnabled = Boolean(enabled);
   if (!mainWindowClickThroughEnabled) {
     mainWindowClickThroughUnlockHover = false;
+    stopMainWindowClickThroughUnlockHoverMonitor();
   }
 
   applyMainWindowMouseIgnoreState();
+  if (mainWindowClickThroughEnabled) {
+    startMainWindowClickThroughUnlockHoverMonitor();
+  }
   refreshTrayMenu();
   patchRemoteControlSnapshot({
     mainWindowClickThroughEnabled,
@@ -2509,6 +2569,8 @@ function createWindow(options = {}) {
   win.on('closed', () => {
     if (mainWindow === win) {
       mainWindow = null;
+      mainWindowClickThroughUnlockHover = false;
+      stopMainWindowClickThroughUnlockHoverMonitor();
       if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
         remoteControlWindow.close();
       }
@@ -2557,6 +2619,7 @@ async function setMainWindowTransparentMode(enabled, handoff = null) {
   });
   mainWindowClickThroughEnabled = false;
   mainWindowClickThroughUnlockHover = false;
+  stopMainWindowClickThroughUnlockHoverMonitor();
   recreateMainWindowWithTransparencyMode(nextEnabled, handoff);
   return true;
 }

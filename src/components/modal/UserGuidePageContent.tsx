@@ -1,5 +1,5 @@
 import React from 'react';
-import { Command, Keyboard, Palette, Search, Sparkles, WandSparkles } from 'lucide-react';
+import { Command, Keyboard, Lock, Palette, Search, Sparkles, WandSparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { CommandPaletteCommand } from '../command-palette/types';
 import { UserGuideFeatureCard } from './UserGuideFeatureCard';
@@ -81,6 +81,37 @@ export const UserGuidePageContent: React.FC<UserGuidePageContentProps> = ({
     if (page === 1) {
         return (
             <>
+                <UserGuideTipCard
+                    {...tipCardClasses}
+                    icon={Lock}
+                    iconClassName={isDaylight ? 'text-amber-500' : 'text-amber-300'}
+                    title={t('userGuide.clickThrough.title', 'Click-through recovery')}
+                    description={t('userGuide.clickThrough.desc', 'When click-through is enabled, you can switch it off from the system tray icon if the window controls are hidden or hard to reach.')}
+                />
+                <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <UserGuideFeatureCard
+                        {...featureCardClasses}
+                        icon={Lock}
+                        iconClassName={isDaylight ? 'text-amber-500' : 'text-amber-300'}
+                        title={t('userGuide.clickThrough.trayTitle', 'Use the tray icon')}
+                        description={t('userGuide.clickThrough.trayDesc', 'Right-click the Folia tray icon and choose the click-through option to enable or disable it.')}
+                    />
+                    <UserGuideFeatureCard
+                        {...featureCardClasses}
+                        icon={Command}
+                        iconClassName={isDaylight ? 'text-blue-500' : 'text-blue-400'}
+                        title={t('userGuide.clickThrough.lockTitle', 'Use the lock button')}
+                        description={t('userGuide.clickThrough.lockDesc', 'Move to the top titlebar hotspot to reveal the lock button, then click it to turn click-through off.')}
+                    />
+                </div>
+                {footer}
+            </>
+        );
+    }
+
+    if (page === 2) {
+        return (
+            <>
                 <div className="flex justify-center mb-6 mt-4">
                     <div className={`relative w-20 h-20 rounded-full flex items-center justify-center ${isDaylight ? 'bg-blue-50 shadow-inner' : 'bg-white/[0.03] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]'}`}>
                         <Sparkles size={32} className={isDaylight ? 'text-blue-500' : 'text-blue-400'} />
@@ -98,7 +129,7 @@ export const UserGuidePageContent: React.FC<UserGuidePageContentProps> = ({
         );
     }
 
-    if (page === 2) {
+    if (page === 3) {
         return (
             <>
                 <UserGuideTipCard
@@ -134,7 +165,7 @@ export const UserGuidePageContent: React.FC<UserGuidePageContentProps> = ({
         );
     }
 
-    if (page === 3) {
+    if (page === 4) {
         return (
             <>
                 <UserGuideTipCard
@@ -159,7 +190,7 @@ export const UserGuidePageContent: React.FC<UserGuidePageContentProps> = ({
         );
     }
 
-    if (page === 4) {
+    if (page === 5) {
         return (
             <>
                 <UserGuideTipCard

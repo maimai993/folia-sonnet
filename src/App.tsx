@@ -1419,7 +1419,9 @@ export default function App() {
         });
 
         const unsubscribe = window.electron.onMainWindowClickThroughChanged((state) => {
-            setIsMainWindowClickThroughEnabled(Boolean(state?.enabled));
+            const enabled = Boolean(state?.enabled);
+            setIsMainWindowClickThroughEnabled(enabled);
+            setIsClickThroughToggleHotspotActive(enabled && Boolean(state?.unlockHoverActive));
         });
 
         return () => {
