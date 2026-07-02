@@ -442,6 +442,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         }
     };
 
+    const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac');
+
+
     const handleCheckForUpdates = async () => {
         if (!window.electron?.checkForUpdates) {
             return;
@@ -1048,7 +1051,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
                                         <span>{t('help.previousTrack')} / {t('help.nextTrack')}</span>
                                         <div className="flex items-center gap-1">
-                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">Ctrl</kbd>
+                                            <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">{isMac ? 'Cmd' : 'Ctrl'}</kbd>
                                             <span className="text-xs opacity-50">+</span>
                                             <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">← / →</kbd>
                                         </div>

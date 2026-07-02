@@ -8,6 +8,8 @@ import { replayGainModeLabels } from '../utils/appPlaybackHelpers';
 
 // src/hooks/usePlaybackInteractionBridge.ts
 
+const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac');
+
 type UsePlaybackInteractionBridgeParams = {
     isDev: boolean;
     currentSong: SongResult | null;
@@ -160,7 +162,11 @@ export function usePlaybackInteractionBridge({
                     }
                     break;
                 case 'ArrowLeft':
-                    if (event.ctrlKey && !event.altKey && !event.metaKey) {
+                    const isPrevTrackKey = isMac 
+                        ? (event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey)
+                        : (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey);
+
+                    if (isPrevTrackKey) {
                         if (currentSong) {
                             event.preventDefault();
                             if (isNowPlayingStageActive) {
@@ -187,7 +193,11 @@ export function usePlaybackInteractionBridge({
                     }
                     break;
                 case 'ArrowRight':
-                    if (event.ctrlKey && !event.altKey && !event.metaKey) {
+                    const isNextTrackKey = isMac 
+                        ? (event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey)
+                        : (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey);
+
+                    if (isNextTrackKey) {
                         if (currentSong) {
                             event.preventDefault();
                             if (isNowPlayingStageActive) {

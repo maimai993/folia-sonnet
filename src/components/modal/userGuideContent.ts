@@ -1,5 +1,7 @@
 // src/components/modal/userGuideContent.ts
 
+const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac');
+
 export type UserGuideShortcut = {
     id: string;
     titleKey: string;
@@ -30,14 +32,14 @@ export const PLAYER_PAGE_SHORTCUTS: UserGuideShortcut[] = [
         id: 'previous-track',
         titleKey: 'help.previousTrack',
         fallback: 'Previous Track',
-        keys: ['Ctrl', '←'],
+        keys: isMac ? ['Cmd', '←'] : ['Ctrl', '←'],
         separator: '+',
     },
     {
         id: 'next-track',
         titleKey: 'help.nextTrack',
         fallback: 'Next Track',
-        keys: ['Ctrl', '→'],
+        keys: isMac ? ['Cmd', '→'] : ['Ctrl', '→'],
         separator: '+',
     },
     {
