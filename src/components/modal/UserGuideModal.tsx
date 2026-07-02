@@ -107,9 +107,9 @@ export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) =>
 
                         <button
                             onClick={() => setIsUserGuideModalOpen(false)}
-                            className={`absolute top-5 right-5 p-2 rounded-full transition-colors opacity-50 hover:opacity-100 z-10 ${closeBtnHover} ${textPrimary}`}
+                            className={`absolute top-4 right-4 p-1.5 rounded-full transition-colors opacity-50 hover:opacity-100 z-50 ${closeBtnHover} ${textPrimary}`}
                         >
-                            <X size={20} />
+                            <X size={18} />
                         </button>
 
                         <div className="relative z-10">

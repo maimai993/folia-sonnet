@@ -90,7 +90,7 @@ export const AiHelpPromptModal: React.FC<AiHelpPromptModalProps> = ({
                         <button
                             type="button"
                             onClick={onClose}
-                            className={`absolute right-4 top-4 z-10 rounded-full p-2 opacity-60 transition hover:opacity-100 ${closeBtnHover}`}
+                            className={`absolute right-4 top-4 z-50 rounded-full p-2 opacity-60 transition hover:opacity-100 ${closeBtnHover}`}
                             aria-label={t('common.close', 'Close')}
                         >
                             <X size={18} />
