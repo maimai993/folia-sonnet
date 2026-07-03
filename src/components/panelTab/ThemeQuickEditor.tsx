@@ -119,7 +119,10 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
     const [mode, setMode] = useState<EditableMode>(() => (isDaylight ? 'light' : 'dark'));
     const [activeKey, setActiveKey] = useState<EditableColorKey>('accentColor');
     const [coverColors, setCoverColors] = useState<string[]>([]);
-    const [themeName, setThemeName] = useState(() => normalizedInitialTheme.light.name || '');
+    const [themeNames, setThemeNames] = useState(() => ({
+        light: normalizedInitialTheme.light.name || '',
+        dark: normalizedInitialTheme.dark.name || '',
+    }));
     const [isDragging, setIsDragging] = useState(false);
     const [isImportPanelOpen, setIsImportPanelOpen] = useState(false);
     const [importJsonText, setImportJsonText] = useState('');
@@ -145,6 +148,10 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
 
     useEffect(() => {
         setDraftTheme(normalizedInitialTheme);
+        setThemeNames({
+            light: normalizedInitialTheme.light.name || '',
+            dark: normalizedInitialTheme.dark.name || '',
+        });
         setMode(isDaylight ? 'light' : 'dark');
         setActiveKey('accentColor');
     }, [isDaylight, normalizedInitialTheme]);
@@ -216,13 +223,14 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
     };
 
     const handleSave = () => {
-        const finalName = themeName.trim();
-        if (!finalName) return;
+        const finalLightName = themeNames.light.trim();
+        const finalDarkName = themeNames.dark.trim();
+        if (!finalLightName || !finalDarkName) return;
 
         const updatedDraft = {
             ...draftTheme,
-            light: { ...draftTheme.light, name: finalName },
-            dark: { ...draftTheme.dark, name: finalName },
+            light: { ...draftTheme.light, name: finalLightName },
+            dark: { ...draftTheme.dark, name: finalDarkName },
         };
         onSave(sanitizeDualTheme(updatedDraft, normalizedInitialTheme));
     };
@@ -254,10 +262,14 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
 
     const handleReset = () => {
         setDraftTheme(normalizedInitialTheme);
-        setThemeName(normalizedInitialTheme.light.name || '');
+        setThemeNames({
+            light: normalizedInitialTheme.light.name || '',
+            dark: normalizedInitialTheme.dark.name || '',
+        });
     };
 
-    const isNameValid = typeof themeName === 'string' && themeName.trim().length > 0 && themeName.trim().length <= 32;
+    const isThemeNameValid = (name: string) => name.trim().length > 0 && name.trim().length <= 32;
+    const isNameValid = isThemeNameValid(themeNames.light) && isThemeNameValid(themeNames.dark);
 
     // Use activeTheme for real-time preview of the edited dual theme
     const panelBg = activeTheme.backgroundColor;
@@ -524,24 +536,35 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
                                     <div className={`text-xs font-bold mb-3 ${themeTransitionClass}`} style={{ color: textColor }}>
                                         {t('options.themeName') || 'Theme Name'}
                                     </div>
-                                    <input
-                                        type="text"
-                                        value={themeName}
-                                        maxLength={32}
-                                        onChange={(e) => setThemeName(e.target.value)}
-                                        className={`w-full rounded-xl border bg-transparent px-4 py-2.5 text-xs font-bold outline-none ${allTransitionClass}`}
-                                        style={{ borderColor, color: textColor }}
-                                        onFocus={(e) => {
-                                            e.currentTarget.style.borderColor = accentColor;
-                                            e.currentTarget.style.boxShadow = `0 0 0 1px ${accentColor}`;
-                                        }}
-                                        onBlur={(e) => {
-                                            e.currentTarget.style.borderColor = borderColor;
-                                            e.currentTarget.style.boxShadow = 'none';
-                                        }}
-                                        placeholder="Enter theme name..."
-                                        spellCheck={false}
-                                    />
+                                    <label className="block">
+                                        <span className={`mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase ${themeTransitionClass}`} style={{ color: mutedTextColor }}>
+                                            {mode === 'light' ? <Sun size={12} /> : <Moon size={12} />}
+                                            {mode === 'light'
+                                                ? (t('options.lightTheme') || 'Light Theme')
+                                                : (t('options.darkTheme') || 'Dark Theme')}
+                                        </span>
+                                        <input
+                                            type="text"
+                                            value={themeNames[mode]}
+                                            maxLength={32}
+                                            onChange={(e) => setThemeNames(previous => ({
+                                                ...previous,
+                                                [mode]: e.target.value,
+                                            }))}
+                                            className={`w-full rounded-xl border bg-transparent px-4 py-2.5 text-xs font-bold outline-none ${allTransitionClass}`}
+                                            style={{ borderColor, color: textColor }}
+                                            onFocus={(e) => {
+                                                e.currentTarget.style.borderColor = accentColor;
+                                                e.currentTarget.style.boxShadow = `0 0 0 1px ${accentColor}`;
+                                            }}
+                                            onBlur={(e) => {
+                                                e.currentTarget.style.borderColor = borderColor;
+                                                e.currentTarget.style.boxShadow = 'none';
+                                            }}
+                                            placeholder="Enter theme name..."
+                                            spellCheck={false}
+                                        />
+                                    </label>
                                 </div>
 
                                 {/* Actions */}

@@ -136,8 +136,12 @@ export const sanitizeTheme = (
         secondaryColor: normalizeThemeHexColor(source.secondaryColor, fallbackTheme.secondaryColor),
         fontStyle: normalizeFontStyle(source.fontStyle, fallbackTheme.fontStyle),
         animationIntensity: normalizeAnimationIntensity(source.animationIntensity, fallbackTheme.animationIntensity),
-        wordColors: normalizeWordColors(source.wordColors, accentColor),
-        lyricsIcons: normalizeLyricsIcons(source.lyricsIcons),
+        wordColors: source.wordColors === undefined
+            ? fallbackTheme.wordColors
+            : normalizeWordColors(source.wordColors, accentColor),
+        lyricsIcons: source.lyricsIcons === undefined
+            ? fallbackTheme.lyricsIcons
+            : normalizeLyricsIcons(source.lyricsIcons),
         provider: typeof source.provider === 'string' && source.provider.trim()
             ? source.provider.trim()
             : fallbackTheme.provider,
