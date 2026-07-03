@@ -62,6 +62,9 @@ describe('useThemeQuickEditorStore', () => {
             coverUrl: 'https://example.test/cover.jpg',
             songKey: 42,
             isDaylight: true,
+            promptSourceText: null,
+            isPureMusic: false,
+            songTitle: undefined,
         });
 
         expect(useThemeQuickEditorStore.getState()).toMatchObject({
@@ -84,6 +87,9 @@ describe('useThemeQuickEditorStore', () => {
             coverUrl: null,
             songKey: null,
             isDaylight: false,
+            promptSourceText: null,
+            isPureMusic: false,
+            songTitle: undefined,
         });
 
         useThemeQuickEditorStore.getState().openEditor('ai');
@@ -101,6 +107,9 @@ describe('useThemeQuickEditorStore', () => {
             coverUrl: null,
             songKey: null,
             isDaylight: false,
+            promptSourceText: null,
+            isPureMusic: false,
+            songTitle: undefined,
         });
 
         useThemeQuickEditorStore.getState().openEditor('custom');
@@ -118,6 +127,9 @@ describe('useThemeQuickEditorStore', () => {
             coverUrl: null,
             songKey: null,
             isDaylight: false,
+            promptSourceText: null,
+            isPureMusic: false,
+            songTitle: undefined,
         });
         useThemeQuickEditorStore.getState().openEditor();
         expect(useThemeQuickEditorStore.getState().editorKind).toBe('custom');
@@ -130,6 +142,9 @@ describe('useThemeQuickEditorStore', () => {
             coverUrl: null,
             songKey: null,
             isDaylight: false,
+            promptSourceText: null,
+            isPureMusic: false,
+            songTitle: undefined,
         });
         useThemeQuickEditorStore.getState().openEditor();
         expect(useThemeQuickEditorStore.getState().editorKind).toBe('ai');
@@ -146,6 +161,9 @@ describe('useThemeQuickEditorStore', () => {
             coverUrl: null,
             songKey: null,
             isDaylight: false,
+            promptSourceText: null,
+            isPureMusic: false,
+            songTitle: undefined,
         });
         useThemeQuickEditorStore.getState().openEditor('ai');
         expect(useThemeQuickEditorStore.getState().isOpen).toBe(false);

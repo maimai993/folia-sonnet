@@ -563,8 +563,9 @@ export default {
     "themePresets": "Theme Presets",
     "themePresetsDefault": "Default",
     "openThemePark": "Open Theme Park",
-    "themeParkDesc": "Create a color-only dual theme with separate light and dark previews.",
+    "themeParkDesc": "Customize color themes.",
     "themeName": "Theme Name",
+    "manualImportAiTheme": "Manual Import AI Theme",
     "aiThemeQuickEditTitle": "Quick Edit AI Theme",
     "aiThemeQuickEditDesc": "Tune the current song AI theme colors.",
     "customThemeQuickEditTitle": "Quick Edit Custom Theme",
@@ -887,6 +888,9 @@ export default {
     "description": "Go to the official site of the AI model you use, write down your issue, then paste this prompt so the AI can use Folia docs and source context while helping you.",
     "usageHint": "How to use it: open the official site for the model you use, describe your specific problem first, then paste this prompt below your question and send both together.",
     "copyPrompt": "Copy prompt",
+    "copyPromptTitle": "1. Copy AI Prompt",
+    "copyPromptDesc": "Copy the prompt and paste it into any AI model to generate your theme.",
+    "importJsonTitle": "2. Paste JSON Result",
     "prompt": "I am using the folia-major music player on GitHub and need help with a problem.\n\nFolia Guide: {{guideUrl}}\nFolia repository: {{repoUrl}}\n\nPlease use these references as context, then help me understand and solve the problem I describe next. If any information is missing, ask what I should provide before making uncertain assumptions."
   }
 } as const;

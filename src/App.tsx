@@ -663,6 +663,11 @@ export default function App() {
     } = themeController;
 
     useEffect(() => {
+        const isPureMusic = Boolean(currentSong?.isPureMusic);
+        const songTitle = currentSong?.name;
+        const allText = lyrics?.lines.map(l => l.fullText).join('\n') || null;
+        const promptSourceText = (isPureMusic ? songTitle : allText) || allText;
+
         setThemeQuickEditorContext({
             aiTheme,
             customTheme,
@@ -670,8 +675,11 @@ export default function App() {
             coverUrl,
             songKey: currentSong?.id ?? null,
             isDaylight,
+            promptSourceText,
+            isPureMusic,
+            songTitle,
         });
-    }, [aiTheme, bgMode, coverUrl, currentSong?.id, customTheme, isDaylight, setThemeQuickEditorContext]);
+    }, [aiTheme, bgMode, coverUrl, currentSong?.id, currentSong?.isPureMusic, currentSong?.name, customTheme, isDaylight, lyrics, setThemeQuickEditorContext]);
 
     // Navigation and Library Hooks
     // manages current view, selected items, and navigation functions across the app

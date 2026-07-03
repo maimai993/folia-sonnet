@@ -143,7 +143,7 @@ describe('localMusicService', () => {
         const persistedHandle = createLibraryHandle();
         const selectedHandle = createLibraryHandle();
         vi.mocked(getDirHandles).mockResolvedValue({ Music: persistedHandle as unknown as FileSystemDirectoryHandle });
-        vi.mocked(window.showDirectoryPicker).mockResolvedValue(selectedHandle as unknown as FileSystemDirectoryHandle);
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(selectedHandle as unknown as FileSystemDirectoryHandle);
 
         const importedSongs = await importFolder();
 
@@ -165,7 +165,7 @@ describe('localMusicService', () => {
         const importedSongs = await resyncFolder('Music/Disc 1');
 
         expect(importedSongs).toHaveLength(1);
-        expect(window.showDirectoryPicker).not.toHaveBeenCalled();
+        expect((window as any).showDirectoryPicker).not.toHaveBeenCalled();
         expect(saveDirHandles).toHaveBeenCalledWith({ Music: persistedHandle });
         expect(saveLocalLibrarySnapshot).toHaveBeenCalledWith(expect.objectContaining({ rootFolderName: 'Music' }));
         expect(saveLocalSongs).toHaveBeenCalledWith([

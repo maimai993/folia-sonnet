@@ -14,6 +14,9 @@ type ThemeQuickEditorContext = {
     coverUrl: string | null;
     songKey: ThemeCacheSongKey | null;
     isDaylight: boolean;
+    promptSourceText: string | null;
+    isPureMusic: boolean;
+    songTitle: string | undefined;
 };
 
 type ThemeQuickEditorState = ThemeQuickEditorContext & {
@@ -56,6 +59,9 @@ export const useThemeQuickEditorStore = create<ThemeQuickEditorState>((set, get)
     coverUrl: null,
     songKey: null,
     isDaylight: false,
+    promptSourceText: null,
+    isPureMusic: false,
+    songTitle: undefined,
     isOpen: false,
     editorKind: null,
     canOpenEditor: false,
