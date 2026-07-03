@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Palette, Zap, Image as ImageIcon } from 'lucide-react';
+import { Sparkles, Palette, Zap, Image as ImageIcon, Bot } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { UserGuideTipCard } from './UserGuideTipCard';
 import { UserGuideFeatureCard } from './UserGuideFeatureCard';
@@ -16,6 +16,7 @@ export type NewFeaturesIntroProps = {
 };
 
 // 在这里编辑当前版本的新功能介绍
+// 修改这里的介绍的同时，需要修改 src\components\modal\userGuideContent.ts 中的 USER_GUIDE_AUTO_OPEN_VERSION 到下一个发布版本号
 export const NewFeaturesIntro: React.FC<NewFeaturesIntroProps> = ({ isDaylight, classes }) => {
     const { t } = useTranslation();
     const { textPrimary, textSecondary, tipCardBg, iconTileBg, cardBg } = classes;
@@ -50,10 +51,10 @@ export const NewFeaturesIntro: React.FC<NewFeaturesIntroProps> = ({ isDaylight, 
                 />
                 <UserGuideFeatureCard
                     {...featureCardClasses}
-                    icon={ImageIcon}
+                    icon={Bot}
                     iconClassName={isDaylight ? 'text-purple-500' : 'text-purple-400'}
-                    title="封面取色优化"
-                    description="改进了颜色提取算法，更准确地抓取封面主题色，并智能匹配亮暗色方案。"
+                    title="手动导入 AI 主题"
+                    description="未配置 API 时，也可在快速编辑面板中一键复制提示词并前往任意大模型对话，将结果手动导入为专属 AI 主题。"
                 />
             </div>
         </div>
