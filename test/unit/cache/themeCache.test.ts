@@ -124,4 +124,23 @@ describe('themeCache', () => {
         expect(cached?.secondaryColor).toBe(FALLBACK_AI_DUAL_THEME.dark.secondaryColor);
         expect(cached?.wordColors).toEqual([{ word: 'glow', color: legacyTheme.accentColor }]);
     });
+
+    it('preserves fallback optional theme arrays when sanitized input omits them', () => {
+        const fallbackTheme: Theme = {
+            ...legacyTheme,
+            wordColors: [{ word: 'keep', color: '#123456' }],
+            lyricsIcons: ['Sparkles']
+        };
+
+        expect(sanitizeTheme({
+            ...legacyTheme,
+            name: 'Partial Edit',
+            wordColors: undefined,
+            lyricsIcons: undefined
+        }, fallbackTheme)).toMatchObject({
+            name: 'Partial Edit',
+            wordColors: fallbackTheme.wordColors,
+            lyricsIcons: fallbackTheme.lyricsIcons
+        });
+    });
 });

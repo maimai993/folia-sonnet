@@ -14,6 +14,9 @@ type ThemeQuickEditorContext = {
     coverUrl: string | null;
     songKey: ThemeCacheSongKey | null;
     isDaylight: boolean;
+    promptSourceText: string | null;
+    isPureMusic: boolean;
+    songTitle: string | undefined;
 };
 
 type ThemeQuickEditorState = ThemeQuickEditorContext & {
@@ -26,7 +29,7 @@ type ThemeQuickEditorState = ThemeQuickEditorContext & {
 };
 
 const canOpenKind = (state: ThemeQuickEditorContext, kind: ThemeQuickEditorKind) => (
-    kind === 'ai' ? Boolean(state.aiTheme) : Boolean(state.customTheme)
+    kind === 'ai' ? true : Boolean(state.customTheme)
 );
 
 const resolveDefaultEditorKind = (state: ThemeQuickEditorContext): ThemeQuickEditorKind | null => {
@@ -34,7 +37,7 @@ const resolveDefaultEditorKind = (state: ThemeQuickEditorContext): ThemeQuickEdi
         return 'custom';
     }
 
-    if (state.bgMode === 'ai' && state.aiTheme) {
+    if (state.bgMode === 'ai') {
         return 'ai';
     }
 
@@ -46,7 +49,7 @@ const resolveDefaultEditorKind = (state: ThemeQuickEditorContext): ThemeQuickEdi
         return 'custom';
     }
 
-    return null;
+    return 'ai';
 };
 
 export const useThemeQuickEditorStore = create<ThemeQuickEditorState>((set, get) => ({
@@ -56,6 +59,9 @@ export const useThemeQuickEditorStore = create<ThemeQuickEditorState>((set, get)
     coverUrl: null,
     songKey: null,
     isDaylight: false,
+    promptSourceText: null,
+    isPureMusic: false,
+    songTitle: undefined,
     isOpen: false,
     editorKind: null,
     canOpenEditor: false,
@@ -68,7 +74,7 @@ export const useThemeQuickEditorStore = create<ThemeQuickEditorState>((set, get)
             ...context,
             isOpen: state.isOpen && Boolean(nextKind),
             editorKind: nextKind,
-            canOpenEditor: Boolean(context.aiTheme || context.customTheme),
+            canOpenEditor: true,
         };
     }),
     openEditor: (kind) => {

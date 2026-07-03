@@ -198,7 +198,9 @@ export default {
       "motionAmount": "动势",
       "glowIntensity": "辉光"
     },
-    "backToHome": "返回主页"
+    "backToHome": "返回主页",
+    "cancel": "取消",
+    "apply": "应用"
   },
   "panel": {
     "cover": "封面",
@@ -259,7 +261,7 @@ export default {
     "login": "登录",
     "welcomeBack": "欢迎回来",
     "guestTitle": "先搜几首喜欢的歌试试看",
-    "guestPrompt": "登录网易云，访问您的歌单、收藏专辑和电台。",
+    "guestPrompt": "登录网易云，访问您的歌单、收藏专辑和电台。\n部分歌曲未登录仅能试听30s。",
     "pleaseLogin": "请登录以访问您的音乐库",
     "connectAccount": "连接网易云账户",
     "loadingLibrary": "加载音乐库...",
@@ -567,6 +569,7 @@ export default {
     "openThemePark": "打开 Theme Park",
     "themeParkDesc": "自定义配色主题。",
     "themeName": "主题名称",
+    "manualImportAiTheme": "手动导入 AI 主题",
     "aiThemeQuickEditTitle": "快速编辑 AI 主题",
     "aiThemeQuickEditDesc": "调整当前歌曲 AI 主题的亮色 / 暗色配色。",
     "customThemeQuickEditTitle": "快速编辑自定义主题",
@@ -578,6 +581,8 @@ export default {
     "aiThemeQuickEditRecommendedColors": "推荐色",
     "aiThemeQuickEditSave": "保存 AI 主题",
     "customThemeQuickEditSave": "保存自定义主题",
+    "invalidJsonFormat": "无效的 JSON 格式",
+    "pasteJsonHere": "在此粘贴 JSON...",
     "audioOutputSettings": "播放设备",
     "audioOutputDevice": "当前播放声卡",
     "audioOutputDeviceDesc": "切换当前播放器的音频输出设备。在支持 setSinkId 时可使用。",
@@ -889,6 +894,9 @@ export default {
     "description": "你可以到自己使用的 AI 模型官方网站，先写下遇到的问题，再粘贴这段提示词，让 AI 结合 Folia 文档和源码仓库协助排查。",
     "usageHint": "用法：打开AI聊天软件，先描述你的具体问题，然后把这段提示词粘贴到问题后面一起发送(需要使用具有联网搜索能力的模型）。",
     "copyPrompt": "复制提示词",
+    "copyPromptTitle": "1. 复制 AI 提示词",
+    "copyPromptDesc": "将提示词复制并粘贴到任意大模型对话中，生成主题 JSON 数据。",
+    "importJsonTitle": "2. 粘贴并导入 JSON",
     "prompt": "我正在使用 GitHub 上的 folia-major 音乐播放器，遇到了一个问题，需要你协助排查。\n\nFolia 使用指南：{{guideUrl}}\nFolia 源码仓库：{{repoUrl}}\n\n请把这些资料作为上下文，结合我接下来描述的问题，帮我判断可能原因并给出处理步骤。如果信息不足，请先询问我需要补充什么，不要直接做不确定的假设。"
   }
 } as const;

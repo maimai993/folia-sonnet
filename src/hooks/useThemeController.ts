@@ -278,10 +278,6 @@ export function useThemeController({
             return;
         }
 
-        if (mode === 'ai' && !aiTheme && !legacyTheme) {
-            return;
-        }
-
         setBgMode(mode);
     };
 

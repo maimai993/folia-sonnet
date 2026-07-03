@@ -65,6 +65,7 @@ import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
 import { clampMediaVolume } from './utils/appPlaybackHelpers';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './utils/appPlaybackGuards';
+import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -663,6 +664,11 @@ export default function App() {
     } = themeController;
 
     useEffect(() => {
+        const isPureMusic = Boolean(currentSong?.isPureMusic);
+        const songTitle = currentSong?.name;
+        const allText = lyrics?.lines.map(l => l.fullText).join('\n') || null;
+        const promptSourceText = (isPureMusic ? songTitle : allText) || allText;
+
         setThemeQuickEditorContext({
             aiTheme,
             customTheme,
@@ -670,8 +676,11 @@ export default function App() {
             coverUrl,
             songKey: currentSong?.id ?? null,
             isDaylight,
+            promptSourceText,
+            isPureMusic,
+            songTitle,
         });
-    }, [aiTheme, bgMode, coverUrl, currentSong?.id, customTheme, isDaylight, setThemeQuickEditorContext]);
+    }, [aiTheme, bgMode, coverUrl, currentSong?.id, currentSong?.isPureMusic, currentSong?.name, customTheme, isDaylight, lyrics, setThemeQuickEditorContext]);
 
     // Navigation and Library Hooks
     // manages current view, selected items, and navigation functions across the app
@@ -1733,8 +1742,8 @@ export default function App() {
         if (bgMode === 'custom' && customTheme) {
             return customTheme;
         }
-        if (bgMode === 'ai' && aiTheme) {
-            return aiTheme;
+        if (bgMode === 'ai') {
+            return aiTheme ?? FALLBACK_AI_DUAL_THEME;
         }
         return {
             light: DAYLIGHT_THEME,

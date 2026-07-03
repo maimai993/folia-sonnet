@@ -2529,7 +2529,6 @@ function createWindow(options = {}) {
     backgroundColor: (useTransparentWindow || enableNativeBlur) ? '#00000000' : '#09090b',
     vibrancy: (!useTransparentWindow && enableNativeBlur) && process.platform === 'darwin' ? 'fullscreen-ui' : undefined,
     backgroundMaterial: (!useTransparentWindow && enableNativeBlur) && process.platform === 'win32' ? 'acrylic' : undefined,
-    titleBarStyle: 'hidden',
     autoHideMenuBar: true,
     icon: APP_ICON_PATH,
     skipTaskbar: mainWindowSkipTaskbarEnabled,

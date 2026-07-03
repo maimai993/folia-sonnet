@@ -42,12 +42,12 @@ interface MonetFloatingDecorProps {
     staticMode?: boolean;
 }
 
-const PARTICLE_COUNT = 7;
+const PARTICLE_COUNT = 10;
 
 /** Generates a stable set of floating particles seeded by the available icon list. */
 const buildParticles = (availableIcons: string[]): FloatingParticle[] =>
     Array.from({ length: PARTICLE_COUNT }, (_, i) => {
-        const useIcon = availableIcons.length > 0 && ((i * 37 + 11) % 100) > 40;
+        const useIcon = availableIcons.length > 0 && ((i * 37 + 11) % 100) > 20;
         return {
             id: i,
             x: ((i * 127 + 43) % 80) + 10,
@@ -58,7 +58,7 @@ const buildParticles = (availableIcons: string[]): FloatingParticle[] =>
             delay: ((i * 41) % 80) / 10,
             opacity: 0.06 + ((i * 31) % 12) / 100,
             iconName: useIcon
-                ? availableIcons[(i * 67) % availableIcons.length]
+                ? availableIcons[i % availableIcons.length]
                 : null,
             reverse: i % 2 === 0,
         };
