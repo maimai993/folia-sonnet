@@ -259,7 +259,7 @@ export default {
     "login": "登录",
     "welcomeBack": "欢迎回来",
     "guestTitle": "先搜几首喜欢的歌试试看",
-    "guestPrompt": "登录网易云，访问您的歌单、收藏专辑和电台。",
+    "guestPrompt": "登录网易云，访问您的歌单、收藏专辑和电台。\n部分歌曲未登录仅能试听30s。",
     "pleaseLogin": "请登录以访问您的音乐库",
     "connectAccount": "连接网易云账户",
     "loadingLibrary": "加载音乐库...",

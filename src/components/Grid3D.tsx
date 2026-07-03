@@ -589,7 +589,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             <User size={40} className="opacity-20" />
                         </div>
                         <h2 className="text-3xl font-bold opacity-80 text-center">{t('home.guestTitle')}</h2>
-                        <p className="opacity-40 text-sm text-center max-w-md leading-6">{t('home.guestPrompt')}</p>
+                        <p className="opacity-40 text-sm text-center max-w-md leading-6 whitespace-pre-line">{t('home.guestPrompt')}</p>
                         <button
                             onClick={initLogin}
                             className="px-8 py-3 bg-white text-black rounded-full font-bold text-sm hover:scale-105 transition-transform"
