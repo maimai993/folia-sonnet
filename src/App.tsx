@@ -65,6 +65,7 @@ import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
 import { clampMediaVolume } from './utils/appPlaybackHelpers';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './utils/appPlaybackGuards';
+import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -1741,8 +1742,8 @@ export default function App() {
         if (bgMode === 'custom' && customTheme) {
             return customTheme;
         }
-        if (bgMode === 'ai' && aiTheme) {
-            return aiTheme;
+        if (bgMode === 'ai') {
+            return aiTheme ?? FALLBACK_AI_DUAL_THEME;
         }
         return {
             light: DAYLIGHT_THEME,

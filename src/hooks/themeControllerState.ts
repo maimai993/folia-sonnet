@@ -1,5 +1,6 @@
 import { DualTheme, Theme } from '../types';
 import { applyStoredAnimationIntensityToDualTheme } from '../services/themePreferences';
+import { FALLBACK_AI_DUAL_THEME } from '../services/themeSanitizer';
 
 export type ThemeSourceKind = 'default' | 'ai' | 'custom';
 export type EditableThemeSourceKind = 'ai' | 'custom';
@@ -282,14 +283,14 @@ export const buildThemeSourceModel = ({
     const defaultSourceTheme = getBaseThemeForMode({ defaultTheme, daylightTheme, isDaylight });
     const aiSourceTheme = aiTheme
         ? getSelectedDualTheme(aiTheme, isDaylight)
-        : legacyTheme;
+        : legacyTheme ?? getSelectedDualTheme(FALLBACK_AI_DUAL_THEME, isDaylight);
     const customSourceTheme = customTheme
         ? getSelectedDualTheme(customTheme, isDaylight)
         : null;
 
     const options: Record<ThemeSourceKind, ThemeSourceOption> = {
         default: buildThemeSourceOption('default', defaultSourceTheme, true, false),
-        ai: buildThemeSourceOption('ai', aiSourceTheme, Boolean(aiSourceTheme), Boolean(aiTheme)),
+        ai: buildThemeSourceOption('ai', aiSourceTheme, true, Boolean(aiTheme || !legacyTheme)),
         custom: buildThemeSourceOption('custom', customSourceTheme, Boolean(customTheme), Boolean(customTheme)),
     };
 
@@ -358,11 +359,9 @@ export const resolveBgModeTheme = ({
         };
     }
 
-    if (!aiTheme) {
-        return previousTheme;
-    }
-
-    const selectedAiTheme = isDaylight ? aiTheme.light : aiTheme.dark;
+    const selectedAiTheme = aiTheme
+        ? getSelectedDualTheme(aiTheme, isDaylight)
+        : getSelectedDualTheme(FALLBACK_AI_DUAL_THEME, isDaylight);
     return {
         ...selectedAiTheme,
         wordColors: previousTheme.wordColors,

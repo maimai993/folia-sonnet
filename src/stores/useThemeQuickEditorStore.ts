@@ -29,7 +29,7 @@ type ThemeQuickEditorState = ThemeQuickEditorContext & {
 };
 
 const canOpenKind = (state: ThemeQuickEditorContext, kind: ThemeQuickEditorKind) => (
-    kind === 'ai' ? Boolean(state.aiTheme) : Boolean(state.customTheme)
+    kind === 'ai' ? true : Boolean(state.customTheme)
 );
 
 const resolveDefaultEditorKind = (state: ThemeQuickEditorContext): ThemeQuickEditorKind | null => {
@@ -37,7 +37,7 @@ const resolveDefaultEditorKind = (state: ThemeQuickEditorContext): ThemeQuickEdi
         return 'custom';
     }
 
-    if (state.bgMode === 'ai' && state.aiTheme) {
+    if (state.bgMode === 'ai') {
         return 'ai';
     }
 
@@ -49,7 +49,7 @@ const resolveDefaultEditorKind = (state: ThemeQuickEditorContext): ThemeQuickEdi
         return 'custom';
     }
 
-    return null;
+    return 'ai';
 };
 
 export const useThemeQuickEditorStore = create<ThemeQuickEditorState>((set, get) => ({
@@ -74,7 +74,7 @@ export const useThemeQuickEditorStore = create<ThemeQuickEditorState>((set, get)
             ...context,
             isOpen: state.isOpen && Boolean(nextKind),
             editorKind: nextKind,
-            canOpenEditor: Boolean(context.aiTheme || context.customTheme),
+            canOpenEditor: true,
         };
     }),
     openEditor: (kind) => {

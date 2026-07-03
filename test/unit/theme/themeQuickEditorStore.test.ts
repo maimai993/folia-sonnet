@@ -48,6 +48,9 @@ describe('useThemeQuickEditorStore', () => {
             coverUrl: null,
             songKey: null,
             isDaylight: false,
+            promptSourceText: null,
+            isPureMusic: false,
+            songTitle: undefined,
             isOpen: false,
             editorKind: null,
             canOpenEditor: false,
@@ -150,14 +153,11 @@ describe('useThemeQuickEditorStore', () => {
         expect(useThemeQuickEditorStore.getState().editorKind).toBe('ai');
     });
 
-    it('does not open unavailable editor kinds', () => {
-        useThemeQuickEditorStore.getState().openEditor();
-        expect(useThemeQuickEditorStore.getState().isOpen).toBe(false);
-
+    it('opens the AI editor even before an AI theme has been generated', () => {
         useThemeQuickEditorStore.getState().setContext({
             aiTheme: null,
-            customTheme,
-            bgMode: 'custom',
+            customTheme: null,
+            bgMode: 'default',
             coverUrl: null,
             songKey: null,
             isDaylight: false,
@@ -165,7 +165,29 @@ describe('useThemeQuickEditorStore', () => {
             isPureMusic: false,
             songTitle: undefined,
         });
-        useThemeQuickEditorStore.getState().openEditor('ai');
+
+        useThemeQuickEditorStore.getState().openEditor();
+        expect(useThemeQuickEditorStore.getState()).toMatchObject({
+            isOpen: true,
+            editorKind: 'ai',
+            canOpenEditor: true,
+        });
+    });
+
+    it('does not open unavailable custom editor kinds', () => {
+        useThemeQuickEditorStore.getState().setContext({
+            aiTheme: null,
+            customTheme: null,
+            bgMode: 'default',
+            coverUrl: null,
+            songKey: null,
+            isDaylight: false,
+            promptSourceText: null,
+            isPureMusic: false,
+            songTitle: undefined,
+        });
+
+        useThemeQuickEditorStore.getState().openEditor('custom');
         expect(useThemeQuickEditorStore.getState().isOpen).toBe(false);
     });
 });

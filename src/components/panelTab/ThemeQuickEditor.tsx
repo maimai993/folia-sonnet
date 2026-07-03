@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { DualTheme } from '../../types';
 import type { ThemeCacheSongKey } from '../../services/themeCache';
-import { normalizeThemeHexColor, sanitizeDualTheme } from '../../services/themeSanitizer';
+import { FALLBACK_AI_DUAL_THEME, normalizeThemeHexColor, sanitizeDualTheme } from '../../services/themeSanitizer';
 import { extractColors } from '../../utils/colorExtractor';
 import { THEME_GENERATION_PROMPT_PREFIX, buildThemeSourcePrompt, parseAiThemeJsonInput } from '../../utils/aiThemePrompts';
 import { useThemeQuickEditorStore, type ThemeQuickEditorKind } from '../../stores/useThemeQuickEditorStore';
@@ -595,7 +595,7 @@ const ThemeQuickEditorHost: React.FC<ThemeQuickEditorHostProps> = ({ onSaveAiThe
         songTitle: state.songTitle,
         closeEditor: state.closeEditor,
     })));
-    const initialTheme = editorKind === 'custom' ? customTheme : aiTheme;
+    const initialTheme = editorKind === 'custom' ? customTheme : (aiTheme ?? FALLBACK_AI_DUAL_THEME);
 
     return (
         <AnimatePresence>

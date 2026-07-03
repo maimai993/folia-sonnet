@@ -6,6 +6,7 @@ import {
     getBaseThemeForMode,
     resolveBgModeTheme
 } from '@/hooks/themeControllerState';
+import { FALLBACK_AI_DUAL_THEME } from '@/services/themeSanitizer';
 import type { DualTheme, Theme } from '@/types';
 
 const defaultTheme: Theme = {
@@ -93,7 +94,7 @@ describe('themeControllerState', () => {
         expect(initialCustomTheme.dark.lyricsIcons).toEqual([]);
     });
 
-    it('falls back to the default source when no AI or custom source is available', () => {
+    it('uses the default AI dual theme when no generated AI theme exists', () => {
         const model = buildThemeSourceModel({
             bgMode: 'ai',
             aiTheme: null,
@@ -104,10 +105,11 @@ describe('themeControllerState', () => {
             daylightTheme,
         });
 
-        expect(model.activeSource).toBe('default');
-        expect(model.current.label).toBe(defaultTheme.name);
-        expect(model.options.ai.available).toBe(false);
-        expect(model.canOpenQuickEditor).toBe(false);
+        expect(model.activeSource).toBe('ai');
+        expect(model.current.label).toBe(FALLBACK_AI_DUAL_THEME.dark.name);
+        expect(model.options.ai.available).toBe(true);
+        expect(model.options.ai.editable).toBe(true);
+        expect(model.canOpenQuickEditor).toBe(true);
     });
 
     it('treats built-in fallback dual themes as editable AI themes', () => {
@@ -197,7 +199,7 @@ describe('themeControllerState', () => {
         expect(nextTheme.lyricsIcons).toEqual(previousTheme.lyricsIcons);
     });
 
-    it('keeps the previous theme when AI background mode is requested without AI theme', () => {
+    it('applies the default AI theme when AI background mode is requested without generated AI theme', () => {
         const previousTheme: Theme = {
             ...defaultTheme,
             name: 'Legacy Theme',
@@ -214,7 +216,10 @@ describe('themeControllerState', () => {
             previousTheme
         });
 
-        expect(nextTheme).toBe(previousTheme);
+        expect(nextTheme.name).toBe(FALLBACK_AI_DUAL_THEME.dark.name);
+        expect(nextTheme.backgroundColor).toBe(FALLBACK_AI_DUAL_THEME.dark.backgroundColor);
+        expect(nextTheme.wordColors).toEqual(previousTheme.wordColors);
+        expect(nextTheme.lyricsIcons).toEqual(previousTheme.lyricsIcons);
     });
 
     it('switches bg mode back to default while retaining AI foreground tokens', () => {
