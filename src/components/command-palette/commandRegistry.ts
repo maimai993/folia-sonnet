@@ -392,6 +392,20 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         },
     },
     {
+        id: 'theme-quick-editor',
+        group: 'settings',
+        title: 'Quick theme editor',
+        description: 'Quickly edit the current AI or custom theme',
+        keywords: ['quick theme editor', 'theme editor', 'ai theme editor', 'custom theme editor', '快速主题编辑器', '主题编辑器', '自定义主题编辑器', 'kuaisuzhutibianjiqi', 'zhutibianjiqi', 'zidingyizhutibianjiqi', 'ksztbjq', 'ztbjq'],
+        execute: (_input, context) => {
+            if (!context.canOpenThemeQuickEditor) {
+                return false;
+            }
+            context.openThemeQuickEditor();
+            return true;
+        },
+    },
+    {
         id: 'playback-auto-match-best-lyric',
         group: 'playback',
         title: 'Match best lyrics',
@@ -553,6 +567,10 @@ export const getCommandPaletteMatches = (
 
         if (command.id === 'theme-generate-current') {
             return context ? context.canGenerateAITheme && !context.isGeneratingTheme : true;
+        }
+
+        if (command.id === 'theme-quick-editor') {
+            return context ? context.canOpenThemeQuickEditor : true;
         }
 
         if (command.group === 'search') {

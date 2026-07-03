@@ -6,6 +6,7 @@ import { UserGuideFeatureCard } from './UserGuideFeatureCard';
 import { UserGuideFooter } from './UserGuideFooter';
 import { UserGuideTipCard } from './UserGuideTipCard';
 import { PLAYER_PAGE_SHORTCUTS, type GuidePage, type UserGuideShortcut } from './userGuideContent';
+import { NewFeaturesIntro } from './NewFeaturesIntro';
 
 // src/components/modal/UserGuidePageContent.tsx
 
@@ -81,6 +82,18 @@ export const UserGuidePageContent: React.FC<UserGuidePageContentProps> = ({
     if (page === 1) {
         return (
             <>
+                <NewFeaturesIntro 
+                    isDaylight={isDaylight} 
+                    classes={{ textPrimary, textSecondary, tipCardBg, iconTileBg, cardBg }} 
+                />
+                {footer}
+            </>
+        );
+    }
+
+    if (page === 2) {
+        return (
+            <>
                 <UserGuideTipCard
                     {...tipCardClasses}
                     icon={Lock}
@@ -104,26 +117,6 @@ export const UserGuidePageContent: React.FC<UserGuidePageContentProps> = ({
                         description={t('userGuide.clickThrough.lockDesc', 'Move to the top titlebar hotspot to reveal the lock button, then click it to turn click-through off.')}
                     />
                 </div>
-                {footer}
-            </>
-        );
-    }
-
-    if (page === 2) {
-        return (
-            <>
-                <div className="flex justify-center mb-6 mt-4">
-                    <div className={`relative w-20 h-20 rounded-full flex items-center justify-center ${isDaylight ? 'bg-blue-50 shadow-inner' : 'bg-white/[0.03] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]'}`}>
-                        <Sparkles size={32} className={isDaylight ? 'text-blue-500' : 'text-blue-400'} />
-                    </div>
-                </div>
-                <UserGuideTipCard
-                    {...tipCardClasses}
-                    icon={Sparkles}
-                    iconClassName={isDaylight ? 'text-blue-500' : 'text-blue-400'}
-                    title={t('userGuide.title', 'Welcome to Folia')}
-                    description={t('userGuide.subtitle', 'Here are some tips to help you navigate.')}
-                />
                 {footer}
             </>
         );

@@ -85,7 +85,12 @@ export const extractColors = async (imageUrl: string, count: number = 5): Promis
             }
 
             // If we don't have enough, fill with existing or transparent
-            const result = distinctColors.map(c => `rgb(${c.r}, ${c.g}, ${c.b})`);
+            const result = distinctColors.map(c => {
+                const hexR = c.r.toString(16).padStart(2, '0');
+                const hexG = c.g.toString(16).padStart(2, '0');
+                const hexB = c.b.toString(16).padStart(2, '0');
+                return `#${hexR}${hexG}${hexB}`;
+            });
             resolve(result);
         };
 

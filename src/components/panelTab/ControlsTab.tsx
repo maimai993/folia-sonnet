@@ -3,7 +3,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Repeat, Repeat1, RepeatOff, Heart, Sparkles, RotateCcw, Cone, Sun, Moon, Volume2, Volume1, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Theme, ThemeMode, VisualizerMode } from '../../types';
+import type { ThemeSourceModel } from '../../hooks/themeControllerState';
 import { getVisualizerModeLabel, VISUALIZER_REGISTRY } from '../visualizer/registry';
+import { useThemeQuickEditorStore } from '../../stores/useThemeQuickEditorStore';
 
 // Controls tab keeps the visualizer picker local so it can expand into a full-tab overlay
 // without changing the rest of the player state flow.
@@ -21,6 +23,7 @@ interface ControlsTabProps {
     bgMode: ThemeMode;
     onBgModeChange: (mode: ThemeMode) => void;
     hasCustomTheme: boolean;
+    themeSourceModel: ThemeSourceModel;
     onResetTheme: () => void;
     defaultTheme: Theme;
     daylightTheme: Theme;
@@ -51,6 +54,7 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     bgMode,
     onBgModeChange,
     hasCustomTheme,
+    themeSourceModel,
     onResetTheme,
     defaultTheme,
     daylightTheme,
@@ -68,6 +72,7 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     loopToggleDisabled = false,
 }) => {
     const { t } = useTranslation();
+    const openThemeQuickEditor = useThemeQuickEditorStore(state => state.openEditor);
     const [sliderVolume, setSliderVolume] = useState(isMuted ? 0 : volume);
     const [isVisualizerOverlayOpen, setIsVisualizerOverlayOpen] = useState(false);
     const isDraggingRef = useRef(false);
@@ -160,6 +165,28 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     const handleVisualizerSelect = (mode: VisualizerMode) => {
         onVisualizerModeChange(mode);
         setIsVisualizerOverlayOpen(false);
+    };
+
+    const formatThemeDisplayName = (name: string) => {
+        if (themeSourceModel.activeSource !== 'default') {
+            return name;
+        }
+
+        return name === defaultTheme.name
+            ? t('theme.midnightDefault')
+            : (name === daylightTheme.name ? t('theme.daylightDefault') : name);
+    };
+    const activeThemeSource = themeSourceModel.current;
+    const aiThemeSource = themeSourceModel.options.ai;
+    const customThemeSource = themeSourceModel.options.custom;
+    const currentEditableSource = themeSourceModel.editableSource;
+    const themeDisplayName = formatThemeDisplayName(activeThemeSource.label || theme.name);
+    const aiSwatchColor = aiThemeSource.theme?.backgroundColor ?? 'rgba(114,119,134,0.4)';
+    const customSwatchColor = customThemeSource.theme?.accentColor ?? 'rgba(114,119,134,0.4)';
+    const openCurrentThemeQuickEditor = () => {
+        if (currentEditableSource) {
+            openThemeQuickEditor(currentEditableSource);
+        }
     };
 
     return (
@@ -281,24 +308,25 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                         <div className={`flex ${wellBg} p-1 rounded-xl`}>
                             <button
                                 onClick={() => onBgModeChange('default')}
-                                className={`flex-1 py-1.5 flex items-center justify-center gap-2 text-[10px] font-medium rounded-lg transition-all ${bgMode === 'default' ? activeOptionBg : 'opacity-40 hover:opacity-100'}`}
+                                className={`flex-1 py-1.5 flex items-center justify-center gap-2 text-[10px] font-medium rounded-lg transition-all ${themeSourceModel.activeSource === 'default' ? activeOptionBg : 'opacity-40 hover:opacity-100'}`}
                             >
                                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: isDaylight ? daylightTheme.backgroundColor : defaultTheme.backgroundColor }}></div>
                                 {t('ui.default')}
                             </button>
                             <button
-                                onClick={() => onBgModeChange('ai')}
-                                className={`flex-1 py-1.5 flex items-center justify-center gap-2 text-[10px] font-medium rounded-lg transition-all ${bgMode === 'ai' ? activeOptionBg : 'opacity-40 hover:opacity-100'}`}
+                                onClick={() => aiThemeSource.available && onBgModeChange('ai')}
+                                disabled={!aiThemeSource.available}
+                                className={`flex-1 py-1.5 flex items-center justify-center gap-2 text-[10px] font-medium rounded-lg transition-all ${themeSourceModel.activeSource === 'ai' ? activeOptionBg : aiThemeSource.available ? 'opacity-40 hover:opacity-100' : 'opacity-25 cursor-not-allowed'}`}
                             >
-                                <div className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: theme.backgroundColor }}></div>
+                                <div className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: aiSwatchColor }}></div>
                                 {t('ui.aiTheme')}
                             </button>
                             {hasCustomTheme && (
                                 <button
                                     onClick={() => onBgModeChange('custom')}
-                                    className={`flex-1 py-1.5 flex items-center justify-center gap-2 text-[10px] font-medium rounded-lg transition-all ${bgMode === 'custom' ? activeOptionBg : 'opacity-40 hover:opacity-100'}`}
+                                    className={`flex-1 py-1.5 flex items-center justify-center gap-2 text-[10px] font-medium rounded-lg transition-all ${themeSourceModel.activeSource === 'custom' ? activeOptionBg : 'opacity-40 hover:opacity-100'}`}
                                 >
-                                    <div className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: theme.accentColor }}></div>
+                                    <div className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: customSwatchColor }}></div>
                                     {t('options.customTheme') || 'Custom'}
                                 </button>
                             )}
@@ -308,10 +336,23 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
 
                 <div className="pt-2 border-t border-white/5 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold truncate max-w-[120px]">
-                            {theme.name === defaultTheme.name ? t('theme.midnightDefault') : (theme.name === daylightTheme.name ? t('theme.daylightDefault') : theme.name)}
-                        </span>
-                        {(theme.name !== defaultTheme.name && theme.name !== daylightTheme.name) && (
+                        {currentEditableSource ? (
+                            <button
+                                type="button"
+                                onClick={openCurrentThemeQuickEditor}
+                                className={`max-w-[120px] truncate rounded-md px-1.5 py-1 text-left text-xs font-bold transition-colors ${isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'}`}
+                                title={currentEditableSource === 'custom'
+                                    ? (t('options.customThemeQuickEditTitle') || 'Edit Custom Theme')
+                                    : (t('options.aiThemeQuickEditTitle') || 'Edit AI Theme')}
+                            >
+                                {themeDisplayName}
+                            </button>
+                        ) : (
+                            <span className="text-xs font-bold truncate max-w-[120px]">
+                                {themeDisplayName}
+                            </span>
+                        )}
+                        {themeSourceModel.activeSource !== 'default' && (
                             <button
                                 onClick={onResetTheme}
                                 className={`p-1 rounded-full ${isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'} transition-colors`}

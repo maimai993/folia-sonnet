@@ -34,6 +34,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     enableAlternativeLyricSources: false,
     runAutoMatchBestLyric: vi.fn(async () => true),
     setIsUserGuideModalOpen: vi.fn(),
+    openThemeQuickEditor: vi.fn(),
+    canOpenThemeQuickEditor: true,
     playQueue: [],
     playSong: vi.fn(),
     ...overrides,
@@ -155,6 +157,22 @@ describe('command palette registry', () => {
         expect(getCommandPaletteMatches('生成AI主题', createContext({
             isGeneratingTheme: true,
         })).some(match => match.command.id === 'theme-generate-current')).toBe(false);
+    });
+
+    it('executes the current editable theme quick editor command', () => {
+        const context = createContext();
+
+        const [match] = getCommandPaletteMatches('快速主题编辑器', context);
+        expect(match.command.id).toBe('theme-quick-editor');
+
+        match.command.execute(match.input, context);
+        expect(context.openThemeQuickEditor).toHaveBeenCalled();
+    });
+
+    it('hides the theme quick editor command when no editable theme is available', () => {
+        expect(getCommandPaletteMatches('快速主题编辑器', createContext({
+            canOpenThemeQuickEditor: false,
+        })).some(match => match.command.id === 'theme-quick-editor')).toBe(false);
     });
 
     it('filters out non-current search commands when context is provided', () => {

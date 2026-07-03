@@ -1,6 +1,26 @@
 import { DualTheme, Theme } from '../types';
 import { applyStoredAnimationIntensityToDualTheme } from '../services/themePreferences';
 
+export type ThemeSourceKind = 'default' | 'ai' | 'custom';
+export type EditableThemeSourceKind = 'ai' | 'custom';
+
+export type ThemeSourceOption = {
+    source: ThemeSourceKind;
+    available: boolean;
+    editable: boolean;
+    theme: Theme | null;
+    label: string;
+    swatchColor: string;
+};
+
+export type ThemeSourceModel = {
+    activeSource: ThemeSourceKind;
+    current: ThemeSourceOption;
+    options: Record<ThemeSourceKind, ThemeSourceOption>;
+    editableSource: EditableThemeSourceKind | null;
+    canOpenQuickEditor: boolean;
+};
+
 interface RgbColor {
     r: number;
     g: number;
@@ -222,6 +242,69 @@ export const getBaseThemeForMode = ({
     isDaylight: boolean;
 }): Theme => {
     return isDaylight ? daylightTheme : defaultTheme;
+};
+
+const getSelectedDualTheme = (dualTheme: DualTheme, isDaylight: boolean) => (
+    isDaylight ? dualTheme.light : dualTheme.dark
+);
+
+const buildThemeSourceOption = (
+    source: ThemeSourceKind,
+    theme: Theme | null,
+    available: boolean,
+    editable: boolean,
+): ThemeSourceOption => ({
+    source,
+    available,
+    editable,
+    theme,
+    label: theme?.name ?? '',
+    swatchColor: theme?.backgroundColor ?? 'transparent',
+});
+
+export const buildThemeSourceModel = ({
+    bgMode,
+    aiTheme,
+    legacyTheme,
+    customTheme,
+    isDaylight,
+    defaultTheme,
+    daylightTheme,
+}: {
+    bgMode: ThemeSourceKind;
+    aiTheme: DualTheme | null;
+    legacyTheme: Theme | null;
+    customTheme: DualTheme | null;
+    isDaylight: boolean;
+    defaultTheme: Theme;
+    daylightTheme: Theme;
+}): ThemeSourceModel => {
+    const defaultSourceTheme = getBaseThemeForMode({ defaultTheme, daylightTheme, isDaylight });
+    const aiSourceTheme = aiTheme
+        ? getSelectedDualTheme(aiTheme, isDaylight)
+        : legacyTheme;
+    const customSourceTheme = customTheme
+        ? getSelectedDualTheme(customTheme, isDaylight)
+        : null;
+
+    const options: Record<ThemeSourceKind, ThemeSourceOption> = {
+        default: buildThemeSourceOption('default', defaultSourceTheme, true, false),
+        ai: buildThemeSourceOption('ai', aiSourceTheme, Boolean(aiSourceTheme), Boolean(aiTheme)),
+        custom: buildThemeSourceOption('custom', customSourceTheme, Boolean(customTheme), Boolean(customTheme)),
+    };
+
+    const activeSource = options[bgMode]?.available ? bgMode : 'default';
+    const editableSource = options[activeSource].editable && activeSource !== 'default'
+        ? activeSource
+        : null;
+
+    return {
+        activeSource,
+        current: options[activeSource],
+        options,
+        editableSource,
+        canOpenQuickEditor: options.ai.editable || options.custom.editable,
+    };
 };
 
 export const buildDefaultCustomDualTheme = ({

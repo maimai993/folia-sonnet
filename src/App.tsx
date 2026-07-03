@@ -9,6 +9,7 @@ import { useCommandPalette } from './components/command-palette/useCommandPalett
 import AppShell from './components/app/AppShell';
 import Home from './components/app/Home';
 import PlayerPanel from './components/app/PlayerPanel';
+import ThemeQuickEditorHost from './components/panelTab/ThemeQuickEditor';
 import AppDialogs from './components/app/dialogs/AppDialogs';
 import { createCopySongInfoSuccessHandler } from './components/app/dialogs/createCopySongInfoSuccessHandler';
 import { buildSettingsDialogModel } from './components/app/dialogs/buildSettingsDialogModel';
@@ -58,6 +59,7 @@ import { useSessionRestoreController } from './hooks/useSessionRestoreController
 import { useStagePlaybackController } from './hooks/useStagePlaybackController';
 import { useSongThemeAutoGeneration } from './hooks/useSongThemeAutoGeneration';
 import { useThemeController } from './hooks/useThemeController';
+import { useThemeQuickEditorStore } from './stores/useThemeQuickEditorStore';
 import { useSearchNavigationStore } from './stores/useSearchNavigationStore';
 import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -153,6 +155,9 @@ export default function App() {
         setLastSeenGuideVersion: state.setLastSeenGuideVersion,
         setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     })));
+    const setThemeQuickEditorContext = useThemeQuickEditorStore(state => state.setContext);
+    const openThemeQuickEditor = useThemeQuickEditorStore(state => state.openEditor);
+    const canOpenThemeQuickEditor = useThemeQuickEditorStore(state => state.canOpenEditor);
 
     useEffect(() => {
         if (
@@ -636,6 +641,7 @@ export default function App() {
         aiTheme,
         customTheme,
         hasCustomTheme,
+        themeSourceModel,
         isCustomThemePreferred,
         songThemeAutoSwitchEnabled,
         songThemeAutoGenerateEnabled,
@@ -649,11 +655,23 @@ export default function App() {
         generateAITheme,
         getThemeParkSeedTheme,
         saveCustomDualTheme,
+        saveEditedAiDualTheme,
         applyCustomTheme,
         handleCustomThemePreferenceChange,
         handleSongThemeAutoSwitchChange,
         handleSongThemeAutoGenerateChange,
     } = themeController;
+
+    useEffect(() => {
+        setThemeQuickEditorContext({
+            aiTheme,
+            customTheme,
+            bgMode,
+            coverUrl,
+            songKey: currentSong?.id ?? null,
+            isDaylight,
+        });
+    }, [aiTheme, bgMode, coverUrl, currentSong?.id, customTheme, isDaylight, setThemeQuickEditorContext]);
 
     // Navigation and Library Hooks
     // manages current view, selected items, and navigation functions across the app
@@ -1636,6 +1654,8 @@ export default function App() {
         enableAlternativeLyricSources,
         runAutoMatchBestLyric: handleAutoMatchBestLyricForCurrentSong,
         setIsUserGuideModalOpen,
+        openThemeQuickEditor,
+        canOpenThemeQuickEditor,
     }), [
         enableAlternativeLyricSources,
         enablePlayerPageNativeBlur,
@@ -1670,6 +1690,8 @@ export default function App() {
         toggleDaylightMode,
         handleToggleAlternativeLyricSources,
         setIsUserGuideModalOpen,
+        openThemeQuickEditor,
+        canOpenThemeQuickEditor,
     ]);
     const commandPalette = useCommandPalette({
         currentView,
@@ -2044,6 +2066,7 @@ export default function App() {
         bgMode,
         handleBgModeChange,
         hasCustomTheme,
+        themeSourceModel,
         handleResetTheme,
         defaultTheme: DEFAULT_THEME,
         daylightTheme: DAYLIGHT_THEME,
@@ -2278,6 +2301,7 @@ export default function App() {
         showOpenPanelCloseButton,
         shuffleQueue,
         theme,
+        themeSourceModel,
         toggleLoop,
         togglePlay,
         t,
@@ -2763,6 +2787,8 @@ export default function App() {
             {currentView === 'player' && !showLyricMatchModal && (
                 <PlayerPanel model={playerPanelModel} />
             )}
+
+            <ThemeQuickEditorHost onSaveAiTheme={saveEditedAiDualTheme} onSaveCustomTheme={saveCustomDualTheme} />
 
             <CommandPalette
                 activeIndex={commandPalette.activeIndex}

@@ -23,6 +23,7 @@ import { FALLBACK_AI_DUAL_THEME, sanitizeDualTheme, sanitizeTheme } from '../ser
 import { extractColors } from '../utils/colorExtractor';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import {
+    buildThemeSourceModel,
     buildBuiltinDualTheme,
     buildDefaultCustomDualTheme,
     getBaseThemeForMode,
@@ -166,6 +167,16 @@ export function useThemeController({
     const activeThemeGenerationCountRef = useRef(0);
     const themeGenerationSongKeysRef = useRef(new Set<string>());
 
+    const themeSourceModel = useMemo(() => buildThemeSourceModel({
+        bgMode,
+        aiTheme,
+        legacyTheme,
+        customTheme,
+        isDaylight,
+        defaultTheme,
+        daylightTheme,
+    }), [aiTheme, bgMode, customTheme, daylightTheme, defaultTheme, isDaylight, legacyTheme]);
+
     const getPreferenceSwitchState = (): ThemePreferenceSwitchState => ({
         isCustomThemePreferred,
         songThemeAutoSwitchEnabled,
@@ -264,6 +275,10 @@ export function useThemeController({
 
     const handleBgModeChange = (mode: ThemeMode) => {
         if (mode === 'custom' && !customTheme) {
+            return;
+        }
+
+        if (mode === 'ai' && !aiTheme && !legacyTheme) {
             return;
         }
 
@@ -371,6 +386,22 @@ export function useThemeController({
         setStatusMsg({
             type: 'success',
             text: `已保存并应用自定义主题: ${getSelectedDualTheme(sanitized, isDaylight).name}`,
+        });
+        return sanitized;
+    };
+
+    const saveEditedAiDualTheme = (dualTheme: DualTheme, songKey?: ThemeCacheSongKey | null) => {
+        const sanitized = applyStoredAnimationIntensityToDualTheme(sanitizeDualTheme(dualTheme));
+        setLegacyTheme(null);
+        setAiTheme(sanitized);
+        setBgMode('ai');
+        void saveToCache('last_dual_theme', sanitized);
+        if (songKey != null) {
+            void saveToCache(`dual_theme_${songKey}`, sanitized);
+        }
+        setStatusMsg({
+            type: 'success',
+            text: t('status.aiThemeUpdated', { themeName: getSelectedDualTheme(sanitized, isDaylight).name }),
         });
         return sanitized;
     };
@@ -591,6 +622,7 @@ export function useThemeController({
         setAiTheme,
         customTheme,
         hasCustomTheme: Boolean(customTheme),
+        themeSourceModel,
         isCustomThemePreferred,
         songThemeAutoSwitchEnabled,
         songThemeAutoGenerateEnabled,
@@ -608,6 +640,7 @@ export function useThemeController({
         generateAITheme,
         getThemeParkSeedTheme,
         saveCustomDualTheme,
+        saveEditedAiDualTheme,
         applyCustomTheme,
         handleCustomThemePreferenceChange,
         handleSongThemeAutoSwitchChange,

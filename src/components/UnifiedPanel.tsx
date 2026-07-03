@@ -14,6 +14,7 @@ import OnlineLyricsTab from './panelTab/OnlineLyricsTab';
 import PlaylistSelectionDialog from './shared/PlaylistSelectionDialog';
 import TextInputDialog from './shared/TextInputDialog';
 import type { OnlineLyricsState } from '../types';
+import type { ThemeSourceModel } from '../hooks/themeControllerState';
 
 export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics';
 
@@ -41,6 +42,7 @@ type UnifiedPanelPlaybackProps = {
     bgMode: ThemeMode;
     onBgModeChange: (mode: ThemeMode) => void;
     hasCustomTheme: boolean;
+    themeSourceModel: ThemeSourceModel;
     onResetTheme: () => void;
     defaultTheme: Theme;
     daylightTheme: Theme;
@@ -154,6 +156,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         bgMode,
         onBgModeChange,
         hasCustomTheme,
+        themeSourceModel,
         onResetTheme,
         defaultTheme,
         daylightTheme,
@@ -781,6 +784,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             bgMode={bgMode}
                                             onBgModeChange={onBgModeChange}
                                             hasCustomTheme={hasCustomTheme}
+                                            themeSourceModel={themeSourceModel}
                                             onResetTheme={onResetTheme}
                                             defaultTheme={defaultTheme}
                                             daylightTheme={daylightTheme}

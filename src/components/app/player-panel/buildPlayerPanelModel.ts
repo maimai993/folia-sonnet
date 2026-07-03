@@ -34,6 +34,7 @@ type BuildPlayerPanelModelParams = {
     bgMode: LegacyUnifiedPanelProps['playback']['bgMode'];
     handleBgModeChange: LegacyUnifiedPanelProps['playback']['onBgModeChange'];
     hasCustomTheme: LegacyUnifiedPanelProps['playback']['hasCustomTheme'];
+    themeSourceModel: LegacyUnifiedPanelProps['playback']['themeSourceModel'];
     handleResetTheme: LegacyUnifiedPanelProps['playback']['onResetTheme'];
     defaultTheme: LegacyUnifiedPanelProps['playback']['defaultTheme'];
     daylightTheme: LegacyUnifiedPanelProps['playback']['daylightTheme'];
@@ -125,6 +126,7 @@ export const buildPlayerPanelModel = ({
     bgMode,
     handleBgModeChange,
     hasCustomTheme,
+    themeSourceModel,
     handleResetTheme,
     defaultTheme,
     daylightTheme,
@@ -215,6 +217,7 @@ export const buildPlayerPanelModel = ({
             bgMode,
             onBgModeChange: handleBgModeChange,
             hasCustomTheme,
+            themeSourceModel,
             onResetTheme: handleResetTheme,
             defaultTheme,
             daylightTheme,
