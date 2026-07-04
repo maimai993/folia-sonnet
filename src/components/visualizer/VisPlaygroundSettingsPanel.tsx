@@ -669,7 +669,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
                         <ToggleRow
                             label={t('options.showSubtitleTranslation') || '显示翻译'}
-                            description={t('options.showSubtitleTranslationDesc') || '控制 Monet 和底部字幕层中的翻译文本。'}
+                            description={t('options.showSubtitleTranslationDesc') || '显示歌词翻译'}
                             checked={showSubtitleTranslation}
                             onChange={onToggleShowSubtitleTranslation}
                             theme={theme}
