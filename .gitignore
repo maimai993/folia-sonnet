@@ -43,3 +43,4 @@ test/manual/lyric-output/*
 test/manual/lyric-audit-output/*    
 .agents/
 skills-lock.json
+TODO.MD

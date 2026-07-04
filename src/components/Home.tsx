@@ -465,12 +465,18 @@ const Home: React.FC<HomeProps> = ({
                                 </h1>
                                 <button
                                     onClick={() => onOpenSettings?.('help')}
-                                    className="relative p-2 rounded-full hover:bg-white/10 opacity-40 hover:opacity-100 transition-all ml-4"
+                                    className={`relative flex items-center gap-1.5 p-2 rounded-full hover:bg-white/10 transition-all ml-4 ${
+                                        showUpdateIndicator 
+                                            ? 'opacity-90 hover:opacity-100' 
+                                            : 'opacity-40 hover:opacity-100'
+                                    }`}
                                     title="Help & About"
                                 >
                                     <Settings size={20} style={{ color: 'var(--text-primary)' }} />
                                     {showUpdateIndicator && (
-                                        <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-red-400 ring-2 ring-black/20" />
+                                        <span className="text-[10px] font-medium text-zinc-800 dark:text-zinc-200 opacity-80 whitespace-nowrap bg-zinc-200/50 dark:bg-white/10 px-2 py-0.5 rounded-md">
+                                            新版本发布
+                                        </span>
                                     )}
                                 </button>
                                 {scanProgress?.active && (

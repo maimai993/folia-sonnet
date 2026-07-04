@@ -285,6 +285,39 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                 发现新版本 v{updateStatus.availableVersion}
                             </span>
                         </div>
+
+                        {/* 自动更新时的提示 */}
+                        {electronSettings.ENABLE_AUTO_UPDATE && updateStatus.status === 'downloading' && (
+                            <div className="text-xs text-left text-zinc-400">
+                                新版本正在后台自动下载，下载完成后将提示您重启安装。
+                            </div>
+                        )}
+
+                        {/* 下载进度条 */}
+                        {updateStatus.status === 'downloading' && updateStatus.downloadProgress && (
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs font-mono">
+                                    <span className="opacity-60 text-left" style={{ color: 'var(--text-secondary)' }}>
+                                        正在下载更新...
+                                    </span>
+                                    <span className="font-semibold text-emerald-400">
+                                        {Math.round(updateStatus.downloadProgress.percent)}%
+                                    </span>
+                                </div>
+                                <div className="w-full h-1.5 rounded-full overflow-hidden bg-white/10">
+                                    <div
+                                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-[width] duration-300 ease-out"
+                                        style={{ width: `${updateStatus.downloadProgress.percent}%` }}
+                                    />
+                                </div>
+                                {updateStatus.downloadProgress.transferred !== undefined && updateStatus.downloadProgress.total !== undefined && (
+                                    <div className="text-[10px] opacity-40 text-right font-mono" style={{ color: 'var(--text-secondary)' }}>
+                                        {(updateStatus.downloadProgress.transferred / 1024 / 1024).toFixed(1)} MB / {(updateStatus.downloadProgress.total / 1024 / 1024).toFixed(1)} MB
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"

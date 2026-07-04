@@ -1111,46 +1111,89 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                             <a href="https://github.com/chthollyphile/folia-major" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors underline decoration-white/30 hover:decoration-white">chthollyphile/folia-major</a>
                                         </p>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleCopyVersionInfo}
-                                        className="text-xs font-mono opacity-30 hover:opacity-70 transition-opacity cursor-copy"
-                                        style={{ color: 'var(--text-secondary)' }}
-                                        title={versionCopied ? '已复制' : '点击复制版本信息'}
-                                        aria-label={versionCopied ? '已复制版本信息' : '点击复制版本信息'}
-                                    >
-                                        {versionCopied
-                                            ? '已复制'
-                                            : `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`}
-                                    </button>
-                                    {updateStatus?.availableVersion && (
-                                        <div className="mt-1 flex items-center justify-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                                            <span className="opacity-60">
-                                                {(t('options.updateAvailable') || 'Found')} v{updateStatus.availableVersion}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
-                                                className="inline-flex items-center gap-1 opacity-50 transition-opacity hover:opacity-90"
-                                                style={{ color: 'var(--text-primary)' }}
-                                            >
-                                                <ExternalLink size={12} />
-                                                {t('options.openReleasePage') || 'Open Release Page'}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleOpenChinaDownload}
-                                                className="inline-flex items-center gap-1 opacity-50 transition-opacity hover:opacity-90"
-                                                style={{ color: 'var(--text-primary)' }}
-                                            >
-                                                <ExternalLink size={12} />
-                                                {t('options.downloadChina') || 'CN Download'}
-                                            </button>
-                                        </div>
-                                    )}
-                                    <p className="text-xs font-mono opacity-30 mb-2" style={{ color: 'var(--text-secondary)' }}>
-                                        AI Service: {aiServiceLabel}
-                                    </p>
+                                    <div className="flex flex-col items-center gap-2 mt-6 mb-2 text-xs font-mono text-center">
+                                        {/* 第一行：原本的版本信息按钮 */}
+                                        <button
+                                            type="button"
+                                            onClick={handleCopyVersionInfo}
+                                            className="opacity-45 hover:opacity-100 transition-opacity cursor-copy hover:underline"
+                                            style={{ color: 'var(--text-secondary)' }}
+                                            title={versionCopied ? '已复制' : '点击复制版本信息'}
+                                            aria-label={versionCopied ? '已复制版本信息' : '点击复制版本信息'}
+                                        >
+                                            {versionCopied
+                                                ? '已复制'
+                                                : `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`}
+                                        </button>
+
+                                        {/* 第二行：发现新版本与操作按钮 */}
+                                        {updateStatus?.availableVersion && (
+                                            <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 mt-0.5">
+                                                <span className="text-amber-500 font-semibold">
+                                                    发现新版本 v{updateStatus.availableVersion}
+                                                </span>
+
+                                                {/* 主操作：立即下载 / 重启安装 */}
+                                                {updateStatus.status === 'downloaded' ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleInstallUpdate}
+                                                        className="text-green-400 font-bold hover:underline ml-1"
+                                                    >
+                                                        重启安装
+                                                    </button>
+                                                ) : updateStatus.status === 'downloading' ? (
+                                                    <span className="text-zinc-300 opacity-80 ml-1">
+                                                        正在下载({Math.round(updateStatus.downloadProgress?.percent || 0)}%)
+                                                    </span>
+                                                ) : (
+                                                    !electronSettings.ENABLE_AUTO_UPDATE && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleDownloadUpdate}
+                                                            disabled={!canDownloadUpdate}
+                                                            className="text-zinc-100 hover:text-white font-bold flex items-center justify-center transition-colors disabled:opacity-40 ml-1"
+                                                            title="立即下载"
+                                                            aria-label="立即下载"
+                                                        >
+                                                            <Download size={13} />
+                                                        </button>
+                                                    )
+                                                )}
+
+                                                <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
+
+                                                {/* 网盘下载 */}
+                                                <button
+                                                    type="button"
+                                                    onClick={handleOpenChinaDownload}
+                                                    className="opacity-55 hover:opacity-100 transition-opacity hover:underline"
+                                                    style={{ color: 'var(--text-secondary)' }}
+                                                >
+                                                    网盘下载
+                                                </button>
+
+                                                <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
+
+                                                {/* 前往Github下载页 */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
+                                                    className="opacity-55 hover:opacity-100 transition-opacity hover:underline"
+                                                    style={{ color: 'var(--text-secondary)' }}
+                                                >
+                                                    前往Github下载页
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* 第三行：国内网络提醒小字 */}
+                                        {updateStatus?.availableVersion && (
+                                            <div className="text-xs opacity-45 mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                                                提示：下载需直连 GitHub (可能较慢)，国内环境推荐使用【网盘下载】。
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </motion.div>
                         ) : (

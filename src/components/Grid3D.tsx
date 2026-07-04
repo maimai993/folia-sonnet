@@ -140,6 +140,41 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         ? Math.min(100, Math.round((scanProgress.completedSongs / scanProgress.totalSongs) * 100))
         : 0;
 
+    const [updateStatus, setUpdateStatus] = useState<any>(null);
+
+    useEffect(() => {
+        if (!window.electron?.getUpdateStatus) {
+            return;
+        }
+
+        let disposed = false;
+
+        window.electron.getUpdateStatus().then((status) => {
+            if (!disposed) {
+                setUpdateStatus(status);
+            }
+        }).catch(() => {
+            if (!disposed) {
+                setUpdateStatus(null);
+            }
+        });
+
+        const unsubscribe = window.electron.onUpdateStatusChanged?.((status) => {
+            setUpdateStatus(status);
+        });
+
+        return () => {
+            disposed = true;
+            unsubscribe?.();
+        };
+    }, []);
+
+    const showUpdateIndicator = Boolean(
+        updateStatus?.updateCheckEnabled &&
+        updateStatus.availableVersion &&
+        !updateStatus.updateSeen
+    );
+
     // Reset focused index when switching tabs.
     useEffect(() => {
         setFocusedIndex(0);
@@ -448,10 +483,19 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         </h1>
                         <button
                             onClick={() => onOpenSettings?.('help')}
-                            className="p-2 rounded-full hover:bg-white/10 opacity-40 hover:opacity-100 transition-all ml-4"
+                            className={`relative flex items-center gap-1.5 p-2 rounded-full hover:bg-white/10 transition-all ml-4 ${
+                                showUpdateIndicator 
+                                    ? 'opacity-90 hover:opacity-100' 
+                                    : 'opacity-40 hover:opacity-100'
+                            }`}
                             title="Help & Options"
                         >
                             <Settings size={20} style={{ color: 'var(--text-primary)' }} />
+                            {showUpdateIndicator && (
+                                <span className="text-[10px] font-medium text-zinc-800 dark:text-zinc-200 opacity-80 whitespace-nowrap bg-zinc-200/50 dark:bg-white/10 px-2 py-0.5 rounded-md">
+                                    新版本发布
+                                </span>
+                            )}
                         </button>
                         {scanProgress?.active && (
                             <div
