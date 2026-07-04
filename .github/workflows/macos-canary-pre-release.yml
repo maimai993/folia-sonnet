@@ -34,7 +34,7 @@ jobs:
       - name: Package Electron App for macOS
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --mac dmg zip --publish never
+        run: npx electron-builder --mac --x64 --arm64 --publish never
 
       - name: Upload packaged artifacts
         uses: actions/upload-artifact@v6
