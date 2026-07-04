@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Monitor, RotateCcw } from 'lucide-react';
+import { CaptionsOff, Languages, Monitor, RotateCcw, type LucideIcon } from 'lucide-react';
 import {
     DEFAULT_MONET_BACKGROUND_TUNING,
     type CappellaAvatarImage,
@@ -47,6 +47,7 @@ interface ToggleRowProps {
     checked: boolean;
     onChange?: (checked: boolean) => void;
     theme: Theme;
+    icon?: LucideIcon;
 }
 
 interface VisPlaygroundSettingsPanelProps {
@@ -193,11 +194,12 @@ const ToggleRow: React.FC<ToggleRowProps> = ({
     checked,
     onChange,
     theme,
+    icon: Icon = Monitor,
 }) => (
     <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
             <div className="text-sm font-medium flex items-center gap-2" style={{ color: theme.primaryColor }}>
-                <Monitor size={14} />
+                <Icon size={14} />
                 {label}
             </div>
             {description && (
@@ -662,9 +664,11 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
                         <ToggleRow
                             label={t('options.hidePlayerTranslationSubtitle') || '隐藏底部字幕层'}
+                            description={t('options.hidePlayerTranslationSubtitleDesc') || '不影响使用独立字幕的动画模式。'}
                             checked={hideTranslationSubtitle}
                             onChange={onToggleHideTranslationSubtitle}
                             theme={theme}
+                            icon={CaptionsOff}
                         />
 
                         <ToggleRow
@@ -673,6 +677,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             checked={showSubtitleTranslation}
                             onChange={onToggleShowSubtitleTranslation}
                             theme={theme}
+                            icon={Languages}
                         />
 
                         <div className="space-y-2">

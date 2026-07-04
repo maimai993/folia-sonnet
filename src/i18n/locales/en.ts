@@ -382,6 +382,7 @@ export default {
     "labHidePlayerUiDesc": "Only applies on the player page. You can hide the bottom control bar, bottom subtitle, and right-side button separately. After hiding the right-side button, you can still use P to open or close the right panel.",
     "hidePlayerProgressBar": "Hide player bottom control bar",
     "hidePlayerTranslationSubtitle": "Hide bottom subtitle overlay",
+    "hidePlayerTranslationSubtitleDesc": "Does not affect visualizer modes that render standalone subtitles.",
     "hidePlayerRightPanelButton": "Hide player right-side button",
     "transparentPlayerBackground": "Transparent player background",
     "transparentPlayerBackgroundDesc": "Only applies on the player page. When enabled, Folia switches to transparent window mode for OBS browser sources or chroma key overlays.",
