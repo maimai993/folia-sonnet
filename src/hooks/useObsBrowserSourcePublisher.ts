@@ -64,6 +64,7 @@ type UseObsBrowserSourcePublisherOptions = {
     disableGeometricBackground: boolean;
     disableVignette: boolean;
     hideTranslationSubtitle: boolean;
+    showSubtitleTranslation: boolean;
     seed: string | number;
     audioPower: MotionValue<number>;
     audioBands: AudioBands;
@@ -124,6 +125,7 @@ export const useObsBrowserSourcePublisher = ({
     disableGeometricBackground,
     disableVignette,
     hideTranslationSubtitle,
+    showSubtitleTranslation,
     seed,
     audioPower,
     audioBands,
@@ -188,6 +190,7 @@ export const useObsBrowserSourcePublisher = ({
         disableGeometricBackground,
         disableVignette,
         hideTranslationSubtitle,
+        showSubtitleTranslation,
         seed,
         classicTuning,
         cadenzaTuning,
@@ -218,6 +221,7 @@ export const useObsBrowserSourcePublisher = ({
         disableVignette,
         fumeTuning,
         hideTranslationSubtitle,
+        showSubtitleTranslation,
         isDaylight,
         lyrics,
         lyricsFontScale,

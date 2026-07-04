@@ -58,6 +58,7 @@ interface VisPlaygroundProps {
     disableVisualizerGeometricBackground?: boolean;
     visualizerBackgroundMode?: VisualizerBackgroundMode | null;
     hideTranslationSubtitle?: boolean;
+    showSubtitleTranslation?: boolean;
     subtitleOverlayOpacity?: number;
     classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
@@ -90,6 +91,7 @@ interface VisPlaygroundProps {
     onVisualizerBackgroundModeChange?: (mode: VisualizerBackgroundMode) => void;
     onResetVisualizerBackgroundMode?: () => void;
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
+    onToggleShowSubtitleTranslation?: (shown: boolean) => void;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
     onResetClassicTuning?: () => void;
@@ -256,6 +258,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     disableVisualizerGeometricBackground = false,
     visualizerBackgroundMode = null,
     hideTranslationSubtitle = false,
+    showSubtitleTranslation = true,
     subtitleOverlayOpacity = 0.6,
     classicTuning = DEFAULT_CLASSIC_TUNING,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
@@ -286,6 +289,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onVisualizerBackgroundModeChange,
     onResetVisualizerBackgroundMode,
     onToggleHideTranslationSubtitle,
+    onToggleShowSubtitleTranslation,
     onSubtitleOverlayOpacityChange,
     onClassicTuningChange,
     onResetClassicTuning,
@@ -761,6 +765,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const handleResetSubtitleSettings = () => {
         setDraftSubtitleOverlayOpacity(0.6);
         onToggleHideTranslationSubtitle?.(false);
+        onToggleShowSubtitleTranslation?.(true);
         onSubtitleOverlayOpacityChange?.(0.6);
     };
 
@@ -857,6 +862,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 lyricsFontScale={normalizedFontScale}
                                 subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                                 hideTranslationSubtitle={hideTranslationSubtitle}
+                                showSubtitleTranslation={showSubtitleTranslation}
                                 classicTuning={draftClassicTuning}
                                 cadenzaTuning={cadenzaTuning}
                                 partitaTuning={resolvedPartitaTuning}
@@ -954,6 +960,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onSetUrlBackgroundSelectedId={onSetUrlBackgroundSelectedId}
                         hideTranslationSubtitle={hideTranslationSubtitle}
                         onToggleHideTranslationSubtitle={onToggleHideTranslationSubtitle}
+                        showSubtitleTranslation={showSubtitleTranslation}
+                        onToggleShowSubtitleTranslation={onToggleShowSubtitleTranslation}
                         subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                         onSubtitleOverlayOpacityChange={handleSubtitleOverlayOpacityDraft}
                         onResetSubtitleSettings={handleResetSubtitleSettings}

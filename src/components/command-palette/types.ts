@@ -67,6 +67,10 @@ export type CommandPaletteContext = {
     setVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
     setMonetBackgroundTuning: (patch: Partial<MonetBackgroundTuning>) => void;
     toggleTransparentBackground: () => void;
+    hideBottomSubtitleOverlay: boolean;
+    toggleBottomSubtitleOverlay: () => void;
+    showSubtitleTranslation: boolean;
+    toggleSubtitleTranslation: () => void;
     toggleDaylightMode: () => void;
     setAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void> | void;
     enableAlternativeLyricSources: boolean;

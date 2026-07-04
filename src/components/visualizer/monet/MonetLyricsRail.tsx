@@ -34,6 +34,7 @@ interface MonetLyricsRailProps {
     fontStack: string;
     keywordColoringEnabled: boolean;
     emptyText: string;
+    showSubtitleTranslation?: boolean;
     audioPower?: MotionValue<number>;
     audioBands?: AudioBands;
 }
@@ -168,6 +169,7 @@ const buildPositionedEntries = (
     translationFontPx: number,
     fontStack: string,
     glowBufferPx: number,
+    showSubtitleTranslation: boolean,
 ): PositionedMonetLineEntry[] => {
     const railWidth = railSize.width || MONET_RAIL_WIDTH_FALLBACK_PX;
     const railHeight = railSize.height || MONET_RAIL_HEIGHT_FALLBACK_PX;
@@ -183,6 +185,7 @@ const buildPositionedEntries = (
             translationFontPx,
             fontStack,
             maxWidthPx: contentWidthPx - 8,
+            showSubtitleTranslation,
         });
 
         return {
@@ -462,8 +465,9 @@ const MonetRailLine: React.FC<{
     glowBufferPx: number;
     vGlowBufferPx: number;
     wordColorMatchers: WordColorMatcher[];
+    showSubtitleTranslation: boolean;
     audioPower?: MotionValue<number>;
-}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, glowBufferPx, vGlowBufferPx, wordColorMatchers, audioPower }) => {
+}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, glowBufferPx, vGlowBufferPx, wordColorMatchers, showSubtitleTranslation, audioPower }) => {
     const initialOffset = entry.offset >= 0 ? 34 : -34;
     const exitOffset = entry.status === 'passed' || entry.offset < 0 ? -38 : 38;
     const textMask = getLineMask(entry.layout.isTextClipped, Math.max(lyricFontPx * 0.55, 12));
@@ -556,7 +560,7 @@ const MonetRailLine: React.FC<{
                     audioPower={audioPower}
                 />
             </div>
-            {entry.status === 'active' && entry.line.translation ? (
+            {showSubtitleTranslation && entry.status === 'active' && entry.line.translation ? (
                 <motion.div
                     className="min-w-0 overflow-hidden whitespace-pre-wrap break-words"
                     initial={{ opacity: 0, y: 8 }}
@@ -602,6 +606,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     fontStack,
     keywordColoringEnabled,
     emptyText,
+    showSubtitleTranslation = true,
     audioPower,
     audioBands,
 }) => {
@@ -620,8 +625,9 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
             translationFontPx,
             fontStack,
             glowBufferPx,
+            showSubtitleTranslation,
         ),
-        [entries, railSize, theme, lyricFontPx, inactiveFontPx, translationFontPx, fontStack, glowBufferPx],
+        [entries, railSize, theme, lyricFontPx, inactiveFontPx, translationFontPx, fontStack, glowBufferPx, showSubtitleTranslation],
     );
     const wordColorMatchers = useMemo(
         () => prepareWordColorMatchers(theme.wordColors, keywordColoringEnabled),
@@ -655,6 +661,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
                             glowBufferPx={glowBufferPx}
                             vGlowBufferPx={vGlowBufferPx}
                             wordColorMatchers={wordColorMatchers}
+                            showSubtitleTranslation={showSubtitleTranslation}
                             audioPower={audioPower}
                         />
                     ))}

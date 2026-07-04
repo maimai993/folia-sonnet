@@ -52,6 +52,7 @@ export interface VisualizerSharedProps {
     resolvedVisualizerBackgroundMode?: VisualizerBackgroundMode;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
+    showSubtitleTranslation?: boolean;
     paused?: boolean;
     onBack?: () => void;
     isPreviewMode?: boolean;

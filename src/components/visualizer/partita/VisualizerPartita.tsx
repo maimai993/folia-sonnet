@@ -690,6 +690,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
         subtitleOverlayOpacity,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        showSubtitleTranslation = true,
     } = props;
     const { t } = useTranslation();
     const [windowHeight, setWindowHeight] = useState(800);
@@ -1016,6 +1017,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
+                showSubtitleTranslation={showSubtitleTranslation}
             />
         </VisualizerShell>
     );

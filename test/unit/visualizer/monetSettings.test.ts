@@ -1,15 +1,30 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, type Line, type Theme } from '@/types';
 import { getMonetBackgroundCacheKey, resolveWashColor, checkCanvasFilterSupport } from '@/components/visualizer/monet/monetBackgroundPipeline';
 import { resolveMonetWordColor } from '@/components/visualizer/monet/MonetLyricsRail';
 import { buildMonetDisplayTokens, resolveMonetLyricContext } from '@/components/visualizer/monet/VisualizerMonet';
-import { buildMonetVisibleLineEntries } from '@/components/visualizer/monet/monetLyricsModel';
+import { buildMonetVisibleLineEntries, measureMonetLineLayout } from '@/components/visualizer/monet/monetLyricsModel';
 import { colorWithAlpha, mixColors, parseColorChannels } from '@/components/visualizer/colorMix';
 import { buildWordColorRanges, prepareWordColorMatchers, resolveTokenColorMap } from '@/components/visualizer/wordColoring';
 import { resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveVisualizerBackgroundMode } from '@/stores/useSettingsUiStore';
 
 // test/unit/visualizer/monetSettings.test.ts
 // Locks Monet tuning normalization, background cache keys, and lyric helper contracts.
+
+vi.mock('@chenglou/pretext', () => ({
+    prepareWithSegments: (text: string) => ({ text }),
+    layoutWithLines: (prepared: { text?: string; }, maxWidth: number) => {
+        const text = prepared.text || ' ';
+        const charsPerLine = Math.max(1, Math.floor(maxWidth / 10));
+        const lineCount = Math.max(1, Math.ceil(text.length / charsPerLine));
+        return {
+            lines: Array.from({ length: lineCount }, () => ({
+                width: Math.min(text.length, charsPerLine) * 10,
+            })),
+        };
+    },
+}));
+
 describe('Monet tuning and lyric helpers', () => {
     it('keeps bright wash targets bright in daylight themes instead of pulling them toward dark text color', () => {
         const washColor = resolveWashColor(
@@ -194,6 +209,40 @@ describe('Monet tuning and lyric helpers', () => {
             before: 1,
             after: 1,
         }).map(entry => entry.status)).toEqual(['passed', 'waiting', 'waiting']);
+    });
+
+    it('does not reserve Monet translation height when subtitle translation is hidden', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 3,
+            fullText: 'A bright river',
+            translation: '一条明亮的河流',
+            words: [],
+        };
+
+        const visibleLayout = measureMonetLineLayout({
+            line,
+            status: 'active',
+            fontPx: 32,
+            translationFontPx: 18,
+            fontStack: 'Arial, sans-serif',
+            maxWidthPx: 520,
+            showSubtitleTranslation: true,
+        });
+        const hiddenLayout = measureMonetLineLayout({
+            line,
+            status: 'active',
+            fontPx: 32,
+            translationFontPx: 18,
+            fontStack: 'Arial, sans-serif',
+            maxWidthPx: 520,
+            showSubtitleTranslation: false,
+        });
+
+        expect(visibleLayout.translationHeightPx).toBeGreaterThan(0);
+        expect(hiddenLayout.translationLineCount).toBe(0);
+        expect(hiddenLayout.translationHeightPx).toBe(0);
+        expect(hiddenLayout.visualHeightPx).toBe(hiddenLayout.textHeightPx);
     });
 
     it('gates Monet keyword coloring through tuning', () => {

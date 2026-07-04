@@ -61,6 +61,7 @@ interface ThemeParkProps {
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
     monetBackgroundImage?: MonetBackgroundImage | null;
     monetPortraitImage?: MonetPortraitImage | null;
+    showSubtitleTranslation?: boolean;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
     lyricsCustomFontFamily?: string | null;
@@ -128,6 +129,7 @@ const ThemePreviewLayer: React.FC<{
     cappellaCustomAvatarImages: CappellaAvatarImage[];
     monetBackgroundImage?: MonetBackgroundImage | null;
     monetPortraitImage?: MonetPortraitImage | null;
+    showSubtitleTranslation: boolean;
     lyricsFontScale: number;
     currentTime: ReturnType<typeof useMotionValue<number>>;
     currentLineIndex: number;
@@ -158,6 +160,7 @@ const ThemePreviewLayer: React.FC<{
     cappellaCustomAvatarImages,
     monetBackgroundImage,
     monetPortraitImage,
+    showSubtitleTranslation,
     lyricsFontScale,
     currentTime,
     currentLineIndex,
@@ -203,6 +206,7 @@ const ThemePreviewLayer: React.FC<{
                         urlBackgroundSelectedId={urlBackgroundSelectedId}
                         coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
                         lyricsFontScale={lyricsFontScale}
+                        showSubtitleTranslation={showSubtitleTranslation}
                         classicTuning={classicTuning}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
@@ -281,6 +285,7 @@ const ThemePreview: React.FC<{
     cappellaCustomAvatarImages: CappellaAvatarImage[];
     monetBackgroundImage?: MonetBackgroundImage | null;
     monetPortraitImage?: MonetPortraitImage | null;
+    showSubtitleTranslation: boolean;
     lyricsFontScale: number;
     currentTime: ReturnType<typeof useMotionValue<number>>;
     currentLineIndex: number;
@@ -310,6 +315,7 @@ const ThemePreview: React.FC<{
     cappellaCustomAvatarImages,
     monetBackgroundImage,
     monetPortraitImage,
+    showSubtitleTranslation,
     lyricsFontScale,
     currentTime,
     currentLineIndex,
@@ -361,6 +367,7 @@ const ThemePreview: React.FC<{
                     cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                     monetBackgroundImage={monetBackgroundImage}
                     monetPortraitImage={monetPortraitImage}
+                    showSubtitleTranslation={showSubtitleTranslation}
                     lyricsFontScale={lyricsFontScale}
                     currentTime={currentTime}
                     currentLineIndex={currentLineIndex}
@@ -393,6 +400,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     cappellaCustomAvatarImages = [],
     monetBackgroundImage = null,
     monetPortraitImage = null,
+    showSubtitleTranslation = true,
     lyricsFontStyle,
     lyricsFontScale,
     lyricsCustomFontFamily,
@@ -626,6 +634,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                             cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                             monetBackgroundImage={monetBackgroundImage}
                             monetPortraitImage={monetPortraitImage}
+                            showSubtitleTranslation={showSubtitleTranslation}
                             lyricsFontScale={lyricsFontScale}
                             currentTime={currentTime}
                             currentLineIndex={currentLineIndex}

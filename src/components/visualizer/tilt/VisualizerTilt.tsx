@@ -545,6 +545,7 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
         subtitleOverlayOpacity,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        showSubtitleTranslation = true,
         tiltTuning = DEFAULT_TILT_TUNING,
     } = props;
     const { t } = useTranslation();
@@ -676,6 +677,7 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
+                showSubtitleTranslation={showSubtitleTranslation}
             />
         </VisualizerShell>
     );

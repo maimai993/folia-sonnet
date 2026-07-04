@@ -55,6 +55,7 @@ export interface ObsBrowserSourceConfig {
     disableGeometricBackground: boolean;
     disableVignette: boolean;
     hideTranslationSubtitle: boolean;
+    showSubtitleTranslation?: boolean;
     seed: string | number;
     classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;

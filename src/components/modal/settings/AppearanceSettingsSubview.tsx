@@ -225,6 +225,8 @@ export const compressConfig = (config: any): string => {
     if (config.visualizerBackgroundMode) minified.vbm = config.visualizerBackgroundMode;
     if (config.backgroundOpacity !== undefined) minified.bo = config.backgroundOpacity;
     if (config.visualizerOpacity !== undefined) minified.vo = config.visualizerOpacity;
+    if (config.hidePlayerTranslationSubtitle !== undefined) minified.hpts = config.hidePlayerTranslationSubtitle;
+    if (config.showSubtitleTranslation !== undefined) minified.sst = config.showSubtitleTranslation;
     if (config.lyricsFontStyle) minified.lfs = config.lyricsFontStyle;
     if (config.lyricsFontScale !== undefined) minified.lfn = config.lyricsFontScale;
 
@@ -268,7 +270,7 @@ export const decompressConfig = (str: string): any => {
         throw new Error('Invalid format');
     }
 
-    const isMinified = parsed.t !== undefined || parsed.vm !== undefined || parsed.ct !== undefined || parsed.cat !== undefined;
+    const isMinified = parsed.t !== undefined || parsed.vm !== undefined || parsed.ct !== undefined || parsed.cat !== undefined || parsed.hpts !== undefined || parsed.sst !== undefined;
     if (isMinified) {
         const decompressed: any = {};
         if (parsed.t) {
@@ -281,6 +283,8 @@ export const decompressConfig = (str: string): any => {
         if (parsed.vbm) decompressed.visualizerBackgroundMode = parsed.vbm;
         if (parsed.bo !== undefined) decompressed.backgroundOpacity = parsed.bo;
         if (parsed.vo !== undefined) decompressed.visualizerOpacity = parsed.vo;
+        if (parsed.hpts !== undefined) decompressed.hidePlayerTranslationSubtitle = parsed.hpts;
+        if (parsed.sst !== undefined) decompressed.showSubtitleTranslation = parsed.sst;
         if (parsed.lfs) decompressed.lyricsFontStyle = parsed.lfs;
         if (parsed.lfn !== undefined) decompressed.lyricsFontScale = parsed.lfn;
 
@@ -301,7 +305,8 @@ export const decompressConfig = (str: string): any => {
     } else {
         const validKeys = [
             'theme', 'visualizerMode', 'visualizerBackgroundMode', 'backgroundOpacity',
-            'visualizerOpacity', 'lyricsFontStyle', 'lyricsFontScale', 'classicTuning',
+            'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation',
+            'lyricsFontStyle', 'lyricsFontScale', 'classicTuning',
             'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'cappellaTuning',
             'tiltTuning', 'monetBackgroundTuning', 'monetTuning',
             'urlBackgroundList', 'urlBackgroundSelectedId',
@@ -389,6 +394,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         visualizerBackgroundMode: state.visualizerBackgroundMode,
         backgroundOpacity: state.backgroundOpacity,
         visualizerOpacity: state.visualizerOpacity,
+        hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
+        showSubtitleTranslation: state.showSubtitleTranslation,
         lyricsFontStyle: state.lyricsFontStyle,
         lyricsFontScale: state.lyricsFontScale,
         classicTuning: state.classicTuning,
@@ -406,6 +413,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleSetVisualizerBackgroundMode: state.handleSetVisualizerBackgroundMode,
         handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
         handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
+        handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
+        handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
         handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
         handleSetLyricsFontScale: state.handleSetLyricsFontScale,
         handleSetClassicTuning: state.handleSetClassicTuning,
@@ -448,6 +457,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             visualizerBackgroundMode: store.visualizerBackgroundMode,
             backgroundOpacity: store.backgroundOpacity,
             visualizerOpacity: store.visualizerOpacity,
+            hidePlayerTranslationSubtitle: store.hidePlayerTranslationSubtitle,
+            showSubtitleTranslation: store.showSubtitleTranslation,
             lyricsFontStyle: store.lyricsFontStyle,
             lyricsFontScale: store.lyricsFontScale,
             classicTuning: store.classicTuning,
@@ -514,6 +525,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (config.visualizerOpacity !== undefined) {
                 store.handleSetVisualizerOpacity(config.visualizerOpacity);
+            }
+            if (config.hidePlayerTranslationSubtitle !== undefined) {
+                store.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
+            }
+            if (config.showSubtitleTranslation !== undefined) {
+                store.handleToggleShowSubtitleTranslation(Boolean(config.showSubtitleTranslation));
             }
             if (config.lyricsFontStyle) {
                 store.handleSetLyricsFontStyle(config.lyricsFontStyle);

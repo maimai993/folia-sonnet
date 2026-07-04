@@ -30,6 +30,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         audioPower,
         audioBands,
         showText = true,
+        showSubtitleTranslation = true,
         songTitle,
         songArtist,
         songAlbum,
@@ -212,6 +213,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     fontStack={lyricFontStack}
                                     keywordColoringEnabled={monetTuning.keywordColoringEnabled}
                                     emptyText=""
+                                    showSubtitleTranslation={showSubtitleTranslation}
                                     audioPower={audioPower}
                                     audioBands={audioBands}
                                 />

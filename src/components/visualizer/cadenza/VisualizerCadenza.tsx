@@ -1271,6 +1271,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         subtitleOverlayOpacity,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        showSubtitleTranslation = true,
     } = props;
     const { t } = useTranslation();
     const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -1710,6 +1711,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
+                showSubtitleTranslation={showSubtitleTranslation}
             />
         </VisualizerShell>
     );

@@ -109,6 +109,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         disableHomeDynamicBackground,
         hidePlayerProgressBar,
         hidePlayerTranslationSubtitle,
+        showSubtitleTranslation,
         hidePlayerRightPanelButton,
         transparentPlayerBackground,
         autoHidePlayerChrome,
@@ -156,6 +157,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
         handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
         handleToggleHidePlayerTranslationSubtitle: onToggleHidePlayerTranslationSubtitle,
+        handleToggleShowSubtitleTranslation: onToggleShowSubtitleTranslation,
         handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
         handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackgroundFromStore,
         handleToggleAutoHidePlayerChrome: onToggleAutoHidePlayerChrome,
@@ -2161,6 +2163,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         disableVisualizerVignette={disableVisualizerVignette}
                         disableVisualizerGeometricBackground={disableVisualizerGeometricBackground}
                         hideTranslationSubtitle={hidePlayerTranslationSubtitle}
+                        showSubtitleTranslation={showSubtitleTranslation}
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
                         classicTuning={classicTuning}
                         cadenzaTuning={cadenzaTuning}
@@ -2191,6 +2194,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onVisualizerBackgroundModeChange={onVisualizerBackgroundModeChange}
                         onResetVisualizerBackgroundMode={onResetVisualizerBackgroundMode}
                         onToggleHideTranslationSubtitle={onToggleHidePlayerTranslationSubtitle}
+                        onToggleShowSubtitleTranslation={onToggleShowSubtitleTranslation}
                         onSubtitleOverlayOpacityChange={setSubtitleOverlayOpacity}
                         onClassicTuningChange={onClassicTuningChange}
                         onResetClassicTuning={onResetClassicTuning}
@@ -2251,6 +2255,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                         monetBackgroundImage={monetBackgroundImage}
                         monetPortraitImage={monetPortraitImage}
+                        showSubtitleTranslation={showSubtitleTranslation}
                         lyricsFontStyle={lyricsFontStyle}
                         lyricsFontScale={lyricsFontScale}
                         lyricsCustomFontFamily={lyricsCustomFontFamily}

@@ -15,7 +15,34 @@ interface VisualizerSubtitleOverlayProps {
     subtitleOverlayOpacity?: number;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
+    showSubtitleTranslation?: boolean;
 }
+
+export const resolveVisualizerSubtitleOverlayContent = ({
+    showText,
+    activeLine,
+    recentCompletedLine,
+    nextLines,
+    hideTranslationSubtitle = false,
+    showSubtitleTranslation = true,
+}: Pick<VisualizerSubtitleOverlayProps, 'showText' | 'activeLine' | 'recentCompletedLine' | 'nextLines' | 'hideTranslationSubtitle' | 'showSubtitleTranslation'>) => {
+    if (!showText || hideTranslationSubtitle) {
+        return {
+            shouldRenderOverlay: false,
+            translationText: null as string | null,
+            upcomingLines: [] as Line[],
+        };
+    }
+
+    const rawTranslationText = activeLine?.translation || recentCompletedLine?.translation || null;
+    const translationText = showSubtitleTranslation ? rawTranslationText : null;
+
+    return {
+        shouldRenderOverlay: true,
+        translationText,
+        upcomingLines: translationText ? [] : activeLine ? nextLines : [],
+    };
+};
 
 const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
     showText,
@@ -29,13 +56,21 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
     subtitleOverlayOpacity,
     isPlayerChromeHidden = false,
     hideTranslationSubtitle = false,
+    showSubtitleTranslation = true,
 }) => {
-    const translationText = activeLine?.translation || recentCompletedLine?.translation || null;
+    const { shouldRenderOverlay, translationText, upcomingLines } = resolveVisualizerSubtitleOverlayContent({
+        showText,
+        activeLine,
+        recentCompletedLine,
+        nextLines,
+        hideTranslationSubtitle,
+        showSubtitleTranslation,
+    });
     const resolvedOpacity = subtitleOverlayOpacity ?? opacity;
 
     return (
         <AnimatePresence>
-            {showText && !hideTranslationSubtitle && (
+            {shouldRenderOverlay && (
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{
@@ -68,7 +103,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                             {translationText}
                         </motion.div>
                     ) : activeLine ? (
-                        nextLines.map((line, index) => (
+                        upcomingLines.map((line, index) => (
                             <p
                                 key={index}
                                 className="truncate max-w-2xl mx-auto transition-all duration-500 blur-[1px]"

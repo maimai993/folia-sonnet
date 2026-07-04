@@ -34,6 +34,7 @@ export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
 export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
+export const SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY = 'show_subtitle_translation';
 export const VISUALIZER_OPACITY_STORAGE_KEY = 'visualizer_opacity';
 
 const getStoredBoolean = (key: string, fallback: boolean) => {
@@ -692,6 +693,7 @@ type SettingsUiState = {
     preferredAlternativeLyricSource: LyricProviderSource;
     hidePlayerProgressBar: boolean;
     hidePlayerTranslationSubtitle: boolean;
+    showSubtitleTranslation: boolean;
     hidePlayerRightPanelButton: boolean;
     transparentPlayerBackground: boolean;
     enablePlayerPageNativeBlur: boolean;
@@ -782,6 +784,7 @@ type SettingsUiState = {
     handleSetPreferredAlternativeLyricSource: (source: LyricProviderSource) => void;
     handleToggleHidePlayerProgressBar: (enable: boolean) => void;
     handleToggleHidePlayerTranslationSubtitle: (enable: boolean) => void;
+    handleToggleShowSubtitleTranslation: (enable: boolean) => void;
     handleToggleHidePlayerRightPanelButton: (enable: boolean) => void;
     handleToggleTransparentPlayerBackground: (enable: boolean) => void;
     handleToggleAutoHidePlayerChrome: (enable: boolean) => void;
@@ -860,6 +863,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     preferredAlternativeLyricSource: readStoredPreferredAlternativeLyricSource(),
     hidePlayerProgressBar: getStoredBoolean('hide_player_progress_bar', false),
     hidePlayerTranslationSubtitle: getStoredBoolean('hide_player_translation_subtitle', false),
+    showSubtitleTranslation: getStoredBoolean(SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY, true),
     hidePlayerRightPanelButton: getStoredBoolean('hide_player_right_panel_button', false),
     transparentPlayerBackground: getStoredBoolean('transparent_player_background', false),
     enablePlayerPageNativeBlur: getStoredBoolean('enable_player_page_native_blur', false),
@@ -1060,7 +1064,15 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         set({ hidePlayerTranslationSubtitle: enable });
         notify(get, {
             type: 'info',
-            text: enable ? '播放页翻译字幕已隐藏' : '播放页翻译字幕已显示',
+            text: enable ? '底部字幕层已隐藏' : '底部字幕层已显示',
+        });
+    },
+    handleToggleShowSubtitleTranslation: (enable) => {
+        setStoredBoolean(SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY, enable);
+        set({ showSubtitleTranslation: enable });
+        notify(get, {
+            type: 'info',
+            text: enable ? '字幕翻译已显示' : '字幕翻译已隐藏',
         });
     },
     handleToggleHidePlayerRightPanelButton: (enable) => {
@@ -1735,6 +1747,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     disableHomeDynamicBackground: state.disableHomeDynamicBackground,
     hidePlayerProgressBar: state.hidePlayerProgressBar,
     hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
+    showSubtitleTranslation: state.showSubtitleTranslation,
     hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
     transparentPlayerBackground: state.transparentPlayerBackground,
     autoHidePlayerChrome: state.autoHidePlayerChrome,
@@ -1794,6 +1807,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
     handleToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
     handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
+    handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
     handleToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
     handleToggleTransparentPlayerBackground: state.handleToggleTransparentPlayerBackground,
     enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,

@@ -1488,6 +1488,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
         subtitleOverlayOpacity,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        showSubtitleTranslation = true,
         cappellaTuning = DEFAULT_CAPPELLA_TUNING,
         cappellaCustomEmojiImages = [],
         cappellaCustomAvatarImages = [],
@@ -1653,6 +1654,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
+                showSubtitleTranslation={showSubtitleTranslation}
             />
         </VisualizerShell>
     );

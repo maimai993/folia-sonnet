@@ -65,6 +65,7 @@ interface VisualizerSharedProps {
     resolvedVisualizerBackgroundMode?: VisualizerBackgroundMode;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
+    showSubtitleTranslation?: boolean;
     paused?: boolean;
     isPreviewMode?: boolean;
     onBack?: () => void;
@@ -139,7 +140,8 @@ export default VisualizerFoo;
 - `visualizerBackgroundMode` / `resolvedVisualizerBackgroundMode`: shell 级背景模式。`common` 是通用几何/封面背景，`monet` 是 Monet 背景图层。
 - `staticMode`: 静态模式。约定为“禁用重资源背景动画”，不是关闭全部歌词动画。
 - `isPlayerChromeHidden`: 播放器外层 chrome 是否隐藏，适合做边距或字幕策略调整。
-- `hideTranslationSubtitle`: 关闭底部翻译字幕层时使用。
+- `hideTranslationSubtitle`: 关闭整个底部 subtitle overlay 时使用，包括翻译和下一句提示；这是旧设置的前向兼容语义。
+- `showSubtitleTranslation`: 控制翻译文本是否显示，默认 `true`。新 visualizer 中涉及翻译字幕时优先接入这个参数。
 - `paused`: 当前是否暂停，适合暂停持续性动效。
 - `onBack`: 返回按钮回调。播放器全屏/主视图里会用到。
 - `seed`: 背景或布局随机种子，保证同一歌曲下布局尽量稳定。
@@ -498,6 +500,7 @@ const VisualizerFoo: React.FC<VisualizerFooProps> = (props) => {
         lyricsFontScale = 1,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        showSubtitleTranslation = true,
     } = props;
     const { t } = useTranslation();
     const { activeLine, recentCompletedLine, nextLines } = useVisualizerRuntime({
@@ -532,6 +535,7 @@ const VisualizerFoo: React.FC<VisualizerFooProps> = (props) => {
                 upcomingFontSize="0.875rem"
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
+                showSubtitleTranslation={showSubtitleTranslation}
             />
         </VisualizerShell>
     );

@@ -33,6 +33,8 @@ describe('Visual Settings Import and Export', () => {
         visualizerBackgroundMode: 'monet',
         backgroundOpacity: 0.85,
         visualizerOpacity: 0.95,
+        hidePlayerTranslationSubtitle: true,
+        showSubtitleTranslation: false,
         lyricsFontStyle: 'sans',
         lyricsFontScale: 1.25,
         classicTuning: {
@@ -106,6 +108,8 @@ describe('Visual Settings Import and Export', () => {
         const decoded = decompressConfig(code);
         expect(decoded.visualizerMode).toBe('monet');
         expect(decoded.backgroundOpacity).toBe(0.85);
+        expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
+        expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.classicTuning?.breathingFloatMultiplier).toBe(1.2);
         expect(decoded.theme?.light.name).toBe('Light Gold');
         expect(decoded.theme?.dark.accentColor).toBe('#fbbf24');
@@ -131,6 +135,8 @@ describe('Visual Settings Import and Export', () => {
         const decoded = decompressConfig(jsonString);
         expect(decoded.visualizerMode).toBe('monet');
         expect(decoded.backgroundOpacity).toBe(0.85);
+        expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
+        expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.theme?.light.name).toBe('Light Gold');
         expect(decoded.theme?.dark.accentColor).toBe('#fbbf24');
         expect(decoded.songThemeAutoSwitchEnabled).toBe(true);

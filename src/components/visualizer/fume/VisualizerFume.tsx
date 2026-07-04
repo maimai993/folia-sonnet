@@ -1854,6 +1854,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         subtitleOverlayOpacity,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        showSubtitleTranslation = true,
         paused = false,
     } = props;
     const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -3044,6 +3045,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
+                showSubtitleTranslation={showSubtitleTranslation}
             />
         </VisualizerShell>
     );

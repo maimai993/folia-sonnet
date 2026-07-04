@@ -293,6 +293,7 @@ export default function App() {
         disableHomeDynamicBackground,
         hidePlayerProgressBar,
         hidePlayerTranslationSubtitle,
+        showSubtitleTranslation,
         hidePlayerRightPanelButton,
         transparentPlayerBackground,
         enablePlayerPageNativeBlur,
@@ -339,6 +340,7 @@ export default function App() {
         handleToggleDisableHomeDynamicBackground,
         handleToggleHidePlayerProgressBar,
         handleToggleHidePlayerTranslationSubtitle,
+        handleToggleShowSubtitleTranslation,
         handleToggleHidePlayerRightPanelButton,
         handleToggleTransparentPlayerBackground,
         handleToggleDisableVisualizerVignette,
@@ -1567,6 +1569,7 @@ export default function App() {
         disableGeometricBackground: disableVisualizerGeometricBackground,
         disableVignette: disableVisualizerVignette,
         hideTranslationSubtitle: shouldHidePlayerTranslationSubtitle,
+        showSubtitleTranslation,
         seed: visualizerGeometrySeed,
         audioPower,
         audioBands,
@@ -1657,6 +1660,14 @@ export default function App() {
             void toggleTransparentModeWithHandoff(!transparentPlayerBackground);
         },
         transparentPlayerBackground,
+        hideBottomSubtitleOverlay: hidePlayerTranslationSubtitle,
+        toggleBottomSubtitleOverlay: () => {
+            handleToggleHidePlayerTranslationSubtitle(!hidePlayerTranslationSubtitle);
+        },
+        showSubtitleTranslation,
+        toggleSubtitleTranslation: () => {
+            handleToggleShowSubtitleTranslation(!showSubtitleTranslation);
+        },
         enablePlayerPageNativeBlur,
         toggleDaylightMode,
         setAppLanguagePreference: handleSetAppLanguagePreference,
@@ -1676,6 +1687,9 @@ export default function App() {
         handleSetVisualizerMode,
         handleSetVisualizerBackgroundMode,
         handleSetMonetBackgroundTuning,
+        handleToggleHidePlayerTranslationSubtitle,
+        handleToggleShowSubtitleTranslation,
+        hidePlayerTranslationSubtitle,
         isGeneratingTheme,
         localSongs,
         navigateToHome,
@@ -1697,6 +1711,7 @@ export default function App() {
         transparentPlayerBackground,
         toggleTransparentModeWithHandoff,
         toggleDaylightMode,
+        showSubtitleTranslation,
         handleToggleAlternativeLyricSources,
         setIsUserGuideModalOpen,
         openThemeQuickEditor,
@@ -2737,6 +2752,7 @@ export default function App() {
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
                         isPlayerChromeHidden={isPlayerChromeHidden}
                         hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
+                        showSubtitleTranslation={showSubtitleTranslation}
                         classicTuning={classicTuning}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}

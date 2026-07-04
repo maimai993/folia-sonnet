@@ -297,7 +297,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                             <span className={`flex h-4 w-4 items-center justify-center rounded-sm border ${hidePlayerTranslationSubtitle ? 'border-white/30 bg-white/15' : 'border-white/20 bg-transparent'}`}>
                                                 {hidePlayerTranslationSubtitle ? <Check size={12} /> : null}
                                             </span>
-                                            <span>{t('options.hidePlayerTranslationSubtitle') || '隐藏播放页翻译字幕'}</span>
+                                            <span>{t('options.hidePlayerTranslationSubtitle') || '隐藏底部字幕层'}</span>
                                         </button>
                                         <button
                                             type="button"

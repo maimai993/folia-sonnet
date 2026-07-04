@@ -120,6 +120,8 @@ interface VisPlaygroundSettingsPanelProps {
     onSetUrlBackgroundSelectedId?: (id: string | null) => void;
     hideTranslationSubtitle: boolean;
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
+    showSubtitleTranslation: boolean;
+    onToggleShowSubtitleTranslation?: (shown: boolean) => void;
     subtitleOverlayOpacity: number;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     onResetSubtitleSettings?: () => void;
@@ -342,6 +344,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onSetUrlBackgroundSelectedId,
         hideTranslationSubtitle,
         onToggleHideTranslationSubtitle,
+        showSubtitleTranslation,
+        onToggleShowSubtitleTranslation,
         subtitleOverlayOpacity,
         onSubtitleOverlayOpacityChange,
         onResetSubtitleSettings,
@@ -657,9 +661,17 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                         </div>
 
                         <ToggleRow
-                            label={t('options.hidePlayerTranslationSubtitle') || '隐藏底部字幕'}
+                            label={t('options.hidePlayerTranslationSubtitle') || '隐藏底部字幕层'}
                             checked={hideTranslationSubtitle}
                             onChange={onToggleHideTranslationSubtitle}
+                            theme={theme}
+                        />
+
+                        <ToggleRow
+                            label={t('options.showSubtitleTranslation') || '显示翻译'}
+                            description={t('options.showSubtitleTranslationDesc') || '控制 Monet 和底部字幕层中的翻译文本。'}
+                            checked={showSubtitleTranslation}
+                            onChange={onToggleShowSubtitleTranslation}
                             theme={theme}
                         />
 

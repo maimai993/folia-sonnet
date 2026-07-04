@@ -29,6 +29,10 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     setVisualizerBackgroundMode: vi.fn(),
     setMonetBackgroundTuning: vi.fn(),
     toggleTransparentBackground: vi.fn(),
+    hideBottomSubtitleOverlay: false,
+    toggleBottomSubtitleOverlay: vi.fn(),
+    showSubtitleTranslation: true,
+    toggleSubtitleTranslation: vi.fn(),
     toggleDaylightMode: vi.fn(),
     setAppLanguagePreference: vi.fn(async () => undefined),
     enableAlternativeLyricSources: false,
@@ -137,6 +141,16 @@ describe('command palette registry', () => {
         expect(matchDaylight.command.id).toBe('settings-toggle-daylight');
         matchDaylight.command.execute(matchDaylight.input, context);
         expect(context.toggleDaylightMode).toHaveBeenCalled();
+
+        const [matchBottomSubtitleOverlay] = getCommandPaletteMatches('隐藏底部字幕层');
+        expect(matchBottomSubtitleOverlay.command.id).toBe('settings-toggle-bottom-subtitle-overlay');
+        matchBottomSubtitleOverlay.command.execute(matchBottomSubtitleOverlay.input, context);
+        expect(context.toggleBottomSubtitleOverlay).toHaveBeenCalled();
+
+        const [matchSubtitleTranslation] = getCommandPaletteMatches('字幕翻译');
+        expect(matchSubtitleTranslation.command.id).toBe('settings-toggle-subtitle-translation');
+        matchSubtitleTranslation.command.execute(matchSubtitleTranslation.input, context);
+        expect(context.toggleSubtitleTranslation).toHaveBeenCalled();
     });
 
     it('executes the current song AI theme generation command', () => {
