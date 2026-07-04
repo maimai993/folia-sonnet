@@ -39,6 +39,13 @@ if (process.platform === 'linux') {
   }
 }
 
+// macOS: GPU 加速优化，解决 Intel Mac + AMD 独显在 Retina 屏幕下的渲染卡顿
+if (process.platform === 'darwin' && process.arch === 'x64') {
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('use-angle', 'gl');
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+}
+
 const store = new Store({ projectName: 'Folia' });
 let mainWindow = null;
 let remoteControlWindow = null;
