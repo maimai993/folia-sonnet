@@ -15,7 +15,7 @@ import {
     saveLocalSongs,
     saveToCache,
 } from '@/services/db';
-import type { LocalSong } from '@/types';
+import type { LocalLibrarySnapshot, LocalSong } from '@/types';
 
 // test/unit/services/localMusicService.test.ts
 // Covers local folder import root reuse and subfolder resync routing.
@@ -107,6 +107,64 @@ const createLibraryHandle = (token = 'library-root') => new FakeDirectoryHandle(
     ], `${token}:disc-1`),
 ], token);
 
+const createLibraryHandleWithLyric = (lyricName: string, lyricContent: string, token = 'library-root') => new FakeDirectoryHandle('Music', [
+    new FakeDirectoryHandle('Disc 1', [
+        new FakeFileHandle('Track 01.mp3'),
+        new FakeFileHandle(lyricName, { content: lyricContent, type: 'text/plain' }),
+    ], `${token}:disc-1`),
+], token);
+
+const createSong = (patch: Partial<LocalSong> = {}): LocalSong => ({
+    id: 'local-track-01',
+    fileName: 'Track 01.mp3',
+    filePath: 'Music/Disc 1/Track 01.mp3',
+    duration: 0,
+    fileSize: 5,
+    fileLastModified: 1000,
+    fileSignature: 'Music/Disc 1/Track 01.mp3::5::1000',
+    mimeType: 'audio/mpeg',
+    addedAt: 1000,
+    folderName: 'Music/Disc 1',
+    ...patch,
+});
+
+const createSnapshotWithLegacyOtherLyricKind = (): LocalLibrarySnapshot => ({
+    rootFolderName: 'Music',
+    scannedAt: 1000,
+    tree: {
+        name: 'Music',
+        relativePath: 'Music',
+        hash: 'legacy-root',
+        files: [],
+        children: [
+            {
+                name: 'Disc 1',
+                relativePath: 'Music/Disc 1',
+                hash: 'legacy-disc',
+                files: [
+                    {
+                        name: 'Track 01.mp3',
+                        relativePath: 'Music/Disc 1/Track 01.mp3',
+                        kind: 'audio',
+                        size: 5,
+                        lastModified: 1000,
+                        signature: 'Music/Disc 1/Track 01.mp3::5::1000',
+                    },
+                    {
+                        name: 'Track 01.ttml',
+                        relativePath: 'Music/Disc 1/Track 01.ttml',
+                        kind: 'other',
+                        size: 43,
+                        lastModified: 1000,
+                        signature: 'Music/Disc 1/Track 01.ttml::43::1000',
+                    },
+                ],
+                children: [],
+            },
+        ],
+    },
+});
+
 describe('localMusicService', () => {
     beforeEach(() => {
         vi.mocked(deleteDirHandle).mockReset();
@@ -125,6 +183,7 @@ describe('localMusicService', () => {
 
         vi.mocked(getLocalSongs).mockResolvedValue([]);
         vi.mocked(getLocalLibrarySnapshot).mockResolvedValue(null);
+        vi.mocked(getDirHandles).mockResolvedValue({});
         vi.mocked(saveDirHandles).mockResolvedValue(undefined);
         vi.mocked(saveLocalSongs).mockResolvedValue(undefined);
         vi.mocked(saveLocalLibrarySnapshot).mockResolvedValue(undefined);
@@ -172,6 +231,49 @@ describe('localMusicService', () => {
             expect.objectContaining<Partial<LocalSong>>({
                 filePath: 'Music/Disc 1/Track 01.mp3',
                 folderName: 'Music/Disc 1',
+            }),
+        ]);
+    });
+
+    it.each([
+        ['Track 01.ttml', '<tt xmlns="http://www.w3.org/ns/ttml"></tt>', 'ttml'],
+        ['Track 01.qrc', '[1000,500](1000,500)Hi', 'qrc'],
+        ['Track 01.yrc', '[1000,500](1000,500,0)Hi', 'yrc'],
+        ['Track 01.krc', '[1000,500]<0,500,0>Hi', 'krc'],
+    ] as const)('indexes %s sidecar lyrics with an explicit format', async (lyricName, lyricContent, expectedFormat) => {
+        const selectedHandle = createLibraryHandleWithLyric(lyricName, lyricContent);
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(selectedHandle as unknown as FileSystemDirectoryHandle);
+
+        const importedSongs = await importFolder();
+
+        expect(importedSongs).toHaveLength(1);
+        expect(saveLocalSongs).toHaveBeenCalledWith([
+            expect.objectContaining<Partial<LocalSong>>({
+                filePath: 'Music/Disc 1/Track 01.mp3',
+                hasLocalLyrics: true,
+                localLyricsContent: lyricContent,
+                localLyricsFormat: expectedFormat,
+            }),
+        ]);
+    });
+
+    it('rescans audio when a sidecar file kind changes from legacy other to lyric', async () => {
+        const lyricContent = '<tt xmlns="http://www.w3.org/ns/ttml"></tt>';
+        const persistedHandle = createLibraryHandleWithLyric('Track 01.ttml', lyricContent);
+        vi.mocked(getDirHandles).mockResolvedValue({ Music: persistedHandle as unknown as FileSystemDirectoryHandle });
+        vi.mocked(getLocalSongs).mockResolvedValue([createSong()]);
+        vi.mocked(getLocalLibrarySnapshot).mockResolvedValue(createSnapshotWithLegacyOtherLyricKind());
+
+        const importedSongs = await resyncFolder('Music');
+
+        expect(importedSongs).toHaveLength(1);
+        expect(saveLocalSongs).toHaveBeenCalledWith([
+            expect.objectContaining<Partial<LocalSong>>({
+                id: 'local-track-01',
+                filePath: 'Music/Disc 1/Track 01.mp3',
+                hasLocalLyrics: true,
+                localLyricsContent: lyricContent,
+                localLyricsFormat: 'ttml',
             }),
         ]);
     });

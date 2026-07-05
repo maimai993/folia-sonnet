@@ -219,7 +219,7 @@ declare global {
     type: 'local';
     lrcContent: string;
     tLrcContent?: string;
-    formatHint?: 'lrc' | 'enhanced-lrc' | 'vtt' | 'yrc' | 'qrc';
+    formatHint?: 'lrc' | 'enhanced-lrc' | 'vtt' | 'ttml' | 'yrc' | 'qrc' | 'krc';
   }
 
   interface StageNeteaseLyricBranch {

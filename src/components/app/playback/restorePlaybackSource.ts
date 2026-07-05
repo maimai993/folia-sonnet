@@ -163,6 +163,7 @@ export const restorePlaybackSourceForSong = async (
                 type: 'local',
                 lrcContent: songToRestore.localLyricsContent,
                 tLrcContent: songToRestore.localTranslationLyricsContent,
+                formatHint: songToRestore.localLyricsFormat,
             }));
         } else if (songToRestore.hasEmbeddedLyrics && songToRestore.embeddedLyricsContent) {
             setLyrics(await LyricParserFactory.parse({

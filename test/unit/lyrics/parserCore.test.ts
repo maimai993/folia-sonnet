@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectTimedLyricFormat } from '@/utils/lyrics/formatDetection';
+import { detectTimedLyricFormat, resolveExplicitFileTimedLyricFormat } from '@/utils/lyrics/formatDetection';
 import {
     parseEnhancedLRC,
     parseLRC,
@@ -41,6 +41,16 @@ const TTML_ADVANCED_FIXTURE = [
 ].join('');
 
 describe('parserCore', () => {
+    it('resolves explicit lyric formats from supported file names', () => {
+        expect(resolveExplicitFileTimedLyricFormat('song.vtt')).toBe('vtt');
+        expect(resolveExplicitFileTimedLyricFormat('song.ttml')).toBe('ttml');
+        expect(resolveExplicitFileTimedLyricFormat('song.qrc')).toBe('qrc');
+        expect(resolveExplicitFileTimedLyricFormat('song.yrc')).toBe('yrc');
+        expect(resolveExplicitFileTimedLyricFormat('song.krc')).toBe('krc');
+        expect(resolveExplicitFileTimedLyricFormat('song.lrc')).toBeUndefined();
+        expect(resolveExplicitFileTimedLyricFormat('song.txt')).toBeUndefined();
+    });
+
     it('parses standard LRC with translation matching and interlude insertion', () => {
         const lyrics = parseLRC(
             '[00:04.00]Hello world\n[00:10.00]再见',

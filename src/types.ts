@@ -135,7 +135,7 @@ export interface StageLocalLyricSource {
   type: 'local';
   lrcContent: string;
   tLrcContent?: string;
-  formatHint?: 'lrc' | 'enhanced-lrc' | 'vtt' | 'ttml' | 'yrc' | 'qrc';
+  formatHint?: 'lrc' | 'enhanced-lrc' | 'vtt' | 'ttml' | 'yrc' | 'qrc' | 'krc';
 }
 
 export interface StageNeteaseLyricBranch {
@@ -758,9 +758,10 @@ export interface LocalSong {
   useOnlineCover?: boolean;     // Prefer online cover over embedded cover
   useOnlineMetadata?: boolean;  // Prefer online artist/album over embedded tags
 
-  // Local Lyrics (.lrc / .vtt files)
+  // Local Lyrics (.lrc / .vtt / .ttml / .qrc / .yrc / .krc files)
   hasLocalLyrics?: boolean;
   localLyricsContent?: string;
+  localLyricsFormat?: 'vtt' | 'ttml' | 'yrc' | 'qrc' | 'krc';
   hasLocalTranslationLyrics?: boolean;
   localTranslationLyricsContent?: string;
 

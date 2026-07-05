@@ -18,6 +18,7 @@ import { migrateMatchedLyricsCarrierRenderHints } from '../utils/lyrics/storageM
 import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
+import { resolveExplicitFileTimedLyricFormat } from '../utils/lyrics/formatDetection';
 import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from '../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { PlayerState } from '../types';
@@ -30,6 +31,19 @@ import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState, getO
 import { getBlobObjectUrlSignature, isBlob } from '../utils/blobGuards';
 
 // src/hooks/useLibraryPlaybackController.ts
+
+const parseLocalSongLyrics = (song: Pick<LocalSong, 'localLyricsContent' | 'localTranslationLyricsContent' | 'localLyricsFormat'>) => {
+    if (!song.localLyricsContent) {
+        return Promise.resolve(null);
+    }
+
+    return LyricParserFactory.parse({
+        type: 'local',
+        lrcContent: song.localLyricsContent,
+        tLrcContent: song.localTranslationLyricsContent,
+        formatHint: song.localLyricsFormat,
+    });
+};
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -426,10 +440,10 @@ export function useLibraryPlaybackController({
         } else if (source === 'embedded' && localData.embeddedLyricsContent) {
             nextLyrics = await LyricParserFactory.parse({ type: 'embedded', textContent: localData.embeddedLyricsContent, translationContent: localData.embeddedTranslationLyricsContent });
         } else if (source === 'local' && localData.localLyricsContent) {
-            nextLyrics = await LyricParserFactory.parse({ type: 'local', lrcContent: localData.localLyricsContent, tLrcContent: localData.localTranslationLyricsContent });
+            nextLyrics = await parseLocalSongLyrics(localData);
         } else if (!source) {
             if (localData.hasLocalLyrics && localData.localLyricsContent) {
-                nextLyrics = await LyricParserFactory.parse({ type: 'local', lrcContent: localData.localLyricsContent, tLrcContent: localData.localTranslationLyricsContent });
+                nextLyrics = await parseLocalSongLyrics(localData);
             } else if (localData.hasEmbeddedLyrics && localData.embeddedLyricsContent) {
                 nextLyrics = await LyricParserFactory.parse({ type: 'embedded', textContent: localData.embeddedLyricsContent, translationContent: localData.embeddedTranslationLyricsContent });
             } else if (localData.matchedLyrics) {
@@ -461,11 +475,11 @@ export function useLibraryPlaybackController({
                 return LyricParserFactory.parse({ type: 'embedded', textContent: localData.embeddedLyricsContent, translationContent: localData.embeddedTranslationLyricsContent });
             }
             if (source === 'local' && localData.localLyricsContent) {
-                return LyricParserFactory.parse({ type: 'local', lrcContent: localData.localLyricsContent, tLrcContent: localData.localTranslationLyricsContent });
+                return parseLocalSongLyrics(localData);
             }
             if (!source) {
                 if (localData.hasLocalLyrics && localData.localLyricsContent) {
-                    return LyricParserFactory.parse({ type: 'local', lrcContent: localData.localLyricsContent, tLrcContent: localData.localTranslationLyricsContent });
+                    return parseLocalSongLyrics(localData);
                 }
                 if (localData.hasEmbeddedLyrics && localData.embeddedLyricsContent) {
                     return LyricParserFactory.parse({ type: 'embedded', textContent: localData.embeddedLyricsContent, translationContent: localData.embeddedTranslationLyricsContent });
@@ -924,7 +938,7 @@ export function useLibraryPlaybackController({
         setStatusMsg({ type: 'info', text: t('navidrome.fetchingLyrics') || '正在匹配歌词...' });
     }, [setStatusMsg, t]);
 
-    const handleUpdateLocalLyrics = useCallback(async (content: string, isTranslation: boolean) => {
+    const handleUpdateLocalLyrics = useCallback(async (content: string, isTranslation: boolean, fileName?: string) => {
         if (!isLocalPlaybackSong(currentSong)) return;
 
         const localData = currentSong.localData;
@@ -937,6 +951,7 @@ export function useLibraryPlaybackController({
         } else {
             updatedLocalSong.hasLocalLyrics = true;
             updatedLocalSong.localLyricsContent = content;
+            updatedLocalSong.localLyricsFormat = resolveExplicitFileTimedLyricFormat(fileName);
         }
 
         try {
@@ -963,7 +978,7 @@ export function useLibraryPlaybackController({
 
             let nextLyrics: LyricData | null = null;
             if (source === 'local' && updatedLocalSong.localLyricsContent) {
-                nextLyrics = await LyricParserFactory.parse({ type: 'local', lrcContent: updatedLocalSong.localLyricsContent, tLrcContent: updatedLocalSong.localTranslationLyricsContent });
+                nextLyrics = await parseLocalSongLyrics(updatedLocalSong);
             } else if (source === 'embedded' && updatedLocalSong.embeddedLyricsContent) {
                 nextLyrics = await LyricParserFactory.parse({ type: 'embedded', textContent: updatedLocalSong.embeddedLyricsContent, translationContent: updatedLocalSong.embeddedTranslationLyricsContent });
             } else if (source === 'online' && updatedLocalSong.matchedLyrics) {
@@ -1036,7 +1051,11 @@ export function useLibraryPlaybackController({
         try {
             const importedLyrics = fileName.toLowerCase().endsWith('.txt')
                 ? await LyricParserFactory.parse({ type: 'embedded', textContent: content })
-                : await LyricParserFactory.parse({ type: 'local', lrcContent: content });
+                : await LyricParserFactory.parse({
+                    type: 'local',
+                    lrcContent: content,
+                    formatHint: resolveExplicitFileTimedLyricFormat(fileName),
+                });
             const previousState = await loadOnlineLyricsState(currentSong);
             const nextState: OnlineLyricsState = {
                 lyricsSource: 'imported',

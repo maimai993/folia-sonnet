@@ -108,7 +108,7 @@ const OnlineLyricsTab: React.FC<OnlineLyricsTabProps> = ({
                         </button>
                         <input
                             type="file"
-                            accept=".lrc,.txt"
+                            accept=".lrc,.vtt,.ttml,.qrc,.yrc,.krc,.txt"
                             ref={inputRef}
                             className="hidden"
                             onChange={handleImport}

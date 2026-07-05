@@ -9,7 +9,7 @@ import { getLyricProviderLabel } from '../../utils/lyrics/lyricSourceLabels';
 interface LocalTabProps {
     currentSong: UnifiedSong;
     onMatchOnline: () => void;
-    onUpdateLocalLyrics: (content: string, isTranslation: boolean) => void;
+    onUpdateLocalLyrics: (content: string, isTranslation: boolean, fileName?: string) => void;
     onChangeLyricsSource: (source: 'local' | 'embedded' | 'online') => void;
     replayGainMode: ReplayGainMode;
     onChangeReplayGainMode: (mode: ReplayGainMode) => void;
@@ -58,7 +58,7 @@ const LocalTab: React.FC<LocalTabProps> = ({
         reader.onload = (event) => {
             const content = event.target?.result as string;
             if (content) {
-                onUpdateLocalLyrics(content, isTranslation);
+                onUpdateLocalLyrics(content, isTranslation, file.name);
             }
         };
         reader.readAsText(file);
@@ -194,7 +194,7 @@ const LocalTab: React.FC<LocalTabProps> = ({
                         </button>
                         <input
                             type="file"
-                            accept=".lrc,.txt"
+                            accept=".lrc,.vtt,.ttml,.qrc,.yrc,.krc,.txt"
                             ref={lrcInputRef}
                             className="hidden"
                             onChange={(e) => handleFileChange(e, false)}

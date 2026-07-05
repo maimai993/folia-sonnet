@@ -8,6 +8,7 @@ import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { normalizeLyricMatchText } from '../utils/lyrics/matchScore';
 import { isBlob } from '../utils/blobGuards';
+import { resolveExplicitFileTimedLyricFormat, type ExplicitFileTimedLyricFormat } from '../utils/lyrics/formatDetection';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
@@ -27,6 +28,11 @@ interface FileEntryForImport {
     relativePath: string;
 }
 
+interface LocalLyricFileCandidate {
+    handle: FileSystemFileHandle;
+    format?: ExplicitFileTimedLyricFormat;
+}
+
 interface SnapshotTraversalResult {
     tree: LocalLibrarySnapshotNode;
     relevantFileCount: number;
@@ -38,7 +44,7 @@ interface ImportDiffPlan {
     removedSongs: LocalSong[];
     totalAudioFiles: number;
     relevantFileCount: number;
-    lrcMap: Map<string, FileSystemFileHandle>;
+    lrcMap: Map<string, LocalLyricFileCandidate>;
     tlrcMap: Map<string, FileSystemFileHandle>;
     coverMap: Map<string, FileSystemFileHandle>;
     snapshot: LocalLibrarySnapshot;
@@ -48,7 +54,7 @@ interface ImportDiffPlan {
 const fileHandleMap = new Map<string, FileSystemFileHandle>();
 const embeddedCoverRequestMap = new Map<string, Promise<LocalSong>>();
 const AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i;
-const LYRIC_EXTENSIONS = /\.(lrc|vtt)$/i;
+const LYRIC_EXTENSIONS = /\.(lrc|vtt|ttml|qrc|yrc|krc)$/i;
 const TRANSLATION_LYRIC_EXTENSIONS = /\.t\.(lrc|vtt)$/i;
 const IMPORT_CONCURRENCY = 6;
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
@@ -253,6 +259,18 @@ function getTimedLyricPriority(fileName: string): number {
     if (lowerName.endsWith('.t.vtt') || lowerName.endsWith('.vtt')) {
         return 1;
     }
+    if (lowerName.endsWith('.ttml')) {
+        return 2;
+    }
+    if (lowerName.endsWith('.qrc')) {
+        return 3;
+    }
+    if (lowerName.endsWith('.yrc')) {
+        return 4;
+    }
+    if (lowerName.endsWith('.krc')) {
+        return 5;
+    }
     return Number.MAX_SAFE_INTEGER;
 }
 
@@ -268,7 +286,7 @@ function getAudioBasePath(relativePath: string): string {
 function getSidecarLyricBasePath(relativePath: string, kind: 'lyric' | 'translationLyric'): string {
     const withoutLyricSuffix = kind === 'translationLyric'
         ? relativePath.replace(/\.t\.(lrc|vtt)$/i, '')
-        : relativePath.replace(/\.(lrc|vtt)$/i, '');
+        : relativePath.replace(/\.(lrc|vtt|ttml|qrc|yrc|krc)$/i, '');
 
     // Support both "track.lrc" and "track.mp3.lrc" style sidecar lyrics.
     return getAudioBasePath(withoutLyricSuffix);
@@ -486,13 +504,13 @@ async function collectImportDiffPlan(
     const changedAudioPaths = new Set<string>();
     const changedLyricBasePaths = new Set<string>();
     const changedCoverFolders = new Set<string>();
-    const lyricCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number }>();
+    const lyricCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number; format?: ExplicitFileTimedLyricFormat }>();
     const translationLyricCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number }>();
     const coverCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number }>();
 
     currentFiles.forEach((file) => {
         const previousFile = previousFiles.get(file.relativePath);
-        const hasChanged = !previousFile || previousFile.signature !== file.signature;
+        const hasChanged = !previousFile || previousFile.signature !== file.signature || previousFile.kind !== file.kind;
 
         if (file.kind === 'audio') {
             currentAudioPaths.add(file.relativePath);
@@ -565,6 +583,7 @@ async function collectImportDiffPlan(
             const fileHandle = await resolveFileHandleFromDirHandle(dirHandle, relativePathFromRoot);
             const baseName = getSidecarLyricBasePath(snapshotFile.relativePath, snapshotFile.kind);
             const priority = getTimedLyricPriority(snapshotFile.name);
+            const format = resolveExplicitFileTimedLyricFormat(snapshotFile.name);
 
             if (snapshotFile.kind === 'translationLyric') {
                 const existingTranslationLyric = translationLyricCandidates.get(baseName);
@@ -574,7 +593,7 @@ async function collectImportDiffPlan(
             } else {
                 const existingLyric = lyricCandidates.get(baseName);
                 if (!existingLyric || priority < existingLyric.priority) {
-                    lyricCandidates.set(baseName, { handle: fileHandle, priority });
+                    lyricCandidates.set(baseName, { handle: fileHandle, priority, format });
                 }
             }
             continue;
@@ -628,7 +647,7 @@ async function collectImportDiffPlan(
         removedSongs,
         totalAudioFiles: currentAudioPaths.size,
         relevantFileCount: traversalResult.relevantFileCount,
-        lrcMap: new Map(Array.from(lyricCandidates.entries()).map(([baseName, value]) => [baseName, value.handle])),
+        lrcMap: new Map(Array.from(lyricCandidates.entries()).map(([baseName, value]) => [baseName, { handle: value.handle, format: value.format }])),
         tlrcMap: new Map(Array.from(translationLyricCandidates.entries()).map(([baseName, value]) => [baseName, value.handle])),
         coverMap: new Map(Array.from(coverCandidates.entries()).map(([folderKey, value]) => [folderKey, value.handle])),
         snapshot
@@ -637,7 +656,7 @@ async function collectImportDiffPlan(
 
 async function buildImportedSong(
     entry: FileEntryForImport,
-    lrcMap: Map<string, FileSystemFileHandle>,
+    lrcMap: Map<string, LocalLyricFileCandidate>,
     tlrcMap: Map<string, FileSystemFileHandle>,
     coverMap: Map<string, FileSystemFileHandle>,
     coverBlobCache: Map<string, Promise<Blob | undefined>>,
@@ -667,13 +686,16 @@ async function buildImportedSong(
     const baseName = getAudioBasePath(entry.relativePath);
 
     let localLyricsContent: string | undefined;
+    let localLyricsFormat: ExplicitFileTimedLyricFormat | undefined;
     let localTranslationLyricsContent: string | undefined;
     const lyricReadStartedAt = performance.now();
 
     if (lrcMap.has(baseName)) {
         try {
-            const lrcFile = await lrcMap.get(baseName)!.getFile();
+            const lyricCandidate = lrcMap.get(baseName)!;
+            const lrcFile = await lyricCandidate.handle.getFile();
             localLyricsContent = await lrcFile.text();
+            localLyricsFormat = lyricCandidate.format;
         } catch (e) {
             console.error(`[LocalMusic] Failed to read local lyric for ${file.name}`, e);
         }
@@ -754,6 +776,7 @@ async function buildImportedSong(
         folderName: entry.folderName,
         hasLocalLyrics: !!localLyricsContent,
         localLyricsContent,
+        localLyricsFormat: localLyricsContent ? localLyricsFormat : undefined,
         hasLocalTranslationLyrics: !!localTranslationLyricsContent,
         localTranslationLyricsContent,
         hasEmbeddedLyrics: !!embeddedMetadata.lyrics,

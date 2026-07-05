@@ -49,7 +49,7 @@ type UnifiedPanelPlaybackProps = {
     visualizerMode: VisualizerMode;
     onVisualizerModeChange: (mode: VisualizerMode) => void;
     onMatchOnline: () => void;
-    onUpdateLocalLyrics: (content: string, isTranslation: boolean) => void;
+    onUpdateLocalLyrics: (content: string, isTranslation: boolean, fileName?: string) => void;
     onChangeLyricsSource: (source: 'local' | 'embedded' | 'online') => void;
     onlineLyricsState: OnlineLyricsState | null;
     onImportOnlineLyrics: (content: string, fileName: string) => void;
