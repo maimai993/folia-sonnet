@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { importFolder, resyncFolder } from '@/services/localMusicService';
+import { importFolder, resyncAllFolders, resyncFolder } from '@/services/localMusicService';
 import {
     deleteDirHandle,
     deleteLocalLibrarySnapshot,
@@ -276,5 +276,26 @@ describe('localMusicService', () => {
                 localLyricsFormat: 'ttml',
             }),
         ]);
+    });
+
+    it('deduplicates nested folders before rescanning all imported roots', async () => {
+        const musicHandle = createLibraryHandle('music-root');
+        const otherHandle = createLibraryHandle('other-root');
+        vi.mocked(getDirHandles).mockResolvedValue({
+            Music: musicHandle as unknown as FileSystemDirectoryHandle,
+            Other: otherHandle as unknown as FileSystemDirectoryHandle,
+        });
+        vi.mocked(getLocalSongs).mockResolvedValue([
+            createSong({ id: 'music-track-01', folderName: 'Music/Disc 1', filePath: 'Music/Disc 1/Track 01.mp3' }),
+            createSong({ id: 'music-track-02', folderName: 'Music/Disc 1/Sub', filePath: 'Music/Disc 1/Sub/Track 02.mp3' }),
+            createSong({ id: 'other-track-01', folderName: 'Other/Disc 1', filePath: 'Other/Disc 1/Track 01.mp3' }),
+        ]);
+
+        const importedSongs = await resyncAllFolders();
+
+        expect(importedSongs).toHaveLength(2);
+        expect(saveLocalLibrarySnapshot).toHaveBeenCalledTimes(2);
+        expect(saveLocalLibrarySnapshot).toHaveBeenCalledWith(expect.objectContaining({ rootFolderName: 'Music' }));
+        expect(saveLocalLibrarySnapshot).toHaveBeenCalledWith(expect.objectContaining({ rootFolderName: 'Other' }));
     });
 });

@@ -1637,6 +1637,34 @@ export async function resyncFolder(folderName: string): Promise<LocalSong[] | nu
     return importedSongs;
 }
 
+function getLocalSongRootFolderName(song: LocalSong): string | null {
+    const sourcePath = song.folderName || song.filePath;
+    const rootFolderName = sourcePath.split('/')[0]?.trim();
+    return rootFolderName || null;
+}
+
+// Resyncs all imported local roots once, even when the song list contains nested folders.
+export async function resyncAllFolders(): Promise<LocalSong[] | null> {
+    const allSongs = await getLocalSongs();
+    const rootFolderNames = Array.from(new Set(
+        allSongs
+            .map(getLocalSongRootFolderName)
+            .filter((rootFolderName): rootFolderName is string => Boolean(rootFolderName))
+    ));
+
+    if (rootFolderNames.length === 0) {
+        return null;
+    }
+
+    const importedSongs: LocalSong[] = [];
+    for (const rootFolderName of rootFolderNames) {
+        const rootSongs = await importFolder(rootFolderName);
+        importedSongs.push(...rootSongs);
+    }
+
+    return importedSongs;
+}
+
 // Delete all songs from a specific folder (and its nested children)
 export async function deleteFolderSongs(folderName: string): Promise<void> {
     // Get all local songs

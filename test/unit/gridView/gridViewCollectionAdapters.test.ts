@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     createLocalGridViewCollection,
     createNavidromeGridViewCollection,
+    refreshLocalGridViewCollection,
     resolveLocalGridViewCoverSource,
     resolveLocalGridViewTracks,
 } from '../../../src/components/app/home/gridViewCollectionAdapters';
@@ -73,6 +74,48 @@ describe('gridViewCollectionAdapters', () => {
 
         expect(tracks.map(track => (track as any).localData?.id)).toEqual(['song-c', 'song-a']);
         expect(tracks.every(track => (track as any).isLocal)).toBe(true);
+    });
+
+    it('refreshes virtual all songs descriptors from the current local song list', () => {
+        const originalSongs = [
+            buildLocalSong('song-a', 'A'),
+        ];
+        const descriptor = createLocalGridViewCollection({
+            id: 'folder-__all-songs__',
+            name: 'All Songs',
+            type: 'folder',
+            songs: originalSongs,
+            isVirtual: true,
+        });
+        const refreshed = refreshLocalGridViewCollection(descriptor, [
+            ...originalSongs,
+            buildLocalSong('song-b', 'B'),
+        ]);
+
+        expect(refreshed.songIds).toEqual(['song-a', 'song-b']);
+        expect(refreshed.trackCount).toBe(2);
+    });
+
+    it('refreshes folder descriptors without pulling nested folders into the open folder view', () => {
+        const descriptor = createLocalGridViewCollection({
+            id: 'folder-Music/Disc 1',
+            name: 'Music/Disc 1',
+            type: 'folder',
+            songs: [buildLocalSong('song-a', 'A')],
+        });
+        const directSong = {
+            ...buildLocalSong('song-b', 'B'),
+            folderName: 'Music/Disc 1',
+        };
+        const nestedSong = {
+            ...buildLocalSong('song-c', 'C'),
+            folderName: 'Music/Disc 1/Sub',
+        };
+
+        const refreshed = refreshLocalGridViewCollection(descriptor, [directSong, nestedSong]);
+
+        expect(refreshed.songIds).toEqual(['song-b']);
+        expect(refreshed.trackCount).toBe(1);
     });
 
     it('ignores non-Blob embedded covers when resolving local collection covers', () => {

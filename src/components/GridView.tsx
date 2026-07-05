@@ -24,6 +24,7 @@ export interface GridViewSourceActions {
     local?: {
         onRefresh?: () => Promise<void> | void;
         onResyncFolder?: (collection: any) => Promise<void> | void;
+        onResyncAllFolders?: () => Promise<void> | void;
         onDeleteFolder?: (collection: any) => Promise<void> | void;
         onRenamePlaylist?: (playlistId: string, name: string) => Promise<void> | void;
         onDeletePlaylist?: (playlistId: string) => Promise<void> | void;
@@ -629,6 +630,7 @@ export const GridView: React.FC<GridViewProps> = ({
         ? (loadedAlbumInfo || collection?.raw || collection)
         : null;
     const isLocalFolderCollection = isLocalCollection && collection?.type === 'folder' && !collection?.isVirtual;
+    const isLocalAllSongsCollection = isLocalCollection && collection?.type === 'folder' && Boolean(collection?.isVirtual);
     const isLocalPlaylistCollection = isLocalCollection && collection?.type === 'playlist' && Boolean(collection?.playlistId) && !collection?.isVirtual;
     const isNavidromePlaylistCollection = isNavidromeCollection && collection?.type === 'playlist' && Boolean(collection?.editable);
     const canAddNavidromeToPlaylist = isNavidromeCollection
@@ -769,6 +771,17 @@ export const GridView: React.FC<GridViewProps> = ({
             setIsSourceActionPending(false);
         }
     }, [collection, isLocalFolderCollection, sourceActions]);
+
+    const handleResyncAllLocalFolders = useCallback(async () => {
+        if (!isLocalAllSongsCollection) return;
+
+        setIsSourceActionPending(true);
+        try {
+            await sourceActions?.local?.onResyncAllFolders?.();
+        } finally {
+            setIsSourceActionPending(false);
+        }
+    }, [isLocalAllSongsCollection, sourceActions]);
 
     const handleAddNavidromeCollectionToPlaylist = useCallback(async (playlistId: string | number) => {
         await sourceActions?.navidrome?.onAddToPlaylist?.(playlistId, playableTracks);
@@ -1922,6 +1935,16 @@ export const GridView: React.FC<GridViewProps> = ({
                                 {isLocalFolderCollection && sourceActions?.local?.onResyncFolder && (
                                     <button
                                         onClick={() => void handleResyncLocalFolder()}
+                                        disabled={isSourceActionPending}
+                                        className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                                    >
+                                        {isSourceActionPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                                        {t('localMusic.reimport')}
+                                    </button>
+                                )}
+                                {isLocalAllSongsCollection && sourceActions?.local?.onResyncAllFolders && (
+                                    <button
+                                        onClick={() => void handleResyncAllLocalFolders()}
                                         disabled={isSourceActionPending}
                                         className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
                                     >

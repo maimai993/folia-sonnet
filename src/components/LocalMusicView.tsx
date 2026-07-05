@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { FolderOpen, Music, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LocalSong, LocalLibraryGroup, LocalPlaylist } from '../types';
-import { importFolder, matchLyrics, resyncFolder, deleteFolderSongs, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
+import { importFolder, matchLyrics, resyncAllFolders, resyncFolder, deleteFolderSongs, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 import LyricMatchModal from './modal/LyricMatchModal';
 import LocalPlaylistView from './local/LocalPlaylistView';
 import Carousel3D from './Carousel3D';
@@ -439,9 +439,24 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 console.log(`[LocalMusic] Successfully re-imported ${importedSongs.length} songs`);
             }
 
-            onRefresh(); // Refresh the UI to show updated songs while keeping the current playlist view open
+            await onRefresh(); // Refresh the UI to show updated songs while keeping the current playlist view open
         } catch (error) {
             console.error('Failed to resync folder:', error);
+            alert(t('localMusic.resyncFailed'));
+        }
+    };
+
+    const handleResyncAllFolders = async () => {
+        if (!selectedGroup || selectedGroup.type !== 'folder' || !selectedGroup.isVirtual) return;
+
+        try {
+            const importedSongs = await resyncAllFolders();
+            if (importedSongs === null) {
+                return;
+            }
+            await onRefresh();
+        } catch (error) {
+            console.error('Failed to resync all local folders:', error);
             alert(t('localMusic.resyncFailed'));
         }
     };
@@ -523,7 +538,9 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
                 onAddToQueue={onAddToQueue}
                 isFolderView={resolvedSelectedGroup.type === 'folder'}
                 allSongs={localSongs}
-                onResync={resolvedSelectedGroup.type === 'folder' && !resolvedSelectedGroup.isVirtual ? handleResyncFolder : undefined}
+                onResync={resolvedSelectedGroup.type === 'folder'
+                    ? (resolvedSelectedGroup.isVirtual ? handleResyncAllFolders : handleResyncFolder)
+                    : undefined}
                 onDelete={resolvedSelectedGroup.type === 'folder' && !resolvedSelectedGroup.isVirtual ? handleDeleteFolder : undefined}
                 onMatchSong={onMatchSong}
                 onRefresh={onRefresh}

@@ -9,7 +9,7 @@ import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { LocalSong, SongResult, UnifiedSong } from '../../../types';
 import { NavidromeSong } from '../../../types/navidrome';
 import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
-import { deleteFolderSongs, resyncFolder } from '../../../services/localMusicService';
+import { deleteFolderSongs, resyncAllFolders, resyncFolder } from '../../../services/localMusicService';
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
 import { getBlobObjectUrlSignature, isBlob } from '../../../utils/blobGuards';
@@ -18,6 +18,7 @@ import {
     LocalGridViewCollectionDescriptor,
     isLocalGridViewCollection,
     isNavidromeGridViewCollection,
+    refreshLocalGridViewCollection,
     resolveLocalGridViewTracks,
     resolveNavidromeGridViewTracks,
 } from './gridViewCollectionAdapters';
@@ -103,7 +104,7 @@ const resolveLiveLocalCollection = (
     legacyProps: LegacyHomeProps
 ): LocalGridViewCollectionDescriptor | null => {
     if (!collection.playlistId) {
-        return collection;
+        return refreshLocalGridViewCollection(collection, legacyProps.localSongs);
     }
 
     const playlist = legacyProps.localPlaylists.find(item => item.id === collection.playlistId);
@@ -508,7 +509,13 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
             onResyncFolder: async (collection) => {
                 const importedSongs = await resyncFolder(collection.name);
                 if (importedSongs !== null) {
-                    legacyProps.onRefreshLocalSongs();
+                    await legacyProps.onRefreshLocalSongs();
+                }
+            },
+            onResyncAllFolders: async () => {
+                const importedSongs = await resyncAllFolders();
+                if (importedSongs !== null) {
+                    await legacyProps.onRefreshLocalSongs();
                 }
             },
             onDeleteFolder: async (collection) => {

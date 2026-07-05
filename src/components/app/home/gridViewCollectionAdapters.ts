@@ -108,6 +108,25 @@ export const createNavidromeGridViewCollection = (
     editable: Boolean((item as { editable?: boolean }).editable),
 });
 
+export const refreshLocalGridViewCollection = (
+    descriptor: LocalGridViewCollectionDescriptor,
+    localSongs: LocalSong[]
+): LocalGridViewCollectionDescriptor => {
+    if (descriptor.playlistId || descriptor.type !== 'folder') {
+        return descriptor;
+    }
+
+    const refreshedSongs = descriptor.isVirtual
+        ? localSongs
+        : localSongs.filter(song => song.folderName === descriptor.name);
+
+    return {
+        ...descriptor,
+        songIds: refreshedSongs.map(song => song.id),
+        trackCount: refreshedSongs.length,
+    };
+};
+
 // Rebuilds a local GridView queue from descriptor ids while preserving descriptor order.
 export const resolveLocalGridViewTracks = (
     descriptor: LocalGridViewCollectionDescriptor,
