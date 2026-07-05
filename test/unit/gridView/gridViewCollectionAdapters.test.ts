@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     createLocalGridViewCollection,
     createNavidromeGridViewCollection,
+    resolveLocalGridViewCoverSource,
     resolveLocalGridViewTracks,
 } from '../../../src/components/app/home/gridViewCollectionAdapters';
 import type { LocalLibraryGroup, LocalSong } from '../../../src/types';
@@ -72,6 +73,66 @@ describe('gridViewCollectionAdapters', () => {
 
         expect(tracks.map(track => (track as any).localData?.id)).toEqual(['song-c', 'song-a']);
         expect(tracks.every(track => (track as any).isLocal)).toBe(true);
+    });
+
+    it('ignores non-Blob embedded covers when resolving local collection covers', () => {
+        const songs = [
+            {
+                ...buildLocalSong('song-a', 'A'),
+                addedAt: 2,
+                embeddedCover: { size: 20, type: 'image/png' } as unknown as Blob,
+                matchedCoverUrl: 'https://example.com/a.jpg',
+            },
+            {
+                ...buildLocalSong('song-b', 'B'),
+                addedAt: 1,
+            },
+        ];
+        const descriptor = createLocalGridViewCollection({
+            id: 'folder-music',
+            name: 'Music',
+            type: 'folder',
+            songs,
+        });
+
+        expect(resolveLocalGridViewCoverSource(descriptor, songs)).toBe('https://example.com/a.jpg');
+    });
+
+    it('prefers matched covers when online covers are enabled', () => {
+        const embeddedCover = new Blob(['cover'], { type: 'image/png' });
+        const songs = [
+            {
+                ...buildLocalSong('song-a', 'A'),
+                embeddedCover,
+                matchedCoverUrl: 'https://example.com/online.jpg',
+                useOnlineCover: true,
+            },
+        ];
+        const descriptor = createLocalGridViewCollection({
+            id: 'folder-music',
+            name: 'Music',
+            type: 'folder',
+            songs,
+        });
+
+        expect(resolveLocalGridViewCoverSource(descriptor, songs)).toBe('https://example.com/online.jpg');
+    });
+
+    it('returns no local cover source when only invalid embedded covers are available', () => {
+        const songs = [
+            {
+                ...buildLocalSong('song-a', 'A'),
+                embeddedCover: { size: 20, type: 'image/png' } as unknown as Blob,
+            },
+        ];
+        const descriptor = createLocalGridViewCollection({
+            id: 'folder-music',
+            name: 'Music',
+            type: 'folder',
+            songs,
+        });
+
+        expect(resolveLocalGridViewCoverSource(descriptor, songs)).toBeUndefined();
     });
 
     it('creates Navidrome descriptors for every GridView collection type', () => {

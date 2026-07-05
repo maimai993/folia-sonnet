@@ -2,6 +2,7 @@
 import { LyricData, Theme, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, LocalLibrarySnapshot } from "../types";
 import { migrateLocalSongsRenderHints, migrateMatchedLyricsCarrierRenderHints } from "../utils/lyrics/storageMigration";
 import type { MigrationResult } from "../utils/lyrics/renderHints";
+import { isBlob } from "../utils/blobGuards";
 
 const DB_NAME = 'KineticPlayerDB';
 const DB_VERSION = 5; // Incremented version to ensure local_music store is created
@@ -116,8 +117,17 @@ export { openDB };
 
 const sanitizeLocalSongForStorage = (song: LocalSong): LocalSong => {
   const normalizedSong = migrateMatchedLyricsCarrierRenderHints(song).value ?? song;
-  const { fileHandle, ...persistedSong } = normalizedSong;
-  return persistedSong;
+  const { fileHandle, embeddedCover, ...persistedSong } = normalizedSong;
+  return isBlob(embeddedCover) ? { ...persistedSong, embeddedCover } : persistedSong;
+};
+
+const normalizeLocalSongFromStorage = (song: LocalSong): { value: LocalSong; changed: boolean } => {
+  if (song.embeddedCover === undefined || isBlob(song.embeddedCover)) {
+    return { value: song, changed: false };
+  }
+
+  const { embeddedCover, ...normalizedSong } = song;
+  return { value: normalizedSong, changed: true };
 };
 
 export const saveSessionData = async (key: keyof SessionData, value: any): Promise<void> => {
@@ -632,7 +642,16 @@ export const getLocalSongs = async (): Promise<LocalSong[]> => {
       req.onerror = () => reject(req.error);
     });
 
-    const migration = migrateLocalSongsRenderHints(songs);
+    const normalized = songs.map(normalizeLocalSongFromStorage);
+    const normalizedSongs = normalized.map(item => item.value);
+    const sanitizedSongs = normalized.filter(item => item.changed).map(item => item.value);
+    if (sanitizedSongs.length > 0) {
+      void saveLocalSongs(sanitizedSongs).catch(error => {
+        console.warn('[DB] Failed to write back sanitized local song covers', error);
+      });
+    }
+
+    const migration = migrateLocalSongsRenderHints(normalizedSongs);
     if (migration.changedSongs.length > 0) {
       void saveLocalSongs(migration.changedSongs).catch(error => {
         console.warn('[DB] Failed to write back migrated local song lyrics', error);

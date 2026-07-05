@@ -8,6 +8,7 @@ import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { calculateMatchScore, normalizeLyricMatchText } from '../../utils/lyrics/matchScore';
 import { buildLyricSearchQuery } from '../../utils/lyrics/searchQuery';
 import { fetchLyricsForMatchSource, LYRIC_MATCH_SOURCES, searchLyricsByMatchSource, sourceSupportsManualSearch } from '../../utils/lyrics/lyricMatchSources';
+import { isBlob } from '../../utils/blobGuards';
 import {
     getLyricMatchSourceLabel,
     getMatchResultAlbumId,
@@ -59,7 +60,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
 
     // Online data toggle state (dots)
     const [lyricsSource, setLyricsSource] = useState<'local' | 'embedded' | 'online' | undefined>(song.lyricsSource || 'online');
-    const [useOnlineCover, setUseOnlineCover] = useState(song.useOnlineCover ?? !song.embeddedCover);
+    const [useOnlineCover, setUseOnlineCover] = useState(song.useOnlineCover ?? !isBlob(song.embeddedCover));
     const [useOnlineMetadata, setUseOnlineMetadata] = useState(song.useOnlineMetadata ?? true);
 
     // Editable metadata fields
@@ -107,7 +108,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
 
         if (!selectedResult) {
             // Show current state
-            if (song.embeddedCover) {
+            if (isBlob(song.embeddedCover)) {
                 objectUrl = URL.createObjectURL(song.embeddedCover);
                 setPreviewCoverUrl(objectUrl);
             } else {
@@ -118,7 +119,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             setPreviewCoverUrl(selectedCoverUrl || song.matchedCoverUrl || null);
         } else {
             // Local cover
-            if (song.embeddedCover) {
+            if (isBlob(song.embeddedCover)) {
                 objectUrl = URL.createObjectURL(song.embeddedCover);
                 setPreviewCoverUrl(objectUrl);
             } else {

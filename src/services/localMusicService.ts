@@ -7,6 +7,7 @@ import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { normalizeLyricMatchText } from '../utils/lyrics/matchScore';
+import { isBlob } from '../utils/blobGuards';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
@@ -849,7 +850,7 @@ async function populateRepresentativeCovers(songs: LocalSong[]): Promise<void> {
     const coverExtractionCache = new Map<string, Promise<Blob | undefined>>();
 
     const tryLoadCover = async (song: LocalSong): Promise<Blob | undefined> => {
-        if (song.embeddedCover) {
+        if (isBlob(song.embeddedCover)) {
             return song.embeddedCover;
         }
 
@@ -875,7 +876,7 @@ async function populateRepresentativeCovers(songs: LocalSong[]): Promise<void> {
     };
 
     const ensureGroupCover = async (groupSongs: LocalSong[]) => {
-        if (groupSongs.some(song => song.embeddedCover)) {
+        if (groupSongs.some(song => isBlob(song.embeddedCover))) {
             return;
         }
 
@@ -912,14 +913,14 @@ function propagateImportedAlbumCovers(songs: LocalSong[]): number {
     albumGroups.forEach(groupSongs => {
         const representativeCover = [...groupSongs]
             .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
-            .find(song => song.embeddedCover)?.embeddedCover;
+            .find(song => isBlob(song.embeddedCover))?.embeddedCover;
 
         if (!representativeCover) {
             return;
         }
 
         groupSongs.forEach(song => {
-            if (!song.embeddedCover) {
+            if (!isBlob(song.embeddedCover)) {
                 song.embeddedCover = representativeCover;
                 propagatedCount += 1;
             }
@@ -935,8 +936,8 @@ async function populateRepresentativeCoversInBackground(rootFolderName: string, 
     try {
         await populateRepresentativeCovers(songs);
         const propagatedCoverCount = propagateImportedAlbumCovers(songs);
-        const songsWithEmbeddedCover = songs.filter(song => !!song.embeddedCover).length;
-        await saveLocalSongs(songs.filter(song => !!song.embeddedCover));
+        const songsWithEmbeddedCover = songs.filter(song => isBlob(song.embeddedCover)).length;
+        await saveLocalSongs(songs.filter(song => isBlob(song.embeddedCover)));
         console.log(`[LocalMusic][Import] Background cover extraction for "${rootFolderName}" finished with ${songsWithEmbeddedCover}/${songs.length} songs carrying embedded covers, propagated to ${propagatedCoverCount} sibling tracks in ${formatImportDuration(performance.now() - coverStartedAt)}.`);
         notifyLocalMusicUpdated();
     } catch (error) {
@@ -965,7 +966,7 @@ function getPriorityRepresentativeCoverCandidateIds(songs: LocalSong[]): Set<str
 
     const collectGroupCandidate = (groupSongs: LocalSong[]) => {
         const sortedSongs = [...groupSongs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
-        const existingPreferredSong = sortedSongs.find(song => song.embeddedCover || song.matchedCoverUrl);
+        const existingPreferredSong = sortedSongs.find(song => isBlob(song.embeddedCover) || song.matchedCoverUrl);
         if (!existingPreferredSong && sortedSongs[0]) {
             candidateIds.add(sortedSongs[0].id);
         }
@@ -1035,9 +1036,9 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
 
             if (priorityCoverCandidateIds.has(hydratedSong.id)) {
                 priorityCoverCandidateIds.delete(hydratedSong.id);
-                if (!hydratedSong.embeddedCover) {
+                if (!isBlob(hydratedSong.embeddedCover)) {
                     hydratedSong = await ensureLocalSongEmbeddedCover(hydratedSong);
-                    resolvedCover = !!hydratedSong.embeddedCover;
+                    resolvedCover = isBlob(hydratedSong.embeddedCover);
                 }
             }
 
@@ -1518,7 +1519,7 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
 }
 
 export async function ensureLocalSongEmbeddedCover(song: LocalSong): Promise<LocalSong> {
-    if (song.embeddedCover) {
+    if (isBlob(song.embeddedCover)) {
         return song;
     }
 

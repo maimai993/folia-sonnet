@@ -12,6 +12,7 @@ import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuard
 import { deleteFolderSongs, resyncFolder } from '../../../services/localMusicService';
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
+import { getBlobObjectUrlSignature, isBlob } from '../../../utils/blobGuards';
 import {
     GridViewCollectionDescriptor,
     LocalGridViewCollectionDescriptor,
@@ -54,18 +55,16 @@ const withLocalTrackCoverUrl = (track: UnifiedSong, coverUrl: string): UnifiedSo
 });
 
 const getLocalTrackCoverObjectUrlSignature = (song: LocalSong): string | null => {
-    if (!song.embeddedCover) {
+    if (!isBlob(song.embeddedCover)) {
         return null;
     }
 
-    return [
+    return getBlobObjectUrlSignature(song.embeddedCover, [
         song.id,
         song.fileSignature || '',
         song.fileSize,
         song.fileLastModified || 0,
-        song.embeddedCover.size,
-        song.embeddedCover.type,
-    ].join('::');
+    ]);
 };
 
 const resolveLocalCollectionCoverUrlFromTracks = (
@@ -77,10 +76,11 @@ const resolveLocalCollectionCoverUrlFromTracks = (
         .filter((song): song is LocalSong => Boolean(song))
         .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     const preferredSong = songs.find(song => {
+        const hasEmbeddedCover = isBlob(song.embeddedCover);
         if (song.useOnlineCover) {
-            return song.matchedCoverUrl || song.embeddedCover;
+            return song.matchedCoverUrl || hasEmbeddedCover;
         }
-        return song.embeddedCover || song.matchedCoverUrl;
+        return hasEmbeddedCover || song.matchedCoverUrl;
     });
 
     if (!preferredSong) {
@@ -91,7 +91,7 @@ const resolveLocalCollectionCoverUrlFromTracks = (
         return preferredSong.matchedCoverUrl;
     }
 
-    if (preferredSong.embeddedCover) {
+    if (isBlob(preferredSong.embeddedCover)) {
         return getLocalCoverObjectUrl(preferredSong);
     }
 
@@ -189,7 +189,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
 
     const getOrCreateLocalTrackCoverObjectUrl = useCallback((song: LocalSong) => {
         const signature = getLocalTrackCoverObjectUrlSignature(song);
-        if (!signature || !song.embeddedCover) {
+        if (!signature || !isBlob(song.embeddedCover)) {
             return undefined;
         }
 
@@ -383,7 +383,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                 return track;
             }
 
-            if (localData.embeddedCover) {
+            if (isBlob(localData.embeddedCover)) {
                 const url = getOrCreateLocalTrackCoverObjectUrl(localData);
                 if (url) {
                     activeTrackCoverSongIds.add(localData.id);

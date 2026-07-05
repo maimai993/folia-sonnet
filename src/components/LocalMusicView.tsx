@@ -9,6 +9,7 @@ import LocalPlaylistView from './local/LocalPlaylistView';
 import Carousel3D from './Carousel3D';
 import LocalArtistView from './local/LocalArtistView';
 import { deleteLocalPlaylist, updateLocalPlaylist } from '../services/localPlaylistService';
+import { isBlob } from '../utils/blobGuards';
 
 interface LocalMusicViewProps {
     localSongs: LocalSong[];
@@ -45,9 +46,9 @@ interface LocalMusicViewProps {
  */
 const getGroupCoverSource = (songs: LocalSong[]): Blob | string | undefined => {
     const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
-    const preferredSong = sortedSongs.find(song => song.embeddedCover || song.matchedCoverUrl);
+    const preferredSong = sortedSongs.find(song => isBlob(song.embeddedCover) || song.matchedCoverUrl);
 
-    if (preferredSong?.embeddedCover) {
+    if (isBlob(preferredSong?.embeddedCover)) {
         return preferredSong.embeddedCover;
     }
 
