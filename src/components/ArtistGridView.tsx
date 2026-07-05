@@ -9,6 +9,7 @@ import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { neteaseApi } from '../services/netease';
 import { createCoverPlaceholder } from '../utils/coverPlaceholders';
 import { getSizedCoverUrl } from '../utils/coverUrl';
+import { isBlob } from '../utils/blobGuards';
 import { PolaroidCard } from './GridView';
 import { HexGridCoord, CubeCoord, getHexCubicSpiral } from './folia-grid/hexViewport';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
@@ -349,7 +350,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     const albName = song.album || '未知专辑';
                     if (!albumMap.has(albName)) {
                         let coverUrl = song.matchedCoverUrl || undefined;
-                        if (!coverUrl && song.embeddedCover) {
+                        if (!coverUrl && isBlob(song.embeddedCover)) {
                             coverUrl = URL.createObjectURL(song.embeddedCover);
                         }
                         albumMap.set(albName, {

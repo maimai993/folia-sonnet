@@ -3,6 +3,7 @@ import { LocalLibraryGroup, LocalSong, SongResult } from '../../../types';
 import { navidromeApi, getNavidromeConfig } from '../../../services/navidromeService';
 import { buildLocalQueue, buildNavidromeQueue } from '../../../services/playbackAdapters';
 import { SubsonicSong } from '../../../types/navidrome';
+import { isBlob } from '../../../utils/blobGuards';
 
 // src/components/app/home/gridViewCollectionAdapters.ts
 // Converts home-surface collections into small GridView descriptors and resolves non-Netease tracks outside GridView.
@@ -123,21 +124,23 @@ export const resolveLocalGridViewTracks = (
 const getLocalGridViewCoverSource = (songs: LocalSong[]): Blob | string | undefined => {
     const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     const preferredSong = sortedSongs.find(song => {
+        const hasEmbeddedCover = isBlob(song.embeddedCover);
         if (song.useOnlineCover) {
-            return song.matchedCoverUrl || song.embeddedCover;
+            return song.matchedCoverUrl || hasEmbeddedCover;
         }
-        return song.embeddedCover || song.matchedCoverUrl;
+        return hasEmbeddedCover || song.matchedCoverUrl;
     });
 
     if (!preferredSong) {
         return undefined;
     }
 
+    const embeddedCover = isBlob(preferredSong.embeddedCover) ? preferredSong.embeddedCover : undefined;
     if (preferredSong.useOnlineCover) {
-        return preferredSong.matchedCoverUrl || preferredSong.embeddedCover;
+        return preferredSong.matchedCoverUrl || embeddedCover;
     }
 
-    return preferredSong.embeddedCover || preferredSong.matchedCoverUrl;
+    return embeddedCover || preferredSong.matchedCoverUrl;
 };
 
 export const resolveLocalGridViewCoverSource = (

@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import { LocalLibraryGroup, LocalPlaylist, LocalSong } from '../../../types';
+import { isBlob } from '../../../utils/blobGuards';
 
 // src/components/app/home/localGrid3DModel.ts
 // Builds local-library overview groups for the desktop Grid3D surface.
@@ -7,19 +8,21 @@ import { LocalLibraryGroup, LocalPlaylist, LocalSong } from '../../../types';
 const getLocalCoverUrl = (songs: LocalSong[]): Blob | string | undefined => {
     const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     const preferredSong = sortedSongs.find(song => {
+        const hasEmbeddedCover = isBlob(song.embeddedCover);
         if (song.useOnlineCover) {
-            return song.matchedCoverUrl || song.embeddedCover;
+            return song.matchedCoverUrl || hasEmbeddedCover;
         }
-        return song.embeddedCover || song.matchedCoverUrl;
+        return hasEmbeddedCover || song.matchedCoverUrl;
     });
 
     if (!preferredSong) return undefined;
 
+    const embeddedCover = isBlob(preferredSong.embeddedCover) ? preferredSong.embeddedCover : undefined;
     if (preferredSong.useOnlineCover) {
-        return preferredSong.matchedCoverUrl || preferredSong.embeddedCover;
+        return preferredSong.matchedCoverUrl || embeddedCover;
     }
 
-    return preferredSong.embeddedCover || preferredSong.matchedCoverUrl;
+    return embeddedCover || preferredSong.matchedCoverUrl;
 };
 
 const sortByName = <T extends { name: string }>(items: T[]) => (

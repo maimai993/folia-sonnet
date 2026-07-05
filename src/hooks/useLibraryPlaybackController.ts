@@ -27,6 +27,7 @@ import type { NavidromeSong } from '../types/navidrome';
 import type { NavidromeMatchData } from '../components/modal/NaviLyricMatchModal';
 import { applyQueueAddBehavior } from '../utils/queueAddBehavior';
 import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState, getOnlineLyricsStateCacheKey } from '../utils/onlineLyricsState';
+import { isBlob } from '../utils/blobGuards';
 
 // src/hooks/useLibraryPlaybackController.ts
 
@@ -270,7 +271,7 @@ export function useLibraryPlaybackController({
         let updatedLocalSong = localSong;
         let matchedSongResult: SongResult | null = null;
         const needsLyricsMatch = !localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics && !localSong.matchedLyrics && !localSong.matchedIsPureMusic;
-        const needsCoverMatch = !localSong.embeddedCover && !localSong.matchedCoverUrl;
+        const needsCoverMatch = !isBlob(localSong.embeddedCover) && !localSong.matchedCoverUrl;
 
         if ((needsLyricsMatch || needsCoverMatch) && !localSong.noAutoMatch) {
             setStatusMsg({ type: 'info', text: '正在匹配歌词和封面...' });
@@ -305,7 +306,7 @@ export function useLibraryPlaybackController({
     }, [loadLocalSongs, setStatusMsg]);
 
     const resolveLocalMetadataUI = useCallback(async (localData: LocalSong, matchedSong: SongResult | null) => {
-        const embeddedCoverUrl = localData.embeddedCover ? URL.createObjectURL(localData.embeddedCover) : null;
+        const embeddedCoverUrl = isBlob(localData.embeddedCover) ? URL.createObjectURL(localData.embeddedCover) : null;
         const preferOnlineCover = localData.useOnlineCover === true;
         const preferOnlineMetadata = localData.useOnlineMetadata === true;
         const coverUrl = preferOnlineCover
@@ -429,7 +430,7 @@ export function useLibraryPlaybackController({
         Object.assign(localSong, preparedLocalSong);
 
         const needsLyricsMatch = !localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics && !localSong.matchedLyrics && !localSong.matchedIsPureMusic;
-        const needsCoverMatch = !localSong.embeddedCover && !localSong.matchedCoverUrl;
+        const needsCoverMatch = !isBlob(localSong.embeddedCover) && !localSong.matchedCoverUrl;
         if ((needsLyricsMatch || needsCoverMatch) && !localSong.noAutoMatch) {
             try {
                 const { matchLyrics } = await import('../services/localMusicService');

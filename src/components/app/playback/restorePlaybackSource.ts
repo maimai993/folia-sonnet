@@ -11,6 +11,7 @@ import type { NavidromeSong } from '../../../types/navidrome';
 import { hydrateNavidromeLyricPayload, resolvePreferredNavidromeLyrics } from '../../../utils/appNavidromeLyrics';
 import { hasRenderableLyrics } from '../../../utils/appPlaybackHelpers';
 import { isLocalPlaybackSong, isNavidromePlaybackSong } from '../../../utils/appPlaybackGuards';
+import { isBlob } from '../../../utils/blobGuards';
 import { LyricParserFactory } from '../../../utils/lyrics/LyricParserFactory';
 import { processNeteaseLyrics } from '../../../utils/lyrics/neteaseProcessing';
 import { isPureMusicLyricText } from '../../../utils/lyrics/pureMusic';
@@ -173,7 +174,7 @@ export const restorePlaybackSourceForSong = async (
             setLyrics(songToRestore.matchedLyrics);
         }
 
-        if (songToRestore.embeddedCover) {
+        if (isBlob(songToRestore.embeddedCover)) {
             setCachedCoverUrl(URL.createObjectURL(songToRestore.embeddedCover));
         } else if (songToRestore.matchedCoverUrl) {
             setCachedCoverUrl(songToRestore.matchedCoverUrl);
