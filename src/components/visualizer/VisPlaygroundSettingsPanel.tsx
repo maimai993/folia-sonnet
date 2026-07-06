@@ -6,6 +6,7 @@ import {
     type CappellaEmojiImage,
     type CappellaTuning,
     type ClassicTuning,
+    type CladdaghTuning,
     type FumeTuning,
     type MonetBackgroundImage,
     type MonetBackgroundTuning,
@@ -88,6 +89,8 @@ interface VisPlaygroundSettingsPanelProps {
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
     fumeTuning: FumeTuning;
     onFumeTuningChange?: (patch: Partial<FumeTuning>) => void;
+    claddaghTuning: CladdaghTuning;
+    onCladdaghTuningChange?: (patch: Partial<CladdaghTuning>) => void;
     cappellaTuning: CappellaTuning;
     cappellaCustomEmojiImages: CappellaEmojiImage[];
     onCappellaTuningChange?: (patch: Partial<CappellaTuning>) => void;
@@ -314,6 +317,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onPartitaTuningChange,
         fumeTuning,
         onFumeTuningChange,
+        claddaghTuning,
+        onCladdaghTuningChange,
         cappellaTuning,
         cappellaCustomEmojiImages,
         onCappellaTuningChange,
@@ -366,6 +371,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         { value: 'common', label: t('options.visualizerBackgroundModeCommon') || '通用' },
         { value: 'monet', label: t('options.visualizerBackgroundModeMonet') || '莫奈' },
         { value: 'url', label: t('options.visualizerBackgroundModeUrl') || 'URL' },
+        { value: 'sora', label: t('options.visualizerBackgroundModeSora') || '空' },
     ]), [t]);
 
     return (
@@ -556,7 +562,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 onDeleteUrlBackgroundItem={onDeleteUrlBackgroundItem}
                                 onSetUrlBackgroundSelectedId={onSetUrlBackgroundSelectedId}
                             />
-                        ) : (
+                        ) : resolvedBackgroundMode === 'monet' ? (
                             <MonetBackgroundSettingsCard
                                 t={t}
                                 isDaylight={isDaylight}
@@ -572,7 +578,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 onSliderPointerDown={onSliderPointerDown}
                                 onSliderCommit={onSliderCommit}
                                 />
-                        )}
+                        ) : null}
                     </>
                 )}
 
@@ -617,6 +623,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             onPartitaTuningChange,
                             fumeTuning,
                             onFumeTuningChange,
+                            claddaghTuning,
+                            onCladdaghTuningChange,
                             cappellaTuning,
                             cappellaCustomEmojiImages,
                             onCappellaTuningChange,

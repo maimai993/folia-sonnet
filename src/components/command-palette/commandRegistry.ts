@@ -420,6 +420,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createVisualizerCommand('fume', 'Visualizer: Fume', 'Switch to fume visualizer', ['visualizer fume', 'fume', '浮名', 'fuming', 'fm']),
     createVisualizerCommand('cappella', 'Visualizer: Cappella', 'Switch to cappella visualizer', ['visualizer cappella', 'cappella', '群唱', 'qunchang', 'qc']),
     createVisualizerCommand('tilt', 'Visualizer: Tilt', 'Switch to tilt visualizer', ['visualizer tilt', 'tilt', '倾诉', 'qingsu', 'qs']),
+    createVisualizerCommand('claddagh', 'Visualizer: Claddagh', 'Switch to Claddagh visualizer', ['visualizer claddagh', 'claddagh', '回环', 'jiezhi', 'jz']),
     createVisualizerCommand('monet', 'Visualizer: Monet', 'Switch to Monet visualizer', ['visualizer monet', 'monet', '莫奈', 'monai', 'mn', '切换到可视化：莫奈', '切换到可视化莫奈']),
 
     {
@@ -465,6 +466,17 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         keywords: ['embedded background', 'embed background', 'background embed', 'background url', 'url background', 'url', 'webpage', '嵌入背景', '网页背景', 'qianrubeijing', 'qrbj', 'wybj', '背景切换到 嵌入背景', '背景切换到嵌入背景'],
         execute: (_input, context) => {
             context.setVisualizerBackgroundMode('url');
+            return true;
+        },
+    },
+    {
+        id: 'background-sora',
+        group: 'visualizer',
+        title: 'Background: Sora',
+        description: 'Switch background to Sora (starry sky) layout',
+        keywords: ['sora', 'background sora', 'starry sky', 'star', '星空', '空', 'kong', 'xingkong', 'xk', '背景切换到 空', '背景切换到空', '背景切换到Sora', '背景切换到星空'],
+        execute: (_input, context) => {
+            context.setVisualizerBackgroundMode('sora');
             return true;
         },
     },
