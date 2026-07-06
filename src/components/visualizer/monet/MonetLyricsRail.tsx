@@ -78,6 +78,7 @@ const MONET_TOUCH_STEP_PX = 52;
 const MONET_SCROLL_BEFORE = 4;
 const MONET_SCROLL_AFTER = 4;
 const MONET_LAYOUT_CACHE_LIMIT = 240;
+const MONET_RAIL_SCROLL_EVENT_OPTIONS: AddEventListenerOptions = { passive: false };
 const MONET_SCROLL_TRANSITION = {
     y: { type: 'spring', stiffness: 142, damping: 28, mass: 0.82 },
     scale: { type: 'spring', stiffness: 150, damping: 30, mass: 0.78 },
@@ -839,12 +840,14 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
         scheduleManualScrollReset();
     }, [getFallbackAnchorIndex, lines.length, scheduleManualScrollReset]);
 
-    const handleRailWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const handleRailWheel = useCallback((event: WheelEvent) => {
         if (lines.length === 0) {
             return;
         }
 
-        event.preventDefault();
+        if (event.cancelable) {
+            event.preventDefault();
+        }
         event.stopPropagation();
         const direction = getScrollDirection(event.deltaY);
         if (direction !== 0 && wheelDirectionRef.current !== 0 && direction !== wheelDirectionRef.current) {
@@ -861,7 +864,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
         }
     }, [lines.length, moveManualScrollAnchor, scheduleManualScrollReset]);
 
-    const handleRailTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    const handleRailTouchStart = useCallback((event: TouchEvent) => {
         if (lines.length === 0) {
             return;
         }
@@ -874,7 +877,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
         scheduleManualScrollReset();
     }, [getFallbackAnchorIndex, lines.length, scheduleManualScrollReset]);
 
-    const handleRailTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    const handleRailTouchMove = useCallback((event: TouchEvent) => {
         if (lines.length === 0 || touchLastYRef.current === null) {
             return;
         }
@@ -909,6 +912,27 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
         scheduleManualScrollReset();
     }, [scheduleManualScrollReset]);
 
+    useEffect(() => {
+        const rail = railRef.current;
+        if (!rail) {
+            return undefined;
+        }
+
+        rail.addEventListener('wheel', handleRailWheel, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+        rail.addEventListener('touchstart', handleRailTouchStart, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+        rail.addEventListener('touchmove', handleRailTouchMove, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+        rail.addEventListener('touchend', handleRailTouchEnd, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+        rail.addEventListener('touchcancel', handleRailTouchEnd, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+
+        return () => {
+            rail.removeEventListener('wheel', handleRailWheel, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+            rail.removeEventListener('touchstart', handleRailTouchStart, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+            rail.removeEventListener('touchmove', handleRailTouchMove, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+            rail.removeEventListener('touchend', handleRailTouchEnd, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+            rail.removeEventListener('touchcancel', handleRailTouchEnd, MONET_RAIL_SCROLL_EVENT_OPTIONS);
+        };
+    }, [handleRailTouchEnd, handleRailTouchMove, handleRailTouchStart, handleRailWheel]);
+
     const handleLineSeek = useCallback((line: Line) => {
         if (!canSeek) {
             return;
@@ -930,11 +954,6 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
         <div
             ref={railRef}
             className="relative h-[clamp(260px,42vh,400px)] max-w-[720px] select-none overflow-hidden"
-            onWheel={handleRailWheel}
-            onTouchStart={handleRailTouchStart}
-            onTouchMove={handleRailTouchMove}
-            onTouchEnd={handleRailTouchEnd}
-            onTouchCancel={handleRailTouchEnd}
             style={{
                 marginLeft: `-${glowBufferPx}px`,
                 marginRight: `-${glowBufferPx}px`,
