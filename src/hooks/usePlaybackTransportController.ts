@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import { PlayerState } from '../types';
+import { hasPlayableMediaSource, isNearReportedMediaEnd } from '../utils/appPlaybackHelpers';
 
 // src/hooks/usePlaybackTransportController.ts
 
@@ -32,6 +33,8 @@ type UsePlaybackTransportControllerParams = {
     }) => Promise<boolean>;
     getSyntheticStageLyricsTime: () => number;
     syncStageLyricsClock: (timeSec: number, endTimeSec: number, nextPlayerState: PlayerState, startTimeSec?: number) => void;
+    onNaturalPlaybackEnd: () => void;
+    markIntentionalPause: () => void;
     t: (key: string) => string;
 };
 
@@ -55,6 +58,8 @@ export function usePlaybackTransportController({
     recoverOnlinePlaybackSource,
     getSyntheticStageLyricsTime,
     syncStageLyricsClock,
+    onNaturalPlaybackEnd,
+    markIntentionalPause,
     t,
 }: UsePlaybackTransportControllerParams) {
     const resumePlayback = useCallback(async () => {
@@ -70,7 +75,13 @@ export function usePlaybackTransportController({
             return;
         }
 
-        if (!audioRef.current) {
+        const audioElement = audioRef.current;
+        if (!audioElement) {
+            return;
+        }
+
+        if (!hasPlayableMediaSource(audioElement, audioSrc)) {
+            setPlayerState(PlayerState.IDLE);
             return;
         }
 
@@ -82,8 +93,8 @@ export function usePlaybackTransportController({
         syncOutputGain(getTargetPlaybackVolume(), 0);
         if (shouldRefreshCurrentOnlineAudioSource()) {
             const refreshed = await recoverOnlinePlaybackSource({
-                failedSrc: audioRef.current.currentSrc || audioSrc,
-                resumeAt: audioRef.current.currentTime,
+                failedSrc: audioElement.currentSrc || audioSrc,
+                resumeAt: audioElement.currentTime,
                 autoplay: true,
             });
 
@@ -93,12 +104,12 @@ export function usePlaybackTransportController({
         }
 
         try {
-            await audioRef.current.play();
+            await audioElement.play();
             setPlayerState(PlayerState.PLAYING);
         } catch (error) {
             const recovered = await recoverOnlinePlaybackSource({
-                failedSrc: audioRef.current.currentSrc || audioSrc,
-                resumeAt: audioRef.current.currentTime,
+                failedSrc: audioElement.currentSrc || audioSrc,
+                resumeAt: audioElement.currentTime,
                 autoplay: true,
             });
 
@@ -106,9 +117,23 @@ export function usePlaybackTransportController({
                 return;
             }
 
-            if (!audioRef.current.paused && !audioRef.current.ended) {
+            if (!audioElement.paused && !audioElement.ended) {
                 setPlayerState(PlayerState.PLAYING);
                 return;
+            }
+
+            if (error instanceof DOMException && error.name === 'NotSupportedError') {
+                if (isNearReportedMediaEnd(audioElement, duration)) {
+                    currentTime.set(Math.max(audioElement.currentTime, duration));
+                    setPlayerState(PlayerState.IDLE);
+                    onNaturalPlaybackEnd();
+                    return;
+                }
+
+                if (!hasPlayableMediaSource(audioElement, audioSrc)) {
+                    setPlayerState(PlayerState.IDLE);
+                    return;
+                }
             }
 
             if (error instanceof DOMException && error.name === 'NotAllowedError') {
@@ -121,7 +146,7 @@ export function usePlaybackTransportController({
             setPlayerState(PlayerState.PAUSED);
             throw error;
         }
-    }, [activePlaybackContext, audioContextRef, audioRef, audioSrc, currentTime, duration, getSyntheticStageLyricsTime, getTargetPlaybackVolume, isNowPlayingStageActive, recoverOnlinePlaybackSource, setPlayerState, setStatusMsg, setupAudioAnalyzer, shouldRefreshCurrentOnlineAudioSource, stageActiveEntryKind, stageLyricsClockRef, syncOutputGain, syncStageLyricsClock, t]);
+    }, [activePlaybackContext, audioContextRef, audioRef, audioSrc, currentTime, duration, getSyntheticStageLyricsTime, getTargetPlaybackVolume, isNowPlayingStageActive, onNaturalPlaybackEnd, recoverOnlinePlaybackSource, setPlayerState, setStatusMsg, setupAudioAnalyzer, shouldRefreshCurrentOnlineAudioSource, stageActiveEntryKind, stageLyricsClockRef, syncOutputGain, syncStageLyricsClock, t]);
 
     const pausePlayback = useCallback(() => {
         if (isNowPlayingStageActive) {
@@ -140,10 +165,11 @@ export function usePlaybackTransportController({
             return;
         }
 
+        markIntentionalPause();
         audioRef.current.pause();
         syncOutputGain(getTargetPlaybackVolume(), 0);
         setPlayerState(PlayerState.PAUSED);
-    }, [activePlaybackContext, audioRef, audioSrc, currentTime, duration, getSyntheticStageLyricsTime, getTargetPlaybackVolume, isNowPlayingStageActive, setPlayerState, stageActiveEntryKind, stageLyricsClockRef, syncOutputGain, syncStageLyricsClock]);
+    }, [activePlaybackContext, audioRef, audioSrc, currentTime, duration, getSyntheticStageLyricsTime, getTargetPlaybackVolume, isNowPlayingStageActive, markIntentionalPause, setPlayerState, stageActiveEntryKind, stageLyricsClockRef, syncOutputGain, syncStageLyricsClock]);
 
     return {
         resumePlayback,

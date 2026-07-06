@@ -63,7 +63,7 @@ import { useThemeQuickEditorStore } from './stores/useThemeQuickEditorStore';
 import { useSearchNavigationStore } from './stores/useSearchNavigationStore';
 import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
-import { clampMediaVolume } from './utils/appPlaybackHelpers';
+import { clampMediaVolume, isNearReportedMediaEnd } from './utils/appPlaybackHelpers';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './utils/appPlaybackGuards';
 import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
 
@@ -258,6 +258,7 @@ export default function App() {
     const onlinePlaybackRecoveryRef = useRef<Promise<boolean> | null>(null);
     const lastAudioRecoverySourceRef = useRef<string | null>(null);
     const currentOnlineAudioUrlFetchedAtRef = useRef<number | null>(null);
+    const intentionalPauseRef = useRef(false);
     // Buffer progress debug helper. Uncomment this ref, the reset effect below,
     // and the audio `onProgress` handler to log buffered percent again.
     // const lastBufferedPercentLogRef = useRef<number | null>(null);
@@ -1137,6 +1138,35 @@ export default function App() {
         t: key => t(key),
     });
 
+    const markIntentionalPause = useCallback(() => {
+        intentionalPauseRef.current = true;
+    }, []);
+
+    const handleNaturalPlaybackEnd = useCallback(() => {
+        if (audioSrc && !audioSrc.startsWith('blob:') && currentSong && !isStagePlaybackSong(currentSong)) {
+            cacheSongAssets();
+        }
+
+        if (effectiveLoopMode === 'one') {
+            const audioElement = audioRef.current;
+            if (!audioElement) {
+                return;
+            }
+
+            audioElement.currentTime = 0;
+            currentTime.set(0);
+            const replayPromise = audioElement.play();
+            if (replayPromise !== undefined) {
+                replayPromise.catch(() => {
+                    setPlayerState(PlayerState.PAUSED);
+                });
+            }
+            return;
+        }
+
+        void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
+    }, [audioRef, audioSrc, cacheSongAssets, currentSong, currentTime, effectiveLoopMode, handleNextTrack]);
+
     const { resumePlayback, pausePlayback } = usePlaybackTransportController({
         activePlaybackContext,
         stageActiveEntryKind,
@@ -1156,6 +1186,8 @@ export default function App() {
         recoverOnlinePlaybackSource,
         getSyntheticStageLyricsTime,
         syncStageLyricsClock,
+        onNaturalPlaybackEnd: handleNaturalPlaybackEnd,
+        markIntentionalPause,
         t: key => t(key),
     });
     useNavidromeScrobbleReporter({
@@ -2623,6 +2655,21 @@ export default function App() {
                 }}
                 onPause={(e) => {
                     shouldAutoPlay.current = false;
+                    const wasIntentionalPause = intentionalPauseRef.current;
+                    intentionalPauseRef.current = false;
+
+                    if (
+                        !wasIntentionalPause
+                        && !e.currentTarget.ended
+                        && isLocalPlaybackSong(currentSong)
+                        && isNearReportedMediaEnd(e.currentTarget, duration)
+                    ) {
+                        currentTime.set(Math.max(e.currentTarget.currentTime, duration));
+                        setPlayerState(PlayerState.IDLE);
+                        handleNaturalPlaybackEnd();
+                        return;
+                    }
+
                     if (!e.currentTarget.ended) {
                         setPlayerState(PlayerState.PAUSED);
                     }
@@ -2664,16 +2711,7 @@ export default function App() {
                 //     }
                 // }}
                 onEnded={() => {
-                    // Cache if playing fully
-                    if (audioSrc && !audioSrc.startsWith('blob:') && currentSong && !isStagePlaybackSong(currentSong)) {
-                        cacheSongAssets();
-                    }
-
-                    // If single loop is active, native loop handles it.
-                    // If not, we handle queue logic.
-                    if (effectiveLoopMode !== 'one') {
-                        void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
-                    }
+                    handleNaturalPlaybackEnd();
                 }}
                 onLoadedMetadata={(e) => {
                     const audioElement = e.currentTarget;
