@@ -113,6 +113,7 @@ const CLADDAGH_LETTER_SPACING_EM = 0.04;
 const CLADDAGH_BASE_TRACKING_EM = 0.18;
 const CLADDAGH_BACK_FOLLOW_RATIO = 0.28;
 const CLADDAGH_BACK_ORBIT_FOLLOW_RATIO = 0.52;
+const CLADDAGH_NEXT_LINE_ENTRY_LEAD_SECONDS = 0.34;
 const CLADDAGH_SPACING_CACHE_LIMIT = 240;
 const claddaghSpacingCache = new Map<string, number[]>();
 
@@ -250,6 +251,7 @@ const buildMeasuredSpacingInfo = <T extends { char: string; }>(
             ...item,
             startAngle,
             nominalAngle: (startAngle - totalSpan / 2) * scaleFactor,
+            scaleFactor,
         };
     });
 };
@@ -407,6 +409,10 @@ const RingLine: React.FC<RingLineProps> = ({
             const currentRx = Rx * scaleFactor;
             const currentRy = Ry * scaleFactor;
 
+            const isUpcomingLine = lineIndex > centerLineIndex;
+            const upcomingEntryProgress = isUpcomingLine
+                ? clamp((latestTime - (line.startTime - CLADDAGH_NEXT_LINE_ENTRY_LEAD_SECONDS)) / CLADDAGH_NEXT_LINE_ENTRY_LEAD_SECONDS, 0, 1)
+                : 0;
             const lineDiffFromCenter = Math.abs(curLineOffset - lineIndex * Math.PI) / Math.PI;
 
             // Calculate overlap mitigation factors based on current and next line lengths
@@ -432,8 +438,21 @@ const RingLine: React.FC<RingLineProps> = ({
                 lengthScaleFactor = 1.0 - (1.0 - targetMinScale) * transitionProgress;
             }
             const activeLine = lines[renderBaseIndex];
-            const activeRenderEnd = activeLine ? (activeLine.renderHints?.renderEndTime ?? activeLine.endTime) : undefined;
-            const ownRenderEnd = line.renderHints?.renderEndTime ?? line.endTime;
+            const activeNextLine = lines[renderBaseIndex + 1];
+            // Extend the render end time to the next line's start time (minus lead time) so the ring slowly drifts
+            // continuously during instrumental gaps, while leaving time for the next line's entry animation.
+            const activeRenderEnd = activeLine 
+                ? Math.max(
+                    activeLine.renderHints?.renderEndTime ?? activeLine.endTime,
+                    activeNextLine ? activeNextLine.startTime - CLADDAGH_NEXT_LINE_ENTRY_LEAD_SECONDS : activeLine.endTime + 10.0
+                )
+                : undefined;
+
+            const nextLine = lines[lineIndex + 1];
+            const ownRenderEnd = Math.max(
+                line.renderHints?.renderEndTime ?? line.endTime,
+                nextLine ? nextLine.startTime - CLADDAGH_NEXT_LINE_ENTRY_LEAD_SECONDS : line.endTime + 10.0
+            );
 
             const activeWordOffset = getLineWordOffset(activeSpacingInfo, latestTime, activeRenderEnd);
             const ownWordOffset = getLineWordOffset(spacingInfo, latestTime, ownRenderEnd);
@@ -488,7 +507,7 @@ const RingLine: React.FC<RingLineProps> = ({
                 // Ellipse positions centered at origin (0, 0)
                 // Active character (psi = 0) is at (0, R_minor) before rotation
                 const rawX = Math.sin(thetaCurve) * R_major * spacingFactor;
-                
+
                 let rawY = localCos * R_minor;
                 if (line.isChorus) {
                     // Alternating vertical stagger that pushes even/odd indices up/down, pulsing with beat power
@@ -523,7 +542,7 @@ const RingLine: React.FC<RingLineProps> = ({
                 // Blend visual properties using depth factor D and focus factor F for a pseudo-3D look
                 // Active character (D=1, F=1) is largest and sharpest.
                 // Background characters (D=0, F=0) stay visible while still feeling distant.
-                const distanceOpacity = 0.22 + 0.78 * Math.pow(D, 1.9);
+                const distanceOpacity = 0.68 + 0.32 * Math.pow(D, 1.9);
                 let finalOpacity = (0.35 + 0.65 * Math.pow(D, 1.5) * (0.35 + 0.65 * F)) * distanceOpacity;
 
                 // Hide the next line while it is still equivalent to the outgoing line's foreground turn.
@@ -539,6 +558,10 @@ const RingLine: React.FC<RingLineProps> = ({
                 // Apply dynamic layout overlap mitigation factors based on sentence lengths
                 finalOpacity = finalOpacity * lengthFadeFactor;
 
+                if (isUpcomingLine) {
+                    finalOpacity = finalOpacity * (0.18 + 0.82 * upcomingEntryProgress);
+                }
+
                 // Boundary fade to keep non-focused lines strictly in the back half of the ellipse
                 let boundaryFade = 1.0;
                 if (lineDiffFromCenter > 0.02) {
@@ -550,7 +573,7 @@ const RingLine: React.FC<RingLineProps> = ({
                 }
                 finalOpacity = finalOpacity * boundaryFade;
 
-                const scale = (0.22 + 0.98 * Math.pow(D, 1.5)) * (1.0 + (focusScaleRatio ?? 0.65) * F) * lengthScaleFactor;
+                const scale = (0.22 + 0.98 * Math.pow(D, 1.5)) * (1.0 + (focusScaleRatio ?? 0.65) * F) * lengthScaleFactor * ((item as any).scaleFactor ?? 1.0);
                 const blur = 8.0 * (1 - D) * (1 - 0.5 * F);
                 const tiltAngle = clamp(tangentAngle * (0.4 + 0.6 * D), -38, 38);
 
@@ -558,33 +581,66 @@ const RingLine: React.FC<RingLineProps> = ({
                 el.style.opacity = finalOpacity.toFixed(3);
                 el.style.filter = blur < 0.2 ? 'none' : `blur(${blur.toFixed(2)}px)`;
 
-                // Update text color and text shadow (glow) based on current play status (like VisualizerClassic)
-                let activeColorState: 'waiting' | 'active' | 'passed' = 'waiting';
-                if (latestTime >= item.startTime && latestTime <= item.endTime) {
-                    activeColorState = 'active';
-                } else if (latestTime > item.endTime) {
-                    activeColorState = 'passed';
+                // Update text color and text shadow (glow) progressively based on character playback status
+                let charProgress = 0;
+                if (latestTime >= item.endTime) {
+                    charProgress = 1;
+                } else if (latestTime > item.startTime) {
+                    const dur = item.endTime - item.startTime;
+                    charProgress = dur > 0 ? (latestTime - item.startTime) / dur : 1;
                 }
 
-                // All characters of the current active line have a glow that decreases from the center (focus point)
-                // Enhance base glow radius and scale with power on beats for chorus lines
-                const glowRadius = line.isChorus
+                // Calculate glow based on focus factor F and power.
+                // Restored exact original radius formula for Image 1 look
+                const baseGlow = line.isChorus
                     ? (36 + power * 24) * Math.pow(F, 1.5)
                     : 24 * Math.pow(F, 2.0);
 
-                const targetColor = activeColorState === 'active' || activeColorState === 'passed'
-                    ? (item.charColor || highlightColor)
-                    : baseColor;
+                const finalHighlightColor = item.charColor || highlightColor;
+                
+                // Color and alpha with "camera flash" effect
+                let targetColor = baseColor;
+                let currentAlpha = 0.55;
+                let flashPop = 0;
+
+                if (charProgress >= 1) {
+                    targetColor = finalHighlightColor;
+                    currentAlpha = 1.0;
+                } else if (charProgress > 0) {
+                    // Near-instant transition (hard cut) for the color snap
+                    const progressFactor = Math.min(1, charProgress * 15.0);
+                    currentAlpha = 0.55 + 0.45 * progressFactor;
+                    targetColor = mixColors(baseColor, finalHighlightColor, progressFactor, currentAlpha);
+                    
+                    // A quick decaying pop on the radius to emphasize the flash
+                    if (charProgress < 0.4) {
+                        flashPop = Math.pow(1 - charProgress / 0.4, 2.0) * 0.65;
+                    }
+                }
+
+                const currentGlowRadius = baseGlow * (1.0 + flashPop);
 
                 el.style.color = targetColor;
 
-                if (glowRadius > 0.5) {
+                // Calculate a smooth fade-out factor so the shadow doesn't abruptly pop when it hits the 0.5px threshold.
+                // At radius 2.5+, it's 1.0 (full original intensity). At 0.5, it's 0.0 (completely transparent).
+                const shadowFade = clamp((currentGlowRadius - 0.5) / 2.0, 0, 1);
+
+                if (currentGlowRadius > 0.5 && shadowFade > 0.01) {
+                    // Fade the target color's alpha to ensure the outer shadow vanishes seamlessly
+                    const fadedTargetColor = mixColors(targetColor, targetColor, 0, currentAlpha * shadowFade);
+
                     if (line.isChorus) {
-                        // Blend targetColor with the theme's primary text color to create a bright inner core matching the theme tone
-                        const innerGlowColor = mixColors(targetColor, theme.primaryColor || '#ffffff', 0.65);
-                        el.style.textShadow = `0 0 ${(glowRadius * 0.35).toFixed(1)}px ${innerGlowColor}, 0 0 ${glowRadius.toFixed(1)}px ${targetColor}, 0 0 ${(glowRadius * 1.6).toFixed(1)}px ${targetColor}`;
+                        // Blend targetColor with the theme's primary text color to create a bright inner core.
+                        // We use shadowFade directly as the alpha so it blooms beautifully at 1.0 near the center,
+                        // but fades to invisible at the edges.
+                        const innerGlowColor = mixColors(targetColor, theme.primaryColor || '#ffffff', 0.65, shadowFade);
+                        
+                        // Restored exact multiplier ratios from Image 1 (0.35, 1.0, 1.6)
+                        el.style.textShadow = `0 0 ${(currentGlowRadius * 0.35).toFixed(1)}px ${innerGlowColor}, 0 0 ${currentGlowRadius.toFixed(1)}px ${fadedTargetColor}, 0 0 ${(currentGlowRadius * 1.6).toFixed(1)}px ${fadedTargetColor}`;
                     } else {
-                        el.style.textShadow = `0 0 ${glowRadius.toFixed(1)}px ${targetColor}`;
+                        // Restored exact multiplier ratio from Image 1
+                        el.style.textShadow = `0 0 ${currentGlowRadius.toFixed(1)}px ${fadedTargetColor}`;
                     }
                 } else {
                     el.style.textShadow = 'none';
@@ -596,8 +652,8 @@ const RingLine: React.FC<RingLineProps> = ({
             handler(currentTime.get());
         };
 
-        const unsubscribeTime = currentTime.onChange(handler);
-        const unsubscribeOffset = lineOffset.onChange(handleUpdate);
+        const unsubscribeTime = currentTime.on("change", handler);
+        const unsubscribeOffset = lineOffset.on("change", handleUpdate);
         handler(currentTime.get());
 
         return () => {

@@ -107,6 +107,16 @@ const SoraBackground: React.FC<SoraBackgroundProps> = ({ theme, isDaylight, paus
 
   const bgColor = isDaylight ? [1.0, 1.0, 1.0] : [0.0, 0.0, 0.0];
 
+  const pausedRef = useRef(paused);
+  const particleColorRef = useRef(particleColor);
+  const particleAccentColorRef = useRef(particleAccentColor);
+  const bgColorRef = useRef(bgColor);
+
+  pausedRef.current = paused;
+  particleColorRef.current = particleColor;
+  particleAccentColorRef.current = particleAccentColor;
+  bgColorRef.current = bgColor;
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -133,7 +143,7 @@ const SoraBackground: React.FC<SoraBackgroundProps> = ({ theme, isDaylight, paus
     let lastTimestamp = performance.now();
 
     const render = (now: number) => {
-      if (!paused) {
+      if (!pausedRef.current) {
         const delta = (now - lastTimestamp) / 1000;
         timeRef.current += delta;
       }
@@ -143,7 +153,8 @@ const SoraBackground: React.FC<SoraBackgroundProps> = ({ theme, isDaylight, paus
       gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
       // Clear background
-      gl.clearColor(bgColor[0], bgColor[1], bgColor[2], 1.0);
+      const currentBgColor = bgColorRef.current;
+      gl.clearColor(currentBgColor[0], currentBgColor[1], currentBgColor[2], 1.0);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
       // Enable additive blending
@@ -153,8 +164,8 @@ const SoraBackground: React.FC<SoraBackgroundProps> = ({ theme, isDaylight, paus
       const uniforms = {
         u_resolution: [gl.canvas.width, gl.canvas.height],
         u_time: timeRef.current,
-        u_particle_color: particleColor,
-        u_particle_accent_color: particleAccentColor,
+        u_particle_color: particleColorRef.current,
+        u_particle_accent_color: particleAccentColorRef.current,
       };
 
       gl.useProgram(programInfo.program);
@@ -177,12 +188,7 @@ const SoraBackground: React.FC<SoraBackgroundProps> = ({ theme, isDaylight, paus
           gl.deleteBuffer(bufferInfo.attribs.a_index.buffer);
       }
     };
-  }, [
-    paused, 
-    particleColor[0], particleColor[1], particleColor[2], 
-    particleAccentColor[0], particleAccentColor[1], particleAccentColor[2], 
-    bgColor[0], bgColor[1], bgColor[2]
-  ]);
+  }, []);
 
   return (
     <canvas
