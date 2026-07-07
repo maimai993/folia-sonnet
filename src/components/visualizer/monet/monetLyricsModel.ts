@@ -69,6 +69,7 @@ interface MeasureMonetLineLayoutOptions {
     fontPx: number;
     translationFontPx: number;
     fontStack: string;
+    translationFontStack?: string;
     maxWidthPx: number;
     showSubtitleTranslation?: boolean;
 }
@@ -349,6 +350,7 @@ export const measureMonetLineLayout = ({
     fontPx,
     translationFontPx,
     fontStack,
+    translationFontStack,
     maxWidthPx,
     showSubtitleTranslation = true,
 }: MeasureMonetLineLayoutOptions): MonetMeasuredLineLayout => {
@@ -359,7 +361,7 @@ export const measureMonetLineLayout = ({
     const translationPaddingTopPx = Math.max(translationFontPx * 0.45, 7);
     const translationPaddingBottomPx = Math.max(translationFontPx * 0.18, 5);
     const fontSpec = `600 ${fontPx}px ${fontStack}`;
-    const translationFontSpec = `500 ${translationFontPx}px ${fontStack}`;
+    const translationFontSpec = `500 ${translationFontPx}px ${translationFontStack ?? fontStack}`;
     const textLineCount = measureTextLineCount(line.fullText, fontSpec, maxWidthPx, lineHeightPx);
     const textLimit = status === 'active' ? MONET_ACTIVE_TEXT_LINE_LIMIT : MONET_INACTIVE_TEXT_LINE_LIMIT;
     const visibleTextLineCount = Math.min(textLineCount, textLimit);

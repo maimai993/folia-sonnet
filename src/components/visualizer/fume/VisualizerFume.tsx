@@ -873,7 +873,7 @@ const buildPreparedSingleLine = (
 const buildLayoutCacheKey = (
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
 ) => {
@@ -891,6 +891,7 @@ const buildLayoutCacheKey = (
         Math.round(viewport.height),
         layoutTheme.fontStyle,
         layoutTheme.fontFamily ?? '',
+        layoutTheme.fontFamilyStack?.join(',') ?? '',
         layoutTheme.name,
         lyricsFontScale.toFixed(4),
         fumeTuning.heroScale.toFixed(4),
@@ -983,7 +984,7 @@ export const resolvePrintedGraphemeProgress = (
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
     options: FumeLayoutAttemptOptions & { mode: 'measure' },
@@ -991,7 +992,7 @@ function buildArticleLayoutAttempt(
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
     options: FumeLayoutAttemptOptions & { mode?: 'render' },
@@ -999,7 +1000,7 @@ function buildArticleLayoutAttempt(
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
     options: FumeLayoutAttemptOptions,
@@ -1262,7 +1263,7 @@ function buildArticleLayoutAttempt(
 const buildArticleLayout = (
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
 ): FumeArticleLayout | null => {
@@ -1843,6 +1844,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         currentLineIndex,
         lines,
         theme,
+        subtitleTheme,
         audioPower,
         audioBands,
         showText = true,
@@ -1955,8 +1957,9 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
             name: theme.name,
             fontStyle: theme.fontStyle,
             fontFamily: theme.fontFamily,
+            fontFamilyStack: theme.fontFamilyStack,
         }),
-        [theme.fontFamily, theme.fontStyle, theme.name],
+        [theme.fontFamily, theme.fontFamilyStack, theme.fontStyle, theme.name],
     );
     const layoutFumeTuning = useMemo<FumeTuning>(() => ({
         ...DEFAULT_FUME_TUNING,
@@ -2065,6 +2068,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         theme.accentColor,
         theme.fontStyle,
         theme.fontFamily,
+        theme.fontFamilyStack,
     ]);
 
     useEffect(() => {
@@ -3040,6 +3044,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                 recentCompletedLine={runtime.recentCompletedLine}
                 nextLines={runtime.nextLines}
                 theme={theme}
+                subtitleTheme={subtitleTheme}
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}

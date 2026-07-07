@@ -682,6 +682,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
         currentLineIndex,
         lines,
         theme,
+        subtitleTheme,
         audioPower,
         audioBands,
         showText = true,
@@ -1012,6 +1013,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                 recentCompletedLine={recentCompletedLine}
                 nextLines={nextLines}
                 theme={theme}
+                subtitleTheme={subtitleTheme}
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}

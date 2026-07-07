@@ -9,6 +9,7 @@ interface VisualizerSubtitleOverlayProps {
     recentCompletedLine: Line | null;
     nextLines: Line[];
     theme: Theme;
+    subtitleTheme?: Theme;
     translationFontSize: string;
     upcomingFontSize: string;
     opacity?: number;
@@ -50,6 +51,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
     recentCompletedLine,
     nextLines,
     theme,
+    subtitleTheme,
     translationFontSize,
     upcomingFontSize,
     opacity = 0.6,
@@ -97,7 +99,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                             style={{
                                 color: theme.secondaryColor,
                                 fontSize: translationFontSize,
-                                fontFamily: resolveThemeTranslationFontStack(theme),
+                                fontFamily: resolveThemeTranslationFontStack(subtitleTheme ?? theme),
                             }}
                         >
                             {translationText}

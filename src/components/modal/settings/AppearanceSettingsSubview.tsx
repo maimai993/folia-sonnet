@@ -241,6 +241,11 @@ export const compressConfig = (config: any): string => {
     if (config.showSubtitleTranslation !== undefined) minified.sst = config.showSubtitleTranslation;
     if (config.lyricsFontStyle) minified.lfs = config.lyricsFontStyle;
     if (config.lyricsFontScale !== undefined) minified.lfn = config.lyricsFontScale;
+    if (config.lyricsFontFallbackFamilies?.length) minified.lff = config.lyricsFontFallbackFamilies;
+    if (config.subtitleFontInheritsLyrics !== undefined) minified.sfi = config.subtitleFontInheritsLyrics;
+    if (config.subtitleFontStyle) minified.sfs = config.subtitleFontStyle;
+    if (config.subtitleFontFamily) minified.sff = config.subtitleFontFamily;
+    if (config.subtitleFontFallbackFamilies?.length) minified.sfff = config.subtitleFontFallbackFamilies;
 
     if (config.classicTuning) minified.ct = compressClassic(config.classicTuning);
     if (config.cadenzaTuning) minified.cat = compressCadenza(config.cadenzaTuning);
@@ -283,7 +288,7 @@ export const decompressConfig = (str: string): any => {
         throw new Error('Invalid format');
     }
 
-    const isMinified = parsed.t !== undefined || parsed.vm !== undefined || parsed.ct !== undefined || parsed.cat !== undefined || parsed.hpts !== undefined || parsed.sst !== undefined;
+    const isMinified = parsed.t !== undefined || parsed.vm !== undefined || parsed.ct !== undefined || parsed.cat !== undefined || parsed.hpts !== undefined || parsed.sst !== undefined || parsed.lff !== undefined || parsed.sfi !== undefined;
     if (isMinified) {
         const decompressed: any = {};
         if (parsed.t) {
@@ -300,6 +305,11 @@ export const decompressConfig = (str: string): any => {
         if (parsed.sst !== undefined) decompressed.showSubtitleTranslation = parsed.sst;
         if (parsed.lfs) decompressed.lyricsFontStyle = parsed.lfs;
         if (parsed.lfn !== undefined) decompressed.lyricsFontScale = parsed.lfn;
+        if (parsed.lff) decompressed.lyricsFontFallbackFamilies = parsed.lff;
+        if (parsed.sfi !== undefined) decompressed.subtitleFontInheritsLyrics = parsed.sfi;
+        if (parsed.sfs) decompressed.subtitleFontStyle = parsed.sfs;
+        if (parsed.sff) decompressed.subtitleFontFamily = parsed.sff;
+        if (parsed.sfff) decompressed.subtitleFontFallbackFamilies = parsed.sfff;
 
         if (parsed.ct) decompressed.classicTuning = decompressClassic(parsed.ct);
         if (parsed.cat) decompressed.cadenzaTuning = decompressCadenza(parsed.cat);
@@ -320,7 +330,9 @@ export const decompressConfig = (str: string): any => {
         const validKeys = [
             'theme', 'visualizerMode', 'visualizerBackgroundMode', 'backgroundOpacity',
             'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation',
-            'lyricsFontStyle', 'lyricsFontScale', 'classicTuning',
+            'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontFallbackFamilies',
+            'subtitleFontInheritsLyrics', 'subtitleFontStyle', 'subtitleFontFamily',
+            'subtitleFontFallbackFamilies', 'classicTuning',
             'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'claddaghTuning', 'cappellaTuning',
             'tiltTuning', 'monetBackgroundTuning', 'monetTuning',
             'urlBackgroundList', 'urlBackgroundSelectedId',
@@ -412,6 +424,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         showSubtitleTranslation: state.showSubtitleTranslation,
         lyricsFontStyle: state.lyricsFontStyle,
         lyricsFontScale: state.lyricsFontScale,
+        lyricsFontFallbackFamilies: state.lyricsFontFallbackFamilies,
+        subtitleFontInheritsLyrics: state.subtitleFontInheritsLyrics,
+        subtitleFontStyle: state.subtitleFontStyle,
+        subtitleFontFamily: state.subtitleFontFamily,
+        subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
         classicTuning: state.classicTuning,
         cadenzaTuning: state.cadenzaTuning,
         partitaTuning: state.partitaTuning,
@@ -432,6 +449,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
         handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
         handleSetLyricsFontScale: state.handleSetLyricsFontScale,
+        handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
+        handleSetSubtitleFontInheritsLyrics: state.handleSetSubtitleFontInheritsLyrics,
+        handleSetSubtitleFontStyle: state.handleSetSubtitleFontStyle,
+        handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,
+        handleSetSubtitleFontFallbackFamilies: state.handleSetSubtitleFontFallbackFamilies,
         handleSetClassicTuning: state.handleSetClassicTuning,
         handleSetCadenzaTuning: state.handleSetCadenzaTuning,
         handleSetPartitaTuning: state.handleSetPartitaTuning,
@@ -477,6 +499,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             showSubtitleTranslation: store.showSubtitleTranslation,
             lyricsFontStyle: store.lyricsFontStyle,
             lyricsFontScale: store.lyricsFontScale,
+            lyricsFontFallbackFamilies: store.lyricsFontFallbackFamilies,
+            subtitleFontInheritsLyrics: store.subtitleFontInheritsLyrics,
+            subtitleFontStyle: store.subtitleFontStyle,
+            subtitleFontFamily: store.subtitleFontFamily,
+            subtitleFontFallbackFamilies: store.subtitleFontFallbackFamilies,
             classicTuning: store.classicTuning,
             cadenzaTuning: store.cadenzaTuning,
             partitaTuning: store.partitaTuning,
@@ -554,6 +581,21 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (config.lyricsFontScale !== undefined) {
                 store.handleSetLyricsFontScale(config.lyricsFontScale);
+            }
+            if (config.lyricsFontFallbackFamilies) {
+                store.handleSetLyricsFontFallbackFamilies(config.lyricsFontFallbackFamilies);
+            }
+            if (config.subtitleFontInheritsLyrics !== undefined) {
+                store.handleSetSubtitleFontInheritsLyrics(Boolean(config.subtitleFontInheritsLyrics));
+            }
+            if (config.subtitleFontStyle) {
+                store.handleSetSubtitleFontStyle(config.subtitleFontStyle);
+            }
+            if (config.subtitleFontFamily !== undefined) {
+                store.handleSetSubtitleFontFamily(config.subtitleFontFamily);
+            }
+            if (config.subtitleFontFallbackFamilies) {
+                store.handleSetSubtitleFontFallbackFamilies(config.subtitleFontFallbackFamilies);
             }
 
             // Tunings

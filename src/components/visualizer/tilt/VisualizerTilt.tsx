@@ -537,6 +537,7 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
         currentLineIndex,
         lines,
         theme,
+        subtitleTheme,
         audioPower,
         audioBands,
         showText = true,
@@ -672,6 +673,7 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
                 recentCompletedLine={recentCompletedLine}
                 nextLines={nextLines}
                 theme={theme}
+                subtitleTheme={subtitleTheme}
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}

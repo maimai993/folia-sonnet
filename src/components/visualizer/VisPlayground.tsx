@@ -36,6 +36,7 @@ import {
 } from '../../types';
 import { resolveThemeFontStack } from '../../utils/fontStacks';
 import { colorWithAlpha } from './colorMix';
+import FontFallbackStackControl from './FontFallbackStackControl';
 import {
     findPreviewPlaceholderLineIndex,
     getPreviewPlaceholderStartOffset,
@@ -81,10 +82,20 @@ interface VisPlaygroundProps {
     fontScale: number;
     customFontFamily: string | null;
     customFontLabel: string | null;
+    fontFallbackFamilies?: string[];
+    subtitleFontInheritsLyrics?: boolean;
+    subtitleFontStyle?: Theme['fontStyle'];
+    subtitleFontFamily?: string | null;
+    subtitleFontFallbackFamilies?: string[];
     onFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
     onFontScaleChange: (fontScale: number) => void;
     onCustomFontChange: (font: StoredCustomLyricsFont | null) => void;
     onUploadCustomFont?: (file: File) => Promise<{ ok: boolean; error?: string; }>;
+    onFontFallbackFamiliesChange?: (families: string[]) => void;
+    onSubtitleFontInheritsLyricsChange?: (inheritsLyrics: boolean) => void;
+    onSubtitleFontStyleChange?: (fontStyle: Theme['fontStyle']) => void;
+    onSubtitleFontFamilyChange?: (fontFamily: string | null) => void;
+    onSubtitleFontFallbackFamiliesChange?: (families: string[]) => void;
     onVisualizerModeChange?: (mode: VisualizerMode) => void;
     onBackgroundOpacityChange?: (opacity: number) => void;
     onVisualizerOpacityChange?: (opacity: number) => void;
@@ -285,10 +296,20 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     fontScale,
     customFontFamily,
     customFontLabel,
+    fontFallbackFamilies = [],
+    subtitleFontInheritsLyrics = true,
+    subtitleFontStyle = 'sans',
+    subtitleFontFamily = null,
+    subtitleFontFallbackFamilies = [],
     onFontStyleChange,
     onFontScaleChange,
     onCustomFontChange,
     onUploadCustomFont,
+    onFontFallbackFamiliesChange,
+    onSubtitleFontInheritsLyricsChange,
+    onSubtitleFontStyleChange,
+    onSubtitleFontFamilyChange,
+    onSubtitleFontFallbackFamiliesChange,
     onVisualizerModeChange,
     onBackgroundOpacityChange,
     onVisualizerOpacityChange,
@@ -346,7 +367,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const treble = useMotionValue(0.1);
     const spectrum = useMotionValue(new Uint8Array(64));
     const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, 0));
-    const [isFontPickerOpen, setIsFontPickerOpen] = useState(false);
+    const [fontPickerTarget, setFontPickerTarget] = useState<'lyrics' | 'subtitle' | 'none'>('none');
+    const isFontPickerOpen = fontPickerTarget !== 'none';
+    const setIsFontPickerOpen = (open: boolean) => setFontPickerTarget(open ? 'lyrics' : 'none');
     const [isLoadingSystemFonts, setIsLoadingSystemFonts] = useState(false);
     const [systemFonts, setSystemFonts] = useState<LocalFontEntry[]>([]);
     const [fontSearchQuery, setFontSearchQuery] = useState('');
@@ -391,7 +414,25 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         ...baseTheme,
         fontStyle,
         fontFamily: customFontFamily ?? undefined,
-    }), [baseTheme, customFontFamily, fontStyle]);
+        fontFamilyStack: fontFallbackFamilies,
+    }), [baseTheme, customFontFamily, fontFallbackFamilies, fontStyle]);
+    const previewSubtitleTheme = useMemo<Theme>(() => (
+        subtitleFontInheritsLyrics
+            ? previewTheme
+            : {
+                ...baseTheme,
+                fontStyle: subtitleFontStyle,
+                fontFamily: subtitleFontFamily ?? undefined,
+                fontFamilyStack: subtitleFontFallbackFamilies,
+            }
+    ), [
+        baseTheme,
+        previewTheme,
+        subtitleFontFallbackFamilies,
+        subtitleFontFamily,
+        subtitleFontInheritsLyrics,
+        subtitleFontStyle,
+    ]);
     const resolvedPartitaTuning = useMemo<PartitaTuning>(() => {
         const rawMin = clampPartitaStagger(draftPartitaTuning.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
         const rawMax = clampPartitaStagger(draftPartitaTuning.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
@@ -431,6 +472,11 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         ...builtinFontOptions,
         { value: 'custom', label: currentFontLabel },
     ]), [builtinFontOptions, currentFontLabel]);
+    const currentSubtitleFontLabel = subtitleFontFamily || (t('options.customFont') || '自定义字体');
+    const subtitleFontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[] = useMemo(() => ([
+        ...builtinFontOptions,
+        { value: 'custom', label: currentSubtitleFontLabel },
+    ]), [builtinFontOptions, currentSubtitleFontLabel]);
     const filteredSystemFonts = useMemo(() => {
         const query = fontSearchQuery.trim().toLocaleLowerCase();
         if (!query) {
@@ -537,8 +583,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         onFontStyleChange(next);
     };
 
-    const loadSystemFonts = async () => {
-        setIsFontPickerOpen(true);
+    const loadSystemFonts = async (target: 'lyrics' | 'subtitle' = 'lyrics') => {
+        setFontPickerTarget(target);
         setFontPickerError(null);
 
         if (systemFonts.length > 0 || isLoadingSystemFonts) {
@@ -576,12 +622,15 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     };
 
     const handleChooseSystemFont = (font: LocalFontEntry) => {
-        onCustomFontChange({
-            source: 'system',
-            family: font.family,
-            label: font.label,
-        });
-        setIsFontPickerOpen(false);
+        if (fontPickerTarget === 'lyrics') {
+            onCustomFontChange({
+                source: 'system',
+                family: font.family,
+                label: font.label,
+            });
+        } else if (fontPickerTarget === 'subtitle') {
+            onSubtitleFontFamilyChange?.(font.family);
+        }
     };
 
     const handleUploadFontFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -676,7 +725,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
     const handleSelectFontStyle = (next: Theme['fontStyle'] | 'custom') => {
         if (next === 'custom') {
-            void loadSystemFonts();
+            void loadSystemFonts('lyrics');
             return;
         }
 
@@ -802,12 +851,17 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         onToggleHideTranslationSubtitle?.(false);
         onToggleShowSubtitleTranslation?.(true);
         onSubtitleOverlayOpacityChange?.(0.6);
+        onSubtitleFontInheritsLyricsChange?.(true);
+        onSubtitleFontStyleChange?.('sans');
+        onSubtitleFontFamilyChange?.(null);
+        onSubtitleFontFallbackFamiliesChange?.([]);
     };
 
     const handleResetCommonSettings = () => {
         setDraftFontScale(1);
         setDraftVisualizerOpacity(1);
         onCustomFontChange(null);
+        onFontFallbackFamiliesChange?.([]);
         onFontStyleChange('sans');
         onFontScaleChange(1);
         onVisualizerOpacityChange?.(1);
@@ -879,6 +933,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 currentLineIndex={currentLineIndex}
                                 lines={VIS_PLAYGROUND_PREVIEW_LINES}
                                 theme={previewTheme}
+                                subtitleTheme={previewSubtitleTheme}
                                 isDaylight={isDaylight}
                                 audioPower={audioPower}
                                 audioBands={audioBands}
@@ -925,7 +980,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         />
                     </div>
 
-<VisPlaygroundSettingsPanel
+                    <VisPlaygroundSettingsPanel
                         activeSection={activeEditSection}
                         onSectionChange={setActiveEditSection}
                         t={t}
@@ -951,7 +1006,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onVisualizerBackgroundModeChange={onVisualizerBackgroundModeChange}
                         onResetBackgroundSettings={handleResetBackgroundSettings}
                         fontStyleValue={customFontFamily ? 'custom' : fontStyle}
+                        builtinFontOptions={builtinFontOptions}
                         fontStyleOptions={fontStyleOptions}
+                        subtitleFontStyleOptions={subtitleFontStyleOptions}
                         onFontStyleChange={handleSelectFontStyle}
                         fontScale={normalizedFontScale}
                         fontScaleOptions={FONT_SCALE_OPTIONS}
@@ -1002,6 +1059,15 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onToggleShowSubtitleTranslation={onToggleShowSubtitleTranslation}
                         subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                         onSubtitleOverlayOpacityChange={handleSubtitleOverlayOpacityDraft}
+                        subtitleFontInheritsLyrics={subtitleFontInheritsLyrics}
+                        onSubtitleFontInheritsLyricsChange={onSubtitleFontInheritsLyricsChange}
+                        subtitleFontStyle={subtitleFontStyle}
+                        onSubtitleFontStyleChange={onSubtitleFontStyleChange}
+                        subtitleFontFamily={subtitleFontFamily}
+                        onSubtitleFontFamilyChange={onSubtitleFontFamilyChange}
+                        subtitleFontFallbackFamilies={subtitleFontFallbackFamilies}
+                        onSubtitleFontFallbackFamiliesChange={onSubtitleFontFallbackFamiliesChange}
+                        onOpenSubtitleFontPicker={() => loadSystemFonts('subtitle')}
                         onResetSubtitleSettings={handleResetSubtitleSettings}
                         onSliderPointerDown={handleSliderPointerDown}
                         onSliderCommit={handleSliderCommit}
@@ -1065,11 +1131,25 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                                 {t('options.currentFont') || '当前字体'}
                                             </div>
                                             <div className="mt-1 text-base font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                {customFontFamily
-                                                    ? currentFontLabel
-                                                    : (t('options.systemFontInactive') || '未启用')}
+                                                {fontPickerTarget === 'subtitle'
+                                                    ? (subtitleFontFamily || (t('options.systemFontInactive') || '未启用'))
+                                                    : (customFontFamily
+                                                        ? currentFontLabel
+                                                        : (t('options.systemFontInactive') || '未启用'))}
+                                            </div>
+                                            <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                                {fontPickerTarget === 'subtitle'
+                                                    ? (subtitleFontFallbackFamilies.length > 0 ? subtitleFontFallbackFamilies.join(', ') : (t('options.fontFallbackEmpty') || '未设置备用字体'))
+                                                    : (fontFallbackFamilies.length > 0 ? fontFallbackFamilies.join(', ') : (t('options.fontFallbackEmpty') || '未设置备用字体'))}
                                             </div>
                                         </div>
+                                        <FontFallbackStackControl
+                                            label={t('options.fontFallbackFamilies') || '备用字体'}
+                                            value={fontPickerTarget === 'subtitle' ? subtitleFontFallbackFamilies : fontFallbackFamilies}
+                                            onChange={fontPickerTarget === 'subtitle' ? onSubtitleFontFallbackFamiliesChange : onFontFallbackFamiliesChange}
+                                            theme={previewTheme}
+                                            placeholder={t('options.fontFallbackFamiliesPlaceholder') || 'Songti SC, SimSun, serif'}
+                                        />
                                         {fontPickerError && (
                                             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm leading-6 text-red-200">
                                                 {fontPickerError}
@@ -1094,8 +1174,12 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    onCustomFontChange(null);
-                                                    setIsFontPickerOpen(false);
+                                                    if (fontPickerTarget === 'subtitle') {
+                                                        onSubtitleFontFamilyChange?.(null);
+                                                    } else {
+                                                        onCustomFontChange(null);
+                                                    }
+                                                    setFontPickerTarget('none');
                                                 }}
                                                 className="flex h-11 w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-medium transition hover:bg-white/10"
                                                 style={{ color: 'var(--text-primary)' }}
@@ -1118,16 +1202,44 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                         {t('options.systemFontNoResults') || '没有找到匹配的系统字体。'}
                                     </div>
                                 ) : (
-                                    <List
-                                        listRef={fontVirtualListRef}
-                                        rowCount={filteredSystemFonts.length}
-                                        rowHeight={FONT_ROW_HEIGHT}
-                                        rowComponent={FontRow}
-                                        rowProps={{}}
-                                        overscanCount={6}
-                                        className="custom-scrollbar"
-                                        style={{ height: fontListHeight, width: '100%' }}
-                                    />
+                                    <div className="flex h-full min-h-0 flex-col gap-4">
+                                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                                {t('options.currentFont') || '当前字体'}
+                                            </div>
+                                            <div className="mt-1 text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                {fontPickerTarget === 'subtitle'
+                                                    ? (subtitleFontFamily || (t('options.systemFontInactive') || '未启用'))
+                                                    : (customFontFamily
+                                                        ? currentFontLabel
+                                                        : (t('options.systemFontInactive') || '未启用'))}
+                                            </div>
+                                            <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                                {fontPickerTarget === 'subtitle'
+                                                    ? (subtitleFontFallbackFamilies.length > 0 ? subtitleFontFallbackFamilies.join(', ') : (t('options.fontFallbackEmpty') || '未设置备用字体'))
+                                                    : (fontFallbackFamilies.length > 0 ? fontFallbackFamilies.join(', ') : (t('options.fontFallbackEmpty') || '未设置备用字体'))}
+                                            </div>
+                                        </div>
+                                        <FontFallbackStackControl
+                                            label={t('options.fontFallbackFamilies') || '备用字体'}
+                                            value={fontPickerTarget === 'subtitle' ? subtitleFontFallbackFamilies : fontFallbackFamilies}
+                                            onChange={fontPickerTarget === 'subtitle' ? onSubtitleFontFallbackFamiliesChange : onFontFallbackFamiliesChange}
+                                            theme={previewTheme}
+                                            placeholder={t('options.fontFallbackFamiliesPlaceholder') || 'Songti SC, SimSun, serif'}
+                                        />
+                                        <div className="min-h-0 flex-1">
+                                            <List
+                                                listRef={fontVirtualListRef}
+                                                rowCount={filteredSystemFonts.length}
+                                                rowHeight={FONT_ROW_HEIGHT}
+                                                rowComponent={FontRow}
+                                                rowProps={{}}
+                                                overscanCount={6}
+                                                className="custom-scrollbar"
+                                                style={{ height: Math.max(160, fontListHeight - 168), width: '100%' }}
+                                            />
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         </div>

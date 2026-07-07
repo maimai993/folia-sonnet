@@ -697,6 +697,7 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
         currentLineIndex,
         lines,
         theme,
+        subtitleTheme,
         showText = true,
         lyricsFontScale = 1.0,
         subtitleOverlayOpacity,
@@ -977,6 +978,7 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
                     recentCompletedLine={recentCompletedLine}
                     nextLines={nextLines}
                     theme={theme}
+                    subtitleTheme={subtitleTheme}
                     translationFontSize="clamp(1.1rem, 2.2vw, 1.45rem)"
                     upcomingFontSize="clamp(0.95rem, 1.8vw, 1.2rem)"
                     subtitleOverlayOpacity={subtitleOverlayOpacity}

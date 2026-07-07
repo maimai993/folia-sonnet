@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CaptionsOff, Languages, Monitor, RotateCcw, type LucideIcon } from 'lucide-react';
 import {
     DEFAULT_MONET_BACKGROUND_TUNING,
@@ -22,6 +22,7 @@ import {
 import { colorWithAlpha } from './colorMix';
 import { MonetBackgroundSettingsCard } from './MonetBackgroundSettingsCard';
 import { UrlBackgroundSettingsCard } from './backgrounds/UrlBackgroundSettingsCard';
+import FontFallbackStackControl from './FontFallbackStackControl';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel, type VisualizerRegistryEntry } from './registry';
 import { type VisPlaygroundEditSection } from './VisPlaygroundPreviewHotspots';
 
@@ -77,7 +78,9 @@ interface VisPlaygroundSettingsPanelProps {
     onVisualizerBackgroundModeChange?: (mode: VisualizerBackgroundMode) => void;
     onResetBackgroundSettings?: () => void;
     fontStyleValue: Theme['fontStyle'] | 'custom';
+    builtinFontOptions: PresetOption<Theme['fontStyle']>[];
     fontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[];
+    subtitleFontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[];
     onFontStyleChange: (fontStyle: Theme['fontStyle'] | 'custom') => void;
     fontScale: number;
     fontScaleOptions: PresetOption<number>[];
@@ -128,6 +131,15 @@ interface VisPlaygroundSettingsPanelProps {
     onToggleShowSubtitleTranslation?: (shown: boolean) => void;
     subtitleOverlayOpacity: number;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
+    subtitleFontInheritsLyrics: boolean;
+    onSubtitleFontInheritsLyricsChange?: (inheritsLyrics: boolean) => void;
+    subtitleFontStyle: Theme['fontStyle'];
+    onSubtitleFontStyleChange?: (fontStyle: Theme['fontStyle']) => void;
+    subtitleFontFamily?: string | null;
+    onSubtitleFontFamilyChange?: (fontFamily: string | null) => void;
+    subtitleFontFallbackFamilies: string[];
+    onSubtitleFontFallbackFamiliesChange?: (families: string[]) => void;
+    onOpenSubtitleFontPicker?: () => void;
     onResetSubtitleSettings?: () => void;
     onSliderPointerDown?: () => void;
     onSliderCommit?: () => void;
@@ -305,7 +317,9 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onVisualizerBackgroundModeChange,
         onResetBackgroundSettings,
         fontStyleValue,
+        builtinFontOptions,
         fontStyleOptions,
+        subtitleFontStyleOptions,
         onFontStyleChange,
         fontScale,
         fontScaleOptions,
@@ -355,6 +369,15 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onToggleShowSubtitleTranslation,
         subtitleOverlayOpacity,
         onSubtitleOverlayOpacityChange,
+        subtitleFontInheritsLyrics,
+        onSubtitleFontInheritsLyricsChange,
+        subtitleFontStyle,
+        onSubtitleFontStyleChange,
+        subtitleFontFamily,
+        onSubtitleFontFamilyChange,
+        subtitleFontFallbackFamilies,
+        onSubtitleFontFallbackFamiliesChange,
+        onOpenSubtitleFontPicker,
         onResetSubtitleSettings,
         onSliderPointerDown,
         onSliderCommit,
@@ -366,6 +389,12 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
             value: entry.mode,
         }))
     ), [t]);
+    const [subtitleFontFamilyDraft, setSubtitleFontFamilyDraft] = useState(subtitleFontFamily ?? '');
+
+    useEffect(() => {
+        setSubtitleFontFamilyDraft(subtitleFontFamily ?? '');
+    }, [subtitleFontFamily]);
+
     const resolvedBackgroundMode: VisualizerBackgroundMode = visualizerBackgroundMode ?? (visualizerMode === 'monet' ? 'monet' : 'common');
     const backgroundModeOptions = useMemo<PresetOption<VisualizerBackgroundMode>[]>(() => ([
         { value: 'common', label: t('options.visualizerBackgroundModeCommon') || '通用' },
@@ -687,6 +716,35 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             theme={theme}
                             icon={Languages}
                         />
+
+                        <ToggleRow
+                            label={t('options.subtitleFontInheritsLyrics') || '字幕继承歌词字体'}
+                            description={t('options.subtitleFontInheritsLyricsDesc') || '关闭后可为字幕单独设置字体。'}
+                            checked={subtitleFontInheritsLyrics}
+                            onChange={onSubtitleFontInheritsLyricsChange}
+                            theme={theme}
+                            icon={Monitor}
+                        />
+
+                        {!subtitleFontInheritsLyrics && (
+                            <div className="space-y-4">
+                                <PresetGroup
+                                    label={t('options.subtitleFontFamily') || '字幕字体'}
+                                    value={subtitleFontFamily ? 'custom' : subtitleFontStyle}
+                                    options={subtitleFontStyleOptions}
+                                    onChange={(next) => {
+                                        if (next === 'custom') {
+                                            onOpenSubtitleFontPicker?.();
+                                        } else {
+                                            onSubtitleFontFamilyChange?.(null);
+                                            onSubtitleFontStyleChange?.(next as Theme['fontStyle']);
+                                        }
+                                    }}
+                                    isDaylight={isDaylight}
+                                    theme={theme}
+                                />
+                            </div>
+                        )}
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>

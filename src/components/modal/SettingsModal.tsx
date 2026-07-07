@@ -150,6 +150,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         lyricsFontScale,
         lyricsCustomFontFamily,
         lyricsCustomFontLabel,
+        lyricsFontFallbackFamilies,
+        subtitleFontInheritsLyrics,
+        subtitleFontStyle,
+        subtitleFontFamily,
+        subtitleFontFallbackFamilies,
         lyricFilterPattern,
         showOpenPanelCloseButton,
         enableNowPlayingStage,
@@ -206,6 +211,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetLyricsFontScale: onLyricsFontScaleChange,
         handleSetLyricsCustomFont: onLyricsCustomFontChange,
         handleUploadLyricsCustomFont: onLyricsCustomFontUpload,
+        handleSetLyricsFontFallbackFamilies: onLyricsFontFallbackFamiliesChange,
+        handleSetSubtitleFontInheritsLyrics: onSubtitleFontInheritsLyricsChange,
+        handleSetSubtitleFontStyle: onSubtitleFontStyleChange,
+        handleSetSubtitleFontFamily: onSubtitleFontFamilyChange,
+        handleSetSubtitleFontFallbackFamilies: onSubtitleFontFallbackFamiliesChange,
         handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
         handleSetHomeLayoutStyle: onChangeHomeLayoutStyle,
         handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
@@ -2228,10 +2238,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         fontScale={lyricsFontScale}
                         customFontFamily={lyricsCustomFontFamily}
                         customFontLabel={lyricsCustomFontLabel}
+                        fontFallbackFamilies={lyricsFontFallbackFamilies}
+                        subtitleFontInheritsLyrics={subtitleFontInheritsLyrics}
+                        subtitleFontStyle={subtitleFontStyle}
+                        subtitleFontFamily={subtitleFontFamily}
+                        subtitleFontFallbackFamilies={subtitleFontFallbackFamilies}
                         onFontStyleChange={onLyricsFontStyleChange}
                         onFontScaleChange={onLyricsFontScaleChange}
                         onCustomFontChange={onLyricsCustomFontChange}
                         onUploadCustomFont={onLyricsCustomFontUpload}
+                        onFontFallbackFamiliesChange={onLyricsFontFallbackFamiliesChange}
+                        onSubtitleFontInheritsLyricsChange={onSubtitleFontInheritsLyricsChange}
+                        onSubtitleFontStyleChange={onSubtitleFontStyleChange}
+                        onSubtitleFontFamilyChange={onSubtitleFontFamilyChange}
+                        onSubtitleFontFallbackFamiliesChange={onSubtitleFontFallbackFamiliesChange}
                         onVisualizerModeChange={onVisualizerModeChange}
                         onBackgroundOpacityChange={setBackgroundOpacity}
                         onVisualizerOpacityChange={setVisualizerOpacity}

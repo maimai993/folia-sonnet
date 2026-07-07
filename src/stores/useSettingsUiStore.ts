@@ -12,6 +12,7 @@ import { parseVisualizerFrameRate, setGlobalVisualizerFrameRate, VISUALIZER_FRAM
 import { sanitizeUrlBackgroundItem, sanitizeUrlBackgroundList } from '../utils/urlBackground';
 import { getLyricProviderPreferenceLabel } from '../utils/lyrics/lyricSourceLabels';
 import { applyAppLanguagePreference, readStoredAppLanguagePreference, type AppLanguagePreference } from '../i18n/config';
+import { normalizeFontFamilyStack } from '../utils/fontStacks';
 
 // src/stores/useSettingsUiStore.ts
 // Shared settings state and actions used by App, Home, and SettingsModal.
@@ -35,6 +36,11 @@ export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
 export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
 export const SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY = 'show_subtitle_translation';
+const LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'lyrics_font_fallback_families';
+const SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY = 'subtitle_font_inherits_lyrics';
+const SUBTITLE_FONT_STYLE_STORAGE_KEY = 'subtitle_font_style';
+const SUBTITLE_FONT_FAMILY_STORAGE_KEY = 'subtitle_font_family';
+const SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'subtitle_font_fallback_families';
 export const VISUALIZER_OPACITY_STORAGE_KEY = 'visualizer_opacity';
 
 const getStoredBoolean = (key: string, fallback: boolean) => {
@@ -602,6 +608,53 @@ const readStoredLyricsFontScale = (): number => {
     return Math.min(1.4, Math.max(0.85, parsed));
 };
 
+const readStoredFontFamilyStack = (key: string): string[] => {
+    if (typeof window === 'undefined') {
+        return [];
+    }
+
+    const saved = localStorage.getItem(key);
+    if (!saved) return [];
+
+    try {
+        const parsed = JSON.parse(saved) as unknown;
+        if (Array.isArray(parsed)) {
+            return normalizeFontFamilyStack(parsed.map(item => typeof item === 'string' ? item : ''));
+        }
+
+        if (typeof parsed === 'string') {
+            return normalizeFontFamilyStack(parsed.split(','));
+        }
+    } catch {
+        return normalizeFontFamilyStack(saved.split(','));
+    }
+
+    return [];
+};
+
+const readStoredSubtitleFontStyle = (): Theme['fontStyle'] => {
+    if (typeof window === 'undefined') {
+        return 'sans';
+    }
+
+    const saved = localStorage.getItem(SUBTITLE_FONT_STYLE_STORAGE_KEY);
+    return saved === 'serif' || saved === 'mono' ? saved : 'sans';
+};
+
+const readStoredSubtitleFontFamily = (): string | null => {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    return localStorage.getItem(SUBTITLE_FONT_FAMILY_STORAGE_KEY)?.trim() || null;
+};
+
+const storeFontFamilyStack = (key: string, families: string[]) => {
+    if (typeof window !== 'undefined') {
+        localStorage.setItem(key, JSON.stringify(normalizeFontFamilyStack(families)));
+    }
+};
+
 export const resolveStoredCustomLyricsFont = (parsed: Partial<StoredCustomLyricsFont>): StoredCustomLyricsFont | null => {
     const family = parsed.family?.trim();
     if (!family) return null;
@@ -773,6 +826,11 @@ type SettingsUiState = {
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
     lyricsCustomFont: StoredCustomLyricsFont | null;
+    lyricsFontFallbackFamilies: string[];
+    subtitleFontInheritsLyrics: boolean;
+    subtitleFontStyle: Theme['fontStyle'];
+    subtitleFontFamily: string | null;
+    subtitleFontFallbackFamilies: string[];
     lyricFilterPattern: string;
     showOpenPanelCloseButton: boolean;
     enableNowPlayingStage: boolean;
@@ -873,6 +931,11 @@ type SettingsUiState = {
     handleSetLyricsFontScale: (fontScale: number) => void;
     handleSetLyricsCustomFont: (font: StoredCustomLyricsFont | null) => void;
     handleUploadLyricsCustomFont: (file: File) => Promise<{ ok: boolean; error?: string; }>;
+    handleSetLyricsFontFallbackFamilies: (families: string[]) => void;
+    handleSetSubtitleFontInheritsLyrics: (inheritsLyrics: boolean) => void;
+    handleSetSubtitleFontStyle: (fontStyle: Theme['fontStyle']) => void;
+    handleSetSubtitleFontFamily: (fontFamily: string | null) => void;
+    handleSetSubtitleFontFallbackFamilies: (families: string[]) => void;
     handleSetAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void>;
     handleSetLyricFilterPattern: (pattern: string) => void;
     handleToggleOpenPanelCloseButton: (enable: boolean) => void;
@@ -946,6 +1009,11 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     lyricsFontStyle: readStoredLyricsFontStyle(),
     lyricsFontScale: readStoredLyricsFontScale(),
     lyricsCustomFont: readStoredCustomLyricsFont(),
+    lyricsFontFallbackFamilies: readStoredFontFamilyStack(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY),
+    subtitleFontInheritsLyrics: getStoredBoolean(SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY, true),
+    subtitleFontStyle: readStoredSubtitleFontStyle(),
+    subtitleFontFamily: readStoredSubtitleFontFamily(),
+    subtitleFontFallbackFamilies: readStoredFontFamilyStack(SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY),
     lyricFilterPattern: readStoredLyricFilterPattern(),
     showOpenPanelCloseButton: getStoredBoolean('show_open_panel_close_button', true),
     enableNowPlayingStage: getStoredBoolean('enable_now_playing_stage', false),
@@ -1690,6 +1758,37 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             return { ok: false, error: message };
         }
     },
+    handleSetLyricsFontFallbackFamilies: (families) => {
+        const next = normalizeFontFamilyStack(families);
+        storeFontFamilyStack(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY, next);
+        set({ lyricsFontFallbackFamilies: next });
+    },
+    handleSetSubtitleFontInheritsLyrics: (inheritsLyrics) => {
+        setStoredBoolean(SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY, inheritsLyrics);
+        set({ subtitleFontInheritsLyrics: inheritsLyrics });
+    },
+    handleSetSubtitleFontStyle: (fontStyle) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(SUBTITLE_FONT_STYLE_STORAGE_KEY, fontStyle);
+        }
+        set({ subtitleFontStyle: fontStyle });
+    },
+    handleSetSubtitleFontFamily: (fontFamily) => {
+        const next = fontFamily?.trim() || null;
+        if (typeof window !== 'undefined') {
+            if (next) {
+                localStorage.setItem(SUBTITLE_FONT_FAMILY_STORAGE_KEY, next);
+            } else {
+                localStorage.removeItem(SUBTITLE_FONT_FAMILY_STORAGE_KEY);
+            }
+        }
+        set({ subtitleFontFamily: next });
+    },
+    handleSetSubtitleFontFallbackFamilies: (families) => {
+        const next = normalizeFontFamilyStack(families);
+        storeFontFamilyStack(SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY, next);
+        set({ subtitleFontFallbackFamilies: next });
+    },
     handleSetAppLanguagePreference: async (preference) => {
         await applyAppLanguagePreference(preference);
         set({ appLanguagePreference: preference });
@@ -1854,6 +1953,11 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     lyricsFontScale: state.lyricsFontScale,
     lyricsCustomFontFamily: state.lyricsCustomFont?.family ?? null,
     lyricsCustomFontLabel: state.lyricsCustomFont?.label ?? null,
+    lyricsFontFallbackFamilies: state.lyricsFontFallbackFamilies,
+    subtitleFontInheritsLyrics: state.subtitleFontInheritsLyrics,
+    subtitleFontStyle: state.subtitleFontStyle,
+    subtitleFontFamily: state.subtitleFontFamily,
+    subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
     lyricFilterPattern: state.lyricFilterPattern,
     lyricFilterPatternError: getLyricFilterError(state.lyricFilterPattern),
     showOpenPanelCloseButton: state.showOpenPanelCloseButton,
@@ -1923,6 +2027,11 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetLyricsFontScale: state.handleSetLyricsFontScale,
     handleSetLyricsCustomFont: state.handleSetLyricsCustomFont,
     handleUploadLyricsCustomFont: state.handleUploadLyricsCustomFont,
+    handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
+    handleSetSubtitleFontInheritsLyrics: state.handleSetSubtitleFontInheritsLyrics,
+    handleSetSubtitleFontStyle: state.handleSetSubtitleFontStyle,
+    handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,
+    handleSetSubtitleFontFallbackFamilies: state.handleSetSubtitleFontFallbackFamilies,
     handleSetAppLanguagePreference: state.handleSetAppLanguagePreference,
     handleSetLyricFilterPattern: state.handleSetLyricFilterPattern,
     handleToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,

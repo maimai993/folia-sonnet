@@ -83,6 +83,7 @@ export interface Theme {
   secondaryColor: string;
   fontStyle: 'sans' | 'serif' | 'mono';
   fontFamily?: string;
+  fontFamilyStack?: string[];
   animationIntensity: 'calm' | 'normal' | 'chaotic';
   wordColors?: { word: string; color: string; }[];
   lyricsIcons?: string[];

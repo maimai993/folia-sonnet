@@ -9,6 +9,11 @@ export const buildVisualizerTheme = ({
     theme,
     lyricsFontStyle,
     lyricsCustomFontFamily,
+    lyricsFontFallbackFamilies,
+    subtitleFontInheritsLyrics,
+    subtitleFontStyle,
+    subtitleFontFamily,
+    subtitleFontFallbackFamilies,
     currentSongId,
     visualizerMode,
 }: {
@@ -16,17 +21,35 @@ export const buildVisualizerTheme = ({
     theme: Theme;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsCustomFontFamily: string | null;
+    lyricsFontFallbackFamilies?: string[];
+    subtitleFontInheritsLyrics?: boolean;
+    subtitleFontStyle?: Theme['fontStyle'];
+    subtitleFontFamily?: string | null;
+    subtitleFontFallbackFamilies?: string[];
     currentSongId?: number | null;
     visualizerMode: VisualizerMode;
 }) => {
     const visualizerBackgroundColor = String(appStyle['--bg-color']);
-    return {
-        visualizerTheme: {
+    const visualizerTheme: Theme = {
+        ...theme,
+        fontStyle: lyricsFontStyle,
+        fontFamily: lyricsCustomFontFamily ?? undefined,
+        fontFamilyStack: lyricsFontFallbackFamilies,
+        backgroundColor: visualizerBackgroundColor,
+    };
+    const visualizerSubtitleTheme: Theme = (subtitleFontInheritsLyrics ?? true)
+        ? visualizerTheme
+        : {
             ...theme,
-            fontStyle: lyricsFontStyle,
-            fontFamily: lyricsCustomFontFamily ?? undefined,
+            fontStyle: subtitleFontStyle ?? 'sans',
+            fontFamily: subtitleFontFamily ?? undefined,
+            fontFamilyStack: subtitleFontFallbackFamilies,
             backgroundColor: visualizerBackgroundColor,
-        },
+        };
+
+    return {
+        visualizerTheme,
+        visualizerSubtitleTheme,
         visualizerGeometrySeed: currentSongId ?? `geometry-${visualizerMode}`,
     };
 };

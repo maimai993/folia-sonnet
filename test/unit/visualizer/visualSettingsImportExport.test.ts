@@ -37,6 +37,11 @@ describe('Visual Settings Import and Export', () => {
         showSubtitleTranslation: false,
         lyricsFontStyle: 'sans',
         lyricsFontScale: 1.25,
+        lyricsFontFallbackFamilies: ['Songti SC', 'SimSun', 'serif'],
+        subtitleFontInheritsLyrics: false,
+        subtitleFontStyle: 'sans',
+        subtitleFontFamily: 'Microsoft YaHei',
+        subtitleFontFallbackFamilies: ['PingFang SC', 'sans-serif'],
         classicTuning: {
             enableWordRotation: true,
             breathingFloatMultiplier: 1.2,
@@ -115,6 +120,11 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.backgroundOpacity).toBe(0.85);
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
+        expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
+        expect(decoded.subtitleFontInheritsLyrics).toBe(false);
+        expect(decoded.subtitleFontStyle).toBe('sans');
+        expect(decoded.subtitleFontFamily).toBe('Microsoft YaHei');
+        expect(decoded.subtitleFontFallbackFamilies).toEqual(['PingFang SC', 'sans-serif']);
         expect(decoded.classicTuning?.breathingFloatMultiplier).toBe(1.2);
         expect(decoded.claddaghTuning?.focusScaleRatio).toBe(0.75);
         expect(decoded.claddaghTuning?.radiusScale).toBe(1.15);
@@ -145,6 +155,11 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.backgroundOpacity).toBe(0.85);
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
+        expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
+        expect(decoded.subtitleFontInheritsLyrics).toBe(false);
+        expect(decoded.subtitleFontStyle).toBe('sans');
+        expect(decoded.subtitleFontFamily).toBe('Microsoft YaHei');
+        expect(decoded.subtitleFontFallbackFamilies).toEqual(['PingFang SC', 'sans-serif']);
         expect(decoded.claddaghTuning?.ellipseTiltDeg).toBe(52);
         expect(decoded.theme?.light.name).toBe('Light Gold');
         expect(decoded.theme?.dark.accentColor).toBe('#fbbf24');

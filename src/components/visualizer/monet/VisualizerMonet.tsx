@@ -8,7 +8,7 @@ import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
-import { resolveThemeFontStack } from '../../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
 import AudioOverlay from './AudioOverlay';
 import MonetFloatingDecor from './MonetFloatingDecor';
 import MonetLyricsRail from './MonetLyricsRail';
@@ -27,6 +27,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         currentLineIndex,
         lines,
         theme,
+        subtitleTheme,
         audioPower,
         audioBands,
         showText = true,
@@ -109,6 +110,10 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
     ]);
 
     const lyricFontStack = useMemo(() => resolveThemeFontStack(theme), [theme]);
+    const translationFontStack = useMemo(
+        () => resolveThemeTranslationFontStack(subtitleTheme ?? theme),
+        [subtitleTheme, theme],
+    );
     const fontScale = monetTuning.fontScale;
     const lyricFontPx = resolveClampFontPx(
         1.34,
@@ -214,6 +219,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     inactiveFontPx={inactiveFontPx}
                                     translationFontPx={translationFontPx}
                                     fontStack={lyricFontStack}
+                                    translationFontStack={translationFontStack}
                                     keywordColoringEnabled={monetTuning.keywordColoringEnabled}
                                     emptyText=""
                                     showSubtitleTranslation={showSubtitleTranslation}

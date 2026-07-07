@@ -14,30 +14,88 @@ const TRANSLATION_FONT_STACKS: Record<Theme['fontStyle'], string> = {
     mono: 'Consolas, "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, "Sarasa Mono SC", "Noto Sans Mono CJK SC", "SimHei", "DengXian", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans Mono CJK JP", "MS Gothic", monospace',
 };
 
+const CSS_GENERIC_FONT_FAMILIES = new Set([
+    'serif',
+    'sans-serif',
+    'monospace',
+    'cursive',
+    'fantasy',
+    'system-ui',
+    'ui-serif',
+    'ui-sans-serif',
+    'ui-monospace',
+    'ui-rounded',
+    'emoji',
+    'math',
+    'fangsong',
+]);
+
 const quoteFontFamily = (fontFamily: string) => `"${fontFamily.replace(/["\\]/g, '\\$&')}"`;
+
+const normalizeFontFamilyName = (fontFamily: string) => fontFamily.trim().replace(/^['"]|['"]$/g, '').trim();
+
+const formatFontFamily = (fontFamily: string) => {
+    const normalized = normalizeFontFamilyName(fontFamily);
+    if (!normalized) return null;
+
+    return CSS_GENERIC_FONT_FAMILIES.has(normalized.toLowerCase())
+        ? normalized
+        : quoteFontFamily(normalized);
+};
+
+export const normalizeFontFamilyStack = (fontFamilies: Array<string | null | undefined> | null | undefined) => {
+    const seen = new Set<string>();
+    const stack: string[] = [];
+
+    fontFamilies?.forEach(fontFamily => {
+        const normalized = normalizeFontFamilyName(fontFamily ?? '');
+        if (!normalized) return;
+
+        const key = normalized.toLocaleLowerCase();
+        if (seen.has(key)) return;
+
+        seen.add(key);
+        stack.push(normalized);
+    });
+
+    return stack;
+};
+
+const buildCustomFontFamilyStack = (theme: Pick<Theme, 'fontFamily' | 'fontFamilyStack'>) => {
+    if (!theme.fontFamily) {
+        return [];
+    }
+
+    return normalizeFontFamilyStack([
+        theme.fontFamily,
+        ...(theme.fontFamilyStack ?? []),
+    ])
+        .map(formatFontFamily)
+        .filter((fontFamily): fontFamily is string => Boolean(fontFamily));
+};
 
 export const getBuiltinThemeFontStack = (fontStyle: Theme['fontStyle']) => {
     return BUILTIN_FONT_STACKS[fontStyle] ?? BUILTIN_FONT_STACKS.sans;
 };
 
-export const resolveThemeFontStack = (theme: Pick<Theme, 'fontStyle' | 'fontFamily'>) => {
+export const resolveThemeFontStack = (theme: Pick<Theme, 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>) => {
     const fallbackStack = getBuiltinThemeFontStack(theme.fontStyle);
-    const customFontFamily = theme.fontFamily?.trim();
+    const customFontStack = buildCustomFontFamilyStack(theme);
 
-    if (!customFontFamily) {
+    if (customFontStack.length === 0) {
         return fallbackStack;
     }
 
-    return `${quoteFontFamily(customFontFamily)}, ${fallbackStack}`;
+    return `${customFontStack.join(', ')}, ${fallbackStack}`;
 };
 
-export const resolveThemeTranslationFontStack = (theme: Pick<Theme, 'fontStyle' | 'fontFamily'>) => {
+export const resolveThemeTranslationFontStack = (theme: Pick<Theme, 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>) => {
     const fallbackStack = TRANSLATION_FONT_STACKS[theme.fontStyle] ?? TRANSLATION_FONT_STACKS.sans;
-    const customFontFamily = theme.fontFamily?.trim();
+    const customFontStack = buildCustomFontFamilyStack(theme);
 
-    if (!customFontFamily) {
+    if (customFontStack.length === 0) {
         return fallbackStack;
     }
 
-    return `${quoteFontFamily(customFontFamily)}, ${fallbackStack}`;
+    return `${customFontStack.join(', ')}, ${fallbackStack}`;
 };

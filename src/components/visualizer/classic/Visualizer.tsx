@@ -288,6 +288,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         currentLineIndex,
         lines,
         theme,
+        subtitleTheme,
         audioPower,
         audioBands,
         showText = true,
@@ -723,6 +724,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                 recentCompletedLine={recentCompletedLine}
                 nextLines={nextLines}
                 theme={theme}
+                subtitleTheme={subtitleTheme}
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}

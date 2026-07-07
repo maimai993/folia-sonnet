@@ -1263,6 +1263,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         currentLineIndex,
         lines,
         theme,
+        subtitleTheme,
         audioPower,
         audioBands,
         showText = true,
@@ -1324,6 +1325,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             viewport.height,
             theme.fontStyle,
             theme.fontFamily ?? '',
+            theme.fontFamilyStack?.join(',') ?? '',
             theme.animationIntensity,
             theme.accentColor,
             tuning.fontScale,
@@ -1335,6 +1337,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         showText,
         theme.animationIntensity,
         theme.fontFamily,
+        theme.fontFamilyStack,
         theme.fontStyle,
         theme.wordColors,
         tuning.fontScale,
@@ -1706,6 +1709,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
                 recentCompletedLine={recentCompletedLine}
                 nextLines={nextLines}
                 theme={theme}
+                subtitleTheme={subtitleTheme}
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}

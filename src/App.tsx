@@ -331,6 +331,11 @@ export default function App() {
         lyricsFontScale,
         lyricsCustomFontFamily,
         lyricsCustomFontLabel,
+        lyricsFontFallbackFamilies,
+        subtitleFontInheritsLyrics,
+        subtitleFontStyle,
+        subtitleFontFamily,
+        subtitleFontFallbackFamilies,
         lyricFilterPattern,
         showOpenPanelCloseButton,
         enableNowPlayingStage,
@@ -1350,14 +1355,31 @@ export default function App() {
         defaultTheme: DEFAULT_THEME,
         transparentBackground: shouldUseTransparentAppBackground,
     }), [bgMode, isDaylight, shouldUseTransparentAppBackground, theme]);
-    const { visualizerTheme, visualizerGeometrySeed } = useMemo(() => buildVisualizerTheme({
+    const { visualizerTheme, visualizerSubtitleTheme, visualizerGeometrySeed } = useMemo(() => buildVisualizerTheme({
         appStyle,
         theme,
         lyricsFontStyle,
         lyricsCustomFontFamily,
+        lyricsFontFallbackFamilies,
+        subtitleFontInheritsLyrics,
+        subtitleFontStyle,
+        subtitleFontFamily,
+        subtitleFontFallbackFamilies,
         currentSongId: currentSong?.id,
         visualizerMode,
-    }), [appStyle, currentSong?.id, lyricsCustomFontFamily, lyricsFontStyle, theme, visualizerMode]);
+    }), [
+        appStyle,
+        currentSong?.id,
+        lyricsCustomFontFamily,
+        lyricsFontFallbackFamilies,
+        lyricsFontStyle,
+        subtitleFontFallbackFamilies,
+        subtitleFontFamily,
+        subtitleFontInheritsLyrics,
+        subtitleFontStyle,
+        theme,
+        visualizerMode,
+    ]);
     const isNowPlayingControlDisabled = isNowPlayingStageActive;
 
     useEffect(() => {
@@ -2797,6 +2819,7 @@ export default function App() {
                         currentLineIndex={currentLineIndex}
                         lines={lyrics?.lines || []}
                         theme={visualizerTheme}
+                        subtitleTheme={visualizerSubtitleTheme}
                         isDaylight={isDaylight}
                         audioPower={audioPower}
                         audioBands={audioBands}

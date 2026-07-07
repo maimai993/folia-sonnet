@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveThemeFontStack, resolveThemeTranslationFontStack } from '@/utils/fontStacks';
+import { normalizeFontFamilyStack, resolveThemeFontStack, resolveThemeTranslationFontStack } from '@/utils/fontStacks';
 import type { Theme } from '@/types';
 
 describe('fontStacks', () => {
@@ -85,5 +85,52 @@ describe('fontStacks', () => {
         expect(stack).toContain('"MS Gothic"');
         expect(stack.indexOf('"SimHei"')).toBeLessThan(stack.indexOf('"DengXian"'));
         expect(stack.indexOf('"Microsoft YaHei"')).toBeLessThan(stack.indexOf('"MS Gothic"'));
+    });
+
+    it('normalizes fallback font families while preserving user order', () => {
+        expect(normalizeFontFamilyStack([
+            ' Songti SC ',
+            '"Songti SC"',
+            'SimSun',
+            '',
+            'serif',
+        ])).toEqual(['Songti SC', 'SimSun', 'serif']);
+    });
+
+    it('appends ordered fallback families after the primary custom font', () => {
+        const theme: Pick<Theme, 'fontStyle' | 'fontFamily' | 'fontFamilyStack'> = {
+            fontStyle: 'serif',
+            fontFamily: 'FZKai-Z03',
+            fontFamilyStack: ['Songti SC', 'SimSun', 'serif'],
+        };
+
+        const stack = resolveThemeFontStack(theme);
+
+        expect(stack.startsWith('"FZKai-Z03", "Songti SC", "SimSun", serif,')).toBe(true);
+        expect(stack).toContain('"Noto Serif CJK SC"');
+    });
+
+    it('does not quote CSS generic fallback families', () => {
+        const theme: Pick<Theme, 'fontStyle' | 'fontFamilyStack'> = {
+            fontStyle: 'sans',
+            fontFamilyStack: ['system-ui', 'sans-serif'],
+        };
+
+        const stack = resolveThemeFontStack(theme);
+
+        expect(stack.startsWith('system-ui, sans-serif,')).toBe(true);
+    });
+
+    it('lets subtitle translations use their own fallback stack', () => {
+        const subtitleTheme: Pick<Theme, 'fontStyle' | 'fontFamily' | 'fontFamilyStack'> = {
+            fontStyle: 'sans',
+            fontFamily: 'Microsoft YaHei',
+            fontFamilyStack: ['PingFang SC', 'sans-serif'],
+        };
+
+        const stack = resolveThemeTranslationFontStack(subtitleTheme);
+
+        expect(stack.startsWith('"Microsoft YaHei", "PingFang SC", sans-serif,')).toBe(true);
+        expect(stack).toContain('"Segoe UI"');
     });
 });

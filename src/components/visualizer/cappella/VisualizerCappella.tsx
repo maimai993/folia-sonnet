@@ -1478,6 +1478,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
         currentLineIndex,
         lines,
         theme,
+        subtitleTheme,
         audioPower,
         audioBands,
         showText = true,
@@ -1649,6 +1650,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
                 recentCompletedLine={recentCompletedLine}
                 nextLines={nextLines}
                 theme={theme}
+                subtitleTheme={subtitleTheme}
                 translationFontSize={`${Math.max(14, 16 * lyricsFontScale)}px`}
                 upcomingFontSize={`${Math.max(12, 14 * lyricsFontScale)}px`}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
