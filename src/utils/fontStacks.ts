@@ -62,14 +62,16 @@ export const normalizeFontFamilyStack = (fontFamilies: Array<string | null | und
 };
 
 const buildCustomFontFamilyStack = (theme: Pick<Theme, 'fontFamily' | 'fontFamilyStack'>) => {
-    if (!theme.fontFamily) {
+    const familiesToNormalize: (string | null | undefined)[] = [
+        ...(theme.fontFamily ? [theme.fontFamily] : []),
+        ...(theme.fontFamilyStack ?? []),
+    ];
+
+    if (familiesToNormalize.length === 0) {
         return [];
     }
 
-    return normalizeFontFamilyStack([
-        theme.fontFamily,
-        ...(theme.fontFamilyStack ?? []),
-    ])
+    return normalizeFontFamilyStack(familiesToNormalize)
         .map(formatFontFamily)
         .filter((fontFamily): fontFamily is string => Boolean(fontFamily));
 };

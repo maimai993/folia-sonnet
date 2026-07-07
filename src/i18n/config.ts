@@ -5,6 +5,26 @@ import en from './locales/en.ts';
 import zhCN from './locales/zh-CN.ts';
 import ind from './locales/in.ts';
 
+/*
+ * Hardcoded Chinese fallback dictionary.
+ * Flattened at build-time from zh-CN.ts so every key has a Chinese fallback
+ * baked directly into the JS bundle — no dependency on i18next resource loading.
+ */
+function flattenLocale(obj: Record<string, any>, prefix = ''): Record<string, string> {
+  let result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === 'object' && value !== null) {
+      result = { ...result, ...flattenLocale(value, path) };
+    } else {
+      result[path] = String(value);
+    }
+  }
+  return result;
+}
+
+const ZH_FALLBACKS: Record<string, string> = flattenLocale(zhCN);
+
 export type AppLanguagePreference = 'system' | 'en' | 'zh-CN' | 'in';
 export const APP_LANGUAGE_STORAGE_KEY = 'folia_app_language';
 
@@ -76,6 +96,7 @@ i18n
       }
     },
     fallbackLng: 'en',
+    parseMissingKeyHandler: (key: string): string => ZH_FALLBACKS[key] ?? key,
     supportedLngs: ['en', 'zh-CN', 'in'],
     ...(initialLanguagePreference !== 'system' ? { lng: initialLanguagePreference } : {}),
     detection: {

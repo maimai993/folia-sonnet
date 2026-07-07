@@ -76,7 +76,7 @@ export const isSupportedLyricsFontFile = (file: File) => {
 
 export const validateUploadedLyricsFontFile = (file: File): string | null => {
     if (!isSupportedLyricsFontFile(file)) {
-        return 'Only woff2, woff, ttf, and otf font files are supported.';
+        return '仅支持 woff2、woff、ttf、otf 字体文件。';
     }
 
     if (file.size > MAX_UPLOADED_LYRICS_FONT_SIZE) {

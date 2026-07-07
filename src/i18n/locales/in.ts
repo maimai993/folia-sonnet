@@ -144,6 +144,8 @@ export default {
     "matchingLyricsAndCover": "Mencocokkan lirik dan sampul...",
     "localSongNotInLibrary": "Lagu lokal yang diputar sebelumnya tidak lagi ada di perpustakaan",
     "localFileReauthorize": "File lagu lokal perlu diotorisasi ulang. Silakan pilih lagi dari daftar musik lokal.",
+    "localFilePlaybackError": "Cannot play local file (file may have been moved or permissions lost)",
+    "waitingNowPlayingInput": "Waiting for local Now Playing input",
     "localFileAccessError": "Tidak bisa mengakses file. Silakan impor ulang folder",
     "localMusicLoaded": "Musik lokal dimuat",
     "navidromeSongLoaded": "Lagu Navidrome dimuat",
@@ -152,7 +154,10 @@ export default {
     "clearedManualLyrics": "Lirik yang dicocokkan/diunggah manual dihapus",
     "clearFailed": "Gagal menghapus",
     "stageLikeUnavailable": "Aksi ini tidak tersedia di mode Stage",
-    "insertedToNext": "Dimasukkan untuk diputar berikutnya"
+    "insertedToNext": "Dimasukkan untuk diputar berikutnya",
+    "connected": "Terkoneksi",
+    "connecting": "Menghubungkan",
+    "disconnected": "Terputus",
   },
   "commandPalette": {
     "placeholder": "Ketik perintah atau cari...",
@@ -537,6 +542,11 @@ export default {
     "enableStageModeDesc": "Ekspos API Stage lokal desktop untuk program eksternal mengirim lirik, media, atau permintaan lagu.",
     "enableStageModeDescEnabled": "API Stage lokal siap menerima lirik, media, dan permintaan lagu.",
     "enableStageModeDescDisabled": "Aktifkan API Stage lokal agar alat eksternal bisa mengirim lirik, media, dan permintaan lagu.",
+    "enableStageModeDescElectron": "Ekspos titik akhir HTTP lokal sehingga klien Stage bisa membaca status pemutaran dan lirik saat ini.",
+    "enableNowPlaying": "Aktifkan Now Playing",
+    "enableNowPlayingDesc": "Saat diaktifkan, halaman beranda menampilkan titik masuk Stage dan terhubung melalui localhost ke layanan now-playing.",
+    "nowPlayingFixedConnectionDesc": "Terhubung ke ws://localhost:9863/api/ws/lyric. Mulai layanan now-playing di mesin Anda terlebih dahulu.",
+
     "stageAddress": "Alamat Stage",
     "stageSession": "Sesi Saat Ini",
     "stageSessionReady": "Sesi siap",
@@ -695,6 +705,16 @@ export default {
     "fontSans": "Sans",
     "fontSerif": "Serif",
     "fontMono": "Mono",
+    "fontFallbackFamilies": "Fallback Fonts",
+    "fontFallbackEmpty": "No fallback fonts set",
+    "fontFallbackFamiliesPlaceholder": "Songti SC, SimSun, serif",
+    "subtitleFontInheritsLyrics": "Subtitle Uses Lyrics Font",
+    "subtitleFontInheritsLyricsDesc": "Turn off to set a separate subtitle font.",
+    "subtitleFontFamily": "Subtitle Font",
+    "subtitlePrimaryFont": "Subtitle Primary Font",
+    "subtitlePrimaryFontPlaceholder": "Microsoft YaHei",
+    "subtitleFontFallbackFamilies": "Subtitle Fallback Fonts",
+    "subtitleFontFallbackFamiliesPlaceholder": "PingFang SC, sans-serif",
     "previewCommonSettings": "Umum",
     "previewCommonSettingsDesc": "Sesuaikan font, ukuran, dan opasitas bersama untuk seluruh lapisan animasi lirik.",
     "previewOriginal": "Angin mengingat setiap baris yang kau nyanyikan.",
@@ -866,6 +886,14 @@ export default {
     "lyricFilterRegex": "Filter Lirik Regex",
     "lyricFilterRegexDesc": "Konfigurasikan aturan filter baris demi baris untuk teks lirik yang diurai."
   },
+  "export": {
+    "noRecordableContent": "No recordable playback content.",
+    "windowRecordingUnsupported": "Window recording is not supported in this environment.",
+    "noExportCodec": "No available video export codec on this system.",
+    "windowResizeFailed": "Failed to resize the player window to export resolution.",
+    "recordingCancelled": "Recording cancelled.",
+    "recorderUnknownError": "Recorder encountered an unknown error.",
+  },
   "player": {
     "unknownArtist": "Artis Tidak Dikenal",
     "unknownAlbum": "Album Tidak Dikenal"
@@ -1011,6 +1039,15 @@ export default {
     "serverProfileUnavailable": "Server tidak dikenal",
     "cloudDrive": "Cloud Drive",
     "cloudDriveDesc": "NetEase Cloud Music Drive"
+  },
+  "unifiedPanel": {
+    "nowPlayingStageDescription": "Now Playing is being controlled by an external player. Folia is only responsible for displaying lyrics and visual effects.",
+    "stageLocalInputDescription": "Stage is in local single-input mode. External devices can push lyrics or media, but playback and display are controlled by Folia itself.",
+  },
+  "artistGrid": {
+    "localArtist": "Local Artist: {{artistName}}",
+    "popularSongs": "Popular / POPULAR",
+    "artistAlbums": "Albums / ALBUMS",
   },
   "obs": {
     "connecting": "Menghubungkan ke Folia",

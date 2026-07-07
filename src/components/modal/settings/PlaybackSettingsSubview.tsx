@@ -224,17 +224,17 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
 
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Settings2 size={14} /> {t('options.lyrics') || '歌词'}
+                    <Settings2 size={14} /> {t('options.lyrics')}
                 </h3>
                 <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
                     <div className="p-4 flex items-center justify-between gap-4">
                         <div className="space-y-1">
                             <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                 <Settings2 size={14} />
-                                {t('options.enableAlternativeLyricSources') || '更多歌词源'}
+                                {t('options.enableAlternativeLyricSources')}
                             </div>
                             <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.enableAlternativeLyricSourcesDesc') || '启用备选歌词源（QQ音乐、酷狗音乐）'}
+                                {t('options.enableAlternativeLyricSourcesDesc')}
                             </div>
                         </div>
                         {renderToggle(enableAlternativeLyricSources, () => onToggleAlternativeLyricSources(!enableAlternativeLyricSources))}
@@ -244,10 +244,10 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                             <div className="space-y-1">
                                 <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                     <Settings2 size={14} />
-                                    {t('options.autoUseBestLyric') || '自动使用最佳歌词'}
+                                    {t('options.autoUseBestLyric')}
                                 </div>
                                 <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.autoUseBestLyricDesc') || '自动检索所有歌词源，若存在完美匹配的逐字歌词则自动优先采用。'}
+                                    {t('options.autoUseBestLyricDesc')}
                                 </div>
                             </div>
                             {renderToggle(autoUseBestLyric, () => onToggleAutoUseBestLyric(!autoUseBestLyric))}
@@ -289,16 +289,16 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
 
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Monitor size={14} /> {t('options.audioOutputSettings') || '播放设备'}
+                    <Monitor size={14} /> {t('options.audioOutputSettings')}
                 </h3>
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.audioOutputDevice') || '当前播放声卡'}
+                                {t('options.audioOutputDevice')}
                             </div>
                             <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.audioOutputDeviceDesc') || '切换当前播放器的音频输出设备。Electron 桌面版优先支持，浏览器环境在支持 setSinkId 时也可使用。'}
+                                {t('options.audioOutputDeviceDesc')}
                             </div>
                         </div>
                         <button
@@ -309,7 +309,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                             style={{ color: 'var(--text-primary)' }}
                         >
                             <RefreshCw size={13} className={isAudioOutputDevicesLoading ? 'animate-spin' : ''} />
-                            <span>{t('options.audioOutputRefresh') || '刷新'}</span>
+                            <span>{t('options.audioOutputRefresh')}</span>
                         </button>
                     </div>
 

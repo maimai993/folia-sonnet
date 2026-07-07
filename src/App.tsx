@@ -1218,6 +1218,7 @@ export default function App() {
         exportState,
         handleExportCommand,
     } = useElectronVideoExportController({
+        t: (key) => t(key),
         isElectronWindow,
         audioRef,
         currentTime,

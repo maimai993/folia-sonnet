@@ -820,8 +820,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full max-h-[300px]">
                                                 <div className="flex items-center justify-center h-full px-4 text-center text-xs opacity-50">
                                                     {playbackControlsDisabled
-                                                        ? 'Now Playing 正由外部播放器控制，Folia 只负责展示歌词和视觉效果。'
-                                                        : 'Stage 现在是本地单项输入模式。外部可以推送一份完整歌词对象或一段媒体，播放与展示仍由 Folia 自己控制。'}
+                                                        ? t('unifiedPanel.nowPlayingStageDescription')
+                                                        : t('unifiedPanel.stageLocalInputDescription')}
                                                 </div>
                                             </motion.div>
                                         ) : (

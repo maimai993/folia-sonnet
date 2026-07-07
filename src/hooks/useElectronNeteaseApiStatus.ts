@@ -32,7 +32,7 @@ export function useElectronNeteaseApiStatus(setStatusMsg: StatusSetter, t: TFunc
             console.warn('[Electron] Netease API failed to start', status.error);
             setStatusMsg({
                 type: 'error',
-                text: t('status.neteaseApiStartupFailed') || '网易云接口启动失败，部分在线功能不可用',
+                text: t('status.neteaseApiStartupFailed'),
                 nonce: status.updatedAt,
                 durationMs: 8000,
             });

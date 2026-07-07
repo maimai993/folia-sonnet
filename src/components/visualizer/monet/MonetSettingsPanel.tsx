@@ -152,15 +152,15 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     };
 
     const keywordColoringOptions = useMemo<PresetOption<boolean>[]>(() => ([
-        { value: true, label: t('options.monetKeywordColoringOn') || '启用' },
-        { value: false, label: t('options.monetKeywordColoringOff') || '关闭' },
+        { value: true, label: t('options.monetKeywordColoringOn') },
+        { value: false, label: t('options.monetKeywordColoringOff') },
     ]), [t]);
     const showDescriptionOptions = useMemo<PresetOption<boolean>[]>(() => ([
-        { value: true, label: t('options.partitaGuideLinesOn') || '显示' },
-        { value: false, label: t('options.partitaGuideLinesOff') || '隐藏' },
+        { value: true, label: t('options.partitaGuideLinesOn') },
+        { value: false, label: t('options.partitaGuideLinesOff') },
     ]), [t]);
     const portraitSourceOptions = useMemo<PresetOption<MonetPortraitSource>[]>(() => ([
-        { value: 'cover', label: t('options.monetPortraitSourceCover') || '封面' },
+        { value: 'cover', label: t('options.monetPortraitSourceCover') },
         {
             value: 'custom',
             label: t('options.monetPortraitSourceCustom'),
@@ -168,16 +168,16 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         },
     ]), [isLoadingMonetPortraitImage, monetPortraitImage, t]);
     const audioStyleOptions = useMemo<PresetOption<MonetAudioStyle>[]>(() => ([
-        { value: 'bar', label: t('options.monetAudioStyleBar') || '柱状' },
-        { value: 'line', label: t('options.monetAudioStyleLine') || '线条' },
+        { value: 'bar', label: t('options.monetAudioStyleBar') },
+        { value: 'line', label: t('options.monetAudioStyleLine') },
     ]), [t]);
     const portraitStyleOptions = useMemo<PresetOption<'rectangular' | 'square'>[]>(() => ([
         { value: 'rectangular', label: t('options.monetPortraitStyleRectangular') },
         { value: 'square', label: t('options.monetPortraitStyleSquare') },
     ]), [t]);
     const showPortraitDragHangerOptions = useMemo<PresetOption<boolean>[]>(() => ([
-        { value: true, label: t('options.monetPortraitDragHangerShow') || '显示' },
-        { value: false, label: t('options.monetPortraitDragHangerHide') || '隐藏' },
+        { value: true, label: t('options.monetPortraitDragHangerShow') },
+        { value: false, label: t('options.monetPortraitDragHangerHide') },
     ]), [t]);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,7 +207,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     {t('options.monetSettings')}
                 </div>
                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.monetSettingsDesc') || '控制关键字、右侧肖像和底部频谱样式。'}
+                    {t('options.monetSettingsDesc')}
                 </div>
             </div>
 
@@ -297,7 +297,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                             }}
                         >
                             <ImagePlus size={15} />
-                            <span>{t('options.monetUploadPortrait') || '上传肖像图'}</span>
+                            <span>{t('options.monetUploadPortrait')}</span>
                         </button>
                         <button
                             type="button"

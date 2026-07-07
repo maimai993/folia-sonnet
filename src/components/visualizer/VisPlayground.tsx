@@ -472,7 +472,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         ...builtinFontOptions,
         { value: 'custom', label: currentFontLabel },
     ]), [builtinFontOptions, currentFontLabel]);
-    const currentSubtitleFontLabel = subtitleFontFamily || (t('options.customFont') || '自定义字体');
+    const currentSubtitleFontLabel = subtitleFontFamily || t('options.customFont');
     const subtitleFontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[] = useMemo(() => ([
         ...builtinFontOptions,
         { value: 'custom', label: currentSubtitleFontLabel },
@@ -614,7 +614,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             setFontPickerError(
                 error instanceof Error && error.message
                     ? error.message
-                    : (t('options.systemFontPermissionDenied') || '读取本机字体失败，请检查权限。')
+                    : t('options.systemFontPermissionDenied')
             );
         } finally {
             setIsLoadingSystemFonts(false);
@@ -1131,26 +1131,20 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                                 {t('options.currentFont')}
                                             </div>
                                             <div className="mt-1 text-base font-medium" style={{ color: 'var(--text-primary)' }}>
-<<<<<<< HEAD
                                                 {fontPickerTarget === 'subtitle'
-                                                    ? (subtitleFontFamily || (t('options.systemFontInactive') || '未启用'))
+                                                    ? (subtitleFontFamily || t('options.systemFontInactive'))
                                                     : (customFontFamily
                                                         ? currentFontLabel
-                                                        : (t('options.systemFontInactive') || '未启用'))}
+                                                        : t('options.systemFontInactive'))}
                                             </div>
                                             <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
                                                 {fontPickerTarget === 'subtitle'
-                                                    ? (subtitleFontFallbackFamilies.length > 0 ? subtitleFontFallbackFamilies.join(', ') : (t('options.fontFallbackEmpty') || '未设置备用字体'))
-                                                    : (fontFallbackFamilies.length > 0 ? fontFallbackFamilies.join(', ') : (t('options.fontFallbackEmpty') || '未设置备用字体'))}
-=======
-                                                {customFontFamily
-                                                    ? currentFontLabel
-                                                    : t('options.systemFontInactive')}
->>>>>>> f364ab5 (> **Note:** The file `src/i18n/locales/in.ts` (Indonesian locale) still needs translations filled in.)
+                                                    ? (subtitleFontFallbackFamilies.length > 0 ? subtitleFontFallbackFamilies.join(', ') : t('options.fontFallbackEmpty'))
+                                                    : (fontFallbackFamilies.length > 0 ? fontFallbackFamilies.join(', ') : t('options.fontFallbackEmpty'))}
                                             </div>
                                         </div>
                                         <FontFallbackStackControl
-                                            label={t('options.fontFallbackFamilies') || '备用字体'}
+                                            label={t('options.fontFallbackFamilies')}
                                             value={fontPickerTarget === 'subtitle' ? subtitleFontFallbackFamilies : fontFallbackFamilies}
                                             onChange={fontPickerTarget === 'subtitle' ? onSubtitleFontFallbackFamiliesChange : onFontFallbackFamiliesChange}
                                             theme={previewTheme}
@@ -1211,23 +1205,23 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                     <div className="flex h-full min-h-0 flex-col gap-4">
                                         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                                             <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                                {t('options.currentFont') || '当前字体'}
+                                                {t('options.currentFont')}
                                             </div>
                                             <div className="mt-1 text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                                                 {fontPickerTarget === 'subtitle'
-                                                    ? (subtitleFontFamily || (t('options.systemFontInactive') || '未启用'))
+                                                    ? (subtitleFontFamily || t('options.systemFontInactive'))
                                                     : (customFontFamily
                                                         ? currentFontLabel
-                                                        : (t('options.systemFontInactive') || '未启用'))}
+                                                        : t('options.systemFontInactive'))}
                                             </div>
                                             <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
                                                 {fontPickerTarget === 'subtitle'
-                                                    ? (subtitleFontFallbackFamilies.length > 0 ? subtitleFontFallbackFamilies.join(', ') : (t('options.fontFallbackEmpty') || '未设置备用字体'))
-                                                    : (fontFallbackFamilies.length > 0 ? fontFallbackFamilies.join(', ') : (t('options.fontFallbackEmpty') || '未设置备用字体'))}
+                                                    ? (subtitleFontFallbackFamilies.length > 0 ? subtitleFontFallbackFamilies.join(', ') : t('options.fontFallbackEmpty'))
+                                                    : (fontFallbackFamilies.length > 0 ? fontFallbackFamilies.join(', ') : t('options.fontFallbackEmpty'))}
                                             </div>
                                         </div>
                                         <FontFallbackStackControl
-                                            label={t('options.fontFallbackFamilies') || '备用字体'}
+                                            label={t('options.fontFallbackFamilies')}
                                             value={fontPickerTarget === 'subtitle' ? subtitleFontFallbackFamilies : fontFallbackFamilies}
                                             onChange={fontPickerTarget === 'subtitle' ? onSubtitleFontFallbackFamiliesChange : onFontFallbackFamiliesChange}
                                             theme={previewTheme}

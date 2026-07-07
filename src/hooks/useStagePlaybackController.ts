@@ -907,7 +907,7 @@ export function useStagePlaybackController({
             }
             navigateToPlayer();
             if (!nowPlayingTrackRef.current && !nowPlayingLyricPayloadRef.current) {
-                setStatusMsg({ type: 'info', text: '等待本地 Now Playing 服务输入' });
+                setStatusMsg({ type: 'info', text: t('status.waitingNowPlayingInput') });
             }
             return;
         }
@@ -937,7 +937,7 @@ export function useStagePlaybackController({
 
         navigateToPlayer();
         if (!nextStageEntryKey) {
-            setStatusMsg({ type: 'info', text: t('status.stageWaiting') || '等待外部 Stage 输入' });
+            setStatusMsg({ type: 'info', text: t('status.stageWaiting') });
         }
     }, [
         activePlaybackContext,

@@ -318,7 +318,7 @@ const NavidromeAlbumView: React.FC<NavidromeAlbumViewProps> = ({
                 title={t('navidrome.createPlaylist')}
                 description={t('localMusic.enterPlaylistName')}
                 placeholder={t('localMusic.enterPlaylistName')}
-                confirmLabel={t('options.save') || '保存'}
+                confirmLabel={t('options.save')}
                 onConfirm={async (name) => {
                     await onCreatePlaylist?.(name, convertToNavidromeSongs());
                 }}

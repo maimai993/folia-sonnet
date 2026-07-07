@@ -33,7 +33,7 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
     const getResolvedLanguageLabel = (): string => {
         const lang = i18n.resolvedLanguage;
         if (lang?.startsWith('zh')) {
-            return t('options.appLanguageZhCN') || '简体中文';
+            return t('options.appLanguageZhCN');
         }
         if (lang === 'in' || lang?.startsWith('id')) {
             return t('options.appLanguageInID') || 'Bahasa Indonesia';
@@ -44,29 +44,29 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
     const currentResolvedLanguage = getResolvedLanguageLabel();
 
     const languageOptions: Array<{ value: AppLanguagePreference; label: string; }> = [
-        { value: 'system', label: t('options.appLanguageSystem') || '跟随系统' },
-        { value: 'zh-CN', label: t('options.appLanguageZhCN') || '简体中文' },
+        { value: 'system', label: t('options.appLanguageSystem') },
+        { value: 'zh-CN', label: t('options.appLanguageZhCN') },
         { value: 'en', label: t('options.appLanguageEnUS') || 'English' },
         { value: 'in', label: t('options.appLanguageInID') || 'Bahasa Indonesia' },
     ];
 
     const languageHint = appLanguagePreference === 'system'
-        ? (t('options.appLanguageSystemHint') || '跟随浏览器或系统语言。当前生效：{{language}}').replace('{{language}}', currentResolvedLanguage)
+        ? (t('options.appLanguageSystemHint')).replace('{{language}}', currentResolvedLanguage)
         : null;
 
     return (
         <div className="space-y-5">
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Languages size={14} /> {t('options.languageSettings') || '语言'}
+                    <Languages size={14} /> {t('options.languageSettings')}
                 </h3>
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                            {t('options.appLanguage') || '界面语言'}
+                            {t('options.appLanguage')}
                         </div>
                         <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.appLanguageDesc') || '手动指定 Folia 的界面语言'}
+                            {t('options.appLanguageDesc')}
                         </div>
                     </div>
                     <CustomSelect

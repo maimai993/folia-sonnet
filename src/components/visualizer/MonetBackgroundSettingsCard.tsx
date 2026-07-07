@@ -224,7 +224,7 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
                     {t('options.monetBackgroundSettings')}
                 </div>
                 <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                    {t('options.monetBackgroundSettingsDesc') || '调整莫奈背景图片来源、布局和后处理。'}
+                    {t('options.monetBackgroundSettingsDesc')}
                 </div>
             </div>
 

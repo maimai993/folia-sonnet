@@ -292,7 +292,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                                 border: `1px solid ${colorWithAlpha(theme.primaryColor, 0.16)}`,
                                                 boxShadow: `0 4px 12px ${colorWithAlpha('#000000', 0.12)}`,
                                             }}
-                                            title={t('common.reset') || '重置'}
+                                            title={t('common.reset')}
                                         >
                                             <RotateCcw size={14} />
                                         </button>

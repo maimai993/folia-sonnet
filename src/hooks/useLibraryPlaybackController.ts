@@ -1330,8 +1330,7 @@ export function useLibraryPlaybackController({
                 setStatusMsg({ type: 'info', text: t('status.bestLyricsNotFound') || '' });
                 return false;
             }
-            if ('isPureMusic' in bestMatch) {
-                setStatusMsg({ type: 'info', text: t('status.bestLyricsPureMusic') || '纯音乐，无需匹配歌词' });
+            if ('isPureMusic' in bestMatch) {                    setStatusMsg({ type: 'info', text: t('status.bestLyricsPureMusic') });
                 return false;
             }
 

@@ -32,6 +32,7 @@ type ElectronSettingsState = {
     ENABLE_UPDATE_CHECK: boolean;
     ENABLE_AUTO_UPDATE: boolean;
     STAGE_MODE_SOURCE: string;
+    DISCORD_RICH_PRESENCE_ENABLED: boolean;
 };
 
 export type DesktopSettingsChrome = {
@@ -140,12 +141,12 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
         <>
             <section className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2 opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                    <Monitor size={14} className="opacity-70" /> {t('options.desktopTrayBehavior') || '桌面窗口行为'}
+                    <Monitor size={14} className="opacity-70" /> {t('options.desktopTrayBehavior')}
                 </h3>
                 <div className={`border rounded-2xl overflow-hidden ${borderColor} ${settingsCardClass}`}>
                     <div className={`p-4 bg-black/[0.04] dark:bg-white/[0.02] border-b ${borderColor}`}>
                         <p className="text-xs opacity-60 leading-relaxed text-left" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.desktopTrayBehaviorDesc') || '仅桌面端生效。可控制最小化到托盘、隐藏任务栏图标，以及启动时是否直接进入播放页。'}
+                            {t('options.desktopTrayBehaviorDesc')}
                         </p>
                     </div>
 
@@ -156,7 +157,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                             </div>
                             <div className="space-y-0.5 text-left">
                                 <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.minimizeToTray') || '最小化到托盘'}
+                                    {t('options.minimizeToTray')}
                                 </h4>
                                 <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                                     点击最小化时，应用将隐藏至系统托盘。
@@ -173,7 +174,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                             </div>
                             <div className="space-y-0.5 text-left">
                                 <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.openPlayerOnLaunch') || '启动后直接进入播放页'}
+                                    {t('options.openPlayerOnLaunch')}
                                 </h4>
                                 <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                                     应用启动时自动开启全屏/大屏歌词播放界面，无需手动点击。
@@ -190,7 +191,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                             </div>
                             <div className="space-y-0.5 text-left">
                                 <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.hideTaskbarIcon') || '隐藏任务栏图标'}
+                                    {t('options.hideTaskbarIcon')}
                                 </h4>
                                 <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                                     即使主窗口处于打开状态，也不在系统任务栏显示应用，最大程度减少干扰。

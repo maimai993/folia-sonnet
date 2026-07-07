@@ -12,11 +12,8 @@ import { parseVisualizerFrameRate, setGlobalVisualizerFrameRate, VISUALIZER_FRAM
 import { sanitizeUrlBackgroundItem, sanitizeUrlBackgroundList } from '../utils/urlBackground';
 import { getLyricProviderPreferenceLabel } from '../utils/lyrics/lyricSourceLabels';
 import { applyAppLanguagePreference, readStoredAppLanguagePreference, type AppLanguagePreference } from '../i18n/config';
-<<<<<<< HEAD
 import { normalizeFontFamilyStack } from '../utils/fontStacks';
-=======
 import i18n from '../i18n/config';
->>>>>>> f364ab5 (> **Note:** The file `src/i18n/locales/in.ts` (Indonesian locale) still needs translations filled in.)
 
 // src/stores/useSettingsUiStore.ts
 // Shared settings state and actions used by App, Home, and SettingsModal.

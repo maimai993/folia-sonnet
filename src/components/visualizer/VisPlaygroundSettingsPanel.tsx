@@ -148,9 +148,9 @@ interface VisPlaygroundSettingsPanelProps {
 const SECTION_OPTIONS: VisPlaygroundEditSection[] = ['common', 'background', 'visualizer', 'subtitle'];
 
 const getSectionLabel = (section: VisPlaygroundEditSection, t: (key: string) => string) => {
-    if (section === 'common') return t('options.previewCommonSettings') || '通用';
-    if (section === 'background') return t('options.previewBackgroundSettings') || '背景';
-    if (section === 'subtitle') return t('options.previewSubtitleSettings') || '字幕';
+    if (section === 'common') return t('options.previewCommonSettings');
+    if (section === 'background') return t('options.previewBackgroundSettings');
+    if (section === 'subtitle') return t('options.previewSubtitleSettings');
     return t('options.previewVisualizerSettings');
 };
 
@@ -397,10 +397,10 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
     const resolvedBackgroundMode: VisualizerBackgroundMode = visualizerBackgroundMode ?? (visualizerMode === 'monet' ? 'monet' : 'common');
     const backgroundModeOptions = useMemo<PresetOption<VisualizerBackgroundMode>[]>(() => ([
-        { value: 'common', label: t('options.visualizerBackgroundModeCommon') || '通用' },
-        { value: 'monet', label: t('options.visualizerBackgroundModeMonet') || '莫奈' },
+        { value: 'common', label: t('options.visualizerBackgroundModeCommon') },
+        { value: 'monet', label: t('options.visualizerBackgroundModeMonet') },
         { value: 'url', label: t('options.visualizerBackgroundModeUrl') || 'URL' },
-        { value: 'sora', label: t('options.visualizerBackgroundModeSora') || '空' },
+        { value: 'sora', label: t('options.visualizerBackgroundModeSora') },
     ]), [t]);
 
     return (
@@ -422,18 +422,18 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     {t('options.previewCommonSettings')}
                                 </div>
                                 <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                                    {t('options.previewCommonSettingsDesc') || '统一调整字体、字号等全局设置。'}
+                                    {t('options.previewCommonSettingsDesc')}
                                 </div>
                             </div>
                             <ResetSectionButton
-                                label={t('ui.default') || '默认'}
+                                label={t('ui.default')}
                                 onClick={onResetCommonSettings}
                                 theme={theme}
                             />
                         </div>
 
                         <PresetGroup
-                            label={t('options.fontFamily') || '字体'}
+                            label={t('options.fontFamily')}
                             value={fontStyleValue}
                             options={fontStyleOptions}
                             onChange={onFontStyleChange}
@@ -443,7 +443,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                         />
 
                         <PresetGroup
-                            label={t('options.fontSize') || '字号'}
+                            label={t('options.fontSize')}
                             value={fontScale}
                             options={fontScaleOptions}
                             onChange={onFontScaleChange}
@@ -453,7 +453,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
-                                <span>{t('options.fontSize') || '字号'}</span>
+                                <span>{t('options.fontSize')}</span>
                                 <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
                                     {Math.round(fontScale * 100)}%
                                 </span>
@@ -502,11 +502,11 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                         {t('options.previewBackgroundSettings')}
                                     </div>
                                     <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                                        {t('options.previewBackgroundSettingsDesc') || '调整播放页背景层、透明窗口和几何氛围。'}
+                                        {t('options.previewBackgroundSettingsDesc')}
                                     </div>
                                 </div>
                                 <ResetSectionButton
-                                    label={t('ui.default') || '默认'}
+                                    label={t('ui.default')}
                                     onClick={onResetBackgroundSettings}
                                     theme={theme}
                                 />
@@ -527,14 +527,14 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
                                     <ToggleRow
                                         label={t('options.disableVisualizerVignette')}
-                                        description={t('options.disableVisualizerVignetteDesc') || '关闭几何背景自带的边缘暗角。'}
+                                        description={t('options.disableVisualizerVignetteDesc')}
                                         checked={disableVisualizerVignette}
                                         onChange={onToggleDisableVisualizerVignette}
                                         theme={theme}
                                     />
                                     <ToggleRow
                                         label={t('options.disableVisualizerGeometricBackground')}
-                                        description={t('options.disableVisualizerGeometricBackgroundDesc') || '隐藏播放页的通用几何背景图形。'}
+                                        description={t('options.disableVisualizerGeometricBackgroundDesc')}
                                         checked={disableVisualizerGeometricBackground}
                                         onChange={onToggleDisableVisualizerGeometricBackground}
                                         theme={theme}
@@ -552,7 +552,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
                                         <ToggleRow
                                             label={t('theme.addCoverColor')}
-                                            description={t('options.coverColorBackgroundDesc') || '使用当前歌曲封面生成背景色彩。'}
+                                            description={t('options.coverColorBackgroundDesc')}
                                             checked={useCoverColorBg}
                                             onChange={onToggleCoverColorBg}
                                             theme={theme}
@@ -620,11 +620,11 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                         {t('options.lyricsRenderer')}
                                     </div>
                                     <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                                        {t('options.lyricsRendererDesc') || '选择播放页使用的歌词渲染模式。'}
+                                        {t('options.lyricsRendererDesc')}
                                     </div>
                                 </div>
                                 <ResetSectionButton
-                                    label={t('ui.default') || '默认'}
+                                    label={t('ui.default')}
                                     onClick={visualizerEntry.resetSettings ? onResetVisualizerTuning : undefined}
                                     theme={theme}
                                 />
@@ -689,11 +689,11 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     {t('options.previewSubtitleSettings')}
                                 </div>
                                 <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                                    {t('options.previewSubtitleSettingsDesc') || '调整底部译文和下一句提示的显示方式。'}
+                                    {t('options.previewSubtitleSettingsDesc')}
                                 </div>
                             </div>
                             <ResetSectionButton
-                                label={t('ui.default') || '默认'}
+                                label={t('ui.default')}
                                 onClick={onResetSubtitleSettings}
                                 theme={theme}
                             />
@@ -701,7 +701,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
                         <ToggleRow
                             label={t('options.hidePlayerTranslationSubtitle')}
-                            description={t('options.hidePlayerTranslationSubtitleDesc') || '不影响使用独立字幕的动画模式。'}
+                            description={t('options.hidePlayerTranslationSubtitleDesc')}
                             checked={hideTranslationSubtitle}
                             onChange={onToggleHideTranslationSubtitle}
                             theme={theme}
@@ -718,8 +718,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                         />
 
                         <ToggleRow
-                            label={t('options.subtitleFontInheritsLyrics') || '字幕继承歌词字体'}
-                            description={t('options.subtitleFontInheritsLyricsDesc') || '关闭后可为字幕单独设置字体。'}
+                            label={t('options.subtitleFontInheritsLyrics')}
+                            description={t('options.subtitleFontInheritsLyricsDesc')}
                             checked={subtitleFontInheritsLyrics}
                             onChange={onSubtitleFontInheritsLyricsChange}
                             theme={theme}
@@ -729,7 +729,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                         {!subtitleFontInheritsLyrics && (
                             <div className="space-y-4">
                                 <PresetGroup
-                                    label={t('options.subtitleFontFamily') || '字幕字体'}
+                                    label={t('options.subtitleFontFamily')}
                                     value={subtitleFontFamily ? 'custom' : subtitleFontStyle}
                                     options={subtitleFontStyleOptions}
                                     onChange={(next) => {

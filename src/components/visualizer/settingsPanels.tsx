@@ -105,7 +105,7 @@ export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     {t('options.classicSettings') }
                 </div>
                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.classicSettingsDesc') || '控制逐字旋转和整行呼吸浮动范围。'}
+                    {t('options.classicSettingsDesc')}
                 </div>
             </div>
 
@@ -224,7 +224,7 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     {t('options.partitaSettings') }
                 </div>
                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.partitaSettingsDesc') || '控制引导线显示和分块横向错位范围。'}
+                    {t('options.partitaSettingsDesc')}
                 </div>
             </div>
 
@@ -338,7 +338,7 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     {t('options.fumeSettings') }
                 </div>
                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.fumeSettingsDesc') || '控制打印方块、镜头节奏、辉光和大标题比例。'}
+                    {t('options.fumeSettingsDesc')}
                 </div>
             </div>
 
@@ -538,9 +538,9 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         try {
             const result = await onImportCappellaCustomEmojiPack(files);
             if (result.ok) {
-                setFeedback(t('options.cappellaEmojiImportSuccess') || '自定义表情包已更新。');
+                setFeedback(t('options.cappellaEmojiImportSuccess'));
             } else {
-                setFeedback(result.error || (t('options.cappellaEmojiImportFailed') || '导入失败。'));
+                setFeedback(result.error || t('options.cappellaEmojiImportFailed'));
             }
         } finally {
             setIsImporting(false);
@@ -554,7 +554,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
         setFeedback(null);
         await onClearCappellaCustomEmojiPack();
-        setFeedback(t('options.cappellaEmojiCleared') || '自定义表情包已清空。');
+        setFeedback(t('options.cappellaEmojiCleared'));
     };
 
     const handleAvatarImportClick = () => {
@@ -574,9 +574,9 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         try {
             const result = await onImportCappellaCustomAvatar(files);
             if (result.ok) {
-                setFeedback(t('options.cappellaAvatarImportSuccess') || '自定义头像已更新。');
+                setFeedback(t('options.cappellaAvatarImportSuccess'));
             } else {
-                setFeedback(result.error || (t('options.cappellaAvatarImportFailed') || '导入失败。'));
+                setFeedback(result.error || t('options.cappellaAvatarImportFailed'));
             }
         } finally {
             setIsImportingAvatar(false);
@@ -590,7 +590,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
         setFeedback(null);
         await onClearCappellaCustomAvatar();
-        setFeedback(t('options.cappellaAvatarCleared') || '自定义头像已清空。');
+        setFeedback(t('options.cappellaAvatarCleared'));
     };
 
     const avatarPreviewSlots = cappellaCustomAvatarImages.length > 0
@@ -610,7 +610,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     {t('options.cappellaSettings') }
                 </div>
                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.cappellaSettingsDesc') || '控制表情包显示与自定义表情包来源。'}
+                    {t('options.cappellaSettingsDesc')}
                 </div>
             </div>
 
@@ -689,7 +689,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
                     {hasCappellaCustomAvatar
                         ? `${t('options.cappellaEmojiCount') } ${cappellaCustomAvatarImages.length}`
-                        : (t('options.cappellaAvatarUploadHint') || '还没有自定义头像，上传后可切换到自定义来源。')}
+                        : t('options.cappellaAvatarUploadHint')}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -705,7 +705,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                         }}
                     >
                         {isImportingAvatar
-                            ? (t('options.cappellaAvatarUploading') || '导入中...')
+                            ? t('options.cappellaAvatarUploading')
                             : (t('options.cappellaAvatarUpload') )}
                     </button>
                     <button
@@ -796,7 +796,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
                     {hasCappellaCustomEmojiPack
                         ? `${t('options.cappellaEmojiCount') } ${cappellaCustomEmojiCount}`
-                        : (t('options.cappellaEmojiUploadHint') || '还没有自定义表情包，上传后才能切换到自定义。')}
+                        : t('options.cappellaEmojiUploadHint')}
                 </div>
             </div>
 
@@ -813,7 +813,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     }}
                 >
                     {isImporting
-                        ? (t('options.cappellaEmojiUploading') || '导入中...')
+                        ? t('options.cappellaEmojiUploading')
                         : (t('options.cappellaEmojiUpload') )}
                 </button>
                 <button
@@ -887,7 +887,7 @@ export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     {t('options.tiltSettings') }
                 </div>
                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.tiltSettingsDesc') || '控制歌词分行概率和斜体强调样式的出现频率。'}
+                    {t('options.tiltSettingsDesc')}
                 </div>
             </div>
 
@@ -968,7 +968,7 @@ export const CladdaghSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     {t('options.claddaghSettings') }
                 </div>
                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.claddaghSettingsDesc') || '调整歌词大小对比率、轨道半径及倾斜度。'}
+                    {t('options.claddaghSettingsDesc')}
                 </div>
             </div>
 
