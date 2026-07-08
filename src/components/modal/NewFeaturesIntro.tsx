@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Type, MousePointerClick, Zap } from 'lucide-react';
+import { Sparkles, Sliders } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { UserGuideTipCard } from './UserGuideTipCard';
 import { UserGuideFeatureCard } from './UserGuideFeatureCard';
@@ -41,10 +41,10 @@ export const NewFeaturesIntro: React.FC<NewFeaturesIntroProps> = ({ isDaylight, 
                 />
             </div>
 
-            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto custom-scrollbar pr-2 pb-2">
+            <div className="mt-5 grid grid-cols-1 gap-3 overflow-y-auto custom-scrollbar pr-2 pb-2">
                 <UserGuideFeatureCard
                     {...featureCardClasses}
-                    icon={Sparkles}
+                    icon={Sliders}
                     iconClassName={isDaylight ? 'text-indigo-500' : 'text-indigo-400'}
                     title="全新动效与背景"
                     description="新增了回环动效以及星空背景，带来更沉浸的视觉体验。"
