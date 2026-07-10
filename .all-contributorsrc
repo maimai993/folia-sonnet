@@ -212,6 +212,15 @@
       "contributions": [
         "ideas"
       ]
+    },
+    {
+      "login": "Jirankun",
+      "name": "Zhyllan Fyllah",
+      "avatar_url": "https://avatars.githubusercontent.com/u/174584819?v=4",
+      "profile": "https://github.com/Jirankun",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "commit": false,
