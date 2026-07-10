@@ -30,6 +30,7 @@ describe('Visual Settings Import and Export', () => {
             },
         },
         visualizerMode: 'monet',
+        randomVisualizerModePerSong: true,
         visualizerBackgroundMode: 'monet',
         backgroundOpacity: 0.85,
         visualizerOpacity: 0.95,
@@ -117,6 +118,7 @@ describe('Visual Settings Import and Export', () => {
 
         const decoded = decompressConfig(code);
         expect(decoded.visualizerMode).toBe('monet');
+        expect(decoded.randomVisualizerModePerSong).toBe(true);
         expect(decoded.backgroundOpacity).toBe(0.85);
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
@@ -152,6 +154,7 @@ describe('Visual Settings Import and Export', () => {
         const jsonString = JSON.stringify(sampleConfig);
         const decoded = decompressConfig(jsonString);
         expect(decoded.visualizerMode).toBe('monet');
+        expect(decoded.randomVisualizerModePerSong).toBe(true);
         expect(decoded.backgroundOpacity).toBe(0.85);
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);

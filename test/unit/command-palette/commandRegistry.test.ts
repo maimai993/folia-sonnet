@@ -26,6 +26,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     isGeneratingTheme: false,
     generateAITheme: vi.fn(),
     setVisualizerMode: vi.fn(),
+    randomVisualizerModePerSong: false,
+    toggleRandomVisualizerModePerSong: vi.fn(),
     setVisualizerBackgroundMode: vi.fn(),
     setMonetBackgroundTuning: vi.fn(),
     toggleTransparentBackground: vi.fn(),
@@ -355,5 +357,14 @@ describe('command palette registry', () => {
         expect(matchCommon.command.id).toBe('background-common');
         matchCommon.command.execute('', context);
         expect(context.setVisualizerBackgroundMode).toHaveBeenCalledWith('common');
+    });
+
+    it('toggles random visualizer mode for each song', () => {
+        const context = createContext();
+        const [match] = getCommandPaletteMatches('每首歌随机动画');
+
+        expect(match.command.id).toBe('visualizer-toggle-random-per-song');
+        match.command.execute('', context);
+        expect(context.toggleRandomVisualizerModePerSong).toHaveBeenCalled();
     });
 });

@@ -588,7 +588,7 @@ export function useLibraryPlaybackController({
         }, 1000);
     }, [prewarmLocalSongMetadata]);
 
-    const onPlayLocalSong = useCallback(async (localSong: LocalSong, queue: LocalSong[] = []) => {
+    const onPlayLocalSong = useCallback(async (localSong: LocalSong, queue: LocalSong[] = [], options: PlaybackNavigationOptions = {}) => {
         interruptStagePlaybackForMainTransition();
 
         const blobUrl = await getAudioFromLocalSong(localSong);
@@ -632,7 +632,9 @@ export function useLibraryPlaybackController({
             void persistLastPlaybackCache(initialMeta.unifiedSong, [initialMeta.unifiedSong]);
         }
 
-        navigateToPlayer();
+        if (options.shouldNavigateToPlayer ?? true) {
+            navigateToPlayer();
+        }
         setPlayerState(PlayerState.IDLE);
         setStatusMsg({ type: 'success', text: t('status.localMusicLoaded')});
         void restoreCachedThemeForSong(initialMeta.unifiedSong.id).catch((error) => {

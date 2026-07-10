@@ -25,6 +25,7 @@ export type SyncRuntimeStatus = {
 
 export type SyncedVisualSettings = {
     visualizerMode?: VisualizerMode;
+    randomVisualizerModePerSong?: boolean;
     visualizerBackgroundMode?: VisualizerBackgroundMode | null;
     backgroundOpacity?: number;
     visualizerOpacity?: number;

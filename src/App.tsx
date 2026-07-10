@@ -53,6 +53,7 @@ import { useNavidromeScrobbleReporter } from './hooks/useNavidromeScrobbleReport
 import { usePlaybackQueueController } from './hooks/usePlaybackQueueController';
 import { usePlaybackTransportController } from './hooks/usePlaybackTransportController';
 import { usePlaybackVisualizerBridge } from './hooks/usePlaybackVisualizerBridge';
+import { useRandomVisualizerMode } from './hooks/useRandomVisualizerMode';
 import { useObsBrowserSourcePublisher } from './hooks/useObsBrowserSourcePublisher';
 import { ObsBrowserSourceLyrics } from './components/obs/ObsBrowserSourceLyrics';
 import { useSessionRestoreController } from './hooks/useSessionRestoreController';
@@ -314,6 +315,7 @@ export default function App() {
         visualizerBackgroundMode,
         isDaylight,
         visualizerMode,
+        randomVisualizerModePerSong,
         classicTuning,
         cadenzaTuning,
         partitaTuning,
@@ -362,6 +364,7 @@ export default function App() {
         handleSetBackgroundOpacity,
         setDaylightPreference,
         handleSetVisualizerMode,
+        handleToggleRandomVisualizerModePerSong,
         handleSetVisualizerBackgroundMode,
         handleSetMonetBackgroundTuning,
         handleSetMonetTuning,
@@ -393,6 +396,13 @@ export default function App() {
         handleToggleMute,
         handleToggleLoopMode,
     } = appPreferences;
+
+    useRandomVisualizerMode({
+        currentSong,
+        enabled: randomVisualizerModePerSong,
+        visualizerMode,
+        setVisualizerMode: handleSetVisualizerMode,
+    });
 
     const setLyrics = useMemo(
         () => createLyricsSetter(setLyricsState, lyricFilterPattern, currentSongFullRef),
@@ -1696,6 +1706,10 @@ export default function App() {
         isGeneratingTheme,
         generateAITheme: generateCurrentSongTheme,
         setVisualizerMode: handleSetVisualizerMode,
+        randomVisualizerModePerSong,
+        toggleRandomVisualizerModePerSong: () => {
+            handleToggleRandomVisualizerModePerSong(!randomVisualizerModePerSong);
+        },
         setVisualizerBackgroundMode: handleSetVisualizerBackgroundMode,
         setMonetBackgroundTuning: handleSetMonetBackgroundTuning,
         toggleTransparentBackground: () => {
@@ -1727,6 +1741,7 @@ export default function App() {
         handleNextTrack,
         handlePrevTrack,
         handleSetVisualizerMode,
+        handleToggleRandomVisualizerModePerSong,
         handleSetVisualizerBackgroundMode,
         handleSetMonetBackgroundTuning,
         handleToggleHidePlayerTranslationSubtitle,
@@ -1741,6 +1756,7 @@ export default function App() {
         playQueue,
         playSong,
         playerState,
+        randomVisualizerModePerSong,
         canGenerateAITheme,
         currentSearchSourceTabInPalette,
         setHomeViewTab,

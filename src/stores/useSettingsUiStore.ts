@@ -34,6 +34,7 @@ export type SettingsModalState = {
 
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
+export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_taskbar';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
 export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
 export const SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY = 'show_subtitle_translation';
@@ -798,6 +799,7 @@ export type SettingsUiState = {
     disableVisualizerGeometricBackground: boolean;
     minimizeToTray: boolean;
     hideTaskbarIcon: boolean;
+    hideRemoteControlTaskbarIcon: boolean;
     openPlayerOnLaunch: boolean;
     enableMediaCache: boolean;
     backgroundOpacity: number;
@@ -809,6 +811,7 @@ export type SettingsUiState = {
     visualizerFrameRate: VisualizerFrameRate;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
+    randomVisualizerModePerSong: boolean;
     classicTuning: ClassicTuning;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
@@ -861,7 +864,7 @@ export type SettingsUiState = {
     setAudioQuality: (quality: AudioQuality) => void;
     setTransparentPlayerBackgroundFromSystem: (enabled: boolean) => void;
     handleTogglePlayerPageNativeBlur: (enable: boolean) => void;
-    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; }) => void;
+    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; }) => void;
     setStoredCappellaEmojiPack: (pack: StoredCappellaEmojiImage[]) => void;
     setCappellaCustomEmojiImages: (images: CappellaEmojiImage[]) => void;
     setIsLoadingCappellaCustomEmojiPack: (loading: boolean) => void;
@@ -894,6 +897,7 @@ export type SettingsUiState = {
     handleToggleDisableVisualizerGeometricBackground: (disable: boolean) => void;
     handleToggleMinimizeToTray: (enable: boolean) => void;
     handleToggleHideTaskbarIcon: (enable: boolean) => void;
+    handleToggleHideRemoteControlTaskbarIcon: (enable: boolean) => void;
     handleToggleOpenPlayerOnLaunch: (enable: boolean) => void;
     handleToggleMediaCache: (enable: boolean) => void;
     handleSetBackgroundOpacity: (opacity: number) => void;
@@ -908,7 +912,8 @@ export type SettingsUiState = {
     handleSetUrlBackgroundList: (items: UrlBackgroundItem[]) => void;
     handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
     setDaylightPreference: (isDaylight: boolean) => void;
-    handleSetVisualizerMode: (mode: VisualizerMode) => void;
+    handleSetVisualizerMode: (mode: VisualizerMode, options?: { notify?: boolean }) => void;
+    handleToggleRandomVisualizerModePerSong: (enable: boolean) => void;
     handleSetClassicTuning: (patch: Partial<ClassicTuning>) => void;
     handleResetClassicTuning: () => void;
     handleSetCadenzaTuning: (patch: Partial<CadenzaTuning>) => void;
@@ -981,6 +986,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     disableVisualizerGeometricBackground: getStoredBoolean('disable_visualizer_geometric_background', false),
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
+    hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
     openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
     enableMediaCache: getStoredBoolean(ENABLE_MEDIA_CACHE_KEY, false),
     backgroundOpacity: readStoredBackgroundOpacity(),
@@ -992,6 +998,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     visualizerFrameRate: readStoredVisualizerFrameRate(),
     isDaylight: getStoredBoolean('default_theme_daylight', false),
     visualizerMode: readStoredVisualizerMode(),
+    randomVisualizerModePerSong: getStoredBoolean('random_visualizer_mode_per_song', false),
     classicTuning: readStoredClassicTuning(),
     cadenzaTuning: readStoredCadenzaTuning(),
     partitaTuning: readStoredPartitaTuning(),
@@ -1080,6 +1087,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         if (typeof settings.HIDE_TASKBAR_ICON === 'boolean') {
             patch.hideTaskbarIcon = settings.HIDE_TASKBAR_ICON;
             setStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, settings.HIDE_TASKBAR_ICON);
+        }
+        if (typeof settings.REMOTE_CONTROL_SKIP_TASKBAR === 'boolean') {
+            patch.hideRemoteControlTaskbarIcon = settings.REMOTE_CONTROL_SKIP_TASKBAR;
+            setStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, settings.REMOTE_CONTROL_SKIP_TASKBAR);
         }
         set(patch);
     },
@@ -1244,6 +1255,13 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             text: i18n.t('notifications.' + (enable ? 'taskbarHidden' : 'taskbarRestored')),
         });
     },
+    handleToggleHideRemoteControlTaskbarIcon: (enable) => {
+        setStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, enable);
+        set({ hideRemoteControlTaskbarIcon: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('REMOTE_CONTROL_SKIP_TASKBAR', enable);
+        }
+    },
     handleToggleOpenPlayerOnLaunch: (enable) => {
         setStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, enable);
         set({ openPlayerOnLaunch: enable });
@@ -1364,15 +1382,25 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             void window.electron.setNativeTheme(enabled ? 'light' : 'dark');
         }
     },
-    handleSetVisualizerMode: (mode) => {
+    handleSetVisualizerMode: (mode, options) => {
         const entry = getVisualizerRegistryEntry(mode);
         if (typeof window !== 'undefined') {
             localStorage.setItem('visualizer_mode', mode);
         }
         set({ visualizerMode: mode });
+        if (options?.notify !== false) {
+            notify(get, {
+                type: 'info',
+                text: i18n.t('notifications.visualizerSwitched', { mode: entry.labelFallback }),
+            });
+        }
+    },
+    handleToggleRandomVisualizerModePerSong: (enable) => {
+        setStoredBoolean('random_visualizer_mode_per_song', enable);
+        set({ randomVisualizerModePerSong: enable });
         notify(get, {
             type: 'info',
-            text: i18n.t('notifications.visualizerSwitched', { mode: entry.labelFallback }),
+            text: i18n.t(`notifications.randomVisualizerModePerSong${enable ? 'On' : 'Off'}`),
         });
     },
     handleSetClassicTuning: (patch) => {
@@ -1931,6 +1959,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     disableVisualizerGeometricBackground: state.disableVisualizerGeometricBackground,
     minimizeToTray: state.minimizeToTray,
     hideTaskbarIcon: state.hideTaskbarIcon,
+    hideRemoteControlTaskbarIcon: state.hideRemoteControlTaskbarIcon,
     openPlayerOnLaunch: state.openPlayerOnLaunch,
     enableMediaCache: state.enableMediaCache,
     backgroundOpacity: state.backgroundOpacity,
@@ -1944,6 +1973,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     lastSeenGuideVersion: state.lastSeenGuideVersion,
     isUserGuideModalOpen: state.isUserGuideModalOpen,
     visualizerMode: state.visualizerMode,
+    randomVisualizerModePerSong: state.randomVisualizerModePerSong,
     homeLayoutStyle: state.homeLayoutStyle,
     handleSetHomeLayoutStyle: state.handleSetHomeLayoutStyle,
     grid3dCardStyle: state.grid3dCardStyle,
@@ -1999,6 +2029,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleDisableVisualizerGeometricBackground: state.handleToggleDisableVisualizerGeometricBackground,
     handleToggleMinimizeToTray: state.handleToggleMinimizeToTray,
     handleToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
+    handleToggleHideRemoteControlTaskbarIcon: state.handleToggleHideRemoteControlTaskbarIcon,
     handleToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
     handleToggleMediaCache: state.handleToggleMediaCache,
     handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
@@ -2016,6 +2047,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     setLastSeenGuideVersion: state.setLastSeenGuideVersion,
     setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     handleSetVisualizerMode: state.handleSetVisualizerMode,
+    handleToggleRandomVisualizerModePerSong: state.handleToggleRandomVisualizerModePerSong,
     handleSetClassicTuning: state.handleSetClassicTuning,
     handleResetClassicTuning: state.handleResetClassicTuning,
     handleSetCadenzaTuning: state.handleSetCadenzaTuning,

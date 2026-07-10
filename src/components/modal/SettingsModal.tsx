@@ -118,6 +118,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         disableVisualizerGeometricBackground,
         minimizeToTray,
         hideTaskbarIcon,
+        hideRemoteControlTaskbarIcon,
         openPlayerOnLaunch,
         enableMediaCache,
         backgroundOpacity,
@@ -172,6 +173,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleDisableVisualizerGeometricBackground: onToggleDisableVisualizerGeometricBackground,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
         handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
+        handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
         handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
         handleToggleMediaCache: onToggleMediaCache,
         handleSetBackgroundOpacity: setBackgroundOpacity,
@@ -2534,8 +2536,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                         preferences={{
                             hideTaskbarIcon,
+                            hideRemoteControlTaskbarIcon,
                             minimizeToTray,
                             onToggleHideTaskbarIcon,
+                            onToggleHideRemoteControlTaskbarIcon,
                             onToggleMinimizeToTray,
                             onToggleOpenPlayerOnLaunch,
                             openPlayerOnLaunch,

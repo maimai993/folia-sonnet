@@ -48,8 +48,10 @@ export type DesktopSettingsChrome = {
 
 export type DesktopSettingsPreferences = {
     hideTaskbarIcon: boolean;
+    hideRemoteControlTaskbarIcon: boolean;
     minimizeToTray: boolean;
     onToggleHideTaskbarIcon: (enabled: boolean) => void;
+    onToggleHideRemoteControlTaskbarIcon: (enabled: boolean) => void;
     onToggleMinimizeToTray: (enabled: boolean) => void;
     onToggleOpenPlayerOnLaunch: (enabled: boolean) => void;
     openPlayerOnLaunch: boolean;
@@ -96,8 +98,10 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
     } = chrome;
     const {
         hideTaskbarIcon,
+        hideRemoteControlTaskbarIcon,
         minimizeToTray,
         onToggleHideTaskbarIcon,
+        onToggleHideRemoteControlTaskbarIcon,
         onToggleMinimizeToTray,
         onToggleOpenPlayerOnLaunch,
         openPlayerOnLaunch,
@@ -184,7 +188,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                         {renderToggle(openPlayerOnLaunch, () => onToggleOpenPlayerOnLaunch(!openPlayerOnLaunch))}
                     </div>
 
-                    <div className="flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
+                    <div className={`flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors border-b ${borderColor}`}>
                         <div className="flex items-start gap-3 min-w-0">
                             <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
                                 <EyeOff size={16} />
@@ -199,6 +203,22 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                             </div>
                         </div>
                         {renderToggle(hideTaskbarIcon, () => onToggleHideTaskbarIcon(!hideTaskbarIcon))}
+                    </div>
+                    <div className="flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
+                        <div className="flex items-start gap-3 min-w-0">
+                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
+                                <EyeOff size={16} />
+                            </div>
+                            <div className="space-y-0.5 text-left">
+                                <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.hideRemoteControlTaskbarIcon')}
+                                </h4>
+                                <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.hideRemoteControlTaskbarIconDesc')}
+                                </p>
+                            </div>
+                        </div>
+                        {renderToggle(hideRemoteControlTaskbarIcon, () => onToggleHideRemoteControlTaskbarIcon(!hideRemoteControlTaskbarIcon))}
                     </div>
                 </div>
 

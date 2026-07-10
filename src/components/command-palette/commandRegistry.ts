@@ -435,6 +435,17 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createVisualizerCommand('tilt', 'Visualizer: Tilt', 'Switch to tilt visualizer', ['visualizer tilt', 'tilt', '倾诉', 'qingsu', 'qs']),
     createVisualizerCommand('claddagh', 'Visualizer: Claddagh', 'Switch to Claddagh visualizer', ['visualizer claddagh', 'claddagh', '回环', 'jiezhi', 'jz']),
     createVisualizerCommand('monet', 'Visualizer: Monet', 'Switch to Monet visualizer', ['visualizer monet', 'monet', '莫奈', 'monai', 'mn', '切换到可视化：莫奈', '切换到可视化莫奈']),
+    {
+        id: 'visualizer-toggle-random-per-song',
+        group: 'visualizer',
+        title: 'Random visualizer for every song',
+        description: 'Toggle a random lyric animation mode whenever the song changes',
+        keywords: ['random visualizer', 'random animation', 'per song', '随机歌词动画', '每首歌随机动画', 'suiji geci donghua', 'meishouge suiji donghua', 'sjgcdh', 'msgsjdh'],
+        execute: (_input, context) => {
+            context.toggleRandomVisualizerModePerSong();
+            return true;
+        },
+    },
 
     {
         id: 'background-monet-full-overlay',

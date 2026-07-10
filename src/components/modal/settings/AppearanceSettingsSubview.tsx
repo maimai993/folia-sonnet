@@ -234,6 +234,7 @@ export const compressConfig = (config: any): string => {
         };
     }
     if (config.visualizerMode) minified.vm = config.visualizerMode;
+    if (config.randomVisualizerModePerSong !== undefined) minified.rvms = config.randomVisualizerModePerSong;
     if (config.visualizerBackgroundMode) minified.vbm = config.visualizerBackgroundMode;
     if (config.backgroundOpacity !== undefined) minified.bo = config.backgroundOpacity;
     if (config.visualizerOpacity !== undefined) minified.vo = config.visualizerOpacity;
@@ -288,7 +289,7 @@ export const decompressConfig = (str: string): any => {
         throw new Error('Invalid format');
     }
 
-    const isMinified = parsed.t !== undefined || parsed.vm !== undefined || parsed.ct !== undefined || parsed.cat !== undefined || parsed.hpts !== undefined || parsed.sst !== undefined || parsed.lff !== undefined || parsed.sfi !== undefined;
+    const isMinified = parsed.t !== undefined || parsed.vm !== undefined || parsed.rvms !== undefined || parsed.ct !== undefined || parsed.cat !== undefined || parsed.hpts !== undefined || parsed.sst !== undefined || parsed.lff !== undefined || parsed.sfi !== undefined;
     if (isMinified) {
         const decompressed: any = {};
         if (parsed.t) {
@@ -298,6 +299,7 @@ export const decompressConfig = (str: string): any => {
             };
         }
         if (parsed.vm) decompressed.visualizerMode = parsed.vm;
+        if (parsed.rvms !== undefined) decompressed.randomVisualizerModePerSong = parsed.rvms;
         if (parsed.vbm) decompressed.visualizerBackgroundMode = parsed.vbm;
         if (parsed.bo !== undefined) decompressed.backgroundOpacity = parsed.bo;
         if (parsed.vo !== undefined) decompressed.visualizerOpacity = parsed.vo;
@@ -328,7 +330,7 @@ export const decompressConfig = (str: string): any => {
         return decompressed;
     } else {
         const validKeys = [
-            'theme', 'visualizerMode', 'visualizerBackgroundMode', 'backgroundOpacity',
+            'theme', 'visualizerMode', 'randomVisualizerModePerSong', 'visualizerBackgroundMode', 'backgroundOpacity',
             'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation',
             'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontFallbackFamilies',
             'subtitleFontInheritsLyrics', 'subtitleFontStyle', 'subtitleFontFamily',
@@ -417,6 +419,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     const store = useSettingsUiStore(useShallow(state => ({
         statusSetter: state.statusSetter,
         visualizerMode: state.visualizerMode,
+        randomVisualizerModePerSong: state.randomVisualizerModePerSong,
         visualizerBackgroundMode: state.visualizerBackgroundMode,
         backgroundOpacity: state.backgroundOpacity,
         visualizerOpacity: state.visualizerOpacity,
@@ -442,6 +445,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         urlBackgroundSelectedId: state.urlBackgroundSelectedId,
 
         handleSetVisualizerMode: state.handleSetVisualizerMode,
+        handleToggleRandomVisualizerModePerSong: state.handleToggleRandomVisualizerModePerSong,
         handleSetVisualizerBackgroundMode: state.handleSetVisualizerBackgroundMode,
         handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
         handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
@@ -492,6 +496,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         return {
             theme: exportTheme,
             visualizerMode: store.visualizerMode,
+            randomVisualizerModePerSong: store.randomVisualizerModePerSong,
             visualizerBackgroundMode: store.visualizerBackgroundMode,
             backgroundOpacity: store.backgroundOpacity,
             visualizerOpacity: store.visualizerOpacity,
@@ -560,6 +565,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             // 2. Restore Visualizer Setup
             if (config.visualizerMode) {
                 store.handleSetVisualizerMode(config.visualizerMode);
+            }
+            if (config.randomVisualizerModePerSong !== undefined) {
+                store.handleToggleRandomVisualizerModePerSong(Boolean(config.randomVisualizerModePerSong));
             }
             if (config.visualizerBackgroundMode) {
                 store.handleSetVisualizerBackgroundMode(config.visualizerBackgroundMode);

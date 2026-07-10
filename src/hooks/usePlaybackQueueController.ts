@@ -81,7 +81,7 @@ type UsePlaybackQueueControllerParams = {
         preserveCurrentOnMiss?: boolean;
     }) => Promise<unknown>;
     interruptStagePlaybackForMainTransition: () => unknown;
-    onPlayLocalSong: (localSong: LocalSong, queue?: LocalSong[]) => Promise<void>;
+    onPlayLocalSong: (localSong: LocalSong, queue?: LocalSong[], options?: PlaybackNavigationOptions) => Promise<void>;
     onPlayNavidromeSong: (
         navidromeSong: NavidromeSong,
         queue?: NavidromeSong[],
@@ -474,7 +474,7 @@ export function usePlaybackQueueController({
             const localQueue = queueContext
                 .map(queuedSong => (queuedSong as SongResult & { localData?: LocalSong }).localData)
                 .filter((queuedSong): queuedSong is LocalSong => Boolean(queuedSong));
-            await onPlayLocalSong(localData, localQueue);
+            await onPlayLocalSong(localData, localQueue, { shouldNavigateToPlayer });
             return;
         }
 

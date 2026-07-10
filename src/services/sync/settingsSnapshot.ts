@@ -7,6 +7,7 @@ import { SYNC_SCHEMA_VERSION } from './syncTypes';
 
 export const buildSyncedVisualSettings = (state: SettingsUiState): SyncedVisualSettings => ({
     visualizerMode: state.visualizerMode,
+    randomVisualizerModePerSong: state.randomVisualizerModePerSong,
     visualizerBackgroundMode: state.visualizerBackgroundMode,
     backgroundOpacity: state.backgroundOpacity,
     visualizerOpacity: state.visualizerOpacity,
@@ -52,6 +53,7 @@ export const applySyncedVisualSettings = (
     settings: SyncedVisualSettings,
 ) => {
     if (settings.visualizerMode !== undefined) state.handleSetVisualizerMode(settings.visualizerMode);
+    if (settings.randomVisualizerModePerSong !== undefined) state.handleToggleRandomVisualizerModePerSong(Boolean(settings.randomVisualizerModePerSong));
     if (settings.visualizerBackgroundMode === null) {
         state.handleResetVisualizerBackgroundMode();
     } else if (settings.visualizerBackgroundMode !== undefined) {

@@ -64,6 +64,8 @@ export type CommandPaletteContext = {
     isGeneratingTheme: boolean;
     generateAITheme: () => void;
     setVisualizerMode: (mode: VisualizerMode) => void;
+    randomVisualizerModePerSong: boolean;
+    toggleRandomVisualizerModePerSong: () => void;
     setVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
     setMonetBackgroundTuning: (patch: Partial<MonetBackgroundTuning>) => void;
     toggleTransparentBackground: () => void;
