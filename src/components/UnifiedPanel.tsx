@@ -85,6 +85,9 @@ type UnifiedPanelQueueProps = {
     onPlaySong: (song: SongResult, queue: SongResult[]) => void;
     queueScrollRef: React.RefObject<HTMLDivElement>;
     onShuffle: () => void;
+    onRemoveSong: (index: number) => void;
+    onMoveSongToEnd: (index: number) => void;
+    onMoveSongToNext: (index: number) => void;
 };
 
 type UnifiedPanelAccountProps = {
@@ -193,7 +196,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         onOpenCommandPalette,
         isCommandPaletteOpen = false,
     } = playback;
-    const { playQueue, onPlaySong, queueScrollRef, onShuffle } = queue;
+    const { playQueue, onPlaySong, queueScrollRef, onShuffle, onRemoveSong, onMoveSongToEnd, onMoveSongToNext } = queue;
     const {
         localPlaylists,
         neteasePlaylists,
@@ -832,6 +835,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 queueScrollRef={queueScrollRef}
                                                 shouldScrollToCurrent={isOpen && currentTab === 'queue'}
                                                 onShuffle={onShuffle}
+                                                onRemoveSong={onRemoveSong}
+                                                onMoveSongToEnd={onMoveSongToEnd}
+                                                onMoveSongToNext={onMoveSongToNext}
                                                 canSaveLocalPlaylist={Boolean(isLocal && playQueue.some(song => ((song as any).isLocal === true) || (song as any).localData))}
                                                 onSaveCurrentQueueAsPlaylist={onSaveCurrentQueueAsPlaylist}
                                                 isDaylight={isDaylight}

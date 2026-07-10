@@ -1087,6 +1087,9 @@ export default {
     "waitingForPlayback": "等待 Folia 播放"
   },
   "queue": {
+    "remove": "从队列中删除",
+    "moveToEnd": "移到队尾",
+    "playNext": "下一首播放",
     "empty": "播放列表为空",
     "title": "播放队列",
     "shuffle": "打乱队列"

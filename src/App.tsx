@@ -1059,7 +1059,7 @@ export default function App() {
         setStatusMsg,
     });
 
-    const { addNavidromeSongsToQueue } = createQueueMutations({
+    const { addNavidromeSongsToQueue, removeQueueSong, moveQueueSongToEnd, moveQueueSongToNext } = createQueueMutations({
         currentSong,
         playQueue,
         setPlayQueue,
@@ -2197,6 +2197,9 @@ export default function App() {
         playSong,
         queueScrollRef,
         shuffleQueue,
+        removeQueueSong,
+        moveQueueSongToEnd,
+        moveQueueSongToNext,
         localPlaylists,
         playlists,
         saveCurrentQueueAsLocalPlaylist,
@@ -2391,6 +2394,9 @@ export default function App() {
         setTheme,
         showOpenPanelCloseButton,
         shuffleQueue,
+        removeQueueSong,
+        moveQueueSongToEnd,
+        moveQueueSongToNext,
         theme,
         themeSourceModel,
         toggleLoop,

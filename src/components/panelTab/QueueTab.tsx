@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { List, useListRef, type ListImperativeAPI } from 'react-window';
-import { Shuffle } from 'lucide-react';
+import { ListEnd, ListPlus, Shuffle, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult } from '../../types';
 import TextInputDialog from '../shared/TextInputDialog';
@@ -14,6 +14,9 @@ interface QueueTabProps {
     queueScrollRef: React.RefObject<HTMLDivElement>;
     shouldScrollToCurrent?: boolean;
     onShuffle?: () => void;
+    onRemoveSong: (index: number) => void;
+    onMoveSongToEnd: (index: number) => void;
+    onMoveSongToNext: (index: number) => void;
     canSaveLocalPlaylist?: boolean;
     onSaveCurrentQueueAsPlaylist?: (name: string) => Promise<void>;
     isDaylight?: boolean;
@@ -26,6 +29,9 @@ const QueueTab: React.FC<QueueTabProps> = ({
     queueScrollRef,
     shouldScrollToCurrent = false,
     onShuffle,
+    onRemoveSong,
+    onMoveSongToEnd,
+    onMoveSongToNext,
     canSaveLocalPlaylist = false,
     onSaveCurrentQueueAsPlaylist,
     isDaylight = false,
@@ -115,7 +121,7 @@ const QueueTab: React.FC<QueueTabProps> = ({
                 onClick={() => onPlaySong(song, playQueue)}
                 data-active={isActive}
                 {...ariaAttributes}
-                className={`flex items-center gap-3 px-2 py-1 rounded-lg cursor-pointer transition-colors
+                className={`group flex items-center gap-3 px-2 py-1 rounded-lg cursor-pointer transition-colors
                     ${isActive ? activeRowClass : hoverRowClass} ${isUnavailable ? 'opacity-55' : ''}`}
             >
                 <div className={`w-1 h-6 rounded-full ${isActive ? activeMarkerClass : 'bg-transparent'}`} />
@@ -130,13 +136,34 @@ const QueueTab: React.FC<QueueTabProps> = ({
                     </div>
                     <div className="text-[10px] opacity-40 truncate">{song.ar?.map(a => a.name).join(', ')}</div>
                 </div>
+                <div className="flex shrink-0 items-center gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
+                    {[
+                        { label: t('queue.playNext'), icon: ListPlus, action: onMoveSongToNext },
+                        { label: t('queue.moveToEnd'), icon: ListEnd, action: onMoveSongToEnd },
+                        { label: t('queue.remove'), icon: Trash2, action: onRemoveSong },
+                    ].map(({ label, icon: Icon, action }) => (
+                        <button
+                            key={label}
+                            type="button"
+                            title={label}
+                            aria-label={label}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                action(index);
+                            }}
+                            className={`rounded-md p-1.5 transition-colors ${isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'}`}
+                        >
+                            <Icon size={13} />
+                        </button>
+                    ))}
+                </div>
             </div>
         );
-    }, [playQueue, currentSong, onPlaySong, isDaylight, t]);
+    }, [playQueue, currentSong, onPlaySong, onMoveSongToNext, onMoveSongToEnd, onRemoveSong, isDaylight, t]);
 
     if (playQueue.length === 0) {
         return (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full max-h-[300px]">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full max-h-[300px] select-none">
                 <div className="flex items-center justify-center h-full text-xs opacity-40">
                     {t('queue.empty')}
                 </div>
@@ -146,7 +173,7 @@ const QueueTab: React.FC<QueueTabProps> = ({
 
     return (
         <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full max-h-[300px]">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full max-h-[300px] select-none">
                 <div className="flex items-center justify-between px-2 pb-2 shrink-0">
                     <span className="text-xs font-medium opacity-60">
                         {t('queue.title')} ({playQueue.length})

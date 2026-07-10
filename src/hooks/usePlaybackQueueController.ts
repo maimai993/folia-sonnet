@@ -834,6 +834,8 @@ export function usePlaybackQueueController({
 
         if (currentIndex >= 0 && currentIndex < playQueue.length - 1) {
             nextIndex = currentIndex + 1;
+        } else if (currentIndex < 0 && playQueue.length > 0) {
+            nextIndex = 0;
         } else if (loopMode === 'all') {
             nextIndex = 0;
         }

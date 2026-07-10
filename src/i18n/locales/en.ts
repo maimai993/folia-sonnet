@@ -1086,6 +1086,9 @@ export default {
     "waitingForPlayback": "Waiting for Folia playback"
   },
   "queue": {
+    "remove": "Remove from queue",
+    "moveToEnd": "Move to end",
+    "playNext": "Play next",
     "empty": "Queue is empty",
     "title": "Play Queue",
     "shuffle": "Shuffle Queue"

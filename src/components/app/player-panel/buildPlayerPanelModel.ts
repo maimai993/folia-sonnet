@@ -74,6 +74,9 @@ type BuildPlayerPanelModelParams = {
     playSong: LegacyUnifiedPanelProps['queue']['onPlaySong'];
     queueScrollRef: RefObject<HTMLDivElement | null>;
     shuffleQueue: LegacyUnifiedPanelProps['queue']['onShuffle'];
+    removeQueueSong: LegacyUnifiedPanelProps['queue']['onRemoveSong'];
+    moveQueueSongToEnd: LegacyUnifiedPanelProps['queue']['onMoveSongToEnd'];
+    moveQueueSongToNext: LegacyUnifiedPanelProps['queue']['onMoveSongToNext'];
     localPlaylists: LegacyUnifiedPanelProps['library']['localPlaylists'];
     playlists: LegacyUnifiedPanelProps['library']['neteasePlaylists'];
     saveCurrentQueueAsLocalPlaylist: LegacyUnifiedPanelProps['library']['onSaveCurrentQueueAsPlaylist'];
@@ -166,6 +169,9 @@ export const buildPlayerPanelModel = ({
     playSong,
     queueScrollRef,
     shuffleQueue,
+    removeQueueSong,
+    moveQueueSongToEnd,
+    moveQueueSongToNext,
     localPlaylists,
     playlists,
     saveCurrentQueueAsLocalPlaylist,
@@ -261,6 +267,9 @@ export const buildPlayerPanelModel = ({
             onPlaySong: playSong,
             queueScrollRef,
             onShuffle: shuffleQueue,
+            onRemoveSong: removeQueueSong,
+            onMoveSongToEnd: moveQueueSongToEnd,
+            onMoveSongToNext: moveQueueSongToNext,
         },
         library: {
             localPlaylists,
