@@ -1405,7 +1405,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         set({ randomVisualizerModePerSong: enable });
         notify(get, {
             type: 'info',
-            text: i18n.t(`notifications.randomVisualizerModePerSong${enable ? 'On' : 'Off'}`),
+            text: i18n.t(`status.randomVisualizerModePerSong${enable ? 'On' : 'Off'}`),
         });
     },
     handleSetClassicTuning: (patch) => {

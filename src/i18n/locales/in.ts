@@ -158,6 +158,8 @@ export default {
     "connected": "Terkoneksi",
     "connecting": "Menghubungkan",
     "disconnected": "Terputus",
+    "randomVisualizerModePerSongOn": "Animasi lirik acak untuk setiap lagu diaktifkan",
+    "randomVisualizerModePerSongOff": "Animasi lirik acak untuk setiap lagu dinonaktifkan",
   },
   "commandPalette": {
     "placeholder": "Ketik perintah atau cari...",
@@ -894,7 +896,7 @@ export default {
       },
       "randomVisualizer": {
         "title": "Animasi Lirik Acak per Lagu",
-        "description": "Otomatis memilih mode animasi lirik saat lagu berganti."
+        "description": "Aktifkan melalui palet perintah agar mode animasi lirik dipilih otomatis saat lagu berganti."
       },
       "themeJsonCopy": {
         "title": "Salin JSON Tema",

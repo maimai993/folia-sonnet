@@ -928,7 +928,7 @@ export default {
       },
       "randomVisualizer": {
         "title": "Random Lyrics Animation per Song",
-        "description": "Automatically choose a lyrics animation mode whenever the song changes."
+        "description": "Enable it from the command palette to automatically choose a lyrics animation mode whenever the song changes."
       },
       "themeJsonCopy": {
         "title": "Copy Theme JSON",

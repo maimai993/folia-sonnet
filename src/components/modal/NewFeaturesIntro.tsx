@@ -42,7 +42,7 @@ export const NewFeaturesIntro: React.FC<NewFeaturesIntroProps> = ({ isDaylight, 
                 />
             </div>
 
-            <div className="mt-5 grid grid-cols-1 gap-3 overflow-y-auto custom-scrollbar pr-2 pb-2">
+            <div className="mt-5 grid grid-cols-2 gap-3 overflow-y-auto custom-scrollbar pr-2 pb-2">
                 {NEW_FEATURES_RELEASE.features.map((feature) => (
                     <UserGuideFeatureCard
                         key={feature.id}

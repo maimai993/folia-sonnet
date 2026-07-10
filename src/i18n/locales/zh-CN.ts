@@ -929,7 +929,7 @@ export default {
       },
       "randomVisualizer": {
         "title": "每首歌随机歌词动画",
-        "description": "切歌时自动随机使用一种歌词动画模式。"
+        "description": "通过命令面板开启后，切歌时会自动随机使用一种歌词动画模式。"
       },
       "themeJsonCopy": {
         "title": "主题 JSON 复制",
