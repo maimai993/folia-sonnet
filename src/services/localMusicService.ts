@@ -13,7 +13,7 @@ import { resolveExplicitFileTimedLyricFormat, type ExplicitFileTimedLyricFormat 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
 
-const EMBEDDED_METADATA_VERSION = 2;
+const EMBEDDED_METADATA_VERSION = 3;
 
 interface ImportPreparationMetrics {
     getFileMs: number;
@@ -126,8 +126,8 @@ async function getImportDirectoryHandle(expectedRootName?: string): Promise<File
         }
 
         const permissionAwareHandle = persistedHandle as FileSystemDirectoryHandle & {
-            queryPermission: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
-            requestPermission: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+            queryPermission: (descriptor: { mode: 'read' | 'readwrite'; }) => Promise<PermissionState>;
+            requestPermission: (descriptor: { mode: 'read' | 'readwrite'; }) => Promise<PermissionState>;
         };
 
         let permission = await permissionAwareHandle.queryPermission({ mode: 'read' });
@@ -178,17 +178,14 @@ function generateId(): string {
     return `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-// Extract basic metadata from filename
-// Expected format: "Artist - Title.mp3", "Artist-Title.mp3", or "Title.mp3"
-function extractMetadataFromFilename(fileName: string): { title?: string; artist?: string; } {
+// Extract basic metadata from filename.
+// Expected format: "Artist - Title.mp3", "Artist-Title.mp3", or "Title.mp3".
+export function extractMetadataFromFilename(fileName: string): { title?: string; artist?: string; } {
     // 去掉扩展名
     let nameWithoutExt = fileName.replace(/\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i, '');
 
-    // 忽略前导数字和点
-    nameWithoutExt = nameWithoutExt.replace(/^[\d\.]+/, '');
-
-    // 再去除一开始的空格
-    nameWithoutExt = nameWithoutExt.replace(/^\s+/, '');
+    // 去掉开头的cue切分产生的序号 "01. ", "01 - ", or "1-01 " 
+    nameWithoutExt = nameWithoutExt.replace(/^\d{1,3}(?:[-.]\d{1,3})?(?:\s*[-.]\s*|\s+)/, '');
 
     // 分割艺术家和标题 - 尝试 " - " (带空格)
     let parts = nameWithoutExt.split(' - ');
@@ -506,9 +503,9 @@ async function collectImportDiffPlan(
     const changedAudioPaths = new Set<string>();
     const changedLyricBasePaths = new Set<string>();
     const changedCoverFolders = new Set<string>();
-    const lyricCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number; format?: ExplicitFileTimedLyricFormat }>();
-    const translationLyricCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number }>();
-    const coverCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number }>();
+    const lyricCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number; format?: ExplicitFileTimedLyricFormat; }>();
+    const translationLyricCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number; }>();
+    const coverCandidates = new Map<string, { handle: FileSystemFileHandle; priority: number; }>();
 
     currentFiles.forEach((file) => {
         const previousFile = previousFiles.get(file.relativePath);
@@ -668,7 +665,7 @@ async function buildImportedSong(
     coverBlobCache: Map<string, Promise<Blob | undefined>>,
     includeEmbeddedMetadata = true,
     existingSong?: LocalSong
-): Promise<{ song: LocalSong | null; metrics: ImportPreparationMetrics }> {
+): Promise<{ song: LocalSong | null; metrics: ImportPreparationMetrics; }> {
     const fileHandle = entry.handle;
     const getFileStartedAt = performance.now();
     const file = await fileHandle.getFile();
@@ -1126,7 +1123,7 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
         // If it's a new import (no expectedRootName), ensure the root folder name is unique
         if (!expectedRootName && !isRescanningExistingRoot) {
             const allSongs = await getLocalSongs();
-            
+
             // Collect existing root folder names (the part before the first '/')
             const existingRootFolders = new Set(
                 allSongs
@@ -1468,7 +1465,7 @@ async function recoverFileHandleFromPersistedDirectory(song: LocalSong): Promise
     }
 
     const permissionAwareHandle = rootDirHandle as FileSystemDirectoryHandle & {
-        queryPermission: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+        queryPermission: (descriptor: { mode: 'read' | 'readwrite'; }) => Promise<PermissionState>;
     };
     const permission = await permissionAwareHandle.queryPermission({ mode: 'read' });
     if (permission !== 'granted') {
@@ -1682,7 +1679,7 @@ export async function deleteFolderSongs(folderName: string): Promise<void> {
     const allSongs = await getLocalSongs();
 
     // Filter songs that belong to this folder OR are nested under it
-    const songsToDelete = allSongs.filter(song => 
+    const songsToDelete = allSongs.filter(song =>
         song.folderName === folderName || (song.folderName && song.folderName.startsWith(`${folderName}/`))
     );
 

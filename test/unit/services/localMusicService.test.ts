@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { importFolder, resyncAllFolders, resyncFolder } from '@/services/localMusicService';
+import { extractMetadataFromFilename, importFolder, resyncAllFolders, resyncFolder } from '@/services/localMusicService';
 import {
     deleteDirHandle,
     deleteLocalLibrarySnapshot,
@@ -166,6 +166,26 @@ const createSnapshotWithLegacyOtherLyricKind = (): LocalLibrarySnapshot => ({
 });
 
 describe('localMusicService', () => {
+    describe('extractMetadataFromFilename', () => {
+        it.each([
+            ['01. Title.wav', 'Title'],
+            ['01 - Title.wav', 'Title'],
+            ['1-01 恋せよ乙女!.wav', '恋せよ乙女!'],
+        ])('removes explicit track prefixes from %s', (fileName, title) => {
+            expect(extractMetadataFromFilename(fileName)).toEqual({ title });
+        });
+
+        it.each([
+            '2024.wav',
+            '2024 Title.wav',
+            '1234. Title.wav',
+        ])('preserves numeric titles that are not explicit track prefixes: %s', (fileName) => {
+            expect(extractMetadataFromFilename(fileName)).toEqual({
+                title: fileName.replace(/\.wav$/, ''),
+            });
+        });
+    });
+
     beforeEach(() => {
         vi.mocked(deleteDirHandle).mockReset();
         vi.mocked(deleteLocalLibrarySnapshot).mockReset();
