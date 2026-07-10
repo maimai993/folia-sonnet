@@ -4,6 +4,7 @@ import { navidromeApi, getNavidromeConfig } from '../../../services/navidromeSer
 import { buildLocalQueue, buildNavidromeQueue } from '../../../services/playbackAdapters';
 import { SubsonicSong } from '../../../types/navidrome';
 import { isBlob } from '../../../utils/blobGuards';
+import { sortLocalFolderSongs } from '../../../utils/localSongSorting';
 
 // src/components/app/home/gridViewCollectionAdapters.ts
 // Converts home-surface collections into small GridView descriptors and resolves non-Netease tracks outside GridView.
@@ -116,9 +117,10 @@ export const refreshLocalGridViewCollection = (
         return descriptor;
     }
 
-    const refreshedSongs = descriptor.isVirtual
+    const currentSongs = descriptor.isVirtual
         ? localSongs
         : localSongs.filter(song => song.folderName === descriptor.name);
+    const refreshedSongs = sortLocalFolderSongs(currentSongs);
 
     return {
         ...descriptor,

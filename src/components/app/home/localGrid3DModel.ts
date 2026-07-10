@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import { LocalLibraryGroup, LocalPlaylist, LocalSong } from '../../../types';
 import { isBlob } from '../../../utils/blobGuards';
+import { sortLocalAlbumSongs, sortLocalFolderSongs } from '../../../utils/localSongSorting';
 
 // src/components/app/home/localGrid3DModel.ts
 // Builds local-library overview groups for the desktop Grid3D surface.
@@ -57,7 +58,7 @@ export const buildLocalGrid3DGroups = (
     const folderList: LocalLibraryGroup[] = sortByName(Object.entries(folders).map(([name, songs]) => ({
         type: 'folder' as const,
         name,
-        songs,
+        songs: sortLocalFolderSongs(songs),
         coverUrl: getLocalCoverUrl(songs),
         id: `folder-${name}`,
         trackCount: songs.length,
@@ -68,7 +69,7 @@ export const buildLocalGrid3DGroups = (
         folderList.unshift({
             type: 'folder',
             name: t('localMusic.allSongs') || 'All Songs',
-            songs: localSongs,
+            songs: sortLocalFolderSongs(localSongs),
             coverUrl: getLocalCoverUrl(localSongs),
             id: 'folder-__all-songs__',
             isVirtual: true,
@@ -83,7 +84,7 @@ export const buildLocalGrid3DGroups = (
         return {
             type: 'album' as const,
             name: albumName,
-            songs,
+            songs: sortLocalAlbumSongs(songs),
             coverUrl: getLocalCoverUrl(songs),
             id: `album-${key}`,
             trackCount: songs.length,

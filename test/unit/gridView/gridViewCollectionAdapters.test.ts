@@ -6,6 +6,7 @@ import {
     resolveLocalGridViewCoverSource,
     resolveLocalGridViewTracks,
 } from '../../../src/components/app/home/gridViewCollectionAdapters';
+import { buildLocalGrid3DGroups } from '../../../src/components/app/home/localGrid3DModel';
 import type { LocalLibraryGroup, LocalSong } from '../../../src/types';
 
 // test/unit/gridView/gridViewCollectionAdapters.test.ts
@@ -94,6 +95,24 @@ describe('gridViewCollectionAdapters', () => {
 
         expect(refreshed.songIds).toEqual(['song-a', 'song-b']);
         expect(refreshed.trackCount).toBe(2);
+    });
+
+    it('keeps folder tracks in natural file-name order when GridView is opened or refreshed', () => {
+        const folderName = 'Soundtrack';
+        const songs = [
+            { ...buildLocalSong('track-04', '1-04 School Days'), fileName: '1-04 School Days.wav', folderName },
+            { ...buildLocalSong('track-10', '1-10 Fua'), fileName: '1-10 Fua.wav', folderName },
+            { ...buildLocalSong('track-02', '1-02 Title'), fileName: '1-02 Title.wav', folderName },
+            { ...buildLocalSong('track-01', '1-01 Game'), fileName: '1-01 Game.wav', folderName },
+        ];
+        const groups = buildLocalGrid3DGroups(songs, [], ((key: string) => key) as any);
+        const folder = groups.folders.find(group => group.name === folderName)!;
+        const descriptor = createLocalGridViewCollection(folder);
+
+        expect(descriptor.songIds).toEqual(['track-01', 'track-02', 'track-04', 'track-10']);
+
+        const refreshed = refreshLocalGridViewCollection(descriptor, songs);
+        expect(refreshed.songIds).toEqual(['track-01', 'track-02', 'track-04', 'track-10']);
     });
 
     it('refreshes folder descriptors without pulling nested folders into the open folder view', () => {
