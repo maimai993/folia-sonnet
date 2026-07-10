@@ -13,6 +13,10 @@ import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
 
+/**
+ * @deprecated Legacy home implementation. It will be removed when the new home surface is complete;
+ * new home work belongs in components/app/home instead.
+ */
 interface HomeProps {
     onPlaySong: (song: SongResult, playlistCtx?: SongResult[], isFmCall?: boolean) => void;
     onBackToPlayer: () => void;

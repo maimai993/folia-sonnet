@@ -6,6 +6,9 @@ import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { formatSongName } from '../utils/songNameFormatter';
 
+/**
+ * @deprecated Kept only for navigation from search results. Do not add new list-view features here.
+ */
 interface ArtistViewProps {
     artistId: number;
     onBack: () => void;

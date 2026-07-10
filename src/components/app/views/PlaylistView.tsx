@@ -1,7 +1,7 @@
 import React from 'react';
 import LegacyPlaylistView from '../../PlaylistView';
 
-// App-level wrapper for the playlist overlay view.
+// @deprecated Kept solely for search-result navigation until the legacy list view is removed.
 const PlaylistView: React.FC<React.ComponentProps<typeof LegacyPlaylistView>> = (props) => {
     return <LegacyPlaylistView {...props} />;
 };

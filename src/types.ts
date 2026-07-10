@@ -744,6 +744,9 @@ export interface LocalSong {
   title?: string;
   artist?: string;
   album?: string;
+  trackNumber?: number;
+  discNumber?: number;
+  embeddedMetadataVersion?: number;
 
   // Embedded metadata from file tags
   embeddedTitle?: string;

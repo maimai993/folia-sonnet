@@ -13,6 +13,8 @@ import { resolveExplicitFileTimedLyricFormat, type ExplicitFileTimedLyricFormat 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
 
+const EMBEDDED_METADATA_VERSION = 2;
+
 interface ImportPreparationMetrics {
     getFileMs: number;
     lyricReadMs: number;
@@ -624,7 +626,11 @@ async function collectImportDiffPlan(
         const fileHandle = await resolveFileHandleFromDirHandle(dirHandle, relativePathFromRoot);
         const existingSong = existingSongsByPath.get(snapshotFile.relativePath);
 
-        if (changedAudioPaths.has(snapshotFile.relativePath) || !existingSong) {
+        if (
+            changedAudioPaths.has(snapshotFile.relativePath)
+            || !existingSong
+            || existingSong.embeddedMetadataVersion !== EMBEDDED_METADATA_VERSION
+        ) {
             changedEntries.push({
                 handle: fileHandle,
                 folderName,
@@ -768,6 +774,8 @@ async function buildImportedSong(
         title: embeddedMetadata.title || metadata.title,
         artist: embeddedMetadata.artist || metadata.artist,
         album: embeddedMetadata.album,
+        trackNumber: embeddedMetadata.trackNumber,
+        discNumber: embeddedMetadata.discNumber,
         embeddedTitle: embeddedMetadata.title,
         embeddedArtist: embeddedMetadata.artist,
         embeddedAlbum: embeddedMetadata.album,
@@ -834,6 +842,9 @@ async function hydrateSongMetadata(song: LocalSong): Promise<LocalSong> {
         song.title = embeddedMetadata.title || song.title;
         song.artist = embeddedMetadata.artist || song.artist;
         song.album = embeddedMetadata.album || song.album;
+        song.trackNumber = embeddedMetadata.trackNumber;
+        song.discNumber = embeddedMetadata.discNumber;
+        song.embeddedMetadataVersion = EMBEDDED_METADATA_VERSION;
         song.embeddedTitle = embeddedMetadata.title;
         song.embeddedArtist = embeddedMetadata.artist;
         song.embeddedAlbum = embeddedMetadata.album;

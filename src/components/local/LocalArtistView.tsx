@@ -4,6 +4,10 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { LocalSong } from '../../types';
 
+/**
+ * @deprecated Legacy local artist list view. It will be removed with the legacy home;
+ * new local artist detail work belongs in the GridView flow.
+ */
 interface LocalArtistViewProps {
     artistName: string;
     songs: LocalSong[];

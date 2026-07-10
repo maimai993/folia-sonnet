@@ -6,6 +6,10 @@ import { motion } from 'framer-motion';
 import DeleteFolderConfirmModal from '../modal/DeleteFolderConfirmModal';
 import { removeSongsFromLocalPlaylist } from '../../services/localPlaylistService';
 
+/**
+ * @deprecated Legacy local list view. It will be removed with the legacy home;
+ * new local collection detail work belongs in the GridView flow.
+ */
 interface LocalPlaylistViewProps {
     title: string;
     coverUrl?: string;

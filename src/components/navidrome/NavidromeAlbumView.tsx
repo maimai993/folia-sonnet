@@ -8,6 +8,10 @@ import { Theme } from '../../types';
 import PlaylistSelectionDialog from '../shared/PlaylistSelectionDialog';
 import TextInputDialog from '../shared/TextInputDialog';
 
+/**
+ * @deprecated Legacy Navidrome album list view. It will be removed with the legacy home;
+ * new Navidrome collection detail work belongs in the GridView flow.
+ */
 interface NavidromeAlbumViewProps {
     album: SubsonicAlbum;
     config: NavidromeConfig;

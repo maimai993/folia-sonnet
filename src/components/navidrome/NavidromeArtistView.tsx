@@ -8,6 +8,10 @@ import { Theme } from '../../types';
 import NavidromeCollectionView from './NavidromeCollectionView';
 import { createCoverPlaceholder } from '../../utils/coverPlaceholders';
 
+/**
+ * @deprecated Legacy Navidrome artist list view. It will be removed with the legacy home;
+ * new Navidrome artist detail work belongs in the GridView flow.
+ */
 interface NavidromeArtistViewProps {
     artist: SubsonicArtist;
     config: NavidromeConfig;

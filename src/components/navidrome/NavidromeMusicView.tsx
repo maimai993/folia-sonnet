@@ -20,6 +20,10 @@ import { navidromeApi, getNavidromeConfig } from '../../services/navidromeServic
 import { Theme } from '../../types';
 import { createCoverPlaceholder, pickRandomSongCoverUrl } from '../../utils/coverPlaceholders';
 
+/**
+ * @deprecated Legacy Navidrome library surface. It will be removed with the legacy home;
+ * new Navidrome navigation belongs in the GridView flow.
+ */
 interface NavidromeMusicViewProps {
     onPlaySong: (song: NavidromeSong, queue?: NavidromeSong[]) => void;
     onAddSongsToQueue?: (songs: NavidromeSong[]) => void;

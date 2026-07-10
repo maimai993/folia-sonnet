@@ -15,6 +15,10 @@ import { createCoverPlaceholder } from '../../utils/coverPlaceholders';
 import PlaylistSelectionDialog from '../shared/PlaylistSelectionDialog';
 import TextInputDialog from '../shared/TextInputDialog';
 
+/**
+ * @deprecated Legacy Navidrome collection list view. It will be removed with the legacy home;
+ * new Navidrome collection detail work belongs in the GridView flow.
+ */
 interface NavidromeCollectionViewProps {
     title: string;
     subtitle?: string;

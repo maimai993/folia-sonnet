@@ -10,7 +10,12 @@ import Carousel3D from './Carousel3D';
 import LocalArtistView from './local/LocalArtistView';
 import { deleteLocalPlaylist, updateLocalPlaylist } from '../services/localPlaylistService';
 import { isBlob } from '../utils/blobGuards';
+import { sortLocalAlbumSongs, sortLocalFolderSongs } from '../utils/localSongSorting';
 
+/**
+ * @deprecated Legacy local-library surface. It will be removed with the legacy home;
+ * new local-library navigation belongs in the GridView flow.
+ */
 interface LocalMusicViewProps {
     localSongs: LocalSong[];
     localPlaylists: LocalPlaylist[];
@@ -204,7 +209,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             return {
                 id,
                 name,
-                songs,
+                songs: sortLocalFolderSongs(songs),
                 type: 'folder' as const,
                 coverUrl: undefined,
                 trackCount: songs.length,
@@ -218,7 +223,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             folderList.unshift({
                 id: allSongsId,
                 name: resolvedAllSongsLabel,
-                songs: localSongs,
+                songs: sortLocalFolderSongs(localSongs),
                 type: 'folder' as const,
                 coverUrl: undefined,
                 trackCount: localSongs.length,
@@ -238,7 +243,7 @@ const LocalMusicView: React.FC<LocalMusicViewProps> = ({
             return {
                 id,
                 name,
-                songs,
+                songs: sortLocalAlbumSongs(songs),
                 type: 'album' as const,
                 coverUrl: undefined,
                 trackCount: songs.length,

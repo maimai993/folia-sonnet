@@ -54,26 +54,25 @@ src/
   首页 app-level 入口。负责消费 `buildHomeModel.ts` 生成的模型，并转接到 legacy `Home.tsx`。
 
 - `components/Home.tsx`
-  首页 legacy 实现。包含搜索、网易云入口、本地音乐入口、Navidrome 入口、帮助/设置弹窗。
+  首页 legacy 实现，即将移除；新首页功能不要继续放入此处。
 
 - `components/app/views/*`
-  由 App 顶层 overlay 栈直接调度的详情页包装入口。
-  当前用于 `PlaylistView`、`AlbumView`、`ArtistView`。
+  旧列表详情页包装入口，仅保留给搜索结果跳转，随旧列表视图一起移除。
 
 - `components/PlaylistView.tsx` / `AlbumView.tsx` / `ArtistView.tsx`
-  网易云详情页 legacy 实现。
+  网易云列表式详情 legacy 实现，仅保留给搜索结果跳转，计划移除。
 
 - `components/LocalMusicView.tsx`
-  本地音乐总览页。负责文件夹/专辑/艺人/歌单视图切换和导入入口。
+  本地音乐 legacy 总览页，随旧首页移除；新本地库导航走 GridView。
 
 - `components/local/LocalPlaylistView.tsx`
-  本地文件夹或本地歌单详情列表。
+  本地文件夹或歌单 legacy 列表详情，计划移除；新详情功能走 GridView。
 
 - `components/navidrome/NavidromeMusicView.tsx`
-  Navidrome 总览页。
+  Navidrome legacy 总览页，随旧首页移除；新导航走 GridView。
 
 - `components/navidrome/NavidromeAlbumView.tsx`
-  Navidrome 专辑详情。
+  Navidrome legacy 专辑列表详情，计划移除；新详情功能走 GridView。
 
 - `components/app/PlayerPanel.tsx`
   播放器右侧面板 app-level 入口。负责消费 `buildPlayerPanelModel.ts` 生成的模型，并转接到 legacy `UnifiedPanel.tsx`。
