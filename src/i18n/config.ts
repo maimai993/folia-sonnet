@@ -37,7 +37,7 @@ const normalizeSupportedLanguage = (value: string | null | undefined): Exclude<A
     return 'en';
   }
 
-  if (value === 'in' || value === 'id' || value.toLowerCase().startsWith('in')) {
+  if (value === 'in' || value.toLowerCase().startsWith('id')) {
     return 'in';
   }
 
@@ -129,6 +129,9 @@ export const applyAppLanguagePreference = async (
 
   const nextLanguage = preference === 'system' ? detectSystemLanguage() : preference;
   await i18n.changeLanguage(nextLanguage);
+  if (typeof window !== 'undefined') {
+    await window.electron?.setAppLocale?.(nextLanguage);
+  }
   return nextLanguage;
 };
 

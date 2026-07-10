@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electron', {
     getSettings: () => ipcRenderer.invoke('get-settings'),
     saveSettings: (key, value) => ipcRenderer.invoke('save-settings', key, value),
+    setAppLocale: (localeKey) => ipcRenderer.invoke('set-app-locale', localeKey),
     getCacheDirectory: () => ipcRenderer.invoke('get-cache-directory'),
     chooseCacheDirectory: () => ipcRenderer.invoke('choose-cache-directory'),
     resetCacheDirectory: () => ipcRenderer.invoke('reset-cache-directory'),

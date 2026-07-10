@@ -73,11 +73,22 @@ const mainLocale = {
     dialogChooseOther: 'Choose Another Folder',
     dialogCancel: 'Cancel',
   },
+  in: {
+    trayShowHide: 'Tampilkan/Sembunyikan Jendela Utama',
+    trayOpenRemote: 'Buka Jendela Remote',
+    trayToggleClickThrough: 'Alihkan Click-Through',
+    trayHideTaskbar: 'Sembunyikan Ikon Taskbar',
+    trayQuit: 'Keluar',
+    dialogImportTitle: 'Tidak dapat mengimpor folder ini',
+    dialogImportMessage: 'Folder sistem atau folder pengguna umum tidak dapat diimpor langsung.\nPilih folder khusus untuk menyimpan musik.',
+    dialogChooseOther: 'Pilih Folder Lain',
+    dialogCancel: 'Batal',
+  },
 };
 
 function getMainLocale() {
   const stored = store.get(APP_LOCALE_KEY);
-  if (stored === 'zh-CN' || stored === 'en') {
+  if (stored === 'zh-CN' || stored === 'en' || stored === 'in') {
     return mainLocale[stored];
   }
   return mainLocale.en;

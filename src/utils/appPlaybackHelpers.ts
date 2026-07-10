@@ -36,11 +36,7 @@ export const formatTime = (time: number) => {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-export const replayGainModeLabels: Record<ReplayGainMode, string> = {
-    off: i18n.t('replayGain.off'),
-    track: i18n.t('replayGain.track'),
-    album: i18n.t('replayGain.album'),
-};
+export const getReplayGainModeLabel = (mode: ReplayGainMode): string => i18n.t(`replayGain.${mode}`);
 
 export const hasRenderableLyrics = (lyricData: LyricData | null | undefined): lyricData is LyricData => {
     if (!lyricData?.lines?.length) {
