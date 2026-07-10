@@ -878,13 +878,33 @@ export default {
     "nowPlayingDisconnectedStatus": "Now Playing tidak terhubung",
     "nowPlayingStatusLabel": "Status koneksi: {{status}}",
     "nowPlayingStatusHint": "Terhubung ke ws://localhost:9863/api/ws/lyric. Mulai layanan now-playing terlebih dahulu.",
-    "newFeatureThemeQuickEdit": "Edit Tema Cepat",
-    "newFeatureThemeQuickEditDesc": "Klik nama Tema AI / Tema Kustom di panel kontrol untuk memilih warna dari sampul atau palet yang direkomendasikan AI.",
-    "newFeatureManualAiTheme": "Impor Tema AI Manual",
-    "newFeatureManualAiThemeDesc": "Saat kunci API tidak dikonfigurasi, salin perintah dari editor cepat dan tempel ke model AI mana pun, lalu impor hasilnya sebagai tema AI kustom.",
-    "newFeatureReleaseNotes": "Berikut adalah fitur dan peningkatan baru di versi ini.",
     "lyricFilterRegex": "Filter Lirik Regex",
     "lyricFilterRegexDesc": "Konfigurasikan aturan filter baris demi baris untuk teks lirik yang diurai."
+  },
+  "releaseNotes": {
+    "v0_5_25": {
+      "intro": "Berikut adalah fitur dan peningkatan baru di versi ini.",
+      "cloudSync": {
+        "title": "Sinkronisasi Cloud",
+        "description": "Sinkronkan pengaturan visual dan tema AI melalui Cloudflare D1 Worker atau layanan sinkronisasi yang Anda kelola, serta impor dan ekspor pustaka."
+      },
+      "queueManagement": {
+        "title": "Pengelolaan Antrean",
+        "description": "Item antrean kini dapat diputar berikutnya, dipindahkan ke akhir, atau dihapus."
+      },
+      "randomVisualizer": {
+        "title": "Animasi Lirik Acak per Lagu",
+        "description": "Otomatis memilih mode animasi lirik saat lagu berganti."
+      },
+      "themeJsonCopy": {
+        "title": "Salin JSON Tema",
+        "description": "Salin tema AI atau tema kustom sebagai JSON langsung dari editor tema cepat."
+      },
+      "indonesianLanguage": {
+        "title": "Antarmuka Bahasa Indonesia",
+        "description": "Folia kini dapat ditampilkan dalam Bahasa Indonesia."
+      }
+    }
   },
   "export": {
     "noRecordableContent": "No recordable playback content.",

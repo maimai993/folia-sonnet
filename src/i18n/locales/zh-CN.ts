@@ -913,13 +913,33 @@ export default {
     "nowPlayingDisconnectedStatus": "Now Playing 未连接",
     "nowPlayingStatusLabel": "连接状态：{{status}}",
     "nowPlayingStatusHint": "固定连接 ws://localhost:9863/api/ws/lyric，请先在本机启动 now-playing 服务。",
-    "newFeatureThemeQuickEdit": "主题快速编辑",
-    "newFeatureThemeQuickEditDesc": "点击控制面板中的 AI主题/自定义主题 名称，可从封面取色和 AI 推荐色中选择心仪的颜色搭配。",
-    "newFeatureManualAiTheme": "手动导入 AI 主题",
-    "newFeatureManualAiThemeDesc": "未配置 API 时，也可在快速编辑面板中一键复制提示词并前往任意大模型对话，将结果手动导入为专属 AI 主题。",
-    "newFeatureReleaseNotes": "以下是新版本功能与改进",
     "lyricFilterRegex": "歌词过滤正则",
     "lyricFilterRegexDesc": "为歌词解析后的完整文本列表配置逐行过滤规则。",
+  },
+  "releaseNotes": {
+    "v0_5_25": {
+      "intro": "以下是新版本功能与改进",
+      "cloudSync": {
+        "title": "云端同步",
+        "description": "支持通过自建 Cloudflare D1 Worker 或同步服务，同步视觉设置与 AI 主题，并可导入、导出同步库。"
+      },
+      "queueManagement": {
+        "title": "播放队列管理",
+        "description": "队列歌曲支持“下一首播放”“移到末尾”和“删除”。"
+      },
+      "randomVisualizer": {
+        "title": "每首歌随机歌词动画",
+        "description": "切歌时自动随机使用一种歌词动画模式。"
+      },
+      "themeJsonCopy": {
+        "title": "主题 JSON 复制",
+        "description": "可从主题快速编辑面板直接复制 AI 或自定义主题的 JSON。"
+      },
+      "indonesianLanguage": {
+        "title": "新增印度尼西亚语界面",
+        "description": "现在可以将 Folia 的界面语言切换为印度尼西亚语。"
+      }
+    }
   },
   "export": {
     "noRecordableContent": "当前没有可录制的播放内容。",

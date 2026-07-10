@@ -1,8 +1,9 @@
 import React from 'react';
-import { MousePointerClick, Sliders, Sparkles, Type } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { UserGuideTipCard } from './UserGuideTipCard';
 import { UserGuideFeatureCard } from './UserGuideFeatureCard';
+import { NEW_FEATURES_RELEASE } from './newFeaturesRelease';
 
 export type NewFeaturesIntroProps = {
     isDaylight: boolean;
@@ -37,32 +38,21 @@ export const NewFeaturesIntro: React.FC<NewFeaturesIntroProps> = ({ isDaylight, 
                     icon={Sparkles}
                     iconClassName={isDaylight ? 'text-blue-500' : 'text-blue-400'}
                     title={t('userGuide.title', '欢迎使用 Folia')}
-                    description={t('options.newFeatureReleaseNotes')}
+                    description={t(`${NEW_FEATURES_RELEASE.i18nKey}.intro`)}
                 />
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-3 overflow-y-auto custom-scrollbar pr-2 pb-2">
-                <UserGuideFeatureCard
-                    {...featureCardClasses}
-                    icon={Sliders}
-                    iconClassName={isDaylight ? 'text-indigo-500' : 'text-indigo-400'}
-                    title="全新动效与背景"
-                    description="新增了回环动效以及星空背景，带来更沉浸的视觉体验。"
-                />
-                <UserGuideFeatureCard
-                    {...featureCardClasses}
-                    icon={MousePointerClick}
-                    iconClassName={isDaylight ? 'text-rose-500' : 'text-rose-400'}
-                    title="主题快速编辑"
-                    description="点击控制面板中的 AI主题/自定义主题 名称，可从封面取色和 AI 推荐色中选择心仪的颜色搭配。"
-                />
-                <UserGuideFeatureCard
-                    {...featureCardClasses}
-                    icon={Type}
-                    iconClassName={isDaylight ? 'text-purple-500' : 'text-purple-400'}
-                    title="手动导入 AI 主题"
-                    description="未配置 API 时，也可在快速编辑面板中一键复制提示词并前往任意大模型对话，将结果手动导入为专属 AI 主题。"
-                />
+                {NEW_FEATURES_RELEASE.features.map((feature) => (
+                    <UserGuideFeatureCard
+                        key={feature.id}
+                        {...featureCardClasses}
+                        icon={feature.icon}
+                        iconClassName={isDaylight ? feature.daylightIconClassName : feature.darkIconClassName}
+                        title={t(`${NEW_FEATURES_RELEASE.i18nKey}.${feature.id}.title`)}
+                        description={t(`${NEW_FEATURES_RELEASE.i18nKey}.${feature.id}.description`)}
+                    />
+                ))}
             </div>
         </div>
     );

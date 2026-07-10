@@ -909,16 +909,36 @@ export default {
     "nowPlayingDisconnectedStatus": "Now Playing not connected",
     "nowPlayingStatusLabel": "Connection status: {{status}}",
     "nowPlayingStatusHint": "Connects to ws://localhost:9863/api/ws/lyric. Start the now-playing service first.",
-    "newFeatureThemeQuickEdit": "Quick Theme Editor",
-    "newFeatureThemeQuickEditDesc": "Click on AI Theme / Custom Theme name in the controls panel to pick colors from the cover or AI-recommended palettes.",
-    "newFeatureManualAiTheme": "Manual AI Theme Import",
-    "newFeatureManualAiThemeDesc": "When no API key is configured, copy the prompt from the quick editor and paste it into any AI model, then import the result as a custom AI theme.",
-    "newFeatureReleaseNotes": "Here are the new features and improvements in this version.",
     "lyricFilterRegex": "Lyric Filter Regex",
     "lyricFilterRegexDesc": "Configure line-by-line filtering rules for the parsed lyrics text.",
     "copyStageAddress": "Copy Address",
     "stageAddressCopied": "Copied",
     "visualizerMode": "Mode",
+  },
+  "releaseNotes": {
+    "v0_5_25": {
+      "intro": "Here are the new features and improvements in this version.",
+      "cloudSync": {
+        "title": "Cloud Sync",
+        "description": "Sync visual settings and AI themes through your Cloudflare D1 Worker or self-hosted sync service, with library import and export."
+      },
+      "queueManagement": {
+        "title": "Queue Management",
+        "description": "Queue items can now play next, move to the end, or be removed."
+      },
+      "randomVisualizer": {
+        "title": "Random Lyrics Animation per Song",
+        "description": "Automatically choose a lyrics animation mode whenever the song changes."
+      },
+      "themeJsonCopy": {
+        "title": "Copy Theme JSON",
+        "description": "Copy an AI or custom theme as JSON directly from the quick theme editor."
+      },
+      "indonesianLanguage": {
+        "title": "Indonesian Interface",
+        "description": "Folia can now be displayed in Bahasa Indonesia."
+      }
+    }
   },
   "export": {
     "noRecordableContent": "No recordable playback content.",
