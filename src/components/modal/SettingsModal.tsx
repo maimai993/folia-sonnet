@@ -103,7 +103,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     customTheme,
 }) => {
     const { t } = useTranslation();
-    const isMouseDownOnOverlayRef = useRef(false);
+    // Track the press origin per overlay so nested subview backdrops do not overwrite each other.
+    const overlayMouseDownTargetsRef = useRef(new WeakSet<HTMLDivElement>());
     const {
         useCoverColorBg,
         staticMode,
@@ -747,12 +748,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleOverlayMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-        isMouseDownOnOverlayRef.current = event.target === event.currentTarget;
+        if (event.target === event.currentTarget) {
+            overlayMouseDownTargetsRef.current.add(event.currentTarget);
+            return;
+        }
+
+        overlayMouseDownTargetsRef.current.delete(event.currentTarget);
     };
 
     // Close only the active overlay layer when its own backdrop is clicked.
     const handleBackdropClose = (event: React.MouseEvent<HTMLDivElement>, onCloseOverlay: () => void) => {
-        if (event.target !== event.currentTarget || !isMouseDownOnOverlayRef.current) {
+        const wasMouseDownOnOverlay = overlayMouseDownTargetsRef.current.has(event.currentTarget);
+        overlayMouseDownTargetsRef.current.delete(event.currentTarget);
+
+        if (event.target !== event.currentTarget || !wasMouseDownOnOverlay) {
             return;
         }
 
