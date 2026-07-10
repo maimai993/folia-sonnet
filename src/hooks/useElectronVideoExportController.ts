@@ -20,6 +20,7 @@ import {
 // src/hooks/useElectronVideoExportController.ts
 // Records the real player window so audio.currentTime remains the single animation clock.
 type UseElectronVideoExportControllerOptions = {
+    t: (key: string) => string;
     isElectronWindow: boolean;
     audioRef: RefObject<HTMLAudioElement | null>;
     currentTime: MotionValue<number>;
@@ -37,6 +38,7 @@ const COUNTDOWN_SECONDS = 3;
 const toArrayBuffer = (blob: Blob) => blob.arrayBuffer();
 
 export const useElectronVideoExportController = ({
+    t,
     isElectronWindow,
     audioRef,
     currentTime,
@@ -72,7 +74,7 @@ export const useElectronVideoExportController = ({
                 ...idleVideoExportState(),
                 status: 'error',
                 presetId: preset.id,
-                error: '当前没有可录制的播放内容。',
+                error: t('export.noRecordableContent'),
             });
             return;
         }
@@ -83,7 +85,7 @@ export const useElectronVideoExportController = ({
                 ...idleVideoExportState(),
                 status: 'error',
                 presetId: preset.id,
-                error: '当前运行环境不支持窗口录制。',
+                error: t('export.windowRecordingUnsupported'),
             });
             return;
         }
@@ -103,7 +105,7 @@ export const useElectronVideoExportController = ({
         try {
             const exportFormat = getSupportedVideoExportFormat();
             if (!exportFormat) {
-                throw new Error('当前系统不支持可用的视频导出编码。');
+                throw new Error(t('export.noExportCodec'));
             }
 
             const saveResult = await electron.chooseVideoExportPath(
@@ -150,7 +152,7 @@ export const useElectronVideoExportController = ({
 
             const prepared = await electron.prepareVideoExportWindow({ width: preset.width, height: preset.height });
             if (!prepared) {
-                throw new Error('无法将主播放器窗口调整到导出分辨率。');
+                throw new Error(t('export.windowResizeFailed'));
             }
             await wait(300);
             videoStream = await getMainWindowVideoCaptureStream(preset);
@@ -168,7 +170,7 @@ export const useElectronVideoExportController = ({
                 }));
                 await wait(1000);
                 if (cancelRequestedRef.current) {
-                    throw new Error('录制已取消。');
+                    throw new Error(t('export.recordingCancelled'));
                 }
             }
 
@@ -181,7 +183,7 @@ export const useElectronVideoExportController = ({
                         chunks.push(event.data);
                     }
                 };
-                recorder.onerror = () => reject(new Error('录制器发生未知错误。'));
+                recorder.onerror = () => reject(new Error(t('export.recorderUnknownError')));
                 recorder.onstop = () => resolve();
             });
             const requestStop = () => {

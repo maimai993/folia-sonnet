@@ -467,7 +467,7 @@ export function usePlaybackQueueController({
             }
 
             if (!localData) {
-                setStatusMsg({ type: 'error', text: '无法播放本地文件 (文件可能已移动或权限丢失)' });
+                setStatusMsg({ type: 'error', text: t('status.localFilePlaybackError') });
                 return;
             }
 

@@ -71,17 +71,10 @@ type IntegrationSettingsSubviewProps = {
     stage: IntegrationStageModel;
 };
 
-const maskStageToken = (token: string | null | undefined) => {
-    if (!token) return '未生成';
+const maskStageToken = (token: string | null | undefined, t: (key: string) => string) => {
+    if (!token) return t('options.stageTokenMissing');
     if (token.length <= 10) return token;
     return `${token.slice(0, 6)}...${token.slice(-4)}`;
-};
-
-const getNowPlayingStatusLabel = (status: NowPlayingConnectionStatus) => {
-    if (status === 'connected') return '已连接';
-    if (status === 'connecting') return '连接中';
-    if (status === 'error') return '连接失败';
-    return '未启用';
 };
 
 const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
@@ -140,8 +133,15 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         status: discordPresenceStatus,
     } = discord;
     const { t } = useTranslation();
+    const getNowPlayingStatusLabel = (status: NowPlayingConnectionStatus) => {
+        if (status === 'connected') return t('status.connected');
+        if (status === 'connecting') return t('status.connecting');
+        if (status === 'error') return t('status.disconnected');
+        return t('options.updateCheckDisabled');
+    };
     const [obsAddressCopied, setObsAddressCopied] = useState(false);
     const nowPlayingStatusLabel = getNowPlayingStatusLabel(nowPlayingConnectionStatus);
+    const maskStageTokenWithT = (token: string | null | undefined) => maskStageToken(token, t);
     const discordPresenceStatusLabel = (() => {
         if (!discordPresenceStatus?.enabled) return t('options.discordPresenceDisabled') || 'Disabled';
         if (discordPresenceStatus.connected) return t('options.discordPresenceConnected') || 'Connected';
@@ -280,16 +280,16 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
             {isElectron && stageStatus && (
                 <section>
                     <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                        <Server size={14} /> 舞台模式
+                        <Server size={14} /> {t('options.stageMode')}
                     </h3>
                     <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                         <div className="flex items-center justify-between gap-4">
                             <div className="space-y-1">
                                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                    启用 Stage API
+                                    {t('options.enableStageMode')}
                                 </div>
                                 <div className="text-[10px] opacity-40 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
-                                    开启后会暴露本机 HTTP 接口，供 Stage 客户端读取当前播放和歌词状态。
+                                    {t('options.enableStageModeDescElectron')}
                                 </div>
                             </div>
                             <button
@@ -334,10 +334,10 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                             Now Playing
                                         </div>
                                         <div className="text-sm" style={{ color: 'var(--text-primary)' }}>
-                                            连接状态：{nowPlayingStatusLabel}
+                                            {t("options.nowPlayingStatusLabel", { status: nowPlayingStatusLabel })}
                                         </div>
                                         <div className="text-[11px] opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                            固定连接 `ws://localhost:9863/api/ws/lyric`，请先在本机启动 now-playing 服务。
+                                            {t('options.nowPlayingFixedConnectionDesc')}
                                         </div>
                                     </div>
                                 ) : (
@@ -372,7 +372,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                                     {t('options.stageToken') || 'Bearer Token'}
                                                 </div>
                                                 <div className="text-sm break-all" style={{ color: 'var(--text-primary)' }}>
-                                                    {maskStageToken(stageStatus.token)}
+                                                    {maskStageTokenWithT(stageStatus.token)}
                                                 </div>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
@@ -416,16 +416,16 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
             {!isElectron && (
                 <section>
                     <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                        <Server size={14} /> 舞台
+                        <Server size={14} /> {t('options.stageMode')}
                     </h3>
                     <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                         <div className="flex items-center justify-between gap-4">
                             <div className="space-y-1">
                                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                    启用 Now Playing
+                                    {t('options.enableNowPlaying')}
                                 </div>
                                 <div className="text-[10px] opacity-40 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
-                                    开启后首页显示舞台入口，并通过本机 localhost 连接 now-playing 服务。
+                                    {t('options.enableNowPlayingDesc')}
                                 </div>
                             </div>
                             <button
@@ -442,7 +442,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                     Now Playing
                                 </div>
                                 <div className="text-sm" style={{ color: 'var(--text-primary)' }}>
-                                    连接状态：{nowPlayingStatusLabel}
+                                    {t("options.nowPlayingStatusLabel", { status: nowPlayingStatusLabel })}
                                 </div>
                             </div>
                         )}

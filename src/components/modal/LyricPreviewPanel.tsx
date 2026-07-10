@@ -134,7 +134,7 @@ export const LyricPreviewPanel: React.FC<LyricPreviewPanelProps> = ({
                             {
                                 startTime: 0,
                                 endTime: 999,
-                                fullText: t('status.bestLyricsPureMusic') || '纯音乐，无需匹配歌词',
+                                fullText: t('status.bestLyricsPureMusic'),
                                 words: []
                             }
                         ]

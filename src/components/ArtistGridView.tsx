@@ -383,7 +383,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
                 const albumMap = new Map<string, { id: string, name: string, picUrl?: string, publishTime?: number; }>();
                 artistSongs.forEach(song => {
-                    const albName = song.album || '未知专辑';
+                    const albName = song.album || t('localMusic.unknownAlbum');
                     if (!albumMap.has(albName)) {
                         let coverUrl = song.matchedCoverUrl || undefined;
                         if (!coverUrl) {
@@ -404,7 +404,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 setArtistInfo({
                     name: artistName,
                     cover: albumsList[0]?.picUrl || undefined,
-                    briefDesc: `本地歌手: ${artistName}`,
+                    briefDesc: t('artistGrid.localArtist', { artistName }),
                     musicSize: artistSongs.length,
                     albumSize: albumsList.length,
                 });
@@ -860,7 +860,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
                             <div className="flex-1 overflow-hidden mt-3 mb-2">
                                 <p className="text-xs opacity-65 leading-relaxed break-words whitespace-pre-wrap">
-                                    {item.description || '暂无详细介绍'}
+                                    {item.description || t('options.noDescription')}
                                 </p>
                             </div>
 
@@ -1024,7 +1024,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                                 zIndex: 80,
                             }}
                         >
-                            时下流行 / POPULAR
+                            {t('artistGrid.popularSongs')}
                         </div>
                         <div
                             className="absolute text-2xl md:text-3xl font-extrabold tracking-[0.25em] select-none pointer-events-none opacity-[0.06] transition-opacity duration-300 font-serif"
@@ -1037,7 +1037,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                                 zIndex: 80,
                             }}
                         >
-                            歌手专辑 / ALBUMS
+                            {t('artistGrid.artistAlbums')}
                         </div>
 
                         {renderedCards}

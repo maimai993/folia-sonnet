@@ -93,10 +93,10 @@ const UrlBackgroundSettingsCard: React.FC<UrlBackgroundSettingsCardProps> = ({
         <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor }}>
             <div className="space-y-1">
                 <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
-                    {t('options.urlBackgroundSettings') || 'URL 背景'}
+                    {t('options.urlBackgroundSettings')}
                 </div>
                 <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                    {t('options.urlBackgroundSettingsDesc') || '将网页显示为播放页背景。'}
+                    {t('options.urlBackgroundSettingsDesc')}
                 </div>
             </div>
 
@@ -132,7 +132,7 @@ const UrlBackgroundSettingsCard: React.FC<UrlBackgroundSettingsCardProps> = ({
                                         type="text"
                                         value={draftNote}
                                         onChange={e => setDraftNote(e.target.value)}
-                                        placeholder={t('options.urlBackgroundNotePlaceholder') || '备注'}
+                                        placeholder={t('options.urlBackgroundNotePlaceholder')}
                                         className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
                                         style={{
                                             backgroundColor: inputBg,
@@ -219,7 +219,7 @@ const UrlBackgroundSettingsCard: React.FC<UrlBackgroundSettingsCardProps> = ({
                         type="text"
                         value={draftNote}
                         onChange={e => setDraftNote(e.target.value)}
-                        placeholder={t('options.urlBackgroundNotePlaceholder') || '备注'}
+                        placeholder={t('options.urlBackgroundNotePlaceholder')}
                         className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
                         style={{
                             backgroundColor: inputBg,
@@ -259,7 +259,7 @@ const UrlBackgroundSettingsCard: React.FC<UrlBackgroundSettingsCardProps> = ({
                     style={{ borderColor, color: theme.primaryColor }}
                 >
                     <Plus size={16} />
-                    {t('options.urlBackgroundAdd') || '添加 URL'}
+                    {t('options.urlBackgroundAdd')}
                 </button>
             )}
 
@@ -267,7 +267,7 @@ const UrlBackgroundSettingsCard: React.FC<UrlBackgroundSettingsCardProps> = ({
                 <div className="flex flex-col items-center gap-2 py-3 opacity-50">
                     <Globe size={24} style={{ color: theme.secondaryColor }} />
                     <div className="text-xs" style={{ color: theme.secondaryColor }}>
-                        {t('options.urlBackgroundEmpty') || '暂无 URL，点击上方按钮添加'}
+                        {t('options.urlBackgroundEmpty')}
                     </div>
                 </div>
             )}

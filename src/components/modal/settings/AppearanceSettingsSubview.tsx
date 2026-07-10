@@ -527,7 +527,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             await navigator.clipboard.writeText(code);
             setCopiedType('shortcode');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.({ type: 'success', text: t('status.copied') || '已复制' });
+            store.statusSetter?.({ type: 'success', text: t('status.copied') });
         } catch (err) {
             console.error('Failed to copy shortcode:', err);
         }
@@ -540,7 +540,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             await navigator.clipboard.writeText(code);
             setCopiedType('json');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.({ type: 'success', text: t('status.copied') || '已复制' });
+            store.statusSetter?.({ type: 'success', text: t('status.copied') });
         } catch (err) {
             console.error('Failed to copy JSON:', err);
         }
@@ -663,11 +663,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 onToggleSongThemeAutoGenerate(Boolean(config.songThemeAutoGenerateEnabled));
             }
 
-            store.statusSetter?.({ type: 'success', text: t('options.importSuccess') || '配置导入成功！' });
+            store.statusSetter?.({ type: 'success', text: t('options.importSuccess') });
             setImportText('');
         } catch (err) {
             console.error('Import settings failed:', err);
-            store.statusSetter?.({ type: 'error', text: t('options.importFailed') || '配置导入失败，请检查格式是否正确。' });
+            store.statusSetter?.({ type: 'error', text: t('options.importFailed') });
         }
     };
 
@@ -676,20 +676,20 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             {/* Section 1: Theme presets and edit options */}
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Palette size={14} /> {t('options.themePresets') || '主题与配色'}
+                    <Palette size={14} /> {t('options.themePresets')}
                 </h3>
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                            {t('options.themePresets') || '主题配色预设'}
+                            {t('options.themePresets')}
                         </div>
                         <button
                             type="button"
                             onClick={onOpenThemePark}
                             className={`shrink-0 w-9 h-9 rounded-full border transition-colors flex items-center justify-center ${utilityGhostButtonClass}`}
                             style={{ color: 'var(--text-primary)' }}
-                            title={t('options.openThemePark') || '打开 Theme Park'}
-                            aria-label={t('options.openThemePark') || '打开 Theme Park'}
+                            title={t('options.openThemePark')}
+                            aria-label={t('options.openThemePark')}
                         >
                             <Palette size={16} />
                         </button>
@@ -726,10 +726,10 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                     <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
                         <div className="space-y-1">
                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.preferCustomTheme') || '优先使用自定义主题'}
+                                {t('options.preferCustomTheme')}
                             </div>
                             <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.preferCustomThemeDesc') || '开启后会关闭歌曲主题自动切换。'}
+                                {t('options.preferCustomThemeDesc')}
                             </div>
                         </div>
                         <button
@@ -744,10 +744,10 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                     <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
                         <div className="space-y-1">
                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.autoSwitchSongTheme') || '主题自动切换'}
+                                {t('options.autoSwitchSongTheme')}
                             </div>
                             <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.autoSwitchSongThemeDesc') || '当切换到的歌曲曾经生成过 AI 主题的时候，自动应用 AI 主题。'}
+                                {t('options.autoSwitchSongThemeDesc')}
                             </div>
                         </div>
                         <button
@@ -762,10 +762,10 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
                             <div className="space-y-1">
                                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.autoGenerateSongTheme') || '自动为播放歌曲进行主题生成'}
+                                    {t('options.autoGenerateSongTheme')}
                                 </div>
                                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.autoGenerateSongThemeDesc') || '当播放歌曲没有缓存 AI 主题时，自动调用AI并应用（会产生较高token费用！）'}
+                                    {t('options.autoGenerateSongThemeDesc')}
                                 </div>
                             </div>
                             <button
@@ -783,15 +783,15 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             {/* Section 2: Lyrics Animation & Player View */}
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Monitor size={14} /> {t('options.lyricsRenderer') || '歌词与播放页'}
+                    <Monitor size={14} /> {t('options.lyricsRenderer')}
                 </h3>
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                            {t('options.lyricsRenderer') || '歌词动画'}
+                            {t('options.lyricsRenderer')}
                         </div>
                         <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.lyricsRendererDesc') || '选择播放页使用的歌词渲染模式。'}
+                            {t('options.lyricsRendererDesc')}
                         </div>
                     </div>
                     <button
@@ -801,15 +801,15 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         style={{ color: 'var(--text-primary)' }}
                     >
                         <Settings2 size={16} />
-                        <span>{t('options.lyricsAnimationAdjust') || '歌词动画样式'}</span>
+                        <span>{t('options.lyricsAnimationAdjust')}</span>
                     </button>
                     <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-4">
                         <div className="space-y-1">
                             <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.transparentPlayerBackground') || '播放页透明背景'}
+                                {t('options.transparentPlayerBackground')}
                             </div>
                             <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.transparentPlayerBackgroundDesc') || '仅对播放页生效。开启后会切换到透明窗口模式，适合 OBS 抠像。'}
+                                {t('options.transparentPlayerBackgroundDesc')}
                             </div>
                         </div>
                         <button
@@ -823,10 +823,10 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                     <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-4">
                         <div className="space-y-1">
                             <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.autoHidePlayerChrome') || '自动隐藏控制栏'}
+                                {t('options.autoHidePlayerChrome')}
                             </div>
                             <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.autoHidePlayerChromeDesc') || '开启后，自动隐藏播放页的进度条和右侧按钮。'}
+                                {t('options.autoHidePlayerChromeDesc')}
                             </div>
                         </div>
                         <button
@@ -843,15 +843,15 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             {/* Section 3: Home Layout styles */}
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <LayoutGrid size={14} /> {t('options.homeLayoutStyle') || '主页布局与风格'}
+                    <LayoutGrid size={14} /> {t('options.homeLayoutStyle')}
                 </h3>
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                            {t('options.homeLayoutStyle') || '首页布局样式'}
+                            {t('options.homeLayoutStyle')}
                         </div>
                         <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.homeLayoutStyleDesc') || '选择首页展示的样式风格：经典(旧版)或万象(新版)透明桌面（支持拍立得单曲网格）。'}
+                            {t('options.homeLayoutStyleDesc')}
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -861,7 +861,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             style={getAccentOptionStyle(homeLayoutStyle === 'carousel')}
                         >
                             <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.homeLayoutStyleCarousel') || '经典(旧版)'}
+                                {t('options.homeLayoutStyleCarousel')}
                             </span>
                         </button>
                         <button
@@ -870,7 +870,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             style={getAccentOptionStyle(homeLayoutStyle === 'grid')}
                         >
                             <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.homeLayoutStyleGrid') || '万象(新版)'}
+                                {t('options.homeLayoutStyleGrid')}
                             </span>
                         </button>
                     </div>
@@ -879,10 +879,10 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         <div className="pt-4 border-t border-white/5 space-y-3">
                             <div className="space-y-1">
                                 <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.grid3dCardStyle') || '3D 网格卡片样式'}
+                                    {t('options.grid3dCardStyle')}
                                 </div>
                                 <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.grid3dCardStyleDesc') || '选择 3D 网格中每张卡片的外观：纯图片封面或经典的拍立得文本卡片。'}
+                                    {t('options.grid3dCardStyleDesc')}
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3 mt-1">
@@ -892,7 +892,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                     style={getAccentOptionStyle(grid3dCardStyle === 'image')}
                                 >
                                     <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.grid3dCardStyleImage') || '纯图片封面'}
+                                        {t('options.grid3dCardStyleImage')}
                                     </span>
                                 </button>
                                 <button
@@ -901,7 +901,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                     style={getAccentOptionStyle(grid3dCardStyle === 'card')}
                                 >
                                     <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.grid3dCardStyleCard') || '拍立得卡片'}
+                                        {t('options.grid3dCardStyleCard')}
                                     </span>
                                 </button>
                             </div>
@@ -913,21 +913,21 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             {/* Section 4: Configurations Import/Export (New feature) */}
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Settings2 size={14} /> {t('options.importExportTitle') || '备份与导入'}
+                    <Settings2 size={14} /> {t('options.importExportTitle')}
                 </h3>
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                            {t('options.importExportTitle') || '备份与导入配置'}
+                            {t('options.importExportTitle')}
                         </div>
                         <div className="text-xs opacity-50 max-w-[400px]" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.importExportDesc') || '通过标准 JSON 或 folia-theme 文本导入/导出配色主题与歌词动画设置。'}
+                            {t('options.importExportDesc')}
                         </div>
                     </div>
 
                     <div className="space-y-1.5 pt-1">
                         <div className="text-xs font-semibold opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.exportThemeLabel') || '导出时包含的主题'}
+                            {t('options.exportThemeLabel')}
                         </div>
                         <div className="flex flex-wrap gap-2 mt-1">
                             {aiTheme && (
@@ -938,7 +938,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                     style={getAccentOptionStyle(exportThemeType === 'ai')}
                                 >
                                     <Palette size={12} className="opacity-70" />
-                                    <span>{t('options.exportAiTheme') || 'AI 主题'}: {aiTheme.light.name || 'AI'}</span>
+                                    <span>{t('options.exportAiTheme')}: {aiTheme.light.name || 'AI'}</span>
                                 </button>
                             )}
                             {customTheme && (
@@ -949,7 +949,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                     style={getAccentOptionStyle(exportThemeType === 'custom')}
                                 >
                                     <Palette size={12} className="opacity-70" />
-                                    <span>{t('options.exportCustomTheme') || '自定义主题'}: {customTheme.light.name || 'Custom'}</span>
+                                    <span>{t('options.exportCustomTheme')}: {customTheme.light.name || 'Custom'}</span>
                                 </button>
                             )}
                             <button
@@ -959,7 +959,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                 style={getAccentOptionStyle(exportThemeType === 'none')}
                             >
                                 <Settings2 size={12} className="opacity-70" />
-                                <span>{t('options.exportNoTheme') || '不包含主题'}</span>
+                                <span>{t('options.exportNoTheme')}</span>
                             </button>
                         </div>
                     </div>
@@ -967,7 +967,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                     <textarea
                         value={importText}
                         onChange={(e) => setImportText(e.target.value)}
-                        placeholder={t('options.importPlaceholder') || '在此处粘贴备份文本，或直接输入标准 JSON...'}
+                        placeholder={t('options.importPlaceholder')}
                         className="w-full h-24 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs focus:outline-none focus:border-white/30 transition-colors font-mono resize-none"
                         style={{ color: 'var(--text-primary)' }}
                     />
@@ -980,7 +980,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             style={{ color: 'var(--text-primary)' }}
                         >
                             {copiedType === 'shortcode' ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
-                            <span>{copiedType === 'shortcode' ? (t('status.copied') || '已复制') : (t('options.exportBtn') || '复制配置码')}</span>
+                            <span>{copiedType === 'shortcode' ? (t('status.copied')) : t('options.exportBtn')}</span>
                         </button>
                         <button
                             type="button"
@@ -989,7 +989,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             style={{ color: 'var(--text-primary)' }}
                         >
                             {copiedType === 'json' ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
-                            <span>{copiedType === 'json' ? (t('status.copied') || '已复制') : '复制 JSON'}</span>
+                            <span>{copiedType === 'json' ? (t('status.copied')) : t('options.importBtn')}</span>
                         </button>
                         <div className="flex-1 min-w-[20px]" />
                         <button
@@ -1000,7 +1000,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             style={{ color: 'var(--text-primary)', borderColor: accentOutlineColor }}
                         >
                             <Download size={13} />
-                            <span>{t('options.importBtn') || '导入配置'}</span>
+                            <span>{t('options.importBtn')}</span>
                         </button>
                     </div>
                 </div>

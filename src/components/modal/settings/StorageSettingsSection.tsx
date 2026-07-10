@@ -232,7 +232,7 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                         className={`ml-auto text-xs font-normal normal-case tracking-normal px-2 py-1 hover:bg-white/10 rounded-lg ${errorTextColor} opacity-60 hover:opacity-100 transition-all disabled:opacity-20 flex items-center gap-1`}
                     >
                         {isCleaning === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                        {t('options.clearAll') || '清空所有'}
+                        {t('options.clearAll')}
                     </button>
                 </h3>
 

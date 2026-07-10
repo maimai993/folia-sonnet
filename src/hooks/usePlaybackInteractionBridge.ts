@@ -4,7 +4,7 @@ import type { MotionValue } from 'framer-motion';
 import { neteaseApi } from '../services/netease';
 import { PlayerState } from '../types';
 import type { ReplayGainMode, SongResult, StageLoopMode, StatusMessage } from '../types';
-import { replayGainModeLabels } from '../utils/appPlaybackHelpers';
+import { getReplayGainModeLabel } from '../utils/appPlaybackHelpers';
 
 // src/hooks/usePlaybackInteractionBridge.ts
 
@@ -107,7 +107,7 @@ export function usePlaybackInteractionBridge({
 
     const handleChangeReplayGainMode = useCallback((mode: ReplayGainMode) => {
         setReplayGainMode(mode);
-        setStatusMsg({ type: 'info', text: replayGainModeLabels[mode] });
+        setStatusMsg({ type: 'info', text: getReplayGainModeLabel(mode) });
     }, [setReplayGainMode, setStatusMsg]);
 
     const handleContainerClick = useCallback(() => {

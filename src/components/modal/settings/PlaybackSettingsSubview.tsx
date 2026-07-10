@@ -103,7 +103,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
     const loadAudioOutputDevices = async () => {
         if (!supportsAudioOutputSelection) {
             setAudioOutputDevices([]);
-            setAudioOutputDevicesError(t('options.audioOutputUnsupported') || '当前环境不支持切换播放设备。');
+            setAudioOutputDevicesError(t('options.audioOutputUnsupported'));
             return;
         }
 
@@ -130,12 +130,12 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                 .filter(device => device.kind === 'audiooutput')
                 .map((device, index) => ({
                     deviceId: device.deviceId,
-                    label: device.label || `${t('options.audioOutputUnnamed') || '播放设备'} ${index + 1}`,
+                    label: device.label || `${t('options.audioOutputUnnamed')} ${index + 1}`,
                 }));
             setAudioOutputDevices(outputs);
         } catch (error) {
             console.error('[PlaybackSettingsSubview] Failed to enumerate audio output devices', error);
-            setAudioOutputDevicesError(t('options.audioOutputLoadFailed') || '读取播放设备失败。');
+            setAudioOutputDevicesError(t('options.audioOutputLoadFailed'));
         } finally {
             stopMediaStream(permissionProbeStream);
             setIsAudioOutputDevicesLoading(false);
@@ -162,11 +162,11 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
             if (applied) {
                 await loadAudioOutputDevices();
             } else {
-                setAudioOutputDevicesError(t('options.audioOutputSelectFailed') || '切换播放设备失败。');
+                setAudioOutputDevicesError(t('options.audioOutputSelectFailed'));
             }
         } catch (error) {
             console.error('[PlaybackSettingsSubview] Failed to select audio output device', error);
-            setAudioOutputDevicesError(t('options.audioOutputSelectFailed') || '切换播放设备失败。');
+            setAudioOutputDevicesError(t('options.audioOutputSelectFailed'));
         } finally {
             setIsSelectingAudioOutput(false);
         }
@@ -197,8 +197,8 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         {([
-                            { value: 'append', label: '追加到末尾', desc: '加入到播放队列的末尾。' },
-                            { value: 'next', label: '追加到下一首', desc: '加入当前播放歌曲后面。' },
+                            { value: 'append', label: t('options.queueAppendLabel'), desc: t('options.queueAppendDesc') },
+                            { value: 'next', label: t('options.queueNextLabel'), desc: t('options.queueNextDesc') },
                         ] as Array<{ value: QueueAddBehavior; label: string; desc: string }>).map((option) => {
                             const selected = queueAddBehavior === option.value;
                             return (
@@ -224,17 +224,17 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
 
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Settings2 size={14} /> {t('options.lyrics') || '歌词'}
+                    <Settings2 size={14} /> {t('options.lyrics')}
                 </h3>
                 <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
                     <div className="p-4 flex items-center justify-between gap-4">
                         <div className="space-y-1">
                             <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                 <Settings2 size={14} />
-                                {t('options.enableAlternativeLyricSources') || '更多歌词源'}
+                                {t('options.enableAlternativeLyricSources')}
                             </div>
                             <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.enableAlternativeLyricSourcesDesc') || '启用备选歌词源（QQ音乐、酷狗音乐）'}
+                                {t('options.enableAlternativeLyricSourcesDesc')}
                             </div>
                         </div>
                         {renderToggle(enableAlternativeLyricSources, () => onToggleAlternativeLyricSources(!enableAlternativeLyricSources))}
@@ -244,10 +244,10 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                             <div className="space-y-1">
                                 <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                     <Settings2 size={14} />
-                                    {t('options.autoUseBestLyric') || '自动使用最佳歌词'}
+                                    {t('options.autoUseBestLyric')}
                                 </div>
                                 <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.autoUseBestLyricDesc') || '自动检索所有歌词源，若存在完美匹配的逐字歌词则自动优先采用。'}
+                                    {t('options.autoUseBestLyricDesc')}
                                 </div>
                             </div>
                             {renderToggle(autoUseBestLyric, () => onToggleAutoUseBestLyric(!autoUseBestLyric))}
@@ -289,16 +289,16 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
 
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Monitor size={14} /> {t('options.audioOutputSettings') || '播放设备'}
+                    <Monitor size={14} /> {t('options.audioOutputSettings')}
                 </h3>
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.audioOutputDevice') || '当前播放声卡'}
+                                {t('options.audioOutputDevice')}
                             </div>
                             <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.audioOutputDeviceDesc') || '切换当前播放器的音频输出设备。Electron 桌面版优先支持，浏览器环境在支持 setSinkId 时也可使用。'}
+                                {t('options.audioOutputDeviceDesc')}
                             </div>
                         </div>
                         <button
@@ -309,13 +309,13 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                             style={{ color: 'var(--text-primary)' }}
                         >
                             <RefreshCw size={13} className={isAudioOutputDevicesLoading ? 'animate-spin' : ''} />
-                            <span>{t('options.audioOutputRefresh') || '刷新'}</span>
+                            <span>{t('options.audioOutputRefresh')}</span>
                         </button>
                     </div>
 
                     {!supportsAudioOutputSelection ? (
                         <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.audioOutputUnsupported') || '当前环境不支持切换播放设备。'}
+                            {t('options.audioOutputUnsupported')}
                         </div>
                     ) : (
                         <div className="space-y-3">
@@ -325,10 +325,10 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                                     void handleSelectAudioOutputDevice(val);
                                 }}
                                 options={[
-                                    { value: '', label: t('options.audioOutputDefault') || '系统默认' },
+                                    { value: '', label: t('options.audioOutputDefault') },
                                     ...audioOutputDevices.map((device, index) => ({
                                         value: device.deviceId,
-                                        label: device.label || `${t('options.audioOutputUnnamed') || '播放设备'} ${index + 1}`,
+                                        label: device.label || `${t('options.audioOutputUnnamed')} ${index + 1}`,
                                     })),
                                 ]}
                                 disabled={isAudioOutputDevicesLoading || isSelectingAudioOutput}
@@ -338,10 +338,10 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
 
                             <div className="text-[11px] opacity-50" style={{ color: 'var(--text-secondary)' }}>
                                 {isSelectingAudioOutput
-                                    ? (t('options.audioOutputSelecting') || '正在切换播放设备...')
+                                    ? (t('options.audioOutputSelecting'))
                                     : isAudioOutputDevicesLoading
-                                        ? (t('options.audioOutputLoading') || '正在读取播放设备...')
-                                        : (t('options.audioOutputDefaultDesc') || '跟随操作系统当前默认输出设备。')}
+                                        ? (t('options.audioOutputLoading'))
+                                        : (t('options.audioOutputDefaultDesc'))}
                             </div>
 
                             {audioOutputDevicesError && (
@@ -352,7 +352,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
 
                             {!isAudioOutputDevicesLoading && audioOutputDevices.length === 0 && !audioOutputDevicesError && (
                                 <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.audioOutputEmpty') || '没有检测到可切换的播放设备。'}
+                                    {t('options.audioOutputEmpty')}
                                 </div>
                             )}
                         </div>

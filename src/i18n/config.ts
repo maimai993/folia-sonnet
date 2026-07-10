@@ -3,17 +3,42 @@ import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import en from './locales/en.ts';
 import zhCN from './locales/zh-CN.ts';
+import ind from './locales/in.ts';
 
-export type AppLanguagePreference = 'system' | 'en' | 'zh-CN';
+/*
+ * Hardcoded Chinese fallback dictionary.
+ * Flattened at build-time from zh-CN.ts so every key has a Chinese fallback
+ * baked directly into the JS bundle — no dependency on i18next resource loading.
+ */
+function flattenLocale(obj: Record<string, any>, prefix = ''): Record<string, string> {
+  let result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === 'object' && value !== null) {
+      result = { ...result, ...flattenLocale(value, path) };
+    } else {
+      result[path] = String(value);
+    }
+  }
+  return result;
+}
+
+const ZH_FALLBACKS: Record<string, string> = flattenLocale(zhCN);
+
+export type AppLanguagePreference = 'system' | 'en' | 'zh-CN' | 'in';
 export const APP_LANGUAGE_STORAGE_KEY = 'folia_app_language';
 
 const isSupportedManualLanguage = (value: string | null | undefined): value is Exclude<AppLanguagePreference, 'system'> => (
-  value === 'en' || value === 'zh-CN'
+  value === 'en' || value === 'zh-CN' || value === 'in'
 );
 
 const normalizeSupportedLanguage = (value: string | null | undefined): Exclude<AppLanguagePreference, 'system'> => {
   if (!value) {
     return 'en';
+  }
+
+  if (value === 'in' || value.toLowerCase().startsWith('id')) {
+    return 'in';
   }
 
   if (value.toLowerCase().startsWith('zh')) {
@@ -65,10 +90,14 @@ i18n
       },
       'zh-CN': {
         translation: zhCN
+      },
+      in: {
+        translation: ind
       }
     },
     fallbackLng: 'en',
-    supportedLngs: ['en', 'zh-CN'],
+    parseMissingKeyHandler: (key: string): string => ZH_FALLBACKS[key] ?? key,
+    supportedLngs: ['en', 'zh-CN', 'in'],
     ...(initialLanguagePreference !== 'system' ? { lng: initialLanguagePreference } : {}),
     detection: {
       order: ['localStorage', 'navigator', 'htmlTag'],
@@ -100,6 +129,9 @@ export const applyAppLanguagePreference = async (
 
   const nextLanguage = preference === 'system' ? detectSystemLanguage() : preference;
   await i18n.changeLanguage(nextLanguage);
+  if (typeof window !== 'undefined') {
+    await window.electron?.setAppLocale?.(nextLanguage);
+  }
   return nextLanguage;
 };
 

@@ -601,7 +601,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleClearAllCache = async () => {
-        if (confirm(t('options.confirmClearAll') || '确定要清空所有缓存数据吗？此操作不可恢复。')) {
+        if (confirm(t('options.confirmClearAll'))) {
             setIsCleaning('all');
             await clearAllData();
             window.location.reload();
@@ -645,13 +645,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const nowPlayingStatusLabel = (() => {
         switch (nowPlayingConnectionStatus) {
             case 'connected':
-                return '已连接';
+                return t('status.connected');
             case 'connecting':
-                return '连接中';
+                return t('status.connecting');
             case 'error':
-                return '未连接';
+                return t('status.disconnected');
             default:
-                return '未启用';
+                return t('options.updateCheckDisabled');
         }
     })();
     const stageEnabled = Boolean(stageStatus?.modeEnabled);
@@ -668,14 +668,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         ...(stageConnected
             ? [{
                 key: 'stage',
-                label: 'Stage 已连接',
+                label: t('options.stageConnected'),
                 tone: 'success' as const,
             }]
             : []),
         ...(nowPlayingEnabled
             ? [{
                 key: 'now-playing',
-                label: nowPlayingConnected ? 'Now Playing 已连接' : 'Now Playing 未连接',
+                label: nowPlayingConnected ? t('options.nowPlayingConnectedStatus') : t('options.nowPlayingDisconnectedStatus'),
                 tone: nowPlayingConnected ? 'success' as const : 'error' as const,
             }]
             : []),
@@ -972,7 +972,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             exit={{ opacity: 0 }}
             transition={shellTransition}
             data-folia-keyboard-window="true"
-            className="fixed inset-0 z-[100] flex items-center justify-center px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+            className="fixed inset-0 z-[100] flex items-center justify-center px-4 py-8 sm:px-5 sm:py-12"
             style={{ backgroundColor: overlayBackground }}
             onMouseDown={handleOverlayMouseDown}
             onClick={(event) => handleBackdropClose(event, onClose)}
@@ -1139,11 +1139,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                             onClick={handleCopyVersionInfo}
                                             className="opacity-45 hover:opacity-100 transition-opacity cursor-copy hover:underline"
                                             style={{ color: 'var(--text-secondary)' }}
-                                            title={versionCopied ? '已复制' : '点击复制版本信息'}
-                                            aria-label={versionCopied ? '已复制版本信息' : '点击复制版本信息'}
+                                            title={versionCopied ? t('status.copied') : t('options.versionCopiedHint')}
+                                            aria-label={versionCopied ? t('options.versionCopiedHint') : t('options.versionCopiedHint')}
                                         >
                                             {versionCopied
-                                                ? '已复制'
+                                                ? t('status.copied')
                                                 : `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`}
                                         </button>
 
@@ -1151,21 +1151,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         {updateStatus?.availableVersion && (
                                             <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 mt-0.5">
                                                 <span className="text-amber-500 font-semibold">
-                                                    发现新版本 v{updateStatus.availableVersion}
+                                                    {t('options.newVersionFound', { version: updateStatus.availableVersion })}
                                                 </span>
 
-                                                {/* 主操作：立即下载 / 重启安装 */}
                                                 {updateStatus.status === 'downloaded' ? (
                                                     <button
                                                         type="button"
                                                         onClick={handleInstallUpdate}
                                                         className="text-green-400 font-bold hover:underline ml-1"
                                                     >
-                                                        重启安装
+                                                        {t('options.restartToInstallUpdate')}
                                                     </button>
                                                 ) : updateStatus.status === 'downloading' ? (
                                                     <span className="text-zinc-300 opacity-80 ml-1">
-                                                        正在下载({Math.round(updateStatus.downloadProgress?.percent || 0)}%)
+                                                        {t('options.downloadingProgress', { percent: Math.round(updateStatus.downloadProgress?.percent || 0) })}
                                                     </span>
                                                 ) : (
                                                     !electronSettings.ENABLE_AUTO_UPDATE && (
@@ -1184,26 +1183,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                                                 <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
 
-                                                {/* 网盘下载 */}
                                                 <button
                                                     type="button"
                                                     onClick={handleOpenChinaDownload}
                                                     className="opacity-55 hover:opacity-100 transition-opacity hover:underline"
                                                     style={{ color: 'var(--text-secondary)' }}
                                                 >
-                                                    网盘下载
+                                                    {t('options.downloadChina')}
                                                 </button>
 
                                                 <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
 
-                                                {/* 前往Github下载页 */}
                                                 <button
                                                     type="button"
                                                     onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
                                                     className="opacity-55 hover:opacity-100 transition-opacity hover:underline"
                                                     style={{ color: 'var(--text-secondary)' }}
                                                 >
-                                                    前往Github下载页
+                                                    {t('options.goToGithubRelease')}
                                                 </button>
                                             </div>
                                         )}
@@ -1211,7 +1208,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         {/* 第三行：国内网络提醒小字 */}
                                         {updateStatus?.availableVersion && (
                                             <div className="text-xs opacity-45 mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                                                提示：下载需直连 GitHub (可能较慢)，国内环境推荐使用【网盘下载】。
+                                                {t('options.chinaDownloadHint')}
                                             </div>
                                         )}
                                     </div>
@@ -1237,10 +1234,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 </div>
                                                 <div className="space-y-1">
                                                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                        {t('options.visualSettings') || '视觉设置'}
+                                                        {t('options.visualSettings')}
                                                     </div>
                                                     <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                        {t('options.visualSettingsCardDesc') || '主题、歌词渲染模式、样式入口和背景透明度。'}
+                                                        {t('options.visualSettingsCardDesc')}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1260,10 +1257,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 </div>
                                                 <div className="space-y-1">
                                                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                        {t('options.generalSettings') || '通用设置'}
+                                                        {t('options.generalSettings')}
                                                     </div>
                                                     <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                        {t('options.generalSettingsDesc') || '语言，应用偏好。'}
+                                                        {t('options.generalSettingsDesc')}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1283,10 +1280,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 </div>
                                                 <div className="space-y-1">
                                                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                        {t('options.playbackSettings') || '播放控制'}
+                                                        {t('options.playbackSettings')}
                                                     </div>
                                                     <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                        {t('options.playbackSettingsDesc') || '播放行为，歌词来源，音频'}
+                                                        {t('options.playbackSettingsDesc')}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1306,10 +1303,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 </div>
                                                 <div className="space-y-1">
                                                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                        {t('options.integrationSettings') || '连接与集成'}
+                                                        {t('options.integrationSettings')}
                                                     </div>
                                                     <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                        {t('options.integrationSettingsDesc') || '外部程序接入设置。'}
+                                                        {t('options.integrationSettingsDesc')}
                                                     </div>
                                                     {integrationStatusItems.length > 0 && (
                                                         <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
@@ -1354,10 +1351,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 </div>
                                                 <div className="space-y-1">
                                                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                        {t('options.storageSettings') || '存储与缓存'}
+                                                        {t('options.storageSettings')}
                                                     </div>
                                                     <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                        {t('options.storageSettingsDesc') || '缓存占用、清理、媒体缓存和缓存目录。'}
+                                                        {t('options.storageSettingsDesc')}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1378,10 +1375,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     </div>
                                                     <div className="space-y-1">
                                                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                            {t('options.desktopSettings') || '桌面端设置'}
+                                                            {t('options.desktopSettings')}
                                                         </div>
                                                         <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                            {t('options.desktopSettingsDesc') || '更新检查、自动更新和桌面端 AI 配置。'}
+                                                            {t('options.desktopSettingsDesc')}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1402,10 +1399,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 </div>
                                                 <div className="space-y-1">
                                                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                        {t('options.labSettings') || '实验室'}
+                                                        {t('options.labSettings')}
                                                     </div>
                                                     <div className="text-xs opacity-50 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                                                        {t('options.labSettingsDesc') || '高级自定义功能'}
+                                                        {t('options.labSettingsDesc')}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1432,8 +1429,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                         onClick={() => setShowThemePark(true)}
                                                         className="shrink-0 w-9 h-9 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center"
                                                         style={{ color: 'var(--text-primary)' }}
-                                                        title={t('options.openThemePark') || '打开 Theme Park'}
-                                                        aria-label={t('options.openThemePark') || '打开 Theme Park'}
+                                                        title={t('options.openThemePark')}
+                                                        aria-label={t('options.openThemePark')}
                                                     >
                                                         <Palette size={16} />
                                                     </button>
@@ -1466,10 +1463,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
                                                     <div className="space-y-1">
                                                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                            {t('options.preferCustomTheme') || '优先使用自定义主题'}
+                                                            {t('options.preferCustomTheme')}
                                                         </div>
                                                         <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                                            {t('options.preferCustomThemeDesc') || '开启后会关闭歌曲主题自动切换。'}
+                                                            {t('options.preferCustomThemeDesc')}
                                                         </div>
                                                     </div>
                                                     <button
@@ -1484,10 +1481,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
                                                     <div className="space-y-1">
                                                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                            {t('options.autoSwitchSongTheme') || '主题自动切换'}
+                                                            {t('options.autoSwitchSongTheme')}
                                                         </div>
                                                         <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                                            {t('options.autoSwitchSongThemeDesc') || '当切换到的歌曲曾经生成过 AI 主题的时候，自动应用 AI 主题。'}
+                                                            {t('options.autoSwitchSongThemeDesc')}
                                                         </div>
                                                     </div>
                                                     <button
@@ -1502,10 +1499,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between gap-3">
                                                         <div className="space-y-1">
                                                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                                {t('options.autoGenerateSongTheme') || '自动为播放歌曲进行主题生成'}
+                                                                {t('options.autoGenerateSongTheme')}
                                                             </div>
                                                             <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                                                {t('options.autoGenerateSongThemeDesc') || '当播放歌曲没有缓存 AI 主题时，自动调用AI并应用（会产生较高token费用！）'}
+                                                                {t('options.autoGenerateSongThemeDesc')}
                                                             </div>
                                                         </div>
                                                         <button
@@ -1523,10 +1520,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="space-y-1">
                                                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                            {t('options.lyricsRenderer') || "歌词动画"}
+                                                            {t('options.lyricsRenderer')}
                                                         </div>
                                                         <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                                            {t('options.lyricsRendererDesc') || "选择播放页使用的歌词动画模式。"}
+                                                            {t('options.lyricsRendererDesc')}
                                                         </div>
                                                     </div>
                                                     <button
@@ -1534,8 +1531,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                         onClick={() => setShowVisPlayground(true)}
                                                         className="shrink-0 w-9 h-9 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center"
                                                         style={{ color: 'var(--text-primary)' }}
-                                                        title={t('options.openLyricsStyleSettings') || '打开歌词样式设置'}
-                                                        aria-label={t('options.openLyricsStyleSettings') || '打开歌词样式设置'}
+                                                        title={t('options.openLyricsStyleSettings')}
+                                                        aria-label={t('options.openLyricsStyleSettings')}
                                                     >
                                                         <Settings2 size={16} />
                                                     </button>
@@ -1595,7 +1592,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                         <div className="text-[10px] opacity-40 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
                                                             {stageStatus.modeEnabled
                                                                 ? '舞台视图已启用，请在下方选择 Stage API 或 Now Playing。'
-                                                                : (t('options.enableStageModeDescDisabled') || '启用后可在舞台视图中选择 Stage API 或 Now Playing。')}
+                                                                : t('options.enableStageModeDescDisabled')}
                                                         </div>
                                                     </div>
                                                     <button
@@ -2348,8 +2345,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             {renderSettingsSubview({
                 isOpen: showGeneralSettings,
                 onClose: () => closeSubviewOrModal(() => setShowGeneralSettings(false)),
-                title: t('options.generalSettings') || '通用设置',
-                description: t('options.generalSettingsDesc') || '语言，应用偏好。',
+                title: t('options.generalSettings') ,
+                description: t('options.generalSettingsDesc') ,
                 children: (
                     <GeneralSettingsSubview
                         isDaylight={isDaylight}
@@ -2361,8 +2358,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             {renderSettingsSubview({
                 isOpen: showPlaybackSettings,
                 onClose: () => closeSubviewOrModal(() => setShowPlaybackSettings(false)),
-                title: t('options.playbackSettings') || '播放控制',
-                description: t('options.playbackSettingsPanelDesc') || '播放行为，歌词来源，音频输出等设置。',
+                title: t('options.playbackSettings') ,
+                description: t('options.playbackSettingsPanelDesc') ,
                 children: (
                     <PlaybackSettingsSubview
                         isOpen={showPlaybackSettings}
@@ -2377,8 +2374,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             {renderSettingsSubview({
                 isOpen: showAppearanceSettings,
                 onClose: () => closeSubviewOrModal(() => setShowAppearanceSettings(false)),
-                title: t('options.visualSettings') || '视觉设置',
-                description: t('options.visualSettingsPanelDesc') || '主题、歌词渲染和背景外观。',
+                title: t('options.visualSettings') ,
+                description: t('options.visualSettingsPanelDesc') ,
                 children: (
                     <AppearanceSettingsSubview
                         accentOutlineColor={accentOutlineColor}
@@ -2417,8 +2414,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             {renderSettingsSubview({
                 isOpen: showStorageSettings,
                 onClose: () => closeSubviewOrModal(() => setShowStorageSettings(false)),
-                title: t('options.storageSettings') || '存储与缓存',
-                description: t('options.storageSettingsPanelDesc') || '缓存占用、清理和媒体缓存行为。',
+                title: t('options.storageSettings') ,
+                description: t('options.storageSettingsPanelDesc') ,
                 children: (
                     <StorageSettingsSection
                         cacheDirectory={cacheDirectory}
@@ -2445,8 +2442,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             {renderSettingsSubview({
                 isOpen: showIntegrationSettings,
                 onClose: () => closeSubviewOrModal(() => setShowIntegrationSettings(false)),
-                title: t('options.integrationSettings') || '集成设置',
-                description: t('options.integrationSettingsDesc') || '外部程序接入设置。',
+                title: t('options.integrationSettings') ,
+                description: t('options.integrationSettingsDesc') ,
                 children: (
                     <IntegrationSettingsSubview
                         chrome={{
@@ -2504,8 +2501,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             {renderSettingsSubview({
                 isOpen: showDesktopSettings,
                 onClose: () => closeSubviewOrModal(() => setShowDesktopSettings(false)),
-                title: t('options.desktopSettings') || '桌面端设置',
-                description: t('options.desktopSettingsPanelDesc') || '桌面窗口行为、更新检查、自动更新和 AI 配置。',
+                title: t('options.desktopSettings') ,
+                description: t('options.desktopSettingsPanelDesc') ,
                 children: (
                     <DesktopSettingsSubview
                         chrome={{

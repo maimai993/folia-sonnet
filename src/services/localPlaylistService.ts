@@ -2,8 +2,8 @@ import { LocalPlaylist, LocalSong } from '../types';
 import { getFromCache, getLocalSongs, saveToCache } from './db';
 
 const LOCAL_PLAYLISTS_CACHE_KEY = 'local_playlists';
-const FAVORITE_PLAYLIST_NAME = '我喜欢的音乐';
-const UNNAMED_PLAYLIST_NAME = '未命名歌单';
+const FAVORITE_PLAYLIST_NAME = 'Liked Songs';
+const UNNAMED_PLAYLIST_NAME = 'Untitled Playlist';
 
 const createPlaylistId = () => `local_playlist_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 

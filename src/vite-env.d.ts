@@ -437,6 +437,7 @@ declare global {
     electron?: {
       getSettings: () => Promise<any>;
       saveSettings: (key: string, value: any) => Promise<any>;
+      setAppLocale: (localeKey: 'en' | 'zh-CN' | 'in') => Promise<string>;
       getCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
       chooseCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
       resetCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
