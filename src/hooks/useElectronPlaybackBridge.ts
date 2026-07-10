@@ -4,7 +4,7 @@ import type { RefObject } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { PlayerState } from '../types';
 import type { SongResult, LyricData } from '../types';
-import type { RemoteControlCommand, RemoteControlSnapshot } from '../types/remoteControl';
+import type { PlayerChromeVisibilityMode, RemoteControlCommand, RemoteControlSnapshot } from '../types/remoteControl';
 import type { VideoExportState } from '../types/videoExport';
 import {
     buildDiscordPresenceSnapshotFromPlaybackSyncBridge,
@@ -23,6 +23,8 @@ type UseElectronPlaybackBridgeOptions = {
     setIsTitlebarRevealed: React.Dispatch<React.SetStateAction<boolean>>;
     isPlayerChromeHidden: boolean;
     setIsPlayerChromeHidden: React.Dispatch<React.SetStateAction<boolean>>;
+    playerChromeVisibilityMode: PlayerChromeVisibilityMode;
+    onRemotePlayerChromeVisibilityModeCycle?: () => void;
     showTransparentWindowBorder: boolean;
     setShowTransparentWindowBorder: React.Dispatch<React.SetStateAction<boolean>>;
     transparentPlayerBackground: boolean;
@@ -70,6 +72,8 @@ export const useElectronPlaybackBridge = ({
     setIsTitlebarRevealed,
     isPlayerChromeHidden,
     setIsPlayerChromeHidden,
+    playerChromeVisibilityMode,
+    onRemotePlayerChromeVisibilityModeCycle,
     showTransparentWindowBorder,
     setShowTransparentWindowBorder,
     transparentPlayerBackground,
@@ -188,10 +192,16 @@ export const useElectronPlaybackBridge = ({
     };
 
     const buildRemoteSnapshot = (options: { includeLyrics?: boolean } = {}): RemoteControlSnapshot => {
-        return buildRemoteControlSnapshotFromPlaybackSyncBridge(
+        return {
+            ...buildRemoteControlSnapshotFromPlaybackSyncBridge(
             buildPlaybackSyncBridgeModelFromCurrentState(),
-            { includeLyrics: options.includeLyrics, lyrics },
-        );
+            {
+                includeLyrics: options.includeLyrics,
+                lyrics,
+                playerChromeVisibilityMode,
+            },
+            ),
+        };
     };
 
     const buildDiscordPresenceSnapshot = () => {
@@ -372,7 +382,7 @@ export const useElectronPlaybackBridge = ({
             window.removeEventListener('resize', handleResize);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, lyrics, lyricTimelineOffsetMs, mainWindowClickThroughEnabled, playbackSyncBridgeStatus, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground, isLiked]);
+    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, playerChromeVisibilityMode, lyrics, lyricTimelineOffsetMs, mainWindowClickThroughEnabled, playbackSyncBridgeStatus, playQueue, playerState, showTransparentWindowBorder, transparentPlayerBackground, isLiked]);
 
     useEffect(() => {
         if (!playbackSyncBridgeStatus.discordPresenceEnabled || !window.electron?.publishDiscordPresenceSnapshot) {
@@ -420,8 +430,8 @@ export const useElectronPlaybackBridge = ({
                 return;
             }
 
-            if (command.type === 'set-player-chrome-hidden') {
-                setIsPlayerChromeHidden(command.hidden);
+            if (command.type === 'cycle-player-chrome-visibility-mode') {
+                onRemotePlayerChromeVisibilityModeCycle?.();
                 return;
             }
 
@@ -488,7 +498,7 @@ export const useElectronPlaybackBridge = ({
 
         return window.electron.onRemoteControlCommand(runCommand);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activePlaybackContext, audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteExportCommand, setIsPlayerChromeHidden, setShowTransparentWindowBorder, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
+    }, [activePlaybackContext, audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteExportCommand, onRemotePlayerChromeVisibilityModeCycle, setShowTransparentWindowBorder, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
 
     useEffect(() => {
         if (!window.electron?.onStagePlayerControlRequest) {

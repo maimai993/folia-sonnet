@@ -45,6 +45,7 @@ import { useElectronNeteaseApiStatus } from './hooks/useElectronNeteaseApiStatus
 import { useElectronVideoExportController } from './hooks/useElectronVideoExportController';
 import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
+import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { usePlaybackInteractionBridge } from './hooks/usePlaybackInteractionBridge';
 import { usePlaybackUiEffects } from './hooks/usePlaybackUiEffects';
@@ -68,6 +69,7 @@ import { clampMediaVolume } from './utils/appPlaybackHelpers';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './utils/appPlaybackGuards';
 import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
 import { initializeSyncCoordinator } from './services/sync/syncCoordinator';
+import type { PlayerChromeVisibilityMode } from './types/remoteControl';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -303,6 +305,7 @@ export default function App() {
         transparentPlayerBackground,
         enablePlayerPageNativeBlur,
         autoHidePlayerChrome,
+        handleToggleAutoHidePlayerChrome,
         disableVisualizerVignette,
         disableVisualizerGeometricBackground,
         minimizeToTray,
@@ -396,6 +399,25 @@ export default function App() {
         handleToggleMute,
         handleToggleLoopMode,
     } = appPreferences;
+
+    const showPlayerChromeVisibilityModeStatus = useCallback((mode: PlayerChromeVisibilityMode) => {
+        setStatusMsg({
+            type: 'info',
+            text: t(`status.playerChrome${mode === 'always-hidden' ? 'AlwaysHidden' : mode === 'always-visible' ? 'AlwaysVisible' : 'AutoHide'}`),
+            nonce: Date.now(),
+        });
+    }, [t]);
+
+    const {
+        playerChromeVisibilityMode,
+        cyclePlayerChromeVisibilityMode,
+    } = usePlayerChromeAutoHide({
+        autoHidePlayerChrome,
+        initialPlayerChromeHidden: isPlayerChromeHidden,
+        setIsPlayerChromeHidden,
+        setAutoHidePlayerChromePreference: handleToggleAutoHidePlayerChrome,
+        onModeChange: showPlayerChromeVisibilityModeStatus,
+    });
 
     useRandomVisualizerMode({
         currentSong,
@@ -1263,6 +1285,8 @@ export default function App() {
         setIsTitlebarRevealed,
         isPlayerChromeHidden,
         setIsPlayerChromeHidden,
+        playerChromeVisibilityMode,
+        onRemotePlayerChromeVisibilityModeCycle: cyclePlayerChromeVisibilityMode,
         showTransparentWindowBorder,
         setShowTransparentWindowBorder,
         transparentPlayerBackground,
@@ -1358,7 +1382,7 @@ export default function App() {
         audioRef,
         stageLyricsClockRef,
         setIsDevDebugOverlayVisible,
-        setIsPlayerChromeHidden,
+        cyclePlayerChromeVisibilityMode,
         setIsPanelOpen,
         setReplayGainMode,
         setStatusMsg,
@@ -1411,53 +1435,6 @@ export default function App() {
     useEffect(() => {
         localStorage.setItem(PLAYER_CHROME_HIDDEN_STORAGE_KEY, String(isPlayerChromeHidden));
     }, [isPlayerChromeHidden]);
-
-    useEffect(() => {
-        if (!autoHidePlayerChrome) return;
-
-        let timeoutId: number;
-        let isThrottled = false;
-        let rafId: number;
-
-        const showAndResetTimer = () => {
-            setIsPlayerChromeHidden(false);
-            window.clearTimeout(timeoutId);
-            timeoutId = window.setTimeout(() => {
-                setIsPlayerChromeHidden(true);
-            }, 3000);
-        };
-
-        const handleMouseOut = (e: MouseEvent) => {
-            if (!e.relatedTarget || (e.clientY <= 0 || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight)) {
-                window.clearTimeout(timeoutId);
-                timeoutId = window.setTimeout(() => {
-                    setIsPlayerChromeHidden(true);
-                }, 300);
-            }
-        };
-
-        const throttledMouseMove = () => {
-            if (isThrottled) return;
-            isThrottled = true;
-            rafId = requestAnimationFrame(() => {
-                showAndResetTimer();
-                isThrottled = false;
-            });
-        };
-
-        // Initialize timer
-        showAndResetTimer();
-
-        window.addEventListener('mouseout', handleMouseOut);
-        window.addEventListener('mousemove', throttledMouseMove);
-
-        return () => {
-            window.clearTimeout(timeoutId);
-            cancelAnimationFrame(rafId);
-            window.removeEventListener('mouseout', handleMouseOut);
-            window.removeEventListener('mousemove', throttledMouseMove);
-        };
-    }, [autoHidePlayerChrome]);
 
     useEffect(() => {
         const body = document.body;

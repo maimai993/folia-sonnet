@@ -79,6 +79,7 @@ const emptySnapshot: RemoteControlSnapshot = {
     mainWindowAlwaysOnTop: false,
     mainWindowBorderVisible: false,
     playerChromeHidden: false,
+    playerChromeVisibilityMode: 'auto-hide',
     exportState: idleVideoExportState(),
     isDaylight: false,
     lyrics: null,
@@ -766,13 +767,17 @@ const RemoteControlApp: React.FC = () => {
 
                                                 <button
                                                     type="button"
-                                                    onClick={() => sendCommand({ type: 'set-player-chrome-hidden', hidden: !snapshot.playerChromeHidden })}
-                                                    className={`flex h-8 items-center justify-center rounded-xl text-[11px] font-bold transition border ${snapshot.playerChromeHidden
+                                                    onClick={() => sendCommand({ type: 'cycle-player-chrome-visibility-mode' })}
+                                                    className={`flex h-8 items-center justify-center rounded-xl text-[11px] font-bold transition border ${snapshot.playerChromeVisibilityMode === 'always-hidden'
                                                         ? (isDaylight ? 'bg-zinc-900 border-zinc-900 text-white shadow-sm' : 'bg-white border-white text-zinc-950 shadow-sm')
                                                         : (isDaylight ? 'bg-black/5 border-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10 hover:text-white')
                                                         }`}
                                                 >
-                                                    {snapshot.playerChromeHidden ? t('remote.showUI') : t('remote.hideUI')}
+                                                    {t(snapshot.playerChromeVisibilityMode === 'always-hidden'
+                                                        ? 'remote.uiAlwaysHidden'
+                                                        : snapshot.playerChromeVisibilityMode === 'always-visible'
+                                                            ? 'remote.uiAlwaysVisible'
+                                                            : 'remote.uiAutoHide')}
                                                 </button>
                                             </div>
 

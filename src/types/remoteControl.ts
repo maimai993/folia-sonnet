@@ -3,6 +3,8 @@ import type { VideoExportPreset, VideoExportStartMode, VideoExportState } from '
 
 // src/types/remoteControl.ts
 // Shared payloads for the Electron remote control window.
+export type PlayerChromeVisibilityMode = 'always-hidden' | 'always-visible' | 'auto-hide';
+
 export type RemoteControlCommand =
     | { type: 'play-pause' }
     | { type: 'play' }
@@ -16,7 +18,7 @@ export type RemoteControlCommand =
     | { type: 'set-main-window-always-on-top'; enabled: boolean }
     | { type: 'set-transparent-mode-enabled'; enabled: boolean }
     | { type: 'disable-transparent-mode' }
-    | { type: 'set-player-chrome-hidden'; hidden: boolean }
+    | { type: 'cycle-player-chrome-visibility-mode' }
     | { type: 'open-export' }
     | { type: 'start-export'; preset: VideoExportPreset; startMode: VideoExportStartMode }
     | { type: 'stop-export' }
@@ -40,6 +42,7 @@ export interface RemoteControlSnapshot {
     mainWindowAlwaysOnTop: boolean;
     mainWindowBorderVisible: boolean;
     playerChromeHidden: boolean;
+    playerChromeVisibilityMode: PlayerChromeVisibilityMode;
     exportState: VideoExportState;
     isDaylight?: boolean;
     lyrics?: LyricData | null;

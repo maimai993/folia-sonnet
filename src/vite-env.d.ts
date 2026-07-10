@@ -60,7 +60,7 @@ declare global {
     | { type: 'set-main-window-always-on-top'; enabled: boolean }
     | { type: 'set-transparent-mode-enabled'; enabled: boolean }
     | { type: 'disable-transparent-mode' }
-    | { type: 'set-player-chrome-hidden'; hidden: boolean }
+    | { type: 'cycle-player-chrome-visibility-mode' }
     | { type: 'open-export' }
     | { type: 'start-export'; preset: ElectronVideoExportPreset; startMode: ElectronVideoExportStartMode }
     | { type: 'stop-export' }
@@ -124,6 +124,7 @@ declare global {
     mainWindowAlwaysOnTop: boolean;
     mainWindowBorderVisible: boolean;
     playerChromeHidden: boolean;
+    playerChromeVisibilityMode: import('./types/remoteControl').PlayerChromeVisibilityMode;
     exportState: ElectronVideoExportState;
     isDaylight?: boolean;
     lyrics?: import('./types').LyricData | null;

@@ -1,5 +1,5 @@
 import { PlayerState, type LyricData, type PlaybackContext, type SongResult, type StagePlayerSnapshot } from '../types';
-import type { RemoteControlSnapshot } from '../types/remoteControl';
+import type { PlayerChromeVisibilityMode, RemoteControlSnapshot } from '../types/remoteControl';
 import type { VideoExportState } from '../types/videoExport';
 import { isLocalPlaybackSong, resolveNavidromePlaybackCarrier } from './appPlaybackGuards';
 import { buildStagePlayerSnapshot } from './stagePlayerSnapshot';
@@ -71,6 +71,7 @@ export interface BuildPlaybackSyncBridgeModelArgs {
 export interface RemoteControlSnapshotOptions {
     lyrics?: LyricData | null;
     includeLyrics?: boolean;
+    playerChromeVisibilityMode: PlayerChromeVisibilityMode;
 }
 
 export interface DiscordPresenceSnapshot {
@@ -193,7 +194,7 @@ export const buildPlaybackSyncBridgeModel = ({
 
 export const buildRemoteControlSnapshotFromPlaybackSyncBridge = (
     model: PlaybackSyncBridgeModel,
-    options: RemoteControlSnapshotOptions = {},
+    options: RemoteControlSnapshotOptions,
 ): RemoteControlSnapshot => ({
     hasTrack: model.hasTrack,
     title: model.title,
@@ -211,6 +212,7 @@ export const buildRemoteControlSnapshotFromPlaybackSyncBridge = (
     mainWindowAlwaysOnTop: model.mainWindowAlwaysOnTop,
     mainWindowBorderVisible: model.mainWindowBorderVisible,
     playerChromeHidden: model.playerChromeHidden,
+    playerChromeVisibilityMode: options.playerChromeVisibilityMode,
     exportState: model.exportState,
     isDaylight: model.isDaylight,
     ...(options.includeLyrics ? { lyrics: options.lyrics ?? null } : {}),

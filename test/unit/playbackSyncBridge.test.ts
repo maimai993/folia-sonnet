@@ -64,13 +64,14 @@ describe('playbackSyncBridge', () => {
         expect(model.artist).toBe('Artist 2');
         expect(model.coverUrl).toBe('https://example.com/cached.jpg');
 
-        expect(buildRemoteControlSnapshotFromPlaybackSyncBridge(model)).toMatchObject({
+        expect(buildRemoteControlSnapshotFromPlaybackSyncBridge(model, { playerChromeVisibilityMode: 'auto-hide' })).toMatchObject({
             title: 'Current Song',
             artist: 'Artist 2',
             currentTime: 42,
             duration: 180,
             canGoPrevious: true,
             canGoNext: true,
+            playerChromeVisibilityMode: 'auto-hide',
             updatedAt: 1234,
         });
         expect(buildStagePlayerSnapshotFromPlaybackSyncBridge(model)).toMatchObject({
@@ -126,10 +127,11 @@ describe('playbackSyncBridge', () => {
         });
 
         expect(model.hasTrack).toBe(false);
-        expect(buildRemoteControlSnapshotFromPlaybackSyncBridge(model)).toMatchObject({
+        expect(buildRemoteControlSnapshotFromPlaybackSyncBridge(model, { playerChromeVisibilityMode: 'always-hidden' })).toMatchObject({
             hasTrack: false,
             controlsDisabled: true,
             isStageActive: true,
+            playerChromeVisibilityMode: 'always-hidden',
         });
         expect(buildTaskbarControlsFromPlaybackSyncBridge(model)).toEqual({
             hasActiveTrack: false,

@@ -31,7 +31,7 @@ type UsePlaybackInteractionBridgeParams = {
         startedAtMs: number | null;
     }>;
     setIsDevDebugOverlayVisible: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsPlayerChromeHidden: React.Dispatch<React.SetStateAction<boolean>>;
+    cyclePlayerChromeVisibilityMode: () => void;
     setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setReplayGainMode: React.Dispatch<React.SetStateAction<ReplayGainMode>>;
     setStatusMsg: React.Dispatch<React.SetStateAction<StatusMessage | null>>;
@@ -60,7 +60,7 @@ export function usePlaybackInteractionBridge({
     audioRef,
     stageLyricsClockRef,
     setIsDevDebugOverlayVisible,
-    setIsPlayerChromeHidden,
+    cyclePlayerChromeVisibilityMode,
     setIsPanelOpen,
     setReplayGainMode,
     setStatusMsg,
@@ -227,7 +227,7 @@ export function usePlaybackInteractionBridge({
                     if (currentView !== 'player' || isPanelOpen || hasBlockingWindow()) return;
                     if (event.ctrlKey || event.altKey || event.metaKey) return;
                     event.preventDefault();
-                    setIsPlayerChromeHidden(prev => !prev);
+                    cyclePlayerChromeVisibilityMode();
                     break;
                 case 'KeyP':
                     if (currentView !== 'player' || hasBlockingWindow()) return;
@@ -258,7 +258,7 @@ export function usePlaybackInteractionBridge({
         resumePlayback,
         setIsDevDebugOverlayVisible,
         setIsPanelOpen,
-        setIsPlayerChromeHidden,
+        cyclePlayerChromeVisibilityMode,
         stageActiveEntryKind,
         stageLyricsClockRef,
         syncStageLyricsClock,
