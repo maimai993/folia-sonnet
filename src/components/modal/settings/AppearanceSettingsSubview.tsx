@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check } from 'lucide-react';
+import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -861,6 +861,14 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
                             {t('options.homeLayoutStyleDesc')}
                         </div>
+                    </div>
+                    <div className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs leading-relaxed ${
+                        isDaylight
+                            ? 'border-amber-500/25 bg-amber-500/10 text-amber-800'
+                            : 'border-amber-400/20 bg-amber-400/10 text-amber-200'
+                    }`}>
+                        <TriangleAlert size={15} className="mt-0.5 shrink-0" />
+                        <span>{t('options.classicHomeLayoutRemovalNotice')}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <button

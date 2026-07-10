@@ -8,6 +8,7 @@ import { getVisualizerModeLabel, VISUALIZER_REGISTRY } from '../visualizer/regis
 import { useThemeQuickEditorStore } from '../../stores/useThemeQuickEditorStore';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { syncNow } from '../../services/sync/syncCoordinator';
+import { isSyncConfigured } from '../../services/sync/syncConfig';
 
 // Controls tab keeps the visualizer picker local so it can expand into a full-tab overlay
 // without changing the rest of the player state flow.
@@ -76,6 +77,7 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     const { t } = useTranslation();
     const openThemeQuickEditor = useThemeQuickEditorStore(state => state.openEditor);
     const openSettings = useSettingsUiStore(state => state.openSettings);
+    const statusSetter = useSettingsUiStore(state => state.statusSetter);
     const visualizerBackgroundMode = useSettingsUiStore(state => state.visualizerBackgroundMode);
     const monetBackgroundTuning = useSettingsUiStore(state => state.monetBackgroundTuning);
     const setMonetBackgroundTuning = useSettingsUiStore(state => state.handleSetMonetBackgroundTuning);
@@ -96,6 +98,14 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
 
     const handleThemeSync = async () => {
         if (themeSyncState === 'syncing') return;
+
+        if (!isSyncConfigured()) {
+            statusSetter?.({
+                type: 'info',
+                text: t('commandPalette.syncNotConfigured'),
+            });
+            return;
+        }
 
         if (themeSyncCompleteTimerRef.current !== null) {
             window.clearTimeout(themeSyncCompleteTimerRef.current);

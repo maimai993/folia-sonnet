@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Sliders } from 'lucide-react';
+import { MousePointerClick, Sliders, Sparkles, Type } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { UserGuideTipCard } from './UserGuideTipCard';
 import { UserGuideFeatureCard } from './UserGuideFeatureCard';

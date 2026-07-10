@@ -820,6 +820,7 @@ export default {
     "visualizerMode": "动画模式",
     "homeLayoutStyle": "首页布局样式",
     "homeLayoutStyleDesc": "选择首页展示的样式风格：经典(旧版)或万象(新版)透明桌面（支持拍立得单曲网格）。",
+    "classicHomeLayoutRemovalNotice": "旧版经典界面即将移除，请切换使用万象桌面。",
     "homeLayoutStyleCarousel": "经典(旧版)",
     "homeLayoutStyleGrid": "万象(新版)",
     "grid3dCardStyle": "歌单卡片样式",

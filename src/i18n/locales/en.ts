@@ -816,6 +816,7 @@ export default {
     "save": "Save",
     "homeLayoutStyle": "Home Layout Style",
     "homeLayoutStyleDesc": "Choose the style of the home screen: Classic (Legacy) or Vast Desktop (New, supporting Polaroid track grids).",
+    "classicHomeLayoutRemovalNotice": "The legacy Classic interface will be removed in a future release. Please switch to Vast Desktop.",
     "homeLayoutStyleCarousel": "Classic (Legacy)",
     "homeLayoutStyleGrid": "Vast Desktop (New)",
     "grid3dCardStyle": "3D Grid Card Style",
