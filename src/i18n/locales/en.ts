@@ -771,6 +771,7 @@ export default {
     "aiThemeQuickEditRecommendedColors": "Recommended colors",
     "aiThemeQuickEditSave": "Save AI Theme",
     "customThemeQuickEditSave": "Save Custom Theme",
+    "copyThemeJson": "Copy JSON",
     "invalidJsonFormat": "Invalid JSON format",
     "pasteJsonHere": "Paste JSON here...",
     "audioOutputSettings": "Playback Device",

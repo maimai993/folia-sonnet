@@ -774,6 +774,7 @@ export default {
     "aiThemeQuickEditRecommendedColors": "推荐色",
     "aiThemeQuickEditSave": "保存 AI 主题",
     "customThemeQuickEditSave": "保存自定义主题",
+    "copyThemeJson": "复制 JSON",
     "invalidJsonFormat": "无效的 JSON 格式",
     "pasteJsonHere": "在此粘贴 JSON...",
     "audioOutputSettings": "播放设备",

@@ -128,6 +128,7 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
     const [importJsonText, setImportJsonText] = useState('');
     const [importError, setImportError] = useState<string | null>(null);
     const [isCopied, setIsCopied] = useState(false);
+    const [isJsonCopied, setIsJsonCopied] = useState(false);
     const isMouseDownOnOverlayRef = useRef(false);
 
     useEffect(() => {
@@ -222,17 +223,41 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
         }));
     };
 
-    const handleSave = () => {
+    // Flushes any pending color-picker update and returns a safe, named dual theme for saving or copying.
+    const buildFinalTheme = () => {
         const finalLightName = themeNames.light.trim();
         const finalDarkName = themeNames.dark.trim();
-        if (!finalLightName || !finalDarkName) return;
-
         const updatedDraft = {
             ...draftTheme,
             light: { ...draftTheme.light, name: finalLightName },
             dark: { ...draftTheme.dark, name: finalDarkName },
         };
-        onSave(sanitizeDualTheme(updatedDraft, normalizedInitialTheme));
+
+        if (throttleTimeoutRef.current) {
+            clearTimeout(throttleTimeoutRef.current);
+            throttleTimeoutRef.current = null;
+            updatedDraft[mode] = {
+                ...updatedDraft[mode],
+                [activeKey]: latestColorRef.current,
+            };
+        }
+
+        return sanitizeDualTheme(updatedDraft, normalizedInitialTheme);
+    };
+
+    const handleSave = () => {
+        if (!isNameValid) return;
+        onSave(buildFinalTheme());
+    };
+
+    const handleCopyThemeJson = async () => {
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(buildFinalTheme(), null, 2));
+            setIsJsonCopied(true);
+            window.setTimeout(() => setIsJsonCopied(false), 2000);
+        } catch (error) {
+            console.error('Failed to copy theme JSON:', error);
+        }
     };
 
     const handleCopyPrompt = async () => {
@@ -583,19 +608,33 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
                                         <Check size={16} strokeWidth={2.5} />
                                         <span>{saveLabel}</span>
                                     </button>
-                                    {kind === 'ai' && (
+                                    <div className="flex gap-2">
                                         <button
                                             type="button"
+                                            onClick={() => void handleCopyThemeJson()}
+                                            disabled={!isNameValid}
+                                            className={`flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${allTransitionClass}`}
+                                            style={{ backgroundColor: 'transparent', color: mutedTextColor }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBg}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                        >
+                                            {isJsonCopied ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+                                            <span>{isJsonCopied ? (t('status.copied') || 'Copied!') : (t('options.copyThemeJson') || 'Copy JSON')}</span>
+                                        </button>
+                                        {kind === 'ai' && (
+                                            <button
+                                            type="button"
                                             onClick={() => setIsImportPanelOpen(true)}
-                                            className={`flex min-h-9 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold hover:brightness-110 active:scale-95 ${allTransitionClass}`}
+                                            className={`flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold hover:brightness-110 active:scale-95 ${allTransitionClass}`}
                                             style={{ backgroundColor: 'transparent', color: mutedTextColor }}
                                             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBg}
                                             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                         >
                                             <Download size={13} />
                                             <span>{t('options.manualImportAiTheme') || 'Manual Import'}</span>
-                                        </button>
-                                    )}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
