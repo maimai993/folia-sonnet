@@ -4,6 +4,7 @@ import { ArrowLeft, CircleHelp, Command, CornerDownLeft, Loader2, Search, X } fr
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../types';
 import type { CommandPaletteMatch, CommandPaletteCommand } from './types';
+import { getCommandDescription, getCommandTitle } from './commandText';
 
 // src/components/command-palette/CommandPalette.tsx
 // Full-screen command input overlay with autocomplete and keyboard execution.
@@ -207,7 +208,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                         }`}
                                     style={{ borderColor: isDaylight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.15)' }}
                                 >
-                                    <span>{t(`commandPalette.commands.${activeCommand.id}.title`, activeCommand.title)}</span>
+                                    <span>{getCommandTitle(activeCommand, t)}</span>
                                     <button
                                         type="button"
                                         disabled={isExecuting}
@@ -235,7 +236,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                 onCompositionEnd={(event) => onCompositionEnd(event.currentTarget.value)}
                                 placeholder={
                                     activeCommand
-                                        ? (activeCommand.placeholder || t(`commandPalette.commands.${activeCommand.id}.description`, activeCommand.description))
+                                        ? (activeCommand.placeholder || getCommandDescription(activeCommand, t))
                                         : t(`commandPalette.idlePlaceholders.${idlePlaceholderIndex}`, 'Type anything — there are plenty of commands to try')
                                 }
                                 autoComplete="off"
@@ -291,8 +292,8 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                     </div>
                                     {availableCommands.map(command => {
                                         const groupLabel = t(groupLabelKey[command.group] || 'commandPalette.groupOther') || command.group;
-                                        const title = t(`commandPalette.commands.${command.id}.title`, command.title);
-                                        const description = t(`commandPalette.commands.${command.id}.description`, command.description);
+                                        const title = getCommandTitle(command, t);
+                                        const description = getCommandDescription(command, t);
                                         return (
                                             <button
                                                 key={command.id}
@@ -325,8 +326,8 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                 matches.map((match, index) => {
                                     const isActive = index === activeIndex;
                                     const groupLabel = t(groupLabelKey[match.command.group] || 'commandPalette.groupOther') || match.command.group;
-                                    const title = t(`commandPalette.commands.${match.command.id}.title`, match.command.title);
-                                    const displayDescription = match.previewText || t(`commandPalette.commands.${match.command.id}.description`, match.command.description);
+                                    const title = getCommandTitle(match.command, t);
+                                    const displayDescription = match.previewText || getCommandDescription(match.command, t);
                                     const commandHint = match.command.keywords[0] ?? match.command.id;
                                     return (
                                         <button

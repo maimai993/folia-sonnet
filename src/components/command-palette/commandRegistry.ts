@@ -676,6 +676,7 @@ const createQueueSongCommand = (
     group: 'playback',
     title: song.name,
     description: buildQueueSongDescription(song, index, context),
+    textSource: 'runtime',
     keywords: [`#${index + 1}`],
     execute: async (_input, commandContext) => {
         await commandContext.playSong(song, commandContext.playQueue);

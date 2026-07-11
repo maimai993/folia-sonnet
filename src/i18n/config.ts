@@ -4,6 +4,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import en from './locales/en.ts';
 import zhCN from './locales/zh-CN.ts';
 import ind from './locales/in.ts';
+import { resolveMissingTranslation } from './missingTranslation';
 
 /*
  * Hardcoded Chinese fallback dictionary.
@@ -96,7 +97,9 @@ i18n
       }
     },
     fallbackLng: 'en',
-    parseMissingKeyHandler: (key: string): string => ZH_FALLBACKS[key] ?? key,
+    parseMissingKeyHandler: (key: string, defaultValue?: string): string => (
+      resolveMissingTranslation(ZH_FALLBACKS, key, defaultValue)
+    ),
     supportedLngs: ['en', 'zh-CN', 'in'],
     ...(initialLanguagePreference !== 'system' ? { lng: initialLanguagePreference } : {}),
     detection: {

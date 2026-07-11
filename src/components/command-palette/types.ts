@@ -17,6 +17,7 @@ export type CommandPaletteCommand = {
     group: CommandPaletteGroup;
     title: string;
     description: string;
+    textSource?: 'i18n' | 'runtime';
     keywords: string[];
     placeholder?: string;
     requiresInput?: boolean;
