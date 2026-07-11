@@ -228,6 +228,8 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     const aiSwatchColor = aiThemeSource.theme?.backgroundColor ?? 'rgba(114,119,134,0.4)';
     const customSwatchColor = customThemeSource.theme?.accentColor ?? 'rgba(114,119,134,0.4)';
     const resolvedVisualizerBackgroundMode = visualizerBackgroundMode ?? (visualizerMode === 'monet' ? 'monet' : 'common');
+    const isMonetFullOverlay = monetBackgroundTuning.backgroundLayout === 'full-overlay';
+    const monetLayoutLabel = t(isMonetFullOverlay ? 'options.monetLayoutFullOverlay' : 'options.monetLayoutHalfPane');
     const openCurrentThemeQuickEditor = () => {
         if (currentEditableSource) {
             openThemeQuickEditor(currentEditableSource);
@@ -403,22 +405,16 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                                     </button>
                                 )}
                                 {resolvedVisualizerBackgroundMode === 'monet' && (
-                                    <>
-                                        <button
-                                            onClick={() => setMonetBackgroundTuning({ backgroundLayout: 'half-pane-gradient' })}
-                                            className={`rounded-md px-1.5 py-1 text-[10px] font-bold transition-all ${monetBackgroundTuning.backgroundLayout === 'half-pane-gradient' ? 'text-blue-400' : 'opacity-40 hover:opacity-100'}`}
-                                            title={t('options.monetLayoutHalfPane')}
-                                        >
-                                            {t('options.monetLayoutHalfPane')}
-                                        </button>
-                                        <button
-                                            onClick={() => setMonetBackgroundTuning({ backgroundLayout: 'full-overlay' })}
-                                            className={`rounded-md px-1.5 py-1 text-[10px] font-bold transition-all ${monetBackgroundTuning.backgroundLayout === 'full-overlay' ? 'text-blue-400' : 'opacity-40 hover:opacity-100'}`}
-                                            title={t('options.monetLayoutFullOverlay')}
-                                        >
-                                            {t('options.monetLayoutFullOverlay')}
-                                        </button>
-                                    </>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMonetBackgroundTuning({ backgroundLayout: isMonetFullOverlay ? 'half-pane-gradient' : 'full-overlay' })}
+                                        className={`rounded-md px-1.5 py-1 text-[10px] font-bold transition-all ${activeOptionBg}`}
+                                        title={`${t('options.monetBackgroundLayout')}: ${monetLayoutLabel}`}
+                                        aria-label={`${t('options.monetBackgroundLayout')}: ${monetLayoutLabel}`}
+                                        aria-pressed={isMonetFullOverlay}
+                                    >
+                                        {monetLayoutLabel}
+                                    </button>
                                 )}
                             </div>
                         </div>
