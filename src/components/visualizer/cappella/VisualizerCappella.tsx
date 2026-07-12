@@ -41,7 +41,6 @@ interface CappellaEmoMessage {
     emoImageUrl: string;
     activationStartTime: number;
     activationEndTime: number;
-    isInterludeEmo?: boolean;
 }
 
 interface CappellaTitleMessage {
@@ -339,7 +338,6 @@ const buildCappellaMessages = (
                 emoImageUrl: fallbackEmo.url,
                 activationStartTime: 0,
                 activationEndTime: 999999,
-                isInterludeEmo: true,
             });
         }
 
@@ -402,7 +400,6 @@ const buildCappellaMessages = (
                 emoImageUrl: emoImage.url,
                 activationStartTime: line.startTime,
                 activationEndTime: Math.max(line.startTime + 0.12, effectiveRenderEndTime),
-                isInterludeEmo: true,
             });
         } else {
             messages.push({
@@ -485,7 +482,6 @@ const buildCappellaMessages = (
                 emoImageUrl: previewEmo.url,
                 activationStartTime: 0,
                 activationEndTime: Number.POSITIVE_INFINITY,
-                isInterludeEmo: true,
             });
         }
     }
@@ -1384,32 +1380,30 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
                                     }}
                                 />
                             )}
-                            <motion.img
-                                src={message.emoImageUrl}
-                                alt="emo"
+                            <motion.div
                                 initial={{ opacity: 0, scale: motionConfig.emoEnterScale }}
-                                animate={message.isInterludeEmo
-                                    ? {
-                                        opacity: 1,
-                                        scale: 1,
-                                        rotate: [-1.6, 1.6, -1.6],
-                                    }
-                                    : { opacity: 1, scale: 1 }}
-                                transition={message.isInterludeEmo
-                                    ? {
-                                        opacity: { duration: motionConfig.rowEnterDuration, ease: 'easeOut' },
-                                        scale: { duration: motionConfig.rowEnterDuration, ease: 'easeOut' },
-                                        rotate: { duration: 1.9, ease: 'easeInOut', repeat: Infinity },
-                                    }
-                                    : { duration: motionConfig.rowEnterDuration, ease: 'easeOut' }}
-                                className="rounded-2xl"
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ duration: motionConfig.rowEnterDuration, ease: 'easeOut' }}
                                 style={{
                                     width: '100%',
                                     height: '100%',
-                                    objectFit: 'contain',
                                     display: 'block',
                                 }}
-                            />
+                            >
+                                <img
+                                    src={message.emoImageUrl}
+                                    alt="emo"
+                                    className="rounded-2xl"
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'contain',
+                                        display: 'block',
+                                        animation: 'cappella-emo-wiggle 1.9s ease-in-out infinite',
+                                        willChange: 'transform',
+                                    }}
+                                />
+                            </motion.div>
                         </motion.div>
                     )
                     : (
@@ -1641,6 +1635,11 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
                 @keyframes cappella-bubble-glow-pan {
                     from { transform: translateX(0); }
                     to { transform: translateX(-50%); }
+                }
+
+                @keyframes cappella-emo-wiggle {
+                    0%, 100% { transform: rotate(-1.6deg); }
+                    50% { transform: rotate(1.6deg); }
                 }
             `}</style>
 
