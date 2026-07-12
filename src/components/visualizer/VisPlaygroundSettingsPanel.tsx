@@ -15,6 +15,7 @@ import {
     type PartitaTuning,
     type Theme,
     type TiltTuning,
+    type DioramaTuning,
     type UrlBackgroundItem,
     type VisualizerBackgroundMode,
     type VisualizerMode,
@@ -106,6 +107,8 @@ interface VisPlaygroundSettingsPanelProps {
     isLoadingCappellaCustomAvatarPack?: boolean;
     tiltTuning: TiltTuning;
     onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
+    dioramaTuning?: DioramaTuning;
+    onDioramaTuningChange?: (patch: Partial<DioramaTuning>) => void;
     monetBackgroundTuning?: MonetBackgroundTuning;
     onMonetBackgroundTuningChange?: (patch: Partial<MonetBackgroundTuning>) => void;
     monetTuning: MonetTuning;
@@ -345,6 +348,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         isLoadingCappellaCustomAvatarPack = false,
         tiltTuning,
         onTiltTuningChange,
+        dioramaTuning,
+        onDioramaTuningChange,
         monetBackgroundTuning = DEFAULT_MONET_BACKGROUND_TUNING,
         onMonetBackgroundTuningChange,
         monetTuning,
@@ -669,6 +674,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             isCappellaCustomAvatarLoading: isLoadingCappellaCustomAvatarPack,
                             tiltTuning,
                             onTiltTuningChange,
+                            dioramaTuning,
+                            onDioramaTuningChange,
                             monetTuning,
                             onMonetTuningChange,
                             monetPortraitImage,

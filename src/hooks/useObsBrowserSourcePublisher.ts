@@ -8,6 +8,7 @@ import type {
     CadenzaTuning,
     ClassicTuning,
     CladdaghTuning,
+    DioramaTuning,
     FumeTuning,
     LyricData,
     MonetBackgroundImage,
@@ -79,6 +80,7 @@ type UseObsBrowserSourcePublisherOptions = {
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
     tiltTuning?: TiltTuning;
+    dioramaTuning?: DioramaTuning;
     monetBackgroundTuning?: MonetBackgroundTuning;
     monetTuning?: MonetTuning;
     monetBackgroundImage?: MonetBackgroundImage | null;
@@ -142,6 +144,7 @@ export const useObsBrowserSourcePublisher = ({
     cappellaCustomEmojiImages,
     cappellaCustomAvatarImages,
     tiltTuning,
+    dioramaTuning,
     monetBackgroundTuning,
     monetTuning,
     monetBackgroundImage,
@@ -235,6 +238,7 @@ export const useObsBrowserSourcePublisher = ({
         cappellaCustomEmojiImages,
         cappellaCustomAvatarImages,
         tiltTuning,
+        dioramaTuning,
         monetBackgroundTuning,
         monetTuning,
         monetBackgroundImage,
@@ -252,6 +256,7 @@ export const useObsBrowserSourcePublisher = ({
         claddaghTuning,
         classicTuning,
         currentSong,
+        dioramaTuning,
         disableGeometricBackground,
         disableVignette,
         fumeTuning,

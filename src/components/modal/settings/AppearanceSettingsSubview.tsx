@@ -179,6 +179,31 @@ const decompressTilt = (o: any): any => ({
     colorScheme: o.tcs || 'default',
 });
 
+const compressDiorama = (t: any): any => ({
+    cs: t.cameraSpeed,
+    ma: t.motionAmount,
+    ar: t.audioReactivity,
+    spa: t.showParticles,
+    ge: t.glowEnabled,
+    gi: t.glowIntensity,
+    se: t.soulEnabled,
+    si: t.soulIntensity,
+    gre: t.gradientEnabled,
+    gri: t.gradientIntensity,
+});
+const decompressDiorama = (o: any): any => ({
+    cameraSpeed: o.cs !== undefined ? o.cs : 1,
+    motionAmount: o.ma !== undefined ? o.ma : 1,
+    audioReactivity: o.ar !== undefined ? o.ar : 1,
+    showParticles: o.spa !== undefined ? o.spa : true,
+    glowEnabled: o.ge !== undefined ? o.ge : true,
+    glowIntensity: o.gi !== undefined ? o.gi : 1,
+    soulEnabled: o.se !== undefined ? o.se : true,
+    soulIntensity: o.si !== undefined ? o.si : 1,
+    gradientEnabled: o.gre !== undefined ? o.gre : false,
+    gradientIntensity: o.gri !== undefined ? o.gri : 1,
+});
+
 const compressMonetBackground = (t: any): any => ({
     mbs: t.backgroundSource,
     mbl: t.backgroundLayout,
@@ -255,6 +280,7 @@ export const compressConfig = (config: any): string => {
     if (config.claddaghTuning) minified.clt = compressCladdagh(config.claddaghTuning);
     if (config.cappellaTuning) minified.cpt = compressCappella(config.cappellaTuning);
     if (config.tiltTuning) minified.tt = compressTilt(config.tiltTuning);
+    if (config.dioramaTuning) minified.dot = compressDiorama(config.dioramaTuning);
     if (config.monetBackgroundTuning) minified.mbt = compressMonetBackground(config.monetBackgroundTuning);
     if (config.monetTuning) minified.mt = compressMonet(config.monetTuning);
     if (config.urlBackgroundList) minified.ubl = config.urlBackgroundList;
@@ -320,6 +346,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.clt) decompressed.claddaghTuning = decompressCladdagh(parsed.clt);
         if (parsed.cpt) decompressed.cappellaTuning = decompressCappella(parsed.cpt);
         if (parsed.tt) decompressed.tiltTuning = decompressTilt(parsed.tt);
+        if (parsed.dot) decompressed.dioramaTuning = decompressDiorama(parsed.dot);
         if (parsed.mbt) decompressed.monetBackgroundTuning = decompressMonetBackground(parsed.mbt);
         if (parsed.mt) decompressed.monetTuning = decompressMonet(parsed.mt);
         if (parsed.ubl) decompressed.urlBackgroundList = parsed.ubl;
@@ -336,7 +363,7 @@ export const decompressConfig = (str: string): any => {
             'subtitleFontInheritsLyrics', 'subtitleFontStyle', 'subtitleFontFamily',
             'subtitleFontFallbackFamilies', 'classicTuning',
             'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'claddaghTuning', 'cappellaTuning',
-            'tiltTuning', 'monetBackgroundTuning', 'monetTuning',
+            'tiltTuning', 'dioramaTuning', 'monetBackgroundTuning', 'monetTuning',
             'urlBackgroundList', 'urlBackgroundSelectedId',
             'songThemeAutoSwitchEnabled', 'songThemeAutoGenerateEnabled',
         ];
@@ -439,6 +466,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         claddaghTuning: state.claddaghTuning,
         cappellaTuning: state.cappellaTuning,
         tiltTuning: state.tiltTuning,
+        dioramaTuning: state.dioramaTuning,
         monetBackgroundTuning: state.monetBackgroundTuning,
         monetTuning: state.monetTuning,
         urlBackgroundList: state.urlBackgroundList,
@@ -465,6 +493,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleSetCladdaghTuning: state.handleSetCladdaghTuning,
         handleSetCappellaTuning: state.handleSetCappellaTuning,
         handleSetTiltTuning: state.handleSetTiltTuning,
+        handleSetDioramaTuning: state.handleSetDioramaTuning,
         handleSetMonetBackgroundTuning: state.handleSetMonetBackgroundTuning,
         handleSetMonetTuning: state.handleSetMonetTuning,
         handleAddUrlBackgroundItem: state.handleAddUrlBackgroundItem,
@@ -516,6 +545,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             claddaghTuning: store.claddaghTuning,
             cappellaTuning: store.cappellaTuning,
             tiltTuning: store.tiltTuning,
+            dioramaTuning: store.dioramaTuning,
             monetBackgroundTuning: store.monetBackgroundTuning,
             monetTuning: store.monetTuning,
             urlBackgroundList: store.urlBackgroundList,
@@ -627,6 +657,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (config.tiltTuning) {
                 store.handleSetTiltTuning(config.tiltTuning);
+            }
+            if (config.dioramaTuning) {
+                store.handleSetDioramaTuning(config.dioramaTuning);
             }
             if (config.monetBackgroundTuning) {
                 store.handleSetMonetBackgroundTuning(config.monetBackgroundTuning);

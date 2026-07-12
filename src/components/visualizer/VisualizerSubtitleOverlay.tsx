@@ -3,6 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Line, Theme } from '../../types';
 import { resolveThemeTranslationFontStack } from '../../utils/fontStacks';
 
+// Some songs' lyric data carries pure marker/separator lines ("//", "●●●", dashes, stray slashes from
+// instrumental breaks or credits formatting). Those are timing placeholders, never display text: a
+// string is only shown here if it contains at least one letter or digit (any script - CJK counts as
+// \p{L}). Applies to BOTH the translation and the upcoming-line preview, so no placeholder can ever
+// reach the shared bottom subtitle in any visualizer mode.
+const hasReadableText = (text?: string | null): boolean => !!text && /[\p{L}\p{N}]/u.test(text);
+
 interface VisualizerSubtitleOverlayProps {
     showText: boolean;
     activeLine: Line | null;
@@ -35,13 +42,15 @@ export const resolveVisualizerSubtitleOverlayContent = ({
         };
     }
 
-    const rawTranslationText = activeLine?.translation || recentCompletedLine?.translation || null;
+    const rawTranslationText = [activeLine?.translation, recentCompletedLine?.translation]
+        .find(hasReadableText) ?? null;
     const translationText = showSubtitleTranslation ? rawTranslationText : null;
+    const previewLines = nextLines.filter((line) => hasReadableText(line.fullText));
 
     return {
         shouldRenderOverlay: true,
         translationText,
-        upcomingLines: translationText ? [] : activeLine ? nextLines : [],
+        upcomingLines: translationText ? [] : activeLine ? previewLines : [],
     };
 };
 

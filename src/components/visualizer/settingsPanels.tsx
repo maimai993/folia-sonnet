@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type FumeTuning, type PartitaTuning, type TiltColorScheme, type TiltTuning } from '../../types';
+import { DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type DioramaTuning, type FumeTuning, type PartitaTuning, type TiltColorScheme, type TiltTuning } from '../../types';
 import { colorWithAlpha } from './colorMix';
 import { type VisualizerSettingsPanelProps } from './definition';
 
@@ -939,6 +939,279 @@ export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     className={rangeInputClass}
                 />
             </div>
+        </div>
+    );
+};
+
+const clampDioramaCameraSpeed = (value: number) => Math.min(1.85, Math.max(0.55, value));
+const clampDioramaMotionAmount = (value: number) => Math.min(1.6, Math.max(0.4, value));
+const clampDioramaAudioReactivity = (value: number) => Math.min(1.5, Math.max(0, value));
+
+// One follow-sing effect row in the diorama panel: an independent on/off toggle, then preset
+// strength chips (弱/中/强/自定义) - the raw slider only unfolds when 自定义 is picked, so casual
+// users pick a tier in one tap. Each of the three effects (普通辉光/灵魂出窍/渐变) gets its own row
+// with its own enabled+intensity fields; they never share or override each other's values.
+const DIORAMA_STRENGTH_PRESETS: Array<{ key: 'low' | 'mid' | 'high'; value: number }> = [
+    { key: 'low', value: 0.5 },
+    { key: 'mid', value: 1 },
+    { key: 'high', value: 1.5 },
+];
+
+type DioramaStrengthChoice = 'low' | 'mid' | 'high' | 'custom';
+
+const DioramaEffectControl: React.FC<{
+    label: string;
+    enabled: boolean;
+    intensity: number;
+    onEnabledChange: (next: boolean) => void;
+    onIntensityChange: (next: number) => void;
+    t: (key: string) => string;
+    isDaylight: boolean;
+    theme: VisualizerSettingsPanelProps['theme'];
+    rangeInputClass: string;
+    onSliderPointerDown?: () => void;
+    onSliderCommit?: () => void;
+}> = ({
+    label,
+    enabled,
+    intensity,
+    onEnabledChange,
+    onIntensityChange,
+    t,
+    isDaylight,
+    theme,
+    rangeInputClass,
+    onSliderPointerDown,
+    onSliderCommit,
+}) => {
+    const matchedPreset = DIORAMA_STRENGTH_PRESETS.find(p => Math.abs(p.value - intensity) < 0.001)?.key ?? null;
+    // UI-only: whether the user explicitly chose 自定义 (so the slider stays open even if they drag
+    // it exactly onto a preset value).
+    const [customMode, setCustomMode] = useState(matchedPreset === null);
+    const activeChoice: DioramaStrengthChoice = customMode ? 'custom' : (matchedPreset ?? 'custom');
+
+    const toggleOptions: PresetOption<boolean>[] = [
+        { label: t('options.dioramaEffectOn') || '开启', value: true },
+        { label: t('options.dioramaEffectOff') || '关闭', value: false },
+    ];
+    const strengthOptions: PresetOption<DioramaStrengthChoice>[] = [
+        { label: t('options.dioramaStrengthLow') || '弱', value: 'low' },
+        { label: t('options.dioramaStrengthMid') || '中', value: 'mid' },
+        { label: t('options.dioramaStrengthHigh') || '强', value: 'high' },
+        { label: t('options.dioramaStrengthCustom') || '自定义', value: 'custom' },
+    ];
+
+    return (
+        <div className="space-y-3">
+            <PresetGroup<boolean>
+                label={label}
+                value={enabled}
+                options={toggleOptions}
+                onChange={onEnabledChange}
+                isDaylight={isDaylight}
+                theme={theme}
+            />
+            {enabled && (
+                <PresetGroup<DioramaStrengthChoice>
+                    label={t('options.dioramaEffectStrength') || '强度'}
+                    value={activeChoice}
+                    options={strengthOptions}
+                    onChange={(next) => {
+                        if (next === 'custom') {
+                            setCustomMode(true);
+                            return;
+                        }
+                        setCustomMode(false);
+                        const preset = DIORAMA_STRENGTH_PRESETS.find(p => p.key === next);
+                        if (preset) onIntensityChange(preset.value);
+                    }}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
+            )}
+            {enabled && activeChoice === 'custom' && (
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                        <span>{t('options.dioramaCustomStrength') || '自定义强度'}</span>
+                        <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                            {Math.round(intensity * 100)}%
+                        </span>
+                    </div>
+                    <input
+                        type="range"
+                        min="0.1"
+                        max="1.5"
+                        step="0.05"
+                        value={intensity}
+                        onChange={(event) => onIntensityChange(parseFloat(event.target.value))}
+                        onPointerDown={onSliderPointerDown}
+                        onPointerUp={onSliderCommit}
+                        className={rangeInputClass}
+                    />
+                </div>
+            )}
+        </div>
+    );
+};
+
+export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
+    t,
+    isDaylight,
+    theme,
+    controlCardBg,
+    rangeInputClass,
+    onSliderPointerDown,
+    onSliderCommit,
+    dioramaTuning = DEFAULT_DIORAMA_TUNING,
+    onDioramaTuningChange,
+}) => {
+    const resolvedTuning: DioramaTuning = {
+        cameraSpeed: clampDioramaCameraSpeed(dioramaTuning.cameraSpeed ?? DEFAULT_DIORAMA_TUNING.cameraSpeed),
+        motionAmount: clampDioramaMotionAmount(dioramaTuning.motionAmount ?? DEFAULT_DIORAMA_TUNING.motionAmount),
+        audioReactivity: clampDioramaAudioReactivity(dioramaTuning.audioReactivity ?? DEFAULT_DIORAMA_TUNING.audioReactivity),
+        showParticles: dioramaTuning.showParticles ?? DEFAULT_DIORAMA_TUNING.showParticles,
+        glowEnabled: dioramaTuning.glowEnabled ?? DEFAULT_DIORAMA_TUNING.glowEnabled,
+        glowIntensity: Math.min(1.5, Math.max(0.1, dioramaTuning.glowIntensity ?? DEFAULT_DIORAMA_TUNING.glowIntensity)),
+        soulEnabled: dioramaTuning.soulEnabled ?? DEFAULT_DIORAMA_TUNING.soulEnabled,
+        soulIntensity: Math.min(1.5, Math.max(0.1, dioramaTuning.soulIntensity ?? DEFAULT_DIORAMA_TUNING.soulIntensity)),
+        gradientEnabled: dioramaTuning.gradientEnabled ?? DEFAULT_DIORAMA_TUNING.gradientEnabled,
+        gradientIntensity: Math.min(1.5, Math.max(0.1, dioramaTuning.gradientIntensity ?? DEFAULT_DIORAMA_TUNING.gradientIntensity)),
+    };
+
+    const particleOptions: PresetOption<boolean>[] = useMemo(() => ([
+        { label: t('options.partitaGuideLinesOn') || '显示', value: true },
+        { label: t('options.partitaGuideLinesOff') || '隐藏', value: false },
+    ]), [t]);
+
+    const handleDioramaTuningChange = (patch: Partial<DioramaTuning>) => {
+        onDioramaTuningChange?.(patch);
+    };
+
+    return (
+        <div
+            className="rounded-[24px] border border-white/10 p-4 space-y-4"
+            style={{ backgroundColor: controlCardBg }}
+        >
+            <div className="space-y-1">
+                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {t('options.dioramaSettings') || '镜台参数'}
+                </div>
+                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.dioramaSettingsDesc') || '运镜风格跟随主题的动画强度（与播放页强度按钮、AI 主题联动）。这里控制镜头速度、运动幅度和几何体的音频响应。'}
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.dioramaCameraSpeed') || '镜头速度'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {resolvedTuning.cameraSpeed.toFixed(2)}x
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0.55"
+                    max="1.85"
+                    step="0.05"
+                    value={resolvedTuning.cameraSpeed}
+                    onChange={(event) => handleDioramaTuningChange({ cameraSpeed: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.dioramaMotionAmount') || '运动幅度'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {resolvedTuning.motionAmount.toFixed(2)}x
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0.4"
+                    max="1.6"
+                    step="0.05"
+                    value={resolvedTuning.motionAmount}
+                    onChange={(event) => handleDioramaTuningChange({ motionAmount: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.dioramaAudioReactivity') || '几何体音频响应'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {Math.round(resolvedTuning.audioReactivity * 100)}%
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0"
+                    max="1.5"
+                    step="0.05"
+                    value={resolvedTuning.audioReactivity}
+                    onChange={(event) => handleDioramaTuningChange({ audioReactivity: parseFloat(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+
+            {/* Three independent, stackable follow-sing effects - each an on/off toggle plus strength
+                tiers (slider only under 自定义). Their rendering paths are fully separate in
+                DioramaScene, so enabling one never stands in for another. */}
+            <DioramaEffectControl
+                label={t('options.dioramaGlowEffect') || '普通辉光跟唱'}
+                enabled={resolvedTuning.glowEnabled}
+                intensity={resolvedTuning.glowIntensity}
+                onEnabledChange={(next) => handleDioramaTuningChange({ glowEnabled: next })}
+                onIntensityChange={(next) => handleDioramaTuningChange({ glowIntensity: next })}
+                t={t}
+                isDaylight={isDaylight}
+                theme={theme}
+                rangeInputClass={rangeInputClass}
+                onSliderPointerDown={onSliderPointerDown}
+                onSliderCommit={onSliderCommit}
+            />
+            <DioramaEffectControl
+                label={t('options.dioramaSoulEffect') || '灵魂出窍跟唱'}
+                enabled={resolvedTuning.soulEnabled}
+                intensity={resolvedTuning.soulIntensity}
+                onEnabledChange={(next) => handleDioramaTuningChange({ soulEnabled: next })}
+                onIntensityChange={(next) => handleDioramaTuningChange({ soulIntensity: next })}
+                t={t}
+                isDaylight={isDaylight}
+                theme={theme}
+                rangeInputClass={rangeInputClass}
+                onSliderPointerDown={onSliderPointerDown}
+                onSliderCommit={onSliderCommit}
+            />
+            <DioramaEffectControl
+                label={t('options.dioramaGradientEffect') || '渐变跟唱'}
+                enabled={resolvedTuning.gradientEnabled}
+                intensity={resolvedTuning.gradientIntensity}
+                onEnabledChange={(next) => handleDioramaTuningChange({ gradientEnabled: next })}
+                onIntensityChange={(next) => handleDioramaTuningChange({ gradientIntensity: next })}
+                t={t}
+                isDaylight={isDaylight}
+                theme={theme}
+                rangeInputClass={rangeInputClass}
+                onSliderPointerDown={onSliderPointerDown}
+                onSliderCommit={onSliderCommit}
+            />
+
+            <PresetGroup<boolean>
+                label={t('options.dioramaShowParticles') || '前景粒子'}
+                value={resolvedTuning.showParticles}
+                options={particleOptions}
+                onChange={(next) => handleDioramaTuningChange({ showParticles: next })}
+                isDaylight={isDaylight}
+                theme={theme}
+            />
         </div>
     );
 };
