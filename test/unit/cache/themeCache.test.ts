@@ -8,6 +8,11 @@ vi.mock('@/services/db', () => ({
     getFromCache: vi.fn()
 }));
 
+vi.mock('@/services/sync/themeSyncRegistry', () => ({
+    readThemeSyncRegistry: vi.fn().mockResolvedValue({}),
+    registerThemeSyncRecordForSongIfMissing: vi.fn().mockResolvedValue(null),
+}));
+
 describe('themeCache', () => {
     const getFromCacheMock = vi.mocked(getFromCache);
 

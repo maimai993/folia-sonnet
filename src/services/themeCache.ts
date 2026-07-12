@@ -31,7 +31,7 @@ export async function getCachedThemeStateForSong(song: SongResult | null): Promi
         return { kind: 'none' };
     }
 
-    const registry = readThemeSyncRegistry();
+    const registry = await readThemeSyncRegistry();
     const registryRecord = createSongSyncFingerprintCandidates(song)
         .map(fingerprint => registry[fingerprint])
         .find(Boolean);
@@ -45,7 +45,7 @@ export async function getCachedThemeStateForSong(song: SongResult | null): Promi
     const localThemeState = await getCachedThemeState(song.id);
     if (localThemeState.kind !== 'none') {
         if (localThemeState.kind === 'dual') {
-            registerThemeSyncRecordForSongIfMissing(song, 'manual');
+            await registerThemeSyncRecordForSongIfMissing(song, 'manual');
         }
         return localThemeState;
     }

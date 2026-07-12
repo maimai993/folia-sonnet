@@ -1,4 +1,5 @@
 import type { SongResult } from '../../types';
+import { getThemeRegistryEntries, upsertThemeRegistryEntries } from '../db';
 import { createNeteaseSongIdFingerprint, createSongSyncFingerprint } from './syncFingerprint';
 import type { SyncedThemeSource } from './syncTypes';
 
@@ -7,6 +8,7 @@ import type { SyncedThemeSource } from './syncTypes';
 
 const THEME_SYNC_REGISTRY_KEY = 'folia_sync_theme_registry_v1';
 const DUAL_THEME_CACHE_PREFIX = 'dual_theme_';
+let legacyMigrationPromise: Promise<void> | null = null;
 
 export type ThemeSyncRegistryRecord = {
     fingerprint: string;
@@ -15,7 +17,7 @@ export type ThemeSyncRegistryRecord = {
     source: SyncedThemeSource;
 };
 
-const isBrowser = () => typeof window !== 'undefined';
+const hasIndexedDb = () => typeof indexedDB !== 'undefined';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
     Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -40,23 +42,83 @@ const parseRegistryRecord = (value: unknown): ThemeSyncRegistryRecord | null => 
     };
 };
 
-export const readThemeSyncRegistry = (): Record<string, ThemeSyncRegistryRecord> => {
-    if (!isBrowser()) {
+const readLegacyThemeSyncRegistry = () => {
+    if (typeof window === 'undefined') {
+        return { raw: null, records: [] as ThemeSyncRegistryRecord[] };
+    }
+
+    const raw = window.localStorage.getItem(THEME_SYNC_REGISTRY_KEY);
+    if (!raw) {
+        return { raw: null, records: [] as ThemeSyncRegistryRecord[] };
+    }
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (!isRecord(parsed)) {
+            return { raw, records: [] as ThemeSyncRegistryRecord[] };
+        }
+
+        const records = Object.entries(parsed).flatMap(([fingerprint, value]) => {
+            const record = parseRegistryRecord(value);
+            return record && record.fingerprint === fingerprint ? [record] : [];
+        });
+        return { raw, records };
+    } catch {
+        return { raw, records: [] as ThemeSyncRegistryRecord[] };
+    }
+};
+
+// Moves the legacy localStorage registry once, without overwriting newer IndexedDB rows.
+const migrateLegacyThemeSyncRegistry = async () => {
+    const legacy = readLegacyThemeSyncRegistry();
+    if (!legacy.raw) {
+        return;
+    }
+
+    const storedRecords = await getThemeRegistryEntries<unknown>();
+    const storedByFingerprint = new Map<string, ThemeSyncRegistryRecord>();
+    storedRecords.forEach((value) => {
+        const record = parseRegistryRecord(value);
+        if (record) {
+            storedByFingerprint.set(record.fingerprint, record);
+        }
+    });
+    const recordsToMigrate = legacy.records.filter((record) => {
+        const stored = storedByFingerprint.get(record.fingerprint);
+        return !stored || Date.parse(record.updatedAt) > Date.parse(stored.updatedAt);
+    });
+    await upsertThemeRegistryEntries(recordsToMigrate);
+
+    if (typeof window !== 'undefined'
+        && window.localStorage.getItem(THEME_SYNC_REGISTRY_KEY) === legacy.raw
+    ) {
+        window.localStorage.removeItem(THEME_SYNC_REGISTRY_KEY);
+    }
+};
+
+const ensureLegacyThemeSyncRegistryMigrated = async () => {
+    if (!legacyMigrationPromise) {
+        legacyMigrationPromise = migrateLegacyThemeSyncRegistry().catch((error) => {
+            legacyMigrationPromise = null;
+            throw error;
+        });
+    }
+    await legacyMigrationPromise;
+};
+
+export const readThemeSyncRegistry = async (): Promise<Record<string, ThemeSyncRegistryRecord>> => {
+    if (!hasIndexedDb()) {
         return {};
     }
 
     try {
-        const raw = window.localStorage.getItem(THEME_SYNC_REGISTRY_KEY);
-        const parsed = raw ? JSON.parse(raw) : null;
-        if (!isRecord(parsed)) {
-            return {};
-        }
-
+        await ensureLegacyThemeSyncRegistryMigrated();
+        const storedRecords = await getThemeRegistryEntries<unknown>();
         const records: Record<string, ThemeSyncRegistryRecord> = {};
-        Object.entries(parsed).forEach(([fingerprint, value]) => {
+        storedRecords.forEach((value) => {
             const record = parseRegistryRecord(value);
-            if (record && record.fingerprint === fingerprint) {
-                records[fingerprint] = record;
+            if (record) {
+                records[record.fingerprint] = record;
             }
         });
         return records;
@@ -65,30 +127,21 @@ export const readThemeSyncRegistry = (): Record<string, ThemeSyncRegistryRecord>
     }
 };
 
-const writeThemeSyncRegistry = (records: Record<string, ThemeSyncRegistryRecord>) => {
-    if (isBrowser()) {
-        window.localStorage.setItem(THEME_SYNC_REGISTRY_KEY, JSON.stringify(records));
-    }
-};
-
-export const upsertThemeSyncRecords = (records: ThemeSyncRegistryRecord[]) => {
+export const upsertThemeSyncRecords = async (records: ThemeSyncRegistryRecord[]) => {
     const validRecords = records.filter(record => record.fingerprint && record.cacheKey);
     if (validRecords.length === 0) {
         return;
     }
 
-    const registry = readThemeSyncRegistry();
-    validRecords.forEach((record) => {
-        registry[record.fingerprint] = record;
-    });
-    writeThemeSyncRegistry(registry);
+    await ensureLegacyThemeSyncRegistryMigrated();
+    await upsertThemeRegistryEntries(validRecords);
 };
 
-export const upsertThemeSyncRecord = (record: ThemeSyncRegistryRecord) => {
-    upsertThemeSyncRecords([record]);
+export const upsertThemeSyncRecord = async (record: ThemeSyncRegistryRecord) => {
+    await upsertThemeSyncRecords([record]);
 };
 
-export const registerThemeSyncRecordForSong = (
+export const registerThemeSyncRecordForSong = async (
     song: SongResult | null,
     source: SyncedThemeSource,
     updatedAt = new Date().toISOString(),
@@ -104,20 +157,20 @@ export const registerThemeSyncRecordForSong = (
         updatedAt,
         source,
     };
-    upsertThemeSyncRecord(record);
+    await upsertThemeSyncRecord(record);
     return record;
 };
 
-export const registerThemeSyncRecordForSongIfMissing = (
+export const registerThemeSyncRecordForSongIfMissing = async (
     song: SongResult | null,
     source: SyncedThemeSource,
 ) => {
     const fingerprint = createSongSyncFingerprint(song);
-    if (!fingerprint || readThemeSyncRegistry()[fingerprint]) {
+    if (!fingerprint || (await readThemeSyncRegistry())[fingerprint]) {
         return null;
     }
 
-    return registerThemeSyncRecordForSong(song, source);
+    return await registerThemeSyncRecordForSong(song, source);
 };
 
 export const createLegacyNeteaseThemeSyncRecord = (
@@ -152,4 +205,4 @@ export const getThemeCacheKeyFromFingerprint = (fingerprint: string) => (
     ?? `${DUAL_THEME_CACHE_PREFIX}sync_${encodeURIComponent(fingerprint)}`
 );
 
-export const getThemeSyncRegistryRecords = () => Object.values(readThemeSyncRegistry());
+export const getThemeSyncRegistryRecords = async () => Object.values(await readThemeSyncRegistry());

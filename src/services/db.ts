@@ -5,13 +5,14 @@ import type { MigrationResult } from "../utils/lyrics/renderHints";
 import { isBlob } from "../utils/blobGuards";
 
 const DB_NAME = 'KineticPlayerDB';
-const DB_VERSION = 5; // Incremented version to ensure local_music store is created
+const DB_VERSION = 6; // Adds the dedicated AI theme sync registry store.
 const STORE_NAME = 'session';
 const CACHE_STORE = 'api_cache';
 const USER_CACHE_STORE = 'user_cache';
 const MEDIA_CACHE_STORE = 'media_cache';
 const METADATA_CACHE_STORE = 'metadata_cache';
 const LOCAL_MUSIC_STORE = 'local_music';
+const THEME_REGISTRY_STORE = 'theme_registry';
 
 export interface SessionData {
   audioFile?: File | Blob;
@@ -104,6 +105,10 @@ const openDB = (): Promise<IDBDatabase> => {
       // Always check if it exists, regardless of version, to handle edge cases
       if (!db.objectStoreNames.contains(LOCAL_MUSIC_STORE)) {
         db.createObjectStore(LOCAL_MUSIC_STORE, { keyPath: 'id' });
+      }
+
+      if (!db.objectStoreNames.contains(THEME_REGISTRY_STORE)) {
+        db.createObjectStore(THEME_REGISTRY_STORE, { keyPath: 'fingerprint' });
       }
     };
 
@@ -359,6 +364,32 @@ export const removeFromCache = async (key: string): Promise<void> => {
   } catch (e) {
     console.error("Cache remove failed", e);
   }
+};
+
+export const getThemeRegistryEntries = async <T>(): Promise<T[]> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([THEME_REGISTRY_STORE], 'readonly');
+    const request = tx.objectStore(THEME_REGISTRY_STORE).getAll();
+    request.onsuccess = () => resolve(request.result as T[]);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const upsertThemeRegistryEntries = async <T extends { fingerprint: string }>(entries: T[]): Promise<void> => {
+  if (entries.length === 0) {
+    return;
+  }
+
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([THEME_REGISTRY_STORE], 'readwrite');
+    const store = tx.objectStore(THEME_REGISTRY_STORE);
+    entries.forEach(entry => store.put(entry));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
 };
 
 export const clearCache = async (preserveKeys: string[] = []): Promise<void> => {

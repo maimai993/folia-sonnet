@@ -5,7 +5,7 @@
 
 (async () => {
   const DB_NAME = 'KineticPlayerDB';
-  const DB_VERSION = 5;
+  const DB_VERSION = 6;
   const STORE = 'local_music';
 
   const db = await new Promise((resolve, reject) => {

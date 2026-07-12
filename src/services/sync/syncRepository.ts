@@ -22,6 +22,7 @@ import {
     registerThemeSyncRecordForSong,
     upsertThemeSyncRecord,
     upsertThemeSyncRecords,
+    type ThemeSyncRegistryRecord,
 } from './themeSyncRegistry';
 import type {
     SyncLibraryExportBundle,
@@ -92,7 +93,7 @@ const writeThemeSyncWatermark = (watermark: ThemeSyncWatermark) => {
     }
 };
 
-const getLocalThemeRegistrySignature = (records: ReturnType<typeof getThemeSyncRegistryRecords>) => {
+const getLocalThemeRegistrySignature = (records: ThemeSyncRegistryRecord[]) => {
     let latestUpdatedAt = '';
     let hash = 2166136261;
     const tokens = records
@@ -200,7 +201,7 @@ const saveRemoteThemeToLocalCache = async (
         source: record.source,
     };
     if (!skipRegistryUpdate) {
-        upsertThemeSyncRecord(registryRecord);
+        await upsertThemeSyncRecord(registryRecord);
     }
     return registryRecord;
 };
@@ -240,7 +241,7 @@ export const saveSyncedThemeForSong = async (
     const fingerprint = createSongSyncFingerprint(song);
     const updatedAt = new Date().toISOString();
     if (fingerprint) {
-        registerThemeSyncRecordForSong(song, source, updatedAt);
+        await registerThemeSyncRecordForSong(song, source, updatedAt);
     }
     if (!config || !fingerprint) {
         return false;
@@ -264,7 +265,7 @@ export const saveSyncedThemeForSong = async (
 
 const hydrateLegacyNeteaseThemeSyncRecords = async () => {
     const entries = await getCacheEntriesByPrefix<DualTheme>(DUAL_THEME_CACHE_PREFIX);
-    const registry = readThemeSyncRegistry();
+    const registry = await readThemeSyncRegistry();
     const recordsToUpsert: NonNullable<ReturnType<typeof createLegacyNeteaseThemeSyncRecord>>[] = [];
     entries.forEach((entry) => {
         const record = createLegacyNeteaseThemeSyncRecord(entry.key, entry.timestamp);
@@ -273,17 +274,18 @@ const hydrateLegacyNeteaseThemeSyncRecords = async () => {
         }
     });
     if (recordsToUpsert.length > 0) {
-        upsertThemeSyncRecords(recordsToUpsert);
+        await upsertThemeSyncRecords(recordsToUpsert);
     }
 };
 
 const collectLocalThemeUploadEntries = async (
     remoteRecords: Map<string, SyncedThemeRecord>,
-    localRecords = getThemeSyncRegistryRecords(),
+    localRecords?: ThemeSyncRegistryRecord[],
 ) => {
     const uploadEntries: SyncedThemeRecord[] = [];
+    const resolvedLocalRecords = localRecords ?? await getThemeSyncRegistryRecords();
 
-    for (const record of localRecords) {
+    for (const record of resolvedLocalRecords) {
         const remoteRecord = remoteRecords.get(record.fingerprint);
         if (remoteRecord && !isRemoteNewer(record.updatedAt, remoteRecord.updatedAt)) {
             continue;
@@ -294,7 +296,7 @@ const collectLocalThemeUploadEntries = async (
             continue;
         }
         if (remoteRecord && areDualThemesEqual(theme, remoteRecord.theme)) {
-            upsertThemeSyncRecord({
+            await upsertThemeSyncRecord({
                 ...record,
                 updatedAt: remoteRecord.updatedAt,
                 source: remoteRecord.source,
@@ -352,7 +354,7 @@ export const pushMissingLocalThemesToRemote = async (
     }
 
     await hydrateLegacyNeteaseThemeSyncRecords();
-    const localRecords = getThemeSyncRegistryRecords();
+    const localRecords = await getThemeSyncRegistryRecords();
     const localRegistrySignature = getLocalThemeRegistrySignature(localRecords);
     const existingWatermark = readThemeSyncWatermark();
     if (isThemeWatermarkFresh(existingWatermark, state, localRegistrySignature)) {
@@ -416,7 +418,7 @@ export const pushMissingLocalThemesToRemote = async (
         }
     }
     if (downloadedRegistryRecords.length > 0) {
-        upsertThemeSyncRecords(downloadedRegistryRecords);
+        await upsertThemeSyncRecords(downloadedRegistryRecords);
     }
 
     const uploadEntries = await collectLocalThemeUploadEntries(remoteRecordMap, affectedLocalRecords);
@@ -425,7 +427,7 @@ export const pushMissingLocalThemesToRemote = async (
     }
 
     if (uploadEntries.length === 0) {
-        const nextLocalRecords = getThemeSyncRegistryRecords();
+        const nextLocalRecords = await getThemeSyncRegistryRecords();
         const nextLocalBuckets = buildThemeBucketSummaries(nextLocalRecords);
         const bucketsAreNowEqual = diffBucketIds.every((bucketId) => {
             const remoteBucket = remoteBuckets.get(bucketId);
@@ -487,7 +489,7 @@ export const saveSyncLibraryBundleToLocalCache = async (bundle: SyncLibraryExpor
         }
     }
     if (registryRecords.length > 0) {
-        upsertThemeSyncRecords(registryRecords);
+        await upsertThemeSyncRecords(registryRecords);
     }
 };
 
