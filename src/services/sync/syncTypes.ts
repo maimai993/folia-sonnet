@@ -1,4 +1,5 @@
 import type { DualTheme, Theme, VisualizerBackgroundMode, VisualizerMode } from '../../types';
+import type { VisualizerTuningBundle } from '../../components/visualizer/tuningRegistry';
 
 // src/services/sync/syncTypes.ts
 // Shared contracts for Folia's user-hosted sync server API.
@@ -38,6 +39,7 @@ export type SyncedVisualSettings = {
     subtitleFontStyle?: Theme['fontStyle'];
     subtitleFontFamily?: string | null;
     subtitleFontFallbackFamilies?: string[];
+    visualizerTunings?: VisualizerTuningBundle;
     classicTuning?: unknown;
     cadenzaTuning?: unknown;
     partitaTuning?: unknown;
@@ -45,6 +47,7 @@ export type SyncedVisualSettings = {
     claddaghTuning?: unknown;
     cappellaTuning?: unknown;
     tiltTuning?: unknown;
+    dioramaTuning?: unknown;
     monetBackgroundTuning?: unknown;
     monetTuning?: unknown;
     urlBackgroundList?: unknown[];

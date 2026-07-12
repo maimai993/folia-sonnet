@@ -182,6 +182,7 @@ const ObsBrowserSourceApp: React.FC = () => {
         >
             <VisualizerRenderer
                 mode={config.visualizerMode}
+                visualizerTunings={config.visualizerTunings}
                 currentTime={currentTime}
                 currentLineIndex={currentLineIndex}
                 lines={config.lyrics?.lines ?? []}
@@ -210,18 +211,9 @@ const ObsBrowserSourceApp: React.FC = () => {
                 isPlayerChromeHidden={true}
                 hideTranslationSubtitle={config.hideTranslationSubtitle}
                 showSubtitleTranslation={config.showSubtitleTranslation ?? true}
-                classicTuning={config.classicTuning}
-                cadenzaTuning={config.cadenzaTuning}
-                partitaTuning={config.partitaTuning}
-                fumeTuning={config.fumeTuning}
-                claddaghTuning={config.claddaghTuning}
-                cappellaTuning={config.cappellaTuning}
                 cappellaCustomEmojiImages={config.cappellaCustomEmojiImages}
                 cappellaCustomAvatarImages={config.cappellaCustomAvatarImages}
-                tiltTuning={config.tiltTuning}
-                dioramaTuning={config.dioramaTuning}
                 monetBackgroundTuning={config.monetBackgroundTuning}
-                monetTuning={config.monetTuning}
                 monetBackgroundImage={config.monetBackgroundImage}
                 monetPortraitImage={config.monetPortraitImage}
                 urlBackgroundList={config.urlBackgroundList}

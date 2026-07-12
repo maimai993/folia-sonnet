@@ -28,6 +28,9 @@ describe('sync schema parsing', () => {
                 subtitleFontStyle: 'serif',
                 lyricsFontFallbackFamilies: ['Inter', 'Arial'],
                 subtitleFontFallbackFamilies: ['Noto Sans'],
+                visualizerTunings: {
+                    diorama: { cameraSpeed: 1.2 },
+                },
                 homeLayoutStyle: 'desktop',
                 grid3dCardStyle: 'image',
             },
@@ -40,6 +43,9 @@ describe('sync schema parsing', () => {
             subtitleFontStyle: 'serif',
             lyricsFontFallbackFamilies: ['Inter', 'Arial'],
             subtitleFontFallbackFamilies: ['Noto Sans'],
+            visualizerTunings: {
+                diorama: { cameraSpeed: 1.2 },
+            },
             grid3dCardStyle: 'image',
         });
     });

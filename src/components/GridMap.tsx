@@ -146,6 +146,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     items = [],
     onBack,
     onSelectCollection,
+    theme,
     isDaylight,
 }) => {
     const { t } = useTranslation();

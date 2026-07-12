@@ -605,6 +605,8 @@ export default defineVisualizer({
 
 `registry.tsx` 会通过 `import.meta.glob('./*/entry.tsx', { eager: true })` 自动发现所有入口。播放器、模式列表、预览面板和主题预览都继续读取同一份 registry，不需要再去手动 import 新组件或改 `VisualizerRenderer.tsx`。
 
+模式专属 tuning 还需要在同目录提供 `tuning.ts`。`tuningRegistry.ts` 会自动发现这些纯数据 adapter，并用统一的 `VisualizerTuningBundle` 在播放器、OBS、ThemePark、预览和设置同步之间传输；adapter 负责把当前模式的强类型 tuning 注入 renderer。`monetBackgroundTuning` 等共享 shell 配置和图片资源不属于模式 tuning bundle，继续使用各自的共享契约。
+
 如果新模式需要预览面板专属设置，可以在 entry 上提供：
 
 ```tsx

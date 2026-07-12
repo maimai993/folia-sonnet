@@ -32,8 +32,9 @@ export const createLocalLibraryNavigation = ({
     setHomeViewTab,
     setLocalMusicState,
     navigateDirectHome,
+    t,
 }: CreateLocalLibraryNavigationParams & {
-    t: (key: string, fallback?: string) => string;
+    t: (key: string) => string;
 }) => {
     const openLocalLibraryGroup = (group: LocalLibraryGroup, row: 0 | 1 | 2 | 3) => {
         setHomeViewTab('local');

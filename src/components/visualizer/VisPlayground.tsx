@@ -483,6 +483,17 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             draftCladdaghTuning.letterSpacingOffset ?? DEFAULT_CLADDAGH_TUNING.letterSpacingOffset
         ),
     }), [draftCladdaghTuning]);
+    const draftVisualizerTunings = useMemo(() => ({
+        classic: draftClassicTuning,
+        cadenza: cadenzaTuning,
+        partita: resolvedPartitaTuning,
+        fume: resolvedFumeTuning,
+        claddagh: resolvedCladdaghTuning,
+        cappella: cappellaTuning,
+        tilt: draftTiltTuning,
+        diorama: draftDioramaTuning,
+        monet: draftMonetTuning,
+    }), [cadenzaTuning, cappellaTuning, draftClassicTuning, draftDioramaTuning, draftMonetTuning, draftTiltTuning, resolvedCladdaghTuning, resolvedFumeTuning, resolvedPartitaTuning]);
     const currentFontLabel = customFontLabel || customFontFamily || t('options.customFont');
     const fontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[] = useMemo(() => ([
         ...builtinFontOptions,
@@ -981,16 +992,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                                 hideTranslationSubtitle={hideTranslationSubtitle}
                                 showSubtitleTranslation={showSubtitleTranslation}
-                                classicTuning={draftClassicTuning}
-                                cadenzaTuning={cadenzaTuning}
-                                partitaTuning={resolvedPartitaTuning}
-                                fumeTuning={resolvedFumeTuning}
-                                claddaghTuning={resolvedCladdaghTuning}
-                                cappellaTuning={cappellaTuning}
-                                tiltTuning={draftTiltTuning}
-                                dioramaTuning={draftDioramaTuning}
+                                visualizerTunings={draftVisualizerTunings}
                                 monetBackgroundTuning={draftMonetBackgroundTuning}
-                                monetTuning={draftMonetTuning}
                                 onMonetTuningChange={handleMonetTuningDraft}
                                 cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                                 cappellaCustomAvatarImages={cappellaCustomAvatarImages}

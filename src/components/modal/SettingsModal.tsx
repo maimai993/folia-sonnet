@@ -2375,20 +2375,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         initialTheme={themeParkInitialTheme}
                         isDaylight={isDaylight}
                         visualizerMode={visualizerMode}
+                        visualizerTunings={{
+                            classic: classicTuning,
+                            cadenza: cadenzaTuning,
+                            partita: partitaTuning,
+                            fume: fumeTuning,
+                            claddagh: claddaghTuning,
+                            cappella: cappellaTuning,
+                            tilt: tiltTuning,
+                            diorama: dioramaTuning,
+                            monet: monetTuning,
+                        }}
                         staticMode={staticMode}
                         backgroundOpacity={backgroundOpacity}
                         visualizerOpacity={visualizerOpacity}
                         visualizerBackgroundMode={visualizerBackgroundMode}
                         urlBackgroundList={urlBackgroundList}
                         urlBackgroundSelectedId={urlBackgroundSelectedId}
-                        classicTuning={classicTuning}
-                        cadenzaTuning={cadenzaTuning}
-                        partitaTuning={partitaTuning}
-                        fumeTuning={fumeTuning}
-                        claddaghTuning={claddaghTuning}
-                        cappellaTuning={cappellaTuning}
                         monetBackgroundTuning={monetBackgroundTuning}
-                        monetTuning={monetTuning}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                         monetBackgroundImage={monetBackgroundImage}

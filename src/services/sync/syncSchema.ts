@@ -57,6 +57,7 @@ const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisual
     if (value.subtitleFontFamily === null) settings.subtitleFontFamily = null;
     else if (typeof value.subtitleFontFamily === 'string') settings.subtitleFontFamily = value.subtitleFontFamily;
     if (isStringArray(value.subtitleFontFallbackFamilies)) settings.subtitleFontFallbackFamilies = value.subtitleFontFallbackFamilies;
+    if (isRecord(value.visualizerTunings)) settings.visualizerTunings = value.visualizerTunings;
     if (value.classicTuning !== undefined) settings.classicTuning = value.classicTuning;
     if (value.cadenzaTuning !== undefined) settings.cadenzaTuning = value.cadenzaTuning;
     if (value.partitaTuning !== undefined) settings.partitaTuning = value.partitaTuning;
@@ -64,6 +65,7 @@ const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisual
     if (value.claddaghTuning !== undefined) settings.claddaghTuning = value.claddaghTuning;
     if (value.cappellaTuning !== undefined) settings.cappellaTuning = value.cappellaTuning;
     if (value.tiltTuning !== undefined) settings.tiltTuning = value.tiltTuning;
+    if (value.dioramaTuning !== undefined) settings.dioramaTuning = value.dioramaTuning;
     if (value.monetBackgroundTuning !== undefined) settings.monetBackgroundTuning = value.monetBackgroundTuning;
     if (value.monetTuning !== undefined) settings.monetTuning = value.monetTuning;
     if (Array.isArray(value.urlBackgroundList)) settings.urlBackgroundList = value.urlBackgroundList;

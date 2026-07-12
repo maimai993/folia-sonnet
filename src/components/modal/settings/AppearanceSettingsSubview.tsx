@@ -11,6 +11,7 @@ import {
     type ThemeMode,
     type UrlBackgroundItem,
 } from '../../../types';
+import { applyVisualizerTuningsToSettings, collectVisualizerTunings } from '../../visualizer/tuningRegistry';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { sanitizeUrlBackgroundItem } from '../../../utils/urlBackground';
 
@@ -273,6 +274,7 @@ export const compressConfig = (config: any): string => {
     if (config.subtitleFontFamily) minified.sff = config.subtitleFontFamily;
     if (config.subtitleFontFallbackFamilies?.length) minified.sfff = config.subtitleFontFallbackFamilies;
 
+    if (config.visualizerTunings) minified.vt = config.visualizerTunings;
     if (config.classicTuning) minified.ct = compressClassic(config.classicTuning);
     if (config.cadenzaTuning) minified.cat = compressCadenza(config.cadenzaTuning);
     if (config.partitaTuning) minified.pt = compressPartita(config.partitaTuning);
@@ -340,6 +342,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.sfff) decompressed.subtitleFontFallbackFamilies = parsed.sfff;
 
         if (parsed.ct) decompressed.classicTuning = decompressClassic(parsed.ct);
+        if (parsed.vt) decompressed.visualizerTunings = parsed.vt;
         if (parsed.cat) decompressed.cadenzaTuning = decompressCadenza(parsed.cat);
         if (parsed.pt) decompressed.partitaTuning = decompressPartita(parsed.pt);
         if (parsed.ft) decompressed.fumeTuning = decompressFume(parsed.ft);
@@ -361,7 +364,7 @@ export const decompressConfig = (str: string): any => {
             'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation',
             'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontFallbackFamilies',
             'subtitleFontInheritsLyrics', 'subtitleFontStyle', 'subtitleFontFamily',
-            'subtitleFontFallbackFamilies', 'classicTuning',
+            'subtitleFontFallbackFamilies', 'visualizerTunings', 'classicTuning',
             'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'claddaghTuning', 'cappellaTuning',
             'tiltTuning', 'dioramaTuning', 'monetBackgroundTuning', 'monetTuning',
             'urlBackgroundList', 'urlBackgroundSelectedId',
@@ -538,6 +541,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             subtitleFontStyle: store.subtitleFontStyle,
             subtitleFontFamily: store.subtitleFontFamily,
             subtitleFontFallbackFamilies: store.subtitleFontFallbackFamilies,
+            visualizerTunings: collectVisualizerTunings(store as unknown as Record<string, unknown>),
             classicTuning: store.classicTuning,
             cadenzaTuning: store.cadenzaTuning,
             partitaTuning: store.partitaTuning,
@@ -637,34 +641,37 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
 
             // Tunings
-            if (config.classicTuning) {
+            if (config.visualizerTunings) {
+                applyVisualizerTuningsToSettings(store as unknown as Record<string, unknown>, config.visualizerTunings);
+            }
+            if (!config.visualizerTunings && config.classicTuning) {
                 store.handleSetClassicTuning(config.classicTuning);
             }
-            if (config.cadenzaTuning) {
+            if (!config.visualizerTunings && config.cadenzaTuning) {
                 store.handleSetCadenzaTuning(config.cadenzaTuning);
             }
-            if (config.partitaTuning) {
+            if (!config.visualizerTunings && config.partitaTuning) {
                 store.handleSetPartitaTuning(config.partitaTuning);
             }
-            if (config.fumeTuning) {
+            if (!config.visualizerTunings && config.fumeTuning) {
                 store.handleSetFumeTuning(config.fumeTuning);
             }
-            if (config.claddaghTuning) {
+            if (!config.visualizerTunings && config.claddaghTuning) {
                 store.handleSetCladdaghTuning(config.claddaghTuning);
             }
-            if (config.cappellaTuning) {
+            if (!config.visualizerTunings && config.cappellaTuning) {
                 store.handleSetCappellaTuning(config.cappellaTuning);
             }
-            if (config.tiltTuning) {
+            if (!config.visualizerTunings && config.tiltTuning) {
                 store.handleSetTiltTuning(config.tiltTuning);
             }
-            if (config.dioramaTuning) {
+            if (!config.visualizerTunings && config.dioramaTuning) {
                 store.handleSetDioramaTuning(config.dioramaTuning);
             }
             if (config.monetBackgroundTuning) {
                 store.handleSetMonetBackgroundTuning(config.monetBackgroundTuning);
             }
-            if (config.monetTuning) {
+            if (!config.visualizerTunings && config.monetTuning) {
                 store.handleSetMonetTuning(config.monetTuning);
             }
             let mergedUrlList: UrlBackgroundItem[] | undefined;

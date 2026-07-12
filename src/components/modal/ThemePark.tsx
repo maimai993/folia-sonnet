@@ -41,25 +41,20 @@ import {
 } from '../visualizer/PreviewPlaceholder';
 import { getVisualizerModeLabel, getVisualizerScopedSeed } from '../visualizer/registry';
 import { normalizeThemeHexColor, sanitizeDualTheme } from '../../services/themeSanitizer';
+import type { VisualizerTuningBundle } from '../visualizer/tuningRegistry';
 
 interface ThemeParkProps {
     initialTheme: DualTheme;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
+    visualizerTunings?: VisualizerTuningBundle;
     staticMode?: boolean;
     backgroundOpacity?: number;
     visualizerOpacity?: number;
     visualizerBackgroundMode?: VisualizerBackgroundMode | null;
     urlBackgroundList?: UrlBackgroundItem[];
     urlBackgroundSelectedId?: string | null;
-    classicTuning?: ClassicTuning;
-    cadenzaTuning?: CadenzaTuning;
-    partitaTuning?: PartitaTuning;
-    fumeTuning?: FumeTuning;
-    claddaghTuning?: CladdaghTuning;
-    cappellaTuning?: CappellaTuning;
     monetBackgroundTuning?: MonetBackgroundTuning;
-    monetTuning?: MonetTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
     monetBackgroundImage?: MonetBackgroundImage | null;
@@ -114,6 +109,7 @@ const ThemePreviewLayer: React.FC<{
     mode: EditableMode;
     isActive: boolean;
     visualizerMode: VisualizerMode;
+    visualizerTunings?: VisualizerTuningBundle;
     visualizerModeLabel: string;
     staticMode: boolean;
     backgroundOpacity: number;
@@ -121,14 +117,7 @@ const ThemePreviewLayer: React.FC<{
     visualizerBackgroundMode?: VisualizerBackgroundMode | null;
     urlBackgroundList: UrlBackgroundItem[];
     urlBackgroundSelectedId?: string | null;
-    classicTuning: ClassicTuning;
-    cadenzaTuning: CadenzaTuning;
-    partitaTuning: PartitaTuning;
-    fumeTuning: FumeTuning;
-    claddaghTuning: CladdaghTuning;
-    cappellaTuning: CappellaTuning;
     monetBackgroundTuning: MonetBackgroundTuning;
-    monetTuning: MonetTuning;
     cappellaCustomEmojiImages: CappellaEmojiImage[];
     cappellaCustomAvatarImages: CappellaAvatarImage[];
     monetBackgroundImage?: MonetBackgroundImage | null;
@@ -146,6 +135,7 @@ const ThemePreviewLayer: React.FC<{
     mode,
     isActive,
     visualizerMode,
+    visualizerTunings,
     visualizerModeLabel,
     staticMode,
     backgroundOpacity,
@@ -153,14 +143,7 @@ const ThemePreviewLayer: React.FC<{
     visualizerBackgroundMode,
     urlBackgroundList,
     urlBackgroundSelectedId,
-    classicTuning,
-    cadenzaTuning,
-    partitaTuning,
-    fumeTuning,
-    claddaghTuning,
-    cappellaTuning,
     monetBackgroundTuning,
-    monetTuning,
     cappellaCustomEmojiImages,
     cappellaCustomAvatarImages,
     monetBackgroundImage,
@@ -194,6 +177,7 @@ const ThemePreviewLayer: React.FC<{
                 <div className="absolute inset-0">
                     <VisualizerRenderer
                         mode={visualizerMode}
+                        visualizerTunings={visualizerTunings}
                         currentTime={currentTime}
                         currentLineIndex={currentLineIndex}
                         lines={VIS_PLAYGROUND_PREVIEW_LINES}
@@ -213,14 +197,7 @@ const ThemePreviewLayer: React.FC<{
                         coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
                         lyricsFontScale={lyricsFontScale}
                         showSubtitleTranslation={showSubtitleTranslation}
-                        classicTuning={classicTuning}
-                        cadenzaTuning={cadenzaTuning}
-                        partitaTuning={partitaTuning}
-                        fumeTuning={fumeTuning}
-                        claddaghTuning={claddaghTuning}
-                        cappellaTuning={cappellaTuning}
                         monetBackgroundTuning={monetBackgroundTuning}
-                        monetTuning={monetTuning}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                         monetBackgroundImage={monetBackgroundImage}
@@ -274,6 +251,7 @@ const ThemePreview: React.FC<{
     theme: Theme;
     mode: EditableMode;
     visualizerMode: VisualizerMode;
+    visualizerTunings?: VisualizerTuningBundle;
     visualizerModeLabel: string;
     staticMode: boolean;
     backgroundOpacity: number;
@@ -281,14 +259,7 @@ const ThemePreview: React.FC<{
     visualizerBackgroundMode?: VisualizerBackgroundMode | null;
     urlBackgroundList: UrlBackgroundItem[];
     urlBackgroundSelectedId?: string | null;
-    classicTuning: ClassicTuning;
-    cadenzaTuning: CadenzaTuning;
-    partitaTuning: PartitaTuning;
-    fumeTuning: FumeTuning;
-    claddaghTuning: CladdaghTuning;
-    cappellaTuning: CappellaTuning;
     monetBackgroundTuning: MonetBackgroundTuning;
-    monetTuning: MonetTuning;
     cappellaCustomEmojiImages: CappellaEmojiImage[];
     cappellaCustomAvatarImages: CappellaAvatarImage[];
     monetBackgroundImage?: MonetBackgroundImage | null;
@@ -305,6 +276,7 @@ const ThemePreview: React.FC<{
     theme,
     mode,
     visualizerMode,
+    visualizerTunings,
     visualizerModeLabel,
     staticMode,
     backgroundOpacity,
@@ -312,14 +284,7 @@ const ThemePreview: React.FC<{
     visualizerBackgroundMode,
     urlBackgroundList,
     urlBackgroundSelectedId,
-    classicTuning,
-    cadenzaTuning,
-    partitaTuning,
-    fumeTuning,
-    claddaghTuning,
-    cappellaTuning,
     monetBackgroundTuning,
-    monetTuning,
     cappellaCustomEmojiImages,
     cappellaCustomAvatarImages,
     monetBackgroundImage,
@@ -359,6 +324,7 @@ const ThemePreview: React.FC<{
                     mode={mode}
                     isActive={true}
                     visualizerMode={visualizerMode}
+                    visualizerTunings={visualizerTunings}
                     visualizerModeLabel={visualizerModeLabel}
                     staticMode={staticMode}
                     backgroundOpacity={backgroundOpacity}
@@ -366,14 +332,7 @@ const ThemePreview: React.FC<{
                     visualizerBackgroundMode={visualizerBackgroundMode}
                     urlBackgroundList={urlBackgroundList}
                     urlBackgroundSelectedId={urlBackgroundSelectedId}
-                    classicTuning={classicTuning}
-                    cadenzaTuning={cadenzaTuning}
-                    partitaTuning={partitaTuning}
-                    fumeTuning={fumeTuning}
-                    claddaghTuning={claddaghTuning}
-                    cappellaTuning={cappellaTuning}
                     monetBackgroundTuning={monetBackgroundTuning}
-                    monetTuning={monetTuning}
                     cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                     cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                     monetBackgroundImage={monetBackgroundImage}
@@ -394,20 +353,14 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     initialTheme,
     isDaylight,
     visualizerMode,
+    visualizerTunings,
     staticMode = false,
     backgroundOpacity = 0.75,
     visualizerOpacity = 1,
     visualizerBackgroundMode = null,
     urlBackgroundList = [],
     urlBackgroundSelectedId = null,
-    classicTuning = DEFAULT_CLASSIC_TUNING,
-    cadenzaTuning = DEFAULT_CADENZA_TUNING,
-    partitaTuning = DEFAULT_PARTITA_TUNING,
-    fumeTuning = DEFAULT_FUME_TUNING,
-    claddaghTuning = DEFAULT_CLADDAGH_TUNING,
-    cappellaTuning = DEFAULT_CAPPELLA_TUNING,
     monetBackgroundTuning = DEFAULT_MONET_BACKGROUND_TUNING,
-    monetTuning = DEFAULT_MONET_TUNING,
     cappellaCustomEmojiImages = [],
     cappellaCustomAvatarImages = [],
     monetBackgroundImage = null,
@@ -628,6 +581,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                             theme={previewTheme[pickerState.mode]}
                             mode={pickerState.mode}
                             visualizerMode={visualizerMode}
+                            visualizerTunings={visualizerTunings}
                             visualizerModeLabel={visualizerModeLabel}
                             staticMode={staticMode}
                             backgroundOpacity={backgroundOpacity}
@@ -635,14 +589,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                             visualizerBackgroundMode={visualizerBackgroundMode}
                             urlBackgroundList={urlBackgroundList}
                             urlBackgroundSelectedId={urlBackgroundSelectedId}
-                            classicTuning={classicTuning}
-                            cadenzaTuning={cadenzaTuning}
-                            partitaTuning={partitaTuning}
-                            fumeTuning={fumeTuning}
-                            claddaghTuning={claddaghTuning}
-                            cappellaTuning={cappellaTuning}
                             monetBackgroundTuning={monetBackgroundTuning}
-                            monetTuning={monetTuning}
                             cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                             cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                             monetBackgroundImage={monetBackgroundImage}

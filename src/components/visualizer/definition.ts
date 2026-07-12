@@ -22,6 +22,7 @@ import {
     type VisualizerBackgroundMode,
     type VisualizerMode,
 } from '../../types';
+import type { VisualizerTuningBundle } from './tuningRegistry';
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
@@ -60,6 +61,7 @@ export interface VisualizerSharedProps {
     onBack?: () => void;
     onLyricLineSeek?: (lyricTimeSec: number) => void;
     isPreviewMode?: boolean;
+    visualizerTunings?: VisualizerTuningBundle;
     classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;

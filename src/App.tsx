@@ -402,6 +402,18 @@ export default function App() {
         handleToggleLoopMode,
     } = appPreferences;
 
+    const visualizerTunings = useMemo(() => ({
+        classic: classicTuning,
+        cadenza: cadenzaTuning,
+        partita: partitaTuning,
+        fume: fumeTuning,
+        claddagh: claddaghTuning,
+        cappella: cappellaTuning,
+        tilt: tiltTuning,
+        diorama: dioramaTuning,
+        monet: monetTuning,
+    }), [cadenzaTuning, cappellaTuning, classicTuning, claddaghTuning, dioramaTuning, fumeTuning, monetTuning, partitaTuning, tiltTuning]);
+
     const showPlayerChromeVisibilityModeStatus = useCallback((mode: PlayerChromeVisibilityMode) => {
         setStatusMsg({
             type: 'info',
@@ -1597,6 +1609,7 @@ export default function App() {
         subtitleTheme: visualizerSubtitleTheme,
         isDaylight,
         visualizerMode,
+        visualizerTunings,
         visualizerBackgroundMode,
         lyricsFontScale,
         backgroundOpacity,
@@ -1612,18 +1625,9 @@ export default function App() {
         seed: visualizerGeometrySeed,
         audioPower,
         audioBands,
-        classicTuning,
-        cadenzaTuning,
-        partitaTuning,
-        fumeTuning,
-        claddaghTuning,
-        cappellaTuning,
         cappellaCustomEmojiImages,
         cappellaCustomAvatarImages,
-        tiltTuning,
-        dioramaTuning,
         monetBackgroundTuning,
-        monetTuning,
         monetBackgroundImage,
         monetPortraitImage,
         urlBackgroundList,
@@ -2892,16 +2896,8 @@ export default function App() {
                         isPlayerChromeHidden={isPlayerChromeHidden}
                         hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
                         showSubtitleTranslation={showSubtitleTranslation}
-                        classicTuning={classicTuning}
-                        cadenzaTuning={cadenzaTuning}
-                        partitaTuning={partitaTuning}
-                        fumeTuning={fumeTuning}
-                        claddaghTuning={claddaghTuning}
-                        cappellaTuning={cappellaTuning}
-                        tiltTuning={tiltTuning}
-                        dioramaTuning={dioramaTuning}
+                        visualizerTunings={visualizerTunings}
                         monetBackgroundTuning={monetBackgroundTuning}
-                        monetTuning={monetTuning}
                         onMonetTuningChange={handleSetMonetTuning}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}

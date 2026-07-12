@@ -33,6 +33,7 @@ import type {
     ObsBrowserSourceStatus,
 } from '../types/obsBrowserSource';
 import { downsampleObsSpectrum, isObsBrowserSourceBlobCoverUrl, resolveObsBrowserSourceClockTime, resolveObsBrowserSourceCoverUrl } from '../utils/obsBrowserSource';
+import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 
 // src/hooks/useObsBrowserSourcePublisher.ts
 // Publishes the single playback surface to the local OBS browser source.
@@ -56,6 +57,7 @@ type UseObsBrowserSourcePublisherOptions = {
     subtitleTheme?: Theme;
     isDaylight: boolean;
     visualizerMode: VisualizerMode;
+    visualizerTunings?: VisualizerTuningBundle;
     visualizerBackgroundMode: VisualizerBackgroundMode | null;
     lyricsFontScale: number;
     backgroundOpacity: number;
@@ -71,18 +73,9 @@ type UseObsBrowserSourcePublisherOptions = {
     seed: string | number;
     audioPower: MotionValue<number>;
     audioBands: AudioBands;
-    classicTuning?: ClassicTuning;
-    cadenzaTuning?: CadenzaTuning;
-    partitaTuning?: PartitaTuning;
-    fumeTuning?: FumeTuning;
-    claddaghTuning?: CladdaghTuning;
-    cappellaTuning?: CappellaTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
-    tiltTuning?: TiltTuning;
-    dioramaTuning?: DioramaTuning;
     monetBackgroundTuning?: MonetBackgroundTuning;
-    monetTuning?: MonetTuning;
     monetBackgroundImage?: MonetBackgroundImage | null;
     monetPortraitImage?: MonetPortraitImage | null;
     urlBackgroundList?: UrlBackgroundItem[];
@@ -120,6 +113,7 @@ export const useObsBrowserSourcePublisher = ({
     subtitleTheme,
     isDaylight,
     visualizerMode,
+    visualizerTunings,
     visualizerBackgroundMode,
     lyricsFontScale,
     backgroundOpacity,
@@ -135,18 +129,9 @@ export const useObsBrowserSourcePublisher = ({
     seed,
     audioPower,
     audioBands,
-    classicTuning,
-    cadenzaTuning,
-    partitaTuning,
-    fumeTuning,
-    claddaghTuning,
-    cappellaTuning,
     cappellaCustomEmojiImages,
     cappellaCustomAvatarImages,
-    tiltTuning,
-    dioramaTuning,
     monetBackgroundTuning,
-    monetTuning,
     monetBackgroundImage,
     monetPortraitImage,
     urlBackgroundList,
@@ -216,6 +201,7 @@ export const useObsBrowserSourcePublisher = ({
         subtitleTheme,
         isDaylight,
         visualizerMode,
+        visualizerTunings,
         visualizerBackgroundMode,
         lyricsFontScale,
         backgroundOpacity,
@@ -229,18 +215,9 @@ export const useObsBrowserSourcePublisher = ({
         hideTranslationSubtitle,
         showSubtitleTranslation,
         seed,
-        classicTuning,
-        cadenzaTuning,
-        partitaTuning,
-        fumeTuning,
-        claddaghTuning,
-        cappellaTuning,
         cappellaCustomEmojiImages,
         cappellaCustomAvatarImages,
-        tiltTuning,
-        dioramaTuning,
         monetBackgroundTuning,
-        monetTuning,
         monetBackgroundImage,
         monetPortraitImage,
         urlBackgroundList,
@@ -251,15 +228,9 @@ export const useObsBrowserSourcePublisher = ({
         backgroundOpacity,
         cappellaCustomAvatarImages,
         cappellaCustomEmojiImages,
-        cappellaTuning,
-        cadenzaTuning,
-        claddaghTuning,
-        classicTuning,
         currentSong,
-        dioramaTuning,
         disableGeometricBackground,
         disableVignette,
-        fumeTuning,
         hideTranslationSubtitle,
         showSubtitleTranslation,
         isDaylight,
@@ -268,22 +239,20 @@ export const useObsBrowserSourcePublisher = ({
         monetBackgroundImage,
         monetBackgroundTuning,
         monetPortraitImage,
-        monetTuning,
         obsCoverUrl,
-        partitaTuning,
         seed,
         stageSource,
         staticMode,
         subtitleOverlayOpacity,
         theme,
         subtitleTheme,
-        tiltTuning,
         transparentBackground,
         urlBackgroundList,
         urlBackgroundSelectedId,
         useCoverColorBg,
         visualizerBackgroundMode,
         visualizerMode,
+        visualizerTunings,
         visualizerOpacity,
     ]);
 
