@@ -139,6 +139,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         claddaghTuning,
         cappellaTuning,
         tiltTuning,
+        dioramaTuning,
         monetBackgroundTuning,
         monetTuning,
         cappellaCustomEmojiImages,
@@ -197,6 +198,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleResetCappellaTuning: onResetCappellaTuning,
         handleSetTiltTuning: onTiltTuningChange,
         handleResetTiltTuning: onResetTiltTuning,
+        handleSetDioramaTuning: onDioramaTuningChange,
+        handleResetDioramaTuning: onResetDioramaTuning,
         handleSetMonetBackgroundTuning: onMonetBackgroundTuningChange,
         handleResetMonetBackgroundTuning: onResetMonetBackgroundTuning,
         handleSetMonetTuning: onMonetTuningChange,
@@ -2288,6 +2291,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         claddaghTuning={claddaghTuning}
                         cappellaTuning={cappellaTuning}
                         tiltTuning={tiltTuning}
+                        dioramaTuning={dioramaTuning}
                         monetBackgroundTuning={monetBackgroundTuning}
                         monetTuning={monetTuning}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
@@ -2335,6 +2339,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onResetCappellaTuning={onResetCappellaTuning}
                         onTiltTuningChange={onTiltTuningChange}
                         onResetTiltTuning={onResetTiltTuning}
+                        onDioramaTuningChange={onDioramaTuningChange}
+                        onResetDioramaTuning={onResetDioramaTuning}
                         onMonetBackgroundTuningChange={onMonetBackgroundTuningChange}
                         onResetMonetBackgroundTuning={onResetMonetBackgroundTuning}
                         onMonetTuningChange={onMonetTuningChange}

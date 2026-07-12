@@ -5,6 +5,7 @@ import type {
     CadenzaTuning,
     ClassicTuning,
     CladdaghTuning,
+    DioramaTuning,
     FumeTuning,
     LyricData,
     MonetBackgroundImage,
@@ -68,6 +69,7 @@ export interface ObsBrowserSourceConfig {
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
     tiltTuning?: TiltTuning;
+    dioramaTuning?: DioramaTuning;
     monetBackgroundTuning?: MonetBackgroundTuning;
     monetTuning?: MonetTuning;
     monetBackgroundImage?: MonetBackgroundImage | null;

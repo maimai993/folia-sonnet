@@ -67,6 +67,7 @@ import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
 import { clampMediaVolume } from './utils/appPlaybackHelpers';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './utils/appPlaybackGuards';
+import { readLyricOffset, writeLyricOffset } from './utils/lyrics/lyricOffsetMemory';
 import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
 import { initializeSyncCoordinator } from './services/sync/syncCoordinator';
 import type { PlayerChromeVisibilityMode } from './types/remoteControl';
@@ -326,6 +327,7 @@ export default function App() {
         claddaghTuning,
         cappellaTuning,
         tiltTuning,
+        dioramaTuning,
         monetBackgroundTuning,
         monetTuning,
         cappellaCustomEmojiImages,
@@ -432,9 +434,17 @@ export default function App() {
     );
     const lyricCurrentTime = useMotionValue(0);
 
+    // On song change, restore that song's remembered manual offset (0 when never adjusted, so a
+    // fresh song behaves exactly like the old reset). currentSongFullRef.current holds the live song
+    // for the change handler below, so a user's correction is saved against the right track.
     useEffect(() => {
-        setLyricTimelineOffsetMs(0);
+        setLyricTimelineOffsetMs(readLyricOffset(currentSong?.id));
     }, [currentSong?.id]);
+
+    const handleLyricTimelineOffsetChange = useCallback((offsetMs: number) => {
+        setLyricTimelineOffsetMs(offsetMs);
+        writeLyricOffset(currentSongFullRef.current?.id, offsetMs);
+    }, []);
 
     const effectiveLoopMode: StageLoopMode = loopMode;
 
@@ -1611,6 +1621,7 @@ export default function App() {
         cappellaCustomEmojiImages,
         cappellaCustomAvatarImages,
         tiltTuning,
+        dioramaTuning,
         monetBackgroundTuning,
         monetTuning,
         monetBackgroundImage,
@@ -2174,7 +2185,7 @@ export default function App() {
         handleMatchOnlineLyrics,
         handleClearOnlineLyricsState,
         lyricTimelineOffsetMs,
-        handleLyricTimelineOffsetChange: setLyricTimelineOffsetMs,
+        handleLyricTimelineOffsetChange,
         replayGainMode,
         handleChangeReplayGainMode,
         isFmMode,
@@ -2868,6 +2879,7 @@ export default function App() {
                         claddaghTuning={claddaghTuning}
                         cappellaTuning={cappellaTuning}
                         tiltTuning={tiltTuning}
+                        dioramaTuning={dioramaTuning}
                         monetBackgroundTuning={monetBackgroundTuning}
                         monetTuning={monetTuning}
                         onMonetTuningChange={handleSetMonetTuning}

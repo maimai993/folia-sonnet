@@ -219,6 +219,7 @@ const ObsBrowserSourceApp: React.FC = () => {
                 cappellaCustomEmojiImages={config.cappellaCustomEmojiImages}
                 cappellaCustomAvatarImages={config.cappellaCustomAvatarImages}
                 tiltTuning={config.tiltTuning}
+                dioramaTuning={config.dioramaTuning}
                 monetBackgroundTuning={config.monetBackgroundTuning}
                 monetTuning={config.monetTuning}
                 monetBackgroundImage={config.monetBackgroundImage}

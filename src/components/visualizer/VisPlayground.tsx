@@ -9,6 +9,7 @@ import {
     DEFAULT_CAPPELLA_TUNING,
     DEFAULT_CLASSIC_TUNING,
     DEFAULT_CLADDAGH_TUNING,
+    DEFAULT_DIORAMA_TUNING,
     DEFAULT_FUME_TUNING,
     DEFAULT_MONET_BACKGROUND_TUNING,
     DEFAULT_MONET_TUNING,
@@ -30,6 +31,7 @@ import {
     type StoredCustomLyricsFont,
     type Theme,
     type TiltTuning,
+    type DioramaTuning,
     type UrlBackgroundItem,
     type VisualizerBackgroundMode,
     type VisualizerMode,
@@ -71,6 +73,7 @@ interface VisPlaygroundProps {
     claddaghTuning?: CladdaghTuning;
     cappellaTuning?: CappellaTuning;
     tiltTuning?: TiltTuning;
+    dioramaTuning?: DioramaTuning;
     monetBackgroundTuning?: MonetBackgroundTuning;
     monetTuning?: MonetTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
@@ -120,6 +123,8 @@ interface VisPlaygroundProps {
     onResetCappellaTuning?: () => void;
     onTiltTuningChange?: (patch: Partial<TiltTuning>) => void;
     onResetTiltTuning?: () => void;
+    onDioramaTuningChange?: (patch: Partial<DioramaTuning>) => void;
+    onResetDioramaTuning?: () => void;
     onMonetBackgroundTuningChange?: (patch: Partial<MonetBackgroundTuning>) => void;
     onResetMonetBackgroundTuning?: () => void;
     onMonetTuningChange?: (patch: Partial<MonetTuning>) => void;
@@ -289,6 +294,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     claddaghTuning = DEFAULT_CLADDAGH_TUNING,
     cappellaTuning = DEFAULT_CAPPELLA_TUNING,
     tiltTuning = DEFAULT_TILT_TUNING,
+    dioramaTuning = DEFAULT_DIORAMA_TUNING,
     monetBackgroundTuning = DEFAULT_MONET_BACKGROUND_TUNING,
     monetTuning = DEFAULT_MONET_TUNING,
     cappellaCustomEmojiImages = [],
@@ -336,6 +342,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onResetCappellaTuning,
     onTiltTuningChange,
     onResetTiltTuning,
+    onDioramaTuningChange,
+    onResetDioramaTuning,
     onMonetBackgroundTuningChange,
     onResetMonetBackgroundTuning,
     onMonetTuningChange,
@@ -388,6 +396,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [draftFumeTuning, setDraftFumeTuning] = useState<FumeTuning>(fumeTuning);
     const [draftCladdaghTuning, setDraftCladdaghTuning] = useState<CladdaghTuning>(claddaghTuning);
     const [draftTiltTuning, setDraftTiltTuning] = useState<TiltTuning>(tiltTuning);
+    const [draftDioramaTuning, setDraftDioramaTuning] = useState<DioramaTuning>(dioramaTuning);
     const [draftMonetBackgroundTuning, setDraftMonetBackgroundTuning] = useState<MonetBackgroundTuning>(monetBackgroundTuning);
     const [draftMonetTuning, setDraftMonetTuning] = useState<MonetTuning>(monetTuning);
     const [activeEditSection, setActiveEditSection] = useState<VisPlaygroundEditSection>(initialEditSection);
@@ -504,6 +513,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     useEffect(() => { setDraftFumeTuning(fumeTuning); }, [fumeTuning]);
     useEffect(() => { setDraftCladdaghTuning(claddaghTuning); }, [claddaghTuning]);
     useEffect(() => { setDraftTiltTuning(tiltTuning); }, [tiltTuning]);
+    useEffect(() => { setDraftDioramaTuning(dioramaTuning); }, [dioramaTuning]);
     useEffect(() => { setDraftMonetBackgroundTuning(monetBackgroundTuning); }, [monetBackgroundTuning]);
     useEffect(() => { setDraftMonetTuning(monetTuning); }, [monetTuning]);
     useEffect(() => { setActiveEditSection(initialEditSection); }, [initialEditSection]);
@@ -580,6 +590,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             resetCladdaghTuning: onResetCladdaghTuning,
             resetCappellaTuning: onResetCappellaTuning,
             resetTiltTuning: onResetTiltTuning,
+            resetDioramaTuning: onResetDioramaTuning,
             resetMonetTuning: onResetMonetTuning,
             setDraftFumeTuning,
             setDraftCladdaghTuning,
@@ -823,6 +834,15 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         }
     };
 
+    const handleDioramaTuningDraft = (patch: Partial<DioramaTuning>) => {
+        setDraftDioramaTuning(prev => ({ ...prev, ...patch }));
+        if (!isDraggingSlider.current) {
+            onDioramaTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onDioramaTuningChange?.(patch);
+        }
+    };
+
     const handleMonetBackgroundTuningDraft = (patch: Partial<MonetBackgroundTuning>) => {
         const next = { ...draftMonetBackgroundTuning, ...patch };
         setDraftMonetBackgroundTuning(next);
@@ -968,6 +988,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 claddaghTuning={resolvedCladdaghTuning}
                                 cappellaTuning={cappellaTuning}
                                 tiltTuning={draftTiltTuning}
+                                dioramaTuning={draftDioramaTuning}
                                 monetBackgroundTuning={draftMonetBackgroundTuning}
                                 monetTuning={draftMonetTuning}
                                 onMonetTuningChange={handleMonetTuningDraft}
@@ -1042,6 +1063,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         isLoadingCappellaCustomAvatarPack={isLoadingCappellaCustomAvatarPack}
                         tiltTuning={draftTiltTuning}
                         onTiltTuningChange={handleTiltTuningDraft}
+                        dioramaTuning={draftDioramaTuning}
+                        onDioramaTuningChange={handleDioramaTuningDraft}
                         monetBackgroundTuning={draftMonetBackgroundTuning}
                         onMonetBackgroundTuningChange={handleMonetBackgroundTuningDraft}
                         monetTuning={draftMonetTuning}

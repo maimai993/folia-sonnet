@@ -195,6 +195,14 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
           main: 'index.html',
           stageClient: 'stage-client.html',
         },
+        output: {
+          // three.js is a large dependency used only by the diorama 3D visualizer. Split it into its
+          // own chunk so it doesn't bloat the main bundle past the PWA precache size limit (each file
+          // must stay under workbox.maximumFileSizeToCacheInBytes to be cached for offline use).
+          manualChunks: {
+            three: ['three'],
+          },
+        },
       },
     },
     server: {

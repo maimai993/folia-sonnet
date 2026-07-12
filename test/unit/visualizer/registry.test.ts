@@ -20,6 +20,7 @@ describe('visualizer registry', () => {
             'claddagh',
             'monet',
             'cappella',
+            'diorama',
         ]);
     });
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type React from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_FUME_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type FumeTuning, type LyricProviderSource, type MonetBackgroundImage, type MonetBackgroundLayout, type MonetBackgroundSource, type MonetBackgroundTuning, type MonetBackgroundWashColorMode, type MonetPortraitImage, type MonetPortraitSource, type MonetTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type StoredMonetBackgroundImage, type StoredMonetPortraitImage, type Theme, type TiltTuning, type UrlBackgroundItem, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type DioramaTuning, type FumeTuning, type LyricProviderSource, type MonetBackgroundImage, type MonetBackgroundLayout, type MonetBackgroundSource, type MonetBackgroundTuning, type MonetBackgroundWashColorMode, type MonetPortraitImage, type MonetPortraitSource, type MonetTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type StoredMonetBackgroundImage, type StoredMonetPortraitImage, type Theme, type TiltTuning, type UrlBackgroundItem, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerModeLabel, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
@@ -399,6 +399,35 @@ const readStoredTiltTuning = (): TiltTuning => {
         };
     } catch {
         return DEFAULT_TILT_TUNING;
+    }
+};
+
+export const resolveStoredDioramaTuning = (parsed: Partial<DioramaTuning>): DioramaTuning => ({
+    cameraSpeed: Math.min(1.85, Math.max(0.55, parsed.cameraSpeed ?? DEFAULT_DIORAMA_TUNING.cameraSpeed)),
+    motionAmount: Math.min(1.6, Math.max(0.4, parsed.motionAmount ?? DEFAULT_DIORAMA_TUNING.motionAmount)),
+    audioReactivity: Math.min(1.5, Math.max(0, parsed.audioReactivity ?? DEFAULT_DIORAMA_TUNING.audioReactivity)),
+    showParticles: parsed.showParticles ?? DEFAULT_DIORAMA_TUNING.showParticles,
+    glowEnabled: parsed.glowEnabled ?? DEFAULT_DIORAMA_TUNING.glowEnabled,
+    glowIntensity: Math.min(1.5, Math.max(0.1, parsed.glowIntensity ?? DEFAULT_DIORAMA_TUNING.glowIntensity)),
+    soulEnabled: parsed.soulEnabled ?? DEFAULT_DIORAMA_TUNING.soulEnabled,
+    soulIntensity: Math.min(1.5, Math.max(0.1, parsed.soulIntensity ?? DEFAULT_DIORAMA_TUNING.soulIntensity)),
+    gradientEnabled: parsed.gradientEnabled ?? DEFAULT_DIORAMA_TUNING.gradientEnabled,
+    gradientIntensity: Math.min(1.5, Math.max(0.1, parsed.gradientIntensity ?? DEFAULT_DIORAMA_TUNING.gradientIntensity)),
+});
+
+const readStoredDioramaTuning = (): DioramaTuning => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_DIORAMA_TUNING;
+    }
+
+    const saved = localStorage.getItem('diorama_tuning');
+    if (!saved) return DEFAULT_DIORAMA_TUNING;
+
+    try {
+        const parsed = JSON.parse(saved) as Partial<DioramaTuning>;
+        return resolveStoredDioramaTuning(parsed);
+    } catch {
+        return DEFAULT_DIORAMA_TUNING;
     }
 };
 
@@ -821,6 +850,7 @@ export type SettingsUiState = {
     claddaghTuning: CladdaghTuning;
     cappellaTuning: CappellaTuning;
     tiltTuning: TiltTuning;
+    dioramaTuning: DioramaTuning;
     monetBackgroundTuning: MonetBackgroundTuning;
     monetTuning: MonetTuning;
     storedCappellaEmojiPack: StoredCappellaEmojiImage[];
@@ -930,6 +960,8 @@ export type SettingsUiState = {
     handleResetCappellaTuning: () => void;
     handleSetTiltTuning: (patch: Partial<TiltTuning>) => void;
     handleResetTiltTuning: () => void;
+    handleSetDioramaTuning: (patch: Partial<DioramaTuning>) => void;
+    handleResetDioramaTuning: () => void;
     handleSetMonetBackgroundTuning: (patch: Partial<MonetBackgroundTuning>) => void;
     handleResetMonetBackgroundTuning: () => void;
     handleSetMonetTuning: (patch: Partial<MonetTuning>) => void;
@@ -1008,6 +1040,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     claddaghTuning: readStoredCladdaghTuning(),
     cappellaTuning: readStoredCappellaTuning(),
     tiltTuning: readStoredTiltTuning(),
+    dioramaTuning: readStoredDioramaTuning(),
     monetBackgroundTuning: readStoredMonetBackgroundTuning(),
     monetTuning: readStoredMonetTuning(),
     storedCappellaEmojiPack: [],
@@ -1563,6 +1596,21 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         set({ tiltTuning: DEFAULT_TILT_TUNING });
         notify(get, { type: 'info', text: i18n.t('notifications.tiltReset') });
     },
+    handleSetDioramaTuning: (patch) => {
+        const prev = get().dioramaTuning;
+        const next = resolveStoredDioramaTuning({ ...prev, ...patch });
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('diorama_tuning', JSON.stringify(next));
+        }
+        set({ dioramaTuning: next });
+    },
+    handleResetDioramaTuning: () => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('diorama_tuning', JSON.stringify(DEFAULT_DIORAMA_TUNING));
+        }
+        set({ dioramaTuning: DEFAULT_DIORAMA_TUNING });
+        notify(get, { type: 'info', text: '镜台参数已重置' });
+    },
     handleSetMonetBackgroundTuning: (patch) => {
         const prev = get().monetBackgroundTuning;
         const next = resolveStoredMonetBackgroundTuning({
@@ -1992,6 +2040,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     claddaghTuning: state.claddaghTuning,
     cappellaTuning: state.cappellaTuning,
     tiltTuning: state.tiltTuning,
+    dioramaTuning: state.dioramaTuning,
     monetBackgroundTuning: state.monetBackgroundTuning,
     monetTuning: state.monetTuning,
     cappellaCustomEmojiImages: state.cappellaCustomEmojiImages,
@@ -2067,6 +2116,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleResetCappellaTuning: state.handleResetCappellaTuning,
     handleSetTiltTuning: state.handleSetTiltTuning,
     handleResetTiltTuning: state.handleResetTiltTuning,
+    handleSetDioramaTuning: state.handleSetDioramaTuning,
+    handleResetDioramaTuning: state.handleResetDioramaTuning,
     handleSetMonetBackgroundTuning: state.handleSetMonetBackgroundTuning,
     handleResetMonetBackgroundTuning: state.handleResetMonetBackgroundTuning,
     handleSetMonetTuning: state.handleSetMonetTuning,
