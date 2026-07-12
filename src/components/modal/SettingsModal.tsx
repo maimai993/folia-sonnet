@@ -1044,10 +1044,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             {t('help.title') || "Help"}
                             {activeTab === 'help' && (
                                 <motion.div
-                                    layoutId="active-tab-underline"
                                     className="absolute bottom-0 left-0 right-0 h-[3px] rounded-full"
                                     style={{ backgroundColor: theme?.accentColor || (isDaylight ? '#18181b' : '#f4f4f5') }}
-                                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                                    initial={{ opacity: 0, scaleX: 0.65 }}
+                                    animate={{ opacity: 1, scaleX: 1 }}
+                                    transition={{ duration: 0.18, ease: 'easeOut' }}
                                 />
                             )}
                         </button>
@@ -1059,10 +1060,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             {t('ui.options') || "Options"}
                             {activeTab === 'options' && (
                                 <motion.div
-                                    layoutId="active-tab-underline"
                                     className="absolute bottom-0 left-0 right-0 h-[3px] rounded-full"
                                     style={{ backgroundColor: theme?.accentColor || (isDaylight ? '#18181b' : '#f4f4f5') }}
-                                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                                    initial={{ opacity: 0, scaleX: 0.65 }}
+                                    animate={{ opacity: 1, scaleX: 1 }}
+                                    transition={{ duration: 0.18, ease: 'easeOut' }}
                                 />
                             )}
                         </button>

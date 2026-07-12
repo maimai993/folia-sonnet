@@ -16,9 +16,10 @@ if (!rootElement) {
 
 const root = ReactDOM.createRoot(rootElement);
 const searchParams = new URLSearchParams(window.location.search);
+const isObsBrowserSource = searchParams.get('obs') === '1' || window.location.pathname === '/obs';
 root.render(
   <React.StrictMode>
-    {searchParams.get('obs') === '1'
+    {isObsBrowserSource
       ? <ObsBrowserSourceApp />
       : searchParams.get('remote') === '1'
         ? <RemoteControlApp />
