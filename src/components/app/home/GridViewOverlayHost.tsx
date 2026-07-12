@@ -591,7 +591,16 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
 
     return (
         <>
-            {children(openGridView)}
+            <div
+                className="absolute inset-0"
+                aria-hidden={Boolean(selectedCollection)}
+                style={{
+                    visibility: selectedCollection ? 'hidden' : 'visible',
+                    pointerEvents: selectedCollection ? 'none' : 'auto',
+                }}
+            >
+                {children(openGridView)}
+            </div>
             <AnimatePresence initial={false}>
                 {selectedCollection && (
                     <motion.div
