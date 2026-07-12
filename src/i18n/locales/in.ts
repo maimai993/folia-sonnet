@@ -927,23 +927,19 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
-    "v0_5_25": {
-      "intro": "Berikut adalah fitur dan peningkatan baru di versi ini.",
-      "cloudSync": {
-        "title": "Sinkronisasi Cloud",
-        "description": "Sinkronkan pengaturan visual dan tema AI melalui Cloudflare D1 Worker atau layanan sinkronisasi yang Anda kelola, serta impor dan ekspor pustaka."
+    "v0_5_27": {
+      "intro": "Berikut adalah fitur dan peningkatan baru di versi 0.5.27.",
+      "diorama": {
+        "title": "Mode Lirik 3D Diorama",
+        "description": "Lirik menjadi teks 3D di dalam ruang saat kamera terbang dari baris ke baris, lengkap dengan cahaya karaoke, partikel, dan visual yang mengikuti tema."
       },
-      "queueManagement": {
-        "title": "Pengelolaan Antrean",
-        "description": "Item antrean kini dapat diputar berikutnya, dipindahkan ke akhir, atau dihapus."
+      "lyricOffsetMemory": {
+        "title": "Offset Linimasa Tersimpan",
+        "description": "Penyesuaian linimasa lirik disimpan untuk setiap lagu dan dipulihkan otomatis saat lagu diputar kembali."
       },
-      "randomVisualizer": {
-        "title": "Animasi Lirik Acak per Lagu",
-        "description": "Aktifkan melalui palet perintah agar mode animasi lirik dipilih otomatis saat lagu berganti."
-      },
-      "themeJsonCopy": {
-        "title": "Salin JSON Tema",
-        "description": "Salin tema AI atau tema kustom sebagai JSON langsung dari editor tema cepat."
+      "posterWallSearch": {
+        "title": "Pencarian dan Gestur Dinding Poster",
+        "description": "Halaman dinding poster kini mendukung pencarian daftar, pengetikan langsung, dan gestur untuk membuka pencarian dengan cepat."
       }
     }
   },

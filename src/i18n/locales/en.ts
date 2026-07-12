@@ -949,23 +949,19 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
-    "v0_5_25": {
-      "intro": "Here are the new features and improvements in this version.",
-      "cloudSync": {
-        "title": "Cloud Sync",
-        "description": "Sync visual settings and AI themes through your Cloudflare D1 Worker or self-hosted sync service, with library import and export."
+    "v0_5_27": {
+      "intro": "Here are the new features and improvements in version 0.5.27.",
+      "diorama": {
+        "title": "Diorama 3D Lyrics Mode",
+        "description": "Lyrics become 3D text in space as the camera flies from line to line, with sing-along glow, particles, and theme-aware visuals."
       },
-      "queueManagement": {
-        "title": "Queue Management",
-        "description": "Queue items can now play next, move to the end, or be removed."
+      "lyricOffsetMemory": {
+        "title": "Saved Timeline Offsets",
+        "description": "Manual lyric timeline adjustments are saved per song and restored automatically the next time it plays."
       },
-      "randomVisualizer": {
-        "title": "Random Lyrics Animation per Song",
-        "description": "Enable it from the command palette to automatically choose a lyrics animation mode whenever the song changes."
-      },
-      "themeJsonCopy": {
-        "title": "Copy Theme JSON",
-        "description": "Copy an AI or custom theme as JSON directly from the quick theme editor."
+      "posterWallSearch": {
+        "title": "Poster-Wall Search and Gestures",
+        "description": "Poster-wall pages now support list search, direct typing, and a search gesture for quickly opening search."
       }
     }
   },

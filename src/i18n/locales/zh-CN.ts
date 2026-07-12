@@ -950,23 +950,19 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
-    "v0_5_25": {
-      "intro": "以下是新版本功能与改进",
-      "cloudSync": {
-        "title": "云端同步",
-        "description": "支持通过自建 Cloudflare D1 Worker 或同步服务，同步视觉设置与 AI 主题，并可导入、导出同步库。"
+    "v0_5_27": {
+      "intro": "以下是 0.5.27 版本的新功能与改进",
+      "diorama": {
+        "title": "Diorama「镜台」3D 歌词模式",
+        "description": "歌词化作空间中的 3D 文字，镜头沿路径逐句飞行，并支持跟唱辉光、粒子与主题联动。"
       },
-      "queueManagement": {
-        "title": "播放队列管理",
-        "description": "队列歌曲支持“下一首播放”“移到末尾”和“删除”。"
+      "lyricOffsetMemory": {
+        "title": "时间轴偏移保存",
+        "description": "手动调整的歌词时间轴偏移会按歌曲保存，再次播放同一首歌时自动恢复。"
       },
-      "randomVisualizer": {
-        "title": "每首歌随机歌词动画",
-        "description": "通过命令面板开启后，切歌时会自动随机使用一种歌词动画模式。"
-      },
-      "themeJsonCopy": {
-        "title": "主题 JSON 复制",
-        "description": "可从主题快速编辑面板直接复制 AI 或自定义主题的 JSON。"
+      "posterWallSearch": {
+        "title": "海报墙搜索与手势",
+        "description": "各海报墙页面现在支持列表搜索，也可以直接输入文字或使用搜索手势快速打开搜索。"
       }
     }
   },

@@ -1,4 +1,4 @@
-import { Cloud, Copy, ListMusic, Shuffle } from 'lucide-react';
+import { Box, History, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // src/components/modal/newFeaturesRelease.ts
@@ -17,11 +17,10 @@ type NewFeaturesRelease = {
 
 // Defines the current release's cards; their localized text lives under i18nKey in every locale.
 export const NEW_FEATURES_RELEASE: NewFeaturesRelease = {
-    i18nKey: 'releaseNotes.v0_5_25',
+    i18nKey: 'releaseNotes.v0_5_27',
     features: [
-        { id: 'cloudSync', icon: Cloud, daylightIconClassName: 'text-indigo-500', darkIconClassName: 'text-indigo-400' },
-        { id: 'queueManagement', icon: ListMusic, daylightIconClassName: 'text-rose-500', darkIconClassName: 'text-rose-400' },
-        { id: 'randomVisualizer', icon: Shuffle, daylightIconClassName: 'text-purple-500', darkIconClassName: 'text-purple-400' },
-        { id: 'themeJsonCopy', icon: Copy, daylightIconClassName: 'text-emerald-500', darkIconClassName: 'text-emerald-400' },
+        { id: 'diorama', icon: Box, daylightIconClassName: 'text-violet-500', darkIconClassName: 'text-violet-400' },
+        { id: 'lyricOffsetMemory', icon: History, daylightIconClassName: 'text-blue-500', darkIconClassName: 'text-blue-400' },
+        { id: 'posterWallSearch', icon: Search, daylightIconClassName: 'text-emerald-500', darkIconClassName: 'text-emerald-400' },
     ],
 };
