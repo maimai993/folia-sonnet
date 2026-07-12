@@ -401,6 +401,7 @@ export default {
     "allAlbums": "全部",
     "popular": "时下流行",
     "radio": "电台",
+    "personalFm": "私人FM",
     "stage": "舞台"
   },
   "animation": {
@@ -944,10 +945,6 @@ export default {
       "themeJsonCopy": {
         "title": "主题 JSON 复制",
         "description": "可从主题快速编辑面板直接复制 AI 或自定义主题的 JSON。"
-      },
-      "indonesianLanguage": {
-        "title": "新增印度尼西亚语界面",
-        "description": "现在可以将 Folia 的界面语言切换为印度尼西亚语。"
       }
     }
   },
@@ -1189,7 +1186,11 @@ export default {
     "commandsPageTitle": "命令面板",
     "shortcuts": "播放页快捷键",
     "commands": "全部命令",
-    "commandsDesc": "输入任意命令的拼音、汉字或英文均可快速触发。"
+    "commandsDesc": "输入任意命令的拼音、汉字或英文均可快速触发。",
+    "ready": {
+      "title": "准备就绪",
+      "subtitle": "尽情享受您的音乐之旅。"
+    }
   },
   "remote": {
     "backgroundDefault": "默认背景",
