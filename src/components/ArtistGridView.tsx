@@ -55,6 +55,16 @@ type LocalArtistCoverObjectUrlEntry = {
     url: string;
 };
 
+type StoredArtistGridNavigationState = {
+    focusedIndex: number;
+    focusedAlbumId?: string | number;
+    dragX: number;
+    dragY: number;
+    searchQuery: string;
+};
+
+const ARTIST_GRID_NAVIGATION_PREFIX = 'folia_artist_grid_state';
+
 // Custom coordinate generator for Artist Grid
 // Computes baseX/baseY for hexagons, reserving specific spots for Avatar and Bio.
 // Popular songs are placed in the upper half (z <= -1) and albums are placed in the lower half (z >= 1).
@@ -182,6 +192,12 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     // Viewport Size Observer
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerSize, setContainerSize] = useState({ width: 1024, height: 768 });
+    const navigationStorageKey = useMemo(
+        () => `${ARTIST_GRID_NAVIGATION_PREFIX}_${collection.source}_${collection.id}`,
+        [collection.id, collection.source]
+    );
+    const pendingRestoreStateRef = useRef<StoredArtistGridNavigationState | null>(null);
+    const hasRestoredNavigationRef = useRef(false);
 
     useEffect(() => {
         const el = containerRef.current;
@@ -306,6 +322,30 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const [focusedIndex, setFocusedIndex] = useState(0);
     const lastUpdateRef = useRef(0);
     const pendingTimeoutRef = useRef<any>(null);
+
+    useEffect(() => {
+        hasRestoredNavigationRef.current = false;
+        pendingRestoreStateRef.current = null;
+        try {
+            const saved = sessionStorage.getItem(navigationStorageKey);
+            if (!saved) return;
+            const parsed = JSON.parse(saved) as Partial<StoredArtistGridNavigationState>;
+            pendingRestoreStateRef.current = {
+                focusedIndex: Number.isFinite(parsed.focusedIndex) ? Number(parsed.focusedIndex) : 1,
+                focusedAlbumId: parsed.focusedAlbumId,
+                dragX: Number.isFinite(parsed.dragX) ? Number(parsed.dragX) : 0,
+                dragY: Number.isFinite(parsed.dragY) ? Number(parsed.dragY) : 0,
+                searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
+            };
+            if (pendingRestoreStateRef.current.searchQuery) {
+                setShowSearchPanel(true);
+                setDraftSearchQuery(pendingRestoreStateRef.current.searchQuery);
+                setSearchQuery(pendingRestoreStateRef.current.searchQuery);
+            }
+        } catch {
+            sessionStorage.removeItem(navigationStorageKey);
+        }
+    }, [navigationStorageKey]);
 
     const clearLocalAlbumCoverObjectUrls = useCallback(() => {
         localAlbumCoverObjectUrlsRef.current.forEach(entry => URL.revokeObjectURL(entry.url));
@@ -580,6 +620,19 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         };
     }, [baseCoords, containerSize, layoutConfig.spacingX, layoutConfig.spacingY]);
 
+    const persistNavigationState = useCallback((index: number) => {
+        const safeIndex = Math.max(0, Math.min(index, Math.max(gridItems.length - 1, 0)));
+        const focusedItem = gridItems[safeIndex];
+        const state: StoredArtistGridNavigationState = {
+            focusedIndex: safeIndex,
+            focusedAlbumId: focusedItem?.rawCollection?.id,
+            dragX: dragX.get(),
+            dragY: dragY.get(),
+            searchQuery,
+        };
+        sessionStorage.setItem(navigationStorageKey, JSON.stringify(state));
+    }, [dragX, dragY, gridItems, navigationStorageKey, searchQuery]);
+
     const centerOnIndex = (index: number, snap = true) => {
         if (index < 0 || index >= baseCoords.length) return;
         const targetX = -baseCoords[index].baseX;
@@ -605,10 +658,36 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
     useEffect(() => {
         if (gridItems.length > 0) {
+            if (pendingRestoreStateRef.current && !hasRestoredNavigationRef.current) return;
             // Focus on Bio Card (Index 1) initially to give a balanced newspaper view
             centerOnIndex(1, false);
         }
     }, [gridItems.length]);
+
+    useEffect(() => {
+        if (hasRestoredNavigationRef.current) return;
+        const pending = pendingRestoreStateRef.current;
+        if (!pending || gridItems.length === 0 || baseCoords.length === 0) return;
+        if (pending.searchQuery && deferredSearchQuery !== pending.searchQuery) return;
+
+        const albumIndex = pending.focusedAlbumId === undefined
+            ? -1
+            : gridItems.findIndex((item) => String(item.rawCollection?.id) === String(pending.focusedAlbumId));
+        const restoredIndex = albumIndex >= 0
+            ? albumIndex
+            : Math.max(0, Math.min(pending.focusedIndex, gridItems.length - 1));
+        const restoredX = Number.isFinite(pending.dragX) ? pending.dragX : -baseCoords[restoredIndex].baseX;
+        const restoredY = Number.isFinite(pending.dragY) ? pending.dragY : -baseCoords[restoredIndex].baseY;
+
+        focusedIndexRef.current = restoredIndex;
+        setFocusedIndex(restoredIndex);
+        dragX.set(restoredX);
+        dragY.set(restoredY);
+        wheelTargetRef.current = { x: restoredX, y: restoredY };
+        updateRenderedIndexesForViewport(restoredX, restoredY, true);
+        hasRestoredNavigationRef.current = true;
+        pendingRestoreStateRef.current = null;
+    }, [baseCoords, deferredSearchQuery, dragX, dragY, gridItems, updateRenderedIndexesForViewport]);
 
     useEffect(() => {
         const syncWheelTarget = () => {
@@ -952,6 +1031,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             if (isSongCard && onSelectTrack && item.rawTrack) {
                                 onSelectTrack(item.rawTrack, topSongs);
                             } else if (!isSongCard && onSelectAlbum && item.rawCollection) {
+                                persistNavigationState(idx);
                                 onSelectAlbum(item.rawCollection.id, item.rawCollection);
                             }
                         }}
@@ -985,6 +1065,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         onSelectTrack,
         onSelectAlbum,
         onAddTrackToQueue,
+        persistNavigationState,
     ]);
 
     return (
@@ -1011,7 +1092,10 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             {/* Header Area */}
             <div className="absolute top-0 left-0 p-6 z-30 flex items-center gap-4">
                 <button
-                    onClick={onBack}
+                    onClick={() => {
+                        sessionStorage.removeItem(navigationStorageKey);
+                        onBack();
+                    }}
                     className={`w-10 h-10 rounded-full ${closeBtnBg} flex items-center justify-center transition-colors backdrop-blur-md cursor-pointer`}
                     style={{ color: 'var(--text-primary)' }}
                 >
@@ -1186,7 +1270,10 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             centerOnIndex(gridIndex, true);
                             setShowSidePanel(false);
                             window.setTimeout(() => {
-                                if (item.rawCollection) onSelectAlbum?.(item.rawCollection.id, item.rawCollection);
+                                if (item.rawCollection) {
+                                    persistNavigationState(gridIndex);
+                                    onSelectAlbum?.(item.rawCollection.id, item.rawCollection);
+                                }
                             }, 320);
                         }}
                     />
