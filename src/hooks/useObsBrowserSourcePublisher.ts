@@ -32,7 +32,14 @@ import type {
     ObsBrowserSourceConfig,
     ObsBrowserSourceStatus,
 } from '../types/obsBrowserSource';
-import { downsampleObsSpectrum, isObsBrowserSourceBlobCoverUrl, resolveObsBrowserSourceClockTime, resolveObsBrowserSourceCoverUrl } from '../utils/obsBrowserSource';
+import {
+    downsampleObsSpectrum,
+    isObsBrowserSourceBlobCoverUrl,
+    resolveObsBrowserSourceClockTime,
+    resolveObsBrowserSourceCoverUrl,
+    resolveObsBrowserSourceImageAsset,
+    resolveObsBrowserSourceImageAssets,
+} from '../utils/obsBrowserSource';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 
 // src/hooks/useObsBrowserSourcePublisher.ts
@@ -139,6 +146,12 @@ export const useObsBrowserSourcePublisher = ({
 }: UseObsBrowserSourcePublisherOptions) => {
     const [status, setStatus] = useState<ObsBrowserSourceStatus>(() => emptyObsStatus());
     const [obsCoverUrl, setObsCoverUrl] = useState<string | null>(coverUrl);
+    const [obsCustomImages, setObsCustomImages] = useState<{
+        cappellaEmoji: CappellaEmojiImage[];
+        cappellaAvatar: CappellaAvatarImage[];
+        monetBackground: MonetBackgroundImage | null;
+        monetPortrait: MonetPortraitImage | null;
+    }>({ cappellaEmoji: [], cappellaAvatar: [], monetBackground: null, monetPortrait: null });
     const isExternallyRendering = status.enabled && status.clientCount > 0;
     const lastPublishedClockRef = useRef<ObsBrowserSourceClock | null>(null);
     const lastClockPublishMsRef = useRef(0);
@@ -188,6 +201,30 @@ export const useObsBrowserSourcePublisher = ({
         };
     }, [coverUrl]);
 
+    useEffect(() => {
+        let cancelled = false;
+
+        void Promise.all([
+            resolveObsBrowserSourceImageAssets(cappellaCustomEmojiImages),
+            resolveObsBrowserSourceImageAssets(cappellaCustomAvatarImages),
+            monetBackgroundImage ? resolveObsBrowserSourceImageAsset(monetBackgroundImage) : null,
+            monetPortraitImage ? resolveObsBrowserSourceImageAsset(monetPortraitImage) : null,
+        ]).then(([cappellaEmoji, cappellaAvatar, monetBackground, monetPortrait]) => {
+            if (!cancelled) {
+                setObsCustomImages({ cappellaEmoji, cappellaAvatar, monetBackground, monetPortrait });
+            }
+        }).catch(error => {
+            console.warn('[OBS] Failed to resolve custom images for browser source', error);
+            if (!cancelled) {
+                setObsCustomImages({ cappellaEmoji: [], cappellaAvatar: [], monetBackground: null, monetPortrait: null });
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [cappellaCustomAvatarImages, cappellaCustomEmojiImages, monetBackgroundImage, monetPortraitImage]);
+
     const config = useMemo<ObsBrowserSourceConfig>(() => ({
         activePlaybackContext,
         stageSource,
@@ -215,19 +252,17 @@ export const useObsBrowserSourcePublisher = ({
         hideTranslationSubtitle,
         showSubtitleTranslation,
         seed,
-        cappellaCustomEmojiImages,
-        cappellaCustomAvatarImages,
+        cappellaCustomEmojiImages: obsCustomImages.cappellaEmoji,
+        cappellaCustomAvatarImages: obsCustomImages.cappellaAvatar,
         monetBackgroundTuning,
-        monetBackgroundImage,
-        monetPortraitImage,
+        monetBackgroundImage: obsCustomImages.monetBackground,
+        monetPortraitImage: obsCustomImages.monetPortrait,
         urlBackgroundList,
         urlBackgroundSelectedId,
         updatedAt: Date.now(),
     }), [
         activePlaybackContext,
         backgroundOpacity,
-        cappellaCustomAvatarImages,
-        cappellaCustomEmojiImages,
         currentSong,
         disableGeometricBackground,
         disableVignette,
@@ -236,9 +271,8 @@ export const useObsBrowserSourcePublisher = ({
         isDaylight,
         lyrics,
         lyricsFontScale,
-        monetBackgroundImage,
         monetBackgroundTuning,
-        monetPortraitImage,
+        obsCustomImages,
         obsCoverUrl,
         seed,
         stageSource,

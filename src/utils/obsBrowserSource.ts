@@ -1,4 +1,10 @@
 import { PlayerState } from '../types';
+import type {
+    CappellaAvatarImage,
+    CappellaEmojiImage,
+    MonetBackgroundImage,
+    MonetPortraitImage,
+} from '../types';
 import type { ObsBrowserSourceClock } from '../types/obsBrowserSource';
 
 // src/utils/obsBrowserSource.ts
@@ -78,6 +84,8 @@ const blobToDataUrl = async (blob: Blob): Promise<string> => {
     return `data:${mimeType};base64,${encodeBase64(bytes)}`;
 };
 
+type ObsImageAsset = CappellaAvatarImage | CappellaEmojiImage | MonetBackgroundImage | MonetPortraitImage;
+
 // OBS runs in a separate browser context, so blob URLs from the main window are not readable there.
 export const resolveObsBrowserSourceCoverUrl = async (
     coverUrl: string | null,
@@ -91,3 +99,19 @@ export const resolveObsBrowserSourceCoverUrl = async (
     const blob = await response.blob();
     return blobToDataUrl(blob);
 };
+
+// Rewrites main-window object URLs while preserving the image metadata consumed by visualizers.
+export const resolveObsBrowserSourceImageAsset = async <T extends ObsImageAsset>(
+    image: T,
+    fetchImage: typeof fetch = fetch,
+): Promise<T> => ({
+    ...image,
+    url: await resolveObsBrowserSourceCoverUrl(image.url, fetchImage) ?? image.url,
+});
+
+export const resolveObsBrowserSourceImageAssets = async <T extends ObsImageAsset>(
+    images: T[] | undefined,
+    fetchImage: typeof fetch = fetch,
+): Promise<T[]> => Promise.all((images ?? []).map(image => (
+    resolveObsBrowserSourceImageAsset(image, fetchImage)
+)));

@@ -4,6 +4,8 @@ import {
     downsampleObsSpectrum,
     resolveObsBrowserSourceClockTime,
     resolveObsBrowserSourceCoverUrl,
+    resolveObsBrowserSourceImageAsset,
+    resolveObsBrowserSourceImageAssets,
 } from '../../src/utils/obsBrowserSource';
 
 describe('obsBrowserSource utilities', () => {
@@ -59,5 +61,33 @@ describe('obsBrowserSource utilities', () => {
         await expect(resolveObsBrowserSourceCoverUrl('https://img.test/cover.jpg', fetchCover))
             .resolves.toBe('https://img.test/cover.jpg');
         expect(fetchCount).toBe(0);
+    });
+
+    it('converts custom visualizer image object URLs for OBS', async () => {
+        const fetchImage = async () => new Response(new Blob(['image'], { type: 'image/webp' }));
+
+        await expect(resolveObsBrowserSourceImageAsset({
+            id: 'monet-portrait',
+            name: 'portrait.webp',
+            url: 'blob:http://127.0.0.1/portrait',
+        }, fetchImage)).resolves.toEqual({
+            id: 'monet-portrait',
+            name: 'portrait.webp',
+            url: 'data:image/webp;base64,aW1hZ2U=',
+        });
+    });
+
+    it('converts every image in a Cappella custom pack', async () => {
+        const fetchImage = async (url: string | URL | Request) => (
+            new Response(new Blob([String(url).endsWith('/left') ? 'left' : 'right'], { type: 'image/png' }))
+        );
+
+        await expect(resolveObsBrowserSourceImageAssets([
+            { id: 'left', name: 'left.png', url: 'blob:http://127.0.0.1/left' },
+            { id: 'right', name: 'right.png', url: 'blob:http://127.0.0.1/right' },
+        ], fetchImage)).resolves.toEqual([
+            { id: 'left', name: 'left.png', url: 'data:image/png;base64,bGVmdA==' },
+            { id: 'right', name: 'right.png', url: 'data:image/png;base64,cmlnaHQ=' },
+        ]);
     });
 });
