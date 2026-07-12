@@ -3276,6 +3276,20 @@ ipcMain.handle('remote-control-open', (event) => {
   return true;
 });
 
+ipcMain.handle('remote-control-toggle', (event) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to toggle the remote control window.');
+  }
+
+  if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
+    remoteControlWindow.close();
+    return false;
+  }
+
+  createRemoteControlWindow();
+  return true;
+});
+
 ipcMain.handle('remote-control-close', (event) => {
   if (!isTrustedRemoteControlContents(event.sender)) {
     throw new Error('Untrusted renderer attempted to close the remote control window.');

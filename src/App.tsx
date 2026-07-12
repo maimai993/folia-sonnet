@@ -1670,6 +1670,22 @@ export default function App() {
             return false;
         }
     }, []);
+    const toggleRemoteControlWindow = useCallback(async () => {
+        if (!window.electron?.toggleRemoteControl) {
+            return false;
+        }
+
+        return window.electron.toggleRemoteControl();
+    }, []);
+    const toggleMainWindowAlwaysOnTop = useCallback(async () => {
+        if (!window.electron?.getMainWindowAlwaysOnTop || !window.electron?.setMainWindowAlwaysOnTop) {
+            return false;
+        }
+
+        const enabled = await window.electron.getMainWindowAlwaysOnTop();
+        await window.electron.setMainWindowAlwaysOnTop(!enabled);
+        return true;
+    }, []);
     const commandPaletteContext = useMemo(() => ({
         currentSearchSourceTab: currentSearchSourceTabInPalette,
         localSongs,
@@ -1681,6 +1697,8 @@ export default function App() {
         navigateToPlayer,
         navigateToSearch,
         toggleBrowserFullscreen,
+        toggleRemoteControlWindow,
+        toggleMainWindowAlwaysOnTop,
         setHomeViewTab,
         setPanelTab,
         setIsPanelOpen,
@@ -1754,6 +1772,8 @@ export default function App() {
         submitSearch,
         t,
         toggleBrowserFullscreen,
+        toggleRemoteControlWindow,
+        toggleMainWindowAlwaysOnTop,
         toggleLoop,
         togglePlay,
         transparentPlayerBackground,

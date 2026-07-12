@@ -14,6 +14,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     navigateToPlayer: vi.fn(),
     navigateToSearch: vi.fn(),
     toggleBrowserFullscreen: vi.fn(async () => true),
+    toggleRemoteControlWindow: vi.fn(async () => true),
+    toggleMainWindowAlwaysOnTop: vi.fn(async () => true),
     setHomeViewTab: vi.fn(),
     setPanelTab: vi.fn(),
     setIsPanelOpen: vi.fn(),
@@ -370,6 +372,34 @@ describe('command palette registry', () => {
         expect(matchCommon.command.id).toBe('background-common');
         matchCommon.command.execute('', context);
         expect(context.setVisualizerBackgroundMode).toHaveBeenCalledWith('common');
+    });
+
+    it('matches and executes the Diorama visualizer command', () => {
+        const context = createContext();
+        const [match] = getCommandPaletteMatches('镜台');
+
+        expect(match.command.id).toBe('visualizer-diorama');
+        match.command.execute('', context);
+        expect(context.setVisualizerMode).toHaveBeenCalledWith('diorama');
+    });
+
+    it('matches and executes desktop window toggle commands', async () => {
+        vi.stubGlobal('window', { electron: {} });
+
+        try {
+            const context = createContext();
+            const [remoteMatch] = getCommandPaletteMatches('切换遥控窗口', context);
+            expect(remoteMatch.command.id).toBe('desktop-toggle-remote-control');
+            await remoteMatch.command.execute('', context);
+            expect(context.toggleRemoteControlWindow).toHaveBeenCalled();
+
+            const [topMatch] = getCommandPaletteMatches('主窗口置顶', context);
+            expect(topMatch.command.id).toBe('desktop-toggle-main-window-always-on-top');
+            await topMatch.command.execute('', context);
+            expect(context.toggleMainWindowAlwaysOnTop).toHaveBeenCalled();
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 
     it('toggles random visualizer mode for each song', () => {

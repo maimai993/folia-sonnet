@@ -443,6 +443,23 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createVisualizerCommand('tilt', 'Visualizer: Tilt', 'Switch to tilt visualizer', ['visualizer tilt', 'tilt', '倾诉', 'qingsu', 'qs']),
     createVisualizerCommand('claddagh', 'Visualizer: Claddagh', 'Switch to Claddagh visualizer', ['visualizer claddagh', 'claddagh', '回环', 'huihuan', 'hh']),
     createVisualizerCommand('monet', 'Visualizer: Monet', 'Switch to Monet visualizer', ['visualizer monet', 'monet', '莫奈', 'monai', 'mn', '切换到可视化：莫奈', '切换到可视化莫奈']),
+    createVisualizerCommand('diorama', 'Visualizer: Diorama', 'Switch to Diorama visualizer', ['visualizer diorama', 'diorama', '镜台', 'jingtai', 'jt', '切换到可视化：镜台', '切换到可视化镜台']),
+    {
+        id: 'desktop-toggle-remote-control',
+        group: 'navigation',
+        title: 'Toggle remote control window',
+        description: 'Open or close the remote control window',
+        keywords: ['remote control', 'remote window', 'toggle remote', '遥控窗口', '切换遥控窗口', '打开遥控', 'yaokongchuangkou', 'qiehuanyaokongchuangkou', 'ykck', 'qhykck'],
+        execute: (_input, context) => context.toggleRemoteControlWindow(),
+    },
+    {
+        id: 'desktop-toggle-main-window-always-on-top',
+        group: 'navigation',
+        title: 'Toggle main window always on top',
+        description: 'Pin or unpin the main window above other windows',
+        keywords: ['always on top', 'main window on top', 'pin main window', '主窗口置顶', '切换主窗口置顶', '取消主窗口置顶', 'zhuchuangkouzhiding', 'qiehuanzhuchuangkouzhiding', 'zckzd', 'qhzckzd'],
+        execute: (_input, context) => context.toggleMainWindowAlwaysOnTop(),
+    },
     {
         id: 'visualizer-toggle-random-per-song',
         group: 'visualizer',
@@ -607,7 +624,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
 ];
 
 export const getAvailableCommandPaletteCommands = (context?: CommandPaletteContext) => COMMAND_PALETTE_COMMANDS.filter(command => {
-    if (command.id === 'settings-desktop') {
+    if (command.id === 'settings-desktop' || command.id.startsWith('desktop-')) {
         const isWebBrowser = typeof window !== 'undefined';
         const isElectron = isWebBrowser && Boolean((window as any).electron);
         if (isWebBrowser && !isElectron) {

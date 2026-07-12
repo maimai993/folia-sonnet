@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('electron', {
         return () => ipcRenderer.removeListener('thumbar-action', listener);
     },
     openRemoteControl: () => ipcRenderer.invoke('remote-control-open'),
+    toggleRemoteControl: () => ipcRenderer.invoke('remote-control-toggle'),
     closeRemoteControl: () => ipcRenderer.invoke('remote-control-close'),
     getRemoteControlAlwaysOnTop: () => ipcRenderer.invoke('remote-control-get-always-on-top'),
     setRemoteControlAlwaysOnTop: (alwaysOnTop) => ipcRenderer.invoke('remote-control-set-always-on-top', alwaysOnTop),
