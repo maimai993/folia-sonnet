@@ -19,12 +19,13 @@ description: Use when making code, workflow, testing, or documentation changes i
 
 ## Primary Sources
 
-优先在这两个文件里定位片段：
+优先在这些项目文档里定位片段：
 
 - `README.md`
 - `src/README.md`
+- `sync-server/README.md`（仅当任务涉及同步服务端、Token、D1、Docker 或 Node 部署）
 
-不要默认完整读取这两个文件。除非用户明确要求全文审阅，否则每次只读取和当前任务直接相关的小片段。
+不要默认完整读取这些文件。除非用户明确要求全文审阅，否则每次只读取和当前任务直接相关的小片段。
 
 ## Read Budget
 
@@ -94,6 +95,16 @@ rg -n "^##|^###|components/visualizer|services/|utils/lyrics|部署|脚本" READ
 - 涉及歌词解析：先 `rg -n "parserCore|lyrics|utils/lyrics|worker" src/README.md`
 - 涉及 app-level 装配：先 `rg -n "components/app|App.tsx|PlayerPanel|Home" src/README.md`
 
+### `sync-server/README.md`
+
+主要提取这些信息：
+
+- 当前支持的部署方式和安装脚本
+- Token、端口、数据库路径和客户端连接方式
+- 同步服务公开的 API 路径
+
+涉及同步服务时，先用 README 了解面向用户的部署约定，再核对 `sync-server/package.json`、`sync-server/install.*`、`sync-server/src/app.ts` 和 `sync-server/src/node.ts`；不要只根据 README 推断后端行为。
+
 ## Editing Rule
 
 如果 README 中的信息和代码现状明显不一致：
@@ -105,7 +116,7 @@ rg -n "^##|^###|components/visualizer|services/|utils/lyrics|部署|脚本" READ
 ## Practical Workflow
 
 1. 先判断任务是否涉及项目约定、架构边界或运行方式。
-2. 如果涉及，先用 `rg -n` 在 `README.md` 和 `src/README.md` 中找关键词或标题。
+2. 如果涉及，先用 `rg -n` 在对应 README 中找关键词或标题；同步服务任务同时检查 `sync-server/README.md`。
 3. 只打开命中的相关行附近片段。
 4. 用 README 提供方向，用真实代码确认细节。
 5. 如果 README 失真，明确指出并补文档，而不是默默忽略。
@@ -116,6 +127,7 @@ rg -n "^##|^###|components/visualizer|services/|utils/lyrics|部署|脚本" READ
 - 如果 `src/README.md` 提到的 app-level 装配目录已经演进，优先核对 `components/app/*`、`build*.ts`、`create*.ts` 的现状，不要默认存在旧的 `view-models/*`。
 - 涉及测试、开发、部署、脚本，优先看 `README.md` 的“部署与开发”“常用脚本”。
 - 涉及本地音乐、Navidrome、网易云三个来源的边界，先看 README 对三类来源的产品说明，再回到代码实现确认。
+- 涉及同步服务时，先看根 README 的产品层说明，再看 `sync-server/README.md` 的运维说明，最后回到 `src/services/sync/*` 和 `sync-server/src/*` 核对实际协议。
 
 ## What To Avoid
 

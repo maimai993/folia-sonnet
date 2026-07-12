@@ -23,6 +23,7 @@ description: Use when implementing, refactoring, or reviewing code in this repos
 - 歌词解析、时序、render end：`src/utils/lyrics/*`
 - visualizer 运行时、背景、颜色：`src/components/visualizer/*`
 - 设置 UI、导入导出、命令面板：`src/components/modal/settings/*`、`src/stores/useSettingsUiStore.ts`、`src/components/command-palette/*`
+- 同步配置、主题同步和本地导出：`src/services/sync/*`、`src/components/modal/settings/StorageSettingsSection.tsx`
 - 字体栈和自定义字体：`src/utils/fontStacks.ts`、`src/services/customLyricsFont.ts`
 - 播放队列、播放适配：`src/services/playbackAdapters.ts`、`src/utils/appPlaybackHelpers.ts`
 - 网易云 / Navidrome / 本地音乐 API：`src/services/*`
@@ -33,7 +34,7 @@ description: Use when implementing, refactoring, or reviewing code in this repos
 
 ```bash
 rg -n "目标词|函数名|相邻概念" src test
-rg -n "prepareWithSegments|layoutWithLines|useVisualizerRuntime|getLineRenderEndTime|resolveThemeFontStack|colorWithAlpha|mixColors" src
+rg -n "prepareWithSegments|layoutWithLines|useVisualizerRuntime|getLineRenderEndTime|buildLineGraphemeTimeline|resolveThemeFontStack|colorWithAlpha|mixColors" src
 ```
 
 ## Common Utilities
@@ -101,6 +102,15 @@ CJK 语义分组、sticky 标点、英文 contraction 已有布局工具：
 位置：`src/utils/lyrics/cjkSemanticLayout.ts`
 
 新增按词/按块 visualizer 时，优先使用 layout units。不要在组件里临时拼接标点、撇号、CJK 字符。
+
+### Grapheme Timing
+
+逐字或逐 grapheme 动画优先复用 `src/utils/lyrics/graphemeTiming.ts`：
+
+- `buildLineGraphemeTimeline`
+- `buildWordGraphemeTimings`
+
+它们负责把 `Line.words` 的原始 timing 映射到可渲染字符；不要在 renderer 里用字符串搜索重新猜重复词、空格或标点的时间范围。
 
 ### Font Stacks
 
@@ -178,6 +188,7 @@ const { t } = useTranslation();
 - 播放结构统一：`src/services/playbackAdapters.ts`
 - IndexedDB：`src/services/db.ts`
 - 队列预取：`src/services/prefetchService.ts`
+- 同步 HTTP / diff / 本地 registry：`src/services/sync/syncClient.ts`、`syncRepository.ts`、`themeSyncRegistry.ts`、`syncCoordinator.ts`
 
 新增数据流时，先判断是 service、hook、util 还是 component：
 
@@ -206,6 +217,7 @@ const { t } = useTranslation();
 - 是否直接使用 `line.endTime`，但应该使用 `getLineRenderEndTime`？
 - 是否手写 SVG，而 lucide 已有图标？
 - 是否新建了 service 请求逻辑，但已有 service 已经封装同类 API？
+- 是否绕过 `src/services/sync/*`，直接对同步服务发 fetch，或直接读写主题同步 registry / IndexedDB？
 - 是否对大量列表使用普通 `.map()` 而不是虚拟列表？
 - 是否新增硬编码文案却没有更新 i18n 字典？
 - 是否新增设置却没有接入视觉配置导入导出或 command palette？

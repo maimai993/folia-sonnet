@@ -26,6 +26,15 @@ Partita 从 visualizer runtime 拿到当前激活的 `Line`。
 
 在这个阶段，Partita 不改写解析器 timing。比如 `It’s unbelievable` 可能已经被解析成 `It`、`’`、`s`、`unbelievable` 这些分开的 token。
 
+Partita 随后会从 `getLineRenderHints(line)` 生成当前行的 render profile。这个 profile 统一决定：
+
+- `lineRenderEndTime`：使用 `getLineRenderEndTime(line)`，作为整行最多可占用的视觉时间边界；
+- `lineTransitionMode`：`normal`、`fast` 或 `none`，控制整行容器的进出场；
+- `wordRevealMode`：`normal`、`fast` 或 `instant`，控制每个词的 active end 和最小显示时长；
+- `wordLookahead`：为极短行和快速切换保留的预读窗口。
+
+因此 `PartitaChunk` 的 active end 不总是直接等于原始 `word.endTime`；当 render hint 要求 fast/instant reveal 时，仍然以统一的 render profile 为准。
+
 ## Step 2：构建 Post Lyric Layout Units
 
 `buildSequentialColumns()` 会先调用：
@@ -202,4 +211,8 @@ Layout units 负责分行规划。
 Sticky layout units 防止标点漂到不同视觉层。
 Display words 决定最终可见文本对象。
 PartitaWord 负责 display word 级动画和 glow layer 逐字动画。
+
+## 预热与缓存
+
+当前实现会把当前行的 `PartitaSequentialLayout` 缓存在 renderer 内，并在 `shouldPreheatLine()` 判定下一句进入 `0.18s` 至 `1.2s` 的预热窗口时提前构建下一句布局。缓存 key 包含歌词文本、主题、窗口高度和 Partita tuning；缓存只服务布局产物，不改变 `Line.words` 的原始 timing。
 ```

@@ -1,6 +1,10 @@
 # Cappella 聊天表情图片
 
-此文件夹内存放供 Cappella 使用的聊天表情图片，文件命名规则为 `表情名称.png`，例如 `happy.png`。请确保图片文件的命名与表情名称一致，以便 Cappella 能正确识别和使用这些表情图片。
+此文件夹内存放供 Cappella 使用的内置聊天表情图片。
+
+运行时会通过 Vite `import.meta.glob` 自动加载目录中的图片文件（png、jpg、jpeg、gif、webp、svg），文件名去掉扩展名后作为图片名称和稳定 id 的一部分。当前内置资源包括 `happy1`、`love1`、`normal1`、`sleepy1`、`sleepy2`、`sleepy3`、`vibe1`、`vibe2`、`vibe3` 等；当前版本会随机选择图片，文件名前缀暂时只为未来的 emotion hint 筛选预留。
+
+用户上传的自定义表情包不放入此目录，而是由 `services/cappellaEmojiPack.ts` 保存到 IndexedDB，并通过 Cappella 设置面板选择或清空。
 
 # disclaimer
 

@@ -41,7 +41,12 @@ description: Use when the user refers to repository-specific terms such as home 
 
 - “首页视图”“当前首页 tab”“主页 tab”
   -> `homeViewTab` in `src/stores/useSearchNavigationStore.ts`
-  -> consumed in `src/components/Home.tsx`
+  -> consumed by `src/components/Grid3D.tsx`, legacy `src/components/Home.tsx` and `src/components/app/home/GridViewOverlayHost.tsx`
+
+- “网格首页”“3D 首页”“集合网格”
+  -> `src/components/Grid3D.tsx` / `src/components/GridView.tsx`
+  -> collection adapters: `src/components/app/home/gridViewCollectionAdapters.ts`
+  -> overlay host: `src/components/app/home/GridViewOverlayHost.tsx`
 
 - “当前 app 视图”“home/player 切换”
   -> `useAppNavigation` in `src/hooks/useAppNavigation.ts`
@@ -58,7 +63,8 @@ description: Use when the user refers to repository-specific terms such as home 
 
 - “首页”
   -> app-level entry: `src/components/app/Home.tsx`
-  -> legacy implementation: `src/components/Home.tsx`
+  -> selects Grid3D/GridView or the legacy implementation according to `homeLayoutStyle`
+  -> legacy implementation: `src/components/Home.tsx`（弃用路径，不承接新功能）
 
 - “首页模型”“Home 装配输入”
   -> `src/components/app/home/buildHomeModel.ts`
@@ -198,6 +204,11 @@ description: Use when the user refers to repository-specific terms such as home 
   -> `src/components/visualizer/monet/VisualizerMonet.tsx`
   -> `VisualizerMode = 'monet'`
 
+- “回环模式”“claddagh”
+  -> `src/components/visualizer/claddagh/VisualizerCladdagh.tsx`
+  -> `VisualizerMode = 'claddagh'`
+  -> tuning: `claddaghTuning` in `src/stores/useSettingsUiStore.ts`
+
 - “通用背景 / 莫奈背景”
   -> `visualizerBackgroundMode` in `src/stores/useSettingsUiStore.ts`
   -> shell background card: `src/components/visualizer/MonetBackgroundSettingsCard.tsx`
@@ -226,9 +237,18 @@ description: Use when the user refers to repository-specific terms such as home 
 
 - “缓存数据库”“IndexedDB 层”
   -> `src/services/db.ts`
+  -> dedicated theme sync registry: `theme_registry` store via `src/services/sync/themeSyncRegistry.ts`
 
 - “预取”
   -> `src/services/prefetchService.ts`
+
+- “同步服务”“云同步”“主题同步”
+  -> configuration/status: `src/services/sync/syncConfig.ts`
+  -> orchestration: `src/services/sync/syncCoordinator.ts`
+  -> local/remote repository: `src/services/sync/syncRepository.ts`
+  -> stable song fingerprints and local registry: `src/services/sync/syncFingerprint.ts` / `themeSyncRegistry.ts`
+  -> settings UI: `src/components/modal/settings/StorageSettingsSection.tsx`
+  -> command palette: `settings-r2-sync` / `sync-now` in `src/components/command-palette/commandRegistry.ts`
 
 ### Types / Shared Definitions
 

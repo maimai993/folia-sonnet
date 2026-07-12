@@ -56,6 +56,7 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 - `classic` / `partita`：每个词只持有 `waiting | active | passed` 这种粗粒度状态，状态变化时才 `setState`。
 - `cappella`：字符数量和时间戳可进入 state，但 setter 需要做相等保护，只在计数真正变化时更新。
 - `cadenza` / `fume`：重动画和高频渲染使用 refs、缓存、canvas、DOM overlay、RAF draw loop，而不是逐帧 React rerender。
+- `claddagh`：用 `buildLineGraphemeTimeline` 保留逐字时间，使用 `pretext` 做字符间距测量，并在 `useLayoutEffect` 中直接写入有限数量 ring line 的 DOM 样式；中心线的音频响应由独立 RAF 驱动，必须清理订阅和 RAF。
 - `VisPlayground`：预览时间可以推进 MotionValue，但派生到 React state 时必须只更新当前行等低频状态。
 
 新增 visualizer 时，先决定：
@@ -139,6 +140,7 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 - 是否把当前精确播放时间、RAF 时间戳或 MotionValue 的连续值写进 React state / store？
 - 是否每帧创建新数组、新对象并进入 React state？
 - 是否每个字符、每个词、每个 segment 都各自订阅同一个 MotionValue？
+- `claddagh` 是否仍只渲染中心行附近的有限 ring line，字符测量是否命中有界缓存？
 - 不可见或 inactive 元素是否仍在持续更新？
 - 动画能否改成 CSS/Motion/canvas 驱动，而不是 React rerender？
 - 重复文本、CJK、多空格和标点是否有测试？

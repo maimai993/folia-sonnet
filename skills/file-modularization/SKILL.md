@@ -32,6 +32,8 @@ description: Use when adding or refactoring frontend features in this repository
 
 如果一个文件同时新增了 UI 结构、异步请求、副作用、状态派生、事件处理和类型定义，说明拆分已经不够。
 
+当前首页仍处于迁移态：`components/app/Home.tsx` 会按 `homeLayoutStyle` 选择 Grid3D/GridView 流程或 legacy `components/Home.tsx`。旧首页、本地视图和 Navidrome 视图属于弃用路径；新功能应落在 `components/app/home/*`、`Grid3D`、`GridView` 及其相邻 adapter 中，不要继续扩展 legacy 组件。
+
 ## File Size Guardrail
 
 以下不是机械死规则，但默认按这个阈值控制：
@@ -160,3 +162,4 @@ description: Use when adding or refactoring frontend features in this repository
 - 创建名义上拆分、实际上仍强耦合且不可复用的空壳文件
 - 把只属于 app-level 装配的纯逻辑统统塞进 hook，而不是按功能落在 `components/app/*`
 - 把拆分理解成纯文件数量增加，而不是职责真正变清晰
+- 把新首页、GridView 或集合详情功能继续塞回已标记弃用的 legacy view

@@ -10,6 +10,7 @@
 - `fume/VisualizerFume.tsx`: 浮名模式
 - `cappella/VisualizerCappella.tsx`: 群唱模式
 - `tilt/VisualizerTilt.tsx`: 倾诉模式
+- `claddagh/VisualizerCladdagh.tsx`: 回环模式
 - `monet/VisualizerMonet.tsx`: 莫奈海报模式
 - `definition.ts`: visualizer 共享契约、registry entry 定义
 - `settingsPanels.tsx`: 模式自带设置面板
@@ -43,6 +44,7 @@ interface VisualizerSharedProps {
     currentLineIndex: number;
     lines: Line[];
     theme: Theme;
+    subtitleTheme?: Theme;
     isDaylight?: boolean;
     audioPower: MotionValue<number>;
     audioBands: AudioBands;
@@ -69,10 +71,13 @@ interface VisualizerSharedProps {
     paused?: boolean;
     isPreviewMode?: boolean;
     onBack?: () => void;
+    onLyricLineSeek?: (lyricTimeSec: number) => void;
     classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
     fumeTuning?: FumeTuning;
+    claddaghTuning?: CladdaghTuning;
+    onCladdaghTuningChange?: (patch: Partial<CladdaghTuning>) => void;
     cappellaTuning?: CappellaTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
@@ -81,6 +86,8 @@ interface VisualizerSharedProps {
     monetTuning?: MonetTuning;
     monetBackgroundImage?: MonetBackgroundImage | null;
     monetPortraitImage?: MonetPortraitImage | null;
+    urlBackgroundList?: UrlBackgroundItem[];
+    urlBackgroundSelectedId?: string | null;
     onMonetTuningChange?: (patch: Partial<MonetTuning>) => void;
 }
 ```
@@ -100,6 +107,7 @@ export default VisualizerFoo;
 - `cadenzaTuning?: CadenzaTuning`
 - `partitaTuning?: PartitaTuning`
 - `fumeTuning?: FumeTuning`
+- `claddaghTuning?: CladdaghTuning`
 - `cappellaTuning?: CappellaTuning`
 - `tiltTuning?: TiltTuning`
 - `monetTuning?: MonetTuning`
@@ -122,6 +130,7 @@ export default VisualizerFoo;
 - `isDaylight`: 当前是否是浅色主题，适合细调边框、阴影和控制面板对比度。
 - `audioPower`: 音频整体能量。
 - `audioBands`: 分频能量，用于驱动背景或局部动画。
+- `subtitleTheme`: 可选的字幕专用主题；未提供时共享字幕层会回退到当前 `theme`。
 
 ### 展示控制
 
@@ -144,8 +153,11 @@ export default VisualizerFoo;
 - `showSubtitleTranslation`: 控制翻译文本是否显示，默认 `true`。新 visualizer 中涉及翻译字幕时优先接入这个参数。
 - `paused`: 当前是否暂停，适合暂停持续性动效。
 - `onBack`: 返回按钮回调。播放器全屏/主视图里会用到。
+- `onLyricLineSeek`: 可选的歌词行点击跳转回调；需要让 visualizer 参与时间轴交互时使用，不要在 renderer 里直接操作 audio 元素。
 - `seed`: 背景或布局随机种子，保证同一歌曲下布局尽量稳定。
 - `isPreviewMode`: 当前是否处于 `VisPlayground` / `ThemePark` 预览模式。
+- `claddaghTuning` / `onCladdaghTuningChange`: 回环模式的主歌词放大、轨道半径、椭圆倾角、轴线和字符间距参数。
+- `urlBackgroundList` / `urlBackgroundSelectedId`: shell 级嵌入网页背景配置；renderer 不应自行读取 localStorage。
 
 ## 新 visualizer 至少应该处理的场景
 
@@ -231,6 +243,8 @@ visualizer/
 │  └─ VisualizerPartita.tsx
 ├─ fume/
 │  └─ VisualizerFume.tsx
+├─ claddagh/
+│  └─ VisualizerCladdagh.tsx
 ├─ tilt/
 │  └─ VisualizerTilt.tsx
 ├─ monet/
@@ -290,6 +304,8 @@ visualizer/
   canvas + DOM overlay 的重型排版 / 动画引擎
 - `fume/VisualizerFume.tsx`
   文章式整页排版 + 摄影机追焦 + glyph 级 reveal
+- `claddagh/VisualizerCladdagh.tsx`
+  以 grapheme timing 驱动的椭圆轨道排版；用预文本测量字符间距，并通过 MotionValue / DOM style 更新环形文字
 - `cappella/VisualizerCappella.tsx`
   聊天气泡 / 表情包叙事布局，靠离线测量稳定气泡尺寸
 - `tilt/VisualizerTilt.tsx`
@@ -338,13 +354,20 @@ visualizer/
 
 这个思路的重点不是绝对精准，而是“视觉上提前占位”，让聊天叙事看起来像一串已经准备好的消息，而不是正在疯狂 reflow 的 DOM。
 
-#### 3. 先定布局，再做 reveal
+#### 3. Claddagh 用 grapheme timeline 驱动轨道排版
+
+- `claddagh` 通过 `buildLineGraphemeTimeline()` 把 `Line.words` 的 timing 映射到 grapheme，并对空格等零时长片段做局部时间修正。
+- 字符宽度由 `@chenglou/pretext` 测量并写入有界 cache，避免每个 frame 重算字体 advance。
+- 播放期间只保留当前行附近的有限 ring line；`useLayoutEffect` 直接更新字符的 transform、opacity、filter 和 glow，中心轴线的音频响应走独立 RAF。
+- 因此新增或调整 Claddagh 动画时，重点检查 MotionValue 订阅、RAF/ResizeObserver cleanup 和 ring line 数量，不要把每个字符的连续状态放进 React state。
+
+#### 4. 先定布局，再做 reveal
 
 - `partita` 的核心是先把列和块的位置定住，再让词在既有轨道内进入 `waiting / active / passed` 三态。
 - README 里原来提到的那句“layout should feel stable while the words are moving through it”，现在仍然是这个模式最重要的设计约束。
 - 这样用户感知到的是“词在穿过结构”，而不是“结构跟着词重新搭”。
 
-#### 4. Fume 走整篇文章级排版，不按单句临时拼
+#### 5. Fume 走整篇文章级排版，不按单句临时拼
 
 - `fume` 会先构建 article layout，把整首歌词拆成 block / render line / grapheme 级结构。
 - 它会做多轮 measurement attempt，比较不同列数和排版结果，再选较优方案。
@@ -353,7 +376,7 @@ visualizer/
 
 这类模式的关键不是某个 motion 参数，而是把昂贵的“文本几何学”尽量前置到 layout build 阶段。
 
-#### 5. 模式设置面板跟模式入口绑定，而不是继续堆到全局预览器
+#### 6. 模式设置面板跟模式入口绑定，而不是继续堆到全局预览器
 
 - 现在 registry entry 不只负责 `render`，还可以挂 `renderSettingsPanel` 和 `resetSettings`。
 - `settingsPanels.tsx` 承载多数内置模式面板；复杂模式也可以把面板放在模式相邻文件，例如 `monet/MonetSettingsPanel.tsx`。
@@ -361,7 +384,7 @@ visualizer/
 
 如果以后新增模式也需要复杂视觉调参，优先延续这条链路。
 
-#### 6. 视觉调参必须能备份和恢复
+#### 7. 视觉调参必须能备份和恢复
 
 - visualizer 模式、背景模式、通用透明度、字体字号和所有 renderer tuning 都属于视觉配置。
 - 当前导入导出入口在 `src/components/modal/settings/AppearanceSettingsSubview.tsx`。
@@ -451,6 +474,8 @@ visualizer 在这种情况下应当直接补完成当前句剩余的 pass / trai
   使用更重的 prepared-state 缓存，并在计算当前句时顺手准备 upcoming line
 - `classic/Visualizer.tsx`
   当前没有专门的重型预热层，保持即时布局计算
+- `claddagh/VisualizerCladdagh.tsx`
+  不建立整句 layout cache；使用有界的 grapheme 间距 cache，并只渲染当前行前后一小段轨道内容
 
 ### 设计原则
 

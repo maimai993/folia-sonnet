@@ -27,7 +27,7 @@ description: Use when adding, changing, refactoring, or reviewing user-facing se
 - JSON 白名单：`validKeys`
 - 导入应用：`handleImportConfig`
 
-新增 visualizer tuning 时通常还要同步：
+新增 visualizer tuning（包括当前的 `claddaghTuning`）时通常还要同步：
 
 - `src/types.ts`：新增 tuning 类型和默认值
 - `src/stores/useSettingsUiStore.ts`：读取、持久化、setter、resetter、draft 逻辑
@@ -48,6 +48,8 @@ description: Use when adding, changing, refactoring, or reviewing user-facing se
 - 命令文案：同步 `src/i18n/locales/en.ts` 和 `src/i18n/locales/zh-CN.ts` 的 `commandPalette.commands`
 - 关键词：至少包含英文、中文和常用拼音缩写
 
+当前同步服务已经有两类命令入口：`settings-r2-sync` 打开存储设置中的同步服务区域，`sync-now` 触发 AI 主题同步；新增同步动作时优先复用 `src/services/sync/syncCoordinator.ts`，不要在命令里直接发请求。
+
 新增设置子视图时，至少添加一个能打开该子视图的 settings command；新增开关或动作时，添加能直接执行的命令，除非该操作危险、不可撤销或需要复杂确认。
 
 ## Settings UI Placement
@@ -58,6 +60,7 @@ description: Use when adding, changing, refactoring, or reviewing user-facing se
 - 播放：`src/components/modal/settings/PlaybackSettingsSubview.tsx`
 - 集成：`src/components/modal/settings/IntegrationSettingsSubview.tsx`
 - 存储：`src/components/modal/settings/StorageSettingsSection.tsx`
+  缓存、同步服务配置、主题/视觉设置同步，以及 zip 导入导出动作。
 - 桌面端：`src/components/modal/settings/DesktopSettingsSubview.tsx`
 - 实验室：`src/components/modal/settings/LabSettingsModal.tsx`
 - visualizer 专属参数：优先放在模式相邻设置面板，再由 registry 的 `renderSettingsPanel` 挂回
@@ -71,5 +74,6 @@ description: Use when adding, changing, refactoring, or reviewing user-facing se
 - 功能性设置或动作是否进入 `COMMAND_PALETTE_COMMANDS`？
 - 命令是否有中英文 i18n、中文关键词和拼音缩写？
 - store、localStorage key、默认值、resetter、导入恢复是否一致？
+- 同步相关设置是否同时接入 `sync/settingsSnapshot.ts`、`StorageSettingsSection.tsx` 和对应 command palette 命令？
 - 新增用户可见文案是否同步中英文？
 - 是否避免继续膨胀 `SettingsModal.tsx`、`VisPlayground.tsx` 或单个 visualizer 大文件？

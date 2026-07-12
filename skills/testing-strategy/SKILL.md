@@ -51,6 +51,12 @@ description: Use when the task involves choosing how to validate a change in thi
 - `src/hooks/**` 中不依赖真实浏览器渲染的逻辑
 - 歌词解析、缓存逻辑、搜索状态、theme 状态等
 
+同步与本地存储也按纯逻辑路径处理：
+
+- `src/services/sync/**` 的 schema、fingerprint、Merkle bucket、主题注册表迁移和 coordinator 分支，优先看 `test/unit/sync/**`
+- `src/services/themeCache.ts`、`src/services/db.ts` 的缓存边界，优先看 `test/unit/cache/**` 和相关 service 测试
+- 同步测试应 mock 本地存储、IndexedDB adapter 或远端 client，不要连接真实的用户同步服务
+
 ### 3. Electron / 打包 / release 流程
 
 不要默认通过完整打包来验证。
@@ -84,6 +90,8 @@ description: Use when the task involves choosing how to validate a change in thi
 - 改动影响脚本名、命令名、路径
 - 改动和 workflow、测试配置、运行方式直接相关
 
+如果文档只是补充当前模块边界、模式列表或设计说明，通常只需要静态核对路径和命令；只有当文档修正了同步 API、部署命令或测试入口时，才运行对应的最小单测或配置检查。
+
 ## Practical Guidance
 
 - 小改动用最小验证，不要默认全量跑一遍。
@@ -96,6 +104,11 @@ description: Use when the task involves choosing how to validate a change in thi
 - `npm run test:unit`
 - `npm run test:ui`
 - `npm run test:ui:update`
+
+同步/主题文档涉及协议或持久化边界时，可优先选择：
+
+- `npm run test:unit -- test/unit/sync/themeSyncRegistry.test.ts`
+- `npm run test:unit -- test/unit/cache/themeCache.test.ts`
 
 ## What To Avoid
 

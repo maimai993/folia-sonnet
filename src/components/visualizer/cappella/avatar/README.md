@@ -1,6 +1,10 @@
 # Cappella 头像
 
-此文件夹内存放供 Cappella 使用的头像
+此文件夹内存放供 Cappella 使用的内置头像。
+
+运行时会通过 Vite `import.meta.glob` 自动加载目录中的图片文件（png、jpg、jpeg、gif、webp、svg），文件名去掉扩展名后作为头像名称。头像选择由 `avatarImages.ts` 按 seed 和左右位置稳定分配，不需要在这里维护额外的注册表。
+
+用户上传的自定义头像不放入此目录，而是由 `services/cappellaAvatarPack.ts` 保存到 IndexedDB，并通过 Cappella 设置面板选择或清空。
 
 # disclaimer
 

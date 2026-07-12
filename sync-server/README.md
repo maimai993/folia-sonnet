@@ -210,29 +210,15 @@ npm run deploy:cf -- --config wrangler.local.toml
 
 ## 方案二：Docker 部署
 
-使用官方提供的 Docker 镜像，只需几步即可完成私有化部署。
+仓库已提供 `Dockerfile` 和 `docker-compose.yml`，当前推荐从仓库内的 `sync-server` 目录直接构建镜像；数据库会持久化到 `./data`。
 
 ### 1. 准备配置
 
-创建一个空文件夹，在其中新建 `docker-compose.yml` 文件：
+进入仓库目录并创建 `.env`：
 
-```yaml
-version: '3.8'
-
-services:
-  sync-server:
-    image: papersman/folia-sync-server:latest
-    container_name: folia-sync
-    restart: unless-stopped
-    ports:
-      - "13000:3000"
-    volumes:
-      - ./data:/app/data
-    environment:
-      - PORT=3000
-      - DB_PATH=/app/data/folia-sync.db
-    env_file:
-      - .env
+```bash
+cd sync-server
+touch .env
 ```
 
 在同级目录下新建 `.env` 文件，配置 Token：
@@ -248,9 +234,9 @@ DASHBOARD_TOKEN="你的_DASHBOARD_TOKEN"
 ### 2. 启动服务
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
-启动后，数据库文件会自动持久化保存在当前目录下的 `./data` 文件夹中。
+启动后，服务监听容器内的 `3000` 端口，并映射到宿主机的 `13000` 端口；数据库文件会持久化保存在 `sync-server/data/folia-sync.db`。
 
 ---
 
@@ -291,6 +277,34 @@ npm run start:node
 你可以使用 PM2 或 Docker 来进行持久化管理。
 
 ---
+
+## 客户端接入与 API
+
+Folia 客户端的“存储设置”使用 `workerBaseUrl` 和 `SYNC_TOKEN` 连接服务端。地址填写服务根地址，例如：
+
+```text
+https://folia-sync.example.workers.dev
+http://127.0.0.1:13000
+```
+
+`SYNC_TOKEN` 通过 `Authorization: Bearer <SYNC_TOKEN>` 发送。除 `GET /health` 外，API 均需要鉴权；根路径 `/?token=<DASHBOARD_TOKEN>` 是只读网页看板，不是客户端 API。
+
+当前 API：
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| `GET` | `/health` | 连通性和 schema 版本检查 |
+| `GET` | `/state` | 读取设置/主题更新时间和主题数量 |
+| `GET` / `PUT` | `/settings` | 读取或按时间戳更新视觉设置快照 |
+| `GET` | `/themes/manifest` | 读取 256 个主题 bucket 摘要 |
+| `POST` | `/themes/get` | 按稳定 fingerprint 读取主题 |
+| `POST` | `/themes/put` | 批量写入主题，旧时间戳不会覆盖新记录 |
+| `POST` | `/themes/bucket` | 按 bucket 拉取主题，用于增量同步 |
+| `POST` | `/themes/list` | 分页读取完整主题库，用于导出 |
+
+客户端是本地优先的：AI 主题和主题同步 registry 保存在本机 IndexedDB，启动时会自动做主题同步；视觉设置的拉取/推送、完整 sync library 的 zip 导入导出由存储设置页面或命令面板触发。主题 registry 从旧 localStorage 迁移到 IndexedDB 时会执行一次性兼容迁移。
+
+服务端实现位于 `src/app.ts`，Node 入口位于 `src/node.ts`，Cloudflare 入口位于 `src/cloudflare.ts`；三种部署方式共用同一套路由和 D1/SQLite 兼容的数据访问模型。
 
 ---
 

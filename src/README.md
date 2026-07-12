@@ -28,6 +28,7 @@ src/
 ├─ components/
 ├─ hooks/
 ├─ services/
+│  └─ sync/
 ├─ stores/
 ├─ utils/
 ├─ workers/
@@ -51,10 +52,10 @@ src/
   分别承接顶层导航辅助、播放装配辅助、展示派生计算，避免这些实现回流到 `App.tsx`。
 
 - `components/app/Home.tsx`
-  首页 app-level 入口。负责消费 `buildHomeModel.ts` 生成的模型，并转接到 legacy `Home.tsx`。
+  首页 app-level 入口。负责消费 `buildHomeModel.ts` 生成的模型，并按 `homeLayoutStyle` 选择 Grid3D/GridView 流程或 legacy `Home.tsx`。
 
 - `components/Home.tsx`
-  首页 legacy 实现，即将移除；新首页功能不要继续放入此处。
+  首页 legacy 实现，属于弃用路径；新首页功能不要继续放入此处。
 
 - `components/app/views/*`
   旧列表详情页包装入口，仅保留给搜索结果跳转，随旧列表视图一起移除。
@@ -93,7 +94,8 @@ src/
 - `components/visualizer/*`
   歌词可视化层。
   根目录保留共享壳层、背景层、runtime、registry、视觉设置卡片和预览入口；
-  `classic` / `cadenza` / `partita` / `fume` / `cappella` / `tilt` / `monet` 子目录分别负责各模式实现。
+  `classic` / `cadenza` / `partita` / `fume` / `cappella` / `tilt` / `claddagh` / `monet` 子目录分别负责各模式实现。
+  shell 背景还支持通用、Monet、URL 和 Sora 模式。
 
 ### Hooks
 
@@ -131,10 +133,14 @@ src/
   队列邻近歌曲的预取。
 
 - `services/db.ts`
-  IndexedDB 封装。缓存、用户数据、本地歌曲、目录句柄、快照都在这里。
+  IndexedDB 封装。缓存、用户数据、本地歌曲、目录句柄、快照和 `theme_registry` 主题同步注册表都在这里。
 
 - `services/coverCache.ts` / `themeCache.ts`
-  封面和主题缓存。
+  封面和主题缓存；`themeCache.ts` 通过稳定歌曲 fingerprint 与同步 registry 对接远端主题。
+
+- `services/sync/*`
+  用户自托管同步服务的配置、HTTP client、设置快照、主题 fingerprint、bucket diff、远端 repository、导入导出和 coordinator。
+  `syncCoordinator.ts` 在 App 启动时同步主题；视觉设置和完整 sync library 的导入导出由存储设置页面触发。
 
 - `services/gemini.ts`
   AI 主题生成前端桥接。
@@ -205,6 +211,8 @@ src/
 9. `utils/lyrics/parserCore.ts`
 10. `stores/useSettingsUiStore.ts`
 11. `components/command-palette/commandRegistry.ts`
+12. `services/sync/syncCoordinator.ts`
+13. `services/sync/themeSyncRegistry.ts`
 
 ## 6. Project-Specific Notes
 
@@ -214,6 +222,8 @@ src/
 - `PlayerPanel.tsx` 是当前 app-level 面板入口，`UnifiedPanel.tsx` 是 legacy 实现；不要重新把面板逻辑塞回单个大组件。
 - 不要在 `App.tsx` 里直接组装超长 props；优先放进 `components/app/*` 下与功能相邻的 `build*.ts` / `create*.ts`。
 - 本地音乐导入是增量快照式，不是单次全量扫描。
+- 主题同步 registry 已从 legacy localStorage 迁移到 IndexedDB 的 `theme_registry` store；首次读取时会做一次性迁移，不要在业务组件里直接维护 registry。
+- 同步服务的主题同步与视觉设置同步是两个动作：`sync-now` 只同步 AI 主题；完整视觉设置的拉取/推送和 zip library 导入导出位于 `StorageSettingsSection.tsx`。
 - 歌词解析优先从 `parserCore.ts` 理解，不要从旧兼容层反推。
 - 不要用高频 `useState`、store setter 或 reducer 追踪当前精确播放时间来驱动每帧动画；连续时间优先走 `MotionValue`、CSS / Framer Motion、canvas draw loop 或 `useRef`，React state 只承载当前行、模式、可见段落等离散状态。
 - 新增 UI 文案必须补 `src/i18n/locales/en.ts` 和 `src/i18n/locales/zh-CN.ts`。
