@@ -179,6 +179,12 @@ const getFractionalActiveIndex = (
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
+export const shouldHoldCladdaghFrameForPlaybackReset = (
+    previousTime: number,
+    currentTime: number,
+    centerLineIndex: number,
+) => centerLineIndex > 0 && currentTime <= 0.5 && currentTime < previousTime - 0.5;
+
 // Keeps tangent-based character rotation readable instead of allowing upside-down glyphs.
 const normalizeReadableAngle = (degrees: number): number => {
     let normalized = degrees;
@@ -389,9 +395,23 @@ const RingLine: React.FC<RingLineProps> = ({
     }, [line, theme.wordColors, fontSpec, baseFontSize, Rx, textSpacingScale, letterSpacingOffset]);
 
     const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
+    const previousTimeRef = useRef(currentTime.get());
+    const holdResetFrameRef = useRef(false);
 
     useLayoutEffect(() => {
         const handler = (latestTime: number) => {
+            if (shouldHoldCladdaghFrameForPlaybackReset(previousTimeRef.current, latestTime, centerLineIndex)) {
+                holdResetFrameRef.current = true;
+            }
+            previousTimeRef.current = latestTime;
+
+            // MotionValue time resets before React commits the matching line index.
+            // Preserve the completed frame instead of rendering the old last line at time zero.
+            if (holdResetFrameRef.current && centerLineIndex > 0) {
+                return;
+            }
+            holdResetFrameRef.current = false;
+
             const mvsLength = spacingInfo.length;
             if (mvsLength === 0) return;
 
