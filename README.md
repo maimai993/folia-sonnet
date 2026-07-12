@@ -14,7 +14,7 @@ Lyrics Reimagined // 辞曲新境
 [![GitHub stars](https://img.shields.io/github/stars/chthollyphile/folia-major?style=social)](https://github.com/chthollyphile/folia-major/stargazers)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-27-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-28-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 [获取方式](https://github.com/chthollyphile/folia-major#%E8%8E%B7%E5%8F%96%E6%96%B9%E5%BC%8F)
@@ -184,6 +184,7 @@ Thanks goes to these wonderful people. Issue reports, bug reports, ideas, docs, 
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/lhtstudy"><img src="https://avatars.githubusercontent.com/u/91039875?v=4?s=100" width="100px;" alt="LHT"/><br /><sub><b>LHT</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3Alhtstudy" title="Bug reports">🐛</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/SXP-Simon"><img src="https://avatars.githubusercontent.com/u/177809507?v=4?s=100" width="100px;" alt="Helian Nuits"/><br /><sub><b>Helian Nuits</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/commits?author=SXP-Simon" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/LXiTong"><img src="https://avatars.githubusercontent.com/u/77535614?v=4?s=100" width="100px;" alt="Kuroneko"/><br /><sub><b>Kuroneko</b></sub></a><br /><a href="#ideas-LXiTong" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/AZURE-HUAI"><img src="https://avatars.githubusercontent.com/u/247430394?v=4?s=100" width="100px;" alt="浮梦怀生"/><br /><sub><b>浮梦怀生</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/commits?author=AZURE-HUAI" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>

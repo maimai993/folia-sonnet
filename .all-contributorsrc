@@ -258,6 +258,15 @@
       "contributions": [
         "ideas"
       ]
+    },
+    {
+      "login": "AZURE-HUAI",
+      "name": "浮梦怀生",
+      "avatar_url": "https://avatars.githubusercontent.com/u/247430394?v=4",
+      "profile": "https://github.com/AZURE-HUAI",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "commit": false,
