@@ -78,6 +78,55 @@ describe('gridViewCollectionAdapters', () => {
         expect(tracks.every(track => (track as any).isLocal)).toBe(true);
     });
 
+    it('exposes assigned local artists as separate entity links', () => {
+        const song = {
+            ...buildLocalSong('song-a', 'A'),
+            artist: '小山百代/三森すずこ',
+        };
+        const descriptor = createLocalGridViewCollection({
+            id: 'artist-a',
+            entityId: 'artist-a',
+            name: '小山百代',
+            type: 'artist',
+            songs: [song],
+        });
+        const entities: LocalLibraryEntity[] = [
+            {
+                id: 'artist-a',
+                kind: 'artist',
+                displayName: '小山百代',
+                aliases: ['小山百代'],
+                normalizedAliases: ['小山百代'],
+                createdAt: 1,
+                updatedAt: 1,
+            },
+            {
+                id: 'artist-b',
+                kind: 'artist',
+                displayName: '三森すずこ',
+                aliases: ['三森すずこ'],
+                normalizedAliases: ['三森すずこ'],
+                createdAt: 1,
+                updatedAt: 1,
+            },
+        ];
+        const assignments: LocalLibraryAssignment[] = [{
+            songId: song.id,
+            artistEntityIds: ['artist-a', 'artist-b'],
+            artistOrigin: 'split',
+            albumOrigin: 'import',
+            updatedAt: 1,
+        }];
+
+        const [track] = resolveLocalGridViewTracks(descriptor, [song], { entities, assignments });
+
+        expect(track.ar).toEqual([
+            { id: 0, entityId: 'artist-a', name: '小山百代' },
+            { id: 0, entityId: 'artist-b', name: '三森すずこ' },
+        ]);
+        expect(track.artists).toEqual(track.ar);
+    });
+
     it('refreshes virtual all songs descriptors from the current local song list', () => {
         const originalSongs = [
             buildLocalSong('song-a', 'A'),

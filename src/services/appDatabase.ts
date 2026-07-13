@@ -8,6 +8,7 @@ import type { LocalLibraryAssignment, LocalLibraryEntity } from '../types/localL
 export const APP_DATABASE_NAME = 'KineticPlayerDB';
 export const APP_DATABASE_VERSION_CHANGE_EVENT = 'folia-database-version-change';
 export const LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY = 'local_library_entities_bootstrap_v1';
+export const LOCAL_LIBRARY_ARTIST_SPLIT_MARKER_KEY = 'local_library_artist_delimiter_split_v1';
 
 export interface StoredCacheEntry<T = unknown> {
   key: string;

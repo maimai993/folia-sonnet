@@ -110,14 +110,15 @@ export const createLocalLibraryNavigation = ({
         if (entity) openEntity(entity);
     };
 
-    const openCurrentLocalArtist = () => {
+    const openCurrentLocalArtist = (requestedEntityId?: string) => {
         if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) {
             return;
         }
 
         const assignment = localLibraryCatalog.assignments.find(item => item.songId === currentSong.localData?.id);
-        const entityId = assignment?.artistEntityIds[0]
-            ? followEntityRedirect(assignment.artistEntityIds[0], catalogIndex.entitiesById)
+        const sourceEntityId = requestedEntityId || assignment?.artistEntityIds[0];
+        const entityId = sourceEntityId
+            ? followEntityRedirect(sourceEntityId, catalogIndex.entitiesById)
             : undefined;
         const entity = entityId ? catalogIndex.entitiesById.get(entityId) : undefined;
         if (entity) openEntity(entity);

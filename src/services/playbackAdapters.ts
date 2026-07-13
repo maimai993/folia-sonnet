@@ -1,5 +1,52 @@
 import { AmllDbPlatform, LocalSong, LyricProviderSource, SongResult, UnifiedSong } from '../types';
 import { NavidromeSong } from '../types/navidrome';
+import type { LocalLibraryAssignment, LocalLibraryEntity } from '../types/localLibrary';
+import { buildLocalLibraryIndex, followEntityRedirect, type LocalLibraryIndex } from '../utils/localLibraryIndex';
+
+export type LocalLibraryDisplayCatalog = {
+    entities: LocalLibraryEntity[];
+    assignments: LocalLibraryAssignment[];
+};
+
+const resolveLocalLibraryDisplayArtists = (
+    localSong: LocalSong,
+    catalog?: LocalLibraryDisplayCatalog,
+    preparedIndex?: LocalLibraryIndex,
+) => {
+    if (!catalog) return [];
+
+    const index = preparedIndex || buildLocalLibraryIndex(catalog.entities, catalog.assignments);
+    const assignment = index.assignmentsBySongId.get(localSong.id);
+    if (!assignment) return [];
+
+    const seenEntityIds = new Set<string>();
+    return assignment.artistEntityIds.flatMap(entityId => {
+        const activeEntityId = followEntityRedirect(entityId, index.entitiesById);
+        const entity = activeEntityId ? index.entitiesById.get(activeEntityId) : undefined;
+        if (!entity || entity.kind !== 'artist' || seenEntityIds.has(entity.id)) return [];
+        seenEntityIds.add(entity.id);
+        return [{ id: 0, entityId: entity.id, name: entity.displayName }];
+    });
+};
+
+// Replaces legacy joined artist text with the song's stable local-library artist entities.
+export const applyLocalLibraryArtistDisplay = <T extends SongResult>(
+    song: T,
+    catalog?: LocalLibraryDisplayCatalog,
+    preparedIndex?: LocalLibraryIndex,
+): T => {
+    const localSong = (song as UnifiedSong).localData;
+    if (!localSong) return song;
+
+    const artists = resolveLocalLibraryDisplayArtists(localSong, catalog, preparedIndex);
+    if (artists.length === 0) return song;
+
+    return {
+        ...song,
+        artists,
+        ar: artists,
+    };
+};
 
 export const getLocalSongId = (localSong: LocalSong): number => {
     // Generate a reliable 52-bit hash from the string ID to avoid parsing long digits and losing precision or colliding.
@@ -92,13 +139,20 @@ export function buildUnifiedLocalSong({
     return unifiedSong;
 }
 
-export function buildLocalQueue(queue: LocalSong[], currentSong?: UnifiedSong): UnifiedSong[] {
+export function buildLocalQueue(
+    queue: LocalSong[],
+    currentSong?: UnifiedSong,
+    catalog?: LocalLibraryDisplayCatalog,
+): UnifiedSong[] {
+    const catalogIndex = catalog
+        ? buildLocalLibraryIndex(catalog.entities, catalog.assignments)
+        : undefined;
     const convertedQueue = queue.map(song => {
         const useMatchedLyrics =
             song.lyricsSource === 'online'
             || (!song.lyricsSource && !song.hasLocalLyrics && !song.hasEmbeddedLyrics);
 
-        return {
+        return applyLocalLibraryArtistDisplay({
             id: getLocalSongId(song),
             name: song.title || song.fileName,
             artists: song.artist ? [{ id: 0, name: song.artist }] : [],
@@ -110,7 +164,7 @@ export function buildLocalQueue(queue: LocalSong[], currentSong?: UnifiedSong): 
             dt: song.duration,
             isLocal: true,
             localData: song
-        } as UnifiedSong;
+        } as UnifiedSong, catalog, catalogIndex);
     });
 
     if (!currentSong) {
@@ -119,7 +173,7 @@ export function buildLocalQueue(queue: LocalSong[], currentSong?: UnifiedSong): 
 
     return convertedQueue.map(song => {
         if (song.id === currentSong.id) {
-            return currentSong;
+            return applyLocalLibraryArtistDisplay(currentSong, catalog, catalogIndex);
         }
         return song;
     });

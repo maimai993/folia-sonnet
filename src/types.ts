@@ -676,6 +676,7 @@ export interface NeteasePlaylist {
 export interface Artist {
   id: number;
   name: string;
+  entityId?: string;
 }
 
 export interface Album {

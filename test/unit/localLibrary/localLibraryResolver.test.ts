@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { LocalLibraryEntity } from '../../../src/types/localLibrary';
-import { normalizeLocalLibraryName } from '../../../src/utils/localLibraryNames';
+import {
+    getImportedArtistNames,
+    getMatchedArtistNames,
+    normalizeLocalLibraryName,
+    splitLocalLibraryArtistNames,
+} from '../../../src/utils/localLibraryNames';
 import { resolveLocalLibraryEntity } from '../../../src/utils/localLibraryResolver';
 
 // test/unit/localLibrary/localLibraryResolver.test.ts
@@ -62,3 +67,31 @@ describe('localLibraryResolver', () => {
     });
 });
 
+describe('explicitly separated local artist names', () => {
+    it('splits ASCII/full-width semicolons and slashes while preserving order', () => {
+        expect(splitLocalLibraryArtistNames('小山百代/三森すずこ')).toEqual(['小山百代', '三森すずこ']);
+        expect(splitLocalLibraryArtistNames('小山百代 ／ 三森すずこ')).toEqual(['小山百代', '三森すずこ']);
+        expect(splitLocalLibraryArtistNames('小山百代;三森すずこ')).toEqual(['小山百代', '三森すずこ']);
+        expect(splitLocalLibraryArtistNames('小山百代；三森すずこ')).toEqual(['小山百代', '三森すずこ']);
+    });
+
+    it('does not guess comma, ideographic comma, ampersand, or feat separators', () => {
+        expect(splitLocalLibraryArtistNames('A, B、C & D feat. E')).toEqual(['A, B、C & D feat. E']);
+    });
+
+    it('applies the slash rule to imported and legacy matched strings', () => {
+        const song = {
+            id: 'duet',
+            fileName: 'duet.flac',
+            filePath: 'Library/duet.flac',
+            duration: 1,
+            fileSize: 1,
+            mimeType: 'audio/flac',
+            addedAt: 1,
+            artist: '小山百代/三森すずこ',
+            matchedArtists: '小山百代／三森すずこ',
+        };
+        expect(getImportedArtistNames(song)).toEqual(['小山百代', '三森すずこ']);
+        expect(getMatchedArtistNames(song)).toEqual(['小山百代', '三森すずこ']);
+    });
+});

@@ -1,7 +1,7 @@
 import type { LocalSong } from '../types';
 
 // src/utils/localLibraryNames.ts
-// Normalizes local-library names and derives import context without guessing legacy artist separators.
+// Normalizes local-library names and recognizes explicit semicolon/slash-separated artist credits.
 
 export const normalizeLocalLibraryName = (value: string): string => (
   value.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase()
@@ -12,10 +12,26 @@ export const cleanLocalLibraryName = (value?: string): string | undefined => {
   return cleaned || undefined;
 };
 
-export const getImportedArtistNames = (song: LocalSong): string[] => {
-  const name = cleanLocalLibraryName(song.embeddedArtist || song.artist);
-  return name ? [name] : [];
+export const splitLocalLibraryArtistNames = (value?: string): string[] => {
+  const cleaned = cleanLocalLibraryName(value);
+  if (!cleaned) return [];
+
+  const seen = new Set<string>();
+  return cleaned
+    .split(/[;；/／]/u)
+    .map(part => cleanLocalLibraryName(part))
+    .filter((part): part is string => {
+      if (!part) return false;
+      const normalized = normalizeLocalLibraryName(part);
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
 };
+
+export const getImportedArtistNames = (song: LocalSong): string[] => (
+  splitLocalLibraryArtistNames(song.embeddedArtist || song.artist)
+);
 
 export const getImportedAlbumName = (song: LocalSong): string | undefined => (
   cleanLocalLibraryName(song.embeddedAlbum || song.album)
@@ -27,8 +43,7 @@ export const getMatchedArtistNames = (song: LocalSong): string[] => {
       .map(artist => cleanLocalLibraryName(artist.name))
       .filter((name): name is string => Boolean(name));
   }
-  const legacyName = cleanLocalLibraryName(song.matchedArtists);
-  return legacyName ? [legacyName] : [];
+  return splitLocalLibraryArtistNames(song.matchedArtists);
 };
 
 export const getRelativeParentFolder = (song: LocalSong): string => {
@@ -48,4 +63,3 @@ export const getAlbumImportContextKey = (song: LocalSong, albumName: string): st
     normalizeLocalLibraryName(albumName),
   ].join('\u0000')
 );
-

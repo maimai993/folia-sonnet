@@ -1,6 +1,7 @@
 import type { Table } from 'dexie';
 import {
   appDatabase,
+  LOCAL_LIBRARY_ARTIST_SPLIT_MARKER_KEY,
   LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY,
   type StoredCacheEntry,
 } from '../appDatabase';
@@ -97,7 +98,11 @@ export const removeCacheEntry = async (key: string): Promise<void> => {
 };
 
 export const clearCacheTables = async (preserveKeys: string[] = []): Promise<void> => {
-  const preserved = new Set([...preserveKeys, LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY]);
+  const preserved = new Set([
+    ...preserveKeys,
+    LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY,
+    LOCAL_LIBRARY_ARTIST_SPLIT_MARKER_KEY,
+  ]);
   await appDatabase.transaction('rw', CACHE_TABLE_NAMES, async () => {
     await Promise.all(CACHE_TABLE_NAMES.map(async name => {
       const table = getTable(name);

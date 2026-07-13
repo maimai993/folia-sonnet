@@ -71,6 +71,8 @@ import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, reso
 import { readLyricOffset, writeLyricOffset } from './utils/lyrics/lyricOffsetMemory';
 import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
 import { initializeSyncCoordinator } from './services/sync/syncCoordinator';
+import { applyLocalLibraryArtistDisplay } from './services/playbackAdapters';
+import { buildLocalLibraryIndex, followEntityRedirect } from './utils/localLibraryIndex';
 import type { PlayerChromeVisibilityMode } from './types/remoteControl';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
@@ -2165,6 +2167,19 @@ export default function App() {
         hideTaskbarIcon,
         openPlayerOnLaunch,
     ]);
+    const playerDisplayCatalogIndex = useMemo(() => buildLocalLibraryIndex(
+        localLibraryCatalog.entities,
+        localLibraryCatalog.assignments,
+    ), [localLibraryCatalog.assignments, localLibraryCatalog.entities]);
+    const playerDisplayCurrentSong = useMemo(() => (
+        currentSong
+            ? applyLocalLibraryArtistDisplay(currentSong, localLibraryCatalog, playerDisplayCatalogIndex)
+            : null
+    ), [currentSong, localLibraryCatalog, playerDisplayCatalogIndex]);
+    const playerDisplayQueue = useMemo(() => (
+        playQueue.map(song => applyLocalLibraryArtistDisplay(song, localLibraryCatalog, playerDisplayCatalogIndex))
+    ), [localLibraryCatalog, playQueue, playerDisplayCatalogIndex]);
+
     const playerPanelModel = useMemo(() => buildPlayerPanelModel({
         isPanelOpen,
         setIsPanelOpen,
@@ -2173,7 +2188,7 @@ export default function App() {
         navigateToHome,
         handleDirectHomeFromPanel,
         coverUrl,
-        currentSong,
+        currentSong: playerDisplayCurrentSong,
         handleAlbumSelect: handlePlayerPanelAlbumSelect,
         handleArtistSelect: handlePlayerPanelArtistSelect,
         effectiveLoopMode,
@@ -2235,7 +2250,7 @@ export default function App() {
         openSettings,
         openCommandPalette: commandPalette.open,
         isCommandPaletteOpen: commandPalette.isOpen,
-        playQueue,
+        playQueue: playerDisplayQueue,
         playSong,
         queueScrollRef,
         shuffleQueue,
@@ -2280,20 +2295,34 @@ export default function App() {
                 openCurrentLocalAlbum();
             }
         },
-        openCurrentLocalArtist: () => {
+        openCurrentLocalArtist: (requestedEntityId?: string) => {
             if (homeLayoutStyle === 'grid') {
                 if (currentSong && isLocalPlaybackSong(currentSong) && currentSong.localData) {
-                    const artistName = currentSong.ar?.[0]?.name || currentSong.artists?.[0]?.name || currentSong.localData.matchedArtists || currentSong.localData.artist;
-                    if (artistName) {
-                        const songs = localSongs.filter(song => {
-                            const candidateArtist = song.matchedArtists || song.artist || '';
-                            return candidateArtist === artistName;
-                        });
+                    const catalogIndex = buildLocalLibraryIndex(
+                        localLibraryCatalog.entities,
+                        localLibraryCatalog.assignments,
+                    );
+                    const assignment = catalogIndex.assignmentsBySongId.get(currentSong.localData.id);
+                    const sourceEntityId = requestedEntityId || assignment?.artistEntityIds[0];
+                    const artistEntityId = sourceEntityId
+                        ? followEntityRedirect(sourceEntityId, catalogIndex.entitiesById)
+                        : undefined;
+                    const artistEntity = artistEntityId
+                        ? catalogIndex.entitiesById.get(artistEntityId)
+                        : undefined;
+                    if (artistEntity?.kind === 'artist') {
+                        const memberIds = new Set(localLibraryCatalog.assignments
+                            .filter(item => item.artistEntityIds.some(entityId => (
+                                followEntityRedirect(entityId, catalogIndex.entitiesById) === artistEntity.id
+                            )))
+                            .map(item => item.songId));
+                        const songs = localSongs.filter(song => memberIds.has(song.id));
                         if (songs.length > 0) {
                             setActiveGridViewCollection({
                                 source: 'local',
-                                id: `artist-current-${artistName}`,
-                                name: artistName,
+                                id: artistEntity.id,
+                                entityId: artistEntity.id,
+                                name: artistEntity.displayName,
                                 type: 'artist',
                                 coverUrl: currentSong.al?.picUrl || currentSong.album?.picUrl || undefined,
                                 description: `${songs.length} ${t('home.songs')}`,
@@ -2306,7 +2335,7 @@ export default function App() {
                     }
                 }
             } else {
-                openCurrentLocalArtist();
+                openCurrentLocalArtist(requestedEntityId);
             }
         },
         openCurrentNavidromeAlbum: () => {
@@ -2378,11 +2407,13 @@ export default function App() {
         createCurrentLocalPlaylist,
         createCurrentNavidromePlaylist,
         currentSong,
+        playerDisplayCurrentSong,
+        playerDisplayQueue,
         effectiveLoopMode,
         generateCurrentSongTheme,
         navigateToNeteaseAlbum,
         navigateToNeteaseArtist,
-        localSongs,
+        localLibraryCatalog,
         handleBgModeChange,
         handleChangeOnlineLyricsSource,
         handleChangeLyricsSource,
@@ -2423,7 +2454,6 @@ export default function App() {
         openCurrentNavidromeAlbum,
         openCurrentNavidromeArtist,
         panelTab,
-        playQueue,
         playSong,
         playerState,
         playlists,

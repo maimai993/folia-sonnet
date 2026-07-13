@@ -1,6 +1,10 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { appDatabase, LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY } from '../../../src/services/appDatabase';
+import {
+    appDatabase,
+    LOCAL_LIBRARY_ARTIST_SPLIT_MARKER_KEY,
+    LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY,
+} from '../../../src/services/appDatabase';
 import {
     clearCache,
     getCacheEntriesByPrefix,
@@ -54,9 +58,15 @@ describe('db Dexie compatibility facade', () => {
             data: { completedAt: 1 },
             timestamp: 1,
         });
+        await appDatabase.api_cache.put({
+            key: LOCAL_LIBRARY_ARTIST_SPLIT_MARKER_KEY,
+            data: { completedAt: 1 },
+            timestamp: 1,
+        });
         await clearCache(['last_song']);
         expect(await getFromCache('last_song')).toEqual({ id: 1 });
         expect(await getFromCache('theme_1')).toBeNull();
         expect(await appDatabase.api_cache.get(LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY)).toBeTruthy();
+        expect(await appDatabase.api_cache.get(LOCAL_LIBRARY_ARTIST_SPLIT_MARKER_KEY)).toBeTruthy();
     });
 });

@@ -162,14 +162,15 @@ export const refreshLocalGridViewCollection = (
 // Rebuilds a local GridView queue from descriptor ids while preserving descriptor order.
 export const resolveLocalGridViewTracks = (
     descriptor: LocalGridViewCollectionDescriptor,
-    localSongs: LocalSong[]
+    localSongs: LocalSong[],
+    catalog?: { entities: LocalLibraryEntity[]; assignments: LocalLibraryAssignment[]; },
 ): SongResult[] => {
     const songsById = new Map(localSongs.map(song => [song.id, song]));
     const orderedSongs = descriptor.songIds
         .map(songId => songsById.get(songId))
         .filter((song): song is LocalSong => Boolean(song));
 
-    return buildLocalQueue(orderedSongs) as SongResult[];
+    return buildLocalQueue(orderedSongs, undefined, catalog) as SongResult[];
 };
 
 const getLocalGridViewCoverSource = (songs: LocalSong[]): Blob | string | undefined => {

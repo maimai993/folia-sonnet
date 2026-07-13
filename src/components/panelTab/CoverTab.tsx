@@ -8,7 +8,7 @@ interface CoverTabProps {
     onAlbumSelect: (albumId: number) => void;
     onSelectArtist: (artistId: number) => void;
     onOpenCurrentLocalAlbum: () => void;
-    onOpenCurrentLocalArtist: () => void;
+    onOpenCurrentLocalArtist: (entityId?: string) => void;
     onOpenCurrentNavidromeAlbum: () => void;
     onOpenCurrentNavidromeArtist: () => void;
     onCopySongInfoSuccess: () => void;
@@ -119,7 +119,7 @@ const CoverTab: React.FC<CoverTabProps> = ({
                 <div className="text-sm opacity-60 space-y-1">
                     <div className="font-medium">
                         {displayArtists.map((a, i) => (
-                            <React.Fragment key={a.id}>
+                            <React.Fragment key={`${a.entityId || a.id}-${i}`}>
                                 {i > 0 && ", "}
                                 <span
                                     className={isStageSong ? '' : 'cursor-pointer hover:underline hover:opacity-100 transition-opacity'}
@@ -128,7 +128,7 @@ const CoverTab: React.FC<CoverTabProps> = ({
                                             return;
                                         }
                                         if (isLocalSong) {
-                                            onOpenCurrentLocalArtist();
+                                            onOpenCurrentLocalArtist(a.entityId);
                                             return;
                                         }
                                         if (isNavidromeSong) {

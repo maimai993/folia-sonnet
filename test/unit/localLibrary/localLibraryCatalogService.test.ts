@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appDatabase } from '../../../src/services/appDatabase';
 import {
     applyMatchedMetadata,
+    applyManualMetadata,
     assignImportedSongs,
     ensureLocalLibraryInitialized,
     mergeEntities,
@@ -48,6 +49,56 @@ describe('localLibraryCatalogService', () => {
         expect(assignments[0]?.albumEntityId).toBeTruthy();
         expect(assignments[1]?.albumEntityId).toBe(assignments[0]?.albumEntityId);
         expect(assignments[0]?.artistEntityIds).not.toEqual(assignments[1]?.artistEntityIds);
+    });
+
+    it('assigns semicolon/slash-separated imported and manual artists as separate entities', async () => {
+        await assignImportedSongs([song('duet', { artist: '小山百代/三森すずこ' })]);
+        expect((await appDatabase.local_library_assignments.get('duet'))?.artistEntityIds).toHaveLength(2);
+
+        await applyManualMetadata('duet', ['佐藤日向；岩田陽葵'], 'Shared Album');
+        const assignment = await appDatabase.local_library_assignments.get('duet');
+        const stored = await appDatabase.local_music.get('duet');
+        expect(assignment?.artistEntityIds).toHaveLength(2);
+        expect(assignment?.artistOrigin).toBe('manual');
+        expect(stored?.manualArtistNames).toEqual(['佐藤日向', '岩田陽葵']);
+    });
+
+    it('migrates existing explicitly joined assignments without touching split origins', async () => {
+        const joinedEntity = {
+            id: 'joined-artist',
+            kind: 'artist' as const,
+            displayName: '小山百代/三森すずこ',
+            aliases: ['小山百代/三森すずこ'],
+            normalizedAliases: ['小山百代/三森すずこ'],
+            createdAt: 1,
+            updatedAt: 1,
+        };
+        await appDatabase.local_music.bulkPut([
+            song('legacy-duet', { artist: '小山百代/三森すずこ' }),
+            song('explicit-split', { artist: '小山百代/三森すずこ' }),
+        ]);
+        await appDatabase.local_library_entities.put(joinedEntity);
+        await appDatabase.local_library_assignments.bulkPut([
+            {
+                songId: 'legacy-duet',
+                artistEntityIds: [joinedEntity.id],
+                artistOrigin: 'import',
+                albumOrigin: 'import',
+                updatedAt: 1,
+            },
+            {
+                songId: 'explicit-split',
+                artistEntityIds: [joinedEntity.id],
+                artistOrigin: 'split',
+                albumOrigin: 'import',
+                updatedAt: 1,
+            },
+        ]);
+
+        await ensureLocalLibraryInitialized();
+
+        expect((await appDatabase.local_library_assignments.get('legacy-duet'))?.artistEntityIds).toHaveLength(2);
+        expect((await appDatabase.local_library_assignments.get('explicit-split'))?.artistEntityIds).toEqual([joinedEntity.id]);
     });
 
     it('creates separate structured matched artist assignments', async () => {

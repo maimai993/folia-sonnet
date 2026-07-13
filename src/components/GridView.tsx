@@ -290,9 +290,10 @@ export const PolaroidCard = React.memo<{
                                                 key={`${artist.id ?? 'artist'}-${idx}-${artist.name}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (artist.id) {
+                                                    const artistTargetId = artist.entityId || artist.id;
+                                                    if (artistTargetId) {
                                                         onBeforeNestedNavigate?.();
-                                                        onSelectArtist(artist.id);
+                                                        onSelectArtist(artistTargetId);
                                                     }
                                                 }}
                                                 className="hover:underline hover:opacity-100 cursor-pointer text-current font-semibold"

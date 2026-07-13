@@ -115,7 +115,7 @@ type UnifiedPanelLibraryProps = {
     onAddCurrentSongToNavidromePlaylist: (playlistId: string) => Promise<void>;
     onCreateCurrentNavidromePlaylist: (name: string) => Promise<void>;
     onOpenCurrentLocalAlbum: () => void;
-    onOpenCurrentLocalArtist: () => void;
+    onOpenCurrentLocalArtist: (entityId?: string) => void;
     onOpenCurrentNavidromeAlbum: () => void;
     onOpenCurrentNavidromeArtist: () => void;
     onCopySongInfoSuccess: () => void;
@@ -757,8 +757,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 onOpenCurrentLocalAlbum();
                                                 onToggle();
                                             }}
-                                            onOpenCurrentLocalArtist={() => {
-                                                onOpenCurrentLocalArtist();
+                                            onOpenCurrentLocalArtist={(entityId) => {
+                                                onOpenCurrentLocalArtist(entityId);
                                                 onToggle();
                                             }}
                                             onOpenCurrentNavidromeAlbum={() => {

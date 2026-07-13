@@ -36,6 +36,7 @@ interface ArtistGridViewProps {
     onSelectTrack?: (track: SongResult, queue: SongResult[]) => void;
     onAddTrackToQueue?: (track: SongResult) => void;
     onSelectAlbum?: (albumId: number | string, album?: any) => void;
+    onSelectArtist?: (artistId: number | string) => void;
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
     theme: Theme;
@@ -186,6 +187,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     onSelectTrack,
     onAddTrackToQueue,
     onSelectAlbum,
+    onSelectArtist,
     theme,
     isDaylight,
     localSongs = [],
@@ -508,7 +510,11 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 });
 
                 const albumsList = Array.from(albumMap.values());
-                const formattedTopSongs = buildLocalQueue(artistSongs.slice(0, 10)) as SongResult[];
+                const formattedTopSongs = buildLocalQueue(
+                    artistSongs.slice(0, 10),
+                    undefined,
+                    localLibraryCatalog,
+                ) as SongResult[];
 
                 setArtistInfo({
                     name: artistName,
@@ -1111,6 +1117,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             if (isDraggingRef.current) return;
                             centerOnIndex(idx, true);
                         }}
+                        onSelectArtist={onSelectArtist}
                         onAddQueue={() => {
                             if (isSongCard && onAddTrackToQueue && item.rawTrack) {
                                 onAddTrackToQueue(item.rawTrack);

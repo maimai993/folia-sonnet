@@ -1,5 +1,5 @@
 import type { LocalSong } from '../types';
-import { cleanLocalLibraryName } from '../utils/localLibraryNames';
+import { cleanLocalLibraryName, splitLocalLibraryArtistNames } from '../utils/localLibraryNames';
 import { appDatabase } from './appDatabase';
 import { createLocalLibraryAssignment, resolveEntityNames } from './localLibraryCatalogInternals';
 import { assignImportedSongs } from './localLibraryImportCatalog';
@@ -84,7 +84,7 @@ export const applyManualMetadata = async (
       if (!song) return undefined;
       const entities = await appDatabase.local_library_entities.toArray();
       const current = await appDatabase.local_library_assignments.get(songId);
-      const cleanedArtists = artistNames.map(cleanLocalLibraryName).filter((name): name is string => Boolean(name));
+      const cleanedArtists = artistNames.flatMap(splitLocalLibraryArtistNames);
       const cleanedAlbum = cleanLocalLibraryName(albumName);
       const artistIds = resolveEntityNames(entities, 'artist', cleanedArtists, current?.artistEntityIds);
       const albumId = cleanedAlbum
