@@ -406,6 +406,14 @@ export default {
     "popular": "Popular",
     "radio": "Radio",
     "personalFm": "Personal FM",
+    "dailyRecommendations": "Daily Recommendations",
+    "dailyRecommendationsDescription": "A daily mix made for you",
+    "dailyRecommendationsSummary": "Updated every day based on your listening taste",
+    "manageRecommendations": "Manage recommendations",
+    "finishManagingRecommendations": "Finish managing",
+    "recommendationDate": "Recommendation date",
+    "todayRecommendations": "Today",
+    "refreshRecommendations": "Refresh today's recommendations",
     "stage": "Stage"
   },
   "animation": {

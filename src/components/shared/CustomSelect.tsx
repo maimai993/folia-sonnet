@@ -17,6 +17,7 @@ interface CustomSelectProps {
     onChange: (value: string) => void;
     options: Option[];
     placeholder?: string;
+    ariaLabel?: string;
     disabled?: boolean;
     isDaylight?: boolean;
     theme?: Theme;
@@ -27,6 +28,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     onChange,
     options,
     placeholder = 'Select...',
+    ariaLabel,
     disabled = false,
     isDaylight = false,
     theme,
@@ -64,6 +66,9 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                 type="button"
                 onClick={handleToggle}
                 disabled={disabled}
+                aria-label={ariaLabel}
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
                 className="w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
                 style={{
                     backgroundColor: 'var(--overlay-medium)',
@@ -90,6 +95,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                         exit={{ opacity: 0, y: -8, scale: 0.96 }}
                         transition={{ duration: 0.15, ease: 'easeOut' }}
                         className="absolute left-0 right-0 z-50 rounded-xl border shadow-xl overflow-hidden max-h-60 overflow-y-auto backdrop-blur-md custom-scrollbar"
+                        role="listbox"
+                        aria-label={ariaLabel}
                         style={{
                             backgroundColor: isDaylight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(24, 24, 27, 0.96)',
                             borderColor: 'var(--border-color)',
@@ -102,6 +109,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                                     <button
                                         key={option.value}
                                         type="button"
+                                        role="option"
+                                        aria-selected={isSelected}
                                         onClick={() => {
                                             onChange(option.value);
                                             setIsOpen(false);

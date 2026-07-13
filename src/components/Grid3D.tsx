@@ -314,7 +314,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const fetchRadioItems = async () => {
         setLoadingRadio(true);
         try {
-            const fmRes = await neteaseApi.getPersonalFm();
+            const [fmRes, dailyRes, personalizedRes] = await Promise.all([
+                neteaseApi.getPersonalFm(),
+                neteaseApi.getDailyRecommendedSongs(),
+                neteaseApi.getPersonalizedPlaylists(35),
+            ]);
             let fmCoverUrl = '';
             if (fmRes.data && fmRes.data.length > 0) {
                 fmCoverUrl = fmRes.data[0].album?.picUrl || fmRes.data[0].al?.picUrl || '';
@@ -328,7 +332,17 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 isFm: true,
             };
 
-            const personalizedRes = await neteaseApi.getPersonalizedPlaylists(35);
+            const dailySongs = dailyRes.songs || [];
+            const dailyItem = {
+                id: 'daily_recommendations',
+                name: t('home.dailyRecommendations'),
+                coverUrl: dailySongs[0]?.al?.picUrl || dailySongs[0]?.album?.picUrl || '',
+                trackCount: dailySongs.length,
+                description: t('home.dailyRecommendationsDescription'),
+                summary: t('home.dailyRecommendationsSummary'),
+                isDailyRecommendations: true,
+            };
+
             let personalizedItems: any[] = [];
             if (personalizedRes.result) {
                 personalizedItems = personalizedRes.result.map((r: any) => ({
@@ -340,7 +354,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     summary: r.copywriter || ''
                 }));
             }
-            setRadioItems([fmItem, ...personalizedItems]);
+            setRadioItems([fmItem, dailyItem, ...personalizedItems]);
         } catch (e) {
             console.error('[Grid3D] Failed to fetch radio items', e);
         } finally {
@@ -388,7 +402,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             trackCount: r.trackCount,
             description: r.description || t('home.radio'),
             summary: r.summary || '',
-            type: r.isFm ? 'radio' as const : 'playlist' as const,
+            type: r.isFm
+                ? 'radio' as const
+                : r.isDailyRecommendations
+                    ? 'daily_recommendations' as const
+                    : 'playlist' as const,
             raw: r
         }));
     }, [radioItems]);

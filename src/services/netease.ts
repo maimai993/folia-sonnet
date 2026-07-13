@@ -731,6 +731,45 @@ export const neteaseApi = {
     return fetchWithCreds(`/personal_fm?timestamp=${Date.now()}`);
   },
 
+  getDailyRecommendedSongs: async (afresh = false) => {
+    const res = await fetchWithCreds(`/recommend/songs?afresh=${afresh}&timestamp=${Date.now()}`);
+    const rawSongs = res.data?.dailySongs || res.data?.songs || res.recommendData?.dailySongs || res.songs || [];
+    return {
+      ...res,
+      songs: mergeSongsWithPrivileges(rawSongs, res.data?.privileges || res.privileges),
+    };
+  },
+
+  dislikeDailyRecommendedSong: async (songId: number) => {
+    const res = await fetchWithCreds(`/recommend/songs/dislike?id=${songId}&timestamp=${Date.now()}`);
+    return {
+      ...res,
+      song: res.data ? normalizeSongResult(res.data) : null,
+    };
+  },
+
+  getDailyRecommendationHistoryDates: async () => {
+    const res = await fetchWithCreds(`/history/recommend/songs?timestamp=${Date.now()}`);
+    const rawDates = res.data?.dates || res.dates || res.data || [];
+    return {
+      ...res,
+      dates: Array.isArray(rawDates)
+        ? rawDates
+          .map((item: unknown) => typeof item === 'string' ? item : (item as { date?: string })?.date)
+          .filter((date: unknown): date is string => typeof date === 'string' && date.length > 0)
+        : [],
+    };
+  },
+
+  getDailyRecommendationHistoryDetail: async (date: string) => {
+    const res = await fetchWithCreds(`/history/recommend/songs/detail?date=${encodeURIComponent(date)}&timestamp=${Date.now()}`);
+    const rawSongs = res.data?.dailySongs || res.data?.songs || res.recommendData?.dailySongs || res.songs || [];
+    return {
+      ...res,
+      songs: mergeSongsWithPrivileges(rawSongs, res.data?.privileges || res.privileges),
+    };
+  },
+
   getPersonalizedPlaylists: async (limit = 35) => {
     return fetchWithCreds(`/personalized?limit=${limit}`);
   },

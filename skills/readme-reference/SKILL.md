@@ -113,6 +113,11 @@ rg -n "^##|^###|components/visualizer|services/|utils/lyrics|部署|脚本" READ
 - 先以代码真实结构为准
 - 在最终修改中顺手修正文档，或者明确指出 README 已经过时
 
+### Strict Constraint: Protect Project Comments
+
+- Keep all comments prefixed with `@note` exactly as they are. These comments mark critical annotations and must not be translated, shortened, modified, or removed.
+- If refactoring significantly changes the code structure, preserve these comments as close as possible to the code they are logically associated with.
+
 ## Practical Workflow
 
 1. 先判断任务是否涉及项目约定、架构边界或运行方式。

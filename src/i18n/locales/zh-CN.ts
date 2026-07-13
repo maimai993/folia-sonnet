@@ -407,6 +407,14 @@ export default {
     "popular": "时下流行",
     "radio": "电台",
     "personalFm": "私人FM",
+    "dailyRecommendations": "每日推荐",
+    "dailyRecommendationsDescription": "为你定制的每日歌曲",
+    "dailyRecommendationsSummary": "每天根据你的音乐偏好更新",
+    "manageRecommendations": "管理推荐",
+    "finishManagingRecommendations": "完成管理",
+    "recommendationDate": "日推日期",
+    "todayRecommendations": "今天",
+    "refreshRecommendations": "刷新今日日推",
     "stage": "舞台"
   },
   "animation": {

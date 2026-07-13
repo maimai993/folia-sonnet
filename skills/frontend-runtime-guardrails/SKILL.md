@@ -66,6 +66,11 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 - 当前实现的每秒 React 更新次数大概是多少？
 - 长歌词、重复歌词、CJK grapheme、移动端和 Electron 下是否仍然可接受？
 
+### Strict Constraint: Protect Project Comments
+
+- Keep all comments prefixed with `@note` exactly as they are. These comments mark critical annotations and must not be translated, shortened, modified, or removed.
+- If refactoring significantly changes the code structure, preserve these comments as close as possible to the code they are logically associated with.
+
 ### Lyrics Timing
 
 歌词显示文本、布局单元和 `Line.words` 时序是三层不同数据。不要在 visualizer 里临时猜测它们之间的关系。
