@@ -415,6 +415,8 @@ export default {
     "recommendationDate": "日推日期",
     "todayRecommendations": "今天",
     "refreshRecommendations": "刷新今日日推",
+    "noMoreDailyRecommendations": "今日暂无更多推荐",
+    "dislikeRecommendationFailed": "暂时无法更换这首推荐，请稍后重试",
     "stage": "舞台"
   },
   "animation": {

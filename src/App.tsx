@@ -2031,6 +2031,7 @@ export default function App() {
         playAll: playOnlineQueueFromStart,
         addAllToQueue: addNeteaseSongsToQueue,
         addSongToQueue: addNeteaseSongToQueue,
+        onStatusMessage: setStatusMsg,
     }), [
         activePlaybackContext,
         addNavidromeSongsToQueue,
@@ -2143,6 +2144,7 @@ export default function App() {
         setLocalMusicState,
         setNavidromeFocusedAlbumIndex,
         setPendingNavidromeSelection,
+        setStatusMsg,
         setStageStatus,
         showOpenPanelCloseButton,
         songThemeAutoSwitchEnabled,

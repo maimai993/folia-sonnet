@@ -2,7 +2,7 @@ import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useSt
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
 import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { SongResult, Theme } from '../types';
+import { SongResult, type StatusMessage, Theme } from '../types';
 import { isSongMarkedUnavailable, getSongUnavailableTagText, neteaseApi } from '../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { formatSongName } from '../utils/songNameFormatter';
@@ -86,6 +86,7 @@ interface GridViewProps {
     externalTracks?: SongResult[];
     externalTracksLoading?: boolean;
     sourceActions?: GridViewSourceActions;
+    onStatusMessage?: (message: StatusMessage) => void;
 }
 
 type StoredGridViewNavigationState = {
@@ -450,6 +451,7 @@ export const GridView: React.FC<GridViewProps> = ({
     externalTracks,
     externalTracksLoading = false,
     sourceActions,
+    onStatusMessage,
 }) => {
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
@@ -614,6 +616,8 @@ export const GridView: React.FC<GridViewProps> = ({
     const [loadedAlbumInfo, setLoadedAlbumInfo] = useState<any>(null);
     const [dailyRecommendationHistoryDates, setDailyRecommendationHistoryDates] = useState<string[]>([]);
     const [selectedDailyRecommendationDate, setSelectedDailyRecommendationDate] = useState('');
+    const [dailyRecommendationDislikeLimitReached, setDailyRecommendationDislikeLimitReached] = useState(false);
+    const dailyRecommendationDislikePendingRef = useRef(false);
     const [removedExternalTrackKeys, setRemovedExternalTrackKeys] = useState<Set<string>>(() => new Set());
     const baseDisplayTracks = externalTracks ?? tracks;
     const displayTracks = useMemo(() => (
@@ -996,6 +1000,7 @@ export const GridView: React.FC<GridViewProps> = ({
         if (!isDailyRecommendationsCollection) {
             setDailyRecommendationHistoryDates([]);
             setSelectedDailyRecommendationDate('');
+            setDailyRecommendationDislikeLimitReached(false);
             return;
         }
 
@@ -1011,7 +1016,12 @@ export const GridView: React.FC<GridViewProps> = ({
     }, [isDailyRecommendationsCollection]);
 
     const canEditNeteasePlaylist = !usesExternalTracks && collection && collection.specialType !== 'cloud' && Boolean(currentUserId && collection.creator?.userId === currentUserId);
-    const canEditPlaylist = Boolean(canEditNeteasePlaylist || (isDailyRecommendationsCollection && !selectedDailyRecommendationDate) || isLocalPlaylistCollection || isNavidromePlaylistCollection);
+    const canEditPlaylist = Boolean(
+        canEditNeteasePlaylist
+        || (isDailyRecommendationsCollection && !selectedDailyRecommendationDate)
+        || isLocalPlaylistCollection
+        || isNavidromePlaylistCollection
+    );
 
     const isNeteasePlaylist = collectionSource === 'netease' && collection?.type === 'playlist' && !isCloudDrive;
     const isNeteaseAlbum = collectionSource === 'netease' && collection?.type === 'album' && !isCloudDrive;
@@ -1105,11 +1115,38 @@ export const GridView: React.FC<GridViewProps> = ({
         if (!collection) return;
         try {
             if (isDailyRecommendationsCollection) {
-                const res = await neteaseApi.dislikeDailyRecommendedSong(Number(track.id));
-                if (res.code === 200 && res.song) {
-                    setTracks(currentTracks => currentTracks.map((item, index) => (
-                        index === trackIndex ? res.song : item
-                    )));
+                if (dailyRecommendationDislikeLimitReached) {
+                    onStatusMessage?.({
+                        type: 'info',
+                        text: t('home.noMoreDailyRecommendations'),
+                        nonce: Date.now(),
+                    });
+                    return;
+                }
+                if (dailyRecommendationDislikePendingRef.current) return;
+                dailyRecommendationDislikePendingRef.current = true;
+                try {
+                    const res = await neteaseApi.dislikeDailyRecommendedSong(Number(track.id));
+                    if (res.code === 200 && res.song) {
+                        setTracks(currentTracks => currentTracks.map((item, index) => (
+                            index === trackIndex ? res.song : item
+                        )));
+                    } else if (res.code === 432) {
+                        setDailyRecommendationDislikeLimitReached(true);
+                        onStatusMessage?.({
+                            type: 'info',
+                            text: t('home.noMoreDailyRecommendations'),
+                            nonce: Date.now(),
+                        });
+                    } else {
+                        onStatusMessage?.({
+                            type: 'error',
+                            text: t('home.dislikeRecommendationFailed'),
+                            nonce: Date.now(),
+                        });
+                    }
+                } finally {
+                    dailyRecommendationDislikePendingRef.current = false;
                 }
                 return;
             }
@@ -1142,15 +1179,25 @@ export const GridView: React.FC<GridViewProps> = ({
             await onPlaylistMutated?.();
         } catch (error) {
             console.error('Failed to remove track in GridView', error);
+            if (isDailyRecommendationsCollection) {
+                onStatusMessage?.({
+                    type: 'error',
+                    text: t('home.dislikeRecommendationFailed'),
+                    nonce: Date.now(),
+                });
+            }
         }
     }, [
         CACHE_KEY,
         collection,
+        dailyRecommendationDislikeLimitReached,
         isLocalPlaylistCollection,
         isDailyRecommendationsCollection,
         isNavidromePlaylistCollection,
         onPlaylistMutated,
+        onStatusMessage,
         sourceActions,
+        t,
         tracks,
     ]);
 
@@ -1159,20 +1206,27 @@ export const GridView: React.FC<GridViewProps> = ({
         if (mode === 'collection') {
             return items || [];
         }
-        return displayTracks.map((track, idx) => ({
-            id: `${track.id}-${idx}`,
-            name: formatSongName(track),
-            searchText: [
-                track.name,
-                track.alia?.join(' '),
-                track.tns?.join(' '),
-            ].filter(Boolean).join(' '),
-            coverUrl: track.al?.picUrl || track.album?.picUrl,
-            subtitle: String(idx + 1).padStart(2, '0'),
-            description: track.ar?.map(a => a.name).join(', '),
-            rawTrack: track,
-            rawTrackIndex: idx,
-        }));
+        const trackIdOccurrences = new Map<string, number>();
+        return displayTracks.map((track, idx) => {
+            const trackId = String(track.id);
+            const occurrence = trackIdOccurrences.get(trackId) ?? 0;
+            trackIdOccurrences.set(trackId, occurrence + 1);
+
+            return {
+                id: `${trackId}-${occurrence}`,
+                name: formatSongName(track),
+                searchText: [
+                    track.name,
+                    track.alia?.join(' '),
+                    track.tns?.join(' '),
+                ].filter(Boolean).join(' '),
+                coverUrl: track.al?.picUrl || track.album?.picUrl,
+                subtitle: String(idx + 1).padStart(2, '0'),
+                description: track.ar?.map(a => a.name).join(', '),
+                rawTrack: track,
+                rawTrackIndex: idx,
+            };
+        });
     }, [mode, items, displayTracks]);
 
     const gridItems = useMemo(() => {
@@ -1457,18 +1511,26 @@ export const GridView: React.FC<GridViewProps> = ({
             const animateEntrance = shouldAnimateItemEntrance(String(item.id));
             return (
                 <div
-                    key={`${mode}-${idx}-${item.id}`}
+                    key={`${mode}-${item.id}`}
+                    data-folia-grid-item-id={String(item.id)}
                     ref={(el) => {
-                        cardWrapperRefs.current[idx] = el;
-                        cardFrameStyleCachesRef.current[idx] = el
-                            ? createHexCardFrameStyleCache(initialFrame)
-                            : undefined;
+                        if (el) {
+                            cardWrapperRefs.current[idx] = el;
+                            cardFrameStyleCachesRef.current[idx] = createHexCardFrameStyleCache(initialFrame);
+                            return;
+                        }
+
+                        if (cardWrapperRefs.current[idx]?.dataset.foliaGridItemId === String(item.id)) {
+                            cardWrapperRefs.current[idx] = null;
+                            cardFrameStyleCachesRef.current[idx] = undefined;
+                        }
                     }}
                     className="absolute select-none pointer-events-auto folia-grid-card-frame"
                     style={{
                         transformOrigin: 'center center',
                         contain: 'layout style',
                         backfaceVisibility: 'hidden',
+                        perspective: '1200px',
                         display: initialFrame.display || undefined,
                         transform: initialFrame.transform,
                         opacity: initialFrame.opacity,
@@ -1481,9 +1543,21 @@ export const GridView: React.FC<GridViewProps> = ({
                     } as React.CSSProperties}
                 >
                     <motion.div
-                        initial={animateEntrance ? { opacity: 0, scale: 0.96 } : false}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                        initial={animateEntrance ? { opacity: 0, scale: 0.98, rotateY: -90 } : false}
+                        animate={{ opacity: 1, scale: 1, rotateY: 0 }}
+                        exit={{
+                            opacity: 0,
+                            scale: 0.98,
+                            rotateY: 90,
+                            transition: { duration: 0.36, ease: [0.4, 0, 0.2, 1] },
+                        }}
+                        transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                        style={{
+                            transformStyle: 'preserve-3d',
+                            transformOrigin: 'center center',
+                            backfaceVisibility: 'hidden',
+                            willChange: 'transform, opacity',
+                        }}
                     >
                     <PolaroidCard
                         item={item}
@@ -1878,7 +1952,9 @@ export const GridView: React.FC<GridViewProps> = ({
                         style={{ x: dragX, y: dragY, background: 'rgba(0,0,0,0)', touchAction: 'none' }}
                         className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing bg-transparent"
                     >
-                        {memoizedCards}
+                        <AnimatePresence initial={false}>
+                            {memoizedCards}
+                        </AnimatePresence>
                     </motion.div>
                 )}
 
@@ -1963,32 +2039,34 @@ export const GridView: React.FC<GridViewProps> = ({
                                         {collection.playCount !== undefined && <span> • {collection.playCount} {t('playlist.plays')}</span>}
                                     </div>
                                     {isDailyRecommendationsCollection && (
-                                        <div className="mt-3 flex items-center gap-2">
-                                            <div className="min-w-0 flex-1">
-                                                <CustomSelect
-                                                    value={selectedDailyRecommendationDate}
-                                                    onChange={date => void handleDailyRecommendationDateChange(date)}
-                                                    options={[
-                                                        { value: '', label: t('home.todayRecommendations') },
-                                                        ...dailyRecommendationHistoryDates.map(date => ({ value: date, label: date })),
-                                                    ]}
-                                                    placeholder={t('home.todayRecommendations')}
-                                                    ariaLabel={t('home.recommendationDate')}
-                                                    disabled={loading}
-                                                    isDaylight={isDaylight}
-                                                    theme={theme}
-                                                />
+                                        <div className="mt-3 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="min-w-0 flex-1">
+                                                    <CustomSelect
+                                                        value={selectedDailyRecommendationDate}
+                                                        onChange={date => void handleDailyRecommendationDateChange(date)}
+                                                        options={[
+                                                            { value: '', label: t('home.todayRecommendations') },
+                                                            ...dailyRecommendationHistoryDates.map(date => ({ value: date, label: date })),
+                                                        ]}
+                                                        placeholder={t('home.todayRecommendations')}
+                                                        ariaLabel={t('home.recommendationDate')}
+                                                        disabled={loading}
+                                                        isDaylight={isDaylight}
+                                                        theme={theme}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleDailyRecommendationDateChange('', true)}
+                                                    disabled={loading || Boolean(selectedDailyRecommendationDate)}
+                                                    title={t('home.refreshRecommendations')}
+                                                    aria-label={t('home.refreshRecommendations')}
+                                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 transition-colors hover:bg-white/10 disabled:opacity-30"
+                                                >
+                                                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                                                </button>
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => void handleDailyRecommendationDateChange('', true)}
-                                                disabled={loading || Boolean(selectedDailyRecommendationDate)}
-                                                title={t('home.refreshRecommendations')}
-                                                aria-label={t('home.refreshRecommendations')}
-                                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 transition-colors hover:bg-white/10 disabled:opacity-30"
-                                            >
-                                                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                                            </button>
                                         </div>
                                     )}
                                     {isAlbumCollection && (

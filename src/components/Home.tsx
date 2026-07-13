@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, ChevronRight, Settings , ChevronDown } from 'lucide-react';
 import { neteaseApi } from '../services/netease';
-import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, LocalLibraryGroup, LocalPlaylist, type StageStatus, type StageSource, type Theme } from '../types';
+import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, LocalLibraryGroup, LocalPlaylist, type StageStatus, type StageSource, type StatusMessage, type Theme } from '../types';
 import { NavidromeSong, NavidromeViewSelection } from '../types/navidrome';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 import LocalMusicView from './LocalMusicView';
@@ -86,6 +86,7 @@ interface HomeProps {
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
     onAddSongToQueue?: (song: SongResult) => void;
+    onStatusMessage?: (message: StatusMessage) => void;
 }
 
 const Home: React.FC<HomeProps> = ({

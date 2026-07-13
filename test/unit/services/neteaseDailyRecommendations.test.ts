@@ -68,6 +68,22 @@ describe('netease daily recommendations', () => {
         expect(String(vi.mocked(fetch).mock.calls[0]?.[0])).toContain('/recommend/songs/dislike?id=10&timestamp=');
     });
 
+    it('preserves the daily dislike limit response without creating a replacement song', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(mockJsonResponse({
+            code: 432,
+            message: '今日暂无更多推荐',
+        }) as any);
+
+        const { neteaseApi } = await import('@/services/netease');
+        const result = await neteaseApi.dislikeDailyRecommendedSong(10);
+
+        expect(result).toMatchObject({
+            code: 432,
+            message: '今日暂无更多推荐',
+            song: null,
+        });
+    });
+
     it('normalizes available history dates', async () => {
         vi.mocked(fetch).mockResolvedValueOnce(mockJsonResponse({
             code: 200,

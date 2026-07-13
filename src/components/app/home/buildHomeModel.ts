@@ -61,6 +61,7 @@ type BuildHomeModelParams = {
     playAll: (songs: SongResult[]) => void;
     addAllToQueue: (songs: SongResult[]) => void;
     addSongToQueue: (song: SongResult) => void;
+    onStatusMessage?: LegacyHomeProps['onStatusMessage'];
 };
 
 // Builds the full Home model from raw app dependencies so App.tsx no longer assembles nested props inline.
@@ -115,6 +116,7 @@ export const buildHomeModel = ({
     playAll,
     addAllToQueue,
     addSongToQueue,
+    onStatusMessage,
 }: BuildHomeModelParams): HomeViewModel => {
     return {
         legacyProps: {
@@ -132,6 +134,7 @@ export const buildHomeModel = ({
             onPlayAll: playAll,
             onAddAllToQueue: addAllToQueue,
             onAddSongToQueue: addSongToQueue,
+            onStatusMessage,
             focusedPlaylistIndex,
             setFocusedPlaylistIndex,
             focusedFavoriteAlbumIndex,

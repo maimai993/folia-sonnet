@@ -672,6 +672,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                             }}
                             currentUserId={legacyProps.user?.userId}
                             onPlaylistMutated={legacyProps.onRefreshUser}
+                            onStatusMessage={legacyProps.onStatusMessage}
                             externalTracks={externalTracks}
                             externalTracksLoading={externalTracksLoading}
                             sourceActions={sourceActions}

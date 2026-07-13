@@ -414,6 +414,8 @@ export default {
     "recommendationDate": "Recommendation date",
     "todayRecommendations": "Today",
     "refreshRecommendations": "Refresh today's recommendations",
+    "noMoreDailyRecommendations": "No more recommendations are available today",
+    "dislikeRecommendationFailed": "This recommendation could not be replaced. Please try again later.",
     "stage": "Stage"
   },
   "animation": {
