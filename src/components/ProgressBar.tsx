@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
+import React, { useCallback, useLayoutEffect, useRef } from 'react';
 import { MotionValue, useMotionValueEvent } from 'framer-motion';
 
 interface ProgressBarProps {
@@ -32,53 +32,42 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     trackColor = 'rgba(255,255,255,0.1)',
     disabled = false,
 }) => {
-    const [isDragging, setIsDragging] = useState(false);
-    const [localValue, setLocalValue] = useState(0);
-
     const progressRef = useRef<HTMLDivElement>(null);
     const timeRef = useRef<HTMLSpanElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const isDraggingRef = useRef(false);
+    const lastDisplayedSecondRef = useRef<number | null>(null);
+    const lastInputSecondRef = useRef<number | null>(null);
 
-    // Keep ref in sync with state
-    useEffect(() => {
-        isDraggingRef.current = isDragging;
-    }, [isDragging]);
+    // Keeps continuous progress on the compositor while coarse values update only when needed.
+    const updateUI = useCallback((value: number, force = false, syncInput = true, bypassDrag = false) => {
+        if (!bypassDrag && isDraggingRef.current) return;
 
-    // Helper function to update UI
-    const updateUI = (value: number, skipDragCheck = false) => {
-        if (!skipDragCheck && isDraggingRef.current) return;
+        const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
+        const clampedValue = duration > 0 ? Math.min(safeValue, duration) : safeValue;
+        const displayedSecond = Math.floor(clampedValue);
 
-        // Update Progress Bar Width
         if (progressRef.current) {
-            const percent = duration > 0 ? (value / duration) * 100 : 0;
-            progressRef.current.style.width = `${percent}%`;
+            const progress = duration > 0 ? Math.min(1, clampedValue / duration) : 0;
+            const hiddenPercent = ((1 - progress) * 100).toFixed(4);
+            progressRef.current.style.clipPath = `inset(0 ${hiddenPercent}% 0 0 round 999px)`;
         }
 
-        // Update Time Text
-        if (timeRef.current) {
-            timeRef.current.innerText = formatTime(value);
+        if (timeRef.current && (force || lastDisplayedSecondRef.current !== displayedSecond)) {
+            timeRef.current.textContent = formatTime(clampedValue);
+            lastDisplayedSecondRef.current = displayedSecond;
         }
 
-        // Update Input Value
-        if (inputRef.current) {
-            inputRef.current.value = value.toString();
+        if (syncInput && inputRef.current && (force || lastInputSecondRef.current !== displayedSecond)) {
+            inputRef.current.value = clampedValue.toString();
+            lastInputSecondRef.current = displayedSecond;
         }
-    };
-
-    // Initialize UI with current value on mount (useLayoutEffect to sync before paint)
-    useLayoutEffect(() => {
-        const initialValue = currentTime.get();
-        updateUI(initialValue, true); // Skip drag check on mount
-    }, []); // Only run on mount
-
-    // Re-sync when duration changes
-    useEffect(() => {
-        const currentValue = currentTime.get();
-        updateUI(currentValue, true); // Skip drag check when duration changes
     }, [duration]);
 
-    // Update UI directly from MotionValue without re-rendering
+    useLayoutEffect(() => {
+        updateUI(currentTime.get(), true);
+    }, [currentTime, updateUI]);
+
     useMotionValueEvent(currentTime, "change", (latest: number) => {
         updateUI(latest);
     });
@@ -88,16 +77,29 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
             return;
         }
         const val = Number(e.currentTarget.value);
-        setLocalValue(val);
+        updateUI(val, false, false, true);
+    };
 
-        // Immediate visual feedback
-        if (progressRef.current) {
-            const percent = duration > 0 ? (val / duration) * 100 : 0;
-            progressRef.current.style.width = `${percent}%`;
-        }
-        if (timeRef.current) {
-            timeRef.current.innerText = formatTime(val);
-        }
+    const handleSeekStart = (e: React.PointerEvent<HTMLInputElement>) => {
+        if (disabled) return;
+        isDraggingRef.current = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        onSeekStart?.();
+    };
+
+    const handleSeekEnd = (e: React.PointerEvent<HTMLInputElement>) => {
+        if (disabled) return;
+        const value = Number(e.currentTarget.value);
+        isDraggingRef.current = false;
+        updateUI(value, true);
+        onSeek(value);
+        onSeekEnd?.();
+    };
+
+    const handleSeekCancel = () => {
+        isDraggingRef.current = false;
+        updateUI(currentTime.get(), true);
+        onSeekEnd?.();
     };
 
     return (
@@ -114,7 +116,12 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
                 <div
                     ref={progressRef}
                     className="absolute top-0 left-0 h-full rounded-sm md:rounded-full pointer-events-none"
-                    style={{ width: '0%', backgroundColor: primaryColor }}
+                    style={{
+                        width: '100%',
+                        backgroundColor: primaryColor,
+                        clipPath: 'inset(0 100% 0 0 round 999px)',
+                        willChange: 'clip-path',
+                    }}
                 />
                 <input
                     ref={inputRef}
@@ -123,30 +130,11 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
                     step={0.1}
                     disabled={disabled}
                     defaultValue={0}
-                    onMouseDown={() => {
-                        if (disabled) return;
-                        setIsDragging(true);
-                        onSeekStart?.();
-                    }}
-                    onTouchStart={() => {
-                        if (disabled) return;
-                        setIsDragging(true);
-                        onSeekStart?.();
-                    }}
+                    onPointerDown={handleSeekStart}
+                    onPointerUp={handleSeekEnd}
+                    onPointerCancel={handleSeekCancel}
                     onInput={handleInput}
                     onChange={() => { }} // React requires this
-                    onMouseUp={(e) => {
-                        if (disabled) return;
-                        setIsDragging(false);
-                        onSeek(Number(e.currentTarget.value));
-                        onSeekEnd?.();
-                    }}
-                    onTouchEnd={(e) => {
-                        if (disabled) return;
-                        setIsDragging(false);
-                        onSeek(Number(e.currentTarget.value));
-                        onSeekEnd?.();
-                    }}
                     onClick={(e) => e.stopPropagation()}
                     className={`absolute inset-0 w-full h-full opacity-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                 />

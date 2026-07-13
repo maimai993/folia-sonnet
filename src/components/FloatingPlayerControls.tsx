@@ -271,146 +271,78 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
     controlsDisabled = false,
 }) => {
     return (
-        <>
-            {/* Desktop Layout - hidden on mobile */}
-            <div className="hidden sm:flex items-center gap-4 w-full">
+        <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-x-4 gap-y-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+            {/* Desktop Layout - responsive grid positions apply from the sm breakpoint */}
+            {/* Mobile Layout - base grid positions apply below the sm breakpoint */}
+            {/* Row 1: Centered Title */}
+            <div
+                className="col-span-3 row-start-1 min-w-0 truncate px-2 text-center text-sm font-bold sm:col-start-2 sm:col-span-1"
+                style={{ color: primaryColor }}
+            >
+                {currentSong?.name || noTrackText}
+            </div>
+
+            {/* Row 3: Loop Button, Play Button, Lyrics Button */}
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePlay();
+                }}
+                disabled={!canTogglePlay || controlsDisabled}
+                className={`col-start-2 row-start-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-none bg-(--text-primary) text-black shadow-lg transition-transform sm:col-start-1 sm:row-start-1 sm:row-span-2 ${controlsDisabled ? 'cursor-not-allowed opacity-45' : 'hover:scale-105'}`}
+                style={{ backgroundColor: primaryColor, color: 'var(--bg-color)' }}
+            >
+                {playerState === PlayerState.PLAYING ? (
+                    <Pause size={20} fill="currentColor" />
+                ) : (
+                    <Play size={20} fill="currentColor" className="ml-1" />
+                )}
+            </button>
+
+            <div className="contents sm:col-start-3 sm:row-start-1 sm:row-span-2 sm:flex sm:items-center sm:gap-1">
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        onTogglePlay();
+                        onToggleLoop();
                     }}
-                    disabled={!canTogglePlay || controlsDisabled}
-                    className={`w-12 h-12 rounded-full bg-(--text-primary) text-black flex items-center justify-center transition-transform shrink-0 shadow-lg border-none ${controlsDisabled ? 'opacity-45 cursor-not-allowed' : 'hover:scale-105'}`}
-                    style={{ backgroundColor: primaryColor, color: 'var(--bg-color)' }}
+                    disabled={controlsDisabled}
+                    className={`col-start-1 row-start-2 justify-self-end rounded-full p-2 transition-colors sm:justify-self-auto ${loopMode !== 'off' ? (isDaylight ? 'bg-black/10 text-black' : 'bg-white/20') : 'opacity-40 hover:opacity-100'} ${controlsDisabled ? 'cursor-not-allowed opacity-35' : ''}`}
+                    style={{ color: primaryColor }}
                 >
-                    {playerState === PlayerState.PLAYING ? (
-                        <Pause size={20} fill="currentColor" />
-                    ) : (
-                        <Play size={20} fill="currentColor" className="ml-1" />
-                    )}
+                    {loopMode === 'off'
+                        ? <RepeatOff size={20} className="sm:h-[18px] sm:w-[18px]" />
+                        : loopMode === 'one'
+                            ? <Repeat1 size={20} className="sm:h-[18px] sm:w-[18px]" />
+                            : <Repeat size={20} className="sm:h-[18px] sm:w-[18px]" />}
                 </button>
 
-                <div className="flex-1 flex flex-col justify-center gap-2 min-w-0 px-2">
-                    <div className="text-center text-sm font-bold truncate px-2" style={{ color: primaryColor }}>
-                        {currentSong?.name || noTrackText}
-                    </div>
-
-                    <div className="w-full px-2">
-                        <ProgressBar
-                            currentTime={currentTime}
-                            duration={duration}
-                            onSeek={onSeek}
-                            primaryColor={primaryColor}
-                            secondaryColor={secondaryColor}
-                            disabled={controlsDisabled}
-                        />
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-1">
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleLoop();
-                        }}
-                        disabled={controlsDisabled}
-                        className={`p-2 rounded-full transition-colors ${loopMode !== 'off' ? (isDaylight ? 'bg-black/10 text-black' : 'bg-white/20') : 'opacity-40 hover:opacity-100'} ${controlsDisabled ? 'opacity-35 cursor-not-allowed' : ''}`}
-                        style={{ color: primaryColor }}
-                    >
-                        {loopMode === 'off'
-                            ? <RepeatOff size={18} />
-                            : loopMode === 'one'
-                                ? <Repeat1 size={18} />
-                                : <Repeat size={18} />}
-                    </button>
-
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleTimeline();
-                        }}
-                        disabled={!hasLyrics}
-                        className={`p-2 rounded-full transition-colors ${!hasLyrics ? 'opacity-20 cursor-not-allowed' : `opacity-40 hover:opacity-100 ${isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/10'}`}`}
-                        style={{ color: primaryColor }}
-                        title="View Lyrics Timeline"
-                    >
-                        <ChartBar size={18} />
-                    </button>
-                </div>
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleTimeline();
+                    }}
+                    disabled={!hasLyrics}
+                    className={`col-start-3 row-start-2 justify-self-start rounded-full p-2 transition-colors sm:justify-self-auto ${!hasLyrics ? 'cursor-not-allowed opacity-20' : `opacity-40 hover:opacity-100 ${isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/10'}`}`}
+                    style={{ color: primaryColor }}
+                    title="View Lyrics Timeline"
+                >
+                    <ChartBar size={20} className="sm:h-[18px] sm:w-[18px]" />
+                </button>
             </div>
 
-            {/* Mobile Layout - visible only on mobile */}
-            <div className="sm:hidden flex flex-col gap-2 w-full">
-                {/* Row 1: Centered Title */}
-                <div className="text-center text-sm font-bold truncate px-2" style={{ color: primaryColor }}>
-                    {currentSong?.name || noTrackText}
-                </div>
-
-                {/* Row 3: Loop Button, Play Button, Lyrics Button */}
-                <div className="flex items-center justify-center gap-4">
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleLoop();
-                        }}
-                        disabled={controlsDisabled}
-                        className={`p-2 rounded-full transition-colors ${loopMode !== 'off' ? 'bg-white/20' : 'opacity-40 hover:opacity-100'} ${controlsDisabled ? 'opacity-35 cursor-not-allowed' : ''}`}
-                        style={{ color: primaryColor }}
-                    >
-                        {loopMode === 'off'
-                            ? <RepeatOff size={20} />
-                            : loopMode === 'one'
-                                ? <Repeat1 size={20} />
-                                : <Repeat size={20} />}
-                    </button>
-
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onTogglePlay();
-                        }}
-                        disabled={!canTogglePlay || controlsDisabled}
-                        className={`w-12 h-12 rounded-full bg-(--text-primary) text-black flex items-center justify-center transition-transform shrink-0 shadow-lg border-none ${controlsDisabled ? 'opacity-45 cursor-not-allowed' : 'hover:scale-105'}`}
-                        style={{ backgroundColor: primaryColor, color: 'var(--bg-color)' }}
-                    >
-                        {playerState === PlayerState.PLAYING ? (
-                            <Pause size={20} fill="currentColor" />
-                        ) : (
-                            <Play size={20} fill="currentColor" className="ml-1" />
-                        )}
-                    </button>
-
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleTimeline();
-                        }}
-                        disabled={!hasLyrics}
-                        className={`p-2 rounded-full transition-colors ${!hasLyrics ? 'opacity-20 cursor-not-allowed' : `opacity-40 hover:opacity-100 ${isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/10'}`}`}
-                        style={{ color: primaryColor }}
-                        title="View Lyrics Timeline"
-                    >
-                        <ChartBar size={20} />
-                    </button>
-                </div>
-
-                {/* Row 2: Current Time, Progress Bar, Duration */}
-                <div className="flex items-center gap-2 w-full px-2">
-                    <div className="flex-1">
-                        <ProgressBar
-                            currentTime={currentTime}
-                            duration={duration}
-                            onSeek={onSeek}
-                            primaryColor={primaryColor}
-                            secondaryColor={secondaryColor}
-                            disabled={controlsDisabled}
-                        />
-                    </div>
-                </div>
-
-
+            {/* Row 2: Current Time, Progress Bar, Duration */}
+            <div className="col-span-3 row-start-3 w-full px-2 sm:col-start-2 sm:col-span-1 sm:row-start-2">
+                <ProgressBar
+                    currentTime={currentTime}
+                    duration={duration}
+                    onSeek={onSeek}
+                    primaryColor={primaryColor}
+                    secondaryColor={secondaryColor}
+                    trackColor={trackColor}
+                    disabled={controlsDisabled}
+                />
             </div>
-        </>
+        </div>
     );
 };
 
