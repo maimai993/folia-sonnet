@@ -101,6 +101,8 @@ const GRID_VIEW_NAVIGATION_PREFIX = 'folia_gridview_state';
 const GRID_VIEW_LAST_INDEX_PREFIX = 'folia_gridview_last_index';
 const GRID_VIEW_RENDER_BUFFER_FACTOR = 0.75;
 const GRID_VIEW_CARD_VISIBILITY_BUFFER = 96;
+const TRACK_REMOVAL_ANIMATION_MS = 460;
+const TRACK_REMOVAL_BEZIER = [0.22, 0.8, 0.24, 1] as const;
 
 /**
  * High-performance memoized Polaroid card — pure visual component.
@@ -618,6 +620,8 @@ export const GridView: React.FC<GridViewProps> = ({
     const [selectedDailyRecommendationDate, setSelectedDailyRecommendationDate] = useState('');
     const [dailyRecommendationDislikeLimitReached, setDailyRecommendationDislikeLimitReached] = useState(false);
     const dailyRecommendationDislikePendingRef = useRef(false);
+    const [removingTrackKeys, setRemovingTrackKeys] = useState<Set<string>>(() => new Set());
+    const trackRemovalTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     const [removedExternalTrackKeys, setRemovedExternalTrackKeys] = useState<Set<string>>(() => new Set());
     const baseDisplayTracks = externalTracks ?? tracks;
     const displayTracks = useMemo(() => (
@@ -639,6 +643,28 @@ export const GridView: React.FC<GridViewProps> = ({
     const [draftSearchQuery, setDraftSearchQuery] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const deferredSearchQuery = useDeferredValue(searchQuery);
+
+    // Keeps a successfully removed card mounted until its flip-and-fade transition finishes.
+    const commitAfterTrackRemovalAnimation = useCallback((trackKey: string, commit: () => void) => {
+        if (trackRemovalTimeoutsRef.current.has(trackKey)) return;
+
+        setRemovingTrackKeys(current => new Set(current).add(trackKey));
+        const timeout = setTimeout(() => {
+            trackRemovalTimeoutsRef.current.delete(trackKey);
+            commit();
+            setRemovingTrackKeys(current => {
+                const next = new Set(current);
+                next.delete(trackKey);
+                return next;
+            });
+        }, TRACK_REMOVAL_ANIMATION_MS);
+        trackRemovalTimeoutsRef.current.set(trackKey, timeout);
+    }, []);
+
+    useEffect(() => () => {
+        trackRemovalTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+        trackRemovalTimeoutsRef.current.clear();
+    }, []);
 
     const collectionSource = collection?.source as string | undefined;
     const isLocalCollection = collectionSource === 'local';
@@ -1111,8 +1137,9 @@ export const GridView: React.FC<GridViewProps> = ({
         }
     }, [isDailyRecommendationsCollection]);
 
-    const handleRemoveTrack = useCallback(async (track: SongResult, trackIndex: number) => {
+    const handleRemoveTrack = useCallback(async (track: SongResult, trackIndex: number, trackKey: string) => {
         if (!collection) return;
+        if (trackRemovalTimeoutsRef.current.has(trackKey)) return;
         try {
             if (isDailyRecommendationsCollection) {
                 if (dailyRecommendationDislikeLimitReached) {
@@ -1128,9 +1155,11 @@ export const GridView: React.FC<GridViewProps> = ({
                 try {
                     const res = await neteaseApi.dislikeDailyRecommendedSong(Number(track.id));
                     if (res.code === 200 && res.song) {
-                        setTracks(currentTracks => currentTracks.map((item, index) => (
-                            index === trackIndex ? res.song : item
-                        )));
+                        commitAfterTrackRemovalAnimation(trackKey, () => {
+                            setTracks(currentTracks => currentTracks.map((item, index) => (
+                                index === trackIndex ? res.song : item
+                            )));
+                        });
                     } else if (res.code === 432) {
                         setDailyRecommendationDislikeLimitReached(true);
                         onStatusMessage?.({
@@ -1154,14 +1183,18 @@ export const GridView: React.FC<GridViewProps> = ({
             if (isLocalPlaylistCollection && collection.playlistId && sourceActions?.local?.onRemovePlaylistSongs) {
                 const localSongId = (track as any).localData?.id || String(track.id);
                 await sourceActions.local.onRemovePlaylistSongs(collection.playlistId, [localSongId]);
-                setRemovedExternalTrackKeys(prev => new Set(prev).add(String(track.id)).add(`${track.id}-${trackIndex}`));
-                await sourceActions.local.onRefresh?.();
+                commitAfterTrackRemovalAnimation(trackKey, () => {
+                    setRemovedExternalTrackKeys(prev => new Set(prev).add(String(track.id)).add(`${track.id}-${trackIndex}`));
+                    void sourceActions.local?.onRefresh?.();
+                });
                 return;
             }
 
             if (isNavidromePlaylistCollection && sourceActions?.navidrome?.onRemovePlaylistSongs) {
                 await sourceActions.navidrome.onRemovePlaylistSongs(String(collection.id), [trackIndex]);
-                setRemovedExternalTrackKeys(prev => new Set(prev).add(`${track.id}-${trackIndex}`));
+                commitAfterTrackRemovalAnimation(trackKey, () => {
+                    setRemovedExternalTrackKeys(prev => new Set(prev).add(`${track.id}-${trackIndex}`));
+                });
                 return;
             }
 
@@ -1173,7 +1206,7 @@ export const GridView: React.FC<GridViewProps> = ({
                 await neteaseApi.updatePlaylistTracks('del', collection.id, [trackId]);
             }
             const nextTracks = tracks.filter(track => track.id !== trackId);
-            setTracks(nextTracks);
+            commitAfterTrackRemovalAnimation(trackKey, () => setTracks(nextTracks));
             await saveToCache(CACHE_KEY, { tracks: nextTracks, snapshotTime: Date.now(), schemaVersion: CACHE_SCHEMA_VERSION });
             await removeFromCache(`playlist_detail_${collection.id}`);
             await onPlaylistMutated?.();
@@ -1190,6 +1223,7 @@ export const GridView: React.FC<GridViewProps> = ({
     }, [
         CACHE_KEY,
         collection,
+        commitAfterTrackRemovalAnimation,
         dailyRecommendationDislikeLimitReached,
         isLocalPlaylistCollection,
         isDailyRecommendationsCollection,
@@ -1509,6 +1543,8 @@ export const GridView: React.FC<GridViewProps> = ({
             const initialFrame = computeHexCardFrame(coord, initialDx, initialDy, cardFrameOptions);
 
             const animateEntrance = shouldAnimateItemEntrance(String(item.id));
+            const trackKey = String(item.id);
+            const isRemovingTrack = removingTrackKeys.has(trackKey);
             return (
                 <div
                     key={`${mode}-${item.id}`}
@@ -1544,56 +1580,75 @@ export const GridView: React.FC<GridViewProps> = ({
                 >
                     <motion.div
                         initial={animateEntrance ? { opacity: 0, scale: 0.98, rotateY: -90 } : false}
-                        animate={{ opacity: 1, scale: 1, rotateY: 0 }}
+                        animate={isRemovingTrack
+                            ? { opacity: [1, 1, 0], scale: [1, 0.98, 0.96], rotateY: [0, 180, 180] }
+                            : { opacity: 1, scale: 1, rotateY: 0 }}
                         exit={{
                             opacity: 0,
                             scale: 0.98,
                             rotateY: 90,
                             transition: { duration: 0.36, ease: [0.4, 0, 0.2, 1] },
                         }}
-                        transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                        transition={isRemovingTrack
+                            ? { duration: TRACK_REMOVAL_ANIMATION_MS / 1000, times: [0, 0.72, 1], ease: TRACK_REMOVAL_BEZIER }
+                            : { duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
                         style={{
                             transformStyle: 'preserve-3d',
                             transformOrigin: 'center center',
-                            backfaceVisibility: 'hidden',
                             willChange: 'transform, opacity',
+                            pointerEvents: isRemovingTrack ? 'none' : undefined,
+                            position: 'relative',
                         }}
                     >
-                    <PolaroidCard
-                        item={item}
-                        isDaylight={isDaylight}
-                        theme={theme}
-                        mode={mode}
-                        t={t}
-                        cardWidth={layoutConfig.cardWidth}
-                        cardHeight={layoutConfig.cardHeight}
-                        isEditMode={isEditMode}
-                        onRemoveTrack={() => {
-                            if (item.rawTrack) handleRemoveTrack(item.rawTrack, item.rawTrackIndex ?? idx);
-                        }}
-                        onSelectArtist={onSelectArtist}
-                        onSelectAlbum={onSelectAlbum}
-                        onBeforeNestedNavigate={() => {
-                            persistNavigationState(idx);
-                        }}
-                        onSelect={() => {
-                            if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
-                                persistNavigationState(idx);
-                                onSelectTrack(item.rawTrack, displayTracks);
-                            } else if (mode === 'collection' && onSelectCollection) {
-                                onSelectCollection(item.rawCollection || item);
-                            }
-                        }}
-                        onCenter={() => {
-                            if (isDraggingRef.current) return;
-                            centerOnIndex(idx, true);
-                        }}
-                        onAddQueue={() => {
-                            if (mode === 'tracks' && onAddTrackToQueue && item.rawTrack) {
-                                onAddTrackToQueue(item.rawTrack);
-                            }
-                        }}
-                    />
+                        <div style={{ backfaceVisibility: 'hidden' }}>
+                            <PolaroidCard
+                                item={item}
+                                isDaylight={isDaylight}
+                                theme={theme}
+                                mode={mode}
+                                t={t}
+                                cardWidth={layoutConfig.cardWidth}
+                                cardHeight={layoutConfig.cardHeight}
+                                isEditMode={isEditMode}
+                                onRemoveTrack={isRemovingTrack ? undefined : () => {
+                                    if (item.rawTrack) handleRemoveTrack(item.rawTrack, item.rawTrackIndex ?? idx, trackKey);
+                                }}
+                                onSelectArtist={onSelectArtist}
+                                onSelectAlbum={onSelectAlbum}
+                                onBeforeNestedNavigate={() => {
+                                    persistNavigationState(idx);
+                                }}
+                                onSelect={() => {
+                                    if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
+                                        persistNavigationState(idx);
+                                        onSelectTrack(item.rawTrack, displayTracks);
+                                    } else if (mode === 'collection' && onSelectCollection) {
+                                        onSelectCollection(item.rawCollection || item);
+                                    }
+                                }}
+                                onCenter={() => {
+                                    if (isDraggingRef.current) return;
+                                    centerOnIndex(idx, true);
+                                }}
+                                onAddQueue={() => {
+                                    if (mode === 'tracks' && onAddTrackToQueue && item.rawTrack) {
+                                        onAddTrackToQueue(item.rawTrack);
+                                    }
+                                }}
+                            />
+                        </div>
+                        <div
+                            aria-hidden="true"
+                            className="absolute inset-0 rounded-xl border shadow-lg theme-polaroid-card flex items-center justify-center"
+                            style={{
+                                backfaceVisibility: 'hidden',
+                                transform: 'rotateY(180deg)',
+                            }}
+                        >
+                            <div className="w-[58%] aspect-square rounded-full border border-current flex items-center justify-center opacity-30">
+                                <Disc className="w-1/2 h-1/2" />
+                            </div>
+                        </div>
                     </motion.div>
                 </div>
             );
@@ -1617,6 +1672,7 @@ export const GridView: React.FC<GridViewProps> = ({
         onSelectAlbum,
         onAddTrackToQueue,
         handleRemoveTrack,
+        removingTrackKeys,
         persistNavigationState,
         shouldAnimateItemEntrance,
     ]);

@@ -535,7 +535,6 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
             },
             onRemovePlaylistSongs: async (playlistId, songIds) => {
                 await removeSongsFromLocalPlaylist(playlistId, songIds);
-                legacyProps.onRefreshLocalSongs();
             },
         },
         navidrome: {
