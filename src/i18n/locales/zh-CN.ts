@@ -575,7 +575,7 @@ export default {
     "transparentPlayerBackground": "播放页透明背景",
     "transparentPlayerBackgroundDesc": "仅对播放页生效。开启后会切换到透明窗口模式，适合 OBS 浏览器源或抠像叠加场景。",
     "enablePlayerPageNativeBlur": "开启播放页原生毛玻璃背景",
-    "enablePlayerPageNativeBlurDesc": "仅在非透明模式下生效。将播放页的背景替换为系统原生毛玻璃效果（仅桌面端）。系统原生效果会消耗更多性能并可能在移动窗口时产生卡顿。",
+    "enablePlayerPageNativeBlurDesc": "开启后，播放页的主题、图片、Monet 等背景将不再显示，并由系统原生毛玻璃替代。仅在非透明模式和桌面端生效；系统原生效果会消耗更多性能，并可能在移动窗口时产生卡顿。",
     "autoHidePlayerChrome": "自动隐藏控制栏",
     "autoHidePlayerChromeDesc": "开启后，自动隐藏播放页的进度条和右侧按钮。",
     "disableVisualizerVignette": "禁用暗角",

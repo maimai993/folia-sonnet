@@ -574,7 +574,7 @@ export default {
     "transparentPlayerBackground": "Transparent player background",
     "transparentPlayerBackgroundDesc": "Only applies on the player page. When enabled, Folia switches to transparent window mode for OBS browser sources or chroma key overlays.",
     "enablePlayerPageNativeBlur": "Enable Player Page Native Blur",
-    "enablePlayerPageNativeBlurDesc": "Applies only to the player page and normal mode. Replaces the background of the player page with system native blur effect (desktop only). The native system effect consumes more performance and may cause lag when moving the window.",
+    "enablePlayerPageNativeBlurDesc": "When enabled, theme, image, Monet, and other player backgrounds are hidden and replaced by the system native blur. Applies only in non-transparent mode on desktop; the native effect uses more resources and may lag while moving the window.",
     "autoHidePlayerChrome": "Auto-hide player controls",
     "autoHidePlayerChromeDesc": "When enabled, the player progress bar and right side buttons will automatically hide when the mouse leaves the window for more than 3 seconds.",
     "disableVisualizerVignette": "Disable vignette",
