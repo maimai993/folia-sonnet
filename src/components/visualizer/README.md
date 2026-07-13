@@ -25,6 +25,18 @@
 - `VisPlayground.tsx`: 可视化预览和样式设置面板
 - `VisPlaygroundSettingsPanel.tsx`: 预览页的共享设置控制面板
 
+## 歌词，配色，Visualizer
+
+Visualizer 接收的是歌词流水线已经整理好的 `Line[]`，不应该在 renderer 内重新解析 LRC、TTML、YRC 等原始格式。对大多数模式，推荐把歌词处理拆成“行切换”和“行内动画”两层：用 React state 追踪 `currentLineIndex` 的离散变化，从而触发上一行退场、当前行入场和下一行预热；行内连续进度则交给 `currentTime`、Framer Motion、CSS 或 canvas，不要把精确播放时间或每个字符的进度逐帧写入 state。
+
+行内动画优先按字符（更准确地说是 grapheme）组织。整行需要逐字符时间轴时使用 `src/utils/lyrics/graphemeTiming.ts` 的 `buildLineGraphemeTimeline(line)`；已经按 `Word` 排版时使用 `buildWordGraphemeTimings(word, wordIndex)`。这两个工具会从解析器提供的词、音节 timing 构建可渲染字符 timing，并处理 CJK、组合字符、空格、标点和重复文本的映射。Visualizer 只负责根据这些 timing 设计 reveal、pass、trail 等动画曲线，不要再按字符串长度平均猜测时间。
+
+歌词的基础颜色必须来自当前 `theme`：正文通常使用 `theme.primaryColor`，激活态和高光通常使用 `theme.accentColor`，弱化信息可使用 `theme.secondaryColor`。需要透明度或混色时复用 `colorWithAlpha`、`mixColors`。关键词着色使用 `src/components/visualizer/wordColoring.ts`：按词渲染可调用 `resolveWordColor(word.text, theme.wordColors, theme.accentColor)`；按字符或自定义 token 渲染时，先用 `prepareWordColorMatchers` 和 `buildWordColorRangesFromMatchers` 建立范围，再用 `resolveTokenColorMap` 映射颜色。这样可以统一处理中英文关键词、短语重叠和 fallback，不要在各模式中重复实现匹配规则或写死颜色。
+
+`Line.isChorus` 表示副歌行。新 visualizer 应为副歌准备独立于普通行的强化表现，例如更强的 glow、不同的排版、额外粒子或音频响应。副歌特效只改变视觉表现，仍应沿用同一套行索引和字符 timing；当 `isChorus` 或 `chorusEffect` 缺失时必须自然回退到普通行效果。
+
+TTML 歌词可以选择性支持更高级的表现。当前统一数据中可能包含音节 timing、ruby、逐行翻译或罗马音、`backgroundVocal`、`agentId` / `ttml.agents`、`songPart`、`blockIndex` 等信息，适合实现注音、伴唱、多歌手分轨或段落级布局。但这些是增量能力，不是 TTML 文件的稳定必备字段，目前也不是 visualizer 的主要依赖。实现时必须逐项检查字段是否存在，并始终保留只依赖 `Line.fullText`、`Line.words` 和基础 timing 的标准渲染路径，不能假设每一份 TTML 都带有相同的高级特性。
+
 ## 目标
 
 实现一个新的 visualizer 时，需要保证它可以同时在下面两个场景里工作：
