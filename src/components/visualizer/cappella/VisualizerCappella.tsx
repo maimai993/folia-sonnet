@@ -1438,7 +1438,7 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
                                 color: bubbleColors.textColor,
                                 fontSize: bubbleFontSize,
                                 lineHeight: 1.45,
-                                maxWidth: maxTextWidth + bubblePaddingX * 2 + cappellaBubbleRenderSafetyPx(bubbleFontSize),
+                                maxWidth: maxTextWidth + bubblePaddingX * 2 + cappellaBubbleRenderSafetyPx(bubbleFontSize) + 2,
                                 minHeight: Math.max(
                                     isActiveMessage ? motionConfig.activeMinHeight : motionConfig.inactiveMinHeight,
                                     bubbleFontSize * 1.45 + bubblePaddingY * 2
