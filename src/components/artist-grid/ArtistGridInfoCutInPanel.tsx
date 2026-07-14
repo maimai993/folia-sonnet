@@ -74,7 +74,7 @@ export const ArtistGridInfoCutInPanel = ({
                                 style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-color)' }}
                             >
                                 <Pencil size={14} />
-                                {t('localMusic.entityInfo')}
+                                {t('localMusic.entityInfo', { kind: t('localMusic.artistLabel') })}
                             </button>
                         </div>
                     )}

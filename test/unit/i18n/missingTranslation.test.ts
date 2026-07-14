@@ -27,10 +27,49 @@ describe('local library entity translations', () => {
         'splitEntity',
         'selectEntity',
         'newEntityName',
+        'entityEditorHint',
+        'entityNameHint',
+        'metadataSuggestions',
+        'entityMergeHint',
+        'searchEntity',
+        'noEntityMatches',
+        'entitySplitHint',
+        'searchEntitySongs',
+        'noEntitySongs',
+        'selectedSongCount',
+        'entityMemberCount',
+        'entitySaved',
+        'entityMerged',
+        'entitySplitDone',
+        'entityOperationFailed',
+        'mergeIntoCurrent',
+        'chooseSongsToSplit',
+        'backToEntityEditing',
+        'splitSelectedAction',
     ] as const;
 
     it.each(entityKeys)('defines localMusic.%s in both locales', key => {
         expect(en.localMusic[key]).toBeTruthy();
         expect(zhCN.localMusic[key]).toBeTruthy();
+    });
+
+    it.each([
+        'entityInfo',
+        'mergeEntity',
+        'splitEntity',
+        'selectEntity',
+        'newEntityName',
+        'entityEditorHint',
+        'entityMergeHint',
+        'searchEntity',
+        'noEntityMatches',
+        'entitySplitHint',
+        'entityMerged',
+        'entitySplitDone',
+        'mergeIntoCurrent',
+        'splitSelectedAction',
+    ] as const)('uses a contextual kind label in localMusic.%s', key => {
+        expect(en.localMusic[key]).toContain('{{kind}}');
+        expect(zhCN.localMusic[key]).toContain('{{kind}}');
     });
 });

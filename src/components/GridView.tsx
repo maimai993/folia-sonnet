@@ -2265,7 +2265,11 @@ export const GridView: React.FC<GridViewProps> = ({
                                         className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                                     >
                                         <Pencil size={14} />
-                                        {t('localMusic.entityInfo')}
+                                        {t('localMusic.entityInfo', {
+                                            kind: collection.type === 'album'
+                                                ? t('localMusic.albumLabel')
+                                                : t('localMusic.artistLabel'),
+                                        })}
                                     </button>
                                 )}
                                 {(isLocalFolderCollection || isLocalPlaylistCollection || isNavidromePlaylistCollection) && (
