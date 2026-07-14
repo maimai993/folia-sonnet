@@ -1,5 +1,6 @@
 import { sanitizeDualTheme } from "../shared/themeSanitizer.mjs";
 
+// 当前文件：Vercel OpenAI 兼容主题生成函数的 TypeScript 源文件。
 export const config = {
     runtime: 'edge', // Use edge runtime for fetch support
 };

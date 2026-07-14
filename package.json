@@ -13,7 +13,8 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:vercel-api && vite build",
+    "build:vercel-api": "tsc api-ts/*.ts --ignoreConfig --noCheck --outDir api --target ES2022 --module ESNext --moduleResolution Bundler",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run -c vitest.config.ts",

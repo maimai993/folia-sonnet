@@ -1,6 +1,6 @@
 import { URL } from 'url';
 
-// api/lyric-proxy.ts
+// 当前文件：Vercel 歌词请求代理函数的 TypeScript 源文件。
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

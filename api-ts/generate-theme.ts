@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { sanitizeDualTheme } from "../shared/themeSanitizer.mjs";
 
+// 当前文件：Vercel Google GenAI 主题生成函数的 TypeScript 源文件。
 const THEME_GENERATION_PROMPT_PREFIX = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.
 
 DUAL THEME REQUIREMENTS:
