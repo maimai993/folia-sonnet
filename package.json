@@ -166,6 +166,8 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/blueimp-md5": "^2.18.2",
