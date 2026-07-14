@@ -71,7 +71,7 @@ import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, reso
 import { readLyricOffset, writeLyricOffset } from './utils/lyrics/lyricOffsetMemory';
 import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
 import { initializeSyncCoordinator } from './services/sync/syncCoordinator';
-import { applyLocalLibraryArtistDisplay } from './services/playbackAdapters';
+import { applyLocalLibraryEntityDisplay } from './services/playbackAdapters';
 import { buildLocalLibraryIndex, followEntityRedirect } from './utils/localLibraryIndex';
 import type { PlayerChromeVisibilityMode } from './types/remoteControl';
 
@@ -2173,11 +2173,11 @@ export default function App() {
     ), [localLibraryCatalog.assignments, localLibraryCatalog.entities]);
     const playerDisplayCurrentSong = useMemo(() => (
         currentSong
-            ? applyLocalLibraryArtistDisplay(currentSong, localLibraryCatalog, playerDisplayCatalogIndex)
+            ? applyLocalLibraryEntityDisplay(currentSong, localLibraryCatalog, playerDisplayCatalogIndex)
             : null
     ), [currentSong, localLibraryCatalog, playerDisplayCatalogIndex]);
     const playerDisplayQueue = useMemo(() => (
-        playQueue.map(song => applyLocalLibraryArtistDisplay(song, localLibraryCatalog, playerDisplayCatalogIndex))
+        playQueue.map(song => applyLocalLibraryEntityDisplay(song, localLibraryCatalog, playerDisplayCatalogIndex))
     ), [localLibraryCatalog, playQueue, playerDisplayCatalogIndex]);
 
     const playerPanelModel = useMemo(() => buildPlayerPanelModel({
@@ -2268,21 +2268,33 @@ export default function App() {
         openCurrentLocalAlbum: () => {
             if (homeLayoutStyle === 'grid') {
                 if (currentSong && isLocalPlaybackSong(currentSong) && currentSong.localData) {
-                    const localSong = currentSong.localData;
-                    const albumName = currentSong.al?.name || currentSong.album?.name || localSong.matchedAlbumName || localSong.album;
-                    if (albumName) {
-                        const songs = localSongs.filter(song => {
-                            const candidateAlbum = song.matchedAlbumName || song.album || '';
-                            return candidateAlbum === albumName;
-                        });
+                    const catalogIndex = buildLocalLibraryIndex(
+                        localLibraryCatalog.entities,
+                        localLibraryCatalog.assignments,
+                    );
+                    const assignment = catalogIndex.assignmentsBySongId.get(currentSong.localData.id);
+                    const albumEntityId = assignment?.albumEntityId
+                        ? followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById)
+                        : undefined;
+                    const albumEntity = albumEntityId
+                        ? catalogIndex.entitiesById.get(albumEntityId)
+                        : undefined;
+                    if (albumEntity?.kind === 'album') {
+                        const memberIds = new Set(localLibraryCatalog.assignments
+                            .filter(item => item.albumEntityId && (
+                                followEntityRedirect(item.albumEntityId, catalogIndex.entitiesById) === albumEntity.id
+                            ))
+                            .map(item => item.songId));
+                        const songs = localSongs.filter(song => memberIds.has(song.id));
                         if (songs.length > 0) {
                             setActiveGridViewCollection({
                                 source: 'local',
-                                id: `album-current-${albumName}`,
-                                name: albumName,
+                                id: albumEntity.id,
+                                entityId: albumEntity.id,
+                                name: albumEntity.displayName,
                                 type: 'album',
-                                coverUrl: currentSong.al?.picUrl || currentSong.album?.picUrl || undefined,
-                                description: currentSong.ar?.map(artist => artist.name).join(', '),
+                                coverUrl: playerDisplayCurrentSong?.al?.picUrl || playerDisplayCurrentSong?.album?.picUrl || undefined,
+                                description: playerDisplayCurrentSong?.ar?.map(artist => artist.name).join(', '),
                                 trackCount: songs.length,
                                 songIds: songs.map(song => song.id),
                                 returnToPlayerOnClose: true,

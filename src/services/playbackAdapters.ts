@@ -48,6 +48,49 @@ export const applyLocalLibraryArtistDisplay = <T extends SongResult>(
     };
 };
 
+// Maps a local song's album assignment onto both album fields used by GridView and player surfaces.
+const applyLocalLibraryAlbumDisplay = <T extends SongResult>(
+    song: T,
+    catalog?: LocalLibraryDisplayCatalog,
+    preparedIndex?: LocalLibraryIndex,
+): T => {
+    const localSong = (song as UnifiedSong).localData;
+    if (!localSong || !catalog) return song;
+
+    const index = preparedIndex || buildLocalLibraryIndex(catalog.entities, catalog.assignments);
+    const assignedEntityId = index.assignmentsBySongId.get(localSong.id)?.albumEntityId;
+    const activeEntityId = assignedEntityId
+        ? followEntityRedirect(assignedEntityId, index.entitiesById)
+        : undefined;
+    const entity = activeEntityId ? index.entitiesById.get(activeEntityId) : undefined;
+    if (!entity || entity.kind !== 'album') return song;
+
+    return {
+        ...song,
+        album: {
+            ...song.album,
+            entityId: entity.id,
+            name: entity.displayName,
+        },
+        al: {
+            ...(song.al || song.album),
+            entityId: entity.id,
+            name: entity.displayName,
+        },
+    };
+};
+
+// Applies the complete local entity display model used by cards, queues, and CoverTab.
+export const applyLocalLibraryEntityDisplay = <T extends SongResult>(
+    song: T,
+    catalog?: LocalLibraryDisplayCatalog,
+    preparedIndex?: LocalLibraryIndex,
+): T => applyLocalLibraryAlbumDisplay(
+    applyLocalLibraryArtistDisplay(song, catalog, preparedIndex),
+    catalog,
+    preparedIndex,
+);
+
 // Applies a resolved local cover URL to both API-compatible album fields used by song cards.
 export const applyLocalSongCoverDisplay = <T extends SongResult>(song: T, coverUrl: string): T => ({
     ...song,
@@ -159,7 +202,7 @@ export function buildLocalQueue(
             song.lyricsSource === 'online'
             || (!song.lyricsSource && !song.hasLocalLyrics && !song.hasEmbeddedLyrics);
 
-        return applyLocalLibraryArtistDisplay({
+        return applyLocalLibraryEntityDisplay({
             id: getLocalSongId(song),
             name: song.title || song.fileName,
             artists: song.artist ? [{ id: 0, name: song.artist }] : [],
@@ -180,7 +223,7 @@ export function buildLocalQueue(
 
     return convertedQueue.map(song => {
         if (song.id === currentSong.id) {
-            return applyLocalLibraryArtistDisplay(currentSong, catalog, catalogIndex);
+            return applyLocalLibraryEntityDisplay(currentSong, catalog, catalogIndex);
         }
         return song;
     });

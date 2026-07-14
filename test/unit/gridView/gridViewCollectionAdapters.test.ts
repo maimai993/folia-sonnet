@@ -9,7 +9,7 @@ import {
 import { buildLocalGrid3DGroups } from '../../../src/components/app/home/localGrid3DModel';
 import type { LocalLibraryGroup, LocalSong } from '../../../src/types';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../src/types/localLibrary';
-import { applyLocalSongCoverDisplay } from '../../../src/services/playbackAdapters';
+import { applyLocalLibraryEntityDisplay, applyLocalSongCoverDisplay } from '../../../src/services/playbackAdapters';
 
 // test/unit/gridView/gridViewCollectionAdapters.test.ts
 // Verifies that GridView descriptors stay serializable and resolve local queues by id.
@@ -126,6 +126,41 @@ describe('gridViewCollectionAdapters', () => {
             { id: 0, entityId: 'artist-b', name: '三森すずこ' },
         ]);
         expect(track.artists).toEqual(track.ar);
+    });
+
+    it('exposes the assigned local album UUID as the card navigation target', () => {
+        const song = buildLocalSong('song-a', 'A');
+        const descriptor = createLocalGridViewCollection({
+            id: 'folder-music',
+            name: 'Music',
+            type: 'folder',
+            songs: [song],
+        });
+        const entities: LocalLibraryEntity[] = [{
+            id: 'album-entity',
+            kind: 'album',
+            displayName: 'Renamed Album',
+            aliases: ['Album'],
+            normalizedAliases: ['album'],
+            createdAt: 1,
+            updatedAt: 1,
+        }];
+        const assignments: LocalLibraryAssignment[] = [{
+            songId: song.id,
+            artistEntityIds: [],
+            artistOrigin: 'import',
+            albumEntityId: 'album-entity',
+            albumOrigin: 'import',
+            updatedAt: 1,
+        }];
+
+        const [track] = resolveLocalGridViewTracks(descriptor, [song], { entities, assignments });
+        const [rawPlayerTrack] = resolveLocalGridViewTracks(descriptor, [song]);
+        const playerTrack = applyLocalLibraryEntityDisplay(rawPlayerTrack, { entities, assignments });
+
+        expect(track.al).toMatchObject({ entityId: 'album-entity', name: 'Renamed Album' });
+        expect(track.album).toMatchObject({ entityId: 'album-entity', name: 'Renamed Album' });
+        expect(playerTrack.al).toMatchObject({ entityId: 'album-entity', name: 'Renamed Album' });
     });
 
     it('applies a resolved local cover even when the track has no album metadata', () => {

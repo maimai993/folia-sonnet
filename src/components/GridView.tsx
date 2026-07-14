@@ -317,10 +317,13 @@ export const PolaroidCard = React.memo<{
                                     <span
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            const alId = item.rawTrack?.al?.id || item.rawTrack?.album?.id;
-                                            if (alId && onSelectAlbum) {
+                                            const albumTargetId = item.rawTrack?.al?.entityId
+                                                || item.rawTrack?.album?.entityId
+                                                || item.rawTrack?.al?.id
+                                                || item.rawTrack?.album?.id;
+                                            if (albumTargetId && onSelectAlbum) {
                                                 onBeforeNestedNavigate?.();
-                                                onSelectAlbum(alId);
+                                                onSelectAlbum(albumTargetId);
                                             }
                                         }}
                                         className="text-[9px] opacity-35 font-mono line-clamp-2 whitespace-normal break-words max-w-full hover:underline hover:opacity-85 cursor-pointer"

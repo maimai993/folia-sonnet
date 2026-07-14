@@ -336,14 +336,23 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                 picUrl: albumCoverUrl,
             });
         } else if (source === 'local') {
-            const localAlbumEntity = localLibraryCatalog.entities.find(entity => (
-                entity.kind === 'album' && !entity.mergedInto && (entity.id === String(albumId) || entity.displayName === album?.name)
-            ));
-            if (!localAlbumEntity) return;
+            const catalogIndex = buildLocalLibraryIndex(
+                localLibraryCatalog.entities,
+                localLibraryCatalog.assignments,
+            );
+            const activeEntityId = followEntityRedirect(String(albumId), catalogIndex.entitiesById);
+            const localAlbumEntity = activeEntityId
+                ? catalogIndex.entitiesById.get(activeEntityId)
+                : localLibraryCatalog.entities.find(entity => (
+                    entity.kind === 'album' && !entity.mergedInto && entity.displayName === album?.name
+                ));
+            if (localAlbumEntity?.kind !== 'album') return;
             const localAlbumName = localAlbumEntity.displayName;
             const localCoverUrl = albumCoverUrl;
             const memberIds = new Set(localLibraryCatalog.assignments
-                .filter(assignment => assignment.albumEntityId === localAlbumEntity.id)
+                .filter(assignment => assignment.albumEntityId && (
+                    followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById) === localAlbumEntity.id
+                ))
                 .map(assignment => assignment.songId));
             const albumSongs = legacyProps.localSongs.filter(song => memberIds.has(song.id));
             handlePushCollection({

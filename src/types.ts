@@ -683,6 +683,7 @@ export interface Album {
   id: number;
   name: string;
   picUrl?: string;
+  entityId?: string;
 }
 
 export interface SongPrivilege {
@@ -721,6 +722,7 @@ export interface SongResult {
     id: number;
     name: string;
     picUrl?: string;
+    entityId?: string;
   };
   ar?: Artist[];
   dt?: number; // duration in ms
