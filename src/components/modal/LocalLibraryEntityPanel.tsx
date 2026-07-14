@@ -139,8 +139,15 @@ export const LocalLibraryEntityPanel = ({
               () => setEntityDisplayName(entity.id, displayName),
               t('localMusic.entitySaved'),
             )}
-            onMerge={sourceEntityId => run(
-              () => mergeEntities(entity.id, [sourceEntityId]),
+            onMerge={(candidateId, mergeIntoCurrent) => run(
+              async () => {
+                if (mergeIntoCurrent) {
+                  await mergeEntities(entity.id, [candidateId]);
+                } else {
+                  await mergeEntities(candidateId, [entity.id]);
+                  setTimeout(onClose, 1500); // Close after showing feedback briefly
+                }
+              },
               t('localMusic.entityMerged', { kind: entityKindLabel }),
             )}
             onSplit={(songIds, displayName) => run(
