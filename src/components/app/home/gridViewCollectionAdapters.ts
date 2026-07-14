@@ -113,6 +113,30 @@ export const createNavidromeGridViewCollection = (
     editable: Boolean((item as { editable?: boolean }).editable),
 });
 
+// Resolves the ordered, deduplicated artist entity names represented by a local album's songs.
+export const resolveLocalAlbumArtistDisplay = (
+    songIds: string[],
+    catalog: { entities: LocalLibraryEntity[]; assignments: LocalLibraryAssignment[]; },
+): string => {
+    const index = buildLocalLibraryIndex(catalog.entities, catalog.assignments);
+    const songIdSet = new Set(songIds);
+    const seenArtistIds = new Set<string>();
+    const names: string[] = [];
+
+    catalog.assignments.forEach(assignment => {
+        if (!songIdSet.has(assignment.songId)) return;
+        assignment.artistEntityIds.forEach(artistEntityId => {
+            const activeArtistId = followEntityRedirect(artistEntityId, index.entitiesById);
+            const artistEntity = activeArtistId ? index.entitiesById.get(activeArtistId) : undefined;
+            if (!artistEntity || artistEntity.kind !== 'artist' || seenArtistIds.has(artistEntity.id)) return;
+            seenArtistIds.add(artistEntity.id);
+            names.push(artistEntity.displayName);
+        });
+    });
+
+    return names.join(', ');
+};
+
 export const refreshLocalGridViewCollection = (
     descriptor: LocalGridViewCollectionDescriptor,
     localSongs: LocalSong[],
@@ -127,12 +151,19 @@ export const refreshLocalGridViewCollection = (
         }
         const songIds = catalog.assignments
             .filter(assignment => entity.kind === 'artist'
-                ? assignment.artistEntityIds.includes(entity.id)
-                : assignment.albumEntityId === entity.id)
+                ? assignment.artistEntityIds.some(artistEntityId => (
+                    followEntityRedirect(artistEntityId, index.entitiesById) === entity.id
+                ))
+                : Boolean(assignment.albumEntityId && (
+                    followEntityRedirect(assignment.albumEntityId, index.entitiesById) === entity.id
+                )))
             .map(assignment => assignment.songId);
         const songIdSet = new Set(songIds);
         const currentSongs = localSongs.filter(song => songIdSet.has(song.id));
         const refreshedSongs = entity.kind === 'album' ? sortLocalFolderSongs(currentSongs) : currentSongs;
+        const albumArtist = entity.kind === 'album'
+            ? resolveLocalAlbumArtistDisplay(songIds, catalog)
+            : undefined;
         return {
             ...descriptor,
             id: entity.id,
@@ -140,6 +171,7 @@ export const refreshLocalGridViewCollection = (
             name: entity.displayName,
             songIds: refreshedSongs.map(song => song.id),
             trackCount: refreshedSongs.length,
+            ...(albumArtist ? { albumArtist, description: albumArtist } : {}),
         };
     }
 

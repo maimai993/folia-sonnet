@@ -3,6 +3,7 @@ import {
     createLocalGridViewCollection,
     createNavidromeGridViewCollection,
     refreshLocalGridViewCollection,
+    resolveLocalAlbumArtistDisplay,
     resolveLocalGridViewCoverSource,
     resolveLocalGridViewTracks,
 } from '../../../src/components/app/home/gridViewCollectionAdapters';
@@ -284,6 +285,61 @@ describe('gridViewCollectionAdapters', () => {
             name: 'Current Album',
             songIds: ['song-b'],
             trackCount: 1,
+        });
+    });
+
+    it('keeps local album artist information when rebuilding an album descriptor', () => {
+        const songs = [buildLocalSong('song-a', 'A'), buildLocalSong('song-b', 'B')];
+        const entities: LocalLibraryEntity[] = [
+            {
+                id: 'album-1',
+                kind: 'album',
+                displayName: 'Album',
+                aliases: ['Album'],
+                normalizedAliases: ['album'],
+                createdAt: 1,
+                updatedAt: 1,
+            },
+            {
+                id: 'artist-a',
+                kind: 'artist',
+                displayName: 'Artist A',
+                aliases: ['Artist A'],
+                normalizedAliases: ['artist a'],
+                createdAt: 1,
+                updatedAt: 1,
+            },
+            {
+                id: 'artist-b',
+                kind: 'artist',
+                displayName: 'Artist B',
+                aliases: ['Artist B'],
+                normalizedAliases: ['artist b'],
+                createdAt: 1,
+                updatedAt: 1,
+            },
+        ];
+        const assignments: LocalLibraryAssignment[] = songs.map((song, index) => ({
+            songId: song.id,
+            artistEntityIds: index === 0 ? ['artist-a', 'artist-b'] : ['artist-a'],
+            artistOrigin: 'import',
+            albumEntityId: 'album-1',
+            albumOrigin: 'import',
+            updatedAt: 1,
+        }));
+        const descriptor = createLocalGridViewCollection({
+            id: 'album-1',
+            entityId: 'album-1',
+            name: 'Album',
+            type: 'album',
+            songs,
+        });
+        const catalog = { entities, assignments };
+
+        expect(resolveLocalAlbumArtistDisplay(songs.map(song => song.id), catalog)).toBe('Artist A, Artist B');
+        expect(refreshLocalGridViewCollection(descriptor, songs, catalog)).toMatchObject({
+            albumArtist: 'Artist A, Artist B',
+            description: 'Artist A, Artist B',
         });
     });
 

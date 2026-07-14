@@ -19,6 +19,7 @@ import {
     isLocalGridViewCollection,
     isNavidromeGridViewCollection,
     refreshLocalGridViewCollection,
+    resolveLocalAlbumArtistDisplay,
     resolveLocalGridViewTracks,
     resolveNavidromeGridViewTracks,
 } from './gridViewCollectionAdapters';
@@ -347,6 +348,14 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                     entity.kind === 'album' && !entity.mergedInto && entity.displayName === album?.name
                 ));
             if (localAlbumEntity?.kind !== 'album') return;
+            const selectedAlbumSourceId = selectedCollection.entityId
+                || (selectedCollection.type === 'album' ? String(selectedCollection.id) : undefined);
+            const selectedAlbumEntityId = selectedAlbumSourceId
+                ? followEntityRedirect(selectedAlbumSourceId, catalogIndex.entitiesById)
+                : undefined;
+            if (selectedCollection.type === 'album' && selectedAlbumEntityId === localAlbumEntity.id) {
+                return;
+            }
             const localAlbumName = localAlbumEntity.displayName;
             const localCoverUrl = albumCoverUrl;
             const memberIds = new Set(localLibraryCatalog.assignments
@@ -355,6 +364,10 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                 ))
                 .map(assignment => assignment.songId));
             const albumSongs = legacyProps.localSongs.filter(song => memberIds.has(song.id));
+            const albumArtist = resolveLocalAlbumArtistDisplay(
+                albumSongs.map(song => song.id),
+                localLibraryCatalog,
+            );
             handlePushCollection({
                 source: 'local',
                 id: localAlbumEntity.id,
@@ -364,6 +377,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                 coverImgUrl: localCoverUrl,
                 coverUrl: localCoverUrl,
                 picUrl: localCoverUrl,
+                description: albumArtist,
+                albumArtist,
                 songIds: albumSongs.map(song => song.id),
             });
         }

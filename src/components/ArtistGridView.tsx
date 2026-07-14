@@ -1134,6 +1134,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             centerOnIndex(idx, true);
                         }}
                         onSelectArtist={onSelectArtist}
+                        onSelectAlbum={onSelectAlbum}
                         onAddQueue={() => {
                             if (isSongCard && onAddTrackToQueue && item.rawTrack) {
                                 onAddTrackToQueue(item.rawTrack);
@@ -1160,6 +1161,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         topSongs,
         onSelectTrack,
         onSelectAlbum,
+        onSelectArtist,
         onAddTrackToQueue,
         persistNavigationState,
         shouldAnimateItemEntrance,
