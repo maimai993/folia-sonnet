@@ -20,6 +20,7 @@ import { appendUniqueByKey, deriveProgressiveLoadingState } from './folia-grid/p
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
 import { useLocalLibraryCatalog } from '../hooks/useLocalLibraryCatalog';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../utils/localLibraryIndex';
+import { ArtistGridInfoCutInPanel } from './artist-grid/ArtistGridInfoCutInPanel';
 
 /*
  * ArtistGridView.tsx
@@ -316,6 +317,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const [showFullBio, setShowFullBio] = useState(false);
     const [showSearchPanel, setShowSearchPanel] = useState(false);
     const [showSidePanel, setShowSidePanel] = useState(false);
+    const [showCutInPanel, setShowCutInPanel] = useState(false);
     const [draftSearchQuery, setDraftSearchQuery] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -1218,14 +1220,33 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             >
                 <button
                     type="button"
-                    disabled={collection.source !== 'local' || !collection.entityId || !onEditEntity}
-                    onClick={() => onEditEntity?.(String(collection.entityId))}
-                    className="text-lg font-bold tracking-tight disabled:cursor-default"
+                    onClick={() => {
+                        setShowSearchPanel(false);
+                        setShowSidePanel(false);
+                        setShowCutInPanel(current => !current);
+                    }}
+                    className="text-lg font-bold tracking-tight cursor-pointer"
+                    aria-expanded={showCutInPanel}
                 >
                     {artistInfo?.name || collection.name}
                 </button>
                 <p className="text-xs opacity-50 mt-0.5">{t('navidrome.artists') || 'Artists'}</p>
             </div>
+
+            <ArtistGridInfoCutInPanel
+                isOpen={showCutInPanel}
+                artistName={artistInfo?.name || collection.name}
+                coverUrl={artistInfo?.cover}
+                description={artistInfo?.briefDesc}
+                musicSize={artistInfo?.musicSize}
+                albumSize={artistInfo?.albumSize}
+                entityId={collection.source === 'local' ? collection.entityId : undefined}
+                onClose={() => setShowCutInPanel(false)}
+                onEditEntity={onEditEntity ? (entityId) => {
+                    setShowCutInPanel(false);
+                    onEditEntity(entityId);
+                } : undefined}
+            />
 
             <AnimatePresence>
                 {showSearchPanel && (
