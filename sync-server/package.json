@@ -4,6 +4,9 @@
   "description": "Sync Server for Folia",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "dev:cf": "wrangler dev",
     "deploy:cf": "wrangler deploy",

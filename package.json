@@ -11,6 +11,9 @@
   "license": "AGPL-3.0",
   "type": "module",
   "main": "electron/main.cjs",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "npm run build:vercel-api && vite build",
