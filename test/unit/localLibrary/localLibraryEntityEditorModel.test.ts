@@ -5,6 +5,7 @@ import {
     buildEntityNameSuggestions,
     filterEntityMemberSongs,
     filterMergeEntitySuggestions,
+    findExactEntitySuggestion,
 } from '../../../src/components/local-library-entity/entityEditorModel';
 
 // test/unit/localLibrary/localLibraryEntityEditorModel.test.ts
@@ -77,5 +78,16 @@ describe('local-library entity editor model', () => {
 
         expect(filterEntityMemberSongs(songs, 'create').map(song => song.id)).toEqual(['one']);
         expect(filterEntityMemberSongs(songs, 'fly-me').map(song => song.id)).toEqual(['two']);
+    });
+
+    it('recognizes an existing split destination by display name or alias', () => {
+        const entities = [
+            createEntity('album-one', '少女☆歌劇', { kind: 'album', aliases: ['Revue Starlight'] }),
+            createEntity('album-two', '別のアルバム', { kind: 'album' }),
+        ];
+
+        expect(findExactEntitySuggestion(entities, '少女☆歌劇')?.id).toBe('album-one');
+        expect(findExactEntitySuggestion(entities, 'revue starlight')?.id).toBe('album-one');
+        expect(findExactEntitySuggestion(entities, 'new album')).toBeUndefined();
     });
 });

@@ -6,6 +6,7 @@ import type { LocalSong } from '../../types';
 import type { LocalLibraryEntity } from '../../types/localLibrary';
 import {
   mergeEntities,
+  moveEntityMembersToExistingEntity,
   setEntityDisplayName,
   splitEntity,
 } from '../../services/localLibraryCatalogService';
@@ -150,9 +151,13 @@ export const LocalLibraryEntityPanel = ({
               },
               t('localMusic.entityMerged', { kind: entityKindLabel }),
             )}
-            onSplit={(songIds, displayName) => run(
-              () => splitEntity(entity.id, songIds, displayName),
-              t('localMusic.entitySplitDone', { kind: entityKindLabel }),
+            onSplit={(songIds, displayName, targetEntityId) => run(
+              () => targetEntityId
+                ? moveEntityMembersToExistingEntity(entity.id, targetEntityId, songIds)
+                : splitEntity(entity.id, songIds, displayName),
+              targetEntityId
+                ? t('localMusic.entityMembersMoved', { kind: entityKindLabel })
+                : t('localMusic.entitySplitDone', { kind: entityKindLabel }),
             )}
           />
         </main>

@@ -7,6 +7,7 @@ import {
     assignImportedSongs,
     ensureLocalLibraryInitialized,
     mergeEntities,
+    moveEntityMembersToExistingEntity,
     splitEntity,
 } from '../../../src/services/localLibraryCatalogService';
 import type { LocalSong } from '../../../src/types';
@@ -194,6 +195,35 @@ describe('localLibraryCatalogService', () => {
             artistEntityIds: [split.id],
             artistOrigin: 'split',
         });
+    });
+
+    it('moves selected album members into an existing album without merging either entity', async () => {
+        await assignImportedSongs([
+            song('source-one', { album: 'Source Album' }),
+            song('source-two', { album: 'Source Album' }),
+            song('target-one', { album: 'Target Album' }),
+        ]);
+        const sourceAssignment = await appDatabase.local_library_assignments.get('source-one');
+        const targetAssignment = await appDatabase.local_library_assignments.get('target-one');
+        const sourceAlbumId = sourceAssignment?.albumEntityId;
+        const targetAlbumId = targetAssignment?.albumEntityId;
+        expect(sourceAlbumId).toBeTruthy();
+        expect(targetAlbumId).toBeTruthy();
+        const entityCount = await appDatabase.local_library_entities.count();
+
+        const target = await moveEntityMembersToExistingEntity(sourceAlbumId!, targetAlbumId!, ['source-one']);
+
+        expect(target.id).toBe(targetAlbumId);
+        expect(await appDatabase.local_library_assignments.get('source-one')).toMatchObject({
+            albumEntityId: targetAlbumId,
+            albumOrigin: 'split',
+        });
+        expect(await appDatabase.local_library_assignments.get('source-two')).toMatchObject({
+            albumEntityId: sourceAlbumId,
+        });
+        expect((await appDatabase.local_library_entities.get(sourceAlbumId!))?.mergedInto).toBeUndefined();
+        expect((await appDatabase.local_library_entities.get(targetAlbumId!))?.mergedInto).toBeUndefined();
+        expect(await appDatabase.local_library_entities.count()).toBe(entityCount);
     });
 
     it('rolls back song writes when an assignment write fails', async () => {

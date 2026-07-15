@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, GitMerge, Pencil, Scissors, Sparkles } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Check, GitMerge, Pencil, Scissors, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LocalSong } from '../../types';
 import type { LocalLibraryEntity } from '../../types/localLibrary';
 import { normalizeLocalLibraryName } from '../../utils/localLibraryNames';
 import { EntityMemberPicker } from './EntityMemberPicker';
+import { EntityTargetPicker } from './EntityTargetPicker';
 import {
     buildEntityNameSuggestions,
     filterMergeEntitySuggestions,
+    findExactEntitySuggestion,
 } from './entityEditorModel';
 
 // src/components/local-library-entity/EntityEditorWorkspace.tsx
@@ -22,7 +24,7 @@ type EntityEditorWorkspaceProps = {
     pending: boolean;
     onRename: (displayName: string) => Promise<boolean>;
     onMerge: (sourceEntityId: string, mergeIntoCurrent: boolean) => Promise<boolean>;
-    onSplit: (songIds: string[], displayName: string) => Promise<boolean>;
+    onSplit: (songIds: string[], displayName: string, targetEntityId?: string) => Promise<boolean>;
 };
 
 export const EntityEditorWorkspace = ({
@@ -56,6 +58,7 @@ export const EntityEditorWorkspace = ({
     const [splitInput, setSplitInput] = useState('');
     const [splitMode, setSplitMode] = useState(false);
     const [mergeSourceId, setMergeSourceId] = useState('');
+    const [splitTargetId, setSplitTargetId] = useState('');
     const [mergeIntoCurrent, setMergeIntoCurrent] = useState(false);
     const [selectedSongIds, setSelectedSongIds] = useState<Set<string>>(new Set());
 
@@ -64,6 +67,7 @@ export const EntityEditorWorkspace = ({
         setSplitInput('');
         setSplitMode(false);
         setMergeSourceId('');
+        setSplitTargetId('');
         setMergeIntoCurrent(false);
         setSelectedSongIds(new Set());
     }, [entity.displayName, entity.id]);
@@ -82,16 +86,21 @@ export const EntityEditorWorkspace = ({
             : [],
         [entity.id, identityInput, sameKindEntities],
     );
-    const exactMergeSource = mergeSuggestions.find(candidate => (
-        [candidate.displayName, ...candidate.aliases]
-            .some(name => normalizeLocalLibraryName(name) === normalizeLocalLibraryName(identityInput))
-    ));
+    const splitTargetSuggestions = useMemo(
+        () => splitInput.trim()
+            ? filterMergeEntitySuggestions(sameKindEntities, entity.id, splitInput, 4)
+            : [],
+        [entity.id, sameKindEntities, splitInput],
+    );
+    const exactMergeSource = findExactEntitySuggestion(mergeSuggestions, identityInput);
     const mergeSource = sameKindEntities.find(candidate => candidate.id === mergeSourceId) || exactMergeSource;
+    const exactSplitTarget = findExactEntitySuggestion(splitTargetSuggestions, splitInput);
+    const splitTarget = sameKindEntities.find(candidate => candidate.id === splitTargetId) || exactSplitTarget;
     const inputValue = splitMode ? splitInput : identityInput;
     const normalizedInput = normalizeLocalLibraryName(inputValue);
     const canRename = Boolean(normalizedInput && normalizedInput !== normalizeLocalLibraryName(entity.displayName));
     const canSubmit = splitMode
-        ? selectedSongIds.size > 0 && Boolean(normalizedInput)
+        ? selectedSongIds.size > 0 && Boolean(splitTarget || normalizedInput)
         : mergeSource
             ? true
             : canRename;
@@ -109,10 +118,11 @@ export const EntityEditorWorkspace = ({
     const submit = async () => {
         if (!canSubmit || pending) return;
         if (splitMode) {
-            const ok = await onSplit(Array.from(selectedSongIds), splitInput.trim());
+            const ok = await onSplit(Array.from(selectedSongIds), splitInput.trim(), splitTarget?.id);
             if (ok) {
                 setSplitMode(false);
                 setSplitInput('');
+                setSplitTargetId('');
                 setSelectedSongIds(new Set());
             }
             return;
@@ -126,7 +136,10 @@ export const EntityEditorWorkspace = ({
     };
 
     const chooseSuggestedName = (name: string) => {
-        if (splitMode) setSplitInput(name);
+        if (splitMode) {
+            setSplitInput(name);
+            setSplitTargetId('');
+        }
         else {
             setIdentityInput(name);
             setMergeSourceId('');
@@ -138,12 +151,12 @@ export const EntityEditorWorkspace = ({
             <motion.section className="min-w-0">
                 <div className="mb-4">
                     <label className="mb-1.5 block text-[12px] font-bold uppercase tracking-wider text-blue-500">
-                        {splitMode ? `新建${entityKindLabel}并拆分` : `重命名或合并${entityKindLabel}`}
+                        {t(splitMode ? 'localMusic.splitEntityEditorTitle' : 'localMusic.editEntityTitle', { kind: entityKindLabel })}
                     </label>
                     <p className="text-[13px] opacity-60 leading-relaxed">
                         {splitMode
-                            ? `从右侧勾选需要拆分出去的歌曲，然后在此输入新的${entityKindLabel}名称，它们将从当前实体中独立出来。`
-                            : `输入新的名称以重命名当前${entityKindLabel}，或输入库中已有的${entityKindLabel}名称进行合并。`
+                            ? t('localMusic.entitySplitHint', { kind: entityKindLabel })
+                            : t('localMusic.entityMergeHint', { kind: entityKindLabel })
                         }
                     </p>
                 </div>
@@ -152,7 +165,10 @@ export const EntityEditorWorkspace = ({
                     <input
                         value={inputValue}
                         onChange={event => {
-                            if (splitMode) setSplitInput(event.target.value);
+                            if (splitMode) {
+                                setSplitInput(event.target.value);
+                                setSplitTargetId('');
+                            }
                             else {
                                 setIdentityInput(event.target.value);
                                 setMergeSourceId('');
@@ -163,8 +179,8 @@ export const EntityEditorWorkspace = ({
                             event.preventDefault();
                             void submit();
                         }}
-                        placeholder={splitMode ? t('localMusic.newEntityName', { kind: entityKindLabel }) : t('localMusic.searchEntity', { kind: entityKindLabel })}
-                        aria-label={splitMode ? t('localMusic.newEntityName', { kind: entityKindLabel }) : t('localMusic.entityDisplayName')}
+                        placeholder={splitMode ? t('localMusic.newOrExistingEntity', { kind: entityKindLabel }) : t('localMusic.searchEntity', { kind: entityKindLabel })}
+                        aria-label={splitMode ? t('localMusic.newOrExistingEntity', { kind: entityKindLabel }) : t('localMusic.entityDisplayName')}
                         autoFocus
                         className="min-w-0 flex-1 bg-transparent text-base font-semibold outline-none"
                     />
@@ -188,57 +204,26 @@ export const EntityEditorWorkspace = ({
                     </motion.div>
                 )}
 
-                {!splitMode && mergeSource && (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`mt-5 flex items-center gap-2 rounded-xl border px-5 py-4 text-sm ${selectedTheme}`}>
-                        <GitMerge size={18} className="shrink-0 opacity-60 text-blue-500 mr-2" />
-                        
-                        <div title={entity.displayName} className={`min-w-0 flex-1 truncate text-right transition-all duration-300 ${mergeIntoCurrent ? 'font-bold text-lg' : 'font-medium opacity-50 line-through decoration-2'}`}>
-                            {entity.displayName}
-                        </div>
-
-                        <motion.button 
-                            whileTap={{ scale: 0.9 }}
-                            animate={{ rotate: mergeIntoCurrent ? 180 : 0 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                            type="button" 
-                            onClick={() => setMergeIntoCurrent(v => !v)}
-                            className="shrink-0 mx-2 flex items-center justify-center rounded-full p-2 hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors text-blue-500"
-                            title="切换合并方向"
-                        >
-                            <ArrowRight size={18} />
-                        </motion.button>
-
-                        <div title={mergeSource.displayName} className={`min-w-0 flex-1 truncate transition-all duration-300 ${mergeIntoCurrent ? 'font-medium opacity-50 line-through decoration-2' : 'font-bold text-lg'}`}>
-                            {mergeSource.displayName}
-                        </div>
-                    </motion.div>
-                )}
-
-                {!splitMode && !mergeSource && mergeSuggestions.length > 0 && (
-                    <motion.div className="mt-5 space-y-2">
-                        {mergeSuggestions.map(candidate => (
-                            <motion.button
-                                whileHover={{ scale: 1.01 }}
-                                whileTap={{ scale: 0.99 }}
-                                key={candidate.id}
-                                type="button"
-                                onClick={() => {
-                                    setMergeSourceId(candidate.id);
-                                    setIdentityInput(candidate.displayName);
-                                }}
-                                className={`flex w-full items-center gap-4 rounded-xl border px-5 py-4 text-left text-sm transition-colors ${resultTheme}`}
-                            >
-                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-blue-500">
-                                    <GitMerge size={14} />
-                                </div>
-                                <span className="min-w-0 flex-1 truncate font-semibold">{candidate.displayName}</span>
-                                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40">
-                                    选择以进行合并
-                                </span>
-                            </motion.button>
-                        ))}
-                    </motion.div>
-                )}
+                <EntityTargetPicker
+                    currentEntity={entity}
+                    targetEntity={splitMode ? splitTarget : mergeSource}
+                    suggestions={splitMode ? splitTargetSuggestions : mergeSuggestions}
+                    mode={splitMode ? 'move' : 'merge'}
+                    mergeIntoCurrent={mergeIntoCurrent}
+                    selectedSongCount={selectedSongIds.size}
+                    resultTheme={resultTheme}
+                    selectedTheme={selectedTheme}
+                    onToggleMergeDirection={() => setMergeIntoCurrent(value => !value)}
+                    onSelect={candidate => {
+                        if (splitMode) {
+                            setSplitTargetId(candidate.id);
+                            setSplitInput(candidate.displayName);
+                        } else {
+                            setMergeSourceId(candidate.id);
+                            setIdentityInput(candidate.displayName);
+                        }
+                    }}
+                />
 
             </motion.section>
 
@@ -262,6 +247,7 @@ export const EntityEditorWorkspace = ({
                     onClick={() => {
                         setSplitMode(current => !current);
                         setMergeSourceId('');
+                        setSplitTargetId('');
                     }}
                     className={`mr-auto flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-colors ${secondaryButtonTheme}`}
                 >
@@ -275,24 +261,16 @@ export const EntityEditorWorkspace = ({
                     className="flex max-w-full items-center justify-center gap-2 rounded-xl bg-blue-500 hover:bg-blue-600 active:bg-blue-700 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-none"
                 >
                     <span className="shrink-0 flex items-center">
-                        {splitMode ? <Scissors size={16} /> : mergeSource ? <GitMerge size={16} /> : <Check size={16} />}
+                        {splitMode ? (splitTarget ? <GitMerge size={16} /> : <Scissors size={16} />) : mergeSource ? <GitMerge size={16} /> : <Check size={16} />}
                     </span>
-                    <span className="flex items-center min-w-0">
+                    <span className="min-w-0 truncate">
                         {splitMode
-                            ? (selectedSongIds.size > 0 && splitInput.trim() 
-                                ? `拆分 ${selectedSongIds.size} 首歌曲` 
+                            ? (splitTarget
+                                ? t('localMusic.moveSelectedToExistingAction', { count: selectedSongIds.size, kind: entityKindLabel, name: splitTarget.displayName })
                                 : t('localMusic.splitSelectedAction', { count: selectedSongIds.size, kind: entityKindLabel }))
                             : mergeSource
-                                ? (
-                                    <>
-                                        <span className="shrink-0 whitespace-pre">确认合并入 "</span>
-                                        <span className="truncate max-w-[150px] md:max-w-[250px]">{mergeIntoCurrent ? entity.displayName : mergeSource.displayName}</span>
-                                        <span className="shrink-0">"</span>
-                                    </>
-                                )
-                                : canRename 
-                                    ? `确认重命名`
-                                    : t('localMusic.save')}
+                                ? t('localMusic.confirmMergeInto', { name: mergeIntoCurrent ? entity.displayName : mergeSource.displayName })
+                                : t('localMusic.confirmRename')}
                     </span>
                 </button>
             </motion.footer>

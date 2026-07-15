@@ -98,6 +98,54 @@ export const splitEntity = async (
   );
 };
 
+// Reassigns only the selected members while leaving both existing entities active.
+export const moveEntityMembersToExistingEntity = async (
+  sourceEntityId: string,
+  targetEntityId: string,
+  songIds: string[],
+): Promise<LocalLibraryEntity> => {
+  return await appDatabase.transaction(
+    'rw',
+    [appDatabase.local_library_entities, appDatabase.local_library_assignments],
+    async () => {
+      const entities = await appDatabase.local_library_entities.toArray();
+      const index = buildLocalLibraryIndex(entities);
+      const sourceId = followEntityRedirect(sourceEntityId, index.entitiesById);
+      const targetId = followEntityRedirect(targetEntityId, index.entitiesById);
+      const source = sourceId && index.entitiesById.get(sourceId);
+      const target = targetId && index.entitiesById.get(targetId);
+      if (!source || !target) throw new Error('Cannot move members between missing entities');
+      if (source.id === target.id) throw new Error('Cannot move members into the same entity');
+      if (source.kind !== target.kind) throw new Error('Cannot move members between different entity kinds');
+
+      const now = Date.now();
+      const assignments = (await appDatabase.local_library_assignments.bulkGet(Array.from(new Set(songIds))))
+        .filter((assignment): assignment is LocalLibraryAssignment => Boolean(assignment))
+        .flatMap((assignment): LocalLibraryAssignment[] => {
+          if (source.kind === 'artist') {
+            if (!assignment.artistEntityIds.includes(source.id)) return [];
+            return [{
+              ...assignment,
+              artistEntityIds: appendUnique(assignment.artistEntityIds.map(id => id === source.id ? target.id : id)),
+              artistOrigin: 'split' as const,
+              updatedAt: now,
+            }];
+          }
+          if (assignment.albumEntityId !== source.id) return [];
+          return [{
+            ...assignment,
+            albumEntityId: target.id,
+            albumOrigin: 'split' as const,
+            updatedAt: now,
+          }];
+        });
+      if (assignments.length === 0) throw new Error('No selected members belong to the source entity');
+      await appDatabase.local_library_assignments.bulkPut(assignments);
+      return target;
+    },
+  );
+};
+
 export const setEntityDisplayName = async (entityId: string, displayName: string): Promise<void> => {
   const cleanedName = cleanLocalLibraryName(displayName);
   if (!cleanedName) throw new Error('Entity display name cannot be empty');

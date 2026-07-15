@@ -84,6 +84,18 @@ export const filterMergeEntitySuggestions = (
         .slice(0, limit);
 };
 
+export const findExactEntitySuggestion = (
+    entities: LocalLibraryEntity[],
+    query: string,
+): LocalLibraryEntity | undefined => {
+    const normalizedQuery = normalizeLocalLibraryName(query);
+    if (!normalizedQuery) return undefined;
+    return entities.find(entity => (
+        [entity.displayName, ...entity.aliases]
+            .some(name => normalizeLocalLibraryName(name) === normalizedQuery)
+    ));
+};
+
 export const filterEntityMemberSongs = (songs: LocalSong[], query: string): LocalSong[] => {
     const normalizedQuery = normalizeLocalLibraryName(query);
     if (!normalizedQuery) return songs;
