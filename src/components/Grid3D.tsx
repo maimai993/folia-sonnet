@@ -492,7 +492,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         <div className={`relative w-full h-full flex flex-col font-sans overflow-hidden ${mainBg} pointer-events-auto backdrop-blur-sm ${bottomPadding}`}>
 
             {/* Main Header Container (Fades out when sliding/interacting) */}
-            <div className="transition-opacity duration-300 ease-in-out z-20 opacity-100">
+            <div className="transition-opacity duration-300 ease-in-out z-20 opacity-100 select-none">
                 <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto p-4 md:p-8 gap-y-4 md:gap-y-0">
                     {/* Left title and settings */}
                     <div className="flex items-center justify-start order-1 md:order-none">
@@ -634,7 +634,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 placeholder={homeViewTab === 'local' ? t('home.searchLocal') : homeViewTab === 'navidrome' ? t('home.searchNavidrome') : t('home.searchDatabase')}
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                className={`w-full ${inputBg} border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-white/20 transition-all placeholder:text-current placeholder:opacity-40`}
+                                className={`w-full ${inputBg} border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-white/20 transition-all placeholder:text-current placeholder:opacity-40 select-text`}
                                 style={{ color: 'var(--text-primary)' }}
                             />
                         </form>

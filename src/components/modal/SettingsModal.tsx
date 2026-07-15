@@ -1034,7 +1034,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
 
                 {/* Header / Tabs */}
-                <div className="relative shrink-0 z-10 mb-6">
+                <div className="relative shrink-0 z-10 mb-6 select-none">
                     <div className="flex items-center gap-6">
                         <button
                             onClick={() => handleTabChange('help')}
@@ -1082,7 +1082,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 animate="center"
                                 exit="exit"
                                 transition={shellTransition}
-                                className="space-y-6"
+                                className="space-y-6 select-none"
                             >
                                 {/* Navigation - REMOVED requested items */}
                                 {/* 
