@@ -1,27 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LocalSong } from '@/types';
-import { applyMatchedMetadata, restoreImportedMetadata } from '@/services/localLibraryCatalogService';
-import { cacheLocalSongOnlineCover } from '@/services/coverCache';
 import { findAutomaticOnlineMetadataCandidate } from '@/services/onlineMetadataSearchService';
+import { applyLocalSongMatchSelection } from '@/services/localSongMatchSelectionService';
 import {
     applyOnlineMetadataCandidate,
     batchAutoMatchLocalSongMetadata,
 } from '@/services/localSongMetadataMatchService';
 
 // test/unit/localLibrary/localSongMetadataMatchService.test.ts
-// Covers cover policy, protected batch writes, skip behavior, and two-worker concurrency.
+// Covers shared-command routing, cover policy, cancellation, and the two-worker limit.
 
-vi.mock('@/services/localLibraryCatalogService', () => ({
-    applyMatchedMetadata: vi.fn(),
-    restoreImportedMetadata: vi.fn(),
-}));
-vi.mock('@/services/coverCache', () => ({ cacheLocalSongOnlineCover: vi.fn() }));
+vi.mock('@/services/localSongMatchSelectionService', () => ({ applyLocalSongMatchSelection: vi.fn() }));
 vi.mock('@/services/onlineMetadataSearchService', () => ({ findAutomaticOnlineMetadataCandidate: vi.fn() }));
 
 const song = (id: string, patch: Partial<LocalSong> = {}): LocalSong => ({
     id,
     fileName: `${id}.flac`,
     filePath: `Library/${id}.flac`,
+    title: id,
+    titleOrigin: 'import',
+    importedMetadata: { title: id, titleSource: 'filename', artistNames: [] },
     duration: 1,
     fileSize: 1,
     mimeType: 'audio/flac',
@@ -51,127 +49,55 @@ const candidate = {
 describe('localSongMetadataMatchService', () => {
     beforeEach(() => {
         vi.resetAllMocks();
-        vi.mocked(applyMatchedMetadata).mockResolvedValue(song('stored'));
-        vi.mocked(restoreImportedMetadata).mockResolvedValue(song('restored'));
-        vi.mocked(cacheLocalSongOnlineCover).mockResolvedValue(true);
+        vi.mocked(applyLocalSongMatchSelection).mockResolvedValue({
+            coverAttempted: true,
+            coverCached: true,
+            lyricsApplied: true,
+            partialLyricsFailure: false,
+        });
     });
 
-    it('fills and caches a missing automatic cover while protecting manual origins', async () => {
-        await applyOnlineMetadataCandidate(song('one'), candidate, { mode: 'automatic', protectOrigins: ['manual', 'split'] });
-        expect(applyMatchedMetadata).toHaveBeenCalledWith('one', expect.objectContaining({
-            source: 'qq', title: 'Song', coverUrl: candidate.coverUrl,
-        }), expect.objectContaining({
-            songPatch: expect.objectContaining({
-                matchedMetadataSource: 'qq',
-                matchedMetadataSongId: 'qq-mid',
-                matchedMetadataAlbumId: 'album-id',
-                matchedCoverUrl: candidate.coverUrl,
-                useOnlineMetadata: true,
-                useOnlineCover: true,
-            }),
-            protectOrigins: ['manual', 'split'],
-        }));
-        expect(cacheLocalSongOnlineCover).toHaveBeenCalledWith('one', candidate.coverUrl);
-    });
-
-    it('stores but does not enable or cache an automatic cover over an embedded cover', async () => {
-        await applyOnlineMetadataCandidate(song('embedded', { embeddedCover: new Blob(['cover']) }), candidate, { mode: 'automatic' });
-        expect(applyMatchedMetadata).toHaveBeenCalledWith('embedded', expect.objectContaining({ coverUrl: candidate.coverUrl }), expect.objectContaining({
-            songPatch: expect.objectContaining({ matchedCoverUrl: candidate.coverUrl, useOnlineCover: false }),
-        }));
-        expect(cacheLocalSongOnlineCover).not.toHaveBeenCalled();
-    });
-
-    it('applies artist and album together while leaving the online cover disabled', async () => {
+    it('routes manual metadata and cover selection through the shared command', async () => {
         await applyOnlineMetadataCandidate(song('manual'), candidate, {
             mode: 'manual',
             useOnlineMetadata: true,
-            useOnlineCover: false,
+            useOnlineCover: true,
         });
-        expect(applyMatchedMetadata).toHaveBeenCalledWith('manual', expect.objectContaining({
-            artists: candidate.artists,
-            album: candidate.album,
-            coverUrl: candidate.coverUrl,
-        }), expect.objectContaining({
-            songPatch: expect.objectContaining({
-                matchedTitle: 'Song',
-                matchedArtists: 'Artist',
-                matchedAlbumName: 'Album',
-                matchedCoverUrl: candidate.coverUrl,
-                useOnlineMetadata: true,
-                useOnlineCover: false,
-            }),
-        }));
-        expect(restoreImportedMetadata).not.toHaveBeenCalled();
-        expect(cacheLocalSongOnlineCover).not.toHaveBeenCalled();
+        expect(applyLocalSongMatchSelection).toHaveBeenCalledWith({
+            songId: 'manual',
+            candidate,
+            metadata: 'online',
+            cover: 'online',
+            lyrics: 'keep',
+            matchMode: 'manual',
+            protectOrigins: undefined,
+        });
     });
 
-    it('invalidates an automatic lyric result when the selected metadata identity changes', async () => {
-        await applyOnlineMetadataCandidate(song('rematch', {
-            matchedMetadataSource: 'netease',
-            matchedMetadataSongId: 123,
-            matchedLyrics: { lines: [], isWordByWord: true },
-            matchedLyricsSongId: 123,
-            matchedLyricsSource: 'netease',
-            matchedIsPureMusic: true,
-        }), candidate, {
-            mode: 'manual',
-            useOnlineMetadata: true,
-            useOnlineCover: false,
+    it('keeps an embedded cover during automatic metadata matching', async () => {
+        await applyOnlineMetadataCandidate(song('embedded', { embeddedCover: new Blob(['cover']) }), candidate, {
+            mode: 'automatic',
+            protectOrigins: ['manual', 'manual-match', 'split'],
         });
-
-        expect(applyMatchedMetadata).toHaveBeenCalledWith('rematch', expect.anything(), expect.objectContaining({
-            songPatch: expect.objectContaining({
-                matchedMetadataSource: 'qq',
-                matchedMetadataSongId: 'qq-mid',
-                matchedLyrics: undefined,
-                matchedLyricsSongId: undefined,
-                matchedLyricsSource: undefined,
-                matchedIsPureMusic: undefined,
-            }),
+        expect(applyLocalSongMatchSelection).toHaveBeenCalledWith(expect.objectContaining({
+            metadata: 'online',
+            cover: 'keep',
+            matchMode: 'automatic',
+            protectOrigins: ['manual', 'manual-match', 'split'],
         }));
     });
 
-    it('keeps a lyric result that the user selected explicitly', async () => {
-        const manualLyrics = { lines: [], isWordByWord: true };
-        await applyOnlineMetadataCandidate(song('manual-lyrics', {
-            matchedMetadataSource: 'netease',
-            matchedMetadataSongId: 123,
-            matchedLyrics: manualLyrics,
-            matchedLyricsSongId: 123,
-            matchedLyricsSource: 'netease',
-            hasManualLyricSelection: true,
-        }), candidate, {
-            mode: 'manual',
-            useOnlineMetadata: true,
-            useOnlineCover: false,
-        });
-
-        const options = vi.mocked(applyMatchedMetadata).mock.calls[0][2];
-        expect(options?.songPatch).not.toHaveProperty('matchedLyrics');
-        expect(options?.songPatch).not.toHaveProperty('matchedLyricsSongId');
-    });
-
-    it('keeps imported metadata while enabling and caching the selected cover', async () => {
-        const result = await applyOnlineMetadataCandidate(song('cover-only'), candidate, {
+    it('restores imported metadata while allowing an independently selected online cover', async () => {
+        await applyOnlineMetadataCandidate(song('cover-only'), candidate, {
             mode: 'manual',
             useOnlineMetadata: false,
             useOnlineCover: true,
         });
-        expect(applyMatchedMetadata).toHaveBeenCalledWith('cover-only', {}, expect.objectContaining({
-            lyricsOnly: true,
-            songPatch: expect.objectContaining({
-                matchedTitle: 'Song',
-                matchedArtists: 'Artist',
-                matchedAlbumName: 'Album',
-                matchedCoverUrl: candidate.coverUrl,
-                useOnlineMetadata: false,
-                useOnlineCover: true,
-            }),
+        expect(applyLocalSongMatchSelection).toHaveBeenCalledWith(expect.objectContaining({
+            metadata: 'imported',
+            cover: 'online',
+            lyrics: 'keep',
         }));
-        expect(restoreImportedMetadata).toHaveBeenCalledWith('cover-only');
-        expect(cacheLocalSongOnlineCover).toHaveBeenCalledWith('cover-only', candidate.coverUrl);
-        expect(result.song?.id).toBe('restored');
     });
 
     it('skips noAutoMatch songs and never exceeds two searches', async () => {
@@ -200,6 +126,6 @@ describe('localSongMetadataMatchService', () => {
         });
         const result = await batchAutoMatchLocalSongMetadata([song('cancelled')], { signal: controller.signal });
         expect(result.cancelled).toBe(true);
-        expect(applyMatchedMetadata).not.toHaveBeenCalled();
+        expect(applyLocalSongMatchSelection).not.toHaveBeenCalled();
     });
 });

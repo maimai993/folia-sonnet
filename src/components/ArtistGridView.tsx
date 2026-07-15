@@ -9,7 +9,7 @@ import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { neteaseApi } from '../services/netease';
 import { createCoverPlaceholder } from '../utils/coverPlaceholders';
 import { getSizedCoverUrl } from '../utils/coverUrl';
-import { getBlobObjectUrlSignature, isBlob } from '../utils/blobGuards';
+import { createSafeObjectUrl, getBlobObjectUrlSignature, isBlob } from '../utils/blobGuards';
 import { PolaroidCard } from './GridView';
 import { HexGridCoord, CubeCoord, getHexCubicSpiral } from './folia-grid/hexViewport';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
@@ -386,7 +386,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             URL.revokeObjectURL(cached.url);
         }
 
-        const url = URL.createObjectURL(song.embeddedCover);
+        const url = createSafeObjectUrl(song.embeddedCover);
+        if (!url) return null;
         localCoverObjectUrlsRef.current.set(song.id, { signature, url });
         return url;
     }, []);
@@ -394,8 +395,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const resolveLocalSongCoverUrl = useCallback((song: LocalSong) => {
         const embeddedCoverUrl = getOrCreateLocalCoverObjectUrl(song);
         return song.useOnlineCover
-            ? (song.matchedCoverUrl || embeddedCoverUrl)
-            : (embeddedCoverUrl || song.matchedCoverUrl);
+            ? (song.onlineMetadata?.coverUrl || embeddedCoverUrl)
+            : embeddedCoverUrl;
     }, [getOrCreateLocalCoverObjectUrl]);
 
     // Appends Netease album pages without replacing already rendered artist content.
@@ -509,7 +510,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         albumMap.set(albumKey, {
                             id: albumKey,
                             name: albumName,
-                            picUrl: coverUrl,
+                            picUrl: coverUrl || undefined,
                             publishTime: undefined,
                         });
                     } else if (coverUrl && !albumMap.get(albumKey)?.picUrl) {

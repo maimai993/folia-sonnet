@@ -1,4 +1,5 @@
-import type { LocalSong, SongResult } from '../types';
+import type { LocalSong, LyricProviderSource, SongResult } from '../types';
+import type { LocalSongMetadataSource } from '../types/localLibrary';
 import { neteaseApi } from './netease';
 import { searchQQLyrics } from '../utils/lyrics/providers/qqLyricProvider';
 import { calculateMatchScoreDetails } from '../utils/lyrics/matchScore';
@@ -13,7 +14,7 @@ import {
 // src/services/onlineMetadataSearchService.ts
 // Searches song metadata without invoking any lyric provider or lyric download path.
 
-export type OnlineMetadataSource = 'netease' | 'qq';
+export type OnlineMetadataSource = LocalSongMetadataSource;
 
 export interface OnlineMetadataSearchTarget {
     title: string;
@@ -38,9 +39,13 @@ export interface OnlineMetadataCandidate {
 const stripAudioExtension = (fileName: string) => fileName.replace(/\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i, '');
 
 export const buildLocalSongMetadataSearchTarget = (song: LocalSong): OnlineMetadataSearchTarget => ({
-    title: song.title || song.embeddedTitle || stripAudioExtension(song.fileName),
-    artist: song.artist || song.embeddedArtist || song.matchedArtists || '',
-    album: song.album || song.embeddedAlbum || song.matchedAlbumName || '',
+    title: song.title || stripAudioExtension(song.fileName),
+    artist: song.titleOrigin === 'import'
+        ? song.importedMetadata.artistNames.join(', ')
+        : song.onlineMetadata?.artists.map(artist => artist.name).join(', ') || song.importedMetadata.artistNames.join(', '),
+    album: song.titleOrigin === 'import'
+        ? song.importedMetadata.albumName || ''
+        : song.onlineMetadata?.album?.name || song.importedMetadata.albumName || '',
     durationMs: song.duration || 0,
 });
 
@@ -49,7 +54,7 @@ export const buildLocalSongMetadataSearchQuery = (song: LocalSong): string => {
     return buildLyricSearchQuery(target.title, target.artist, target.album);
 };
 
-const normalizeCandidate = (
+export const normalizeOnlineMetadataCandidate = (
     source: OnlineMetadataSource,
     result: SongResult,
     target: OnlineMetadataSearchTarget,
@@ -59,7 +64,11 @@ const normalizeCandidate = (
     const albumId = getMatchResultAlbumId(result);
     return {
         source,
-        songId: source === 'qq' && result.qqMid ? result.qqMid : result.id,
+        songId: source === 'qq' && result.qqMid
+            ? result.qqMid
+            : source === 'kugou' && result.kgHash
+                ? result.kgHash
+                : result.id,
         title: result.name || '',
         artists: getMatchResultArtistEntities(result),
         album: albumName ? { id: albumId, name: albumName } : undefined,
@@ -69,6 +78,17 @@ const normalizeCandidate = (
         titleMatched: details.titleMatched,
         raw: result,
     };
+};
+
+export const normalizeLyricMatchMetadataCandidate = (
+    lyricSource: LyricProviderSource,
+    result: SongResult,
+    target: OnlineMetadataSearchTarget,
+): OnlineMetadataCandidate => {
+    const source: OnlineMetadataSource = lyricSource === 'amll'
+        ? result.amllDbPlatform === 'qq' ? 'qq' : 'netease'
+        : lyricSource;
+    return normalizeOnlineMetadataCandidate(source, result, target);
 };
 
 const throwIfAborted = (signal?: AbortSignal) => {
@@ -117,7 +137,7 @@ export async function searchOnlineMetadata(
         : await waitForProvider(searchQQLyrics(safeQuery, 1, limit), options.signal);
     throwIfAborted(options.signal);
     return results
-        .map(result => normalizeCandidate(source, result, target))
+        .map(result => normalizeOnlineMetadataCandidate(source, result, target))
         .sort((left, right) => right.score - left.score)
         .slice(0, limit);
 }

@@ -5,7 +5,6 @@ import {
     getImportedArtistNames,
     getMatchedArtistNames,
     normalizeLocalLibraryName,
-    splitLocalLibraryArtistNames,
 } from '../../utils/localLibraryNames';
 
 // src/components/local-library-entity/entityEditorModel.ts
@@ -20,12 +19,11 @@ const getSongEntityNames = (kind: LocalLibraryEntityKind, song: LocalSong): stri
     if (kind === 'artist') {
         return [
             ...getImportedArtistNames(song),
-            ...(song.manualArtistNames || []).flatMap(splitLocalLibraryArtistNames),
             ...getMatchedArtistNames(song),
         ];
     }
 
-    return [song.embeddedAlbum, song.album, song.manualAlbumName, song.matchedAlbumName]
+    return [song.importedMetadata.albumName, song.onlineMetadata?.album?.name]
         .map(cleanLocalLibraryName)
         .filter((name): name is string => Boolean(name));
 };
@@ -100,7 +98,14 @@ export const filterEntityMemberSongs = (songs: LocalSong[], query: string): Loca
     const normalizedQuery = normalizeLocalLibraryName(query);
     if (!normalizedQuery) return songs;
     return songs.filter(song => (
-        [song.title, song.embeddedTitle, song.fileName, song.artist, song.album]
+        [
+            song.title,
+            song.fileName,
+            ...song.importedMetadata.artistNames,
+            song.importedMetadata.albumName,
+            ...song.onlineMetadata?.artists.map(artist => artist.name) || [],
+            song.onlineMetadata?.album?.name,
+        ]
             .filter((value): value is string => Boolean(value))
             .some(value => normalizeLocalLibraryName(value).includes(normalizedQuery))
     ));

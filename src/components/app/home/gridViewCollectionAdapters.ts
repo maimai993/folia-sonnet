@@ -210,9 +210,9 @@ const getLocalGridViewCoverSource = (songs: LocalSong[]): Blob | string | undefi
     const preferredSong = sortedSongs.find(song => {
         const hasEmbeddedCover = isBlob(song.embeddedCover);
         if (song.useOnlineCover) {
-            return song.matchedCoverUrl || hasEmbeddedCover;
+            return song.onlineMetadata?.coverUrl || hasEmbeddedCover;
         }
-        return hasEmbeddedCover || song.matchedCoverUrl;
+        return hasEmbeddedCover || song.onlineMetadata?.coverUrl;
     });
 
     if (!preferredSong) {
@@ -221,10 +221,10 @@ const getLocalGridViewCoverSource = (songs: LocalSong[]): Blob | string | undefi
 
     const embeddedCover = isBlob(preferredSong.embeddedCover) ? preferredSong.embeddedCover : undefined;
     if (preferredSong.useOnlineCover) {
-        return preferredSong.matchedCoverUrl || embeddedCover;
+        return preferredSong.onlineMetadata?.coverUrl || embeddedCover;
     }
 
-    return embeddedCover || preferredSong.matchedCoverUrl;
+    return embeddedCover || preferredSong.onlineMetadata?.coverUrl;
 };
 
 export const resolveLocalGridViewCoverSource = (

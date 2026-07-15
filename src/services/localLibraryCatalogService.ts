@@ -1,6 +1,11 @@
 import type { LocalSong } from '../types';
-import type { LocalLibraryAssignmentOrigin } from '../types/localLibrary';
-import { cleanLocalLibraryName, splitLocalLibraryArtistNames } from '../utils/localLibraryNames';
+import type { LocalLibraryAssignmentOrigin, LocalSongMetadataSource } from '../types/localLibrary';
+import {
+  cleanLocalLibraryName,
+  getImportedAlbumName,
+  getImportedArtistNames,
+  splitLocalLibraryArtistNames,
+} from '../utils/localLibraryNames';
 import { appDatabase } from './appDatabase';
 import { createLocalLibraryAssignment, resolveEntityNames } from './localLibraryCatalogInternals';
 import { assignImportedSongs } from './localLibraryImportCatalog';
@@ -13,7 +18,7 @@ export { assignImportedSongs, ensureLocalLibraryInitialized } from './localLibra
 export { mergeEntities, moveEntityMembersToExistingEntity, setEntityDisplayName, splitEntity } from './localLibraryEntityMutations';
 
 export interface MatchedLocalMetadata {
-  source?: 'netease' | 'qq';
+  source?: LocalSongMetadataSource;
   title?: string;
   artists?: Array<{ id?: number | string; name: string }>;
   album?: { id?: number | string; name: string };
@@ -28,6 +33,7 @@ export const applyMatchedMetadata = async (
     lyricsOnly?: boolean;
     songPatch?: Partial<LocalSong>;
     protectOrigins?: LocalLibraryAssignmentOrigin[];
+    assignmentOrigin?: Extract<LocalLibraryAssignmentOrigin, 'auto-match' | 'manual-match'>;
   } = {},
 ): Promise<LocalSong | undefined> => {
   return await appDatabase.transaction(
@@ -37,6 +43,22 @@ export const applyMatchedMetadata = async (
       const song = await appDatabase.local_music.get(songId);
       if (!song) return undefined;
       const updatedSong: LocalSong = { ...song, ...options.songPatch };
+      const assignmentOrigin = options.assignmentOrigin || 'auto-match';
+      if (metadata.source) {
+        updatedSong.onlineMetadata = {
+          source: metadata.source,
+          songId: metadata.songId,
+          albumId: metadata.album?.id,
+          title: cleanLocalLibraryName(metadata.title),
+          artists: metadata.artists?.filter(artist => cleanLocalLibraryName(artist.name)) || [],
+          album: cleanLocalLibraryName(metadata.album?.name)
+            ? { id: metadata.album?.id, name: cleanLocalLibraryName(metadata.album?.name)! }
+            : undefined,
+          coverUrl: metadata.coverUrl,
+          matchMode: assignmentOrigin === 'manual-match' ? 'manual' : 'auto',
+          matchedAt: Date.now(),
+        };
+      }
       if (!options.lyricsOnly) {
         const entities = await appDatabase.local_library_entities.toArray();
         const current = await appDatabase.local_library_assignments.get(songId);
@@ -54,36 +76,17 @@ export const applyMatchedMetadata = async (
           ? resolveEntityNames(entities, 'album', [albumName], current?.albumEntityId ? [current.albumEntityId] : [])[0]
           : current?.albumEntityId;
         if (metadata.title?.trim()) {
-          updatedSong.matchedTitle = metadata.title.trim();
+          updatedSong.title = metadata.title.trim();
+          updatedSong.titleOrigin = assignmentOrigin;
         }
-        if (hasArtistMetadata) {
-          updatedSong.matchedArtistEntities = artists;
-          updatedSong.matchedArtists = artists.map(artist => artist.name).join(', ') || updatedSong.matchedArtists;
-        }
-        if (albumName) {
-          if ((!metadata.source || metadata.source === 'netease') && typeof metadata.album?.id === 'number') {
-            updatedSong.matchedAlbumId = metadata.album.id;
-          }
-          updatedSong.matchedAlbumName = albumName;
-        }
-        if (metadata.source) {
-          updatedSong.matchedMetadataSource = metadata.source;
-          updatedSong.matchedMetadataSongId = metadata.songId;
-          updatedSong.matchedMetadataAlbumId = metadata.album?.id;
-        }
-        if ((!metadata.source || metadata.source === 'netease') && typeof metadata.songId === 'number') {
-          updatedSong.matchedSongId = metadata.songId;
-        }
-        updatedSong.matchedCoverUrl = metadata.coverUrl ?? updatedSong.matchedCoverUrl;
-        updatedSong.useOnlineMetadata = true;
         await Promise.all([
           appDatabase.local_library_entities.bulkPut(entities),
           appDatabase.local_library_assignments.put({
             songId,
             artistEntityIds: artistIds,
-            artistOrigin: hasArtistMetadata ? 'matched' : current?.artistOrigin || 'import',
+            artistOrigin: hasArtistMetadata ? assignmentOrigin : current?.artistOrigin || 'import',
             albumEntityId: albumId,
-            albumOrigin: hasAlbumMetadata ? 'matched' : current?.albumOrigin || 'import',
+            albumOrigin: hasAlbumMetadata ? assignmentOrigin : current?.albumOrigin || 'import',
             updatedAt: Date.now(),
           }),
         ]);
@@ -113,30 +116,55 @@ export const applyManualMetadata = async (
       const albumId = cleanedAlbum
         ? resolveEntityNames(entities, 'album', [cleanedAlbum], current?.albumEntityId ? [current.albumEntityId] : [])[0]
         : undefined;
-      const updatedSong = {
-        ...song,
-        manualArtistNames: cleanedArtists,
-        manualAlbumName: cleanedAlbum,
-      };
       await Promise.all([
-        appDatabase.local_music.put(sanitizeLocalSongForStorage(updatedSong)),
         appDatabase.local_library_entities.bulkPut(entities),
         appDatabase.local_library_assignments.put(createLocalLibraryAssignment(songId, artistIds, albumId, 'manual')),
       ]);
-      return updatedSong;
+      return song;
     },
   );
 };
 
-export const restoreImportedMetadata = async (songId: string): Promise<LocalSong | undefined> => {
-  const song = await appDatabase.local_music.get(songId);
-  if (!song) return undefined;
-  const restored = { ...song, useOnlineMetadata: false };
-  delete restored.manualArtistNames;
-  delete restored.manualAlbumName;
-  await assignImportedSongs([restored], { preserveNonImportAssignments: false });
-  return restored;
-};
+export const restoreImportedMetadata = async (
+  songId: string,
+  songPatch: Partial<LocalSong> = {},
+): Promise<LocalSong | undefined> => appDatabase.transaction(
+  'rw',
+  [appDatabase.local_music, appDatabase.local_library_entities, appDatabase.local_library_assignments],
+  async () => {
+    const song = await appDatabase.local_music.get(songId);
+    if (!song) return undefined;
+    const restored: LocalSong = {
+      ...song,
+      ...songPatch,
+      title: song.importedMetadata.title,
+      titleOrigin: 'import',
+    };
+    const entities = await appDatabase.local_library_entities.toArray();
+    const current = await appDatabase.local_library_assignments.get(songId);
+    const artistEntityIds = resolveEntityNames(
+      entities,
+      'artist',
+      getImportedArtistNames(restored),
+      current?.artistEntityIds,
+    );
+    const albumName = getImportedAlbumName(restored);
+    const albumEntityId = albumName
+      ? resolveEntityNames(entities, 'album', [albumName], current?.albumEntityId ? [current.albumEntityId] : [])[0]
+      : undefined;
+    await Promise.all([
+      appDatabase.local_music.put(sanitizeLocalSongForStorage(restored)),
+      appDatabase.local_library_entities.bulkPut(entities),
+      appDatabase.local_library_assignments.put(createLocalLibraryAssignment(
+        songId,
+        artistEntityIds,
+        albumEntityId,
+        'import',
+      )),
+    ]);
+    return restored;
+  },
+);
 
 export const deleteSongAssignment = async (songId: string): Promise<void> => {
   await appDatabase.transaction(

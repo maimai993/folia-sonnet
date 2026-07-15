@@ -7,7 +7,6 @@ import { formatSongName } from '../utils/songNameFormatter';
 import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getSongUnavailableTagText, isSongMarkedUnavailable } from '../services/netease';
-import { isBlob } from '../utils/blobGuards';
 
 const toSafeRemoteUrl = (url: string | null | undefined): string | undefined => {
     if (!url) {
@@ -39,20 +38,8 @@ const SearchResultCover: React.FC<{ track: UnifiedSong; }> = ({ track }) => {
     useEffect(() => {
         let objectUrl: string | undefined;
 
-        if (track.isLocal && track.localData) {
-            const localSong = track.localData;
-            if (localSong.useOnlineCover !== false && localSong.matchedCoverUrl) {
-                setSrc(toSafeRemoteUrl(localSong.matchedCoverUrl));
-            } else if (isBlob(localSong.embeddedCover)) {
-                objectUrl = URL.createObjectURL(localSong.embeddedCover);
-                setSrc(objectUrl);
-            } else {
-                setSrc(undefined);
-            }
-        } else {
-            const remoteUrl = track.al?.picUrl || track.album?.picUrl;
-            setSrc(toSafeRemoteUrl(remoteUrl));
-        }
+        const remoteUrl = track.al?.picUrl || track.album?.picUrl;
+        setSrc(toSafeRemoteUrl(remoteUrl));
 
         return () => {
             if (objectUrl) {

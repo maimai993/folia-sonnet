@@ -82,7 +82,7 @@ export const createLocalLibraryNavigation = ({
             entityId: entity.id,
             name: entity.displayName,
             songs,
-            coverUrl: songs.find(song => song.matchedCoverUrl)?.matchedCoverUrl,
+            coverUrl: songs.find(song => song.onlineMetadata?.coverUrl)?.onlineMetadata?.coverUrl,
             description: `${songs.length} ${t('home.songs')}`,
         }, entity.kind === 'album' ? 1 : 2);
     };
@@ -98,11 +98,11 @@ export const createLocalLibraryNavigation = ({
     };
 
     const openCurrentLocalAlbum = () => {
-        if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) {
+        if (!isLocalPlaybackSong(currentSong)) {
             return;
         }
 
-        const assignment = localLibraryCatalog.assignments.find(item => item.songId === currentSong.localData?.id);
+        const assignment = localLibraryCatalog.assignments.find(item => item.songId === currentSong.localRef.songId);
         const entityId = assignment?.albumEntityId
             ? followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById)
             : undefined;
@@ -111,11 +111,11 @@ export const createLocalLibraryNavigation = ({
     };
 
     const openCurrentLocalArtist = (requestedEntityId?: string) => {
-        if (!isLocalPlaybackSong(currentSong) || !currentSong.localData) {
+        if (!isLocalPlaybackSong(currentSong)) {
             return;
         }
 
-        const assignment = localLibraryCatalog.assignments.find(item => item.songId === currentSong.localData?.id);
+        const assignment = localLibraryCatalog.assignments.find(item => item.songId === currentSong.localRef.songId);
         const sourceEntityId = requestedEntityId || assignment?.artistEntityIds[0];
         const entityId = sourceEntityId
             ? followEntityRedirect(sourceEntityId, catalogIndex.entitiesById)

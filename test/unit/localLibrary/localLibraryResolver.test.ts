@@ -88,8 +88,10 @@ describe('explicitly separated local artist names', () => {
             fileSize: 1,
             mimeType: 'audio/flac',
             addedAt: 1,
-            artist: '小山百代/三森すずこ',
-            matchedArtists: '小山百代／三森すずこ',
+            title: 'duet',
+            titleOrigin: 'manual-match' as const,
+            importedMetadata: { title: 'duet', titleSource: 'filename' as const, artistNames: ['小山百代/三森すずこ'] },
+            onlineMetadata: { source: 'netease' as const, artists: [{ name: '小山百代／三森すずこ' }], matchMode: 'manual' as const, matchedAt: 1 },
         };
         expect(getImportedArtistNames(song)).toEqual(['小山百代', '三森すずこ']);
         expect(getMatchedArtistNames(song)).toEqual(['小山百代', '三森すずこ']);

@@ -30,20 +30,15 @@ export const splitLocalLibraryArtistNames = (value?: string): string[] => {
 };
 
 export const getImportedArtistNames = (song: LocalSong): string[] => (
-  splitLocalLibraryArtistNames(song.embeddedArtist || song.artist)
+  song.importedMetadata.artistNames.flatMap(splitLocalLibraryArtistNames)
 );
 
 export const getImportedAlbumName = (song: LocalSong): string | undefined => (
-  cleanLocalLibraryName(song.embeddedAlbum || song.album)
+  cleanLocalLibraryName(song.importedMetadata.albumName)
 );
 
 export const getMatchedArtistNames = (song: LocalSong): string[] => {
-  if (song.matchedArtistEntities?.length) {
-    return song.matchedArtistEntities
-      .map(artist => cleanLocalLibraryName(artist.name))
-      .filter((name): name is string => Boolean(name));
-  }
-  return splitLocalLibraryArtistNames(song.matchedArtists);
+  return song.onlineMetadata?.artists.flatMap(artist => splitLocalLibraryArtistNames(artist.name)) || [];
 };
 
 export const getRelativeParentFolder = (song: LocalSong): string => {

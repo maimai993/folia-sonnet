@@ -41,7 +41,11 @@ const SongRow = ({ index, style, ariaAttributes, songs, selectedSongIds, onToggl
                     <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-semibold">{song.title || song.fileName}</span>
                         <span className="block truncate text-[11px] opacity-50">
-                            {statusBySongId?.get(song.id) || song.matchedArtists || song.artist || song.album || song.fileName}
+                            {statusBySongId?.get(song.id)
+                                || song.onlineMetadata?.artists.map(artist => artist.name).join(', ')
+                                || song.importedMetadata.artistNames.join(', ')
+                                || song.importedMetadata.albumName
+                                || song.fileName}
                         </span>
                     </span>
                 </button>

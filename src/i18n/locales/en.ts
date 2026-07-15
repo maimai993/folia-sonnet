@@ -1148,6 +1148,7 @@ export default {
     "candidateHasNoCover": "This result has no cover",
     "applyMetadataMatch": "Save selection",
     "coverCacheFailed": "Metadata was saved, but the cover could not be cached. The online URL will still be used when available.",
+    "lyricsNotAppliedOtherSaved": "Lyrics were not applied; the other selections were saved.",
   },
   "navidrome": {
     "title": "Navi",

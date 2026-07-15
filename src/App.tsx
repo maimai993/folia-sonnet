@@ -677,9 +677,7 @@ export default function App() {
         if (fallbackArtists) {
             return fallbackArtists;
         }
-        return isLocalPlaybackSong(currentSong)
-            ? currentSong.localData.matchedArtists || currentSong.localData.artist || null
-            : null;
+        return null;
     }, [currentSong]);
     const currentSongAlbum = useMemo(() => {
         if (!currentSong) {
@@ -688,9 +686,7 @@ export default function App() {
         if (currentSong.al?.name || currentSong.album?.name) {
             return currentSong.al?.name || currentSong.album?.name || null;
         }
-        return isLocalPlaybackSong(currentSong)
-            ? currentSong.localData.matchedAlbumName || currentSong.localData.album || null
-            : null;
+        return null;
     }, [currentSong]);
 
     // Theme Controller
@@ -1198,6 +1194,7 @@ export default function App() {
         audioRef,
         audioSrc,
         currentSong,
+        localSongs,
         isLyricsLoading,
         enableMediaCache,
         isPanelOpen,
@@ -2267,12 +2264,12 @@ export default function App() {
         createCurrentNavidromePlaylist,
         openCurrentLocalAlbum: () => {
             if (homeLayoutStyle === 'grid') {
-                if (currentSong && isLocalPlaybackSong(currentSong) && currentSong.localData) {
+                if (currentSong && isLocalPlaybackSong(currentSong)) {
                     const catalogIndex = buildLocalLibraryIndex(
                         localLibraryCatalog.entities,
                         localLibraryCatalog.assignments,
                     );
-                    const assignment = catalogIndex.assignmentsBySongId.get(currentSong.localData.id);
+                    const assignment = catalogIndex.assignmentsBySongId.get(currentSong.localRef.songId);
                     const albumEntityId = assignment?.albumEntityId
                         ? followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById)
                         : undefined;
@@ -2309,12 +2306,12 @@ export default function App() {
         },
         openCurrentLocalArtist: (requestedEntityId?: string) => {
             if (homeLayoutStyle === 'grid') {
-                if (currentSong && isLocalPlaybackSong(currentSong) && currentSong.localData) {
+                if (currentSong && isLocalPlaybackSong(currentSong)) {
                     const catalogIndex = buildLocalLibraryIndex(
                         localLibraryCatalog.entities,
                         localLibraryCatalog.assignments,
                     );
-                    const assignment = catalogIndex.assignmentsBySongId.get(currentSong.localData.id);
+                    const assignment = catalogIndex.assignmentsBySongId.get(currentSong.localRef.songId);
                     const sourceEntityId = requestedEntityId || assignment?.artistEntityIds[0];
                     const artistEntityId = sourceEntityId
                         ? followEntityRedirect(sourceEntityId, catalogIndex.entitiesById)
@@ -2647,6 +2644,7 @@ export default function App() {
         showNaviLyricMatchModal,
         showOnlineLyricMatchModal,
         currentSong,
+        localSongs,
         setShowLyricMatchModal,
         setShowNaviLyricMatchModal,
         setShowOnlineLyricMatchModal,
@@ -2664,6 +2662,7 @@ export default function App() {
         handleOnlineLyricMatchComplete,
         handleUnavailableReplacementConfirm,
         isDaylight,
+        localSongs,
         pendingUnavailableReplacement,
         setPendingUnavailableReplacement,
         setShowLyricMatchModal,

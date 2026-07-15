@@ -1148,7 +1148,8 @@ export default {
     "useOnlineCoverResult": "使用在线封面",
     "candidateHasNoCover": "此结果没有封面",
     "applyMetadataMatch": "保存选择",
-    "coverCacheFailed": "元数据已保存，但封面缓存失败；在线地址可用时仍会继续显示封面。"
+    "coverCacheFailed": "元数据已保存，但封面缓存失败；在线地址可用时仍会继续显示封面。",
+    "lyricsNotAppliedOtherSaved": "歌词未应用，其他选择已保存。"
   },
   "navidrome": {
     "title": "Navi",

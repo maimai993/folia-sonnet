@@ -41,7 +41,7 @@ export interface GridViewSourceActions {
         onRemovePlaylistSongs?: (playlistId: string, songIds: string[]) => Promise<void> | void;
         onEditEntity?: (entityId: string) => Promise<void> | void;
         onOrganizeFolderSongInfo?: (collection: any) => Promise<void> | void;
-        onMatchSong?: (song: LocalSong) => Promise<void> | void;
+        onMatchSong?: (songId: string) => Promise<void> | void;
     };
     navidrome?: {
         availablePlaylists?: Array<{ id: string | number; name: string; description?: string; }>;
@@ -1208,7 +1208,7 @@ export const GridView: React.FC<GridViewProps> = ({
             }
 
             if (isLocalPlaylistCollection && collection.playlistId && sourceActions?.local?.onRemovePlaylistSongs) {
-                const localSongId = (track as any).localData?.id || String(track.id);
+                const localSongId = (track as UnifiedSong).localRef?.songId || String(track.id);
                 await sourceActions.local.onRemovePlaylistSongs(collection.playlistId, [localSongId]);
                 commitAfterTrackRemovalAnimation(trackKey, () => {
                     setRemovedExternalTrackKeys(prev => new Set(prev).add(String(track.id)).add(`${track.id}-${trackIndex}`));
@@ -1646,9 +1646,9 @@ export const GridView: React.FC<GridViewProps> = ({
                                     persistNavigationState(idx);
                                 }}
                                 onEditLocalMetadata={(() => {
-                                    const localSong = (item.rawTrack as UnifiedSong | undefined)?.localData;
-                                    if (!localSong || !sourceActions?.local?.onMatchSong) return undefined;
-                                    return () => void sourceActions.local?.onMatchSong?.(localSong);
+                                    const songId = (item.rawTrack as UnifiedSong | undefined)?.localRef?.songId;
+                                    if (!songId || !sourceActions?.local?.onMatchSong) return undefined;
+                                    return () => void sourceActions.local?.onMatchSong?.(songId);
                                 })()}
                                 onSelect={() => {
                                     if (mode === 'tracks' && onSelectTrack && item.rawTrack) {

@@ -11,16 +11,28 @@ import {
 // test/unit/localLibrary/localLibraryEntityEditorModel.test.ts
 // Verifies the input suggestions and search behavior used by the entity editor.
 
-const createSong = (id: string, overrides: Partial<LocalSong> = {}): LocalSong => ({
-    id,
-    fileName: `${id}.mp3`,
-    filePath: `/music/${id}.mp3`,
-    duration: 180_000,
-    fileSize: 1_024,
-    mimeType: 'audio/mpeg',
-    addedAt: 1,
-    ...overrides,
-});
+type SongOverrides = Partial<LocalSong> & { artist?: string; album?: string; embeddedArtist?: string };
+const createSong = (id: string, overrides: SongOverrides = {}): LocalSong => {
+    const { artist, album, embeddedArtist, importedMetadata, ...rest } = overrides;
+    return {
+        id,
+        fileName: `${id}.mp3`,
+        filePath: `/music/${id}.mp3`,
+        title: id,
+        titleOrigin: 'import',
+        importedMetadata: importedMetadata || {
+            title: id,
+            titleSource: 'filename',
+            artistNames: embeddedArtist || artist ? [embeddedArtist || artist!] : [],
+            albumName: album,
+        },
+        duration: 180_000,
+        fileSize: 1_024,
+        mimeType: 'audio/mpeg',
+        addedAt: 1,
+        ...rest,
+    };
+};
 
 const createEntity = (
     id: string,
@@ -41,9 +53,8 @@ describe('local-library entity editor model', () => {
     it('builds ranked artist name suggestions without double-counting one song', () => {
         const suggestions = buildEntityNameSuggestions('artist', [
             createSong('one', {
-                embeddedArtist: '小山百代/三森すずこ',
-                manualArtistNames: ['小山百代'],
-                matchedArtistEntities: [{ name: '三森すずこ' }],
+                importedMetadata: { title: 'one', titleSource: 'filename', artistNames: ['小山百代', '三森すずこ'] },
+                onlineMetadata: { source: 'netease', artists: [{ name: '三森すずこ' }], matchMode: 'manual', matchedAt: 1 },
             }),
             createSong('two', { embeddedArtist: '三森すずこ' }),
         ]);

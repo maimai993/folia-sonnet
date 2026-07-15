@@ -1,9 +1,11 @@
 import i18n from '../../../i18n/config';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { getCachedAudioBlob } from '../../../services/audioCache';
-import { getCachedCoverUrl } from '../../../services/coverCache';
+import { getCachedCoverUrl, loadCachedOrFetchCover } from '../../../services/coverCache';
 import { getFromCacheWithMigration, getLocalSongs } from '../../../services/db';
 import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from '../../../services/localMusicService';
+import { applyLocalLibraryEntityDisplay, buildUnifiedLocalSong } from '../../../services/playbackAdapters';
+import { getLocalLibraryCatalogSnapshot } from '../../../services/localLibraryEntityRepository';
 import { getOnlineSongCacheKey, isCloudSong, neteaseApi } from '../../../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
 import type { ThemeCacheSongKey } from '../../../services/themeCache';
@@ -12,7 +14,7 @@ import type { NavidromeSong } from '../../../types/navidrome';
 import { hydrateNavidromeLyricPayload, resolvePreferredNavidromeLyrics } from '../../../utils/appNavidromeLyrics';
 import { hasRenderableLyrics } from '../../../utils/appPlaybackHelpers';
 import { isLocalPlaybackSong, isNavidromePlaybackSong } from '../../../utils/appPlaybackGuards';
-import { isBlob } from '../../../utils/blobGuards';
+import { createSafeObjectUrl, isBlob } from '../../../utils/blobGuards';
 import { LyricParserFactory } from '../../../utils/lyrics/LyricParserFactory';
 import { processNeteaseLyrics } from '../../../utils/lyrics/neteaseProcessing';
 import { isPureMusicLyricText } from '../../../utils/lyrics/pureMusic';
@@ -110,13 +112,14 @@ export const restorePlaybackSourceForSong = async (
         return true;
     }
 
-    if (isLocalPlaybackSong(song)) {
-        const localData = (song as SongResult & { localData?: LocalSong }).localData;
+    const legacyLocalData = (song as SongResult & { localData?: LocalSong }).localData;
+    if (isLocalPlaybackSong(song) || legacyLocalData?.id) {
+        const localSongId = isLocalPlaybackSong(song) ? song.localRef.songId : legacyLocalData?.id;
         let songToRestore: LocalSong | undefined;
         const songs = await getLocalSongs();
 
-        if (localData?.id) {
-            songToRestore = songs.find(candidate => candidate.id === localData.id);
+        if (localSongId) {
+            songToRestore = songs.find(candidate => candidate.id === localSongId);
         }
 
         if (!songToRestore) {
@@ -146,6 +149,14 @@ export const restorePlaybackSourceForSong = async (
         }
 
         songToRestore = await ensureLocalSongEmbeddedCover(songToRestore);
+        const catalog = await getLocalLibraryCatalogSnapshot();
+        const restoredSong = applyLocalLibraryEntityDisplay(buildUnifiedLocalSong({
+            localSong: songToRestore,
+            matchedSong: null,
+            coverUrl: songToRestore.useOnlineCover ? songToRestore.onlineMetadata?.coverUrl || null : null,
+            preferOnlineMetadata: false,
+        }), catalog);
+        setCurrentSong(restoredSong);
         replaceBlobUrl(blobUrlRef, blobUrl);
         currentOnlineAudioUrlFetchedAtRef.current = null;
         setAudioSrc(blobUrl);
@@ -176,11 +187,19 @@ export const restorePlaybackSourceForSong = async (
             setLyrics(songToRestore.matchedLyrics);
         }
 
-        if (isBlob(songToRestore.embeddedCover)) {
-            setCachedCoverUrl(URL.createObjectURL(songToRestore.embeddedCover));
-        } else if (songToRestore.matchedCoverUrl) {
-            setCachedCoverUrl(songToRestore.matchedCoverUrl);
+        const cacheKey = `cover_local_${songToRestore.id}`;
+        const cachedCoverUrl = songToRestore.useOnlineCover
+            ? await getCachedCoverUrl(cacheKey)
+            : null;
+        if (cachedCoverUrl) setCachedCoverUrl(cachedCoverUrl);
+        else if (songToRestore.useOnlineCover && songToRestore.onlineMetadata?.coverUrl) {
+            setCachedCoverUrl(await loadCachedOrFetchCover(cacheKey, songToRestore.onlineMetadata.coverUrl));
+        } else if (isBlob(songToRestore.embeddedCover)) {
+            setCachedCoverUrl(createSafeObjectUrl(songToRestore.embeddedCover));
+        } else {
+            setCachedCoverUrl(null);
         }
+        void persistLastPlaybackCache?.(restoredSong, [restoredSong]);
         return true;
     }
 
@@ -190,12 +209,17 @@ export const restorePlaybackSourceForSong = async (
     }
 
     const cachedAudio = await getCachedAudioBlob(getOnlineSongCacheKey('audio', song));
+    let restoredCachedAudio = false;
     if (cachedAudio) {
-        const blobUrl = URL.createObjectURL(cachedAudio);
-        replaceBlobUrl(blobUrlRef, blobUrl);
-        currentOnlineAudioUrlFetchedAtRef.current = null;
-        setAudioSrc(blobUrl);
-    } else {
+        const blobUrl = createSafeObjectUrl(cachedAudio);
+        if (blobUrl) {
+            replaceBlobUrl(blobUrlRef, blobUrl);
+            currentOnlineAudioUrlFetchedAtRef.current = null;
+            setAudioSrc(blobUrl);
+            restoredCachedAudio = true;
+        }
+    }
+    if (!restoredCachedAudio) {
         const urlRes = await neteaseApi.getSongUrl(song.id, audioQuality);
         let url = urlRes.data?.[0]?.url;
         if (url) {

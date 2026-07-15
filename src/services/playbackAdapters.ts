@@ -8,24 +8,49 @@ export type LocalLibraryDisplayCatalog = {
     assignments: LocalLibraryAssignment[];
 };
 
+export type ResolvedLocalSongMetadata = {
+    artists: Array<{ entityId: string; name: string }>;
+    album?: { entityId: string; name: string };
+};
+
+// Resolves the canonical artist and album display from stable entity assignments only.
+export const resolveLocalSongMetadata = (
+    songId: string,
+    catalog: LocalLibraryDisplayCatalog,
+    preparedIndex?: LocalLibraryIndex,
+): ResolvedLocalSongMetadata => {
+    const index = preparedIndex || buildLocalLibraryIndex(catalog.entities, catalog.assignments);
+    const assignment = index.assignmentsBySongId.get(songId);
+    const artists = assignment?.artistEntityIds.flatMap(entityId => {
+        const activeEntityId = followEntityRedirect(entityId, index.entitiesById);
+        const entity = activeEntityId ? index.entitiesById.get(activeEntityId) : undefined;
+        return entity?.kind === 'artist' ? [{ entityId: entity.id, name: entity.displayName }] : [];
+    }) || [];
+    const activeAlbumId = assignment?.albumEntityId
+        ? followEntityRedirect(assignment.albumEntityId, index.entitiesById)
+        : undefined;
+    const albumEntity = activeAlbumId ? index.entitiesById.get(activeAlbumId) : undefined;
+    return {
+        artists,
+        album: albumEntity?.kind === 'album'
+            ? { entityId: albumEntity.id, name: albumEntity.displayName }
+            : undefined,
+    };
+};
+
 const resolveLocalLibraryDisplayArtists = (
-    localSong: LocalSong,
+    songId: string,
     catalog?: LocalLibraryDisplayCatalog,
     preparedIndex?: LocalLibraryIndex,
 ) => {
     if (!catalog) return [];
 
-    const index = preparedIndex || buildLocalLibraryIndex(catalog.entities, catalog.assignments);
-    const assignment = index.assignmentsBySongId.get(localSong.id);
-    if (!assignment) return [];
-
+    const resolved = resolveLocalSongMetadata(songId, catalog, preparedIndex);
     const seenEntityIds = new Set<string>();
-    return assignment.artistEntityIds.flatMap(entityId => {
-        const activeEntityId = followEntityRedirect(entityId, index.entitiesById);
-        const entity = activeEntityId ? index.entitiesById.get(activeEntityId) : undefined;
-        if (!entity || entity.kind !== 'artist' || seenEntityIds.has(entity.id)) return [];
-        seenEntityIds.add(entity.id);
-        return [{ id: 0, entityId: entity.id, name: entity.displayName }];
+    return resolved.artists.flatMap(entity => {
+        if (seenEntityIds.has(entity.entityId)) return [];
+        seenEntityIds.add(entity.entityId);
+        return [{ id: 0, entityId: entity.entityId, name: entity.name }];
     });
 };
 
@@ -35,10 +60,10 @@ export const applyLocalLibraryArtistDisplay = <T extends SongResult>(
     catalog?: LocalLibraryDisplayCatalog,
     preparedIndex?: LocalLibraryIndex,
 ): T => {
-    const localSong = (song as UnifiedSong).localData;
-    if (!localSong) return song;
+    const songId = (song as UnifiedSong).localRef?.songId;
+    if (!songId) return song;
 
-    const artists = resolveLocalLibraryDisplayArtists(localSong, catalog, preparedIndex);
+    const artists = resolveLocalLibraryDisplayArtists(songId, catalog, preparedIndex);
     if (artists.length === 0) return song;
 
     return {
@@ -54,28 +79,23 @@ const applyLocalLibraryAlbumDisplay = <T extends SongResult>(
     catalog?: LocalLibraryDisplayCatalog,
     preparedIndex?: LocalLibraryIndex,
 ): T => {
-    const localSong = (song as UnifiedSong).localData;
-    if (!localSong || !catalog) return song;
+    const songId = (song as UnifiedSong).localRef?.songId;
+    if (!songId || !catalog) return song;
 
-    const index = preparedIndex || buildLocalLibraryIndex(catalog.entities, catalog.assignments);
-    const assignedEntityId = index.assignmentsBySongId.get(localSong.id)?.albumEntityId;
-    const activeEntityId = assignedEntityId
-        ? followEntityRedirect(assignedEntityId, index.entitiesById)
-        : undefined;
-    const entity = activeEntityId ? index.entitiesById.get(activeEntityId) : undefined;
-    if (!entity || entity.kind !== 'album') return song;
+    const entity = resolveLocalSongMetadata(songId, catalog, preparedIndex).album;
+    if (!entity) return song;
 
     return {
         ...song,
         album: {
             ...song.album,
-            entityId: entity.id,
-            name: entity.displayName,
+            entityId: entity.entityId,
+            name: entity.name,
         },
         al: {
             ...(song.al || song.album),
-            entityId: entity.id,
-            name: entity.displayName,
+            entityId: entity.entityId,
+            name: entity.name,
         },
     };
 };
@@ -133,24 +153,23 @@ export function buildUnifiedLocalSong({
     const useMatchedLyrics =
         localSong.lyricsSource === 'online'
         || (!localSong.lyricsSource && !localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics);
-    const displayTitle = preferOnlineMetadata
-        ? (localSong.matchedTitle || localSong.embeddedTitle || localSong.title || localSong.fileName)
-        : (localSong.embeddedTitle || localSong.title || localSong.matchedTitle || localSong.fileName);
-    const displayArtist = preferOnlineMetadata
-        ? (localSong.matchedArtists || localSong.embeddedArtist || localSong.artist)
-        : (localSong.embeddedArtist || localSong.artist || localSong.matchedArtists);
-    const displayAlbum = preferOnlineMetadata
-        ? (localSong.matchedAlbumName || localSong.embeddedAlbum || localSong.album)
-        : (localSong.embeddedAlbum || localSong.album || localSong.matchedAlbumName);
+    const displayTitle = localSong.title;
+    const displayArtists = (localSong.titleOrigin === 'import'
+        ? localSong.importedMetadata.artistNames
+        : localSong.onlineMetadata?.artists.map(artist => artist.name) || localSong.importedMetadata.artistNames)
+        .map(name => ({ id: 0, name }));
+    const displayAlbum = localSong.titleOrigin === 'import'
+        ? localSong.importedMetadata.albumName
+        : localSong.onlineMetadata?.album?.name || localSong.importedMetadata.albumName;
 
     const unifiedSong: UnifiedSong = {
         id: getLocalSongId(localSong),
         name: displayTitle,
-        artists: displayArtist ? [{ id: 0, name: displayArtist }] : [],
+        artists: displayArtists,
         album: displayAlbum ? { id: 0, name: displayAlbum } : { id: 0, name: '' },
         duration: localSong.duration,
         isPureMusic: useMatchedLyrics ? localSong.matchedIsPureMusic : false,
-        ar: displayArtist ? [{ id: 0, name: displayArtist }] : [],
+        ar: displayArtists,
         al: displayAlbum ? {
             id: 0,
             name: displayAlbum,
@@ -162,25 +181,11 @@ export function buildUnifiedLocalSong({
         } : undefined,
         dt: localSong.duration,
         isLocal: true,
-        localData: localSong
+        localRef: { songId: localSong.id },
     };
 
     if (!matchedSong) {
         return unifiedSong;
-    }
-
-    if (!localSong.embeddedTitle) {
-        unifiedSong.name = matchedSong.name;
-    }
-
-    if (preferOnlineMetadata || !localSong.embeddedArtist) {
-        if (matchedSong.ar) unifiedSong.ar = matchedSong.ar;
-        if (matchedSong.artists) unifiedSong.artists = matchedSong.artists;
-    }
-
-    if (preferOnlineMetadata || !localSong.embeddedAlbum) {
-        if (matchedSong.al) unifiedSong.al = matchedSong.al;
-        if (matchedSong.album) unifiedSong.album = matchedSong.album;
     }
 
     if (coverUrl) {
@@ -203,8 +208,8 @@ export function buildLocalQueue(
         return applyLocalLibraryEntityDisplay(buildUnifiedLocalSong({
             localSong: song,
             matchedSong: null,
-            coverUrl: song.matchedCoverUrl || null,
-            preferOnlineMetadata: song.useOnlineMetadata === true,
+            coverUrl: song.useOnlineCover ? song.onlineMetadata?.coverUrl || null : null,
+            preferOnlineMetadata: false,
         }), catalog, catalogIndex);
     });
 

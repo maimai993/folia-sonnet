@@ -27,6 +27,7 @@ import {
 } from './repositories/localSongRepository';
 import { clearSessionValues, putSessionValue, readSession } from './repositories/sessionRepository';
 import { readThemeRegistryEntries, writeThemeRegistryEntries } from './repositories/themeRegistryRepository';
+import { clearCoverAssets, getCoverAssetUsage } from './binaryAssetStore';
 
 // src/services/db.ts
 // Keeps the historical storage API stable while delegating every IndexedDB operation to Dexie repositories.
@@ -125,6 +126,7 @@ export const clearCache = async (preserveKeys: string[] = []): Promise<void> => 
     if (hasElectronAudioCacheBridge() && !preserveKeys.some(key => key.startsWith('audio_'))) {
       await window.electron!.clearAudioCache();
     }
+    if (!preserveKeys.some(key => key.startsWith('cover_'))) await clearCoverAssets();
   } catch (error) {
     console.error('Clear cache failed', error);
   }
@@ -133,8 +135,8 @@ export const clearCache = async (preserveKeys: string[] = []): Promise<void> => 
 export const getCacheUsage = async (): Promise<number> => {
   try {
     const browserSize = await getBrowserCacheUsage();
-    if (!hasElectronAudioCacheBridge()) return browserSize;
-    return browserSize + await window.electron!.getAudioCacheUsage();
+    const audioSize = hasElectronAudioCacheBridge() ? await window.electron!.getAudioCacheUsage() : 0;
+    return browserSize + audioSize + await getCoverAssetUsage();
   } catch {
     return 0;
   }
@@ -156,6 +158,7 @@ export const getCacheUsageByCategory = async (): Promise<{
     } else if (hasElectronAudioCacheBridge()) {
       usage.media += await window.electron!.getAudioCacheUsage();
     }
+    usage.cover += await getCoverAssetUsage();
     return usage;
   } catch {
     return { playlist: 0, lyrics: 0, cover: 0, media: 0, mediaCount: 0 };
@@ -168,6 +171,7 @@ export const clearCacheByCategory = async (category: CacheCategory): Promise<voi
     if (category === 'media' && hasElectronAudioCacheBridge()) {
       await window.electron!.clearAudioCache();
     }
+    if (category === 'cover') await clearCoverAssets();
   } catch (error) {
     console.error('Failed to clear cache by category', error);
   }
@@ -220,6 +224,7 @@ export const deleteLocalSongs = async (ids: string[]): Promise<void> => {
 export const clearAllData = async (): Promise<void> => {
   try {
     if (hasElectronAudioCacheBridge()) await window.electron!.clearAudioCache();
+    await clearCoverAssets();
     await appDatabase.delete();
     await appDatabase.open();
   } catch (error) {

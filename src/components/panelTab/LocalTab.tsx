@@ -1,10 +1,12 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { UnifiedSong, ReplayGainMode } from '../../types';
 import { FileAudio, RefreshCw, FileText, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LyricTimelineOffsetControl from './LyricTimelineOffsetControl';
 import { getLyricProviderLabel } from '../../utils/lyrics/lyricSourceLabels';
+import { getLocalSongs } from '../../services/db';
+import type { LocalSong } from '../../types';
 
 interface LocalTabProps {
     currentSong: UnifiedSong;
@@ -40,7 +42,20 @@ const LocalTab: React.FC<LocalTabProps> = ({
     const { t } = useTranslation();
     const lrcInputRef = useRef<HTMLInputElement>(null);
 
-    const localData = currentSong.localData;
+    const [localData, setLocalData] = useState<LocalSong | null>(null);
+    const localSongId = currentSong.localRef?.songId;
+
+    useEffect(() => {
+        let active = true;
+        if (!localSongId) {
+            setLocalData(null);
+            return;
+        }
+        void getLocalSongs().then(songs => {
+            if (active) setLocalData(songs.find(song => song.id === localSongId) || null);
+        });
+        return () => { active = false; };
+    }, [localSongId]);
 
     if (!currentSong.isLocal || !localData) {
         return (

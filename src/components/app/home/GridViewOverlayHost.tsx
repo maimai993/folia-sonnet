@@ -12,7 +12,7 @@ import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuard
 import { deleteFolderSongs, resyncAllFolders, resyncFolder } from '../../../services/localMusicService';
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
-import { getBlobObjectUrlSignature, isBlob } from '../../../utils/blobGuards';
+import { createSafeObjectUrl, getBlobObjectUrlSignature, isBlob } from '../../../utils/blobGuards';
 import {
     GridViewCollectionDescriptor,
     LocalGridViewCollectionDescriptor,
@@ -71,33 +71,35 @@ const getLocalTrackCoverObjectUrlSignature = (song: LocalSong): string | null =>
 
 const resolveLocalCollectionCoverUrlFromTracks = (
     tracks: UnifiedSong[],
+    localSongs: LocalSong[],
     getLocalCoverObjectUrl: (song: LocalSong) => string | undefined
 ): string | undefined => {
+    const songsById = new Map(localSongs.map(song => [song.id, song]));
     const songs = tracks
-        .map(track => track.localData)
+        .map(track => track.localRef ? songsById.get(track.localRef.songId) : undefined)
         .filter((song): song is LocalSong => Boolean(song))
         .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     const preferredSong = songs.find(song => {
         const hasEmbeddedCover = isBlob(song.embeddedCover);
         if (song.useOnlineCover) {
-            return song.matchedCoverUrl || hasEmbeddedCover;
+            return song.onlineMetadata?.coverUrl || hasEmbeddedCover;
         }
-        return hasEmbeddedCover || song.matchedCoverUrl;
+        return hasEmbeddedCover || song.onlineMetadata?.coverUrl;
     });
 
     if (!preferredSong) {
         return undefined;
     }
 
-    if (preferredSong.useOnlineCover && preferredSong.matchedCoverUrl) {
-        return preferredSong.matchedCoverUrl;
+    if (preferredSong.useOnlineCover && preferredSong.onlineMetadata?.coverUrl) {
+        return preferredSong.onlineMetadata.coverUrl;
     }
 
     if (isBlob(preferredSong.embeddedCover)) {
         return getLocalCoverObjectUrl(preferredSong);
     }
 
-    return preferredSong.matchedCoverUrl;
+    return preferredSong.onlineMetadata?.coverUrl;
 };
 
 const resolveLiveLocalCollection = (
@@ -213,7 +215,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
             URL.revokeObjectURL(cached.url);
         }
 
-        const url = URL.createObjectURL(song.embeddedCover);
+        const url = createSafeObjectUrl(song.embeddedCover);
+        if (!url) return undefined;
         localTrackCoverObjectUrlsRef.current.set(song.id, { signature, url });
         return url;
     }, []);
@@ -480,16 +483,18 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         setNavidromePlaylistItems([]);
         setResolvedLocalCollectionCoverUrl(resolveLocalCollectionCoverUrlFromTracks(
             resolvedTracks,
+            legacyProps.localSongs,
             getOrCreateLocalTrackCoverObjectUrl
         ));
 
         const activeTrackCoverSongIds = new Set<string>();
+        const localSongsById = new Map(legacyProps.localSongs.map(song => [song.id, song]));
         const processedTracks = resolvedTracks.map(track => {
-            const localData = track.localData;
+            const localData = track.localRef ? localSongsById.get(track.localRef.songId) : undefined;
             if (!localData) return track;
 
             const preferOnlineCover = localData.useOnlineCover === true;
-            if (preferOnlineCover && localData.matchedCoverUrl) {
+            if (preferOnlineCover && localData.onlineMetadata?.coverUrl) {
                 return track;
             }
 
@@ -587,11 +592,17 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                 return;
             }
         }
-        if (unifiedTrack.isLocal && unifiedTrack.localData) {
+        const localSongId = unifiedTrack.localRef?.songId;
+        const localSong = localSongId ? legacyProps.localSongs.find(song => song.id === localSongId) : undefined;
+        if (unifiedTrack.isLocal && localSong) {
+            const songsById = new Map(legacyProps.localSongs.map(song => [song.id, song]));
             const localQueue = queue
-                .map(t => (t as UnifiedSong).localData)
+                .map(t => {
+                    const songId = (t as UnifiedSong).localRef?.songId;
+                    return songId ? songsById.get(songId) : undefined;
+                })
                 .filter((song): song is LocalSong => Boolean(song));
-            legacyProps.onPlayLocalSong?.(unifiedTrack.localData, localQueue);
+            legacyProps.onPlayLocalSong?.(localSong, localQueue);
             return;
         }
         legacyProps.onPlaySong(track, queue);
@@ -599,8 +610,10 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
 
     const handleAddTrackToQueue = useCallback((track: SongResult) => {
         const unifiedTrack = track as UnifiedSong;
-        if (unifiedTrack.isLocal && unifiedTrack.localData) {
-            legacyProps.onAddLocalSongToQueue?.(unifiedTrack.localData);
+        const localSongId = unifiedTrack.localRef?.songId;
+        const localSong = localSongId ? legacyProps.localSongs.find(song => song.id === localSongId) : undefined;
+        if (unifiedTrack.isLocal && localSong) {
+            legacyProps.onAddLocalSongToQueue?.(localSong);
             return;
         }
         if (unifiedTrack.isNavidrome) {
@@ -622,7 +635,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                     setOrganizingFolder(collection);
                 }
             },
-            onMatchSong: async (song) => setMatchingSongId(song.id),
+            onMatchSong: async (songId) => setMatchingSongId(songId),
             onResyncFolder: async (collection) => {
                 const importedSongs = await resyncFolder(collection.name);
                 if (importedSongs !== null) {

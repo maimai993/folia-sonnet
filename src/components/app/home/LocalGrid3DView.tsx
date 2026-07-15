@@ -7,6 +7,7 @@ import { GridViewCollectionDescriptor, createLocalGridViewCollection } from './g
 import { buildLocalGrid3DGroups } from './localGrid3DModel';
 import { useDebouncedFocusSync } from '../../../hooks/useDebouncedFocusSync';
 import { useLocalLibraryCatalog } from '../../../hooks/useLocalLibraryCatalog';
+import { createSafeObjectUrl, isBlob } from '../../../utils/blobGuards';
 
 // src/components/app/home/LocalGrid3DView.tsx
 // Desktop-only local music Grid3D overview that opens GridView instead of legacy carousel details.
@@ -103,8 +104,9 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
 
         for (const group of allGroups) {
             const source = coverSourceMap.get(group.id);
-            if (source instanceof Blob) {
-                const url = URL.createObjectURL(source);
+            if (isBlob(source)) {
+                const url = createSafeObjectUrl(source);
+                if (!url) continue;
                 nextObjectUrls[group.id] = url;
                 createdUrls.push(url);
             }

@@ -15,20 +15,29 @@ import type { LocalSong } from '../../../src/types';
 // test/unit/localLibrary/localLibraryCatalogService.test.ts
 // Verifies folder album heuristics, structured matches, protected origins, merge/split, and rollback.
 
-const song = (id: string, patch: Partial<LocalSong> = {}): LocalSong => ({
-    id,
-    fileName: `${id}.flac`,
-    filePath: `Library/Album/${id}.flac`,
-    folderName: 'Library',
-    title: id,
-    artist: 'Local Artist',
-    album: 'Shared Album',
-    duration: 1,
-    fileSize: 1,
-    mimeType: 'audio/flac',
-    addedAt: 1,
-    ...patch,
-});
+type SongPatch = Partial<LocalSong> & { artist?: string; album?: string };
+const song = (id: string, patch: SongPatch = {}): LocalSong => {
+    const { artist = 'Local Artist', album = 'Shared Album', importedMetadata, ...rest } = patch;
+    return {
+        id,
+        fileName: `${id}.flac`,
+        filePath: `Library/Album/${id}.flac`,
+        folderName: 'Library',
+        title: id,
+        titleOrigin: 'import',
+        importedMetadata: importedMetadata || {
+            title: id,
+            titleSource: 'filename',
+            artistNames: artist ? [artist] : [],
+            albumName: album,
+        },
+        duration: 1,
+        fileSize: 1,
+        mimeType: 'audio/flac',
+        addedAt: 1,
+        ...rest,
+    };
+};
 
 describe('localLibraryCatalogService', () => {
     beforeEach(async () => {
@@ -58,13 +67,13 @@ describe('localLibraryCatalogService', () => {
 
         await applyManualMetadata('duet', ['佐藤日向；岩田陽葵'], 'Shared Album');
         const assignment = await appDatabase.local_library_assignments.get('duet');
-        const stored = await appDatabase.local_music.get('duet');
         expect(assignment?.artistEntityIds).toHaveLength(2);
         expect(assignment?.artistOrigin).toBe('manual');
-        expect(stored?.manualArtistNames).toEqual(['佐藤日向', '岩田陽葵']);
+        const artists = await appDatabase.local_library_entities.bulkGet(assignment?.artistEntityIds || []);
+        expect(artists.map(entity => entity?.displayName)).toEqual(['佐藤日向', '岩田陽葵']);
     });
 
-    it('migrates existing explicitly joined assignments without touching split origins', async () => {
+    it('does not rewrite existing assignments during initialization', async () => {
         const joinedEntity = {
             id: 'joined-artist',
             kind: 'artist' as const,
@@ -98,21 +107,23 @@ describe('localLibraryCatalogService', () => {
 
         await ensureLocalLibraryInitialized();
 
-        expect((await appDatabase.local_library_assignments.get('legacy-duet'))?.artistEntityIds).toHaveLength(2);
+        expect((await appDatabase.local_library_assignments.get('legacy-duet'))?.artistEntityIds).toEqual([joinedEntity.id]);
         expect((await appDatabase.local_library_assignments.get('explicit-split'))?.artistEntityIds).toEqual([joinedEntity.id]);
     });
 
     it('creates separate structured matched artist assignments', async () => {
         await assignImportedSongs([song('duet')]);
         await applyMatchedMetadata('duet', {
+            source: 'netease',
+            songId: 1,
             artists: [{ id: 1, name: 'Artist One' }, { id: 2, name: 'Artist Two' }],
             album: { id: 10, name: 'Online Album' },
         });
         const assignment = await appDatabase.local_library_assignments.get('duet');
         const stored = await appDatabase.local_music.get('duet');
-        expect(assignment?.artistOrigin).toBe('matched');
+        expect(assignment?.artistOrigin).toBe('auto-match');
         expect(assignment?.artistEntityIds).toHaveLength(2);
-        expect(stored?.matchedArtistEntities).toEqual([
+        expect(stored?.onlineMetadata?.artists).toEqual([
             { id: 1, name: 'Artist One' },
             { id: 2, name: 'Artist Two' },
         ]);
@@ -129,8 +140,8 @@ describe('localLibraryCatalogService', () => {
         expect(await appDatabase.local_library_assignments.get('matched')).toMatchObject({
             artistEntityIds: before?.artistEntityIds,
             albumEntityId: before?.albumEntityId,
-            artistOrigin: 'matched',
-            albumOrigin: 'matched',
+            artistOrigin: 'auto-match',
+            albumOrigin: 'auto-match',
         });
     });
 
@@ -140,7 +151,7 @@ describe('localLibraryCatalogService', () => {
         await appDatabase.api_cache.clear();
         await ensureLocalLibraryInitialized();
         expect(await appDatabase.local_library_assignments.get('marker')).toMatchObject({
-            artistOrigin: 'matched',
+            artistOrigin: 'auto-match',
         });
     });
 
@@ -151,7 +162,7 @@ describe('localLibraryCatalogService', () => {
         expect(await appDatabase.local_library_assignments.get('album-only')).toMatchObject({
             artistEntityIds: imported?.artistEntityIds,
             artistOrigin: 'import',
-            albumOrigin: 'matched',
+            albumOrigin: 'auto-match',
         });
     });
 
@@ -169,13 +180,17 @@ describe('localLibraryCatalogService', () => {
         expect(await appDatabase.local_library_assignments.get('protected')).toMatchObject({
             artistEntityIds: imported?.artistEntityIds,
             artistOrigin: 'manual',
-            albumOrigin: 'matched',
+            albumOrigin: 'auto-match',
         });
         expect(await appDatabase.local_music.get('protected')).toMatchObject({
-            matchedMetadataSource: 'qq',
-            matchedMetadataSongId: 'qq-song-mid',
-            matchedMetadataAlbumId: 'qq-album',
-            matchedTitle: 'Online Title',
+            title: 'Online Title',
+            titleOrigin: 'auto-match',
+            onlineMetadata: {
+                source: 'qq',
+                songId: 'qq-song-mid',
+                albumId: 'qq-album',
+                title: 'Online Title',
+            },
         });
     });
 

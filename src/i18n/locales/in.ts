@@ -1049,7 +1049,8 @@ export default {
     "noPlaylistsFound": "Belum ada playlist",
     "editPlaylist": "Edit Playlist",
     "finishEditing": "Selesai Mengedit",
-    "deletePlaylist": "Hapus Playlist"
+    "deletePlaylist": "Hapus Playlist",
+    "lyricsNotAppliedOtherSaved": "Lirik tidak diterapkan; pilihan lainnya telah disimpan."
   },
   "navidrome": {
     "title": "Navi",

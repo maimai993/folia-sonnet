@@ -457,10 +457,7 @@ export function usePlaybackQueueController({
         }
 
         if (isLocal) {
-            const localData = song.localData ?? localSongs.find(ls =>
-                    (ls.title || ls.fileName) === song.name &&
-                    Math.abs(ls.duration - song.duration) < 1000
-                ) ?? null;
+            const localData = localSongs.find(ls => ls.id === song.localRef.songId) ?? null;
 
             if (!localData) {
                 setStatusMsg({ type: 'error', text: t('status.localFilePlaybackError') });
@@ -469,7 +466,10 @@ export function usePlaybackQueueController({
             const resolvedLocalData = localData;
 
             const localQueue = queueContext
-                .map(queuedSong => (queuedSong as SongResult & { localData?: LocalSong }).localData)
+                .map(queuedSong => {
+                    const songId = (queuedSong as UnifiedSong).localRef?.songId;
+                    return songId ? localSongs.find(localSong => localSong.id === songId) : undefined;
+                })
                 .filter((queuedSong): queuedSong is LocalSong => Boolean(queuedSong));
             await onPlayLocalSong(resolvedLocalData, localQueue, { shouldNavigateToPlayer });
             return;
@@ -730,8 +730,10 @@ export function usePlaybackQueueController({
     }, [localSongs, searchDeps, t]);
 
     const handleSearchResultPlay = useCallback((track: UnifiedSong) => {
-        if (track.isLocal && track.localData) {
-            void onPlayLocalSong(track.localData);
+        const localSongId = track.localRef?.songId;
+        const localSong = localSongId ? localSongs.find(song => song.id === localSongId) : undefined;
+        if (track.isLocal && localSong) {
+            void onPlayLocalSong(localSong);
             return;
         }
 
@@ -741,7 +743,7 @@ export function usePlaybackQueueController({
         }
 
         handleQueueAddAndPlay(track);
-    }, [handleQueueAddAndPlay, onPlayLocalSong, onPlayNavidromeSong]);
+    }, [handleQueueAddAndPlay, localSongs, onPlayLocalSong, onPlayNavidromeSong]);
 
     const handleUnavailableReplacementConfirm = useCallback(async () => {
         if (!pendingUnavailableReplacement) {

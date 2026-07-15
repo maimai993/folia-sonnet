@@ -18,6 +18,13 @@ const createSong = (patch: Partial<LocalSong> & Pick<LocalSong, 'id' | 'filePath
         id,
         fileName: songPatch.fileName || filePath.split('/').pop() || 'song.mp3',
         filePath,
+        title: songPatch.title || (songPatch.fileName || filePath.split('/').pop() || 'song.mp3').replace(/\.[^.]+$/, ''),
+        titleOrigin: songPatch.titleOrigin || 'import',
+        importedMetadata: songPatch.importedMetadata || {
+            title: songPatch.title || (songPatch.fileName || filePath.split('/').pop() || 'song.mp3').replace(/\.[^.]+$/, ''),
+            titleSource: 'filename',
+            artistNames: [],
+        },
         duration: songPatch.duration ?? 0,
         fileSize: songPatch.fileSize ?? 1234,
         fileLastModified: songPatch.fileLastModified ?? 1000,

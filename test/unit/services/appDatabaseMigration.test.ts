@@ -4,7 +4,7 @@ import { APP_DATABASE_NAME, appDatabase } from '../../../src/services/appDatabas
 import { getFromCache, getSessionData, getThemeRegistryEntries } from '../../../src/services/db';
 
 // test/unit/services/appDatabaseMigration.test.ts
-// Verifies a native IndexedDB v6 database remains readable when Dexie opens and upgrades it to v0.7.
+// Verifies a native IndexedDB v6 database remains readable when Dexie opens and upgrades it to v0.8.
 
 const openNativeV6 = () => new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(APP_DATABASE_NAME, 6);
@@ -61,11 +61,16 @@ describe('AppDatabase native v6 migration', () => {
 
         await appDatabase.open();
 
-        expect(appDatabase.verno).toBe(0.7);
+        expect(appDatabase.verno).toBe(0.8);
         expect(await getSessionData()).toMatchObject({ fileName: 'song.mp3' });
         expect(await getFromCache('last_song')).toEqual({ id: 42 });
         expect(await getFromCache('user_profile')).toEqual({ userId: 7 });
-        expect(await appDatabase.local_music.get('song-1')).toMatchObject({ id: 'song-1' });
+        expect(await appDatabase.local_music.get('song-1')).toMatchObject({
+            id: 'song-1',
+            title: 'song',
+            titleOrigin: 'import',
+            importedMetadata: { title: 'song', titleSource: 'filename', artistNames: [] },
+        });
         expect(await getThemeRegistryEntries()).toEqual([{ fingerprint: 'theme:1', cacheKey: 'theme_1' }]);
         expect(appDatabase.tables.map(table => table.name)).toEqual(expect.arrayContaining([
             'local_library_entities',

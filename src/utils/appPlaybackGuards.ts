@@ -1,4 +1,5 @@
-import type { LocalSong, SongResult } from '../types';
+import type { SongResult } from '../types';
+import type { LocalSongReference } from '../types/localLibrary';
 import type { NavidromeSong } from '../types/navidrome';
 
 // Runtime guards for the unified playback song model.
@@ -30,11 +31,11 @@ export const resolveNavidromePlaybackCarrier = (
 
 export const isLocalPlaybackSong = (
     song: SongResult | null | undefined
-): song is SongResult & { isLocal: true; localData: LocalSong } => {
+): song is SongResult & { isLocal: true; localRef: LocalSongReference } => {
     return Boolean(
         song &&
         !isNavidromePlaybackSong(song) &&
-        (((song as any).isLocal === true) || Boolean((song as any).localData))
+        (((song as any).isLocal === true) || Boolean((song as any).localRef?.songId))
     );
 };
 

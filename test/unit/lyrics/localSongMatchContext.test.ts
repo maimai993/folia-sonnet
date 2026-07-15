@@ -9,8 +9,8 @@ const song = (patch: Partial<LocalSong> = {}): LocalSong => ({
     fileName: 'wrong-file-name.flac',
     filePath: 'Library/wrong-file-name.flac',
     title: 'Wrong title',
-    artist: 'Wrong artist',
-    album: 'Wrong album',
+    titleOrigin: 'import',
+    importedMetadata: { title: 'Wrong title', titleSource: 'filename', artistNames: ['Wrong artist'], albumName: 'Wrong album' },
     duration: 200000,
     fileSize: 1,
     mimeType: 'audio/flac',
@@ -21,12 +21,17 @@ const song = (patch: Partial<LocalSong> = {}): LocalSong => ({
 describe('localSongMatchContext', () => {
     it('uses the selected online identity and metadata for lyric matching', () => {
         const context = buildLocalSongLyricMatchContext(song({
-            useOnlineMetadata: true,
-            matchedMetadataSource: 'qq',
-            matchedMetadataSongId: 'selected-mid',
-            matchedTitle: 'Correct title',
-            matchedArtists: 'Correct artist',
-            matchedAlbumName: 'Correct album',
+            title: 'Correct title',
+            titleOrigin: 'manual-match',
+            onlineMetadata: {
+                source: 'qq',
+                songId: 'selected-mid',
+                title: 'Correct title',
+                artists: [{ name: 'Correct artist' }],
+                album: { name: 'Correct album' },
+                matchMode: 'manual',
+                matchedAt: 1,
+            },
         }));
 
         expect(context).toEqual({
@@ -38,33 +43,41 @@ describe('localSongMatchContext', () => {
         });
     });
 
-    it('does not use a stored candidate when online metadata is disabled', () => {
+    it('keeps a stored candidate as an accelerator after restoring the imported title', () => {
         const context = buildLocalSongLyricMatchContext(song({
-            useOnlineMetadata: false,
-            matchedMetadataSource: 'netease',
-            matchedMetadataSongId: 321,
-            matchedTitle: 'Ignored online title',
+            onlineMetadata: {
+                source: 'netease', songId: 321, title: 'Ignored online title', artists: [], matchMode: 'manual', matchedAt: 1,
+            },
         }));
 
         expect(context.title).toBe('Wrong title');
-        expect(context.metadataCandidate).toBeUndefined();
+        expect(context.metadataCandidate).toEqual({ source: 'netease', songId: 321 });
+    });
+
+    it('uses resolved entity names as the canonical lyric search start', () => {
+        const context = buildLocalSongLyricMatchContext(song(), {
+            artistNames: ['Renamed Artist'],
+            albumName: 'Merged Album',
+        });
+
+        expect(context).toMatchObject({
+            title: 'Wrong title',
+            artist: 'Renamed Artist',
+            album: 'Merged Album',
+        });
     });
 
     it('lets an explicit metadata selection bypass a stale no-auto-match flag', () => {
         expect(shouldRunLocalSongAutomaticMatch(song({ noAutoMatch: true }))).toBe(false);
         expect(shouldRunLocalSongAutomaticMatch(song({
             noAutoMatch: true,
-            useOnlineMetadata: true,
-            matchedMetadataSource: 'netease',
-            matchedMetadataSongId: 321,
+            onlineMetadata: { source: 'netease', songId: 321, artists: [], matchMode: 'manual', matchedAt: 1 },
         }))).toBe(true);
     });
 
     it('refreshes a legacy automatic lyric result once but preserves manual lyrics', () => {
         const selectedMetadata = {
-            useOnlineMetadata: true,
-            matchedMetadataSource: 'netease' as const,
-            matchedMetadataSongId: 321,
+            onlineMetadata: { source: 'netease' as const, songId: 321, artists: [], matchMode: 'manual' as const, matchedAt: 1 },
             matchedLyrics: { lines: [], isWordByWord: true },
         };
         expect(shouldRefreshLocalSongLyricsFromMetadata(song(selectedMetadata))).toBe(true);

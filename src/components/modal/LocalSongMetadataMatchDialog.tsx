@@ -3,7 +3,7 @@ import { Check, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LocalSong } from '../../types';
 import type { LocalLibraryAssignment } from '../../types/localLibrary';
-import { isBlob } from '../../utils/blobGuards';
+import { createSafeObjectUrl, isBlob } from '../../utils/blobGuards';
 import { applyOnlineMetadataCandidate } from '../../services/localSongMetadataMatchService';
 import {
     buildLocalSongMetadataSearchQuery,
@@ -32,22 +32,20 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
     const [selected, setSelected] = useState<OnlineMetadataCandidate | null>(null);
     const [searching, setSearching] = useState(false);
     const [applying, setApplying] = useState(false);
-    const [useOnlineMetadata, setUseOnlineMetadata] = useState(song.useOnlineMetadata ?? true);
+    const [useOnlineMetadata, setUseOnlineMetadata] = useState(song.titleOrigin !== 'import');
     const [useOnlineCover, setUseOnlineCover] = useState(song.useOnlineCover ?? !isBlob(song.embeddedCover));
     const [embeddedCoverUrl, setEmbeddedCoverUrl] = useState<string | null>(null);
     const requestIdRef = useRef(0);
     const target = useMemo(() => buildLocalSongMetadataSearchTarget(song), [song]);
-    const currentTitle = song.useOnlineMetadata
-        ? song.matchedTitle || song.embeddedTitle || song.title || song.fileName
-        : song.embeddedTitle || song.title || song.matchedTitle || song.fileName;
-    const currentArtist = song.manualArtistNames?.join(', ')
-        || (song.useOnlineMetadata ? song.matchedArtists : undefined)
-        || song.embeddedArtist || song.artist || t('localMusic.unknownArtist');
-    const currentAlbum = song.manualAlbumName
-        || (song.useOnlineMetadata ? song.matchedAlbumName : undefined)
-        || song.embeddedAlbum || song.album || t('localMusic.unknownAlbum');
-    const currentCoverUrl = song.useOnlineCover && song.matchedCoverUrl
-        ? song.matchedCoverUrl
+    const currentTitle = song.title;
+    const currentArtist = (song.titleOrigin !== 'import'
+        ? song.onlineMetadata?.artists.map(artist => artist.name).join(', ')
+        : song.importedMetadata.artistNames.join(', ')) || t('localMusic.unknownArtist');
+    const currentAlbum = (song.titleOrigin !== 'import'
+        ? song.onlineMetadata?.album?.name
+        : song.importedMetadata.albumName) || t('localMusic.unknownAlbum');
+    const currentCoverUrl = song.useOnlineCover && song.onlineMetadata?.coverUrl
+        ? song.onlineMetadata.coverUrl
         : embeddedCoverUrl;
     const selectedArtist = selected?.artists.map(artist => artist.name).join(', ') || '';
     const previewTitle = useOnlineMetadata && selected?.title ? selected.title : currentTitle;
@@ -60,7 +58,8 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
             setEmbeddedCoverUrl(null);
             return;
         }
-        const url = URL.createObjectURL(song.embeddedCover);
+        const url = createSafeObjectUrl(song.embeddedCover);
+        if (!url) return;
         setEmbeddedCoverUrl(url);
         return () => URL.revokeObjectURL(url);
     }, [song.embeddedCover]);

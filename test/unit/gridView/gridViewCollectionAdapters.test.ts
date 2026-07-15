@@ -20,8 +20,8 @@ const buildLocalSong = (id: string, title: string): LocalSong => ({
     fileName: `${title}.mp3`,
     filePath: `/music/${title}.mp3`,
     title,
-    artist: 'Artist',
-    album: 'Album',
+    titleOrigin: 'import',
+    importedMetadata: { title, titleSource: 'filename', artistNames: ['Artist'], albumName: 'Album' },
     duration: 180000,
     fileSize: 1024,
     mimeType: 'audio/mpeg',
@@ -76,19 +76,25 @@ describe('gridViewCollectionAdapters', () => {
 
         const tracks = resolveLocalGridViewTracks(descriptor, songs);
 
-        expect(tracks.map(track => (track as any).localData?.id)).toEqual(['song-c', 'song-a']);
+        expect(tracks.map(track => (track as any).localRef?.songId)).toEqual(['song-c', 'song-a']);
         expect(tracks.every(track => (track as any).isLocal)).toBe(true);
     });
 
     it('uses enabled online title, metadata, and cover even when imported album metadata is missing', () => {
         const song = {
             ...buildLocalSong('song-online', 'Imported Title'),
-            album: undefined,
-            matchedTitle: 'Online Title',
-            matchedArtists: 'Online Artist',
-            matchedAlbumName: 'Online Album',
-            matchedCoverUrl: 'https://example.com/online.jpg',
-            useOnlineMetadata: true,
+            title: 'Online Title',
+            titleOrigin: 'manual-match' as const,
+            importedMetadata: { title: 'Imported Title', titleSource: 'filename' as const, artistNames: ['Artist'] },
+            onlineMetadata: {
+                source: 'netease' as const,
+                title: 'Online Title',
+                artists: [{ name: 'Online Artist' }],
+                album: { name: 'Online Album' },
+                coverUrl: 'https://example.com/online.jpg',
+                matchMode: 'manual' as const,
+                matchedAt: 1,
+            },
             useOnlineCover: true,
         };
         const descriptor = createLocalGridViewCollection({
@@ -107,7 +113,7 @@ describe('gridViewCollectionAdapters', () => {
     it('exposes assigned local artists as separate entity links', () => {
         const song = {
             ...buildLocalSong('song-a', 'A'),
-            artist: '小山百代/三森すずこ',
+            importedMetadata: { title: 'A', titleSource: 'filename' as const, artistNames: ['小山百代', '三森すずこ'], albumName: 'Album' },
         };
         const descriptor = createLocalGridViewCollection({
             id: 'artist-a',
@@ -189,7 +195,7 @@ describe('gridViewCollectionAdapters', () => {
     });
 
     it('applies a resolved local cover even when the track has no album metadata', () => {
-        const song = { ...buildLocalSong('song-a', 'A'), album: undefined };
+        const song = { ...buildLocalSong('song-a', 'A'), importedMetadata: { title: 'A', titleSource: 'filename' as const, artistNames: ['Artist'] } };
         const descriptor = createLocalGridViewCollection({
             id: 'folder-music',
             name: 'Music',
@@ -373,7 +379,8 @@ describe('gridViewCollectionAdapters', () => {
                 ...buildLocalSong('song-a', 'A'),
                 addedAt: 2,
                 embeddedCover: { size: 20, type: 'image/png' } as unknown as Blob,
-                matchedCoverUrl: 'https://example.com/a.jpg',
+                useOnlineCover: true,
+                onlineMetadata: { source: 'qq' as const, artists: [], coverUrl: 'https://example.com/a.jpg', matchMode: 'manual' as const, matchedAt: 1 },
             },
             {
                 ...buildLocalSong('song-b', 'B'),
@@ -396,7 +403,7 @@ describe('gridViewCollectionAdapters', () => {
             {
                 ...buildLocalSong('song-a', 'A'),
                 embeddedCover,
-                matchedCoverUrl: 'https://example.com/online.jpg',
+                onlineMetadata: { source: 'qq' as const, artists: [], coverUrl: 'https://example.com/online.jpg', matchMode: 'manual' as const, matchedAt: 1 },
                 useOnlineCover: true,
             },
         ];

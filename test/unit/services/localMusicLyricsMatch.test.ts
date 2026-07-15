@@ -4,11 +4,15 @@ import { matchLyrics } from '@/services/localMusicService';
 import { autoMatchBestLyric } from '@/utils/lyrics/autoMatchBestLyric';
 import { applyMatchedMetadata } from '@/services/localLibraryCatalogService';
 import { neteaseApi } from '@/services/netease';
+import { getLocalLibraryCatalogSnapshot } from '@/services/localLibraryEntityRepository';
 
 // test/unit/services/localMusicLyricsMatch.test.ts
 
 vi.mock('@/utils/lyrics/autoMatchBestLyric', () => ({ autoMatchBestLyric: vi.fn() }));
 vi.mock('@/services/localLibraryCatalogService', () => ({ applyMatchedMetadata: vi.fn() }));
+vi.mock('@/services/localLibraryEntityRepository', () => ({
+    getLocalLibraryCatalogSnapshot: vi.fn().mockResolvedValue({ entities: [], assignments: [] }),
+}));
 vi.mock('@/services/netease', () => ({
     neteaseApi: {
         cloudSearch: vi.fn(),
@@ -30,15 +34,13 @@ const song = (): LocalSong => ({
     id: 'local-song',
     fileName: 'wrong-file.flac',
     filePath: 'Library/wrong-file.flac',
-    title: 'Wrong title',
-    artist: 'Wrong artist',
-    album: 'Wrong album',
-    matchedTitle: 'Correct title',
-    matchedArtists: 'Correct artist',
-    matchedAlbumName: 'Correct album',
-    matchedMetadataSource: 'netease',
-    matchedMetadataSongId: 987,
-    useOnlineMetadata: true,
+    title: 'Correct title',
+    titleOrigin: 'manual-match',
+    importedMetadata: { title: 'Wrong title', titleSource: 'filename', artistNames: ['Wrong artist'], albumName: 'Wrong album' },
+    onlineMetadata: {
+        source: 'netease', songId: 987, title: 'Correct title', artists: [{ name: 'Correct artist' }],
+        album: { name: 'Correct album' }, matchMode: 'manual', matchedAt: 1,
+    },
     duration: 200000,
     fileSize: 1,
     mimeType: 'audio/flac',
@@ -49,6 +51,7 @@ describe('localMusicService lyric matching', () => {
     beforeEach(() => {
         vi.resetAllMocks();
         vi.mocked(applyMatchedMetadata).mockResolvedValue(undefined);
+        vi.mocked(getLocalLibraryCatalogSnapshot).mockResolvedValue({ entities: [], assignments: [] });
     });
 
     it('passes the selected metadata identity into playback matching without replacing it', async () => {
@@ -72,9 +75,7 @@ describe('localMusicService lyric matching', () => {
         expect(applyMatchedMetadata).toHaveBeenCalledWith('local-song', {}, expect.objectContaining({
             lyricsOnly: true,
             songPatch: expect.objectContaining({
-                matchedMetadataSource: 'netease',
-                matchedMetadataSongId: 987,
-                matchedTitle: 'Correct title',
+                onlineMetadata: expect.objectContaining({ source: 'netease', songId: 987 }),
                 matchedLyricsSongId: 987,
             }),
         }));

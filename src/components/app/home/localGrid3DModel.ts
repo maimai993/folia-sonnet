@@ -13,19 +13,19 @@ const getLocalCoverUrl = (songs: LocalSong[]): Blob | string | undefined => {
     const preferredSong = sortedSongs.find(song => {
         const hasEmbeddedCover = isBlob(song.embeddedCover);
         if (song.useOnlineCover) {
-            return song.matchedCoverUrl || hasEmbeddedCover;
+            return song.onlineMetadata?.coverUrl || hasEmbeddedCover;
         }
-        return hasEmbeddedCover || song.matchedCoverUrl;
+        return hasEmbeddedCover || song.onlineMetadata?.coverUrl;
     });
 
     if (!preferredSong) return undefined;
 
     const embeddedCover = isBlob(preferredSong.embeddedCover) ? preferredSong.embeddedCover : undefined;
     if (preferredSong.useOnlineCover) {
-        return preferredSong.matchedCoverUrl || embeddedCover;
+        return preferredSong.onlineMetadata?.coverUrl || embeddedCover;
     }
 
-    return embeddedCover || preferredSong.matchedCoverUrl;
+    return embeddedCover || preferredSong.onlineMetadata?.coverUrl;
 };
 
 const sortByName = <T extends { name: string }>(items: T[]) => (
@@ -49,12 +49,14 @@ export const buildLocalGrid3DGroups = (
         }
 
         if (!catalog) {
-            const albumName = song.matchedAlbumName || song.album || t('localMusic.unknownAlbum');
-            const albumKey = song.matchedAlbumId ? `matched-${song.matchedAlbumId}` : albumName;
+            const albumName = song.onlineMetadata?.album?.name || song.importedMetadata.albumName || t('localMusic.unknownAlbum');
+            const albumKey = song.onlineMetadata?.albumId ? `matched-${song.onlineMetadata.albumId}` : albumName;
             albums[albumKey] = albums[albumKey] || [];
             albums[albumKey].push(song);
 
-            const artistName = song.matchedArtists || song.artist || t('localMusic.unknownArtist');
+            const artistName = song.onlineMetadata?.artists.map(artist => artist.name).join(', ')
+                || song.importedMetadata.artistNames.join(', ')
+                || t('localMusic.unknownArtist');
             artists[artistName] = artists[artistName] || [];
             artists[artistName].push(song);
         }
@@ -85,7 +87,7 @@ export const buildLocalGrid3DGroups = (
 
     const legacyAlbumList: LocalLibraryGroup[] = sortByName(Object.entries(albums).map(([key, songs]) => {
         const firstSong = songs[0];
-        const albumName = firstSong?.matchedAlbumName || firstSong?.album || t('localMusic.unknownAlbum');
+        const albumName = firstSong?.onlineMetadata?.album?.name || firstSong?.importedMetadata.albumName || t('localMusic.unknownAlbum');
         return {
             type: 'album' as const,
             name: albumName,
@@ -93,8 +95,10 @@ export const buildLocalGrid3DGroups = (
             coverUrl: getLocalCoverUrl(songs),
             id: `album-${key}`,
             trackCount: songs.length,
-            description: firstSong?.matchedArtists || firstSong?.artist || t('localMusic.unknownArtist'),
-            albumId: firstSong?.matchedAlbumId,
+            description: firstSong?.onlineMetadata?.artists.map(artist => artist.name).join(', ')
+                || firstSong?.importedMetadata.artistNames.join(', ')
+                || t('localMusic.unknownArtist'),
+            albumId: typeof firstSong?.onlineMetadata?.albumId === 'number' ? firstSong.onlineMetadata.albumId : undefined,
         };
     }));
 

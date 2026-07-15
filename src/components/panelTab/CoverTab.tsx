@@ -25,7 +25,7 @@ const CoverTab: React.FC<CoverTabProps> = ({
     onCopySongInfoSuccess,
 }) => {
     const { t } = useTranslation();
-    const isLocalSong = Boolean(currentSong && (((currentSong as any).isLocal === true) || (currentSong as any).localData));
+    const isLocalSong = Boolean(currentSong && (((currentSong as any).isLocal === true) || (currentSong as any).localRef?.songId));
     const isNavidromeSong = Boolean(currentSong && (currentSong as any).isNavidrome === true);
     const isStageSong = Boolean(currentSong && (currentSong as any).isStage === true);
     const displayArtists = currentSong?.ar?.length ? currentSong.ar : (currentSong?.artists || []);
@@ -34,9 +34,7 @@ const CoverTab: React.FC<CoverTabProps> = ({
     const copyTitleLine = currentSong
         ? `${currentSong.name || ''} - ${displayArtistNames} - ${displayAlbumName}`
         : '';
-    const neteaseSongId = isLocalSong
-        ? (currentSong as SongResult & { localData?: { matchedSongId?: number } })?.localData?.matchedSongId
-        : (!isNavidromeSong && !isStageSong ? currentSong?.id : undefined);
+    const neteaseSongId = !isLocalSong && !isNavidromeSong && !isStageSong ? currentSong?.id : undefined;
     const copyPayload = copyTitleLine
         ? [copyTitleLine, neteaseSongId ? `https://music.163.com/#/song?id=${neteaseSongId}` : ''].filter(Boolean).join('\n')
         : '';

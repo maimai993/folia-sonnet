@@ -15,27 +15,34 @@ export interface LocalSongLyricMatchContext {
     metadataCandidate?: LocalSongMetadataLyricCandidate;
 }
 
+export interface ResolvedLocalSongLyricMetadata {
+    artistNames: string[];
+    albumName?: string;
+}
+
 const stripAudioExtension = (fileName: string): string => (
     fileName.replace(/\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i, '')
 );
 
-// Uses the online identity only when the user has chosen online metadata for display.
-export const buildLocalSongLyricMatchContext = (song: LocalSong): LocalSongLyricMatchContext => {
-    const useOnlineMetadata = song.useOnlineMetadata === true;
-    const title = useOnlineMetadata
-        ? (song.matchedTitle || song.embeddedTitle || song.title || stripAudioExtension(song.fileName))
-        : (song.title || song.embeddedTitle || stripAudioExtension(song.fileName));
-    const artist = useOnlineMetadata
-        ? (song.matchedArtists || song.artist || song.embeddedArtist || '')
-        : (song.artist || song.embeddedArtist || '');
-    const album = useOnlineMetadata
-        ? (song.matchedAlbumName || song.album || song.embeddedAlbum || '')
-        : (song.album || song.embeddedAlbum || '');
-    const hasSelectedIdentity = useOnlineMetadata
-        && Boolean(song.matchedMetadataSource)
-        && song.matchedMetadataSongId !== undefined
-        && song.matchedMetadataSongId !== null
-        && String(song.matchedMetadataSongId).trim() !== '';
+// Uses the canonical title for scoring and the latest provider identity only as a lookup accelerator.
+export const buildLocalSongLyricMatchContext = (
+    song: LocalSong,
+    resolvedMetadata?: ResolvedLocalSongLyricMetadata,
+): LocalSongLyricMatchContext => {
+    const title = song.title || stripAudioExtension(song.fileName);
+    const artist = resolvedMetadata?.artistNames.join(', ')
+        || song.onlineMetadata?.artists.map(item => item.name).join(', ')
+        || song.importedMetadata.artistNames.join(', ');
+    const album = resolvedMetadata?.albumName
+        || song.onlineMetadata?.album?.name
+        || song.importedMetadata.albumName
+        || '';
+    const source = song.onlineMetadata?.source;
+    const songId = song.onlineMetadata?.songId;
+    const hasSelectedIdentity = (source === 'netease' || source === 'qq')
+        && songId !== undefined
+        && songId !== null
+        && String(songId).trim() !== '';
 
     return {
         title,
@@ -44,14 +51,14 @@ export const buildLocalSongLyricMatchContext = (song: LocalSong): LocalSongLyric
         durationMs: song.duration || 0,
         ...(hasSelectedIdentity ? {
             metadataCandidate: {
-                source: song.matchedMetadataSource!,
-                songId: song.matchedMetadataSongId!,
+                source,
+                songId,
             },
         } : {}),
     };
 };
 
-// An explicit GridView metadata selection is allowed to recover from an older no-auto-match choice.
+// Explicit metadata identity may accelerate lookup without bypassing the normal lyric scoring pipeline.
 export const shouldRunLocalSongAutomaticMatch = (song: LocalSong): boolean => (
     !song.noAutoMatch || Boolean(buildLocalSongLyricMatchContext(song).metadataCandidate)
 );

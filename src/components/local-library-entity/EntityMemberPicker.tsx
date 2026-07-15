@@ -43,7 +43,9 @@ const SongRow = ({ index, style, ariaAttributes, songs, selectedSongIds, onToggl
                 </span>
                 <span className="min-w-0 flex-1">
                     <span className={`block truncate text-[13px] font-semibold ${selected ? (isDaylight ? 'text-blue-900' : 'text-blue-100') : ''}`}>{song.title || song.fileName}</span>
-                    <span className={`block truncate text-[11px] opacity-50 ${selected ? (isDaylight ? 'text-blue-800' : 'text-blue-200') : ''}`}>{song.artist || song.album || song.fileName}</span>
+                    <span className={`block truncate text-[11px] opacity-50 ${selected ? (isDaylight ? 'text-blue-800' : 'text-blue-200') : ''}`}>
+                        {song.importedMetadata.artistNames.join(', ') || song.importedMetadata.albumName || song.fileName}
+                    </span>
                 </span>
             </button>
         </div>

@@ -102,10 +102,6 @@ const getPlaybackSyncBridgeArtist = (song: SongResult | null): string | null => 
         return primaryArtists.join(', ');
     }
 
-    if (isLocalPlaybackSong(song)) {
-        return song.localData.matchedArtists || song.localData.artist || null;
-    }
-
     const navidromeSong = resolveNavidromePlaybackCarrier(song);
     return navidromeSong?.artists?.map(artist => artist.name).filter(Boolean).join(', ') || null;
 };

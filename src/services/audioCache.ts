@@ -1,4 +1,5 @@
 import { getFromCache, removeFromCache, saveToCache } from './db';
+import { isBlob } from '../utils/blobGuards';
 
 interface ElectronAudioCacheEntry {
   found: boolean;
@@ -33,10 +34,14 @@ export async function getCachedAudioBlob(cacheKey: string): Promise<Blob | null>
     }
   }
 
-  const indexedDbBlob = await getFromCache<Blob>(cacheKey);
-  if (!indexedDbBlob) {
+  const indexedDbValue = await getFromCache<unknown>(cacheKey);
+  if (!isBlob(indexedDbValue)) {
+    if (indexedDbValue != null) {
+      await removeFromCache(cacheKey);
+    }
     return null;
   }
+  const indexedDbBlob = indexedDbValue;
 
   if (isElectronAudioCacheAvailable()) {
     try {
@@ -58,10 +63,16 @@ export async function hasCachedAudio(cacheKey: string): Promise<boolean> {
     }
   }
 
-  return Boolean(await getFromCache<Blob>(cacheKey));
+  const indexedDbValue = await getFromCache<unknown>(cacheKey);
+  if (isBlob(indexedDbValue)) return true;
+  if (indexedDbValue != null) await removeFromCache(cacheKey);
+  return false;
 }
 
 export async function saveAudioBlob(cacheKey: string, blob: Blob): Promise<void> {
+  if (!isBlob(blob)) {
+    throw new TypeError('Audio cache only accepts Blob values');
+  }
   if (isElectronAudioCacheAvailable()) {
     const buffer = await blob.arrayBuffer();
     await window.electron!.saveAudioCache(cacheKey, buffer, blob.type || 'audio/mpeg');

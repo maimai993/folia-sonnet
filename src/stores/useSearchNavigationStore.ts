@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { neteaseApi } from '../services/netease';
 import type { HomeViewTab, LocalSong, UnifiedSong } from '../types';
+import { buildUnifiedLocalSong } from '../services/playbackAdapters';
 
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEFAULT_SEARCH_LIMIT = 30;
@@ -44,25 +45,11 @@ const mapLocalSongToUnifiedSong = (
     song: LocalSong,
     index: number,
     t: SearchExecutorDeps['t']
-): UnifiedSong => ({
-    id: -(Date.now() + index),
-    name: song.title || song.embeddedTitle || song.fileName,
-    artists: [{ id: 0, name: song.artist || song.embeddedArtist || t('player.unknownArtist') }],
-    album: {
-        id: 0,
-        name: song.album || song.embeddedAlbum || t('player.unknownAlbum'),
-        picUrl: song.matchedCoverUrl || undefined,
-    },
-    duration: song.duration,
-    al: {
-        id: 0,
-        name: song.album || song.embeddedAlbum || t('player.unknownAlbum'),
-        picUrl: song.matchedCoverUrl || undefined,
-    },
-    ar: [{ id: 0, name: song.artist || song.embeddedArtist || t('player.unknownArtist') }],
-    dt: song.duration,
-    isLocal: true,
-    localData: song,
+): UnifiedSong => buildUnifiedLocalSong({
+    localSong: song,
+    matchedSong: null,
+    coverUrl: song.useOnlineCover ? song.onlineMetadata?.coverUrl || null : null,
+    preferOnlineMetadata: false,
 });
 
 const searchLocalSongs = (
@@ -73,9 +60,13 @@ const searchLocalSongs = (
     const lowerQuery = query.toLowerCase();
     const results = localSongs
         .filter(song => {
-            const title = (song.title || song.embeddedTitle || song.fileName || '').toLowerCase();
-            const artist = (song.artist || song.embeddedArtist || '').toLowerCase();
-            const album = (song.album || song.embeddedAlbum || '').toLowerCase();
+            const title = song.title.toLowerCase();
+            const artist = [
+                ...song.importedMetadata.artistNames,
+                ...song.onlineMetadata?.artists.map(item => item.name) || [],
+            ].join(' ').toLowerCase();
+            const album = [song.importedMetadata.albumName, song.onlineMetadata?.album?.name]
+                .filter(Boolean).join(' ').toLowerCase();
             return title.includes(lowerQuery) || artist.includes(lowerQuery) || album.includes(lowerQuery);
         })
         .map((song, index) => mapLocalSongToUnifiedSong(song, index, t));

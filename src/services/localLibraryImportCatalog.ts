@@ -1,21 +1,13 @@
 import type { LocalSong } from '../types';
 import type { LocalLibraryAssignment } from '../types/localLibrary';
 import {
-  cleanLocalLibraryName,
   getAlbumImportContextKey,
   getImportedAlbumName,
   getImportedArtistNames,
-  getMatchedArtistNames,
   normalizeLocalLibraryName,
-  splitLocalLibraryArtistNames,
 } from '../utils/localLibraryNames';
-import {
-  appDatabase,
-  LOCAL_LIBRARY_ARTIST_SPLIT_MARKER_KEY,
-  LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY,
-  type StoredCacheEntry,
-} from './appDatabase';
-import { createLocalLibraryAssignment, resolveEntityNames } from './localLibraryCatalogInternals';
+import { appDatabase } from './appDatabase';
+import { resolveEntityNames } from './localLibraryCatalogInternals';
 import { sanitizeLocalSongForStorage } from './repositories/localSongRepository';
 
 // src/services/localLibraryImportCatalog.ts
@@ -108,83 +100,13 @@ export const assignImportedSongs = async (
   );
 };
 
-const migrateExplicitlySeparatedArtistsInTransaction = async (): Promise<void> => {
-  if (await appDatabase.api_cache.get(LOCAL_LIBRARY_ARTIST_SPLIT_MARKER_KEY)) return;
-  const [songs, entities, assignments] = await Promise.all([
+// Repairs only genuinely missing assignments; the v0.8 upgrade owns legacy conversion.
+export const ensureLocalLibraryInitialized = async (): Promise<void> => {
+  const [songs, assignments] = await Promise.all([
     appDatabase.local_music.toArray(),
-    appDatabase.local_library_entities.toArray(),
     appDatabase.local_library_assignments.toArray(),
   ]);
-  const songsById = new Map(songs.map(song => [song.id, song]));
-  const changedAssignments = assignments.flatMap(assignment => {
-    if (assignment.artistOrigin === 'split') return [];
-    const song = songsById.get(assignment.songId);
-    if (!song) return [];
-    const names = assignment.artistOrigin === 'manual'
-      ? (song.manualArtistNames || []).flatMap(splitLocalLibraryArtistNames)
-      : assignment.artistOrigin === 'matched'
-        ? getMatchedArtistNames(song)
-        : getImportedArtistNames(song);
-    if (names.length < 2) return [];
-    const artistEntityIds = resolveEntityNames(entities, 'artist', names, assignment.artistEntityIds);
-    if (
-      artistEntityIds.length === assignment.artistEntityIds.length &&
-      artistEntityIds.every((id, index) => id === assignment.artistEntityIds[index])
-    ) return [];
-    return [{ ...assignment, artistEntityIds, updatedAt: Date.now() }];
-  });
-
-  await Promise.all([
-    appDatabase.local_library_entities.bulkPut(entities),
-    appDatabase.local_library_assignments.bulkPut(changedAssignments),
-    appDatabase.api_cache.put({
-      key: LOCAL_LIBRARY_ARTIST_SPLIT_MARKER_KEY,
-      data: { completedAt: Date.now() },
-      timestamp: Date.now(),
-    } satisfies StoredCacheEntry),
-  ]);
-};
-
-// Bootstraps legacy records after open; any failure rolls back the marker and entity writes.
-export const ensureLocalLibraryInitialized = async (): Promise<void> => {
-  await appDatabase.transaction(
-    'rw',
-    [appDatabase.local_music, appDatabase.local_library_entities, appDatabase.local_library_assignments, appDatabase.api_cache],
-    async () => {
-      if (!(await appDatabase.api_cache.get(LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY))) {
-        if (await appDatabase.local_library_assignments.count() > 0) {
-          await appDatabase.api_cache.put({
-            key: LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY,
-            data: { completedAt: Date.now(), recovered: true },
-            timestamp: Date.now(),
-          });
-        } else {
-          const songs = await appDatabase.local_music.toArray();
-          await assignImportedSongsInTransaction(songs, false);
-          const entities = await appDatabase.local_library_entities.toArray();
-          const assignments = new Map((await appDatabase.local_library_assignments.toArray()).map(item => [item.songId, item]));
-          const matchedAssignments: LocalLibraryAssignment[] = [];
-          songs.filter(song => song.useOnlineMetadata === true).forEach(song => {
-            const current = assignments.get(song.id);
-            const artistIds = resolveEntityNames(entities, 'artist', getMatchedArtistNames(song), current?.artistEntityIds);
-            const albumName = cleanLocalLibraryName(song.matchedAlbumName);
-            const albumId = albumName
-              ? resolveEntityNames(entities, 'album', [albumName], current?.albumEntityId ? [current.albumEntityId] : [])[0]
-              : undefined;
-            matchedAssignments.push(createLocalLibraryAssignment(song.id, artistIds, albumId, 'matched'));
-          });
-          await Promise.all([
-            appDatabase.local_library_entities.bulkPut(entities),
-            appDatabase.local_library_assignments.bulkPut(matchedAssignments),
-            appDatabase.api_cache.put({
-              key: LOCAL_LIBRARY_BOOTSTRAP_MARKER_KEY,
-              data: { completedAt: Date.now() },
-              timestamp: Date.now(),
-            } satisfies StoredCacheEntry),
-          ]);
-        }
-      }
-      await migrateExplicitlySeparatedArtistsInTransaction();
-    },
-  );
+  const assignedIds = new Set(assignments.map(assignment => assignment.songId));
+  const missing = songs.filter(song => !assignedIds.has(song.id));
+  if (missing.length > 0) await assignImportedSongs(missing, { preserveNonImportAssignments: false });
 };

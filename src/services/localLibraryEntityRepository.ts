@@ -18,6 +18,19 @@ export const getLocalLibraryAssignment = async (songId: string): Promise<LocalLi
   await appDatabase.local_library_assignments.get(songId)
 );
 
+// Reads both entity tables in one transaction so consumers never combine different catalog revisions.
+export const getLocalLibraryCatalogSnapshot = async (): Promise<{
+  entities: LocalLibraryEntity[];
+  assignments: LocalLibraryAssignment[];
+}> => appDatabase.transaction(
+  'r',
+  [appDatabase.local_library_entities, appDatabase.local_library_assignments],
+  async () => ({
+    entities: await appDatabase.local_library_entities.toArray(),
+    assignments: await appDatabase.local_library_assignments.toArray(),
+  }),
+);
+
 export const resolveEntityRedirect = async (entityId: string): Promise<LocalLibraryEntity | undefined> => {
   const visited = new Set<string>();
   let entity = await appDatabase.local_library_entities.get(entityId);

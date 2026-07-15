@@ -775,18 +775,15 @@ export interface LocalSong {
   bitrate?: number; // bps
   addedAt: number; // timestamp
 
-  // Extracted metadata from file tags
-  title?: string;
-  artist?: string;
-  album?: string;
+  // Canonical metadata and retained source snapshots
+  title: string;
+  titleOrigin: import('./types/localLibrary').LocalSongTitleOrigin;
+  importedMetadata: import('./types/localLibrary').LocalSongImportedMetadata;
+  onlineMetadata?: import('./types/localLibrary').LocalSongOnlineMetadata;
   trackNumber?: number;
   discNumber?: number;
   embeddedMetadataVersion?: number;
 
-  // Embedded metadata from file tags
-  embeddedTitle?: string;
-  embeddedArtist?: string;
-  embeddedAlbum?: string;
   embeddedCover?: Blob; // Preferred local cover blob (folder cover or embedded art), stored in IndexedDB
   replayGain?: number; // ReplayGain track gain in dB
   replayGainTrackGain?: number; // ReplayGain track gain in dB
@@ -795,21 +792,9 @@ export interface LocalSong {
   replayGainAlbumPeak?: number; // ReplayGain album peak ratio
 
   // Lyrics matching result
-  matchedSongId?: number; // Netease song ID
-  matchedMetadataSource?: 'netease' | 'qq'; // Provider used for the current online metadata match
-  matchedMetadataSongId?: number | string;
-  matchedMetadataAlbumId?: number | string;
-  matchedTitle?: string;
-  matchedArtists?: string; // Matched artist names (joined string)
-  matchedArtistEntities?: Array<{ id?: number | string; name: string }>;
-  manualArtistNames?: string[];
-  manualAlbumName?: string;
-  matchedAlbumId?: number; // Netease album ID
-  matchedAlbumName?: string; // Netease album name
   matchedLyrics?: LyricData;
   matchedIsPureMusic?: boolean;
   matchedLyricsSongId?: number | string; // Provider-scoped ID used for the saved lyric result
-  matchedCoverUrl?: string; // Cover image URL from matched song
   hasManualLyricSelection?: boolean;
   folderName?: string; // Name of the folder if imported via folder import
   noAutoMatch?: boolean; // If true, do not attempt to auto-match metadata
@@ -819,7 +804,6 @@ export interface LocalSong {
   // User preferences for online data override (set via LyricMatchModal)
   lyricsSource?: 'local' | 'embedded' | 'online';  // Explicit lyrics source selection; undefined = default priority (local > embedded > online)
   useOnlineCover?: boolean;     // Prefer online cover over embedded cover
-  useOnlineMetadata?: boolean;  // Prefer online artist/album over embedded tags
 
   // Local Lyrics (.lrc / .vtt / .ttml / .qrc / .yrc / .krc files)
   hasLocalLyrics?: boolean;
@@ -888,12 +872,17 @@ export type {
   LocalLibraryAssignmentOrigin,
   LocalLibraryEntity,
   LocalLibraryEntityKind,
+  LocalSongImportedMetadata,
+  LocalSongMetadataSource,
+  LocalSongOnlineMetadata,
+  LocalSongReference,
+  LocalSongTitleOrigin,
 } from './types/localLibrary';
 
 // Extend SongResult to support local files and Navidrome files
 export interface UnifiedSong extends SongResult {
   isLocal?: boolean;
-  localData?: LocalSong;
+  localRef?: import('./types/localLibrary').LocalSongReference;
   isNavidrome?: boolean;
   navidromeData?: any;
 }
