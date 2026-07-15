@@ -1,4 +1,5 @@
 import type { LocalSong } from '../types';
+import type { LocalLibraryAssignmentOrigin } from '../types/localLibrary';
 import { cleanLocalLibraryName, splitLocalLibraryArtistNames } from '../utils/localLibraryNames';
 import { appDatabase } from './appDatabase';
 import { createLocalLibraryAssignment, resolveEntityNames } from './localLibraryCatalogInternals';
@@ -12,16 +13,22 @@ export { assignImportedSongs, ensureLocalLibraryInitialized } from './localLibra
 export { mergeEntities, setEntityDisplayName, splitEntity } from './localLibraryEntityMutations';
 
 export interface MatchedLocalMetadata {
+  source?: 'netease' | 'qq';
+  title?: string;
   artists?: Array<{ id?: number | string; name: string }>;
   album?: { id?: number | string; name: string };
-  songId?: number;
+  songId?: number | string;
   coverUrl?: string;
 }
 
 export const applyMatchedMetadata = async (
   songId: string,
   metadata: MatchedLocalMetadata,
-  options: { lyricsOnly?: boolean; songPatch?: Partial<LocalSong> } = {},
+  options: {
+    lyricsOnly?: boolean;
+    songPatch?: Partial<LocalSong>;
+    protectOrigins?: LocalLibraryAssignmentOrigin[];
+  } = {},
 ): Promise<LocalSong | undefined> => {
   return await appDatabase.transaction(
     'rw',
@@ -33,24 +40,40 @@ export const applyMatchedMetadata = async (
       if (!options.lyricsOnly) {
         const entities = await appDatabase.local_library_entities.toArray();
         const current = await appDatabase.local_library_assignments.get(songId);
-        const hasArtistMetadata = metadata.artists !== undefined;
+        const protectedOrigins = new Set(options.protectOrigins || []);
+        const hasArtistMetadata = metadata.artists !== undefined
+          && !Boolean(current && protectedOrigins.has(current.artistOrigin));
         const artists = metadata.artists?.filter(artist => cleanLocalLibraryName(artist.name)) || [];
         const artistIds = hasArtistMetadata
           ? resolveEntityNames(entities, 'artist', artists.map(artist => artist.name), current?.artistEntityIds)
           : current?.artistEntityIds || [];
-        const albumName = cleanLocalLibraryName(metadata.album?.name);
+        const hasAlbumMetadata = Boolean(cleanLocalLibraryName(metadata.album?.name))
+          && !Boolean(current && protectedOrigins.has(current.albumOrigin));
+        const albumName = hasAlbumMetadata ? cleanLocalLibraryName(metadata.album?.name) : undefined;
         const albumId = albumName
           ? resolveEntityNames(entities, 'album', [albumName], current?.albumEntityId ? [current.albumEntityId] : [])[0]
           : current?.albumEntityId;
+        if (metadata.title?.trim()) {
+          updatedSong.matchedTitle = metadata.title.trim();
+        }
         if (hasArtistMetadata) {
           updatedSong.matchedArtistEntities = artists;
           updatedSong.matchedArtists = artists.map(artist => artist.name).join(', ') || updatedSong.matchedArtists;
         }
         if (albumName) {
-          updatedSong.matchedAlbumId = typeof metadata.album?.id === 'number' ? metadata.album.id : updatedSong.matchedAlbumId;
+          if ((!metadata.source || metadata.source === 'netease') && typeof metadata.album?.id === 'number') {
+            updatedSong.matchedAlbumId = metadata.album.id;
+          }
           updatedSong.matchedAlbumName = albumName;
         }
-        updatedSong.matchedSongId = metadata.songId ?? updatedSong.matchedSongId;
+        if (metadata.source) {
+          updatedSong.matchedMetadataSource = metadata.source;
+          updatedSong.matchedMetadataSongId = metadata.songId;
+          updatedSong.matchedMetadataAlbumId = metadata.album?.id;
+        }
+        if ((!metadata.source || metadata.source === 'netease') && typeof metadata.songId === 'number') {
+          updatedSong.matchedSongId = metadata.songId;
+        }
         updatedSong.matchedCoverUrl = metadata.coverUrl ?? updatedSong.matchedCoverUrl;
         updatedSong.useOnlineMetadata = true;
         await Promise.all([
@@ -60,7 +83,7 @@ export const applyMatchedMetadata = async (
             artistEntityIds: artistIds,
             artistOrigin: hasArtistMetadata ? 'matched' : current?.artistOrigin || 'import',
             albumEntityId: albumId,
-            albumOrigin: albumName ? 'matched' : current?.albumOrigin || 'import',
+            albumOrigin: hasAlbumMetadata ? 'matched' : current?.albumOrigin || 'import',
             updatedAt: Date.now(),
           }),
         ]);

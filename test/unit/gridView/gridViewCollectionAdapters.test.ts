@@ -80,6 +80,30 @@ describe('gridViewCollectionAdapters', () => {
         expect(tracks.every(track => (track as any).isLocal)).toBe(true);
     });
 
+    it('uses enabled online title, metadata, and cover even when imported album metadata is missing', () => {
+        const song = {
+            ...buildLocalSong('song-online', 'Imported Title'),
+            album: undefined,
+            matchedTitle: 'Online Title',
+            matchedArtists: 'Online Artist',
+            matchedAlbumName: 'Online Album',
+            matchedCoverUrl: 'https://example.com/online.jpg',
+            useOnlineMetadata: true,
+            useOnlineCover: true,
+        };
+        const descriptor = createLocalGridViewCollection({
+            id: 'folder-online',
+            name: 'Online',
+            type: 'folder',
+            songs: [song],
+        });
+
+        const [track] = resolveLocalGridViewTracks(descriptor, [song]);
+        expect(track.name).toBe('Online Title');
+        expect(track.ar?.[0]?.name).toBe('Online Artist');
+        expect(track.al).toMatchObject({ name: 'Online Album', picUrl: 'https://example.com/online.jpg' });
+    });
+
     it('exposes assigned local artists as separate entity links', () => {
         const song = {
             ...buildLocalSong('song-a', 'A'),

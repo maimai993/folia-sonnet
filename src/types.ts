@@ -796,6 +796,10 @@ export interface LocalSong {
 
   // Lyrics matching result
   matchedSongId?: number; // Netease song ID
+  matchedMetadataSource?: 'netease' | 'qq'; // Provider used for the current online metadata match
+  matchedMetadataSongId?: number | string;
+  matchedMetadataAlbumId?: number | string;
+  matchedTitle?: string;
   matchedArtists?: string; // Matched artist names (joined string)
   matchedArtistEntities?: Array<{ id?: number | string; name: string }>;
   manualArtistNames?: string[];
@@ -804,6 +808,7 @@ export interface LocalSong {
   matchedAlbumName?: string; // Netease album name
   matchedLyrics?: LyricData;
   matchedIsPureMusic?: boolean;
+  matchedLyricsSongId?: number | string; // Provider-scoped ID used for the saved lyric result
   matchedCoverUrl?: string; // Cover image URL from matched song
   hasManualLyricSelection?: boolean;
   folderName?: string; // Name of the folder if imported via folder import

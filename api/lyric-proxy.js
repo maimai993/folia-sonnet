@@ -23,6 +23,7 @@ const CORS_HEADERS = {
 const IGNORED_FORWARD_HEADERS = ['host', 'connection', 'content-length', 'origin', 'referer'];
 function isAllowedLyricProxyHost(hostname) {
     return hostname === 'qq.com' || hostname.endsWith('.qq.com') ||
+        hostname === 'y.gtimg.cn' ||
         hostname === 'kugou.com' || hostname.endsWith('.kugou.com') ||
         hostname === 'amll-ttml-db.stevexmh.net';
 }

@@ -133,13 +133,15 @@ export function buildUnifiedLocalSong({
     const useMatchedLyrics =
         localSong.lyricsSource === 'online'
         || (!localSong.lyricsSource && !localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics);
-    const displayTitle = localSong.embeddedTitle || localSong.title || localSong.fileName;
+    const displayTitle = preferOnlineMetadata
+        ? (localSong.matchedTitle || localSong.embeddedTitle || localSong.title || localSong.fileName)
+        : (localSong.embeddedTitle || localSong.title || localSong.matchedTitle || localSong.fileName);
     const displayArtist = preferOnlineMetadata
         ? (localSong.matchedArtists || localSong.embeddedArtist || localSong.artist)
-        : (localSong.embeddedArtist || localSong.matchedArtists || localSong.artist);
+        : (localSong.embeddedArtist || localSong.artist || localSong.matchedArtists);
     const displayAlbum = preferOnlineMetadata
         ? (localSong.matchedAlbumName || localSong.embeddedAlbum || localSong.album)
-        : (localSong.embeddedAlbum || localSong.matchedAlbumName || localSong.album);
+        : (localSong.embeddedAlbum || localSong.album || localSong.matchedAlbumName);
 
     const unifiedSong: UnifiedSong = {
         id: getLocalSongId(localSong),
@@ -198,23 +200,12 @@ export function buildLocalQueue(
         ? buildLocalLibraryIndex(catalog.entities, catalog.assignments)
         : undefined;
     const convertedQueue = queue.map(song => {
-        const useMatchedLyrics =
-            song.lyricsSource === 'online'
-            || (!song.lyricsSource && !song.hasLocalLyrics && !song.hasEmbeddedLyrics);
-
-        return applyLocalLibraryEntityDisplay({
-            id: getLocalSongId(song),
-            name: song.title || song.fileName,
-            artists: song.artist ? [{ id: 0, name: song.artist }] : [],
-            album: song.album ? { id: 0, name: song.album } : { id: 0, name: '' },
-            duration: song.duration,
-            isPureMusic: useMatchedLyrics ? song.matchedIsPureMusic : false,
-            ar: song.artist ? [{ id: 0, name: song.artist }] : [],
-            al: song.album ? { id: 0, name: song.album, picUrl: song.matchedCoverUrl } : undefined,
-            dt: song.duration,
-            isLocal: true,
-            localData: song
-        } as UnifiedSong, catalog, catalogIndex);
+        return applyLocalLibraryEntityDisplay(buildUnifiedLocalSong({
+            localSong: song,
+            matchedSong: null,
+            coverUrl: song.matchedCoverUrl || null,
+            preferOnlineMetadata: song.useOnlineMetadata === true,
+        }), catalog, catalogIndex);
     });
 
     if (!currentSong) {

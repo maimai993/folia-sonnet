@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Loader2, X, Music, Check } from 'lucide-react';
 import { LocalSong, SongResult, LyricData } from '../../types';
-import { removeFromCache, saveToCache } from '../../services/db';
+import { removeFromCache } from '../../services/db';
+import { cacheLocalSongOnlineCover } from '../../services/coverCache';
 import {
     applyManualMetadata,
     applyMatchedMetadata,
@@ -228,9 +229,14 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             if (!processed) return;
             const parsedLyrics: LyricData | null = processed ? processed.lyrics : null;
 
-            // Always save the matched song ID for reference
-            song.matchedSongId = selectedResult.id;
+            // Keep the legacy ID strictly NetEase-only; other providers use the general metadata/lyrics source fields.
+            if (source === 'netease' || (source === 'amll' && selectedResult.amllDbPlatform === 'ncm')) {
+                song.matchedSongId = selectedResult.id;
+            } else {
+                delete song.matchedSongId;
+            }
             song.matchedIsPureMusic = processed.isPureMusic;
+            song.matchedLyricsSongId = selectedResult.id;
             song.matchedLyricsSource = source;
             song.matchedLyricsProviderPlatform = processed.matchedLyricsProviderPlatform;
 
@@ -249,8 +255,12 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             }
 
             // Save metadata - always save the user-edited values.
+            song.matchedTitle = selectedResult.name;
             song.matchedArtists = editArtist;
-            song.matchedAlbumId = getMatchResultAlbumId(selectedResult);
+            const selectedAlbumId = getMatchResultAlbumId(selectedResult);
+            if (source === 'netease' && typeof selectedAlbumId === 'number') {
+                song.matchedAlbumId = selectedAlbumId;
+            }
             song.matchedAlbumName = editAlbum;
             song.useOnlineCover = Boolean(useOnlineCover && (selectedCoverUrl || song.matchedCoverUrl));
             song.useOnlineMetadata = useOnlineMetadata;
@@ -267,7 +277,9 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
                 await restoreImportedMetadata(song.id);
             } else if (editArtist !== onlineArtist || editAlbum !== onlineAlbum) {
                 await applyMatchedMetadata(song.id, {
-                    songId: selectedResult.id,
+                    source: source === 'netease' || source === 'qq' ? source : undefined,
+                    songId: source === 'qq' && selectedResult.qqMid ? selectedResult.qqMid : selectedResult.id,
+                    title: selectedResult.name,
                     artists: selectedArtists,
                     album: onlineAlbum ? { id: getMatchResultAlbumId(selectedResult), name: onlineAlbum } : undefined,
                     coverUrl: song.matchedCoverUrl,
@@ -275,7 +287,9 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
                 await applyManualMetadata(song.id, editArtist ? [editArtist] : [], editAlbum);
             } else {
                 await applyMatchedMetadata(song.id, {
-                    songId: selectedResult.id,
+                    source: source === 'netease' || source === 'qq' ? source : undefined,
+                    songId: source === 'qq' && selectedResult.qqMid ? selectedResult.qqMid : selectedResult.id,
+                    title: selectedResult.name,
                     artists: selectedArtists,
                     album: onlineAlbum ? { id: getMatchResultAlbumId(selectedResult), name: onlineAlbum } : undefined,
                     coverUrl: song.matchedCoverUrl,
@@ -283,17 +297,10 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             }
 
             // Remove old cached cover to force refresh
-            await removeFromCache(`cover_local_${song.id}`);
-
-            // Fetch and cache the cover blob so it persists across refreshes.
             if (song.useOnlineCover && song.matchedCoverUrl) {
-                try {
-                    const coverResponse = await fetch(song.matchedCoverUrl, { mode: 'cors' });
-                    const coverBlob = await coverResponse.blob();
-                    await saveToCache(`cover_local_${song.id}`, coverBlob);
-                } catch (e) {
-                    console.warn('Failed to cache cover blob:', e);
-                }
+                await cacheLocalSongOnlineCover(song.id, song.matchedCoverUrl);
+            } else {
+                await removeFromCache(`cover_local_${song.id}`);
             }
 
             onMatch();

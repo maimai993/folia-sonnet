@@ -1,8 +1,8 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2, Star } from 'lucide-react';
+import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2, Star, Tags } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { SongResult, type StatusMessage, Theme } from '../types';
+import { SongResult, type LocalSong, type StatusMessage, Theme, type UnifiedSong } from '../types';
 import { isSongMarkedUnavailable, getSongUnavailableTagText, neteaseApi } from '../services/netease';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { formatSongName } from '../utils/songNameFormatter';
@@ -40,6 +40,8 @@ export interface GridViewSourceActions {
         onDeletePlaylist?: (playlistId: string) => Promise<void> | void;
         onRemovePlaylistSongs?: (playlistId: string, songIds: string[]) => Promise<void> | void;
         onEditEntity?: (entityId: string) => Promise<void> | void;
+        onOrganizeFolderSongInfo?: (collection: any) => Promise<void> | void;
+        onMatchSong?: (song: LocalSong) => Promise<void> | void;
     };
     navidrome?: {
         availablePlaylists?: Array<{ id: string | number; name: string; description?: string; }>;
@@ -127,6 +129,7 @@ export const PolaroidCard = React.memo<{
     onSelectArtist?: (artistId: number | string) => void;
     onSelectAlbum?: (albumId: number | string) => void;
     onBeforeNestedNavigate?: () => void;
+    onEditLocalMetadata?: () => void;
     openWhenFocusedOnCardClick?: boolean;
     isFocused?: boolean;
 }>(
@@ -146,6 +149,7 @@ export const PolaroidCard = React.memo<{
         onSelectArtist,
         onSelectAlbum,
         onBeforeNestedNavigate,
+        onEditLocalMetadata,
         openWhenFocusedOnCardClick = false,
         isFocused = false,
     }) => {
@@ -277,8 +281,24 @@ export const PolaroidCard = React.memo<{
                 <div className="w-full flex-1 flex flex-col justify-between pt-3 text-left min-w-0">
                     <div className="space-y-1 mb-2">
                         {/* Title */}
-                        <div className="text-s font-bold tracking-tight opacity-90 max-w-full line-clamp-4 whitespace-normal break-words">
-                            {item.name}
+                        <div className="group/song-title relative max-w-full">
+                            <div className="text-s font-bold tracking-tight opacity-90 max-w-full line-clamp-4 whitespace-normal break-words">
+                                {item.name}
+                            </div>
+                            {isFocused && onEditLocalMetadata && (
+                                <button
+                                    type="button"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onEditLocalMetadata();
+                                    }}
+                                    className="absolute -right-1 top-0 rounded-md bg-[var(--bg-color)]/85 p-1 opacity-0 shadow-sm backdrop-blur-sm transition-opacity hover:bg-current/10 group-hover/song-title:opacity-65 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current/30"
+                                    title={t('localMusic.manualMetadataMatch')}
+                                    aria-label={t('localMusic.manualMetadataMatch')}
+                                >
+                                    <Pencil size={13} />
+                                </button>
+                            )}
                         </div>
                         {/* Clickable Artists */}
                         {item.description && (
@@ -395,6 +415,7 @@ export const PolaroidCard = React.memo<{
             prev.cardHeight === next.cardHeight &&
             prev.isEditMode === next.isEditMode &&
             prev.openWhenFocusedOnCardClick === next.openWhenFocusedOnCardClick &&
+            Boolean(prev.onEditLocalMetadata) === Boolean(next.onEditLocalMetadata) &&
             prev.isFocused === next.isFocused
         );
     }
@@ -1624,6 +1645,11 @@ export const GridView: React.FC<GridViewProps> = ({
                                 onBeforeNestedNavigate={() => {
                                     persistNavigationState(idx);
                                 }}
+                                onEditLocalMetadata={(() => {
+                                    const localSong = (item.rawTrack as UnifiedSong | undefined)?.localData;
+                                    if (!localSong || !sourceActions?.local?.onMatchSong) return undefined;
+                                    return () => void sourceActions.local?.onMatchSong?.(localSong);
+                                })()}
                                 onSelect={() => {
                                     if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
                                         persistNavigationState(idx);
@@ -1641,6 +1667,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                         onAddTrackToQueue(item.rawTrack);
                                     }
                                 }}
+                                isFocused={idx === focusedIndex}
                             />
                         </div>
                         <div
@@ -1671,12 +1698,14 @@ export const GridView: React.FC<GridViewProps> = ({
         layoutConfig.cardHeight,
         cardFrameOptions,
         isEditMode,
+        focusedIndex,
         displayTracks,
         onSelectTrack,
         onSelectCollection,
         onSelectArtist,
         onSelectAlbum,
         onAddTrackToQueue,
+        sourceActions,
         handleRemoveTrack,
         removingTrackKeys,
         persistNavigationState,
@@ -2229,6 +2258,15 @@ export const GridView: React.FC<GridViewProps> = ({
                                     >
                                         {isSourceActionPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                                         {t('localMusic.reimport')}
+                                    </button>
+                                )}
+                                {isLocalFolderCollection && sourceActions?.local?.onOrganizeFolderSongInfo && (
+                                    <button
+                                        onClick={() => void sourceActions.local?.onOrganizeFolderSongInfo?.(collection)}
+                                        className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                    >
+                                        <Tags size={14} />
+                                        {t('localMusic.organizeSongInfo')}
                                     </button>
                                 )}
                                 {isLocalAllSongsCollection && sourceActions?.local?.onResyncAllFolders && (

@@ -25,6 +25,8 @@ import {
 } from './gridViewCollectionAdapters';
 import { useLocalLibraryCatalog, type LocalLibraryCatalogSnapshot } from '../../../hooks/useLocalLibraryCatalog';
 import { LocalLibraryEntityPanel } from '../../modal/LocalLibraryEntityPanel';
+import { LocalFolderSongInfoPanel } from '../../modal/LocalFolderSongInfoPanel';
+import { LocalSongMetadataMatchDialog } from '../../modal/LocalSongMetadataMatchDialog';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/localLibraryIndex';
 import { applyLocalSongCoverDisplay } from '../../../services/playbackAdapters';
 
@@ -147,6 +149,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
     const [resolvedLocalCollectionCoverUrl, setResolvedLocalCollectionCoverUrl] = useState<string | undefined>(undefined);
     const [navidromePlaylistItems, setNavidromePlaylistItems] = useState<Array<{ id: string | number; name: string; description?: string; }>>([]);
     const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
+    const [organizingFolder, setOrganizingFolder] = useState<LocalGridViewCollectionDescriptor | null>(null);
+    const [matchingSongId, setMatchingSongId] = useState<string | null>(null);
     const localTrackCoverObjectUrlsRef = useRef(new Map<string, LocalTrackCoverObjectUrlEntry>());
     const selectedCollectionKey = selectedCollection
         ? `${selectedCollection.source}:${selectedCollection.type}:${String(selectedCollection.id)}`
@@ -613,6 +617,12 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
         local: {
             onRefresh: legacyProps.onRefreshLocalSongs,
             onEditEntity: async (entityId) => setEditingEntityId(entityId),
+            onOrganizeFolderSongInfo: async (collection) => {
+                if (isLocalGridViewCollection(collection) && collection.type === 'folder' && !collection.isVirtual) {
+                    setOrganizingFolder(collection);
+                }
+            },
+            onMatchSong: async (song) => setMatchingSongId(song.id),
             onResyncFolder: async (collection) => {
                 const importedSongs = await resyncFolder(collection.name);
                 if (importedSongs !== null) {
@@ -704,6 +714,17 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
             : assignment.albumEntityId === editingEntity?.id)
         .map(assignment => assignment.songId));
     const editingEntitySongs = legacyProps.localSongs.filter(song => editingEntityMemberIds.has(song.id));
+    const organizingFolderSongs = organizingFolder
+        ? organizingFolder.songIds
+            .map(songId => legacyProps.localSongs.find(song => song.id === songId))
+            .filter((song): song is LocalSong => Boolean(song))
+        : [];
+    const matchingSong = matchingSongId
+        ? legacyProps.localSongs.find(song => song.id === matchingSongId)
+        : undefined;
+    const matchingSongAssignment = matchingSongId
+        ? localLibraryCatalog.assignments.find(assignment => assignment.songId === matchingSongId)
+        : undefined;
 
     return (
         <>
@@ -781,6 +802,31 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({ legacyProps, 
                     memberSongs={editingEntitySongs}
                     isDaylight={isDaylight}
                     onClose={() => setEditingEntityId(null)}
+                    onChanged={async () => {
+                        await localLibraryCatalog.reload();
+                        await legacyProps.onRefreshLocalSongs();
+                    }}
+                />
+            )}
+            {organizingFolder && (
+                <LocalFolderSongInfoPanel
+                    folderName={organizingFolder.name}
+                    songs={organizingFolderSongs}
+                    assignments={localLibraryCatalog.assignments}
+                    isDaylight={isDaylight}
+                    onClose={() => setOrganizingFolder(null)}
+                    onChanged={async () => {
+                        await localLibraryCatalog.reload();
+                        await legacyProps.onRefreshLocalSongs();
+                    }}
+                />
+            )}
+            {matchingSong && (
+                <LocalSongMetadataMatchDialog
+                    song={matchingSong}
+                    assignment={matchingSongAssignment}
+                    isDaylight={isDaylight}
+                    onClose={() => setMatchingSongId(null)}
                     onChanged={async () => {
                         await localLibraryCatalog.reload();
                         await legacyProps.onRefreshLocalSongs();

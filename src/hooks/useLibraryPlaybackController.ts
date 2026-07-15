@@ -30,6 +30,7 @@ import { applyQueueAddBehavior } from '../utils/queueAddBehavior';
 import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState, getOnlineLyricsStateCacheKey } from '../utils/onlineLyricsState';
 import { getBlobObjectUrlSignature, isBlob } from '../utils/blobGuards';
 import { applyMatchedMetadata } from '../services/localLibraryCatalogService';
+import { buildLocalSongLyricMatchContext, shouldRefreshLocalSongLyricsFromMetadata, shouldRunLocalSongAutomaticMatch } from '../utils/lyrics/localSongMatchContext';
 
 // src/hooks/useLibraryPlaybackController.ts
 
@@ -391,10 +392,15 @@ export function useLibraryPlaybackController({
     const handleLocalSongMatch = useCallback(async (localSong: LocalSong): Promise<{ updatedLocalSong: LocalSong; matchedSongResult: SongResult | null; }> => {
         let updatedLocalSong = localSong;
         let matchedSongResult: SongResult | null = null;
-        const needsLyricsMatch = !localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics && !localSong.matchedLyrics && !localSong.matchedIsPureMusic;
+        const needsLyricsMatch = (
+            !localSong.hasLocalLyrics
+            && !localSong.hasEmbeddedLyrics
+            && (!localSong.matchedLyrics && !localSong.matchedIsPureMusic
+                || shouldRefreshLocalSongLyricsFromMetadata(localSong))
+        );
         const needsCoverMatch = !isBlob(localSong.embeddedCover) && !localSong.matchedCoverUrl;
 
-        if ((needsLyricsMatch || needsCoverMatch) && !localSong.noAutoMatch) {
+        if ((needsLyricsMatch || needsCoverMatch) && shouldRunLocalSongAutomaticMatch(localSong)) {
             setStatusMsg({ type: 'info', text: t('status.matchingLyricsAndCover') || '' });
             try {
                 const { matchLyrics } = await import('../services/localMusicService');
@@ -404,10 +410,17 @@ export function useLibraryPlaybackController({
 
                 if (found) {
                     updatedLocalSong = found;
-                    if (found.matchedSongId) {
+                    const needsLegacyMatchedSongDetails = Boolean(
+                        found.matchedSongId
+                        && !found.matchedTitle
+                        && !found.matchedArtists
+                        && !found.matchedAlbumName
+                    );
+                    if (needsLegacyMatchedSongDetails) {
                         try {
+                            const matchContext = buildLocalSongLyricMatchContext(found);
                             const searchRes = await neteaseApi.cloudSearch(
-                                localSong.artist ? `${localSong.artist} ${localSong.title}` : localSong.title || localSong.fileName,
+                                [matchContext.title, matchContext.artist, matchContext.album].filter(Boolean).join(' - '),
                             );
                             if (searchRes.result?.songs) {
                                 const searchSongs = searchRes.result.songs as SongResult[];
@@ -551,9 +564,14 @@ export function useLibraryPlaybackController({
         const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
         Object.assign(localSong, preparedLocalSong);
 
-        const needsLyricsMatch = !localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics && !localSong.matchedLyrics && !localSong.matchedIsPureMusic;
+        const needsLyricsMatch = (
+            !localSong.hasLocalLyrics
+            && !localSong.hasEmbeddedLyrics
+            && (!localSong.matchedLyrics && !localSong.matchedIsPureMusic
+                || shouldRefreshLocalSongLyricsFromMetadata(localSong))
+        );
         const needsCoverMatch = !isBlob(localSong.embeddedCover) && !localSong.matchedCoverUrl;
-        if ((needsLyricsMatch || needsCoverMatch) && !localSong.noAutoMatch) {
+        if ((needsLyricsMatch || needsCoverMatch) && shouldRunLocalSongAutomaticMatch(localSong)) {
             try {
                 const { matchLyrics } = await import('../services/localMusicService');
                 await matchLyrics(localSong);
@@ -1231,10 +1249,11 @@ export function useLibraryPlaybackController({
         try {
             if (isLocalPlaybackSong(currentSong) && currentSong.localData) {
                 const localData = currentSong.localData;
-                const title = localData.title || localData.fileName.replace(/\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i, '');
-                const bestMatch = await autoMatchBestLyric(title, localData.artist || '', localData.duration, {
-                    album: localData.album,
+                const matchContext = buildLocalSongLyricMatchContext(localData);
+                const bestMatch = await autoMatchBestLyric(matchContext.title, matchContext.artist, matchContext.durationMs, {
+                    album: matchContext.album,
                     preferredSource: settings.preferredAlternativeLyricSource,
+                    metadataCandidate: matchContext.metadataCandidate,
                 });
 
                 if (!bestMatch) {
@@ -1249,6 +1268,7 @@ export function useLibraryPlaybackController({
                 const updatedLocalSong: LocalSong = {
                     ...localData,
                     matchedLyrics: bestMatch.lyrics,
+                    matchedLyricsSongId: bestMatch.id,
                     matchedLyricsSource: bestMatch.source,
                     matchedLyricsProviderPlatform: bestMatch.matchedLyricsProviderPlatform,
                     matchedIsPureMusic: false,

@@ -154,6 +154,30 @@ describe('localLibraryCatalogService', () => {
         });
     });
 
+    it('protects manual artist relationships while filling an unprotected album', async () => {
+        await assignImportedSongs([song('protected', { album: undefined })]);
+        const imported = await appDatabase.local_library_assignments.get('protected');
+        await appDatabase.local_library_assignments.update('protected', { artistOrigin: 'manual' });
+        await applyMatchedMetadata('protected', {
+            source: 'qq',
+            songId: 'qq-song-mid',
+            title: 'Online Title',
+            artists: [{ id: 9, name: 'Online Artist' }],
+            album: { id: 'qq-album', name: 'Online Album' },
+        }, { protectOrigins: ['manual', 'split'] });
+        expect(await appDatabase.local_library_assignments.get('protected')).toMatchObject({
+            artistEntityIds: imported?.artistEntityIds,
+            artistOrigin: 'manual',
+            albumOrigin: 'matched',
+        });
+        expect(await appDatabase.local_music.get('protected')).toMatchObject({
+            matchedMetadataSource: 'qq',
+            matchedMetadataSongId: 'qq-song-mid',
+            matchedMetadataAlbumId: 'qq-album',
+            matchedTitle: 'Online Title',
+        });
+    });
+
     it('merges redirects then splits only selected members with split origin', async () => {
         await assignImportedSongs([
             song('one', { artist: 'First' }),
