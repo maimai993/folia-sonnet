@@ -17,7 +17,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run build:vercel-api && vite build",
-    "build:vercel-api": "tsc api-ts/*.ts --ignoreConfig --noCheck --outDir api --target ES2022 --module ESNext --moduleResolution Bundler",
+    "build:vercel-api": "tsc -p api-ts/tsconfig.json",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run -c vitest.config.ts",

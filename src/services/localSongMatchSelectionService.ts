@@ -1,5 +1,4 @@
-import type { LyricData, LyricProviderSource } from '../types';
-import type { AmllDbPlatform } from '../types';
+import type { AmllDbPlatform, LocalSong, LyricData, LyricProviderSource } from '../types';
 import type { LocalLibraryAssignmentOrigin } from '../types/localLibrary';
 import type { OnlineMetadataCandidate } from './onlineMetadataSearchService';
 import { cacheLocalSongOnlineCover, removeCachedCover } from './coverCache';
@@ -41,9 +40,24 @@ export interface ApplyLocalSongMatchSelectionResult {
 }
 
 const buildSongPatch = (input: ApplyLocalSongMatchSelectionInput) => {
-  const patch: Record<string, unknown> = {};
+  const patch: Partial<LocalSong> = {};
   if (input.setNoAutoMatch !== undefined) patch.noAutoMatch = input.setNoAutoMatch;
-  if (input.cover === 'online') patch.useOnlineCover = Boolean(input.candidate?.coverUrl);
+  if (input.cover === 'online') {
+    patch.useOnlineCover = Boolean(input.candidate?.coverUrl);
+    if (input.candidate?.coverUrl && input.metadata === 'imported') {
+      patch.onlineMetadata = {
+        source: input.candidate.source,
+        songId: input.candidate.songId,
+        albumId: input.candidate.album?.id,
+        title: input.candidate.title,
+        artists: input.candidate.artists,
+        album: input.candidate.album,
+        coverUrl: input.candidate.coverUrl,
+        matchMode: 'manual',
+        matchedAt: Date.now(),
+      };
+    }
+  }
   if (input.cover === 'embedded') patch.useOnlineCover = false;
   if (input.lyrics === 'online' && input.onlineLyrics) {
     patch.matchedLyrics = input.onlineLyrics.lyrics;

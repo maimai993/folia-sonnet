@@ -60,6 +60,10 @@ export const shouldNavigatePlayerBackThroughHistory = (
     state: NavigationHistoryState | null,
 ): boolean => state?.view === 'player' && getAppHistoryIndex(state) > 0;
 
+export const shouldReplacePlayerNavigation = (
+    state: NavigationHistoryState | null,
+): boolean => state?.view === 'player';
+
 const getSearchHistorySnapshot = (): NavigationHistoryState['search'] => {
     const searchState = useSearchNavigationStore.getState();
     return searchState.isSearchOpen
@@ -173,8 +177,10 @@ export function useAppNavigation() {
     const navigateToPlayer = () => {
         const collection = useCollectionNavigationStore.getState().snapshot;
         const search = getSearchHistorySnapshot();
+        const historyState = window.history.state as NavigationHistoryState | null;
         pushNavigationState({
             view: 'player',
+            replace: shouldReplacePlayerNavigation(historyState),
             hash: '#player',
             search,
             collection,

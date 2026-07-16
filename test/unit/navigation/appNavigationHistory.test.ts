@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     shouldNavigatePlayerBackThroughHistory,
+    shouldReplacePlayerNavigation,
     type NavigationHistoryState,
 } from '@/hooks/useAppNavigation';
 
@@ -28,5 +29,13 @@ describe('player navigation history', () => {
 
     it('does not treat a home entry as player back navigation', () => {
         expect(shouldNavigatePlayerBackThroughHistory(state('home', 2))).toBe(false);
+    });
+
+    it('replaces the current entry when navigating to an already active player', () => {
+        expect(shouldReplacePlayerNavigation(state('player', 2))).toBe(true);
+    });
+
+    it('pushes a new entry when opening the player from home', () => {
+        expect(shouldReplacePlayerNavigation(state('home', 2))).toBe(false);
     });
 });

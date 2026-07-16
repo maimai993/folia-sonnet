@@ -15,6 +15,7 @@ import { buildLocalSongLyricMatchContext, shouldRefreshLocalSongLyricsFromMetada
 import { buildImportedMetadataSnapshot } from '../utils/localSongMetadata';
 import { getLocalLibraryCatalogSnapshot } from './localLibraryEntityRepository';
 import { resolveLocalSongMetadata } from './playbackAdapters';
+import { removeCachedCover } from './coverCache';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
@@ -1486,7 +1487,10 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
 export async function deleteLocalSong(id: string): Promise<void> {
     // Remove fileHandle from memory
     fileHandleMap.delete(id);
-    await dbDeleteLocalSong(id);
+    await Promise.all([
+        dbDeleteLocalSong(id),
+        removeCachedCover(`cover_local_${id}`),
+    ]);
 }
 
 function getRootFolderName(song: LocalSong): string | null {
@@ -1755,7 +1759,10 @@ export async function deleteFolderSongs(folderName: string): Promise<void> {
         fileHandleMap.delete(id);
         embeddedCoverRequestMap.delete(id);
     });
-    await dbDeleteLocalSongs(songIdsToDelete);
+    await Promise.all([
+        dbDeleteLocalSongs(songIdsToDelete),
+        ...songIdsToDelete.map(id => removeCachedCover(`cover_local_${id}`)),
+    ]);
     await removeDeletedSongIdsFromPlaylists(songIdsToDelete);
 
     const rootFolderName = folderName.split('/')[0];

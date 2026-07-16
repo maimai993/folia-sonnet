@@ -123,6 +123,30 @@ describe('applyLocalSongMatchSelection', () => {
         expect(mocks.removeCachedCover).toHaveBeenCalledWith('cover_local_song-1');
     });
 
+    it('persists the selected online cover while restoring imported metadata', async () => {
+        await applyLocalSongMatchSelection({
+            songId: 'song-1',
+            candidate,
+            metadata: 'imported',
+            cover: 'online',
+            lyrics: 'keep',
+        });
+
+        expect(mocks.restoreImportedMetadata).toHaveBeenCalledWith('song-1', expect.objectContaining({
+            useOnlineCover: true,
+            onlineMetadata: expect.objectContaining({
+                source: 'qq',
+                songId: 'qq-song-mid',
+                coverUrl: 'https://example.com/cover.jpg',
+                matchMode: 'manual',
+            }),
+        }));
+        expect(mocks.cacheLocalSongOnlineCover).toHaveBeenCalledWith(
+            'song-1',
+            'https://example.com/cover.jpg',
+        );
+    });
+
     it('reports partial lyric failure while still committing metadata and cover', async () => {
         const result = await applyLocalSongMatchSelection({
             songId: 'song-1',

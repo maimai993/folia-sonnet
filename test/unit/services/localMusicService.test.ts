@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { extractMetadataFromFilename, importFolder, resyncAllFolders, resyncFolder } from '@/services/localMusicService';
+import {
+    deleteFolderSongs,
+    deleteLocalSong as deleteLocalMusicSong,
+    extractMetadataFromFilename,
+    importFolder,
+    resyncAllFolders,
+    resyncFolder,
+} from '@/services/localMusicService';
 import {
     deleteDirHandle,
     deleteLocalLibrarySnapshot,
@@ -15,6 +22,7 @@ import {
     saveLocalSongs,
     saveToCache,
 } from '@/services/db';
+import { removeCachedCover } from '@/services/coverCache';
 import type { LocalLibrarySnapshot, LocalSong } from '@/types';
 
 // test/unit/services/localMusicService.test.ts
@@ -34,6 +42,9 @@ vi.mock('@/services/db', () => ({
     saveLocalSong: vi.fn(),
     saveLocalSongs: vi.fn(),
     saveToCache: vi.fn(),
+}));
+vi.mock('@/services/coverCache', () => ({
+    removeCachedCover: vi.fn(),
 }));
 
 class FakeFileHandle {
@@ -203,6 +214,7 @@ describe('localMusicService', () => {
         vi.mocked(saveLocalSong).mockReset();
         vi.mocked(saveLocalSongs).mockReset();
         vi.mocked(saveToCache).mockReset();
+        vi.mocked(removeCachedCover).mockReset();
 
         vi.mocked(getLocalSongs).mockResolvedValue([]);
         vi.mocked(getLocalLibrarySnapshot).mockResolvedValue(null);
@@ -320,5 +332,35 @@ describe('localMusicService', () => {
         expect(saveLocalLibrarySnapshot).toHaveBeenCalledTimes(2);
         expect(saveLocalLibrarySnapshot).toHaveBeenCalledWith(expect.objectContaining({ rootFolderName: 'Music' }));
         expect(saveLocalLibrarySnapshot).toHaveBeenCalledWith(expect.objectContaining({ rootFolderName: 'Other' }));
+    });
+
+    it('removes the external cover cache when deleting a local song', async () => {
+        await deleteLocalMusicSong('local-track-01');
+
+        expect(deleteLocalSong).toHaveBeenCalledWith('local-track-01');
+        expect(removeCachedCover).toHaveBeenCalledWith('cover_local_local-track-01');
+    });
+
+    it('removes every external cover cache when deleting a folder tree', async () => {
+        vi.mocked(getLocalSongs).mockResolvedValue([
+            createSong({ id: 'song-1' }),
+            createSong({
+                id: 'song-2',
+                folderName: 'Music/Disc 1/Sub',
+                filePath: 'Music/Disc 1/Sub/Track 02.mp3',
+            }),
+            createSong({
+                id: 'song-3',
+                folderName: 'Other',
+                filePath: 'Other/Track 03.mp3',
+            }),
+        ]);
+
+        await deleteFolderSongs('Music/Disc 1');
+
+        expect(deleteLocalSongs).toHaveBeenCalledWith(['song-1', 'song-2']);
+        expect(removeCachedCover).toHaveBeenCalledTimes(2);
+        expect(removeCachedCover).toHaveBeenCalledWith('cover_local_song-1');
+        expect(removeCachedCover).toHaveBeenCalledWith('cover_local_song-2');
     });
 });
