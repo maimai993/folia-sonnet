@@ -8,11 +8,15 @@ import type {
     DioramaTuning,
     FumeTuning,
     LyricData,
+    MonetBackgroundImage,
+    MonetBackgroundTuning,
     MonetPortraitImage,
     PlayerState,
     SongResult,
     StageSource,
     Theme,
+    UrlBackgroundItem,
+    VisualizerBackgroundMode,
     VisualizerMode,
 } from '../types';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
@@ -44,6 +48,26 @@ export interface ObsBrowserSourceConfig {
     visualizerMode: VisualizerMode;
     visualizerTunings?: VisualizerTuningBundle;
     background?: VisualizerBackgroundConfig;
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    visualizerBackgroundMode?: VisualizerBackgroundMode | null;
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    backgroundOpacity?: number;
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    transparentBackground?: boolean;
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    useCoverColorBg?: boolean;
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    disableGeometricBackground?: boolean;
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    disableVignette?: boolean;
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    monetBackgroundTuning?: MonetBackgroundTuning;
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    monetBackgroundImage?: MonetBackgroundImage | null;
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    urlBackgroundList?: UrlBackgroundItem[];
+    /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
+    urlBackgroundSelectedId?: string | null;
     lyricsFontScale: number;
     visualizerOpacity: number;
     subtitleOverlayOpacity: number;

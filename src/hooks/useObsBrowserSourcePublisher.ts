@@ -30,6 +30,7 @@ import type {
     ObsBrowserSourceStatus,
 } from '../types/obsBrowserSource';
 import {
+    buildLegacyObsBrowserSourceBackgroundConfig,
     downsampleObsSpectrum,
     isObsBrowserSourceBlobCoverUrl,
     resolveObsBrowserSourceClockTime,
@@ -207,37 +208,42 @@ export const useObsBrowserSourcePublisher = ({
         };
     }, [background?.customImage, cappellaCustomAvatarImages, cappellaCustomEmojiImages, monetPortraitImage]);
 
-    const config = useMemo<ObsBrowserSourceConfig>(() => ({
-        activePlaybackContext,
-        stageSource,
-        hasTrack: Boolean(currentSong || lyrics),
-        song: currentSong ? { id: currentSong.id, name: currentSong.name } : null,
-        songArtist: getSongArtist(currentSong),
-        songAlbum: getSongAlbum(currentSong),
-        coverUrl: obsCoverUrl,
-        lyrics,
-        theme,
-        subtitleTheme,
-        isDaylight,
-        visualizerMode,
-        visualizerTunings,
-        background: {
+    const config = useMemo<ObsBrowserSourceConfig>(() => {
+        const resolvedBackground = {
             ...background,
             customImage: obsCustomImages.monetBackground,
-        },
-        lyricsFontScale,
-        visualizerOpacity,
-        subtitleOverlayOpacity,
-        subtitleOverlayBackground,
-        staticMode,
-        hideTranslationSubtitle,
-        showSubtitleTranslation,
-        seed,
-        cappellaCustomEmojiImages: obsCustomImages.cappellaEmoji,
-        cappellaCustomAvatarImages: obsCustomImages.cappellaAvatar,
-        monetPortraitImage: obsCustomImages.monetPortrait,
-        updatedAt: Date.now(),
-    }), [
+        };
+
+        return {
+            activePlaybackContext,
+            stageSource,
+            hasTrack: Boolean(currentSong || lyrics),
+            song: currentSong ? { id: currentSong.id, name: currentSong.name } : null,
+            songArtist: getSongArtist(currentSong),
+            songAlbum: getSongAlbum(currentSong),
+            coverUrl: obsCoverUrl,
+            lyrics,
+            theme,
+            subtitleTheme,
+            isDaylight,
+            visualizerMode,
+            visualizerTunings,
+            background: resolvedBackground,
+            ...buildLegacyObsBrowserSourceBackgroundConfig(resolvedBackground),
+            lyricsFontScale,
+            visualizerOpacity,
+            subtitleOverlayOpacity,
+            subtitleOverlayBackground,
+            staticMode,
+            hideTranslationSubtitle,
+            showSubtitleTranslation,
+            seed,
+            cappellaCustomEmojiImages: obsCustomImages.cappellaEmoji,
+            cappellaCustomAvatarImages: obsCustomImages.cappellaAvatar,
+            monetPortraitImage: obsCustomImages.monetPortrait,
+            updatedAt: Date.now(),
+        };
+    }, [
         activePlaybackContext,
         background,
         currentSong,
