@@ -7,6 +7,7 @@ import LyricTimelineOffsetControl from './LyricTimelineOffsetControl';
 import { getLyricProviderLabel } from '../../utils/lyrics/lyricSourceLabels';
 import { getLocalSongs } from '../../services/db';
 import type { LocalSong } from '../../types';
+import { isLocalPlaybackSong } from '../../utils/appPlaybackGuards';
 
 interface LocalTabProps {
     currentSong: UnifiedSong;
@@ -42,17 +43,29 @@ const LocalTab: React.FC<LocalTabProps> = ({
     const { t } = useTranslation();
     const lrcInputRef = useRef<HTMLInputElement>(null);
 
-    const [localData, setLocalData] = useState<LocalSong | null>(null);
+    const [loadedLocalData, setLoadedLocalData] = useState<{
+        songId: string;
+        data: LocalSong | null;
+    } | null>(null);
     const localSongId = currentSong.localRef?.songId;
+    const isLocalSong = isLocalPlaybackSong(currentSong);
+    const isLocalDataLoading = Boolean(localSongId && loadedLocalData?.songId !== localSongId);
+    const localData = loadedLocalData && loadedLocalData.songId === localSongId
+        ? loadedLocalData.data
+        : null;
 
     useEffect(() => {
         let active = true;
-        setLocalData(null);
         if (!localSongId) {
             return;
         }
         void getLocalSongs().then(songs => {
-            if (active) setLocalData(songs.find(song => song.id === localSongId) || null);
+            if (active) {
+                setLoadedLocalData({
+                    songId: localSongId,
+                    data: songs.find(song => song.id === localSongId) || null,
+                });
+            }
         });
         return () => { active = false; };
     }, [localSongId]);
@@ -131,10 +144,18 @@ const LocalTab: React.FC<LocalTabProps> = ({
         return parts.length > 0 ? parts.join(' / ') : t('localMusic.replayGainUnavailable');
     }, [localData, t]);
 
-    if (!currentSong.isLocal || !localData) {
+    if (!isLocalSong) {
+        return <div className="min-h-96" aria-hidden="true" />;
+    }
+
+    if (isLocalDataLoading) {
+        return <div className="min-h-96" aria-busy="true" />;
+    }
+
+    if (!localData) {
         return (
-            <div className="flex items-center justify-center h-full opacity-60">
-                {t('localMusic.notALocalSong')}
+            <div className="flex min-h-96 items-center justify-center px-4 text-center opacity-60">
+                {t('status.localSongNotInLibrary')}
             </div>
         );
     }
@@ -143,7 +164,7 @@ const LocalTab: React.FC<LocalTabProps> = ({
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex flex-col space-y-6 pt-4 px-2"
+            className="flex min-h-96 flex-col space-y-6 pt-4 px-2"
         >
             {/* File Info */}
             <div className="space-y-3">
