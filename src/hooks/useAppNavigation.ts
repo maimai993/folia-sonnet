@@ -32,6 +32,7 @@ export type NavigationHistoryState = {
     view: ViewState;
     search?: { query: string; sourceTab: SearchSource; returnView?: SearchReturnView; } | null;
     collection?: CollectionNavigationSnapshot | null;
+    appHistoryIndex: number;
 };
 
 const LAST_APP_VIEW_KEY = 'last_app_view';
@@ -41,11 +42,23 @@ const buildHistoryState = (
     view: ViewState,
     search: NavigationHistoryState['search'] = null,
     collection: NavigationHistoryState['collection'] = null,
+    appHistoryIndex = 0,
 ): NavigationHistoryState => ({
     view,
     search,
     collection,
+    appHistoryIndex,
 });
+
+const getAppHistoryIndex = (state: unknown): number => {
+    if (!state || typeof state !== 'object') return 0;
+    const index = (state as Partial<NavigationHistoryState>).appHistoryIndex;
+    return typeof index === 'number' && Number.isFinite(index) && index >= 0 ? index : 0;
+};
+
+export const shouldNavigatePlayerBackThroughHistory = (
+    state: NavigationHistoryState | null,
+): boolean => state?.view === 'player' && getAppHistoryIndex(state) > 0;
 
 const getSearchHistorySnapshot = (): NavigationHistoryState['search'] => {
     const searchState = useSearchNavigationStore.getState();
@@ -104,7 +117,13 @@ export function useAppNavigation() {
         search?: NavigationHistoryState['search'];
         collection?: NavigationHistoryState['collection'];
     }) => {
-        const nextState = buildHistoryState(view, search, collection);
+        const currentHistoryIndex = getAppHistoryIndex(window.history.state);
+        const nextState = buildHistoryState(
+            view,
+            search,
+            collection,
+            replace ? currentHistoryIndex : currentHistoryIndex + 1,
+        );
         const method = replace ? window.history.replaceState.bind(window.history) : window.history.pushState.bind(window.history);
         method(nextState, '', hash ?? window.location.hash);
         restoreHistoryState(nextState);
@@ -190,6 +209,15 @@ export function useAppNavigation() {
             replace: true,
             hash: window.location.pathname + window.location.search,
         });
+    };
+
+    const navigateBackFromPlayer = () => {
+        const historyState = window.history.state as NavigationHistoryState | null;
+        if (shouldNavigatePlayerBackThroughHistory(historyState)) {
+            window.history.back();
+            return;
+        }
+        navigateDirectHome();
     };
 
     const navigateToSearch = ({
@@ -289,6 +317,7 @@ export function useAppNavigation() {
         setLocalMusicState,
         navigateToPlayer,
         navigateToHome,
+        navigateBackFromPlayer,
         navigateDirectHome,
         navigateToSearch,
         closeSearchView,

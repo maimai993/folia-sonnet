@@ -779,6 +779,7 @@ export default function App() {
         setLocalMusicState,
         navigateToPlayer,
         navigateToHome,
+        navigateBackFromPlayer,
         navigateDirectHome,
         navigateToSearch,
         closeSearchView,
@@ -2894,7 +2895,7 @@ export default function App() {
                         urlBackgroundList={urlBackgroundList}
                         urlBackgroundSelectedId={urlBackgroundSelectedId}
                         onLyricLineSeek={visualizerMode === 'monet' ? handleMonetLyricLineSeek : undefined}
-                        onBack={navigateToHome}
+                        onBack={navigateBackFromPlayer}
                     />
                 )}
             </div>
@@ -2907,7 +2908,7 @@ export default function App() {
                     lyricsFontScale={lyricsFontScale}
                     shouldHidePlayerTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
                     isDaylight={isDaylight}
-                    navigateToHome={navigateToHome}
+                    navigateToHome={navigateBackFromPlayer}
                 />
             )}
 

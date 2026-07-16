@@ -6,7 +6,7 @@ import { applyLocalSongMatchSelection } from '../../services/localSongMatchSelec
 import { buildLocalSongMetadataSearchTarget, normalizeLyricMatchMetadataCandidate } from '../../services/onlineMetadataSearchService';
 import { formatSongName } from '../../utils/songNameFormatter';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
-import { calculateMatchScoreDetails, normalizeLyricMatchText } from '../../utils/lyrics/matchScore';
+import { calculateMatchScoreDetails } from '../../utils/lyrics/matchScore';
 import { buildLyricSearchQuery } from '../../utils/lyrics/searchQuery';
 import { fetchLyricsForMatchSource, LYRIC_MATCH_SOURCES, searchLyricsByMatchSource, sourceSupportsManualSearch } from '../../utils/lyrics/lyricMatchSources';
 import { createSafeObjectUrl, isBlob } from '../../utils/blobGuards';
@@ -126,15 +126,6 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
         return t('localMusic.statusNone');
     }, [lyricsSource, song, t, source, selectedResult]);
 
-    // Title matching helpers
-    const normalizeTitle = (title: string): string => {
-        return normalizeLyricMatchText(title).replace(/\s+/g, '');
-    };
-
-    const isTitleMatch = (localTitle: string, searchTitle: string): boolean => {
-        return normalizeTitle(localTitle) === normalizeTitle(searchTitle);
-    };
-
     const runSearch = async (query: string, activeSource: LyricMatchSource) => {
         const q = sourceSupportsManualSearch(activeSource)
             ? query.trim()
@@ -151,15 +142,6 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             if (requestId !== searchRequestIdRef.current) return;
 
             setSearchResults(results);
-
-            const localTitle = song.title || song.fileName.replace(/\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i, '');
-            const exactMatch = results.find(s => isTitleMatch(localTitle, s.name));
-
-            if (exactMatch) {
-                setSelectedResult(exactMatch);
-            } else if (results.length > 0) {
-                setSelectedResult(results[0]);
-            }
         } catch (error) {
             console.error('Search failed:', error);
         } finally {
