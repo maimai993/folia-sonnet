@@ -37,7 +37,7 @@ interface ArtistGridViewProps {
     onSelectTrack?: (track: SongResult, queue: SongResult[]) => void;
     onAddTrackToQueue?: (track: SongResult) => void;
     onSelectAlbum?: (albumId: number | string, album?: any) => void;
-    onSelectArtist?: (artistId: number | string) => void;
+    onSelectArtist?: (artistId: number | string, artist?: any) => void;
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
     theme: Theme;

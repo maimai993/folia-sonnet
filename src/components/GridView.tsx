@@ -30,6 +30,10 @@ import {
 } from './folia-grid/progressiveGrid';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
 import { resolveGridViewContextTracks } from './folia-grid/gridViewContextActions';
+import {
+    resolveGridTrackAlbumTargetId,
+    resolveGridTrackArtistTargetId,
+} from './folia-grid/gridTrackNavigation';
 
 export interface GridViewSourceActions {
     local?: {
@@ -83,8 +87,8 @@ interface GridViewProps {
     collection?: any;
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
-    onSelectAlbum?: (albumId: number | string) => void;
-    onSelectArtist?: (artistId: number | string) => void;
+    onSelectAlbum?: (albumId: number | string, album?: any) => void;
+    onSelectArtist?: (artistId: number | string, artist?: any) => void;
     currentUserId?: number | null;
     onPlaylistMutated?: () => Promise<void> | void;
     externalTracks?: SongResult[];
@@ -128,8 +132,8 @@ export const PolaroidCard = React.memo<{
     cardHeight: number;
     isEditMode?: boolean;
     onRemoveTrack?: () => void;
-    onSelectArtist?: (artistId: number | string) => void;
-    onSelectAlbum?: (albumId: number | string) => void;
+    onSelectArtist?: (artistId: number | string, artist?: any) => void;
+    onSelectAlbum?: (albumId: number | string, album?: any) => void;
     onBeforeNestedNavigate?: () => void;
     onEditLocalMetadata?: () => void;
     openWhenFocusedOnCardClick?: boolean;
@@ -312,10 +316,13 @@ export const PolaroidCard = React.memo<{
                                                 key={`${artist.id ?? 'artist'}-${idx}-${artist.name}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    const artistTargetId = artist.entityId || artist.id;
-                                                    if (artistTargetId) {
+                                                    const artistTargetId = resolveGridTrackArtistTargetId(
+                                                        item.rawTrack,
+                                                        artist,
+                                                    );
+                                                    if (artistTargetId !== undefined && artistTargetId !== '') {
                                                         onBeforeNestedNavigate?.();
-                                                        onSelectArtist(artistTargetId);
+                                                        onSelectArtist(artistTargetId, artist);
                                                     }
                                                 }}
                                                 className="hover:underline hover:opacity-100 cursor-pointer text-current font-semibold"
@@ -339,13 +346,17 @@ export const PolaroidCard = React.memo<{
                                     <span
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            const albumTargetId = item.rawTrack?.al?.entityId
-                                                || item.rawTrack?.album?.entityId
-                                                || item.rawTrack?.al?.id
-                                                || item.rawTrack?.album?.id;
-                                            if (albumTargetId && onSelectAlbum) {
+                                            const albumTargetId = resolveGridTrackAlbumTargetId(item.rawTrack);
+                                            if (
+                                                albumTargetId !== undefined
+                                                && albumTargetId !== ''
+                                                && onSelectAlbum
+                                            ) {
                                                 onBeforeNestedNavigate?.();
-                                                onSelectAlbum(albumTargetId);
+                                                onSelectAlbum(
+                                                    albumTargetId,
+                                                    item.rawTrack?.al || item.rawTrack?.album,
+                                                );
                                             }
                                         }}
                                         className="text-[9px] opacity-35 font-mono line-clamp-2 whitespace-normal break-words max-w-full hover:underline hover:opacity-85 cursor-pointer"

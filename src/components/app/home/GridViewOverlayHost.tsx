@@ -314,15 +314,16 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         }
     }, [handlePushCollection, legacyProps.localSongs, localLibraryCatalog, selectedCollection]);
 
-    const handlePushArtistCollection = useCallback((artistId: number | string) => {
+    const handlePushArtistCollection = useCallback((artistId: number | string, artist?: any) => {
         if (!selectedCollection) return;
 
         const source = selectedCollection.source;
+        const artistName = artist?.name || String(artistId);
         if (source === 'netease') {
             handlePushCollection({
                 source: 'netease',
                 id: Number(artistId),
-                name: String(artistId),
+                name: artistName,
                 type: 'artist',
             });
             return;
@@ -331,7 +332,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             handlePushCollection({
                 source: 'navidrome',
                 id: String(artistId),
-                name: String(artistId),
+                name: artistName,
                 type: 'artist',
             });
             return;
@@ -345,7 +346,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         const artistEntity = activeEntityId
             ? catalogIndex.entitiesById.get(activeEntityId)
             : localLibraryCatalog.entities.find(entity => (
-                entity.kind === 'artist' && !entity.mergedInto && entity.displayName === String(artistId)
+                entity.kind === 'artist' && !entity.mergedInto && entity.displayName === artistName
             ));
         if (!artistEntity) return;
         const memberIds = new Set(localLibraryCatalog.assignments
