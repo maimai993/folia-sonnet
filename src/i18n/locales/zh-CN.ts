@@ -360,6 +360,8 @@ export default {
     "tracks": "首歌曲",
     "plays": "次播放",
     "playAll": "播放全部",
+    "playFilteredTracks": "播放{{count}}首",
+    "addFilteredTracksToQueue": "加入{{count}}首到播放队列",
     "loadMore": "加载更多",
     "headerTitle": "标题",
     "headerTime": "时长",

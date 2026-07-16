@@ -29,6 +29,7 @@ import {
     GRID_INITIAL_BATCH_SIZE,
 } from './folia-grid/progressiveGrid';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
+import { resolveGridViewContextTracks } from './folia-grid/gridViewContextActions';
 
 export interface GridViewSourceActions {
     local?: {
@@ -104,6 +105,7 @@ const GRID_VIEW_NAVIGATION_PREFIX = 'folia_gridview_state';
 const GRID_VIEW_LAST_INDEX_PREFIX = 'folia_gridview_last_index';
 const GRID_VIEW_RENDER_BUFFER_FACTOR = 0.75;
 const GRID_VIEW_CARD_VISIBILITY_BUFFER = 96;
+const GRID_SEARCH_DEBOUNCE_MS = 80;
 const TRACK_REMOVAL_ANIMATION_MS = 460;
 const TRACK_REMOVAL_BEZIER = [0.22, 0.8, 0.24, 1] as const;
 
@@ -668,7 +670,18 @@ export const GridView: React.FC<GridViewProps> = ({
     const [showSearchPanel, setShowSearchPanel] = useState(false);
     const [draftSearchQuery, setDraftSearchQuery] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    const deferredSearchQuery = useDeferredValue(searchQuery);
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+    const deferredSearchQuery = useDeferredValue(debouncedSearchQuery);
+
+    useEffect(() => {
+        if (searchQuery === debouncedSearchQuery) return;
+
+        const timeout = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, GRID_SEARCH_DEBOUNCE_MS);
+
+        return () => clearTimeout(timeout);
+    }, [debouncedSearchQuery, searchQuery]);
 
     // Keeps a successfully removed card mounted until its flip-and-fade transition finishes.
     const commitAfterTrackRemovalAnimation = useCallback((trackKey: string, commit: () => void) => {
@@ -1311,6 +1324,10 @@ export const GridView: React.FC<GridViewProps> = ({
             return searchableText.includes(query);
         });
     }, [allGridItems, deferredSearchQuery]);
+    const hasSearchQuery = deferredSearchQuery.trim().length > 0;
+    const contextActionTracks = useMemo(() => (
+        resolveGridViewContextTracks(gridItems, playableTracks, hasSearchQuery)
+    ), [gridItems, hasSearchQuery, playableTracks]);
     const shouldAnimateItemEntrance = useProgressiveItemEntrance(
         `${mode}:${String(collection?.source ?? '')}:${String(collection?.id ?? title)}`
     );
@@ -1839,7 +1856,6 @@ export const GridView: React.FC<GridViewProps> = ({
         backgroundLoading
     );
     const showLoading = progressiveLoading.initialLoading;
-    const hasSearchQuery = deferredSearchQuery.trim().length > 0;
 
     const coverUrl = neteaseAlbumInfo?.picUrl || collection?.coverImgUrl || collection?.coverUrl || collection?.picUrl || '';
     const infoPanelCoverUrl = collection?.coverImgUrl || collection?.coverUrl || collection?.picUrl || neteaseAlbumInfo?.picUrl || '';
@@ -2226,28 +2242,32 @@ export const GridView: React.FC<GridViewProps> = ({
                             >
                                 <button
                                     onClick={() => {
-                                        if (onPlayAll && playableTracks.length > 0) {
-                                            onPlayAll(playableTracks);
+                                        if (onPlayAll && contextActionTracks.length > 0) {
+                                            onPlayAll(contextActionTracks);
                                         }
                                     }}
-                                    disabled={playableTracks.length === 0}
+                                    disabled={contextActionTracks.length === 0}
                                     className="w-full py-3 rounded-full font-bold text-xs transition-transform hover:scale-102 active:scale-98 flex items-center justify-center gap-1.5 shadow-md disabled:opacity-40 disabled:hover:scale-100 cursor-pointer"
                                     style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-color)' }}
                                 >
                                     <Play size={14} fill="currentColor" />
-                                    {t('playlist.playAll')}
+                                    {hasSearchQuery
+                                        ? t('playlist.playFilteredTracks', { count: contextActionTracks.length })
+                                        : t('playlist.playAll')}
                                 </button>
                                 <button
                                     onClick={() => {
-                                        if (onAddAllToQueue && playableTracks.length > 0) {
-                                            onAddAllToQueue(playableTracks);
+                                        if (onAddAllToQueue && contextActionTracks.length > 0) {
+                                            onAddAllToQueue(contextActionTracks);
                                         }
                                     }}
-                                    disabled={playableTracks.length === 0}
+                                    disabled={contextActionTracks.length === 0}
                                     className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
                                 >
                                     <ListPlus size={14} />
-                                    {t('navidrome.addToQueue')}
+                                    {hasSearchQuery
+                                        ? t('playlist.addFilteredTracksToQueue', { count: contextActionTracks.length })
+                                        : t('navidrome.addToQueue')}
                                 </button>
                                 {canAddNavidromeToPlaylist && (
                                     <button

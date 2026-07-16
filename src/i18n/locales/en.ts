@@ -359,6 +359,8 @@ export default {
     "tracks": "Tracks",
     "plays": "Plays",
     "playAll": "Play All",
+    "playFilteredTracks": "Play {{count}} songs",
+    "addFilteredTracksToQueue": "Add {{count}} songs to queue",
     "loadMore": "Load More",
     "headerTitle": "Title",
     "headerTime": "Time",
