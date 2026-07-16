@@ -39,6 +39,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     toggleBottomSubtitleOverlay: vi.fn(),
     showSubtitleTranslation: true,
     toggleSubtitleTranslation: vi.fn(),
+    subtitleOverlayBackground: false,
+    toggleSubtitleOverlayBackground: vi.fn(),
     toggleDaylightMode: vi.fn(),
     setAppLanguagePreference: vi.fn(async () => undefined),
     enableAlternativeLyricSources: false,
@@ -174,6 +176,11 @@ describe('command palette registry', () => {
         expect(matchSubtitleTranslation.command.id).toBe('settings-toggle-subtitle-translation');
         matchSubtitleTranslation.command.execute(matchSubtitleTranslation.input, context);
         expect(context.toggleSubtitleTranslation).toHaveBeenCalled();
+
+        const [matchSubtitleBackground] = getCommandPaletteMatches('字幕背景');
+        expect(matchSubtitleBackground.command.id).toBe('settings-toggle-subtitle-background');
+        matchSubtitleBackground.command.execute(matchSubtitleBackground.input, context);
+        expect(context.toggleSubtitleOverlayBackground).toHaveBeenCalled();
     });
 
     it('executes the current song AI theme generation command', () => {

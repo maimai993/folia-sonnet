@@ -629,6 +629,37 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
             return true;
         },
     },
+    {
+        id: 'settings-toggle-subtitle-background',
+        group: 'settings',
+        title: 'Toggle subtitle background',
+        description: 'Show or hide the readability background behind visualizer subtitles',
+        keywords: [
+            'subtitle background',
+            'subtitle readability background',
+            'caption background',
+            'show subtitle background',
+            'hide subtitle background',
+            '字幕背景',
+            '切换字幕背景',
+            '显示字幕背景',
+            '隐藏字幕背景',
+            '字幕底色',
+            'zimu beijing',
+            'qiehuan zimu beijing',
+            'xianshi zimu beijing',
+            'yincang zimu beijing',
+            'zimu dise',
+            'zmbj',
+            'qhzmbj',
+            'xszmbj',
+            'yczmbj',
+        ],
+        execute: (_input, context) => {
+            context.toggleSubtitleOverlayBackground();
+            return true;
+        },
+    },
     createAppLanguageCommand('settings-language-system', 'system', 'Follow system language', 'Use the browser or system language', ['system language', 'follow system', 'auto language', '跟随系统', '系统语言', 'gensuixitong', 'xitongyuyan', 'gsxt', 'xtyy']),
     createAppLanguageCommand('settings-language-zh-CN', 'zh-CN', 'Switch language to Chinese', 'Use Simplified Chinese in the interface', ['chinese', 'simplified chinese', '中文', '简体中文', 'zhongwen', 'jiantizhongwen', 'zw', 'jtzw']),
     createAppLanguageCommand('settings-language-en', 'en', 'Switch language to English', 'Use English in the interface', ['english', 'interface english', '英文', 'yingwen', 'yw']),

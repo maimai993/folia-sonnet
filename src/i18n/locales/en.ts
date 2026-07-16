@@ -268,6 +268,7 @@ export default {
       "settings-toggle-daylight": { "title": "Toggle light/dark", "description": "Toggle theme daylight/midnight mode" },
       "settings-toggle-bottom-subtitle-overlay": { "title": "Toggle bottom subtitle overlay", "description": "Show or hide the whole bottom subtitle overlay" },
       "settings-toggle-subtitle-translation": { "title": "Toggle subtitle translation", "description": "Show or hide translation text in visualizer subtitles" },
+      "settings-toggle-subtitle-background": { "title": "Toggle subtitle background", "description": "Show or hide the readability background behind visualizer subtitles" },
       "settings-language-system": { "title": "Follow system language", "description": "Use the browser or system language" },
       "settings-language-zh-CN": { "title": "Switch language to Chinese", "description": "Use Simplified Chinese in the interface" },
       "settings-language-en": { "title": "Switch language to English", "description": "Use English in the interface" },

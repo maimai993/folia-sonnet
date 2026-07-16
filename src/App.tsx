@@ -366,6 +366,7 @@ export default function App() {
         handleToggleHidePlayerProgressBar,
         handleToggleHidePlayerTranslationSubtitle,
         handleToggleShowSubtitleTranslation,
+        handleToggleSubtitleOverlayBackground,
         handleToggleHidePlayerRightPanelButton,
         handleToggleTransparentPlayerBackground,
         handleToggleDisableVisualizerVignette,
@@ -1771,6 +1772,10 @@ export default function App() {
         toggleSubtitleTranslation: () => {
             handleToggleShowSubtitleTranslation(!showSubtitleTranslation);
         },
+        subtitleOverlayBackground,
+        toggleSubtitleOverlayBackground: () => {
+            handleToggleSubtitleOverlayBackground(!subtitleOverlayBackground);
+        },
         enablePlayerPageNativeBlur,
         toggleDaylightMode,
         setAppLanguagePreference: handleSetAppLanguagePreference,
@@ -1820,7 +1825,9 @@ export default function App() {
         toggleTransparentModeWithHandoff,
         toggleDaylightMode,
         showSubtitleTranslation,
+        subtitleOverlayBackground,
         handleToggleAlternativeLyricSources,
+        handleToggleSubtitleOverlayBackground,
         setIsUserGuideModalOpen,
         openThemeQuickEditor,
         canOpenThemeQuickEditor,

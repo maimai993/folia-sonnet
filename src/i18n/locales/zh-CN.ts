@@ -269,6 +269,7 @@ export default {
       "settings-toggle-daylight": { "title": "切换明暗", "description": "切换主题日夜模式" },
       "settings-toggle-bottom-subtitle-overlay": { "title": "切换底部字幕层", "description": "显示或隐藏整个底部字幕层" },
       "settings-toggle-subtitle-translation": { "title": "切换字幕翻译", "description": "显示或隐藏歌词动画中的翻译文本" },
+      "settings-toggle-subtitle-background": { "title": "切换字幕背景", "description": "显示或隐藏提升字幕可读性的背景" },
       "settings-language-system": { "title": "跟随系统语言", "description": "使用浏览器或系统语言" },
       "settings-language-zh-CN": { "title": "切换为中文", "description": "界面使用简体中文" },
       "settings-language-en": { "title": "切换为英文", "description": "界面使用 English" },

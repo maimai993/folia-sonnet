@@ -85,12 +85,12 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
     });
     const resolvedOpacity = subtitleOverlayOpacity ?? opacity;
     const contentClassName = subtitleOverlayBackground
-        ? 'inline-block rounded-full px-1 py-0'
+        ? 'inline-block rounded px-1.5 py-0.5'
         : 'inline-block';
     const contentStyle = subtitleOverlayBackground
         ? {
-            backgroundColor: colorWithAlpha(theme.backgroundColor, 0.72),
-            boxShadow: `0 0 28px 10px ${colorWithAlpha(theme.backgroundColor, 0.72)}`,
+            backgroundColor: colorWithAlpha(theme.backgroundColor, 0.8),
+            boxShadow: `0 0 20px 5px ${colorWithAlpha(theme.backgroundColor, 0.8)}`,
         }
         : undefined;
     const textShadow = `0 1px 2px ${colorWithAlpha(theme.backgroundColor, 0.24)}`;
