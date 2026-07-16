@@ -830,19 +830,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         }
     };
 
-    const handleResetBackgroundSettings = () => {
-        setDraftBackgroundOpacity(0.75);
-        backgroundActions?.common?.onOpacityChange?.(0.75);
-        backgroundActions?.common?.onCoverColorChange?.(false);
-        backgroundActions?.common?.onDisableVignetteChange?.(false);
-        backgroundActions?.common?.onDisableGeometricChange?.(false);
-        backgroundActions?.onResetMode?.();
-        setDraftMonetBackgroundTuning(DEFAULT_MONET_BACKGROUND_TUNING);
-        backgroundActions?.monet?.onResetTuning?.();
-        backgroundActions?.nomand?.onResetTuning?.();
-        backgroundActions?.onResetAll?.();
-    };
-
     const handleResetSubtitleSettings = () => {
         setDraftSubtitleOverlayOpacity(0.6);
         onToggleHideTranslationSubtitle?.(false);
@@ -889,7 +876,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     };
     const draftBackgroundActions: VisualizerBackgroundActions = {
         ...backgroundActions,
-        onResetAll: handleResetBackgroundSettings,
         common: {
             ...backgroundActions?.common,
             onOpacityChange: handleBackgroundOpacityDraft,
@@ -897,6 +883,10 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         monet: {
             ...backgroundActions?.monet,
             onTuningChange: handleMonetBackgroundTuningDraft,
+            onResetTuning: () => {
+                setDraftMonetBackgroundTuning(DEFAULT_MONET_BACKGROUND_TUNING);
+                backgroundActions?.monet?.onResetTuning?.();
+            },
         },
     };
 

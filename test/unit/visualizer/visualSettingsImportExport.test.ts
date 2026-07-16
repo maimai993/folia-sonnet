@@ -106,6 +106,8 @@ describe('Visual Settings Import and Export', () => {
             colorSteps: 3,
             originalColors: false,
             inverted: true,
+            overlayEnabled: true,
+            overlayOpacity: 0.45,
         },
         monetTuning: {
             keywordColoringEnabled: false,
@@ -177,6 +179,24 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.theme?.dark.accentColor).toBe('#fbbf24');
         expect(decoded.songThemeAutoSwitchEnabled).toBe(true);
         expect(decoded.songThemeAutoGenerateEnabled).toBe(true);
+    });
+
+    it('migrates the removed Nomand random dithering option to 8x8', () => {
+        const encoded = compressConfig({
+            nomandBackgroundTuning: {
+                imageSource: 'cover-derived',
+                ditheringType: 'random',
+                size: 2,
+                colorSteps: 2,
+                originalColors: false,
+                inverted: false,
+            },
+        });
+        const decoded = decompressConfig(encoded);
+
+        expect(decoded.nomandBackgroundTuning.ditheringType).toBe('8x8');
+        expect(decoded.nomandBackgroundTuning.overlayEnabled).toBe(true);
+        expect(decoded.nomandBackgroundTuning.overlayOpacity).toBe(0.35);
     });
 
     it('gracefully throws error on invalid configuration input strings', () => {

@@ -514,7 +514,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         group: 'visualizer',
         title: 'Background: Nomand',
         description: 'Switch background to theme-colored image dithering',
-        keywords: ['nomand', 'dithering', 'dither', 'shader background', '抖动背景', '网点背景', '主题色背景', 'dou dong bei jing', 'wang dian bei jing', 'ddbj', 'wdbj'],
+        keywords: ['nomand', 'dithering', 'dither', 'shader background', '漫游', '像素画', '像素画背景', '抖动背景', '网点背景', '主题色背景', 'man you', 'xiang su hua', 'dou dong bei jing', 'wang dian bei jing', 'my', 'xsh', 'ddbj', 'wdbj'],
         execute: (_input, context) => {
             context.setVisualizerBackgroundMode('nomand');
             return true;

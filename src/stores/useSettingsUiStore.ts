@@ -583,15 +583,19 @@ const resolveNomandBackgroundSource = (value: NomandBackgroundSource | undefined
 );
 
 const resolveNomandDitheringType = (
-    value: NomandBackgroundDitheringType | undefined,
+    value: unknown,
 ): NomandBackgroundDitheringType => (
-    value === 'random' || value === '2x2' || value === '4x4' || value === '8x8'
+    value === '2x2' || value === '4x4' || value === '8x8'
         ? value
         : DEFAULT_NOMAND_BACKGROUND_TUNING.ditheringType
 );
 
+type StoredNomandBackgroundTuningInput = Omit<Partial<NomandBackgroundTuning>, 'ditheringType'> & {
+    ditheringType?: unknown;
+};
+
 export const resolveStoredNomandBackgroundTuning = (
-    parsed: Partial<NomandBackgroundTuning>,
+    parsed: StoredNomandBackgroundTuningInput,
 ): NomandBackgroundTuning => ({
     imageSource: resolveNomandBackgroundSource(parsed.imageSource),
     ditheringType: resolveNomandDitheringType(parsed.ditheringType),
@@ -599,6 +603,14 @@ export const resolveStoredNomandBackgroundTuning = (
     colorSteps: Math.min(7, Math.max(1, Math.round(Number.isFinite(parsed.colorSteps) ? parsed.colorSteps! : DEFAULT_NOMAND_BACKGROUND_TUNING.colorSteps))),
     originalColors: parsed.originalColors ?? DEFAULT_NOMAND_BACKGROUND_TUNING.originalColors,
     inverted: parsed.inverted ?? DEFAULT_NOMAND_BACKGROUND_TUNING.inverted,
+    overlayEnabled: typeof parsed.overlayEnabled === 'boolean'
+        ? parsed.overlayEnabled
+        : DEFAULT_NOMAND_BACKGROUND_TUNING.overlayEnabled,
+    overlayOpacity: Math.min(1, Math.max(0,
+        Number.isFinite(parsed.overlayOpacity)
+            ? parsed.overlayOpacity!
+            : DEFAULT_NOMAND_BACKGROUND_TUNING.overlayOpacity
+    )),
 });
 
 const readStoredNomandBackgroundTuning = (): NomandBackgroundTuning => {

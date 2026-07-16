@@ -374,7 +374,7 @@ describe('command palette registry', () => {
         matchCommon.command.execute('', context);
         expect(context.setVisualizerBackgroundMode).toHaveBeenCalledWith('common');
 
-        const [matchNomand] = getCommandPaletteMatches('抖动背景');
+        const [matchNomand] = getCommandPaletteMatches('像素画');
         expect(matchNomand.command.id).toBe('background-nomand');
         matchNomand.command.execute('', context);
         expect(context.setVisualizerBackgroundMode).toHaveBeenCalledWith('nomand');

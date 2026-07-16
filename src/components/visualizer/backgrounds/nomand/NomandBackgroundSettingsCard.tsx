@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { RotateCcw, Trash2, Upload } from 'lucide-react';
+import { Trash2, Upload } from 'lucide-react';
 import type { MonetBackgroundImage, NomandBackgroundDitheringType, NomandBackgroundSource, NomandBackgroundTuning, Theme } from '../../../../types';
 import { colorWithAlpha } from '../../colorMix';
+import BackgroundToggleRow from '../BackgroundToggleRow';
 
 // src/components/visualizer/backgrounds/nomand/NomandBackgroundSettingsCard.tsx
 // Edits the Paper dithering background while reusing the shared custom background image asset.
@@ -14,14 +15,15 @@ interface NomandBackgroundSettingsCardProps {
     rangeInputClass: string;
     tuning: NomandBackgroundTuning;
     onTuningChange?: (patch: Partial<NomandBackgroundTuning>) => void;
-    onResetTuning?: () => void;
     monetBackgroundImage?: MonetBackgroundImage | null;
     onUploadMonetBackgroundImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearMonetBackgroundImage?: () => Promise<void> | void;
     isLoadingMonetBackgroundImage?: boolean;
+    onSliderPointerDown?: () => void;
+    onSliderCommit?: () => void;
 }
 
-const DITHERING_TYPES: NomandBackgroundDitheringType[] = ['random', '2x2', '4x4', '8x8'];
+const DITHERING_TYPES: NomandBackgroundDitheringType[] = ['2x2', '4x4', '8x8'];
 
 const NomandBackgroundSettingsCard: React.FC<NomandBackgroundSettingsCardProps> = ({
     t,
@@ -31,11 +33,12 @@ const NomandBackgroundSettingsCard: React.FC<NomandBackgroundSettingsCardProps> 
     rangeInputClass,
     tuning,
     onTuningChange,
-    onResetTuning,
     monetBackgroundImage,
     onUploadMonetBackgroundImage,
     onClearMonetBackgroundImage,
     isLoadingMonetBackgroundImage = false,
+    onSliderPointerDown,
+    onSliderCommit,
 }) => {
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [feedback, setFeedback] = useState('');
@@ -55,24 +58,13 @@ const NomandBackgroundSettingsCard: React.FC<NomandBackgroundSettingsCardProps> 
 
     return (
         <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor }}>
-            <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                    <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
-                        {t('options.nomandBackgroundSettings')}
-                    </div>
-                    <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
-                        {t('options.nomandBackgroundSettingsDesc')}
-                    </div>
+            <div className="space-y-1">
+                <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
+                    {t('options.nomandBackgroundSettings')}
                 </div>
-                <button
-                    type="button"
-                    onClick={onResetTuning}
-                    className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs"
-                    style={{ borderColor, color: theme.secondaryColor }}
-                >
-                    <RotateCcw size={13} />
-                    {t('ui.default')}
-                </button>
+                <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
+                    {t('options.nomandBackgroundSettingsDesc')}
+                </div>
             </div>
 
             <div className="space-y-2">
@@ -141,7 +133,7 @@ const NomandBackgroundSettingsCard: React.FC<NomandBackgroundSettingsCardProps> 
                 <div className="text-sm" style={{ color: theme.primaryColor }}>
                     {t('options.nomandBackgroundDitheringType')}
                 </div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                     {DITHERING_TYPES.map(type => (
                         <button
                             key={type}
@@ -160,6 +152,34 @@ const NomandBackgroundSettingsCard: React.FC<NomandBackgroundSettingsCardProps> 
                 </div>
             </div>
 
+            <div className="space-y-3 rounded-2xl border p-3" style={{ borderColor }}>
+                <BackgroundToggleRow
+                    label={t('options.nomandBackgroundOverlay')}
+                    description={t('options.nomandBackgroundOverlayDesc')}
+                    checked={tuning.overlayEnabled}
+                    onChange={overlayEnabled => onTuningChange?.({ overlayEnabled })}
+                    theme={theme}
+                />
+                <label className={`block space-y-2 ${tuning.overlayEnabled ? '' : 'opacity-45'}`}>
+                    <span className="flex justify-between text-sm" style={{ color: theme.primaryColor }}>
+                        <span>{t('options.nomandBackgroundOverlayOpacity')}</span>
+                        <span className="font-mono opacity-70">{Math.round(tuning.overlayOpacity * 100)}%</span>
+                    </span>
+                    <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={tuning.overlayOpacity}
+                        disabled={!tuning.overlayEnabled}
+                        onChange={event => onTuningChange?.({ overlayOpacity: Number(event.target.value) })}
+                        onPointerDown={onSliderPointerDown}
+                        onPointerUp={onSliderCommit}
+                        className={rangeInputClass}
+                    />
+                </label>
+            </div>
+
             <label className="block space-y-2">
                 <span className="flex justify-between text-sm" style={{ color: theme.primaryColor }}>
                     <span>{t('options.nomandBackgroundSize')}</span>
@@ -172,6 +192,8 @@ const NomandBackgroundSettingsCard: React.FC<NomandBackgroundSettingsCardProps> 
                     step="0.5"
                     value={tuning.size}
                     onChange={event => onTuningChange?.({ size: Number(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </label>
@@ -188,6 +210,8 @@ const NomandBackgroundSettingsCard: React.FC<NomandBackgroundSettingsCardProps> 
                     step="1"
                     value={tuning.colorSteps}
                     onChange={event => onTuningChange?.({ colorSteps: Number(event.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
                     className={rangeInputClass}
                 />
             </label>
@@ -196,16 +220,13 @@ const NomandBackgroundSettingsCard: React.FC<NomandBackgroundSettingsCardProps> 
                 ['originalColors', t('options.nomandBackgroundOriginalColors')],
                 ['inverted', t('options.nomandBackgroundInverted')],
             ] as const).map(([key, label]) => (
-                <label key={key} className="flex items-center justify-between gap-3">
-                    <span className="text-sm" style={{ color: theme.primaryColor }}>{label}</span>
-                    <input
-                        type="checkbox"
-                        checked={tuning[key]}
-                        onChange={event => onTuningChange?.({ [key]: event.target.checked })}
-                        className="h-4 w-4 accent-current"
-                        style={{ color: theme.accentColor }}
-                    />
-                </label>
+                <BackgroundToggleRow
+                    key={key}
+                    label={label}
+                    checked={tuning[key]}
+                    onChange={checked => onTuningChange?.({ [key]: checked })}
+                    theme={theme}
+                />
             ))}
         </div>
     );

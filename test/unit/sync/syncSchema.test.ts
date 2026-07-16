@@ -73,6 +73,8 @@ describe('sync schema parsing', () => {
                     ditheringType: '8x8',
                     size: 2,
                     colorSteps: 2,
+                    overlayEnabled: true,
+                    overlayOpacity: 0.35,
                 },
             },
         });
@@ -83,6 +85,8 @@ describe('sync schema parsing', () => {
             ditheringType: '8x8',
             size: 2,
             colorSteps: 2,
+            overlayEnabled: true,
+            overlayOpacity: 0.35,
         });
     });
 

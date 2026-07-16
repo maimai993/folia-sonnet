@@ -523,7 +523,7 @@ export type MonetBackgroundSource = 'cover-derived' | 'uploaded-global';
 export type MonetBackgroundLayout = 'full-overlay' | 'half-pane-gradient';
 export type MonetBackgroundWashColorMode = 'theme' | 'custom';
 export type NomandBackgroundSource = 'cover-derived' | 'uploaded-global';
-export type NomandBackgroundDitheringType = 'random' | '2x2' | '4x4' | '8x8';
+export type NomandBackgroundDitheringType = '2x2' | '4x4' | '8x8';
 export type MonetAudioStyle = 'bar' | 'line';
 export type MonetPortraitSource = 'cover' | 'custom';
 export type BuiltinVisualizerBackgroundMode = 'common' | 'monet' | 'nomand' | 'url' | 'sora';
@@ -555,6 +555,8 @@ export interface NomandBackgroundTuning {
   colorSteps: number;
   originalColors: boolean;
   inverted: boolean;
+  overlayEnabled: boolean;
+  overlayOpacity: number;
 }
 
 export interface MonetTuning {
@@ -588,6 +590,8 @@ export const DEFAULT_NOMAND_BACKGROUND_TUNING: NomandBackgroundTuning = {
   colorSteps: 2,
   originalColors: false,
   inverted: false,
+  overlayEnabled: true,
+  overlayOpacity: 0.35,
 };
 
 export const DEFAULT_MONET_TUNING: MonetTuning = {

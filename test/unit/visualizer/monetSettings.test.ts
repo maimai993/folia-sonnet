@@ -125,13 +125,17 @@ describe('Monet tuning and lyric helpers', () => {
             colorSteps: -4,
             originalColors: true,
             inverted: true,
+            overlayEnabled: false,
+            overlayOpacity: 4,
         })).toEqual({
             imageSource: 'uploaded-global',
-            ditheringType: 'random',
+            ditheringType: '8x8',
             size: 20,
             colorSteps: 1,
             originalColors: true,
             inverted: true,
+            overlayEnabled: false,
+            overlayOpacity: 1,
         });
 
         expect(resolveStoredNomandBackgroundTuning({

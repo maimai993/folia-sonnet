@@ -184,7 +184,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
         handleSetVisualizerOpacity: setVisualizerOpacity,
         handleSetVisualizerBackgroundMode: onVisualizerBackgroundModeChange,
-        handleResetVisualizerBackgroundMode: onResetVisualizerBackgroundMode,
         handleSetVisualizerMode: onVisualizerModeChange,
         handleSetClassicTuning: onClassicTuningChange,
         handleResetClassicTuning: onResetClassicTuning,
@@ -2297,7 +2296,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                         backgroundActions={{
                             onModeChange: onVisualizerBackgroundModeChange,
-                            onResetMode: onResetVisualizerBackgroundMode,
                             common: {
                                 onCoverColorChange: onToggleCoverColorBg,
                                 onOpacityChange: setBackgroundOpacity,

@@ -470,7 +470,9 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 </div>
                                 <ResetSectionButton
                                     label={t('ui.default')}
-                                    onClick={backgroundActions?.onResetAll}
+                                    onClick={backgroundEntry.resetSettings
+                                        ? () => backgroundEntry.resetSettings?.(backgroundActions)
+                                        : undefined}
                                     theme={theme}
                                 />
                             </div>

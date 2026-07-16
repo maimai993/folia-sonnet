@@ -64,4 +64,10 @@ export default defineVisualizerBackground({
         );
     },
     renderSettingsPanel: props => <CommonBackgroundSettingsCard {...props} />,
+    resetSettings: actions => {
+        actions?.common?.onOpacityChange?.(0.75);
+        actions?.common?.onCoverColorChange?.(false);
+        actions?.common?.onDisableVignetteChange?.(false);
+        actions?.common?.onDisableGeometricChange?.(false);
+    },
 });

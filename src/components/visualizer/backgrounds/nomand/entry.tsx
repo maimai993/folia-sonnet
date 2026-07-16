@@ -25,11 +25,11 @@ export default defineVisualizerBackground({
             {...props}
             tuning={config?.nomand?.tuning ?? DEFAULT_NOMAND_BACKGROUND_TUNING}
             onTuningChange={actions?.nomand?.onTuningChange}
-            onResetTuning={actions?.nomand?.onResetTuning}
             monetBackgroundImage={config?.customImage}
             onUploadMonetBackgroundImage={actions?.customImage?.onUpload}
             onClearMonetBackgroundImage={actions?.customImage?.onClear}
             isLoadingMonetBackgroundImage={actions?.customImage?.isLoading}
         />
     ),
+    resetSettings: actions => actions?.nomand?.onResetTuning?.(),
 });

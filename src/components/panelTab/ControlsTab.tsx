@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Repeat, Repeat1, RepeatOff, Heart, Sparkles, Sparkle, ArrowUpDown, Check, RefreshCw, Cone, Sun, Moon, Settings, Volume2, Volume1, VolumeX } from 'lucide-react';
+import { Repeat, Repeat1, RepeatOff, Heart, Sparkles, Sparkle, ArrowUpDown, Check, RefreshCw, Cone, Layers, Sun, Moon, Settings, Volume2, Volume1, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Theme, ThemeMode, VisualizerMode } from '../../types';
 import type { ThemeSourceModel } from '../../hooks/themeControllerState';
@@ -81,6 +81,8 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     const visualizerBackgroundMode = useSettingsUiStore(state => state.visualizerBackgroundMode);
     const monetBackgroundTuning = useSettingsUiStore(state => state.monetBackgroundTuning);
     const setMonetBackgroundTuning = useSettingsUiStore(state => state.handleSetMonetBackgroundTuning);
+    const nomandBackgroundTuning = useSettingsUiStore(state => state.nomandBackgroundTuning);
+    const setNomandBackgroundTuning = useSettingsUiStore(state => state.handleSetNomandBackgroundTuning);
     const [sliderVolume, setSliderVolume] = useState(isMuted ? 0 : volume);
     const [isVisualizerOverlayOpen, setIsVisualizerOverlayOpen] = useState(false);
     const [themeSyncState, setThemeSyncState] = useState<'idle' | 'syncing' | 'complete'>('idle');
@@ -414,6 +416,20 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                                         aria-pressed={isMonetFullOverlay}
                                     >
                                         {monetLayoutLabel}
+                                    </button>
+                                )}
+                                {resolvedVisualizerBackgroundMode === 'nomand' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setNomandBackgroundTuning({
+                                            overlayEnabled: !nomandBackgroundTuning.overlayEnabled,
+                                        })}
+                                        className={`p-1 rounded-md transition-all ${nomandBackgroundTuning.overlayEnabled ? 'text-blue-400' : 'opacity-40 hover:opacity-100'}`}
+                                        title={t('options.nomandBackgroundOverlay')}
+                                        aria-label={t('options.nomandBackgroundOverlay')}
+                                        aria-pressed={nomandBackgroundTuning.overlayEnabled}
+                                    >
+                                        <Layers size={14} />
                                     </button>
                                 )}
                             </div>

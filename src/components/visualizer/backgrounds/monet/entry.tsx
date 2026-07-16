@@ -49,4 +49,5 @@ export default defineVisualizerBackground({
             onSliderCommit={onSliderCommit}
         />
     ),
+    resetSettings: actions => actions?.monet?.onResetTuning?.(),
 });

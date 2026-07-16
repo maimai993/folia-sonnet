@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     DEFAULT_VISUALIZER_BACKGROUND_MODE,
     VISUALIZER_BACKGROUND_REGISTRY,
@@ -37,5 +37,18 @@ describe('visualizer background registry', () => {
 
     it('uses label fallback when translation is missing', () => {
         expect(getVisualizerBackgroundModeLabel('nomand', key => key)).toBe('Nomand');
+    });
+
+    it('resets only the active background settings without changing its mode', () => {
+        const onModeChange = vi.fn();
+        const onResetTuning = vi.fn();
+
+        getVisualizerBackgroundRegistryEntry('nomand').resetSettings?.({
+            onModeChange,
+            nomand: { onResetTuning },
+        });
+
+        expect(onResetTuning).toHaveBeenCalledOnce();
+        expect(onModeChange).not.toHaveBeenCalled();
     });
 });

@@ -236,14 +236,20 @@ const compressNomandBackground = (t: any): any => ({
     cs: t.colorSteps,
     oc: t.originalColors,
     i: t.inverted,
+    oe: t.overlayEnabled,
+    oo: t.overlayOpacity,
 });
 const decompressNomandBackground = (o: any): any => ({
     imageSource: o.is || DEFAULT_NOMAND_BACKGROUND_TUNING.imageSource,
-    ditheringType: o.dt || DEFAULT_NOMAND_BACKGROUND_TUNING.ditheringType,
+    ditheringType: o.dt === '2x2' || o.dt === '4x4' || o.dt === '8x8'
+        ? o.dt
+        : DEFAULT_NOMAND_BACKGROUND_TUNING.ditheringType,
     size: o.s !== undefined ? o.s : DEFAULT_NOMAND_BACKGROUND_TUNING.size,
     colorSteps: o.cs !== undefined ? o.cs : DEFAULT_NOMAND_BACKGROUND_TUNING.colorSteps,
     originalColors: o.oc !== undefined ? o.oc : DEFAULT_NOMAND_BACKGROUND_TUNING.originalColors,
     inverted: o.i !== undefined ? o.i : DEFAULT_NOMAND_BACKGROUND_TUNING.inverted,
+    overlayEnabled: o.oe !== undefined ? o.oe : DEFAULT_NOMAND_BACKGROUND_TUNING.overlayEnabled,
+    overlayOpacity: o.oo !== undefined ? o.oo : DEFAULT_NOMAND_BACKGROUND_TUNING.overlayOpacity,
 });
 
 const compressMonet = (t: any): any => ({
@@ -334,7 +340,16 @@ export const decompressConfig = (str: string): any => {
         throw new Error('Invalid format');
     }
 
-    const isMinified = parsed.t !== undefined || parsed.vm !== undefined || parsed.rvms !== undefined || parsed.ct !== undefined || parsed.cat !== undefined || parsed.hpts !== undefined || parsed.sst !== undefined || parsed.lff !== undefined || parsed.sfi !== undefined;
+    const isMinified = parsed.t !== undefined
+        || parsed.vm !== undefined
+        || parsed.rvms !== undefined
+        || parsed.ct !== undefined
+        || parsed.cat !== undefined
+        || parsed.nbt !== undefined
+        || parsed.hpts !== undefined
+        || parsed.sst !== undefined
+        || parsed.lff !== undefined
+        || parsed.sfi !== undefined;
     if (isMinified) {
         const decompressed: any = {};
         if (parsed.t) {

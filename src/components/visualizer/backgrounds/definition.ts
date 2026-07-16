@@ -37,8 +37,6 @@ export interface VisualizerBackgroundConfig {
 
 export interface VisualizerBackgroundActions {
     onModeChange?: (mode: VisualizerBackgroundMode) => void;
-    onResetMode?: () => void;
-    onResetAll?: () => void;
     common?: {
         onCoverColorChange?: (enabled: boolean) => void;
         onOpacityChange?: (opacity: number) => void;
@@ -97,6 +95,7 @@ export interface VisualizerBackgroundRegistryEntry {
     labelFallback: string;
     render: (props: VisualizerBackgroundRenderProps) => React.ReactNode;
     renderSettingsPanel?: (props: VisualizerBackgroundSettingsProps) => React.ReactNode;
+    resetSettings?: (actions?: VisualizerBackgroundActions) => void;
 }
 
 export interface VisualizerBackgroundEntryModule {
