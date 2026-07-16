@@ -1490,6 +1490,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
         seed,
         lyricsFontScale = 1,
         subtitleOverlayOpacity,
+        subtitleOverlayBackground,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
@@ -1662,6 +1663,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
                 translationFontSize={`${Math.max(14, 16 * lyricsFontScale)}px`}
                 upcomingFontSize={`${Math.max(12, 14 * lyricsFontScale)}px`}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
+                subtitleOverlayBackground={subtitleOverlayBackground}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}

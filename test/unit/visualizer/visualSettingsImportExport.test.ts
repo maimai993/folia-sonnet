@@ -36,6 +36,7 @@ describe('Visual Settings Import and Export', () => {
         visualizerOpacity: 0.95,
         hidePlayerTranslationSubtitle: true,
         showSubtitleTranslation: false,
+        subtitleOverlayBackground: true,
         lyricsFontStyle: 'sans',
         lyricsFontScale: 1.25,
         lyricsFontFallbackFamilies: ['Songti SC', 'SimSun', 'serif'],
@@ -132,6 +133,7 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.backgroundOpacity).toBe(0.85);
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
+        expect(decoded.subtitleOverlayBackground).toBe(true);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);
         expect(decoded.subtitleFontStyle).toBe('sans');
@@ -169,6 +171,7 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.backgroundOpacity).toBe(0.85);
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
+        expect(decoded.subtitleOverlayBackground).toBe(true);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);
         expect(decoded.subtitleFontStyle).toBe('sans');

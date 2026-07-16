@@ -672,6 +672,8 @@ export default {
     "previewSubtitleHotspot": "Subtitle Settings",
     "previewSubtitleSettingsDesc": "Adjust the bottom subtitle layer, translation text, and upcoming-line overlay.",
     "subtitleOverlayOpacity": "Subtitle Opacity",
+    "subtitleOverlayBackground": "Subtitle Background",
+    "subtitleOverlayBackgroundDesc": "Add a theme-aware translucent background to improve readability over busy visuals.",
     "showSubtitleTranslation": "Show Translation",
     "showSubtitleTranslationDesc": "Controls translation text in Monet and the bottom subtitle overlay.",
     "classicSettings": "Classic Tuning",

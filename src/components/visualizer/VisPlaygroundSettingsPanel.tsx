@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CaptionsOff, Languages, Monitor, RotateCcw, type LucideIcon } from 'lucide-react';
+import { CaptionsOff, Languages, Monitor, PanelTop, RotateCcw, type LucideIcon } from 'lucide-react';
 import {
     type CappellaAvatarImage,
     type CappellaEmojiImage,
@@ -112,6 +112,8 @@ interface VisPlaygroundSettingsPanelProps {
     onToggleShowSubtitleTranslation?: (shown: boolean) => void;
     subtitleOverlayOpacity: number;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
+    subtitleOverlayBackground: boolean;
+    onToggleSubtitleOverlayBackground?: (enabled: boolean) => void;
     subtitleFontInheritsLyrics: boolean;
     onSubtitleFontInheritsLyricsChange?: (inheritsLyrics: boolean) => void;
     subtitleFontStyle: Theme['fontStyle'];
@@ -331,6 +333,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onToggleShowSubtitleTranslation,
         subtitleOverlayOpacity,
         onSubtitleOverlayOpacityChange,
+        subtitleOverlayBackground,
+        onToggleSubtitleOverlayBackground,
         subtitleFontInheritsLyrics,
         onSubtitleFontInheritsLyricsChange,
         subtitleFontStyle,
@@ -607,6 +611,15 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             onChange={onToggleShowSubtitleTranslation}
                             theme={theme}
                             icon={Languages}
+                        />
+
+                        <ToggleRow
+                            label={t('options.subtitleOverlayBackground')}
+                            description={t('options.subtitleOverlayBackgroundDesc')}
+                            checked={subtitleOverlayBackground}
+                            onChange={onToggleSubtitleOverlayBackground}
+                            theme={theme}
+                            icon={PanelTop}
                         />
 
                         <ToggleRow

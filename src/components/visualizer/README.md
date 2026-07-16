@@ -143,6 +143,7 @@ export default VisualizerFoo;
 - `visualizerOpacity`: 歌词动画整体透明度，不应该由每个 renderer 再各自发明一套全局透明度。
 - `lyricsFontScale`: 用户字号缩放。新 visualizer 应把它乘进最终字号，而不是忽略。
 - `subtitleOverlayOpacity`: 共享字幕层透明度。
+- `subtitleOverlayBackground`: 是否为共享字幕层添加主题自适应的半透明背景。
 - `staticMode`: 静态模式。约定为“禁用重资源背景动画”，不是关闭全部歌词动画。
 - `isPlayerChromeHidden`: 播放器外层 chrome 是否隐藏，适合做边距或字幕策略调整。
 - `hideTranslationSubtitle`: 关闭整个底部 subtitle overlay 时使用，包括翻译和下一句提示；这是旧设置的前向兼容语义。

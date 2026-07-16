@@ -45,6 +45,7 @@ export interface VisualizerSharedProps {
     background?: VisualizerBackgroundConfig;
     lyricsFontScale?: number;
     subtitleOverlayOpacity?: number;
+    subtitleOverlayBackground?: boolean;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
     showSubtitleTranslation?: boolean;

@@ -1856,6 +1856,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         lyricsFontScale = 1,
         fumeTuning,
         subtitleOverlayOpacity,
+        subtitleOverlayBackground,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
@@ -3057,6 +3058,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                 translationFontSize={translationFontSize}
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
+                subtitleOverlayBackground={subtitleOverlayBackground}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}

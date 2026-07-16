@@ -203,6 +203,7 @@ const ObsBrowserSourceApp: React.FC = () => {
                 background={config.background}
                 lyricsFontScale={config.lyricsFontScale}
                 subtitleOverlayOpacity={config.subtitleOverlayOpacity}
+                subtitleOverlayBackground={config.subtitleOverlayBackground ?? false}
                 isPlayerChromeHidden={true}
                 hideTranslationSubtitle={config.hideTranslationSubtitle}
                 showSubtitleTranslation={config.showSubtitleTranslation ?? true}

@@ -67,6 +67,7 @@ type UseObsBrowserSourcePublisherOptions = {
     lyricsFontScale: number;
     visualizerOpacity: number;
     subtitleOverlayOpacity: number;
+    subtitleOverlayBackground: boolean;
     staticMode: boolean;
     hideTranslationSubtitle: boolean;
     showSubtitleTranslation: boolean;
@@ -114,6 +115,7 @@ export const useObsBrowserSourcePublisher = ({
     lyricsFontScale,
     visualizerOpacity,
     subtitleOverlayOpacity,
+    subtitleOverlayBackground,
     staticMode,
     hideTranslationSubtitle,
     showSubtitleTranslation,
@@ -226,6 +228,7 @@ export const useObsBrowserSourcePublisher = ({
         lyricsFontScale,
         visualizerOpacity,
         subtitleOverlayOpacity,
+        subtitleOverlayBackground,
         staticMode,
         hideTranslationSubtitle,
         showSubtitleTranslation,
@@ -249,6 +252,7 @@ export const useObsBrowserSourcePublisher = ({
         stageSource,
         staticMode,
         subtitleOverlayOpacity,
+        subtitleOverlayBackground,
         theme,
         subtitleTheme,
         visualizerMode,

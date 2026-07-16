@@ -40,6 +40,7 @@ export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_taskbar';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
 export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
+export const SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY = 'subtitle_overlay_background';
 export const SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY = 'show_subtitle_translation';
 const LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'lyrics_font_fallback_families';
 const SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY = 'subtitle_font_inherits_lyrics';
@@ -888,6 +889,7 @@ export type SettingsUiState = {
     enableMediaCache: boolean;
     backgroundOpacity: number;
     subtitleOverlayOpacity: number;
+    subtitleOverlayBackground: boolean;
     visualizerOpacity: number;
     visualizerBackgroundMode: VisualizerBackgroundMode | null;
     urlBackgroundList: UrlBackgroundItem[];
@@ -986,6 +988,7 @@ export type SettingsUiState = {
     handleToggleMediaCache: (enable: boolean) => void;
     handleSetBackgroundOpacity: (opacity: number) => void;
     handleSetSubtitleOverlayOpacity: (opacity: number) => void;
+    handleToggleSubtitleOverlayBackground: (enabled: boolean) => void;
     handleSetVisualizerOpacity: (opacity: number) => void;
     handleSetVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
     handleResetVisualizerBackgroundMode: () => void;
@@ -1079,6 +1082,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     enableMediaCache: getStoredBoolean(ENABLE_MEDIA_CACHE_KEY, false),
     backgroundOpacity: readStoredBackgroundOpacity(),
     subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
+    subtitleOverlayBackground: getStoredBoolean(SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY, false),
     visualizerOpacity: readStoredVisualizerOpacity(),
     visualizerBackgroundMode: readStoredVisualizerBackgroundMode(),
     urlBackgroundList: readStoredUrlBackgroundList(),
@@ -1376,6 +1380,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem(SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY, String(next));
         }
         set({ subtitleOverlayOpacity: next });
+    },
+    handleToggleSubtitleOverlayBackground: (enabled) => {
+        setStoredBoolean(SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY, enabled);
+        set({ subtitleOverlayBackground: enabled });
     },
     handleSetVisualizerOpacity: (opacity) => {
         const next = Math.min(1, Math.max(0.2, opacity));
@@ -2087,6 +2095,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     enableMediaCache: state.enableMediaCache,
     backgroundOpacity: state.backgroundOpacity,
     subtitleOverlayOpacity: state.subtitleOverlayOpacity,
+    subtitleOverlayBackground: state.subtitleOverlayBackground,
     visualizerOpacity: state.visualizerOpacity,
     visualizerBackgroundMode: state.visualizerBackgroundMode,
     urlBackgroundList: state.urlBackgroundList,
@@ -2157,6 +2166,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleMediaCache: state.handleToggleMediaCache,
     handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
     handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
+    handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
     handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
     handleSetVisualizerBackgroundMode: state.handleSetVisualizerBackgroundMode,
     handleResetVisualizerBackgroundMode: state.handleResetVisualizerBackgroundMode,

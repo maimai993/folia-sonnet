@@ -126,6 +126,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         enableMediaCache,
         backgroundOpacity,
         subtitleOverlayOpacity,
+        subtitleOverlayBackground,
         visualizerOpacity,
         visualizerBackgroundMode,
         isDaylight,
@@ -182,6 +183,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleMediaCache: onToggleMediaCache,
         handleSetBackgroundOpacity: setBackgroundOpacity,
         handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
+        handleToggleSubtitleOverlayBackground: onToggleSubtitleOverlayBackground,
         handleSetVisualizerOpacity: setVisualizerOpacity,
         handleSetVisualizerBackgroundMode: onVisualizerBackgroundModeChange,
         handleSetVisualizerMode: onVisualizerModeChange,
@@ -2325,6 +2327,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         hideTranslationSubtitle={hidePlayerTranslationSubtitle}
                         showSubtitleTranslation={showSubtitleTranslation}
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
+                        subtitleOverlayBackground={subtitleOverlayBackground}
                         classicTuning={classicTuning}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
@@ -2360,6 +2363,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onToggleHideTranslationSubtitle={onToggleHidePlayerTranslationSubtitle}
                         onToggleShowSubtitleTranslation={onToggleShowSubtitleTranslation}
                         onSubtitleOverlayOpacityChange={setSubtitleOverlayOpacity}
+                        onToggleSubtitleOverlayBackground={onToggleSubtitleOverlayBackground}
                         onClassicTuningChange={onClassicTuningChange}
                         onResetClassicTuning={onResetClassicTuning}
                         onPartitaTuningChange={onPartitaTuningChange}

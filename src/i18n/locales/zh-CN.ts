@@ -675,6 +675,8 @@ export default {
     "previewSubtitleHotspot": "字幕设置",
     "previewSubtitleSettingsDesc": "调整底部译文和下一句提示的显示方式。",
     "subtitleOverlayOpacity": "字幕透明度",
+    "subtitleOverlayBackground": "字幕背景",
+    "subtitleOverlayBackgroundDesc": "为底部字幕添加主题自适应的半透明背景，提高复杂画面中的可读性。",
     "showSubtitleTranslation": "显示翻译",
     "showSubtitleTranslationDesc": "显示歌词翻译",
     "classicSettings": "流光参数",

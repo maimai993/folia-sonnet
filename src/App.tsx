@@ -321,6 +321,7 @@ export default function App() {
         enableMediaCache,
         backgroundOpacity,
         subtitleOverlayOpacity,
+        subtitleOverlayBackground,
         visualizerOpacity,
         visualizerBackgroundMode,
         isDaylight,
@@ -1655,6 +1656,7 @@ export default function App() {
         lyricsFontScale,
         visualizerOpacity,
         subtitleOverlayOpacity,
+        subtitleOverlayBackground,
         staticMode,
         hideTranslationSubtitle: shouldHidePlayerTranslationSubtitle,
         showSubtitleTranslation,
@@ -2907,6 +2909,7 @@ export default function App() {
                         }}
                         lyricsFontScale={lyricsFontScale}
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
+                        subtitleOverlayBackground={subtitleOverlayBackground}
                         isPlayerChromeHidden={isPlayerChromeHidden}
                         hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
                         showSubtitleTranslation={showSubtitleTranslation}

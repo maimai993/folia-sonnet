@@ -47,6 +47,7 @@ export interface ObsBrowserSourceConfig {
     lyricsFontScale: number;
     visualizerOpacity: number;
     subtitleOverlayOpacity: number;
+    subtitleOverlayBackground?: boolean;
     staticMode: boolean;
     hideTranslationSubtitle: boolean;
     showSubtitleTranslation?: boolean;

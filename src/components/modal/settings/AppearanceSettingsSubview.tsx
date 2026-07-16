@@ -288,6 +288,7 @@ export const compressConfig = (config: any): string => {
     if (config.visualizerOpacity !== undefined) minified.vo = config.visualizerOpacity;
     if (config.hidePlayerTranslationSubtitle !== undefined) minified.hpts = config.hidePlayerTranslationSubtitle;
     if (config.showSubtitleTranslation !== undefined) minified.sst = config.showSubtitleTranslation;
+    if (config.subtitleOverlayBackground !== undefined) minified.sob = config.subtitleOverlayBackground;
     if (config.lyricsFontStyle) minified.lfs = config.lyricsFontStyle;
     if (config.lyricsFontScale !== undefined) minified.lfn = config.lyricsFontScale;
     if (config.lyricsFontFallbackFamilies?.length) minified.lff = config.lyricsFontFallbackFamilies;
@@ -348,6 +349,7 @@ export const decompressConfig = (str: string): any => {
         || parsed.nbt !== undefined
         || parsed.hpts !== undefined
         || parsed.sst !== undefined
+        || parsed.sob !== undefined
         || parsed.lff !== undefined
         || parsed.sfi !== undefined;
     if (isMinified) {
@@ -365,6 +367,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.vo !== undefined) decompressed.visualizerOpacity = parsed.vo;
         if (parsed.hpts !== undefined) decompressed.hidePlayerTranslationSubtitle = parsed.hpts;
         if (parsed.sst !== undefined) decompressed.showSubtitleTranslation = parsed.sst;
+        if (parsed.sob !== undefined) decompressed.subtitleOverlayBackground = parsed.sob;
         if (parsed.lfs) decompressed.lyricsFontStyle = parsed.lfs;
         if (parsed.lfn !== undefined) decompressed.lyricsFontScale = parsed.lfn;
         if (parsed.lff) decompressed.lyricsFontFallbackFamilies = parsed.lff;
@@ -395,6 +398,7 @@ export const decompressConfig = (str: string): any => {
         const validKeys = [
             'theme', 'visualizerMode', 'randomVisualizerModePerSong', 'visualizerBackgroundMode', 'backgroundOpacity',
             'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation',
+            'subtitleOverlayBackground',
             'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontFallbackFamilies',
             'subtitleFontInheritsLyrics', 'subtitleFontStyle', 'subtitleFontFamily',
             'subtitleFontFallbackFamilies', 'visualizerTunings', 'classicTuning',
@@ -486,6 +490,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         visualizerOpacity: state.visualizerOpacity,
         hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
         showSubtitleTranslation: state.showSubtitleTranslation,
+        subtitleOverlayBackground: state.subtitleOverlayBackground,
         lyricsFontStyle: state.lyricsFontStyle,
         lyricsFontScale: state.lyricsFontScale,
         lyricsFontFallbackFamilies: state.lyricsFontFallbackFamilies,
@@ -514,6 +519,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
         handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
         handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
+        handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
         handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
         handleSetLyricsFontScale: state.handleSetLyricsFontScale,
         handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
@@ -567,6 +573,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             visualizerOpacity: store.visualizerOpacity,
             hidePlayerTranslationSubtitle: store.hidePlayerTranslationSubtitle,
             showSubtitleTranslation: store.showSubtitleTranslation,
+            subtitleOverlayBackground: store.subtitleOverlayBackground,
             lyricsFontStyle: store.lyricsFontStyle,
             lyricsFontScale: store.lyricsFontScale,
             lyricsFontFallbackFamilies: store.lyricsFontFallbackFamilies,
@@ -651,6 +658,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (config.showSubtitleTranslation !== undefined) {
                 store.handleToggleShowSubtitleTranslation(Boolean(config.showSubtitleTranslation));
+            }
+            if (config.subtitleOverlayBackground !== undefined) {
+                store.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
             }
             if (config.lyricsFontStyle) {
                 store.handleSetLyricsFontStyle(config.lyricsFontStyle);
