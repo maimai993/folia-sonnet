@@ -12,7 +12,7 @@ Lyrics Reimagined // 辞曲新境
 [![GitHub release](https://img.shields.io/github/v/release/chthollyphile/folia-major?label=release)](https://github.com/chthollyphile/folia-major/releases)
 [![License](https://img.shields.io/github/license/chthollyphile/folia-major)](https://github.com/chthollyphile/folia-major/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/chthollyphile/folia-major?style=social)](https://github.com/chthollyphile/folia-major/stargazers)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D24-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 [![All Contributors](https://img.shields.io/badge/all_contributors-29-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
@@ -91,7 +91,7 @@ https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
 | 模块 | 说明 |
 | --- | --- |
 | 在线搜索与播放 | 搜索歌曲、歌手或专辑后即可播放，并自动加载相关封面与歌词。 |
-| 本地音乐支持 | 可导入本地音频文件，在本地安全保存索引信息，不上传文件内容。 |
+| 本地音乐支持 | 可导入本地音频文件，在本地安全保存索引信息，不上传文件内容。详细用法见 [本地音乐库管理](docs/local-library-management.md)。 |
 | 智能歌词匹配 | 本地歌曲可自动匹配在线歌词与封面，也支持手动修正匹配结果。 |
 | 本地歌词文件识别 | 自动加载同目录同名 `.lrc`、`.vtt`、`.ttml`、`.qrc`、`.yrc`、`.krc` 歌词文件，或歌词文件内嵌 LRC 歌词。适配 LDDC 生成的增强型逐字歌词格式。 |
 | Now Playing 接入 | 支持通过本机 [Now Playing](https://github.com/Widdit/now-playing-service/) 服务接入外部播放器的歌曲、时间轴与歌词信息，并驱动 Folia 的舞台视图与全屏歌词渲染。 |
@@ -132,20 +132,9 @@ Folia 提供了可选的官方同步服务端 `sync-server`，用于在多个设
 
 ## 本地音乐与匹配说明
 
-使用本地音乐时，Folia 会优先尝试从以下来源补全信息：
+Folia 会读取音频文件元数据、同目录歌词和封面，并可通过网易云或 QQ 音乐补全歌曲信息。自动匹配不准确时，可以手动选择候选、恢复首次导入的本地信息，或进一步合并、拆分艺术家与专辑实体。
 
-1. 音频文件自身元数据
-2. 同目录同名歌词文件
-3. 在线匹配结果
-
-如果自动匹配不准确，可以在播放界面的右侧面板进入“本地”选项卡，手动搜索并指定更合适的歌词、封面或元数据来源。你也可以选择只使用本地信息，关闭在线匹配结果。
-
-本地曲库由 Dexie 管理。每首本地歌曲只有一个当前标题，艺术家和专辑由稳定的本地实体及歌曲关系表示；文件标签只在首次入库时建立导入快照。在线匹配会把候选结果中的标题、艺术家与专辑作为一组元数据应用，关闭在线元数据时则整体恢复导入快照。实体展示名称与成员关系彼此独立，你可以从 GridView 的实体信息面板修改展示名称，并显式合并艺术家、专辑实体；拆分成员时既可以创建新实体，也可以把选中的歌曲移入已有实体。
-
-打开 GridView 中的真实本地文件夹后，可以使用“整理歌曲信息”批量运行自动匹配，或为单首歌曲修改检索文字、切换网易云与 QQ 并手动选择候选。应用候选时，可分别决定是否使用在线元数据（标题、艺术家与专辑共同应用）和在线封面；选择“不使用在线数据”会整体恢复本地导入快照，并标记该歌曲在后续自动匹配中跳过。该流程不会立即请求歌词，后续播放只会用已选来源的歌曲 ID 加速定位，并把在线元信息作为更可靠的搜索起点，不会改变“最佳逐字歌词”的来源和质量优先级。实体关系的后续修正仍通过拆分、合并功能完成。文件夹在这里仅限定操作范围，Folia 不会因为歌曲处于同一目录就自动把它们视为同一艺术家或专辑。
-
-在线封面在 Web 版写入 OPFS，在 Electron 版写入应用文件缓存；数据库只保存在线地址和轻量缓存描述。文件缓存属于可重建数据，缺失或损坏时会回退到在线地址、有效的内嵌封面或占位图，不会影响歌曲和实体信息。
-
+完整的导入、重扫、匹配、实体编辑、歌单、缓存和故障排查说明见 [本地音乐库管理](docs/local-library-management.md)。
 
 ## 贡献者
 
