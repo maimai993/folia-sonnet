@@ -619,12 +619,16 @@ const MonetRailLine: React.FC<{
         event.stopPropagation();
         onLineSeek?.(entry.line);
     };
+    const handleClickSeek = (event: React.MouseEvent<HTMLDivElement>) => {
+        handleSeek(event);
+        event.currentTarget.blur();
+    };
 
     return (
         <motion.div
             role={canSeek ? 'button' : undefined}
             tabIndex={canSeek ? 0 : undefined}
-            onClick={canSeek ? handleSeek : undefined}
+            onClick={canSeek ? handleClickSeek : undefined}
             onKeyDown={canSeek ? (event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
