@@ -777,8 +777,10 @@ const readStoredHomeLayoutStyle = (): 'carousel' | 'grid' => {
     }
 
     const saved = localStorage.getItem('home_layout_style');
-    if (saved === 'desktop') return 'grid';
-    return saved === 'carousel' ? 'carousel' : 'grid';
+    if (saved === 'carousel' || saved === 'desktop') {
+        localStorage.setItem('home_layout_style', 'grid');
+    }
+    return 'grid';
 };
 
 const readStoredPreferredAlternativeLyricSource = (): LyricProviderSource => {
@@ -1974,14 +1976,14 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ loopMode: next });
     },
-    handleSetHomeLayoutStyle: (style) => {
+    handleSetHomeLayoutStyle: () => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('home_layout_style', style);
+            localStorage.setItem('home_layout_style', 'grid');
         }
-        set({ homeLayoutStyle: style });
+        set({ homeLayoutStyle: 'grid' });
         notify(get, {
             type: 'info',
-            text: i18n.t('notifications.' + (style === 'grid' ? 'homeLayoutGrid' : 'homeLayoutCarousel')),
+            text: i18n.t('notifications.homeLayoutGrid'),
         });
     },
     handleSetGrid3dCardStyle: (style) => {

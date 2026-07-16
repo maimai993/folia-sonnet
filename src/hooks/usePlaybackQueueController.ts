@@ -73,8 +73,8 @@ type UsePlaybackQueueControllerParams = {
     setPendingNavidromeSelection: (selection: { type: 'artist'; artistId: string } | { type: 'album'; albumId: string }) => void;
     handleArtistSelect: (artistId: number) => void;
     handleAlbumSelect: (albumId: number) => void;
-    openLocalArtistByName: (artistName: string) => void;
-    openLocalAlbumByName: (albumName: string) => void;
+    openLocalArtistByName: (artistName: string, songId?: string, entityId?: string) => void;
+    openLocalAlbumByName: (albumName: string, songId?: string, entityId?: string) => void;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
     restoreCachedThemeForSong: (songOrId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
@@ -770,7 +770,8 @@ export function usePlaybackQueueController({
     const handleSearchResultArtistSelect = useCallback((track: UnifiedSong, artistName: string, artistId?: number) => {
         if (track.isLocal) {
             hideSearchOverlay();
-            openLocalArtistByName(artistName);
+            const entityId = track.ar?.find(artist => artist.name === artistName)?.entityId;
+            openLocalArtistByName(artistName, track.localRef?.songId, entityId);
             return;
         }
 
@@ -789,7 +790,11 @@ export function usePlaybackQueueController({
     const handleSearchResultAlbumSelect = useCallback((track: UnifiedSong, albumName: string, albumId?: number) => {
         if (track.isLocal) {
             hideSearchOverlay();
-            openLocalAlbumByName(albumName);
+            openLocalAlbumByName(
+                albumName,
+                track.localRef?.songId,
+                track.al?.entityId || track.album?.entityId,
+            );
             return;
         }
 

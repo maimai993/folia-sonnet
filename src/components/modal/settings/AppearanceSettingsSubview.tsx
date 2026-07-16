@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check, TriangleAlert } from 'lucide-react';
+import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -43,8 +43,6 @@ type AppearanceSettingsSubviewProps = {
     transparentPlayerBackground: boolean;
     autoHidePlayerChrome: boolean;
     utilityGhostButtonClass: string;
-    homeLayoutStyle: 'carousel' | 'grid';
-    onChangeHomeLayoutStyle: (style: 'carousel' | 'grid') => void;
     grid3dCardStyle: 'image' | 'card';
     onChangeGrid3dCardStyle: (style: 'image' | 'card') => void;
     aiTheme?: DualTheme | null;
@@ -418,8 +416,6 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     transparentPlayerBackground,
     autoHidePlayerChrome,
     utilityGhostButtonClass,
-    homeLayoutStyle,
-    onChangeHomeLayoutStyle,
     grid3dCardStyle,
     onChangeGrid3dCardStyle,
     aiTheme,
@@ -888,81 +884,40 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 </div>
             </section>
 
-            {/* Section 3: Home Layout styles */}
+            {/* Section 3: Grid card style */}
             <section>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <LayoutGrid size={14} /> {t('options.homeLayoutStyle')}
+                    <LayoutGrid size={14} /> {t('options.grid3dCardStyle')}
                 </h3>
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                            {t('options.homeLayoutStyle')}
+                            {t('options.grid3dCardStyle')}
                         </div>
                         <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.homeLayoutStyleDesc')}
+                            {t('options.grid3dCardStyleDesc')}
                         </div>
-                    </div>
-                    <div className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs leading-relaxed ${
-                        isDaylight
-                            ? 'border-amber-500/25 bg-amber-500/10 text-amber-800'
-                            : 'border-amber-400/20 bg-amber-400/10 text-amber-200'
-                    }`}>
-                        <TriangleAlert size={15} className="mt-0.5 shrink-0" />
-                        <span>{t('options.classicHomeLayoutRemovalNotice')}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <button
-                            onClick={() => onChangeHomeLayoutStyle('carousel')}
+                            onClick={() => onChangeGrid3dCardStyle('image')}
                             className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
-                            style={getAccentOptionStyle(homeLayoutStyle === 'carousel')}
+                            style={getAccentOptionStyle(grid3dCardStyle === 'image')}
                         >
                             <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.homeLayoutStyleCarousel')}
+                                {t('options.grid3dCardStyleImage')}
                             </span>
                         </button>
                         <button
-                            onClick={() => onChangeHomeLayoutStyle('grid')}
+                            onClick={() => onChangeGrid3dCardStyle('card')}
                             className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
-                            style={getAccentOptionStyle(homeLayoutStyle === 'grid')}
+                            style={getAccentOptionStyle(grid3dCardStyle === 'card')}
                         >
                             <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.homeLayoutStyleGrid')}
+                                {t('options.grid3dCardStyleCard')}
                             </span>
                         </button>
                     </div>
-
-                    {homeLayoutStyle === 'grid' && (
-                        <div className="pt-4 border-t border-white/5 space-y-3">
-                            <div className="space-y-1">
-                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.grid3dCardStyle')}
-                                </div>
-                                <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.grid3dCardStyleDesc')}
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 mt-1">
-                                <button
-                                    onClick={() => onChangeGrid3dCardStyle('image')}
-                                    className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
-                                    style={getAccentOptionStyle(grid3dCardStyle === 'image')}
-                                >
-                                    <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.grid3dCardStyleImage')}
-                                    </span>
-                                </button>
-                                <button
-                                    onClick={() => onChangeGrid3dCardStyle('card')}
-                                    className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
-                                    style={getAccentOptionStyle(grid3dCardStyle === 'card')}
-                                >
-                                    <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.grid3dCardStyleCard')}
-                                    </span>
-                                </button>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </section>
 

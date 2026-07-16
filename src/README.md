@@ -52,7 +52,7 @@ src/
   分别承接顶层导航辅助、播放装配辅助、展示派生计算，避免这些实现回流到 `App.tsx`。
 
 - `components/app/Home.tsx`
-  首页 app-level 入口。负责消费 `buildHomeModel.ts` 生成的模型，并按 `homeLayoutStyle` 选择 Grid3D/GridView 流程或 legacy `Home.tsx`。
+  首页 app-level 入口。负责消费 `buildHomeModel.ts` 生成的模型，并统一进入 Grid3D/GridView 流程；`carousel` 首页布局已弃用，历史设置会迁移到 `grid`。
 
 - `components/Home.tsx`
   首页 legacy 实现，属于弃用路径；新首页功能不要继续放入此处。

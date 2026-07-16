@@ -1,43 +1,33 @@
-import type { Dispatch, SetStateAction } from 'react';
 import type { HomeViewTab, LocalLibraryGroup, LocalSong, SongResult } from '../../../types';
 import { isLocalPlaybackSong } from '../../../utils/appPlaybackGuards';
 import type { LocalLibraryCatalogSnapshot } from '../../../hooks/useLocalLibraryCatalog';
 import type { LocalLibraryEntity } from '../../../types/localLibrary';
 import { normalizeLocalLibraryName } from '../../../utils/localLibraryNames';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/localLibraryIndex';
+import {
+    createLocalGridViewCollection,
+    type GridViewCollectionDescriptor,
+} from '../home/gridViewCollectionAdapters';
 
 // src/components/app/navigation/createLocalLibraryNavigation.ts
 
-type LocalMusicState = {
-    activeRow: 0 | 1 | 2 | 3;
-    selectedGroup: LocalLibraryGroup | null;
-    detailStack: LocalLibraryGroup[];
-    detailOriginView: 'home' | 'player' | null;
-    focusedFolderIndex: number;
-    focusedAlbumIndex: number;
-    focusedArtistIndex: number;
-    focusedPlaylistIndex: number;
-};
-
 type CreateLocalLibraryNavigationParams = {
-    currentView: string;
     currentSong: SongResult | null;
     localSongs: LocalSong[];
     localLibraryCatalog: LocalLibraryCatalogSnapshot;
     setHomeViewTab: (tab: HomeViewTab) => void;
-    setLocalMusicState: Dispatch<SetStateAction<LocalMusicState>>;
     navigateDirectHome: (options?: { clearContext?: boolean }) => void;
+    setActiveGridViewCollection: (collection: GridViewCollectionDescriptor | null) => void;
 };
 
 // Creates local library navigation helpers for album and artist drill-in flows.
 export const createLocalLibraryNavigation = ({
-    currentView,
     currentSong,
     localSongs,
     localLibraryCatalog,
     setHomeViewTab,
-    setLocalMusicState,
     navigateDirectHome,
+    setActiveGridViewCollection,
     t,
 }: CreateLocalLibraryNavigationParams & {
     t: (key: string) => string;
@@ -46,29 +36,15 @@ export const createLocalLibraryNavigation = ({
         localLibraryCatalog.entities,
         localLibraryCatalog.assignments,
     );
-    const openLocalLibraryGroup = (group: LocalLibraryGroup, row: 0 | 1 | 2 | 3) => {
-        setHomeViewTab('local');
-        setLocalMusicState(prev => ({
-            ...prev,
-            activeRow: row,
-            selectedGroup: group,
-            detailStack: prev.selectedGroup && prev.selectedGroup.id !== group.id
-                ? [...prev.detailStack, prev.selectedGroup]
-                : prev.selectedGroup
-                    ? prev.detailStack
-                    : [],
-            detailOriginView: prev.selectedGroup
-                ? prev.detailOriginView
-                : (currentView === 'player' ? 'player' : null),
-        }));
-        navigateDirectHome({ clearContext: false });
-    };
-
     const getEntitySongs = (entity: LocalLibraryEntity) => {
         const memberIds = new Set(localLibraryCatalog.assignments
             .filter(assignment => entity.kind === 'artist'
-                ? assignment.artistEntityIds.includes(entity.id)
-                : assignment.albumEntityId === entity.id)
+                ? assignment.artistEntityIds.some(entityId => (
+                    followEntityRedirect(entityId, catalogIndex.entitiesById) === entity.id
+                ))
+                : Boolean(assignment.albumEntityId && (
+                    followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById) === entity.id
+                )))
             .map(assignment => assignment.songId));
         return localSongs.filter(song => memberIds.has(song.id));
     };
@@ -76,7 +52,7 @@ export const createLocalLibraryNavigation = ({
     const openEntity = (entity: LocalLibraryEntity) => {
         const songs = getEntitySongs(entity);
         if (songs.length === 0) return;
-        openLocalLibraryGroup({
+        const group: LocalLibraryGroup = {
             type: entity.kind,
             id: entity.id,
             entityId: entity.id,
@@ -84,7 +60,10 @@ export const createLocalLibraryNavigation = ({
             songs,
             coverUrl: songs.find(song => song.onlineMetadata?.coverUrl)?.onlineMetadata?.coverUrl,
             description: `${songs.length} ${t('home.songs')}`,
-        }, entity.kind === 'album' ? 1 : 2);
+        };
+        setHomeViewTab('local');
+        setActiveGridViewCollection(createLocalGridViewCollection(group));
+        navigateDirectHome({ clearContext: false });
     };
 
     const findEntityByName = (kind: LocalLibraryEntity['kind'], name: string) => {
@@ -94,6 +73,26 @@ export const createLocalLibraryNavigation = ({
             !entity.mergedInto &&
             entity.normalizedAliases.includes(normalizedName)
         ));
+        return matches.length === 1 ? matches[0] : undefined;
+    };
+
+    const findEntityById = (kind: LocalLibraryEntity['kind'], entityId?: string) => {
+        const activeEntityId = entityId
+            ? followEntityRedirect(entityId, catalogIndex.entitiesById)
+            : undefined;
+        const entity = activeEntityId ? catalogIndex.entitiesById.get(activeEntityId) : undefined;
+        return entity?.kind === kind ? entity : undefined;
+    };
+
+    // Resolves a clicked search-result artist inside that song's own assignments.
+    const findAssignedArtist = (songId: string | undefined, artistName: string) => {
+        if (!songId) return undefined;
+        const assignment = catalogIndex.assignmentsBySongId.get(songId);
+        const normalizedName = normalizeLocalLibraryName(artistName);
+        const matches = assignment?.artistEntityIds.flatMap(entityId => {
+            const entity = findEntityById('artist', entityId);
+            return entity?.normalizedAliases.includes(normalizedName) ? [entity] : [];
+        }) || [];
         return matches.length === 1 ? matches[0] : undefined;
     };
 
@@ -124,13 +123,18 @@ export const createLocalLibraryNavigation = ({
         if (entity) openEntity(entity);
     };
 
-    const openLocalAlbumByName = (albumName: string) => {
-        const entity = albumName && findEntityByName('album', albumName);
+    const openLocalAlbumByName = (albumName: string, songId?: string, requestedEntityId?: string) => {
+        const assignment = songId ? catalogIndex.assignmentsBySongId.get(songId) : undefined;
+        const entity = findEntityById('album', requestedEntityId)
+            || findEntityById('album', assignment?.albumEntityId)
+            || (albumName ? findEntityByName('album', albumName) : undefined);
         if (entity) openEntity(entity);
     };
 
-    const openLocalArtistByName = (artistName: string) => {
-        const entity = artistName && findEntityByName('artist', artistName);
+    const openLocalArtistByName = (artistName: string, songId?: string, requestedEntityId?: string) => {
+        const entity = findEntityById('artist', requestedEntityId)
+            || findAssignedArtist(songId, artistName)
+            || (artistName ? findEntityByName('artist', artistName) : undefined);
         if (entity) openEntity(entity);
     };
 

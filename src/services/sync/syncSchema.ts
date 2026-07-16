@@ -71,7 +71,7 @@ const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisual
     if (Array.isArray(value.urlBackgroundList)) settings.urlBackgroundList = value.urlBackgroundList;
     if (value.urlBackgroundSelectedId === null) settings.urlBackgroundSelectedId = null;
     else if (typeof value.urlBackgroundSelectedId === 'string') settings.urlBackgroundSelectedId = value.urlBackgroundSelectedId;
-    if (value.homeLayoutStyle === 'carousel' || value.homeLayoutStyle === 'grid') settings.homeLayoutStyle = value.homeLayoutStyle;
+    if (value.homeLayoutStyle === 'carousel' || value.homeLayoutStyle === 'grid') settings.homeLayoutStyle = 'grid';
     if (value.grid3dCardStyle === 'image' || value.grid3dCardStyle === 'card') settings.grid3dCardStyle = value.grid3dCardStyle;
 
     return settings;

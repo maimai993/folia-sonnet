@@ -50,6 +50,18 @@ describe('sync schema parsing', () => {
         });
     });
 
+    it('migrates the deprecated carousel home layout to grid', () => {
+        const record = parseSyncedSettingsRecord({
+            schemaVersion: 1,
+            updatedAt: '2026-07-08T00:00:00.000Z',
+            data: {
+                homeLayoutStyle: 'carousel',
+            },
+        });
+
+        expect(record?.data.homeLayoutStyle).toBe('grid');
+    });
+
     it('parses theme records and normalizes invalid sources', () => {
         const record = parseSyncedThemeRecord({
             fingerprint: 'netease:id:123',

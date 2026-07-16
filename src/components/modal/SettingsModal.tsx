@@ -130,7 +130,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         visualizerBackgroundMode,
         isDaylight,
         visualizerMode,
-        homeLayoutStyle,
         grid3dCardStyle,
         classicTuning,
         cadenzaTuning,
@@ -226,7 +225,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetSubtitleFontFamily: onSubtitleFontFamilyChange,
         handleSetSubtitleFontFallbackFamilies: onSubtitleFontFallbackFamiliesChange,
         handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
-        handleSetHomeLayoutStyle: onChangeHomeLayoutStyle,
         handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
     } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
     const resolvedToggleTransparentPlayerBackground = onToggleTransparentPlayerBackground ?? onToggleTransparentPlayerBackgroundFromStore;
@@ -2469,8 +2467,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         transparentPlayerBackground={transparentPlayerBackground}
                         autoHidePlayerChrome={autoHidePlayerChrome}
                         utilityGhostButtonClass={utilityGhostButtonClass}
-                        homeLayoutStyle={homeLayoutStyle}
-                        onChangeHomeLayoutStyle={onChangeHomeLayoutStyle}
                         grid3dCardStyle={grid3dCardStyle}
                         onChangeGrid3dCardStyle={onChangeGrid3dCardStyle}
                         aiTheme={aiTheme}

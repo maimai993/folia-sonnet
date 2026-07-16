@@ -1066,13 +1066,12 @@ export default function App() {
         openLocalAlbumByName,
         openLocalArtistByName,
     } = createLocalLibraryNavigation({
-        currentView,
         currentSong,
         localSongs,
         localLibraryCatalog,
         setHomeViewTab,
-        setLocalMusicState,
         navigateDirectHome,
+        setActiveGridViewCollection,
         t,
     });
     const handleSaveLyricFilterPattern = createLyricFilterPatternSaver({
