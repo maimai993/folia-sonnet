@@ -38,6 +38,7 @@ const candidate = {
     durationMs: 1,
     score: 90,
     titleMatched: true,
+    durationMatched: true,
     raw: {
         id: 1,
         name: 'Song',

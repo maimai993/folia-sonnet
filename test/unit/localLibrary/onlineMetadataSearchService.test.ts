@@ -34,6 +34,7 @@ describe('onlineMetadataSearchService', () => {
         ] } });
         const candidate = await findAutomaticOnlineMetadataCandidate(song);
         expect(candidate?.source).toBe('netease');
+        expect(candidate?.durationMatched).toBe(true);
         expect(searchQQLyrics).not.toHaveBeenCalled();
     });
 

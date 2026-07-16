@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Loader2, Search, X } from 'lucide-react';
+import { Check, FileAudio, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LocalSong } from '../../types';
 import type { LocalLibraryAssignment } from '../../types/localLibrary';
@@ -12,6 +12,7 @@ import {
     type OnlineMetadataCandidate,
     type OnlineMetadataSource,
 } from '../../services/onlineMetadataSearchService';
+import { DurationMatchBadge } from './DurationMatchBadge';
 
 // src/components/modal/LocalSongMetadataMatchDialog.tsx
 // Lets the user search one provider and independently choose its metadata bundle and cover.
@@ -125,8 +126,13 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
                 <header className="flex items-center justify-between border-b border-current/10 px-5 py-4">
                     <div className="min-w-0">
                         <h3 className="truncate text-lg font-bold">{t('localMusic.manualMetadataMatch')}</h3>
-                        <div className="mt-1 flex items-center gap-2">
-                            <p className="min-w-0 truncate text-xs opacity-50">{song.title || song.fileName}</p>
+                        <p className="mt-1 truncate text-xs opacity-60">{song.title || song.importedMetadata.title}</p>
+                        <div className="mt-1 flex min-w-0 items-center gap-2">
+                            <span title={song.fileName} className="flex min-w-0 items-center gap-1 text-[11px] opacity-45">
+                                <FileAudio size={12} className="shrink-0" />
+                                <span className="shrink-0">{t('localMusic.filename')}:</span>
+                                <span className="truncate">{song.fileName}</span>
+                            </span>
                             {song.noAutoMatch && (
                                 <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-500">
                                     {t('localMusic.localInfoBadge')}
@@ -160,7 +166,10 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
                                     <span className="block truncate text-sm font-bold">{candidate.title}</span>
                                     <span className="block truncate text-xs opacity-55">{candidate.artists.map(artist => artist.name).join(', ')} · {candidate.album?.name || t('localMusic.unknownAlbum')}</span>
                                 </span>
-                                <span className="text-xs font-bold opacity-50">{candidate.score}%</span>
+                                <span className="flex shrink-0 items-center gap-2">
+                                    <DurationMatchBadge matched={candidate.durationMatched} />
+                                    <span className="text-xs font-bold opacity-50">{candidate.score}%</span>
+                                </span>
                                 {selected === candidate && <Check size={17} className="text-blue-500" />}
                             </button>
                         ))}

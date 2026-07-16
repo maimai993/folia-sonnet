@@ -1042,6 +1042,7 @@ export default {
     "notALocalSong": "Not a local song",
     "fileInfo": "File Info",
     "filename": "Filename",
+    "durationMatched": "Duration match",
     "size": "Size",
     "path": "Path",
     "lyrics": "Lyrics",

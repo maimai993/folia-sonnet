@@ -33,6 +33,7 @@ export interface OnlineMetadataCandidate {
     durationMs: number;
     score: number;
     titleMatched: boolean;
+    durationMatched: boolean | null;
     raw: SongResult;
 }
 
@@ -76,6 +77,7 @@ export const normalizeOnlineMetadataCandidate = (
         durationMs: result.dt || result.duration || 0,
         score: details.score,
         titleMatched: details.titleMatched,
+        durationMatched: details.durationMatched,
         raw: result,
     };
 };

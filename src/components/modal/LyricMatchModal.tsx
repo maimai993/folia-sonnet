@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Loader2, X, Music, Check } from 'lucide-react';
+import { Search, Loader2, X, Music, Check, FileAudio } from 'lucide-react';
 import { LocalSong, SongResult } from '../../types';
 import { applyLocalSongMatchSelection } from '../../services/localSongMatchSelectionService';
 import { buildLocalSongMetadataSearchTarget, normalizeLyricMatchMetadataCandidate } from '../../services/onlineMetadataSearchService';
 import { formatSongName } from '../../utils/songNameFormatter';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
-import { calculateMatchScore, normalizeLyricMatchText } from '../../utils/lyrics/matchScore';
+import { calculateMatchScoreDetails, normalizeLyricMatchText } from '../../utils/lyrics/matchScore';
 import { buildLyricSearchQuery } from '../../utils/lyrics/searchQuery';
 import { fetchLyricsForMatchSource, LYRIC_MATCH_SOURCES, searchLyricsByMatchSource, sourceSupportsManualSearch } from '../../utils/lyrics/lyricMatchSources';
 import { createSafeObjectUrl, isBlob } from '../../utils/blobGuards';
@@ -20,6 +20,7 @@ import {
     type LyricMatchSource,
 } from './lyricMatchResultHelpers';
 import { LyricPreviewPanel } from './LyricPreviewPanel';
+import { DurationMatchBadge } from './DurationMatchBadge';
 
 interface LyricMatchModalProps {
     song: LocalSong;
@@ -290,7 +291,15 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             <div className={`${bgClass} border rounded-2xl max-w-5xl w-full max-h-[80vh] flex flex-col shadow-2xl backdrop-blur-md`}>
                 {/* Header */}
                 <div className={`px-6 py-4 border-b ${borderColor} flex items-center justify-between`}>
-                    <h2 className={`text-lg font-bold ${textPrimary}`}>{t('localMusic.matchLyrics')}</h2>
+                    <div className="min-w-0">
+                        <h2 className={`text-lg font-bold ${textPrimary}`}>{t('localMusic.matchLyrics')}</h2>
+                        <p className={`mt-1 truncate text-xs ${textSecondary}`}>{song.title || song.importedMetadata.title}</p>
+                        <div title={song.fileName} className={`mt-1 flex min-w-0 items-center gap-1 text-[11px] opacity-55 ${textSecondary}`}>
+                            <FileAudio size={12} className="shrink-0" />
+                            <span className="shrink-0">{t('localMusic.filename')}:</span>
+                            <span className="truncate">{song.fileName}</span>
+                        </div>
+                    </div>
                     <button
                         onClick={onClose}
                         className={`p-2 ${closeBtnHover} rounded-lg transition-colors ${textPrimary}`}
@@ -377,6 +386,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
                                         const resultCoverUrl = getMatchResultCoverUrl(result, source);
                                         const resultArtists = getMatchResultArtists(result);
                                         const resultAlbum = getMatchResultAlbumName(result);
+                                        const matchDetails = calculateMatchScoreDetails(songInfo, result);
                                         return (
                                             <div
                                                 key={resultKey}
@@ -403,8 +413,9 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
                                                     <div className="flex items-center gap-2">
                                                         <span className={`text-sm font-semibold truncate ${textPrimary}`}>{formatSongName(result)}</span>
                                                         <span className="text-[10px] px-1.5 py-0.2 bg-blue-500/10 text-blue-400 rounded-md font-mono shrink-0">
-                                                            {calculateMatchScore(songInfo, result)}%
+                                                            {matchDetails.score}%
                                                         </span>
+                                                        <DurationMatchBadge matched={matchDetails.durationMatched} />
                                                     </div>
                                                     <div className={`text-xs truncate ${textSecondary}`}>
                                                         {[resultArtists, resultAlbum].filter(Boolean).join(' · ')}

@@ -31,6 +31,7 @@ const candidate: OnlineMetadataCandidate = {
     durationMs: 180000,
     score: 1,
     titleMatched: true,
+    durationMatched: true,
     raw: {
         id: 9,
         qqMid: 'qq-song-mid',

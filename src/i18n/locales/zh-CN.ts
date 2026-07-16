@@ -1043,6 +1043,7 @@ export default {
     "notALocalSong": "非本地歌曲",
     "fileInfo": "文件信息",
     "filename": "文件名",
+    "durationMatched": "时长匹配",
     "size": "大小",
     "path": "路径",
     "lyrics": "歌词",
