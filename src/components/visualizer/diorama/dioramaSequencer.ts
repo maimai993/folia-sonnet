@@ -42,6 +42,13 @@ export interface CorridorSegment {
     /** World position of this segment's LOCAL line 0 (the offset it was spawned at). Kept so the corridor
      * can be rebuilt at the SAME spot if its lyrics arrive after it was spawned (updateActiveSegmentLines). */
     placementOrigin: DioramaVec;
+    /**
+     * Bumped every time updateActiveSegmentLines swaps this segment's lyrics. `key` deliberately cannot do
+     * this job - it is (seed, round), and the whole point of the in-place rebuild is that a late/reprocessed
+     * lyric load keeps the same key. Consumers that CACHE anything derived from the lines (React memos, the
+     * rasterised text) must read this too, or they keep serving the previous lyrics for the same indices.
+     */
+    linesEpoch: number;
 }
 
 export interface SequencerState {
@@ -88,6 +95,7 @@ export const appendSegment = (
         globalStart: state.nextGlobalStart,
         span,
         placementOrigin: input.placementOrigin,
+        linesEpoch: 0,
     };
     state.segments.push(segment);
     state.nextGlobalStart += span;
@@ -110,6 +118,7 @@ export const updateActiveSegmentLines = (state: SequencerState, lines: Line[]): 
     seg.lines = lines;
     seg.frames = translateFrames(raw, seg.placementOrigin);
     seg.span = span;
+    seg.linesEpoch += 1;
 };
 
 /** Exclusive upper bound of the global index space (one past the last valid line). */

@@ -171,6 +171,22 @@ describe('dioramaSequencer', () => {
         expect(resolveGlobal(state, 8)).toBeNull();
     });
 
+    it('bumps linesEpoch on an in-place rebuild, including one that keeps the same span', () => {
+        // The signal every lines-derived cache needs. `key` cannot carry it (same seed, same round) and
+        // neither can `span` - a reprocess/provider swap/translation can land the SAME number of lines with
+        // different words, which is precisely the case that leaves stale lyrics rendered at live indices.
+        const state = createSequencerState();
+        appendSegment(state, { seed: 's1', lines: mkLines(4), round: 0, placementOrigin: ORIGIN });
+        const segment = activeSegment(state)!;
+        expect(segment.linesEpoch).toBe(0);
+
+        updateActiveSegmentLines(state, mkLines(4));
+
+        expect(segment.key).toBe('s1#0');
+        expect(segment.span).toBe(4);
+        expect(segment.linesEpoch).toBe(1);
+    });
+
     it('never prunes the only (active) segment', () => {
         const state = createSequencerState();
         appendSegment(state, { seed: 'solo', lines: mkLines(2), round: 0, placementOrigin: ORIGIN });

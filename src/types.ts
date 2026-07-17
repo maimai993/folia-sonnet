@@ -490,11 +490,72 @@ export const DEFAULT_TILT_TUNING: TiltTuning = {
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other
 // visualizer it follows theme.animationIntensity (the player-panel intensity chip / AI themes), so
 // the theme system stays the single source of truth. The tuning only carries diorama-specific knobs.
+/** The two mutually-exclusive shapes the point-cloud layer can take. */
+export type DioramaGeometryMode = 'clouds' | 'corridor';
+
+export interface DioramaGeometryVisibility {
+  /** Parent switch: hides the whole point-cloud layer without discarding child preferences. */
+  enabled: boolean;
+  /**
+   * 'clouds' = per-lyric point-cloud formations (the family switches below apply).
+   * 'corridor' = one always-on point tunnel threaded along the flight path (families ignored).
+   * The two never render together - picking one replaces the other.
+   */
+  mode: DioramaGeometryMode;
+  /** Point-cloud cubes used by architectural formations. */
+  strands: boolean;
+  /** Open cylindrical point-cloud shells. */
+  blobs: boolean;
+  /** Triangular tetrahedron point-cloud crystals. */
+  ribbons: boolean;
+  /** Circular point-cloud loops. */
+  rings: boolean;
+}
+
+export const DEFAULT_DIORAMA_GEOMETRY_VISIBILITY: DioramaGeometryVisibility = {
+  enabled: true,
+  mode: 'clouds',
+  strands: true,
+  blobs: true,
+  ribbons: true,
+  rings: true,
+};
+
+export const DIORAMA_PARTICLE_DENSITY_MIN = 96;
+export const DIORAMA_PARTICLE_DENSITY_MAX = 1536;
+export const DIORAMA_PARTICLE_DENSITY_STEP = 24;
+// Background dust motes PER LINE of the resident window (see dioramaMoteField.ts). The MAX is a hard
+// safety cap, not taste: the window holds 8 lines, so it bounds the layer at 1120 points for low-end
+// GPUs and OBS browser sources however far the slider is dragged.
+export const DIORAMA_BACKGROUND_PARTICLE_DENSITY_MIN = 8;
+export const DIORAMA_BACKGROUND_PARTICLE_DENSITY_MAX = 140;
+export const DIORAMA_BACKGROUND_PARTICLE_DENSITY_STEP = 4;
+export const DIORAMA_PARTICLE_SCALE_MIN = 0.65;
+export const DIORAMA_PARTICLE_SCALE_MAX = 1.6;
+export const DIORAMA_PARTICLE_SCALE_STEP = 0.05;
+// Compatibility aliases for the uncommitted tuning UI while it migrates from point size to cluster scale.
+export const DIORAMA_PARTICLE_SIZE_MIN = DIORAMA_PARTICLE_SCALE_MIN;
+export const DIORAMA_PARTICLE_SIZE_MAX = DIORAMA_PARTICLE_SCALE_MAX;
+export const DIORAMA_PARTICLE_SIZE_STEP = DIORAMA_PARTICLE_SCALE_STEP;
+export const DIORAMA_PARTICLE_GLOW_INTENSITY_MIN = 0.1;
+export const DIORAMA_PARTICLE_GLOW_INTENSITY_MAX = 1.5;
+export const DIORAMA_PARTICLE_GLOW_INTENSITY_STEP = 0.05;
+
 export interface DioramaTuning {
   cameraSpeed: number;
   motionAmount: number;
   audioReactivity: number;
+  geometryVisibility: DioramaGeometryVisibility;
+  /** Number of points requested for each formation anchor; the renderer also enforces a global cap. */
+  particleDensity: number;
+  /** Spatial scale multiplier for each complete point-cloud formation. */
+  particleScale: number;
+  /** One soft gradient aura per point-cloud cluster, separate from lyric sung-glow. */
+  particleGlowEnabled: boolean;
+  particleGlowIntensity: number;
   showParticles: boolean;
+  /** Motes per line of the background dust window; the field clamps this to its own safety cap. */
+  backgroundParticleDensity: number;
   /** 普通辉光跟唱: soft glow on the unit being sung. Independent toggle + strength. */
   glowEnabled: boolean;
   glowIntensity: number;
@@ -504,19 +565,30 @@ export interface DioramaTuning {
   /** 渐变跟唱: the line's fill progressively deepens with the sung progress. Independent toggle + strength. */
   gradientEnabled: boolean;
   gradientIntensity: number;
+  /** 关键字着色: the theme's `wordColors` keywords (written by the AI theme from the song's lyrics) become
+   *  the follow-sing TARGET colour of the units they cover - hidden until the singing reaches them, never
+   *  a resting colour. Same source and matcher as every other visualizer. */
+  keywordColoringEnabled: boolean;
 }
 
 export const DEFAULT_DIORAMA_TUNING: DioramaTuning = {
   cameraSpeed: 1,
   motionAmount: 1,
   audioReactivity: 1,
+  geometryVisibility: DEFAULT_DIORAMA_GEOMETRY_VISIBILITY,
+  particleDensity: 576,
+  particleScale: 1,
+  particleGlowEnabled: true,
+  particleGlowIntensity: 0.65,
   showParticles: true,
+  backgroundParticleDensity: 56,
   glowEnabled: true,
   glowIntensity: 1,
   soulEnabled: true,
   soulIntensity: 1,
   gradientEnabled: false,
   gradientIntensity: 1,
+  keywordColoringEnabled: true,
 };
 
 export type MonetBackgroundSource = 'cover-derived' | 'uploaded-global';

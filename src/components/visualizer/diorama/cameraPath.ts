@@ -151,7 +151,7 @@ export interface DioramaMotionParams {
     driftScale: number;
     /** SmoothDamp time constant (seconds) for the camera follow - smaller is snappier. */
     smoothTime: number;
-    /** Scales the GEOMETRY's audio reaction (glow/pulse/spin). Never applied to the camera. */
+    /** Scales the GEOMETRY's audio reaction (glow/flow/surface pulse). Never applied to the camera. */
     audioLevel: number;
     /** Scales the per-line text placement variety (offsets/roll/yaw/look). */
     weaveScale: number;
@@ -270,9 +270,8 @@ export const getFrame = (frames: DioramaFrame[], index: number): DioramaFrame =>
 export const translateFrames = (frames: DioramaFrame[], offset: DioramaVec): DioramaFrame[] =>
     frames.map((f) => ({ position: vadd(f.position, offset), forward: f.forward, right: f.right, up: f.up }));
 
-/** Compose a local (right, up, depth) offset in a frame into a world point. depth is along `forward`:
- * depth > 0 is AHEAD along the path = away from the trailing camera = behind the text (never occludes);
- * depth < 0 is toward the camera (used only by the deliberate gate-wipe shape). */
+/** Compose a local (right, up, depth) offset in a frame into a world point. Positive depth is ahead
+ * along the path, away from the trailing camera and behind the text. */
 export const composeLocal = (frame: DioramaFrame, right: number, up: number, depth: number): DioramaVec => ({
     x: frame.position.x + frame.right.x * right + frame.up.x * up + frame.forward.x * depth,
     y: frame.position.y + frame.right.y * right + frame.up.y * up + frame.forward.y * depth,
@@ -732,7 +731,7 @@ export interface DioramaShapePlacement {
     layer: 'near' | 'far';
 }
 
-const DIORAMA_SHAPE_KINDS: DioramaShapePlacement['kind'][] = ['box', 'sphere', 'cone', 'torus'];
+export const DIORAMA_PARTICLE_AUDIO_SCALE_MAX = 1.44;
 
 // Local-space spec a formation is designed in (right/up/depth relative to the line's frame + text
 // offset), so overlap separation and the text clearance belt can run in one consistent space before
@@ -745,17 +744,29 @@ interface FormationSpec {
     scale: number;
     stretchY: number;
     upright: boolean;
+    colorSlot?: 0 | 1;
 }
 
-// Push apart any two pieces closer than their combined radii (2 relaxation iterations - plenty for
-// <= 8 pieces), then re-clamp depth behind the text plane. Deterministic: ties nudge by index.
+const getSpecClearanceRadius = (spec: FormationSpec): number => {
+    const familyRadius = spec.kind === 'box'
+        ? 0.5
+        : spec.kind === 'sphere'
+            ? 0.74
+            : spec.kind === 'cone'
+                ? 0.68
+                : 0.9;
+    return spec.scale * Math.max(familyRadius, spec.stretchY * 0.55);
+};
+
+// Push apart any two pieces closer than their visual footprints, then re-clamp depth behind the text
+// plane. The old scale-only radius underestimated torus/ribbon silhouettes and created nested highlights.
 const separateSpecs = (specs: FormationSpec[]): void => {
-    for (let iter = 0; iter < 2; iter += 1) {
+    for (let iter = 0; iter < 6; iter += 1) {
         for (let a = 0; a < specs.length; a += 1) {
             for (let b = a + 1; b < specs.length; b += 1) {
                 const A = specs[a];
                 const B = specs[b];
-                const minDist = (A.scale + B.scale) * 0.8;
+                const minDist = (getSpecClearanceRadius(A) + getSpecClearanceRadius(B)) * 1.3;
                 let dr = B.r - A.r;
                 let du = B.u - A.u;
                 let dd = B.d - A.d;
@@ -778,7 +789,7 @@ const separateSpecs = (specs: FormationSpec[]): void => {
         }
     }
     specs.forEach((s) => {
-        s.d = Math.max(s.d, 0.25);
+        s.d = Math.max(s.d, 1);
     });
 };
 
@@ -790,10 +801,29 @@ const TEXT_CLEAR_LATERAL = 5.2;
 const TEXT_CLEAR_VERTICAL = 1.4;
 const enforceTextClearance = (specs: FormationSpec[]): void => {
     specs.forEach((s, i) => {
-        if (Math.abs(s.u) < TEXT_CLEAR_VERTICAL && Math.abs(s.r) < TEXT_CLEAR_LATERAL) {
+        const radius = getSpecClearanceRadius(s) * DIORAMA_PARTICLE_AUDIO_SCALE_MAX;
+        if (
+            Math.abs(s.u) - radius < TEXT_CLEAR_VERTICAL
+            && Math.abs(s.r) - radius < TEXT_CLEAR_LATERAL
+        ) {
             const side = s.r === 0 ? (i % 2 === 0 ? 1 : -1) : Math.sign(s.r);
-            s.r = side * (TEXT_CLEAR_LATERAL + Math.abs(s.r) * 0.2);
+            s.r = side * (TEXT_CLEAR_LATERAL + radius + 0.35);
         }
+    });
+};
+
+// Keep the complete cloud footprint outside the camera/lyric rail, not only its anchor point.
+const enforceRailClearance = (specs: FormationSpec[]): void => {
+    specs.forEach((s, i) => {
+        const radius = getSpecClearanceRadius(s) * DIORAMA_PARTICLE_AUDIO_SCALE_MAX;
+        const minimum = 2.8 + radius;
+        const distance = Math.hypot(s.r, s.u);
+        if (distance >= minimum) return;
+        const fallbackAngle = (i % 2 === 0 ? 1 : -1) * Math.PI * 0.16;
+        const directionR = distance > 0.001 ? s.r / distance : Math.cos(fallbackAngle);
+        const directionU = distance > 0.001 ? s.u / distance : Math.sin(fallbackAngle);
+        s.r = directionR * minimum;
+        s.u = directionU * minimum;
     });
 };
 
@@ -812,24 +842,30 @@ export const buildFormation = (
     seed: string | number | undefined,
     shot: DioramaShotKind,
     frame: DioramaFrame,
-    placement: DioramaTextPlacement
+    placement: DioramaTextPlacement,
+    volumeScale = 1,
 ): DioramaShapePlacement[] => {
     const salt = hashSeed(seed) + lineIndex * 97;
     const rnd = (k: number): number => seededUnit(salt + k);
     const dir = getShotDir(lineIndex, seed);
     const specs: FormationSpec[] = [];
-    const add = (kind: DioramaShapePlacement['kind'], r: number, u: number, d: number, scale: number, stretchY = 1): void => {
-        specs.push({ kind, r, u, d, scale, stretchY, upright: stretchY > 1.2 });
+    const safeVolumeScale = Math.min(1.6, Math.max(0.65, volumeScale));
+    const add = (kind: DioramaShapePlacement['kind'], r: number, u: number, d: number, scale: number, stretchY = 1, colorSlot?: 0 | 1): void => {
+        specs.push({ kind, r, u, d, scale: scale * safeVolumeScale, stretchY, upright: stretchY > 1.2, colorSlot });
+    };
+    const addPair = (kind: DioramaShapePlacement['kind'], lateral: number, u: number, d: number, scale: number, stretchY = 1, colorSlot: 0 | 1 = 0): void => {
+        add(kind, -Math.abs(lateral), u, d, scale, stretchY, colorSlot);
+        add(kind, Math.abs(lateral), u, d, scale, stretchY, colorSlot);
     };
 
     switch (shot) {
         case 'orbit': {
-            // A ring the orbit sweeps around, behind the text; alternating torus/sphere beads.
+            // A sparse orbit of liquid beads with one ring accent; repeated rings read as nested glare.
             const count = 6;
             const radius = 4.4 + rnd(1) * 0.6;
             for (let j = 0; j < count; j += 1) {
                 const a = (j / count) * Math.PI * 2 + rnd(2) * 0.6;
-                add(j % 2 === 0 ? 'torus' : 'sphere', Math.cos(a) * radius, Math.sin(a) * radius, 0.6 + rnd(10 + j) * 1.4, 0.45 + rnd(20 + j) * 0.4);
+                add(j === 0 ? 'torus' : 'sphere', Math.cos(a) * radius, Math.sin(a) * radius, 0.6 + rnd(10 + j) * 1.4, 0.42 + rnd(20 + j) * 0.32);
             }
             break;
         }
@@ -863,14 +899,12 @@ export const buildFormation = (
             break;
         }
         case 'swell': {
-            // A vertical totem to one side - stacked blocks with a sphere crown, revealed as the swell
-            // blooms up and back.
-            const side = dir;
+            // Mirrored rising totems keep the swell grand without massing every cloud on one side.
             const lat = 4.2 + rnd(2) * 0.5;
-            for (let j = 0; j < 3; j += 1) {
-                add('box', side * lat + (rnd(j) - 0.5) * 0.3, -2.0 + j * 1.5, 0.7 + rnd(j * 2) * 0.6, 0.55 - j * 0.08, 1.3);
+            for (let j = 0; j < 2; j += 1) {
+                addPair('box', lat, -1.5 + j * 2.1, 1 + j * 1.2, 0.48 - j * 0.06, 1.45, (j % 2) as 0 | 1);
             }
-            add('sphere', side * lat, 2.6, 0.9, 0.5);
+            addPair('sphere', lat, 2.65, 3.4, 0.5, 1, 0);
             break;
         }
         case 'spiral': {
@@ -892,21 +926,17 @@ export const buildFormation = (
             break;
         }
         case 'flyby': {
-            // A close rail of pillars on the pass side that streaks by the lens.
-            for (let j = 0; j < 4; j += 1) {
-                add('box', dir * (4.0 + rnd(j) * 0.4), -0.6 + (rnd(j * 2) - 0.5) * 0.8, 0.4 + j * 1.7, 0.42 + rnd(j * 3) * 0.14, 2.4);
+            // Mirrored rails preserve a clear flight channel and a regular cadence on both sides.
+            for (let j = 0; j < 3; j += 1) {
+                addPair('box', 4.25 + rnd(j) * 0.25, -0.45 + j * 0.45, 1 + j * 2.1, 0.42 + rnd(j * 3) * 0.1, 2.2, (j % 2) as 0 | 1);
             }
-            // One counterweight piece on the far side so the frame is not lopsided.
-            add('cone', -dir * 5.2, 0.8, 3.4, 0.8);
             break;
         }
         case 'pullBack': {
-            // A cluster massed off to one side and behind, revealed as the camera retreats, anchored by
-            // one large hero piece deep in the background (scale contrast sells the depth).
-            const side = dir;
-            add('sphere', side * (5.4 + rnd(9) * 1.2), 1.2 + (rnd(10) - 0.5) * 2, 6.5 + rnd(11) * 2, 2.1 + rnd(12) * 0.8);
-            for (let j = 0; j < 4; j += 1) {
-                add(j % 2 === 0 ? 'box' : 'cone', side * (4.0 + rnd(j) * 2.0), (rnd(j * 2) - 0.5) * 3.5, 1.2 + rnd(j * 3) * 3.5, 0.45 + rnd(j * 4) * 0.5, j % 2 === 0 ? 1.6 : 1);
+            // A balanced deep reveal replaces the former one-sided pile and oversized hero blob.
+            addPair('sphere', 5.8 + rnd(9) * 0.5, 1.25, 6.8 + rnd(11), 1.25 + rnd(12) * 0.25, 1, 0);
+            for (let j = 0; j < 2; j += 1) {
+                addPair(j === 0 ? 'box' : 'cone', 4.4 + j * 1.15, -1.4 + j * 2.2, 2.2 + j * 2.1, 0.58 + rnd(j * 4) * 0.18, j === 0 ? 1.5 : 1, 1);
             }
             break;
         }
@@ -916,39 +946,38 @@ export const buildFormation = (
             const radius = 5.2 + rnd(1) * 0.6;
             for (let j = 0; j < count; j += 1) {
                 const a = (-0.5 + j / (count - 1)) * 1.5 * dir;
-                add(j % 2 === 0 ? 'torus' : 'sphere', Math.sin(a) * radius, 0.3 + Math.cos(a) * 0.7, 1.0 + rnd(20 + j) * 1.6, 0.5 + rnd(30 + j) * 0.4);
+                add(j === Math.floor(count / 2) ? 'torus' : 'sphere', Math.sin(a) * radius, 0.3 + Math.cos(a) * 0.7, 1.0 + rnd(20 + j) * 1.6, 0.45 + rnd(30 + j) * 0.32);
             }
             break;
         }
         case 'float': {
-            // Weightless orbs suspended around the line for the dreamy bob to hang among.
-            for (let j = 0; j < 5; j += 1) {
-                add('sphere', (rnd(j) - 0.5) * 7, 1.0 + (rnd(j * 2) - 0.5) * 3.2, 1.2 + rnd(j * 3) * 3, 0.4 + rnd(j * 4) * 0.55);
+            // Three mirrored orb rows feel weightless without random clumps around the lyric rail.
+            for (let j = 0; j < 3; j += 1) {
+                addPair('sphere', 4.1 + j * 0.85, -1.2 + j * 1.35, 1.2 + j * 1.55, 0.42 + rnd(j * 4) * 0.22, 1, (j % 2) as 0 | 1);
             }
             break;
         }
         case 'glide': {
-            // A rising flight of pylons the ascending glide climbs alongside.
-            const side = dir;
-            for (let j = 0; j < 4; j += 1) {
-                add('box', side * (4.2 + rnd(j) * 0.5), -1.6 + j * 1.6, 0.6 + j * 1.3, 0.5 + rnd(j * 2) * 0.2, 1.9);
+            // Mirrored ascending pylons frame the glide instead of forming a single crowded wall.
+            for (let j = 0; j < 3; j += 1) {
+                addPair('box', 4.25 + rnd(j) * 0.3, -1.5 + j * 1.7, 1 + j * 1.7, 0.46 + rnd(j * 2) * 0.12, 1.85, (j % 2) as 0 | 1);
             }
             break;
         }
         case 'hold':
         default: {
-            // A calm sparse scatter plus one distant hero silhouette for a still shot.
-            add('torus', dir * 5.6, 1.6, 7 + rnd(1) * 2, 1.8 + rnd(2) * 0.7);
-            for (let j = 0; j < 2; j += 1) {
-                const side = rnd(j) < 0.5 ? -1 : 1;
-                add('sphere', side * (4.4 + rnd(j * 2) * 1.5), (rnd(j * 3) - 0.5) * 3, 0.8 + rnd(j * 4) * 3, 0.5 + rnd(j * 5) * 0.4);
-            }
+            // A calm pair of rings and a nearer pair of beads make a quiet, ordered frame.
+            addPair('torus', 5.6, 1.55, 7.2 + rnd(1), 1.05 + rnd(2) * 0.2, 1, 0);
+            addPair('sphere', 4.45, -1.1, 2.1 + rnd(4), 0.58 + rnd(5) * 0.16, 1, 1);
             break;
         }
     }
 
+    enforceRailClearance(specs);
     enforceTextClearance(specs);
     separateSpecs(specs);
+    enforceRailClearance(specs);
+    enforceTextClearance(specs);
 
     return specs.map((s, j) => ({
         kind: s.kind,
@@ -957,39 +986,9 @@ export const buildFormation = (
         stretchY: s.stretchY,
         upright: s.upright,
         spinSpeed: 0.04 + rnd(j * 13 + 5) * 0.1,
-        colorSlot: (j % 2) as 0 | 1,
+        colorSlot: s.colorSlot ?? (j % 2) as 0 | 1,
         layer: s.d > 3.5 ? 'far' : 'near',
     }));
-};
-
-/**
- * A single NEAR foreground shape parked just on the camera side of a line (negative depth), off in the
- * lowered corner. When the camera flies to the next line it passes right by this shape, so it streaks
- * across the lens as a foreground "wipe" that masks the seam - and the near-dissolve lifecycle fades it
- * out gracefully if the camera path runs straight through it.
- */
-export const getDioramaGateShape = (
-    lineIndex: number,
-    seed: string | number | undefined,
-    frame: DioramaFrame
-): DioramaShapePlacement => {
-    const s = hashSeed(seed) + lineIndex * 61 + 29;
-    const side = seededUnit(s) < 0.5 ? -1 : 1;
-    return {
-        kind: DIORAMA_SHAPE_KINDS[(lineIndex * 3 + 2) % DIORAMA_SHAPE_KINDS.length],
-        position: composeLocal(
-            frame,
-            side * (3.2 + seededUnit(s + 1) * 1.2),
-            -(1.6 + seededUnit(s + 2) * 1.4),
-            -(1.0 + seededUnit(s + 3) * 1.6)
-        ),
-        scale: 0.4 + seededUnit(s + 4) * 0.35,
-        stretchY: 1,
-        upright: false,
-        spinSpeed: 0.05 + seededUnit(s + 5) * 0.12,
-        colorSlot: side > 0 ? 0 : 1,
-        layer: 'near',
-    };
 };
 
 /**
@@ -1008,31 +1007,4 @@ export const resolveShapeLifeOpacity = (distanceToCamera: number): number => {
     const farS = farT * farT * (3 - 2 * farT);
     const nearS = nearT * nearT * (3 - 2 * nearT);
     return farS * nearS;
-};
-
-/**
- * A static field of tiny particles scattered along the whole corridor (one draw call): the foreground
- * dust layer of the near/mid/far depth stack. The camera's motion alone animates it via parallax.
- * Returns interleaved XYZ positions. Deterministic per song/seed.
- */
-export const buildParticleField = (frames: DioramaFrame[], seed: string | number | undefined, perLine = 5): Float32Array => {
-    const base = hashSeed(seed);
-    const positions = new Float32Array(frames.length * perLine * 3);
-    let w = 0;
-    for (let i = 0; i < frames.length; i += 1) {
-        for (let p = 0; p < perLine; p += 1) {
-            const s = base + i * 131 + p * 17;
-            const point = composeLocal(
-                frames[i],
-                (seededUnit(s) - 0.5) * 15,
-                (seededUnit(s + 1) - 0.5) * 10,
-                (seededUnit(s + 2) - 0.5) * DIORAMA_STEP_DISTANCE
-            );
-            positions[w] = point.x;
-            positions[w + 1] = point.y;
-            positions[w + 2] = point.z;
-            w += 3;
-        }
-    }
-    return positions;
 };

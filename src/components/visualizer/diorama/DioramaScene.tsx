@@ -1,25 +1,27 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { type MotionValue } from 'framer-motion';
 import * as THREE from 'three';
-import { type AudioBands, type Line, type Theme } from '../../../types';
+import { type AudioBands, type DioramaGeometryVisibility, type Line, type Theme } from '../../../types';
 import { buildLineGraphemeTimeline, splitLyricGraphemes, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
-import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { resolveThemeFontStack } from '../../../utils/fontStacks';
+import { prepareDioramaKeywordMatchers, resolveDioramaKeywordUnitColors } from './dioramaKeywordColor';
 import {
     buildFormation,
-    buildParticleField,
     DIORAMA_HERO_DISTANCE,
+    getFrame,
     type DioramaFrame,
     type DioramaMotionParams,
-    type DioramaShapePlacement,
     type DioramaTextPlacement,
-    getDioramaGateShape,
     getDioramaShot,
     getDioramaTextPlacement,
-    resolveShapeLifeOpacity,
 } from './cameraPath';
 import { resolveGlobal, type SequencerState, totalGlobalLines } from './dioramaSequencer';
+import {
+    DIORAMA_CLUSTER_COLLISION_LINE_SPAN,
+    selectVisibleDioramaClusters,
+    type DioramaParticleClusterAnchor,
+} from './dioramaGeometry';
 import {
     buildDioramaFontSpec,
     DIORAMA_RASTER_FONT_PX,
@@ -29,12 +31,24 @@ import {
     rasterDioramaUnit,
     type DioramaUnitRaster,
 } from './dioramaTextRaster';
+import { DioramaParticleField } from './DioramaParticleField';
+import { buildDioramaParticleCorridorWindow } from './dioramaParticleCorridor';
+import {
+    DIORAMA_MOTE_LINES_AHEAD,
+    DIORAMA_MOTE_LINES_BEHIND,
+    DIORAMA_MOTE_WINDOW_LINES,
+    dioramaMoteSlot,
+    extendDioramaFrame,
+    resolveDioramaMoteDensity,
+    writeDioramaMoteLine,
+} from './dioramaMoteField';
 
 // src/components/visualizer/diorama/DioramaScene.tsx
 // Renders the lyric corridor along the winding path. Each nearby lyric line is staged on its path
 // frame (per-line offset, scale, roll, yaw), plus a per-line procedural geometry formation matched to
 // that line's camera move. Text, camera and geometry all read from the same shared `frames` +
-// placements, so everything stays consistent as the path bends.
+// placements, so everything stays consistent as the path bends. Formation anchors render as a single
+// self-lit point-cloud field; camera, text and transition logic remain independent from audio.
 //
 // TEXT is canvas-rasterised (see dioramaTextRaster.ts for why not SDF): the browser's own text engine
 // draws every glyph - perfect stroke continuity for every script and the full shared subtitle font
@@ -45,10 +59,9 @@ import {
 // sung unit turns accent-coloured and lit, finished units return to plain bright, unsung units wait
 // dim; each unit's light swells/decays on its own smoothed envelope, breathing with the music.
 //
-// The music is expressed HERE, in the world - never in the camera: bass pulses the formations' glow,
-// treble quickens their spin, and a liquid-flow shader (injected into the standard material via
-// onBeforeCompile) slides bands of emissive energy across every surface so the geometry reads as
-// molten/flowing rather than static plastic. Shapes AND text live a distance-based LIFECYCLE: born
+// The music is expressed HERE, in the world - never in the camera: bass accelerates the point-cloud
+// flow while treble increases curl disturbance and sparkle. Particle clouds AND text live a
+// distance-based LIFECYCLE: born
 // from the far haze (no pop-in) and dissolving gracefully when the camera closes in. Theme colours
 // are DAMPED per-frame (fog, lights, materials), so theme/AI theme changes and song switches glide
 // instead of snapping. All per-frame values are refs inside useFrame - never React state.
@@ -73,8 +86,19 @@ interface DioramaSceneProps {
     motion: DioramaMotionParams;
     /** Master lyric visibility (the shared subtitle toggle): hides all 3D text but keeps the world flying. */
     showLyrics: boolean;
-    /** Foreground particle dust layer toggle (from the diorama tuning panel). */
+    /** Background particle-mote layer toggle (from the diorama tuning panel). */
     showParticles: boolean;
+    /** Requested motes per line of the resident window; the field clamps it to a safe cap. */
+    backgroundParticleDensity: number;
+    /** Parent + per-family visibility for the staged point-cloud layer. */
+    geometryVisibility: DioramaGeometryVisibility;
+    /** Requested number of points per formation anchor (the particle builder also enforces a global cap). */
+    particleDensity: number;
+    /** Spatial scale multiplier for each complete point-cloud formation. */
+    particleScale: number;
+    /** One soft cluster aura, separate from the lyric sung-glow effect. */
+    particleGlowEnabled: boolean;
+    particleGlowIntensity: number;
     /** Global lyric font-size scale (the 通用 字号 setting): scales the 3D text uniformly. */
     lyricsFontScale: number;
     /** 普通辉光跟唱 EFFECTIVE strength (toggle off resolves to 0) - the soft cadenza glow. */
@@ -83,6 +107,9 @@ interface DioramaSceneProps {
     soulIntensity: number;
     /** 渐变跟唱 EFFECTIVE strength (toggle off resolves to 0) - fill deepens with sung progress. */
     gradientIntensity: number;
+    /** 关键字着色: the theme's keyword units take their own emphasis colour as their follow-sing TARGET -
+     *  hidden until the singing reaches them, never a resting colour. See the colour block in useFrame. */
+    keywordColoringEnabled: boolean;
 }
 
 // Which lines get mounted as 3D text + formations, relative to the current line. Past lines stay
@@ -90,10 +117,22 @@ interface DioramaSceneProps {
 // born out of the far haze by the lifecycle fade.
 const LINES_AHEAD = 3;
 const LINES_BEHIND = 2;
-// The outgoing corridor during a transition needs only a small departing cluster on screen (it is being
-// left behind), so its window is tighter than the live one - fewer meshes/rasters mounted per switch.
+// The outgoing TEXT during a transition needs only a small departing cluster on screen (it is being left
+// behind), so its window is tighter than the live one - fewer meshes/rasters mounted per switch. This
+// pair is text-only; the corridor sizes its outgoing window from clearance instead (see below).
 const OUTGOING_LINES_BEHIND = 2;
 const OUTGOING_LINES_AHEAD = 1;
+// The corridor gets a LONGER window than the text, and it has to clear the visible band at BOTH ends: a
+// point stops existing past DIORAMA_SHAPE_FADE_IN_END (27) and fog closes at FOG_FAR (30), so an end
+// nearer than that is a hole you can look through. Lines sit DIORAMA_STEP_DISTANCE (8) apart, and the
+// camera trails the read head by DIORAMA_HERO_DISTANCE (5.2), stretched to ~15 in the worst case (the
+// widest shot pulls back to 2x hero, and 运镜幅度 scales that excursion by up to 1.6):
+//   ahead:  7 * 8 - 3.4 (nearest shot) = 52 units clear - most visible at a song's start, staring down
+//           the tunnel from line 0.
+//   behind: 6 * 8 - 15 (widest shot)   = 33 units clear. This was 2, i.e. 16 - 15 = ONE unit clear: any
+//           shot that swung the camera off the forward axis showed the tunnel's open back end.
+const CORRIDOR_LINES_AHEAD = 7;
+const CORRIDOR_LINES_BEHIND = 6;
 // How many neighbour line textures to rasterise per animation frame - keeps the per-frame cost bounded so
 // a song change (several new lines at once) spreads across a few frames instead of hitching one.
 const NEIGHBOR_RASTER_BUDGET = 2;
@@ -108,9 +147,10 @@ const resolveNeighborLineOpacity = (offset: number): number => {
     if (offset === 3) return 0.06;
     return 0;
 };
-// Opacity for an OUTGOING corridor's lines during a transition: a soft, uniform departing glow (the
-// camera is flying away from them, so the distance fog does the actual fade-out). Its own former-active
-// line reads brightest, the rest a touch dimmer, so the leaving scene still looks like a real scene.
+// Opacity for an OUTGOING corridor's lines during a transition: a soft, uniform departing glow. Its own
+// former-active line reads brightest, the rest a touch dimmer, so the leaving scene still looks like a
+// real scene. Uniform ON PURPOSE - the fade-out is the camera flying away from them, applied by the
+// distance lifecycle (resolveTextLife) and dressed by the fog, not baked into this curve.
 const resolveOutgoingLineOpacity = (offsetFromOutgoing: number): number =>
     offsetFromOutgoing === 0 ? 0.7 : Math.abs(offsetFromOutgoing) <= 2 ? 0.45 : 0.25;
 
@@ -124,9 +164,6 @@ const TARGET_FRAME_WIDTH_FRACTION = 0.72;
 // Floor for the fit scale so an extremely long line becomes small-but-readable instead of vanishing.
 const MIN_FIT_SCALE = 0.28;
 const DEG_TO_RAD = Math.PI / 180;
-// World distance within which a shape brightens as the camera approaches - the geometry visibly
-// performing with the move (a swept ring lights up as the lens passes it).
-const SHAPE_PROXIMITY_RADIUS = 7;
 // Fog band: far enough to keep the hero line and its formation crisp, near enough that the +3 line
 // and its set-piece are born inside the haze (the lifecycle fade and the fog work together).
 const FOG_NEAR = 12;
@@ -135,6 +172,16 @@ const FOG_FAR = 30;
 // melts away instead of smearing across it, but no shot's normal framing distance ever triggers it.
 const TEXT_DISSOLVE_START = 2.0;
 const TEXT_DISSOLVE_END = 0.9;
+// Far end of the text lifecycle - the half that was missing. Sits entirely PAST the fog's far plane, so
+// it can never dim a line the scene actually means to show (a mounted neighbour tops out around 24-30
+// units even in the widest shot); it exists to guarantee a line reaches true zero rather than merely
+// fog-coloured. Fog recolours a fragment toward the background, it does not remove it - a fully-fogged
+// lyric still draws background-coloured glyphs at its own opacity, which over the corridor's points
+// (rather than over the empty shell background) reads as a ghost line that is not in this scene. A song
+// change parks the previous corridor TRANSITION_DISTANCE (46) away while its last lines stay mounted as
+// the new song's index-adjacent trail, so that is the normal path, not a corner case.
+const TEXT_FADE_IN_START = 32;
+const TEXT_FADE_IN_END = 40;
 // How quickly the damped theme colours chase their targets (per-second rate for the exp smoothing).
 // Deliberately gentle (~1.5s to settle) so on a song change the palette eases over roughly the same span
 // the outgoing scene takes to recede into the fog - the departing elements don't visibly snap to the new
@@ -165,9 +212,92 @@ const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 const stepEnvelope = (current: number, target: number, attack: number, release: number, delta: number): number =>
     current + (target - current) * (1 - Math.exp(-(target > current ? attack : release) * delta));
 
-const resolveTextLife = (distanceToCamera: number): number => {
-    const t = clamp01((distanceToCamera - TEXT_DISSOLVE_END) / (TEXT_DISSOLVE_START - TEXT_DISSOLVE_END));
-    return t * t * (3 - 2 * t);
+const smoothstep01 = (t: number): number => t * t * (3 - 2 * t);
+
+// 渐变跟唱 wake, in seconds AFTER a unit stops being sung: a brief hold at full tint, then a bounded
+// decay that lands on exactly 0. Total wake is HOLD + TRAIL, the same order as the trail this replaces.
+const GRADIENT_HOLD_SECONDS = 0.35;
+const GRADIENT_TRAIL_SECONDS = 1.8;
+
+/**
+ * 渐变跟唱 energy for ONE unit at ONE instant: 0 before it is sung, easing to 1 across its own span,
+ * holding, then decaying one-way to 0 - 出现 / 保持 / 衰减 / 回到底色.
+ *
+ * Reads ONLY this unit's own start/end time. It deliberately knows nothing about the line's progress:
+ * the previous version summed a `0.25 * lineProgress` term into every sung unit, so each finished word
+ * was re-tinted, brighter and brighter, by later words still being sung (measured: a line's first word
+ * decayed to 0.42 and then climbed back to 0.60 over a 12s line). It also had a 0.35 floor, so a
+ * finished word never reached its base colour - the whole line un-tinted together when a line-level
+ * gate released, instead of each word settling on its own.
+ *
+ * PURE, and carries no frame-to-frame state. That is what makes seeking, looping, pausing and song
+ * changes correct BY CONSTRUCTION: the colour is a function of the playback clock, so there is nothing
+ * to reset and nothing that can drift out of step with it. The gate it replaces was an envelope
+ * advanced by real frame delta, which kept fading the tint for seconds after a pause froze the clock.
+ */
+export const resolveGradientEnergy = (
+    now: number,
+    unit: { startTime: number; endTime: number },
+): number => {
+    if (now <= unit.startTime) return 0;
+    if (now < unit.endTime) {
+        const span = Math.max(unit.endTime - unit.startTime, 0.001);
+        return smoothstep01(clamp01((now - unit.startTime) / span));
+    }
+    const sinceSung = now - unit.endTime;
+    if (sinceSung <= GRADIENT_HOLD_SECONDS) return 1;
+    return 1 - smoothstep01(clamp01((sinceSung - GRADIENT_HOLD_SECONDS) / GRADIENT_TRAIL_SECONDS));
+};
+
+/**
+ * The fill colour of ONE lyric unit: its resting colour, dyed toward `target` by its OWN sung progress.
+ *
+ * Every unit rests at `primary` - keyword or not. `target` is the ONLY thing 关键字着色 changes, and that
+ * is precisely what keeps an AI keyword hidden until the singing reaches it: at progress 0 this returns
+ * exactly `primary`, so no target colour can leak ahead of the read-head, whatever colour it is. An AI
+ * keyword marks what colour a word BECOMES when sung, never what colour it starts as.
+ *
+ * One base, one target, one interpolation - so keyword colour and follow-sing colour can never be two
+ * finished colours fighting to overwrite each other. Writes into `out`; allocates nothing per frame.
+ */
+export const resolveDioramaUnitFill = (
+    out: THREE.Color,
+    primary: THREE.Color,
+    target: THREE.Color,
+    progress: number,
+): THREE.Color => out.copy(primary).lerp(target, clamp01(progress));
+
+/**
+ * Whether the active line's per-unit state (the light/soul envelope arrays and the material ref slots)
+ * must be reallocated this frame.
+ *
+ * The obvious trigger is a new active line. The second one is not obvious and was missing: a lyric swap
+ * under a LIVE index. updateActiveSegmentLines rebuilds the active corridor IN PLACE - same globalStart,
+ * same index, different words - when a slow load's lyrics arrive late or a provider reprocesses them. The
+ * line changes, its unit count changes with it, and the global index does not move, so keying the reset on
+ * the index alone left the envelope arrays sized for the PREVIOUS line.
+ *
+ * That failed silently, which is why it has a test. A Float32Array read past its end is `undefined`, not an
+ * error; `undefined` then flows through the envelope step into NaN, a write of NaN past the end is
+ * swallowed, and the unit's fill lerps by NaN - so every unit past the old length renders a NaN colour for
+ * the rest of the line. Comparing the LENGTH catches it directly and covers the first allocation too
+ * (`undefined !== count`), so there is no separate init path.
+ */
+export const shouldResetDioramaUnitState = (
+    previousGlobalIndex: number,
+    globalIndex: number,
+    unitStateLength: number | undefined,
+    unitCount: number,
+): boolean => previousGlobalIndex !== globalIndex || unitStateLength !== unitCount;
+
+/**
+ * Distance lifecycle for a lyric plane, BOTH ends - the same shape resolveShapeLifeOpacity gives the
+ * set-pieces: 0 beyond the far haze, 1 through the mid-range, dissolving again as it passes the lens.
+ */
+export const resolveTextLife = (distanceToCamera: number): number => {
+    const farT = clamp01((TEXT_FADE_IN_END - distanceToCamera) / (TEXT_FADE_IN_END - TEXT_FADE_IN_START));
+    const nearT = clamp01((distanceToCamera - TEXT_DISSOLVE_END) / (TEXT_DISSOLVE_START - TEXT_DISSOLVE_END));
+    return (farT * farT * (3 - 2 * farT)) * (nearT * nearT * (3 - 2 * nearT));
 };
 
 // Uniform scale that shrinks a rendered line so it occupies at most TARGET_FRAME_WIDTH_FRACTION of
@@ -215,10 +345,6 @@ const frameQuaternion = (frame: DioramaFrame, roll = 0, yaw = 0): [number, numbe
     if (roll !== 0) _basisQuat.multiply(_tiltQuat.setFromAxisAngle(_axisZ, roll));
     return [_basisQuat.x, _basisQuat.y, _basisQuat.z, _basisQuat.w];
 };
-
-interface ShapeInstance extends DioramaShapePlacement {
-    key: string;
-}
 
 interface VisibleLineEntry {
     index: number;
@@ -274,12 +400,18 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
     motion,
     showLyrics,
     showParticles,
+    backgroundParticleDensity,
+    geometryVisibility,
+    particleDensity,
+    particleScale,
+    particleGlowEnabled,
+    particleGlowIntensity,
     lyricsFontScale,
     glowIntensity,
     soulIntensity,
     gradientIntensity,
+    keywordColoringEnabled,
 }) => {
-    const shapeRefs = useRef<Array<THREE.Mesh | null>>([]);
     // Neighbour line planes (one rasterised texture per line) - meshes for the fit scale, materials
     // for per-frame colour/opacity. Keyed by GLOBAL line index (which grows without bound across the
     // continuous tunnel), so Maps rather than arrays - entries are added/removed as the window moves.
@@ -296,23 +428,20 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
     const unitSoulMatRefs = useRef<Array<THREE.MeshBasicMaterial | null>>([]);
     const unitSoulMeshRefs = useRef<Array<THREE.Mesh | null>>([]);
     // Per-unit smoothed values (one slot per unit): lightVals drive the glow (fast release), soulVals
-    // the ghost (slow release so it lingers and drifts after the word finishes). gradientEnv is the
-    // line-progress ramp for 渐变跟唱. All reset on a line change via prevActiveGlobalRef.
+    // the ghost (slow release so it lingers and drifts after the word finishes). Both reset on a line
+    // change via prevActiveGlobalRef. 渐变跟唱 keeps no state here - it is a pure function of the clock.
     const unitLightValsRef = useRef<Float32Array | null>(null);
     const unitSoulValsRef = useRef<Float32Array | null>(null);
-    const gradientEnvRef = useRef<number>(0);
     // Reset per-unit state when the ACTIVE global line changes. Keyed on the global index (not the line
     // object) so a single-loop restart - which replays the very same line objects in a fresh segment -
     // still resets cleanly instead of carrying the previous round's envelopes.
     const prevActiveGlobalRef = useRef<number>(-1);
     // Overall music-power envelope (fast attack, slow release) shared by the glow and the dust.
     const powerEnvRef = useRef<number>(0);
-    // Smoke-dust layer refs, animated per-frame (drift + music breathing).
+    const trebleEnvRef = useRef<number>(0);
+    // Background-mote layer refs, animated per-frame (subtle drift + music breathing).
     const pointsRef = useRef<THREE.Points>(null);
     const pointsMatRef = useRef<THREE.PointsMaterial>(null);
-    const ambientRef = useRef<THREE.AmbientLight>(null);
-    const accentLightRef = useRef<THREE.PointLight>(null);
-    const primaryLightRef = useRef<THREE.PointLight>(null);
 
     const colors = useMemo(() => ({
         primary: theme.primaryColor,
@@ -347,57 +476,14 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
     );
     const fontSpec = useMemo(() => buildDioramaFontSpec(fontStack), [fontStack]);
 
-    // Shared uniforms for the living-material shader below - one object each drives every shape
-    // material; useFrame writes them once per frame (clock + smoothed audio envelopes).
-    const flowTimeRef = useRef({ value: 0 });
-    const bassEnvUniformRef = useRef({ value: 0 });
-    const trebleEnvUniformRef = useRef({ value: 0 });
-    // Injected into the standard material (fog, lighting, transparency all keep working) to make the
-    // geometry read as LIVING fluid rather than static plastic, all driven by the smoothed envelopes:
-    // - VERTEX: the surface undulates along its normals like liquid, swelling with the bass envelope.
-    // - FRAGMENT: slow diagonal bands of theme-coloured emissive energy flow across the surface (their
-    //   contrast pumps with the bass), and a fresnel rim makes the silhouette edge catch light like
-    //   glass - shimmering harder as the treble envelope rises.
-    const handleShapeBeforeCompile = useMemo(() => {
-        const timeUniform = flowTimeRef.current;
-        const bassUniform = bassEnvUniformRef.current;
-        const trebleUniform = trebleEnvUniformRef.current;
-        return (shader: THREE.WebGLProgramParametersWithUniforms) => {
-            shader.uniforms.uFlowTime = timeUniform;
-            shader.uniforms.uBassEnv = bassUniform;
-            shader.uniforms.uTrebleEnv = trebleUniform;
-            shader.vertexShader = shader.vertexShader
-                .replace('#include <common>', '#include <common>\nuniform float uFlowTime;\nuniform float uBassEnv;')
-                .replace(
-                    '#include <begin_vertex>',
-                    [
-                        '#include <begin_vertex>',
-                        'float dioramaWobble = sin(uFlowTime * 1.6 + position.x * 3.1 + position.y * 2.3 + position.z * 2.7);',
-                        'transformed += normal * dioramaWobble * (0.035 + 0.09 * uBassEnv);',
-                    ].join('\n')
-                );
-            shader.fragmentShader = shader.fragmentShader
-                .replace('#include <common>', '#include <common>\nuniform float uFlowTime;\nuniform float uBassEnv;\nuniform float uTrebleEnv;')
-                .replace(
-                    '#include <emissivemap_fragment>',
-                    [
-                        '#include <emissivemap_fragment>',
-                        'float dioramaFlow = 0.5 + 0.5 * sin(uFlowTime * 1.4 + vViewPosition.x * 1.6 + vViewPosition.y * 2.3);',
-                        'float dioramaFlow2 = 0.5 + 0.5 * sin(uFlowTime * 0.7 - vViewPosition.y * 1.1 + vViewPosition.x * 0.6);',
-                        'float dioramaBands = (0.75 * dioramaFlow + 0.35 * dioramaFlow2) * (0.7 + 0.6 * uBassEnv);',
-                        'vec3 dioramaViewDir = normalize(vViewPosition);',
-                        'float dioramaRim = pow(1.0 - saturate(dot(normalize(normal), dioramaViewDir)), 2.5);',
-                        'totalEmissiveRadiance *= 0.4 + dioramaBands;',
-                        'totalEmissiveRadiance += totalEmissiveRadiance * dioramaRim * (0.9 + 2.2 * uTrebleEnv);',
-                    ].join('\n')
-                );
-        };
-    }, []);
-
     // The active (newest) segment - the corridor currently playing. During a transition the previous
     // segment is still in the sequencer (the outgoing scene); everything on screen is one of the two.
     const activeSeg = sequencer.segments[sequencer.segments.length - 1] ?? null;
     const total = totalGlobalLines(sequencer);
+    // The sequencer is a mutable ref-held object, so nothing downstream of it can be memoised on its
+    // identity. `total` covers a lyric load that changes the LINE COUNT; this covers one that does not
+    // (a reprocess, a provider swap, a translation landing) - same key, same span, different words.
+    const linesEpoch = activeSeg?.linesEpoch ?? 0;
 
     // Which GLOBAL indices to mount. Normally a small forward-weighted window around the current line;
     // during a transition ALSO a tighter window around the outgoing line, so the departing corridor stays
@@ -442,40 +528,97 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         }
         return result;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mountedIndices, sequencer, transitionOutgoingIndex, globalIndex, motion.weaveScale]);
+    }, [mountedIndices, sequencer, linesEpoch, transitionOutgoingIndex, globalIndex, motion.weaveScale]);
 
-    // Per-line procedural set-pieces matched to each line's camera move, centered on the line's actual
-    // text placement, plus one foreground "gate" wipe shape per line. Built from the LOCAL index + segment
-    // seed so each song keeps its own deterministic formations; keyed by GLOBAL index so pieces from two
-    // segments never collide.
-    const shapes = useMemo(() => {
-        const result: ShapeInstance[] = [];
+    // Which shape the point-cloud layer takes: independent per-line formations, or one path tunnel.
+    const geometryMode = geometryVisibility.mode ?? 'clouds';
+
+    // Corridor mode only: one point tunnel threaded along the path. Each line contributes a span keyed by
+    // its ABSOLUTE global index (pathStart), and each span's nextFrame comes from its own segment so it
+    // never bridges a graft. The corridor uses its OWN, longer window than the text (see the constants):
+    // it has to reach past the point fade-in distance or its far end reads as a hole - most visibly at a
+    // song's start, where the camera sits at line 0 and stares straight down the tunnel.
+    // During a song change the outgoing window is included too, so both tunnels exist: the departing one
+    // recedes and disperses while the incoming one is born in the fog and gathers as the camera arrives.
+    const corridorSpans = useMemo(() => {
+        if (geometryMode !== 'corridor') return [];
+        // Each window extends its OWN segment past that segment's ends (see the builder). During a song
+        // change the two tunnels genuinely coexist - the departing one receding, the incoming one born in
+        // the fog - so both windows are built whole and simply concatenated. They can hold the same global
+        // index (one as a real line, the other as its own extension) and that is correct: they are
+        // TRANSITION_DISTANCE apart in the world.
+        const live = buildDioramaParticleCorridorWindow(
+            sequencer, globalIndex, CORRIDOR_LINES_BEHIND, CORRIDOR_LINES_AHEAD,
+        );
+        if (transitionOutgoingIndex == null) return live;
+        return [
+            ...buildDioramaParticleCorridorWindow(
+                sequencer, transitionOutgoingIndex, CORRIDOR_LINES_BEHIND, CORRIDOR_LINES_AHEAD,
+            ),
+            ...live,
+        ];
+    }, [geometryMode, globalIndex, transitionOutgoingIndex, sequencer, linesEpoch]);
+
+    // Clouds mode only: per-line point-cloud anchors matched to each camera move and kept outside the
+    // lyric/camera rail. The stable particleSeed excludes GLOBAL indices so a loop rebuilds the same
+    // local cloud pattern even though the world segment has advanced.
+    // Built in ASCENDING line order over the mounted window PLUS a short margin behind it, and NEVER
+    // ranked by distance from the current line: the collision pass resolves a tie by earlier line, so
+    // every possible blocker of a mounted cluster must be present for its verdict to come out the same
+    // wherever the camera is. Ranking by the current line instead re-ran that pass in a different order on
+    // every line advance and silently re-shuffled the whole surrounding composition. The margin clusters
+    // only vote; they are dropped again below.
+    const particleClusters = useMemo(() => {
+        if (geometryMode !== 'clouds') return [];
+        const result: DioramaParticleClusterAnchor[] = [];
+        const mounted = new Set(mountedIndices);
+        const clusterIndices = new Set<number>();
         for (const i of mountedIndices) {
+            for (let back = 0; back <= DIORAMA_CLUSTER_COLLISION_LINE_SPAN; back += 1) {
+                if (i - back >= 0) clusterIndices.add(i - back);
+            }
+        }
+        for (const i of Array.from(clusterIndices).sort((a, b) => a - b)) {
             const resolved = resolveGlobal(sequencer, i);
             if (!resolved) continue;
             const { frame, localIndex, segment } = resolved;
             const placement = getDioramaTextPlacement(localIndex, segment.seed, motion.weaveScale);
             const shot = getDioramaShot(localIndex, segment.lines, segment.seed, motion.subMode);
-            buildFormation(localIndex, segment.seed, shot, frame, placement).forEach((piece, slot) => {
-                result.push({ ...piece, key: `${i}-${slot}` });
+            buildFormation(localIndex, segment.seed, shot, frame, placement, particleScale).forEach((piece, slot) => {
+                result.push({
+                    ...piece,
+                    key: `${i}-${slot}`,
+                    sourceLine: i,
+                    particleSeed: `${segment.seed ?? 'seed'}:${localIndex}:${slot}:${piece.kind}`,
+                    role: 'formation',
+                });
             });
-            result.push({ ...getDioramaGateShape(localIndex, segment.seed, frame), key: `${i}-gate` });
+            // Foreground gate clouds are intentionally omitted: their negative depth placed them on the
+            // camera side of the lyric rail and was the main source of path crossings and one-sided piles.
         }
-        return result;
+        return selectVisibleDioramaClusters(result, geometryVisibility)
+            .filter((cluster) => mounted.has(cluster.sourceLine));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mountedIndices, sequencer, motion.weaveScale, motion.subMode]);
+    }, [geometryMode, mountedIndices, sequencer, motion.weaveScale, motion.subMode, geometryVisibility, particleScale]);
 
-    // Foreground dust field for the active segment's corridor - one static Points draw call; the camera's
-    // own motion animates it as parallax. Rebuilt only when the active song/round (segment) changes.
+    // Background mote field: one Points draw call holding a sliding WINDOW of lines around the read head
+    // (see dioramaMoteField.ts). The buffer is fixed-size and recycled in place per-frame below, so the
+    // draw cost is bounded by the density cap no matter how long the song is.
     const activeSegKey = activeSeg?.key ?? 'x';
-    const particlePositions = useMemo(
-        () => buildParticleField(activeSeg?.frames ?? [], activeSeg?.seed),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [activeSegKey]
+    const moteDensity = resolveDioramaMoteDensity(backgroundParticleDensity);
+    const motePositions = useMemo(
+        () => new Float32Array(DIORAMA_MOTE_WINDOW_LINES * moteDensity * 3),
+        [moteDensity]
     );
-    const particleKey = `dust-${activeSegKey}`;
+    const moteAttrRef = useRef<THREE.BufferAttribute>(null);
+    // slot -> the line index currently written there. Empty = every slot is stale and will be rewritten.
+    const moteWrittenRef = useRef<number[]>([]);
+    // A new buffer (density change) or a new song's dust must not be read as the old window.
+    useEffect(() => { moteWrittenRef.current = []; }, [moteDensity, activeSegKey]);
+    const particleKey = `dust-${activeSegKey}-${moteDensity}`;
 
-    const activeLine = resolveGlobal(sequencer, globalIndex)?.line ?? null;
+    const activeResolved = resolveGlobal(sequencer, globalIndex);
+    const activeLine = activeResolved?.line ?? null;
     const activeEntry = useMemo(
         () => visibleLines.find((entry) => entry.index === globalIndex) ?? null,
         [visibleLines, globalIndex]
@@ -533,6 +676,29 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         return units;
     }, [activeLine, activeLineTimeline]);
 
+    // 关键字着色. The keywords and their colours are the THEME's own `wordColors` - written by the AI
+    // theme from the song's own lyrics, and the exact source every other visualizer draws from -
+    // prepared by the shared matcher, then resolved onto units by character RANGE. What comes out is a
+    // per-unit follow-sing TARGET, never a resting colour; see the colour block in useFrame.
+    // Colour never reaches a texture (the rasters are pure white and are tinted by the material), so
+    // keyword colouring adds no texture, no cache key and nothing to dispose: it only changes which
+    // colour a material is dyed toward each frame.
+    const keywordMatchers = useMemo(
+        () => prepareDioramaKeywordMatchers(theme.wordColors, keywordColoringEnabled),
+        [theme.wordColors, keywordColoringEnabled],
+    );
+    const keywordUnitColors = useMemo(
+        () => resolveDioramaKeywordUnitColors(
+            activeLine?.fullText ?? '',
+            activeLineUnits,
+            keywordMatchers,
+            colorTargets.primary,
+            colorTargets.accent,
+            colorTargets.bg,
+        ),
+        [activeLine, activeLineUnits, keywordMatchers, colorTargets],
+    );
+
     // Rasterise + lay out the active line's units. Layout measures PREFIX strings of the full line, so
     // every unit lands at its exact kerned slot; each unit's base/glow textures share one canvas
     // geometry, so the glow registers on the strokes exactly. Synchronous - ready the frame it's built.
@@ -572,13 +738,18 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
     // textures land (so their planes mount); every consumer reads the cache ref live.
     const lineRasterCacheRef = useRef<Map<number, DioramaLineRaster>>(new Map());
     const lineRasterFontRef = useRef('');
+    const lineRasterEpochRef = useRef(-1);
     const [, bumpNeighborTick] = useState(0);
     useEffect(() => {
         const cache = lineRasterCacheRef.current;
-        if (lineRasterFontRef.current !== fontSpec) {
+        // A cached raster is only ever built for a MISSING index, so a lyric swap under a live index would
+        // otherwise keep serving the previous song's words at the right place forever. Flush on the epoch
+        // for the same reason the font change flushes: every entry is now derived from stale input.
+        if (lineRasterFontRef.current !== fontSpec || lineRasterEpochRef.current !== linesEpoch) {
             cache.forEach((raster) => raster.texture.dispose());
             cache.clear();
             lineRasterFontRef.current = fontSpec;
+            lineRasterEpochRef.current = linesEpoch;
         }
         const wanted = new Set<number>();
         visibleLines.forEach(({ index, line }) => {
@@ -614,7 +785,7 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         };
         rafId = requestAnimationFrame(buildBatch);
         return () => { cancelled = true; if (rafId) cancelAnimationFrame(rafId); };
-    }, [visibleLines, globalIndex, fontSpec, fontStack]);
+    }, [visibleLines, globalIndex, fontSpec, fontStack, linesEpoch]);
 
     // Free the neighbour cache's WebGL textures on UNMOUNT. The incremental effect above only disposes
     // textures it prunes (index no longer wanted) or flushes (font change); its cleanup just cancels the
@@ -639,6 +810,23 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         }
     }
 
+    // Fog toward the shell's background colour (the colour itself is damped per-frame below): distant
+    // lines and set-pieces melt into the same haze the lifecycle fade births them from.
+    // Owned IMPERATIVELY, on purpose. three only ever reads fog off the SCENE, and R3F's `attach` is a
+    // plain parent-property write - so an `<fog attach="fog"/>` element rendered inside this component's
+    // own <group> silently sets group.fog, which nothing reads. That is exactly what used to happen here:
+    // scene.fog stayed null and the diorama ran with NO fog at all, which is why departing lyrics never
+    // faded and the far end of the mote field showed up as a clump. Setting it on the scene directly keeps
+    // it correct no matter how this component's JSX is later nested.
+    const scene = useThree((state) => state.scene);
+    useEffect(() => {
+        const previous = scene.fog;
+        scene.fog = new THREE.Fog(colorTargets.bg.getHex(), FOG_NEAR, FOG_FAR);
+        return () => { scene.fog = previous; };
+        // colorTargets.bg is only the initial colour here; useFrame keeps it damped from then on.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scene]);
+
     useFrame((frameState, delta) => {
         // Damped theme colours chase the targets, then everything colour-bearing copies from them -
         // fog, lights, shape materials - so a theme/AI/song switch is a glide, not a jump.
@@ -658,73 +846,57 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         damped.bg.lerp(colorTargets.bg, colorK);
         const sceneFog = frameState.scene.fog;
         if (sceneFog) sceneFog.color.copy(damped.bg);
-        if (ambientRef.current) ambientRef.current.color.copy(damped.secondary);
-        if (accentLightRef.current) accentLightRef.current.color.copy(damped.accent);
-        if (primaryLightRef.current) primaryLightRef.current.color.copy(damped.primary);
-
-        // Liquid-flow clock: wall time (not playback time) so the energy keeps flowing during pauses.
-        flowTimeRef.current.value = frameState.clock.elapsedTime;
 
         // Audio levels arrive 0..255; scaled by the tuning's audioLevel (0 disables entirely). The
-        // GEOMETRY carries the music - the camera never does. Raw values are folded into fast-attack /
-        // slow-release ENVELOPES (uniform refs shared with the shape shader): beats land on time, decays
-        // breathe out - so every music-reactive element pulses together without frame flicker.
+        // background motes and lyric effects use smoothed envelopes here; the point-cloud field owns its
+        // separate shader uniforms. Neither path writes audio into the camera.
         const audioK = motion.audioLevel;
-        const bass01 = Math.min(1, audioBands.bass.get() / 255) * audioK;
         const treble01 = Math.min(1, audioBands.treble.get() / 255) * audioK;
         const power01 = Math.min(1, audioPower.get() / 255) * audioK;
-        const bassEnv = bassEnvUniformRef.current.value = stepEnvelope(bassEnvUniformRef.current.value, bass01, 14, 3.2, delta);
-        const trebleEnv = trebleEnvUniformRef.current.value = stepEnvelope(trebleEnvUniformRef.current.value, treble01, 14, 3.2, delta);
+        const trebleEnv = stepEnvelope(trebleEnvRef.current, treble01, 14, 3.2, delta);
+        trebleEnvRef.current = trebleEnv;
         const powerEnv = stepEnvelope(powerEnvRef.current, power01, 18, 3.5, delta);
         powerEnvRef.current = powerEnv;
         const camPos = frameState.camera.position;
 
-        // Smoke-life for the dust: the whole field drifts slowly like a carried haze, and the motes
-        // swell/brighten with the music's energy - the camera's parallax does the rest.
-        if (pointsRef.current) {
-            const t = frameState.clock.elapsedTime;
-            pointsRef.current.position.set(Math.sin(t * 0.21) * 0.35, Math.sin(t * 0.13 + 1.7) * 0.28, Math.cos(t * 0.17) * 0.35);
-        }
-        if (pointsMatRef.current) {
-            pointsMatRef.current.size = 0.05 * (1 + 0.9 * trebleEnv);
-            pointsMatRef.current.opacity = 0.32 + 0.35 * powerEnv;
-            pointsMatRef.current.color.copy(damped.accent);
+        // Recycle the mote window onto the read head. Every line from -BEHIND to +AHEAD maps to its own
+        // ring slot, so this is a no-op on the frames where the read head has not moved, and rewrites
+        // exactly the lines that entered the window on the frames where it has. Lines past either end of
+        // the lyrics get a straight procedural frame, so the dust keeps going where the path stops.
+        if (showParticles) {
+            const written = moteWrittenRef.current;
+            const lastLine = Math.max(0, total - 1);
+            let dirty = false;
+            for (let line = globalIndex - DIORAMA_MOTE_LINES_BEHIND; line <= globalIndex + DIORAMA_MOTE_LINES_AHEAD; line += 1) {
+                const slot = dioramaMoteSlot(line);
+                if (written[slot] === line) continue;
+                const anchorLine = Math.min(Math.max(line, 0), lastLine);
+                const resolved = resolveGlobal(sequencer, anchorLine);
+                if (!resolved) continue;
+                writeDioramaMoteLine(
+                    motePositions,
+                    extendDioramaFrame(resolved.frame, line - anchorLine),
+                    line,
+                    moteDensity,
+                    activeSeg?.seed,
+                );
+                written[slot] = line;
+                dirty = true;
+            }
+            if (dirty && moteAttrRef.current) moteAttrRef.current.needsUpdate = true;
         }
 
-        shapeRefs.current.forEach((mesh, i) => {
-            if (!mesh) return;
-            const shape = shapes[i];
-            if (!shape) return;
-            // Distance lifecycle: born from the far haze, dissolved before the lens can clip through.
-            const dist = mesh.position.distanceTo(camPos);
-            const life = resolveShapeLifeOpacity(dist);
-            if (life <= 0.001) {
-                mesh.visible = false;
-                return;
-            }
-            mesh.visible = true;
-            // Upright architecture only yaws slowly; loose pieces tumble slowly. Treble quickens both.
-            const spin = shape.spinSpeed * (1 + trebleEnv * 2);
-            if (shape.upright) {
-                mesh.rotation.y += delta * spin * 0.6;
-            } else {
-                mesh.rotation.x += delta * spin;
-                mesh.rotation.y += delta * spin * 0.7;
-            }
-            // Bass pulse + proximity swell, with a gentle shrink while dissolving so a near pass reads
-            // as the shape melting away rather than popping off.
-            const closeness = Math.max(0, 1 - dist / SHAPE_PROXIMITY_RADIUS);
-            const pulse = shape.scale * (1 + bassEnv * 0.18 + closeness * 0.12) * (0.75 + 0.25 * life);
-            mesh.scale.set(pulse, pulse * shape.stretchY, pulse);
-            const material = mesh.material as THREE.MeshStandardMaterial;
-            if (material) {
-                const tone = shape.colorSlot === 0 ? damped.primary : damped.accent;
-                material.color.copy(tone);
-                material.emissive.copy(tone);
-                material.opacity = (shape.layer === 'far' ? 0.45 : 0.9) * life;
-                material.emissiveIntensity = (0.14 + bassEnv * 0.6 + powerEnv * 0.25 + closeness * 1.0) * life;
-            }
-        });
+        // Background motes drift as a quiet depth cue; restrained audio response keeps them from
+        // competing with lyrics or reading as bright foreground debris.
+        if (pointsRef.current) {
+            const t = frameState.clock.elapsedTime;
+            pointsRef.current.position.set(Math.sin(t * 0.17) * 0.12, Math.sin(t * 0.11 + 1.7) * 0.09, Math.cos(t * 0.13) * 0.12);
+        }
+        if (pointsMatRef.current) {
+            pointsMatRef.current.size = 0.03 * (1 + 0.42 * trebleEnv);
+            pointsMatRef.current.opacity = 0.16 + 0.18 * powerEnv;
+            pointsMatRef.current.color.copy(damped.secondary).lerp(damped.accent, 0.3);
+        }
 
         // Fit each lyric line to read well at the HERO distance (times its per-line staging scale and
         // the global 字号 scale), then leave it alone - no billboarding, no live-distance rescale, so
@@ -743,8 +915,8 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
             mesh.scale.setScalar(fit);
             const life = resolveTextLife(mesh.position.distanceTo(camPos));
             if (isOutgoing) {
-                // Departing corridor: a soft primary-toned cluster the camera is flying away from; the
-                // distance fog handles the fade-out as it recedes (see resolveOutgoingLineOpacity).
+                // Departing corridor: a soft primary-toned cluster the camera is flying away from; `life`
+                // fades it out as it recedes, the fog dresses the way down (see resolveOutgoingLineOpacity).
                 mat.opacity = resolveOutgoingLineOpacity(index - (transitionOutgoingIndex ?? index)) * life;
                 mat.color.copy(damped.primary);
             } else {
@@ -763,13 +935,15 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         // Disabling one never changes what the others draw. All per-frame writes are material
         // colour/opacity + mesh transforms - nothing ever re-rasterises during a line.
         const unitsGroup = unitsGroupRef.current;
-        if (globalIndex !== prevActiveGlobalRef.current) {
+        if (shouldResetDioramaUnitState(
+            prevActiveGlobalRef.current, globalIndex, unitLightValsRef.current?.length, activeLineUnits.length,
+        )) {
             // New active line (or new segment/round): fresh per-unit state (the keyed group already
-            // remounted fresh planes).
+            // remounted fresh planes). Also fires when THIS line's words were swapped under it - the
+            // group is keyed by index, so it keeps its planes and only these arrays have to catch up.
             prevActiveGlobalRef.current = globalIndex;
             unitLightValsRef.current = new Float32Array(activeLineUnits.length);
             unitSoulValsRef.current = new Float32Array(activeLineUnits.length);
-            gradientEnvRef.current = 0;
             unitBaseMatRefs.current.length = activeLineUnits.length;
             unitGlowMatRefs.current.length = activeLineUnits.length;
             unitGlowMeshRefs.current.length = activeLineUnits.length;
@@ -788,15 +962,10 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
             const lightVals = unitLightValsRef.current;
             const soulVals = unitSoulValsRef.current;
 
-            // 渐变跟唱 line gate: eases in when the line starts being sung and releases slowly after
-            // it finishes, so the whole tint fades out naturally and hands over smoothly to the next
-            // line (which starts its own gate from zero). lineProgress feeds the per-unit sustain.
-            const renderEnd = getLineRenderEndTime(activeLine);
-            const lineSpan = Math.max(renderEnd - activeLine.startTime, 0.001);
-            const lineProgress = clamp01((now - activeLine.startTime) / lineSpan);
-            const gradientGateTarget = gradientIntensity > 0 && now >= activeLine.startTime && now <= renderEnd ? 1 : 0;
-            gradientEnvRef.current = stepEnvelope(gradientEnvRef.current, gradientGateTarget, 6, 1.6, delta);
-            const gradientNow = gradientEnvRef.current * Math.min(1.5, gradientIntensity);
+            // 渐变跟唱 strength tier. There is deliberately no line-level gate: each unit owns its own
+            // wake (resolveGradientEnergy), so a line hands over to the next simply by its units running
+            // out of wake, and nothing at line scope can re-tint a word that has already settled.
+            const gradientStrength = Math.min(1.5, gradientIntensity);
             // Sung-tint axis for this frame, from the theme's damped colours: normally the accent as
             // is. When the palette is DEGENERATE (accent ~= primary - e.g. the built-in 墨染/素白
             // themes ship the SAME colour for both, so any accent<->primary blend is mathematically
@@ -819,7 +988,7 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
             // amplify channel noise into a fake hue) version of the sung-tint. The sung glyphs are
             // dyed from the plain primary toward this, so the wave carries a deep, saturated,
             // same-family colour that no palette washes out. The 强 tier makes the anchor deeper.
-            const gradHot01 = Math.min(1, Math.max(0, (Math.min(1.5, gradientIntensity) - 0.1) / 1.4));
+            const gradHot01 = Math.min(1, Math.max(0, (gradientStrength - 0.1) / 1.4));
             _gradDeep.copy(_sungTint).multiplyScalar(0.8 - 0.18 * gradHot01);
 
             activeLineUnits.forEach((unit, i) => {
@@ -835,14 +1004,10 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
                 lightVals[i] = stepEnvelope(lightVals[i], isCurrent ? 1 : 0, 14, 4.5, delta);
 
                 // 渐变跟唱 energy for this unit (its OWN follow-sing computation, alive with the other
-                // two effects off). A HOT-TRAIL that peaks right as the unit is sung and relaxes over
-                // ~1.8s behind the singing (a wave travelling through the line), on top of a floor that
-                // deepens with the line's progress - so freshly sung glyphs are deepest, earlier ones
-                // settle to a mid tone that grows richer as the line advances, and unsung glyphs are
-                // untouched (energy 0). Scaled by gradientNow (the gate x strength tier).
-                const sinceSung = sung ? now - unit.endTime : 0;
-                const hotTrail = isCurrent ? sungMix : sung ? Math.max(0, 1 - sinceSung / 1.8) : 0;
-                const gradientEnergy = sungMix * (0.35 + 0.25 * lineProgress + 0.7 * hotTrail) * gradientNow;
+                // two effects off): a bounded wake that peaks as the unit is sung and relaxes to zero
+                // behind the singing - a wave travelling through the line, leaving each word back at its
+                // base colour. Unsung glyphs are untouched (energy 0).
+                const gradientEnergy = resolveGradientEnergy(now, unit) * gradientStrength;
 
                 // BASE REVEAL (always on): dim while unsung, sweeping to full as the unit is sung.
                 // The gradient effect adds a small opacity lift on top.
@@ -853,18 +1018,23 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
 
                 // ---- UNIFIED sung-colour state: the fill colour is computed exactly ONCE ----
                 // Glow and soul only READ this colour below (never re-dye), so stacking never double-
-                // deepens or over-saturates.
-                if (gradientIntensity > 0) {
-                    // 渐变跟唱 OWNS the fill: dye from the plain primary toward the deep sung-tint by
-                    // this unit's energy. Energy 0 = exactly primary (unsung stays plain, the colour is
-                    // never blanked), rising smoothly to the deep tint at the sung peak - a continuous,
-                    // same-family deepening bound to the lyric progress, no jumps, no wash-out.
-                    baseMat.color.copy(damped.primary).lerp(_gradDeep, Math.min(1, gradientEnergy));
-                } else {
-                    // Standard highlight when the gradient is off: the shared baseline every config
-                    // gets - sung unit flashes toward the accent tint, decays after via lightVals.
-                    baseMat.color.copy(damped.primary).lerp(_sungTint, Math.min(1, lightVals[i] * 1.15));
-                }
+                // deepens or over-saturates - and it is what makes them follow a keyword's own colour
+                // instead of glowing in the ordinary sung tint around AI-coloured glyphs.
+                //
+                // ONE base, ONE target, ONE interpolation driven by this unit's own sung progress:
+                //   unsung -> exactly damped.primary       sung -> target       after -> back to primary
+                // 关键字着色 changes only the TARGET. An AI keyword is a HIDDEN colour: it is not a
+                // resting colour and must never appear before the singing arrives, or a line shows its
+                // own answers ahead of itself. It emerges only as the unit is sung, everything else
+                // dyes toward the same colour, and it decays back to the plain lyric colour behind the
+                // singing. Ordinary units keep the shared sung tint as their target, exactly as before.
+                const unitTarget = keywordUnitColors.get(i)
+                    ?? (gradientIntensity > 0 ? _gradDeep : _sungTint);
+                // 渐变跟唱 times the dye when it is on (a pure, one-way function of this unit's own
+                // start/end - so a keyword emerges, peaks and decays with the word itself, and a seek
+                // or a loop recomputes it from the clock). Otherwise the shared baseline envelope does.
+                const unitProgress = gradientIntensity > 0 ? gradientEnergy : lightVals[i] * 1.15;
+                resolveDioramaUnitFill(baseMat.color, damped.primary, unitTarget, unitProgress);
 
                 // 普通辉光 (visual layer only - reads the unified colour, never writes it): brightness
                 // rides the shared envelope, breath and the music-power envelope AFTER smoothing.
@@ -909,32 +1079,45 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
 
     return (
         <group>
-            {/* Fog toward the shell's background colour (damped per-frame in useFrame): distant lines
-                and set-pieces melt into the same haze the lifecycle fade births them from. */}
-            <fog attach="fog" args={['#000000', FOG_NEAR, FOG_FAR]} />
-            {/* Light colours are driven imperatively from the damped theme colours each frame. */}
-            <ambientLight ref={ambientRef} intensity={0.6} />
-            <pointLight ref={accentLightRef} position={[6, 8, 6]} intensity={1.1} />
-            <pointLight ref={primaryLightRef} position={[-6, -4, -6]} intensity={0.5} />
-
             {showParticles && (
                 <points key={particleKey} ref={pointsRef} frustumCulled={false}>
                     <bufferGeometry>
-                        <bufferAttribute attach="attributes-position" args={[particlePositions, 3]} />
+                        <bufferAttribute ref={moteAttrRef} attach="attributes-position" args={[motePositions, 3]} />
                     </bufferGeometry>
-                    {/* Size/opacity/colour are driven per-frame from the music envelopes in useFrame -
-                        the dust breathes like carried smoke instead of sitting static. */}
+                    {/* Size/opacity/colour are driven per-frame from the music envelopes in useFrame. */}
                     <pointsMaterial
                         ref={pointsMatRef}
-                        size={0.05}
+                        size={0.03}
                         sizeAttenuation
                         transparent
-                        opacity={0.4}
+                        opacity={0.2}
                         depthWrite={false}
-                        color={colors.accent}
-                        blending={THREE.AdditiveBlending}
+                        color={colors.secondary}
+                        blending={THREE.NormalBlending}
                     />
                 </points>
+            )}
+
+            {(geometryMode === 'corridor' ? corridorSpans.length > 0 : particleClusters.length > 0) && (
+                <DioramaParticleField
+                    mode={geometryMode}
+                    clusters={particleClusters}
+                    corridorSpans={corridorSpans}
+                    density={particleDensity}
+                    particleGlowEnabled={particleGlowEnabled}
+                    particleGlowIntensity={particleGlowIntensity}
+                    currentTime={currentTime}
+                    audioPower={audioPower}
+                    audioBands={audioBands}
+                    audioLevel={motion.audioLevel}
+                    primaryColor={colors.primary}
+                    accentColor={colors.accent}
+                    secondaryColor={colors.secondary}
+                    backgroundColor={theme.backgroundColor}
+                    transitionActive={transitionOutgoingIndex != null}
+                    readHeadLine={globalIndex}
+                    resetKey={activeSegKey}
+                />
             )}
 
             {showLyrics && visibleLines.map(({ index, line, position, quaternion, isOutgoing }) => {
@@ -1040,37 +1223,6 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
                 </group>
             )}
 
-            {shapes.map((shape, i) => (
-                <mesh
-                    key={shape.key}
-                    ref={el => { shapeRefs.current[i] = el; }}
-                    position={[shape.position.x, shape.position.y, shape.position.z]}
-                    scale={[shape.scale, shape.scale * shape.stretchY, shape.scale]}
-                >
-                    {/* The formation archetypes map onto SMOOTH, organic primitives only. Hard-edged
-                        primitives (boxes/cones) have split per-face normals, so the fluid vertex wobble
-                        tears their faces apart at the seams - and their silhouettes read as plastic, not
-                        fluid. Smooth geometry shares vertex normals: the wobble undulates the surface
-                        continuously, so the set-pieces read as liquid blobs, pillars and ribbons.
-                        'box' (pillar archetype) -> capsule, 'cone' (spire) -> flowing torus knot. */}
-                    {shape.kind === 'box' && <capsuleGeometry args={[0.42, 0.72, 12, 24]} />}
-                    {shape.kind === 'sphere' && <sphereGeometry args={[0.7, 48, 32]} />}
-                    {shape.kind === 'cone' && <torusKnotGeometry args={[0.45, 0.16, 96, 16]} />}
-                    {shape.kind === 'torus' && <torusGeometry args={[0.7, 0.25, 24, 48]} />}
-                    {/* Colour/emissive are copied from the DAMPED theme colours per-frame in useFrame
-                        (smooth theme transitions); opacity/emissiveIntensity are the audio pulse,
-                        proximity flare and lifecycle fade; onBeforeCompile injects the living-material
-                        behaviour (liquid wobble, flowing emissive bands, fresnel glass rim). */}
-                    <meshStandardMaterial
-                        emissiveIntensity={0.12}
-                        roughness={shape.layer === 'far' ? 0.6 : 0.32}
-                        metalness={0.15}
-                        transparent
-                        opacity={shape.layer === 'far' ? 0.45 : 0.9}
-                        onBeforeCompile={handleShapeBeforeCompile}
-                    />
-                </mesh>
-            ))}
         </group>
     );
 };
