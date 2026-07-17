@@ -88,6 +88,32 @@ describe('Visual Settings Import and Export', () => {
             tiltStyleProbability: 0.4,
             colorScheme: 'accentAll' as const,
         },
+        dioramaTuning: {
+            cameraSpeed: 1.1,
+            motionAmount: 0.9,
+            audioReactivity: 0.8,
+            geometryVisibility: {
+                enabled: true,
+                mode: 'corridor' as const,
+                strands: true,
+                blobs: false,
+                ribbons: true,
+                rings: false,
+            },
+            particleDensity: 72,
+            particleScale: 1.4,
+            particleGlowEnabled: true,
+            particleGlowIntensity: 0.75,
+            showParticles: false,
+            backgroundParticleDensity: 96,
+            glowEnabled: true,
+            glowIntensity: 0.8,
+            soulEnabled: false,
+            soulIntensity: 1,
+            gradientEnabled: true,
+            gradientIntensity: 0.7,
+            keywordColoringEnabled: false,
+        },
         monetBackgroundTuning: {
             backgroundSource: 'cover-derived' as const,
             backgroundLayout: 'half-pane-gradient' as const,
@@ -159,6 +185,8 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.claddaghTuning?.focusScaleRatio).toBe(0.75);
         expect(decoded.claddaghTuning?.radiusScale).toBe(1.15);
         expect(decoded.claddaghTuning?.ellipseTiltDeg).toBe(52);
+        expect(decoded.dioramaTuning?.geometryVisibility).toEqual(sampleConfig.dioramaTuning.geometryVisibility);
+        expect(decoded.dioramaTuning?.showParticles).toBe(false);
         expect(decoded.theme?.light.name).toBe('Light Gold');
         expect(decoded.theme?.dark.accentColor).toBe('#fbbf24');
         expect(decoded.monetBackgroundTuning?.backgroundBlurPx).toBe(4);
@@ -217,6 +245,13 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.nomandBackgroundTuning.ditheringType).toBe('8x8');
         expect(decoded.nomandBackgroundTuning.overlayEnabled).toBe(true);
         expect(decoded.nomandBackgroundTuning.overlayOpacity).toBe(0.35);
+    });
+
+    it('round-trips a Diorama-only short code including geometry child switches', () => {
+        const code = compressConfig({ dioramaTuning: sampleConfig.dioramaTuning });
+        const decoded = decompressConfig(code);
+
+        expect(decoded.dioramaTuning).toEqual(sampleConfig.dioramaTuning);
     });
 
     it('gracefully throws error on invalid configuration input strings', () => {

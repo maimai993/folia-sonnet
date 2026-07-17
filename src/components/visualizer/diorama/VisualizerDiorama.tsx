@@ -398,7 +398,15 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
                         audioBands={audioBands}
                         motion={motionParams}
                         showLyrics={showText}
+                        geometryVisibility={dioramaTuning?.geometryVisibility ?? DEFAULT_DIORAMA_TUNING.geometryVisibility}
+                        particleDensity={dioramaTuning?.particleDensity ?? DEFAULT_DIORAMA_TUNING.particleDensity}
+                        particleScale={dioramaTuning?.particleScale ?? DEFAULT_DIORAMA_TUNING.particleScale}
+                        particleGlowEnabled={dioramaTuning?.particleGlowEnabled ?? DEFAULT_DIORAMA_TUNING.particleGlowEnabled}
+                        particleGlowIntensity={dioramaTuning?.particleGlowIntensity ?? DEFAULT_DIORAMA_TUNING.particleGlowIntensity}
                         showParticles={dioramaTuning?.showParticles ?? true}
+                        backgroundParticleDensity={
+                            dioramaTuning?.backgroundParticleDensity ?? DEFAULT_DIORAMA_TUNING.backgroundParticleDensity
+                        }
                         lyricsFontScale={lyricsFontScale}
                         // Each follow-sing effect resolves to an EFFECTIVE strength here (0 when its
                         // toggle is off) - the scene renders the three effects on fully separate paths.
@@ -408,6 +416,8 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
                             ? (dioramaTuning?.soulIntensity ?? DEFAULT_DIORAMA_TUNING.soulIntensity) : 0}
                         gradientIntensity={(dioramaTuning?.gradientEnabled ?? DEFAULT_DIORAMA_TUNING.gradientEnabled)
                             ? (dioramaTuning?.gradientIntensity ?? DEFAULT_DIORAMA_TUNING.gradientIntensity) : 0}
+                        keywordColoringEnabled={dioramaTuning?.keywordColoringEnabled
+                            ?? DEFAULT_DIORAMA_TUNING.keywordColoringEnabled}
                     />
                 </Canvas>
             </div>

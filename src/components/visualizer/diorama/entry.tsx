@@ -5,7 +5,7 @@ import VisualizerDiorama from './VisualizerDiorama';
 
 // src/components/visualizer/diorama/entry.tsx
 // Registers Diorama: a procedural 3D lyric flythrough with lyric-synced cinematic camera work, plus
-// its tuning panel (sub-modes / camera speed / motion amount / geometry audio response / particles).
+// its tuning panel (camera speed / motion amount / geometry visibility and response / particles).
 export default defineVisualizer({
     mode: 'diorama',
     order: 60,

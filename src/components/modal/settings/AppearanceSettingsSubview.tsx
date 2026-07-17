@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import {
     DEFAULT_CLADDAGH_TUNING,
+    DEFAULT_DIORAMA_TUNING,
     DEFAULT_LATENT_BACKGROUND_TUNING,
     DEFAULT_MONET_BACKGROUND_TUNING,
     DEFAULT_MONET_TUNING,
@@ -184,25 +185,53 @@ const compressDiorama = (t: any): any => ({
     cs: t.cameraSpeed,
     ma: t.motionAmount,
     ar: t.audioReactivity,
+    gv: t.geometryVisibility ? {
+        e: t.geometryVisibility.enabled,
+        m: t.geometryVisibility.mode,
+        s: t.geometryVisibility.strands,
+        b: t.geometryVisibility.blobs,
+        r: t.geometryVisibility.ribbons,
+        o: t.geometryVisibility.rings,
+    } : undefined,
+    pd: t.particleDensity,
+        psz: t.particleScale,
+    pge: t.particleGlowEnabled,
+    pgi: t.particleGlowIntensity,
     spa: t.showParticles,
+    bpd: t.backgroundParticleDensity,
     ge: t.glowEnabled,
     gi: t.glowIntensity,
     se: t.soulEnabled,
     si: t.soulIntensity,
     gre: t.gradientEnabled,
     gri: t.gradientIntensity,
+    kce: t.keywordColoringEnabled,
 });
 const decompressDiorama = (o: any): any => ({
-    cameraSpeed: o.cs !== undefined ? o.cs : 1,
-    motionAmount: o.ma !== undefined ? o.ma : 1,
-    audioReactivity: o.ar !== undefined ? o.ar : 1,
-    showParticles: o.spa !== undefined ? o.spa : true,
-    glowEnabled: o.ge !== undefined ? o.ge : true,
-    glowIntensity: o.gi !== undefined ? o.gi : 1,
-    soulEnabled: o.se !== undefined ? o.se : true,
-    soulIntensity: o.si !== undefined ? o.si : 1,
-    gradientEnabled: o.gre !== undefined ? o.gre : false,
-    gradientIntensity: o.gri !== undefined ? o.gri : 1,
+    cameraSpeed: o.cs !== undefined ? o.cs : DEFAULT_DIORAMA_TUNING.cameraSpeed,
+    motionAmount: o.ma !== undefined ? o.ma : DEFAULT_DIORAMA_TUNING.motionAmount,
+    audioReactivity: o.ar !== undefined ? o.ar : DEFAULT_DIORAMA_TUNING.audioReactivity,
+    geometryVisibility: {
+        enabled: o.gv?.e !== undefined ? o.gv.e : DEFAULT_DIORAMA_TUNING.geometryVisibility.enabled,
+        mode: o.gv?.m !== undefined ? o.gv.m : DEFAULT_DIORAMA_TUNING.geometryVisibility.mode,
+        strands: o.gv?.s !== undefined ? o.gv.s : DEFAULT_DIORAMA_TUNING.geometryVisibility.strands,
+        blobs: o.gv?.b !== undefined ? o.gv.b : DEFAULT_DIORAMA_TUNING.geometryVisibility.blobs,
+        ribbons: o.gv?.r !== undefined ? o.gv.r : DEFAULT_DIORAMA_TUNING.geometryVisibility.ribbons,
+        rings: o.gv?.o !== undefined ? o.gv.o : DEFAULT_DIORAMA_TUNING.geometryVisibility.rings,
+    },
+    particleDensity: o.pd !== undefined ? o.pd : DEFAULT_DIORAMA_TUNING.particleDensity,
+        particleScale: o.psz !== undefined ? o.psz : DEFAULT_DIORAMA_TUNING.particleScale,
+    particleGlowEnabled: o.pge !== undefined ? o.pge : DEFAULT_DIORAMA_TUNING.particleGlowEnabled,
+    particleGlowIntensity: o.pgi !== undefined ? o.pgi : DEFAULT_DIORAMA_TUNING.particleGlowIntensity,
+    showParticles: o.spa !== undefined ? o.spa : DEFAULT_DIORAMA_TUNING.showParticles,
+    backgroundParticleDensity: o.bpd !== undefined ? o.bpd : DEFAULT_DIORAMA_TUNING.backgroundParticleDensity,
+    glowEnabled: o.ge !== undefined ? o.ge : DEFAULT_DIORAMA_TUNING.glowEnabled,
+    glowIntensity: o.gi !== undefined ? o.gi : DEFAULT_DIORAMA_TUNING.glowIntensity,
+    soulEnabled: o.se !== undefined ? o.se : DEFAULT_DIORAMA_TUNING.soulEnabled,
+    soulIntensity: o.si !== undefined ? o.si : DEFAULT_DIORAMA_TUNING.soulIntensity,
+    gradientEnabled: o.gre !== undefined ? o.gre : DEFAULT_DIORAMA_TUNING.gradientEnabled,
+    gradientIntensity: o.gri !== undefined ? o.gri : DEFAULT_DIORAMA_TUNING.gradientIntensity,
+    keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_DIORAMA_TUNING.keywordColoringEnabled,
 });
 
 const compressMonetBackground = (t: any): any => ({
@@ -385,6 +414,7 @@ export const decompressConfig = (str: string): any => {
         || parsed.rvms !== undefined
         || parsed.ct !== undefined
         || parsed.cat !== undefined
+        || parsed.dot !== undefined
         || parsed.nbt !== undefined
         || parsed.lbt !== undefined
         || parsed.hpts !== undefined
