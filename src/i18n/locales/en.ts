@@ -1039,6 +1039,37 @@ export default {
         "title": "Poster-Wall Search and Gestures",
         "description": "Poster-wall pages now support list search, direct typing, and a search gesture for quickly opening search."
       }
+    },
+    "v0_6_0": {
+      "intro": "Here are the new features and improvements in version 0.6.0.",
+      "localLibraryV2": {
+        "title": "Local Library 2.0",
+        "description": "The local music library now uses a progressive poster-wall workflow for folders, albums, artists, and playlists, with stronger import, rescan, and cover-cache handling."
+      },
+      "entityEditing": {
+        "title": "Artist and Album Entity Editing",
+        "description": "Rename displayed identities, search and merge duplicates, or move selected songs into new or existing artist and album entities."
+      },
+      "unifiedSearch": {
+        "title": "Unified Search and Navigation",
+        "description": "The search workspace covers NetEase, local, Navidrome, and the current queue, while navigation history, map view, and detail links make browsing more continuous."
+      },
+      "metadataMatching": {
+        "title": "Smarter Metadata Matching",
+        "description": "Local songs now have duration-assisted matching, batch metadata and cover organization, manual online matching, and reliable recovery of original local information."
+      },
+      "dailyRecommendations": {
+        "title": "Daily Recommendations and Playlist Editing",
+        "description": "NetEase daily recommendations can be browsed, managed, and queued directly, and playlist editing now has smoother interaction feedback."
+      },
+      "visualizerBackgrounds": {
+        "title": "New Visualizer Background System",
+        "description": "Latent and Nomand backgrounds add static mode, subtitle readability overlays, configurable color sources, beat response, and unified background settings and commands."
+      },
+      "dioramaRework": {
+        "title": "Diorama Particle Rework",
+        "description": "Diorama now offers ripple-driven point-cloud and corridor modes, more particle shapes, keyword coloring, and controls for density and glow."
+      }
     }
   },
   "export": {

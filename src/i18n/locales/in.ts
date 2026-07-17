@@ -961,6 +961,37 @@ export default {
         "title": "Pencarian dan Gestur Dinding Poster",
         "description": "Halaman dinding poster kini mendukung pencarian daftar, pengetikan langsung, dan gestur untuk membuka pencarian dengan cepat."
       }
+    },
+    "v0_6_0": {
+      "intro": "Berikut adalah fitur dan peningkatan baru di versi 0.6.0.",
+      "localLibraryV2": {
+        "title": "Perpustakaan Lokal 2.0",
+        "description": "Perpustakaan musik lokal kini menggunakan alur dinding poster progresif untuk folder, album, artis, dan playlist, dengan impor, pemindaian ulang, serta cache sampul yang lebih baik."
+      },
+      "entityEditing": {
+        "title": "Edit Entitas Artis dan Album",
+        "description": "Ubah nama tampilan, cari dan gabungkan entitas duplikat, atau pindahkan lagu terpilih ke entitas artis dan album baru maupun yang sudah ada."
+      },
+      "unifiedSearch": {
+        "title": "Pencarian dan Navigasi Terpadu",
+        "description": "Ruang kerja pencarian mencakup NetEase, lokal, Navidrome, dan antrean saat ini, sementara riwayat navigasi, tampilan peta, dan tautan detail membuat penelusuran lebih lancar."
+      },
+      "metadataMatching": {
+        "title": "Pencocokan Metadata yang Lebih Cerdas",
+        "description": "Lagu lokal kini mendukung pencocokan berbantuan durasi, pengaturan metadata dan sampul secara massal, pencocokan online manual, serta pemulihan informasi lokal asli."
+      },
+      "dailyRecommendations": {
+        "title": "Rekomendasi Harian dan Edit Playlist",
+        "description": "Rekomendasi harian NetEase dapat dijelajahi, dikelola, dan dimasukkan ke antrean secara langsung, dengan umpan balik yang lebih halus saat mengedit playlist."
+      },
+      "visualizerBackgrounds": {
+        "title": "Sistem Latar Visualizer Baru",
+        "description": "Latar Latent dan Nomand menambahkan mode statis, latar keterbacaan subtitle, sumber warna yang dapat diatur, respons ketukan, serta pengaturan dan perintah latar yang terpadu."
+      },
+      "dioramaRework": {
+        "title": "Pembaruan Partikel Diorama",
+        "description": "Diorama kini memiliki mode awan titik dan koridor berbasis riak, lebih banyak bentuk partikel, pewarnaan kata kunci, serta kontrol kepadatan dan cahaya."
+      }
     }
   },
   "export": {

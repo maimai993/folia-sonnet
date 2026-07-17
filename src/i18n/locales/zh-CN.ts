@@ -1040,6 +1040,37 @@ export default {
         "title": "海报墙搜索与手势",
         "description": "各海报墙页面现在支持列表搜索，也可以直接输入文字或使用搜索手势快速打开搜索。"
       }
+    },
+    "v0_6_0": {
+      "intro": "以下是 0.6.0 版本的新功能与改进",
+      "localLibraryV2": {
+        "title": "本地曲库 2.0",
+        "description": "本地音乐库全面更新，支持多文件夹、专辑与艺术家跳转、元数据整理和在线匹配。"
+      },
+      "entityEditing": {
+        "title": "艺术家与专辑实体编辑",
+        "description": "可以修改展示名称、搜索并合并重复实体，或选择歌曲拆分到新的或已有的艺术家与专辑。"
+      },
+      "unifiedSearch": {
+        "title": "统一搜索与队列",
+        "description": "搜索功能支持网易云、本地库、Navidrome多来源; 支持构建混合了在线歌曲与本地歌曲的播放队列。"
+      },
+      "metadataMatching": {
+        "title": "海报墙增强",
+        "description": "海报墙现在支持基于搜索来筛选歌曲并加入队列，优化了卡片加载动画"
+      },
+      "dailyRecommendations": {
+        "title": "每日推荐",
+        "description": "现在可以浏览网易云日推歌曲。"
+      },
+      "visualizerBackgrounds": {
+        "title": "全新可视化背景系统",
+        "description": "新增隐现与漫游背景，支持静态模式、字幕可读性背景、颜色来源和节拍响应，并统一了背景设置与命令。"
+      },
+      "dioramaRework": {
+        "title": "镜台点云重构",
+        "description": "镜台加入涟漪驱动的点云与长廊双模式、更多粒子形态、关键字着色和可调的粒子密度与辉光。"
+      }
     }
   },
   "export": {
