@@ -88,16 +88,21 @@ export const resolveLatentShaderColors = (
         const secondary = coverColors[1] ?? primary;
         const tertiary = coverColors[2] ?? secondary;
         const quaternary = coverColors[3] ?? primary;
+        const quinary = coverColors[4] ?? secondary;
+        const senary = coverColors[5] ?? tertiary;
         return {
             ditheringBack: tertiary,
             ditheringFront: primary,
-            mesh: [primary, secondary, tertiary, quaternary],
+            mesh: [primary, secondary, tertiary, quaternary, quinary, senary],
         };
     }
+    const secondary = coverColors[1] ?? theme.primaryColor;
+    const tertiary = coverColors[2] ?? primary;
+    const quaternary = coverColors[3] ?? secondary;
     return {
         ditheringBack: theme.backgroundColor,
         ditheringFront: primary,
-        mesh: [primary, coverColors[1] ?? theme.primaryColor, theme.backgroundColor, theme.accentColor],
+        mesh: [primary, secondary, tertiary, quaternary, theme.backgroundColor, theme.accentColor],
     };
 };
 
@@ -131,7 +136,7 @@ const LatentBackground: React.FC<LatentBackgroundProps> = ({
             };
         }
 
-        void extractColors(coverUrl, 4).then(colors => {
+        void extractColors(coverUrl, 6).then(colors => {
             if (active) {
                 setCoverColors(colors);
             }

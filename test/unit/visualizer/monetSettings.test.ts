@@ -237,12 +237,19 @@ describe('Monet tuning and lyric helpers', () => {
             fontStyle: 'sans',
             animationIntensity: 'normal',
         };
-        const coverColors = ['#110000', '#220000', '#330000', '#440000'];
+        const coverColors = ['#110000', '#220000', '#330000', '#440000', '#550000', '#660000'];
 
         expect(resolveLatentShaderColors(coverColors, theme, 'cover-theme')).toEqual({
             ditheringBack: theme.backgroundColor,
             ditheringFront: coverColors[0],
-            mesh: [coverColors[0], coverColors[1], theme.backgroundColor, theme.accentColor],
+            mesh: [
+                coverColors[0],
+                coverColors[1],
+                coverColors[2],
+                coverColors[3],
+                theme.backgroundColor,
+                theme.accentColor,
+            ],
         });
         expect(resolveLatentShaderColors(coverColors, theme, 'cover-only')).toEqual({
             ditheringBack: coverColors[2],
