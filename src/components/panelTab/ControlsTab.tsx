@@ -1,17 +1,18 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Repeat, Repeat1, RepeatOff, Heart, Sparkles, Sparkle, ArrowUpDown, Check, RefreshCw, Cone, Layers, Sun, Moon, Settings, Volume2, Volume1, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { type LatentBackgroundDisplayMode, Theme, ThemeMode, VisualizerMode } from '../../types';
+import { type LatentBackgroundDisplayMode, Theme, ThemeMode, type VisualizerBackgroundMode, VisualizerMode } from '../../types';
 import type { ThemeSourceModel } from '../../hooks/themeControllerState';
 import { getVisualizerModeLabel, VISUALIZER_REGISTRY } from '../visualizer/registry';
+import { getVisualizerBackgroundModeLabel, VISUALIZER_BACKGROUND_REGISTRY } from '../visualizer/backgrounds/registry';
 import { useThemeQuickEditorStore } from '../../stores/useThemeQuickEditorStore';
 import { resolveVisualizerBackgroundMode, useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { syncNow } from '../../services/sync/syncCoordinator';
 import { isSyncConfigured } from '../../services/sync/syncConfig';
+import QuickEffectPicker from './QuickEffectPicker';
 
-// Controls tab keeps the visualizer picker local so it can expand into a full-tab overlay
-// without changing the rest of the player state flow.
+// Controls tab composes compact visualizer and background pickers without changing player state flow.
 
 interface ControlsTabProps {
     loopMode: 'off' | 'all' | 'one';
@@ -86,13 +87,11 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     const latentBackgroundTuning = useSettingsUiStore(state => state.latentBackgroundTuning);
     const setLatentBackgroundTuning = useSettingsUiStore(state => state.handleSetLatentBackgroundTuning);
     const [sliderVolume, setSliderVolume] = useState(isMuted ? 0 : volume);
-    const [isVisualizerOverlayOpen, setIsVisualizerOverlayOpen] = useState(false);
     const [themeSyncState, setThemeSyncState] = useState<'idle' | 'syncing' | 'complete'>('idle');
     const isDraggingRef = useRef(false);
     const themeSyncCompleteTimerRef = useRef<number | null>(null);
     const pendingVolumeRef = useRef(sliderVolume);
-    const visualizerTriggerRef = useRef<HTMLButtonElement>(null);
-    const [visualizerOverlayLeft, setVisualizerOverlayLeft] = useState(0);
+    const setVisualizerBackgroundMode = useSettingsUiStore(state => state.handleSetVisualizerBackgroundMode);
 
     useEffect(() => () => {
         if (themeSyncCompleteTimerRef.current !== null) {
@@ -136,57 +135,10 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
         }
     }, [volume, isMuted]);
 
-    useLayoutEffect(() => {
-        if (!isVisualizerOverlayOpen) {
-            return undefined;
-        }
-
-        const syncOverlayPosition = () => {
-            const trigger = visualizerTriggerRef.current;
-            const parent = trigger?.offsetParent as HTMLElement | null;
-            if (!trigger || !parent) {
-                return;
-            }
-
-            const triggerRect = trigger.getBoundingClientRect();
-            const parentRect = parent.getBoundingClientRect();
-            setVisualizerOverlayLeft(triggerRect.left - parentRect.left + triggerRect.width / 2);
-        };
-
-        syncOverlayPosition();
-        window.addEventListener('resize', syncOverlayPosition);
-        return () => window.removeEventListener('resize', syncOverlayPosition);
-    }, [isVisualizerOverlayOpen]);
-
-    useEffect(() => {
-        if (!isVisualizerOverlayOpen) {
-            return undefined;
-        }
-
-        const handlePointerDown = (event: PointerEvent) => {
-            if (!(event.target instanceof Node)) {
-                return;
-            }
-
-            const target = event.target as HTMLElement;
-            const isInsidePanel = target.closest('[data-visualizer-panel="true"]');
-            const isTrigger = target.closest('[data-visualizer-trigger="true"]');
-
-            if (!isInsidePanel && !isTrigger) {
-                setIsVisualizerOverlayOpen(false);
-            }
-        };
-
-        document.addEventListener('pointerdown', handlePointerDown);
-        return () => document.removeEventListener('pointerdown', handlePointerDown);
-    }, [isVisualizerOverlayOpen]);
-
     const loopButtonBg = isDaylight ? 'bg-black/5 hover:bg-zinc-300/85' : 'bg-white/5 hover:bg-white/10';
     const buttonBg = isDaylight ? 'bg-black/5 hover:bg-black/10' : 'bg-white/5 hover:bg-white/10';
     const wellBg = isDaylight ? 'bg-black/5' : 'bg-black/20';
     const activeOptionBg = isDaylight ? 'bg-white shadow-sm hover:bg-white/90' : 'bg-white/20 shadow-sm hover:bg-white/30';
-    const overlaySurfaceClass = isDaylight ? 'text-black border-black/[0.08]' : 'text-white border-white/[0.08]';
-    const overlayBodyTextClass = isDaylight ? 'text-black/82' : 'text-white/84';
 
     const handleSliderInput = (nextVolume: number) => {
         isDraggingRef.current = true;
@@ -210,11 +162,6 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
         onThemeChange({ ...theme, animationIntensity: modes[nextIndex] });
     };
 
-    const handleVisualizerSelect = (mode: VisualizerMode) => {
-        onVisualizerModeChange(mode);
-        setIsVisualizerOverlayOpen(false);
-    };
-
     const formatThemeDisplayName = (name: string) => {
         if (themeSourceModel.activeSource !== 'default') {
             return name;
@@ -232,6 +179,14 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     const aiSwatchColor = aiThemeSource.theme?.backgroundColor ?? 'rgba(114,119,134,0.4)';
     const customSwatchColor = customThemeSource.theme?.accentColor ?? 'rgba(114,119,134,0.4)';
     const resolvedVisualizerBackgroundMode = resolveVisualizerBackgroundMode(visualizerBackgroundMode, visualizerMode);
+    const visualizerOptions = VISUALIZER_REGISTRY.map(entry => ({
+        value: entry.mode,
+        label: getVisualizerModeLabel(entry.mode, t),
+    }));
+    const backgroundOptions = VISUALIZER_BACKGROUND_REGISTRY.map(entry => ({
+        value: entry.mode,
+        label: getVisualizerBackgroundModeLabel(entry.mode, t),
+    }));
     const isMonetFullOverlay = monetBackgroundTuning.backgroundLayout === 'full-overlay';
     const monetLayoutLabel = t(isMonetFullOverlay ? 'options.monetLayoutFullOverlay' : 'options.monetLayoutHalfPane');
     const latentDisplayModes: LatentBackgroundDisplayMode[] = ['dithering', 'mesh', 'both'];
@@ -353,15 +308,14 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                             </button>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button
-                                ref={visualizerTriggerRef}
-                                onClick={() => setIsVisualizerOverlayOpen(prev => !prev)}
-                                data-visualizer-trigger="true"
-                                className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${activeOptionBg}`}
-                                style={isVisualizerOverlayOpen ? { color: theme.primaryColor } : undefined}
-                            >
-                                {getVisualizerModeLabel(visualizerMode, t)}
-                            </button>
+                            <QuickEffectPicker
+                                value={visualizerMode}
+                                options={visualizerOptions}
+                                onChange={onVisualizerModeChange}
+                                isDaylight={isDaylight}
+                                primaryColor={theme.primaryColor}
+                                ariaLabel={t('ui.animationMode')}
+                            />
 
                             <button
                                 onClick={toggleAnimationIntensity}
@@ -400,13 +354,14 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                                 </button>
                             </div>
                             <div className="flex items-center gap-1">
-                                <button
-                                    onClick={onToggleDaylight}
-                                    className={`p-1 rounded-md transition-all ${isDaylight ? 'text-amber-500' : 'text-blue-300'}`}
-                                    title={isDaylight ? t('theme.switchToDark') : t('theme.switchToLight')}
-                                >
-                                    {isDaylight ? <Sun size={14} /> : <Moon size={14} />}
-                                </button>
+                                <QuickEffectPicker<VisualizerBackgroundMode>
+                                    value={resolvedVisualizerBackgroundMode}
+                                    options={backgroundOptions}
+                                    onChange={setVisualizerBackgroundMode}
+                                    isDaylight={isDaylight}
+                                    primaryColor={theme.primaryColor}
+                                    ariaLabel={t('options.visualizerBackgroundMode')}
+                                />
                                 {resolvedVisualizerBackgroundMode === 'common' && (
                                     <button
                                         onClick={() => onToggleCoverColorBg(!useCoverColorBg)}
@@ -500,6 +455,15 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
 
                 <div className="pt-2 border-t border-white/5 flex items-center justify-between">
                     <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={onToggleDaylight}
+                            className={`rounded-md p-1 transition-all ${isDaylight ? 'text-amber-500' : 'text-blue-300'}`}
+                            title={isDaylight ? t('theme.switchToDark') : t('theme.switchToLight')}
+                            aria-label={isDaylight ? t('theme.switchToDark') : t('theme.switchToLight')}
+                        >
+                            {isDaylight ? <Sun size={14} /> : <Moon size={14} />}
+                        </button>
                         {currentEditableSource ? (
                             <button
                                 type="button"
@@ -551,73 +515,6 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                 </div>
             </div>
 
-            <AnimatePresence initial={false}>
-                {isVisualizerOverlayOpen && (
-                    <motion.div
-                        key="visualizer-overlay"
-                        initial={{ opacity: 0, scale: 0.92, x: -12, y: -10 }}
-                        animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.97, x: -8, y: -6 }}
-                        transition={{ duration: 0.18, ease: 'easeOut' }}
-                        className="absolute top-[4.45rem] z-20 w-[7.25rem] -translate-x-1/2"
-                        style={{ left: visualizerOverlayLeft }}
-                        onClick={() => setIsVisualizerOverlayOpen(false)}
-                    >
-                        <motion.div
-                            layout
-                            data-visualizer-panel="true"
-                            className={`relative max-h-[11.25rem] overflow-hidden rounded-[1.15rem] border shadow-2xl ${overlaySurfaceClass}`}
-                            style={{
-                                boxShadow: isDaylight
-                                    ? '0 18px 44px rgba(15, 23, 42, 0.14)'
-                                    : '0 22px 60px rgba(0, 0, 0, 0.42)',
-                                backgroundColor: isDaylight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(0, 0, 0, 0.94)',
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div 
-                                className="visualizer-overlay-scrollbar max-h-[11.25rem] overflow-y-auto px-1.5 py-1.5 pr-1.5"
-                                style={{
-                                    ['--scrollbar-thumb-color' as any]: isDaylight ? 'rgba(0, 0, 0, 0.16)' : 'rgba(255, 255, 255, 0.22)',
-                                    ['--scrollbar-thumb-hover-color' as any]: isDaylight ? 'rgba(0, 0, 0, 0.28)' : 'rgba(255, 255, 255, 0.35)',
-                                }}
-                            >
-                                <div className="relative space-y-0.5">
-                                    {VISUALIZER_REGISTRY.map((entry) => {
-                                        const isActive = entry.mode === visualizerMode;
-                                        return (
-                                            <button
-                                                key={entry.mode}
-                                                onClick={() => handleVisualizerSelect(entry.mode)}
-                                                className={`relative flex w-full items-center justify-center rounded-[0.85rem] px-2 text-center transition-all ${isActive ? 'py-1.5' : `py-2.5 ${isDaylight ? 'hover:bg-black/[0.04]' : 'hover:bg-white/[0.04]'}`}`}
-                                                style={isActive ? {
-                                                    backgroundColor: isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)',
-                                                    color: theme.primaryColor,
-                                                } : undefined}
-                                            >
-                                                {isActive && (
-                                                    <div
-                                                        className="absolute left-2 h-1.5 w-1.5 rounded-full"
-                                                        style={{
-                                                            backgroundColor: isDaylight ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.88)',
-                                                            boxShadow: isDaylight
-                                                                ? '0 0 0 1px rgba(255,255,255,0.55)'
-                                                                : '0 0 0 1px rgba(255,255,255,0.18)',
-                                                        }}
-                                                    />
-                                                )}
-                                                <span className={`text-[9px] ${isActive ? 'font-medium' : 'font-normal'} tracking-[0.01em] ${overlayBodyTextClass}`} style={{ color: theme.primaryColor }}>
-                                                    {getVisualizerModeLabel(entry.mode, t)}
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
         </motion.div>
     );
 };
