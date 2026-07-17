@@ -2052,6 +2052,10 @@ const {
   generateRandomChineseIP,
 } = require('@neteasecloudmusicapienhanced/api/util/index');
 const { serveNcmApi } = require('@neteasecloudmusicapienhanced/api/server');
+const {
+  refreshAnonymousToken,
+  resolveXeapiPublicKey,
+} = require('./neteaseApiStartup.cjs');
 
 const net = require('net');
 let assignedPort = 30000; // default fallback
@@ -2120,17 +2124,20 @@ async function initializeNcmApiRuntime() {
     }
   }
 
-  const nextPublicKey = await getXeapiPublicKey(currentPublicKey, global.deviceId);
-  fs.writeFileSync(xeapiPublicKeyPath, JSON.stringify(nextPublicKey), 'utf-8');
-
-  const anonymousRegistration = await register_anonimous();
-  const anonymousCookie = anonymousRegistration?.body?.cookie;
-  if (typeof anonymousCookie === 'string' && anonymousCookie.trim()) {
-    const cookieObject = cookieToJson(anonymousCookie);
-    if (typeof cookieObject.MUSIC_A === 'string') {
-      fs.writeFileSync(tokenPath, cookieObject.MUSIC_A, 'utf-8');
-    }
+  const { publicKey: nextPublicKey, refreshed } = await resolveXeapiPublicKey({
+    currentPublicKey,
+    deviceId: global.deviceId,
+    getXeapiPublicKey,
+  });
+  if (refreshed) {
+    fs.writeFileSync(xeapiPublicKeyPath, JSON.stringify(nextPublicKey), 'utf-8');
   }
+
+  await refreshAnonymousToken({
+    registerAnonymous: register_anonimous,
+    cookieToJson,
+    persistToken: (token) => fs.writeFileSync(tokenPath, token, 'utf-8'),
+  });
 }
 
 async function startApi() {
