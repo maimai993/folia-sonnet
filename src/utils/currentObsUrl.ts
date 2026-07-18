@@ -21,10 +21,16 @@ export async function readEffectiveExportTheme(): Promise<DualTheme | null> {
   return readSavedCustomTheme() ?? null;
 }
 
-// Bakes the effective theme and the current light/dark preference (cfg only carries both theme
-// sides, so daylight is a separate param).
+// Bakes the effective theme, the current light/dark preference, and the transparent-background
+// toggle (cfg carries only the theme sides, so daylight/transparent ride as separate params). The
+// transparent param mirrors the toggle 1:1 — on → transparent=1, off → transparent=0 (background
+// shown); the overlay reads an absent param the same as transparent=0, so the default matches the
+// toggle 100%.
 export async function buildCurrentObsUrl(obsSource: string): Promise<string> {
   const config = { theme: await readEffectiveExportTheme(), ...buildVisualSettingsConfig() };
-  const isDaylight = useSettingsUiStore.getState().isDaylight;
-  return buildObsSourceUrl(obsSource, compressConfig(config), '', isDaylight ? { daylight: '1' } : undefined);
+  const { isDaylight, transparentPlayerBackground } = useSettingsUiStore.getState();
+  const extra: Record<string, string> = {};
+  if (isDaylight) extra.daylight = '1';
+  extra.transparent = transparentPlayerBackground ? '1' : '0';
+  return buildObsSourceUrl(obsSource, compressConfig(config), '', extra);
 }

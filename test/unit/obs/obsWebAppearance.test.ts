@@ -98,14 +98,15 @@ describe('parseObsWebParams', () => {
         expect(p.host).toBe('localhost:9863');
         expect(p.cfg).toBe('folia-theme://abc');
         expect(p.isDaylight).toBe(true);
-        expect(p.transparent).toBe(true); // 默认透明
+        expect(p.transparent).toBe(false); // 缺省=显示背景
         expect(p.visualizer).toBe('cadenza');
     });
 
-    it('defaults to dark + transparent, and opaque only when transparent=0', () => {
+    it('defaults to dark + background (opaque), and transparent only when transparent=1', () => {
         expect(parseObsWebParams('').isDaylight).toBe(false);
-        expect(parseObsWebParams('').transparent).toBe(true);
+        expect(parseObsWebParams('').transparent).toBe(false); // 缺省当 transparent=0
         expect(parseObsWebParams('?transparent=0').transparent).toBe(false);
+        expect(parseObsWebParams('?transparent=1').transparent).toBe(true);
     });
 
     it('sanitizes host, stripping characters that would break the ws URL', () => {
@@ -135,5 +136,13 @@ describe('buildObsSourceUrl', () => {
         expect(url).toContain('cfg=folia-theme');
         // round-trip：从组装的 URL 再剥回 cfg。
         expect(extractCfgFromInput(url.startsWith('http') ? url : `https://x.test${url}`)).toBe('folia-theme://abc');
+    });
+
+    it('carries extra params (daylight/transparent) ahead of the terminal cfg', () => {
+        const url = buildObsSourceUrl('now-playing', 'folia-theme://abc', '', { daylight: '1', transparent: '0' });
+        expect(url).toContain('daylight=1');
+        expect(url).toContain('transparent=0');
+        // cfg stays last so trailing technical params never wrap the copied link.
+        expect(url.indexOf('cfg=')).toBeGreaterThan(url.indexOf('transparent=0'));
     });
 });

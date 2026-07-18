@@ -51,8 +51,9 @@ export function parseObsWebParams(search: string): ObsWebParams {
     cfg: params.get('cfg'),
     // OBS overlay defaults to the dark theme; only daylight=1 picks the light side.
     isDaylight: params.get('daylight') === '1',
-    // OBS overlay defaults to transparent; only transparent=0 uses the opaque theme background.
-    transparent: params.get('transparent') !== '0',
+    // Absent and transparent=0 both show the opaque theme background — matching the
+    // transparent-player-background toggle's default (off); only transparent=1 makes it transparent.
+    transparent: params.get('transparent') === '1',
     visualizer: params.get('visualizer')?.trim() || '',
   };
 }

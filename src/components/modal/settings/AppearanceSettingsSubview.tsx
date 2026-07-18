@@ -684,11 +684,16 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     };
 
     // Copy the OBS overlay URL: burn the current appearance into a link to paste into an OBS browser
-    // source. Bakes the current light/dark preference; warns when the link carries a custom font.
+    // source. Bakes the current light/dark preference and the transparent-background toggle (on →
+    // transparent=1, off → transparent=0 with the background shown); warns when the link carries a
+    // custom font.
     const handleCopyObsUrl = async () => {
         const code = compressConfig(buildCurrentConfig());
         // Omit host so the OBS page uses its own default endpoint (single source for the default).
-        const url = buildObsSourceUrl('now-playing', code, '', isDaylight ? { daylight: '1' } : undefined);
+        const extra: Record<string, string> = {};
+        if (isDaylight) extra.daylight = '1';
+        extra.transparent = transparentPlayerBackground ? '1' : '0';
+        const url = buildObsSourceUrl('now-playing', code, '', extra);
         try {
             await navigator.clipboard.writeText(url);
             setCopiedType('obsurl');
