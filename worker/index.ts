@@ -10,6 +10,7 @@ type Env = {
   OPENAI_API_KEY?: string;
   OPENAI_API_URL?: string;
   OPENAI_API_MODEL?: string;
+  OPENAI_API_TEMPERATURE?: string;
 };
 
 export default {

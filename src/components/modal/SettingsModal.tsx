@@ -24,6 +24,7 @@ import { selectSettingsUiSnapshot, type SettingsSubviewId, type VisualizerSettin
 import { useShallow } from 'zustand/react/shallow';
 import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
 
+const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -291,6 +292,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         OPENAI_API_KEY: '',
         OPENAI_API_URL: '',
         OPENAI_API_MODEL: '',
+        OPENAI_API_TEMPERATURE: DEFAULT_OPENAI_TEMPERATURE,
         AI_PROVIDER: 'gemini',
         USE_SYSTEM_PROXY_FOR_AI: false,
         ENABLE_UPDATE_CHECK: true,
@@ -312,7 +314,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             setIsElectron(true);
             (window as any).electron.getSettings().then((settings: any) => {
                 if (settings) {
-                    setElectronSettings(prev => ({ ...prev, ...settings }));
+                    setElectronSettings(prev => ({
+                        ...prev,
+                        ...settings,
+                        OPENAI_API_TEMPERATURE: String(settings.OPENAI_API_TEMPERATURE ?? '').trim() || DEFAULT_OPENAI_TEMPERATURE,
+                    }));
                 }
             });
             (window as any).electron.getCacheDirectory().then((result: ElectronCacheDirectoryResult) => {
@@ -414,11 +420,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
     const saveElectronSettings = async () => {
         if ((window as any).electron) {
+            const configuredTemperature = Number.parseFloat(electronSettings.OPENAI_API_TEMPERATURE.trim());
+            const temperature = Number.isFinite(configuredTemperature) && configuredTemperature >= 0 && configuredTemperature <= 2
+                ? electronSettings.OPENAI_API_TEMPERATURE.trim()
+                : DEFAULT_OPENAI_TEMPERATURE;
             setElectronSaveStatus('saving');
+            setElectronSettings(prev => ({ ...prev, OPENAI_API_TEMPERATURE: temperature }));
             await (window as any).electron.saveSettings('GEMINI_API_KEY', electronSettings.GEMINI_API_KEY);
             await (window as any).electron.saveSettings('OPENAI_API_KEY', electronSettings.OPENAI_API_KEY);
             await (window as any).electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
             await (window as any).electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
+            await (window as any).electron.saveSettings('OPENAI_API_TEMPERATURE', temperature);
             await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
             await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
             await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
@@ -2128,6 +2140,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                                 </div>
                                                                 <div className="text-[10px] opacity-40" style={{ color: 'var(--text-secondary)' }}>
                                                                     {t('options.openaiApiModelDesc') || "Required for many OpenAI-compatible providers. DeepSeek models like deepseek-v4-flash must be filled explicitly if auto-detection does not apply."}
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                                                    {t('options.openaiApiTemperature') || "Temperature"}
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max="2"
+                                                                    step="0.1"
+                                                                    value={electronSettings.OPENAI_API_TEMPERATURE}
+                                                                    onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_TEMPERATURE: e.target.value })}
+                                                                    placeholder={DEFAULT_OPENAI_TEMPERATURE}
+                                                                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors"
+                                                                    style={{ color: 'var(--text-primary)' }}
+                                                                />
+                                                                <div className="text-[10px] opacity-40" style={{ color: 'var(--text-secondary)' }}>
+                                                                    {t('options.openaiApiTemperatureDesc') || "Range: 0–2. Defaults to 0.7 when left blank."}
                                                                 </div>
                                                             </div>
                                                             <div className="space-y-2">
