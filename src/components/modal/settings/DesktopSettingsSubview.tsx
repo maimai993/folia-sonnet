@@ -27,6 +27,7 @@ type ElectronSettingsState = {
     OPENAI_API_KEY: string;
     OPENAI_API_URL: string;
     OPENAI_API_MODEL: string;
+    OPENAI_API_TEMPERATURE: string;
     AI_PROVIDER: string;
     USE_SYSTEM_PROXY_FOR_AI: boolean;
     ENABLE_UPDATE_CHECK: boolean;
@@ -485,6 +486,26 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                     />
                                     <p className="text-[10px] opacity-40 leading-relaxed px-1" style={{ color: 'var(--text-secondary)' }}>
                                         {t('options.openaiApiModelDesc') || 'Required for many OpenAI-compatible providers. DeepSeek models like deepseek-v4-flash must be filled explicitly if auto-detection does not apply.'}
+                                    </p>
+                                </div>
+
+                                <div className="space-y-2 text-left">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                        {t('options.openaiApiTemperature') || 'Temperature'}
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="2"
+                                        step="0.1"
+                                        value={electronSettings.OPENAI_API_TEMPERATURE}
+                                        onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_TEMPERATURE: e.target.value })}
+                                        placeholder="0.7"
+                                        className="w-full px-3.5 py-2.5 bg-black/10 dark:bg-white/5 border border-white/10 rounded-xl text-sm focus:outline-none focus:border-zinc-500 dark:focus:border-white/30 focus:ring-2 focus:ring-zinc-500/10 transition-all leading-normal"
+                                        style={{ color: 'var(--text-primary)' }}
+                                    />
+                                    <p className="text-[10px] opacity-40 leading-relaxed px-1" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('options.openaiApiTemperatureDesc') || 'Range: 0–2. Defaults to 0.7 when left blank.'}
                                     </p>
                                 </div>
 

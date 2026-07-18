@@ -903,6 +903,8 @@ export default {
     "openaiApiUrl": "OpenAI API URL",
     "openaiApiModel": "OpenAI Model",
     "openaiApiModelDesc": "Required by many OpenAI-compatible providers. Examples: gpt-4o, gpt-4.1-mini, deepseek-v4-flash.",
+    "openaiApiTemperature": "Temperature",
+    "openaiApiTemperatureDesc": "Range: 0–2. Defaults to 0.7 when left blank.",
     "geminiApiKeyDesc": "Netease API backend runs locally.",
     "save": "Save",
     "grid3dCardStyle": "3D Grid Card Style",

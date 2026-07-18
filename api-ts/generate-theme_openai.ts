@@ -7,6 +7,7 @@ export const config = {
 
 const DEFAULT_OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o';
+const DEFAULT_OPENAI_TEMPERATURE = 0.7;
 const DEEPSEEK_DEFAULT_MODEL = 'deepseek-v4-flash';
 const THEME_JSON_SCHEMA_NAME = 'dual_theme';
 
@@ -262,7 +263,8 @@ const buildOpenAICompatibleRequestBody = (
     model: string,
     provider: OpenAICompatibleProvider,
     systemPrompt: string,
-    sourcePrompt: string
+    sourcePrompt: string,
+    temperature: number
 ) => {
     const messages = [
         { role: 'system', content: systemPrompt },
@@ -273,7 +275,7 @@ const buildOpenAICompatibleRequestBody = (
         return {
             model,
             messages,
-            temperature: 0.7,
+            temperature,
             response_format: {
                 type: 'json_schema',
                 json_schema: {
@@ -288,7 +290,7 @@ const buildOpenAICompatibleRequestBody = (
     return {
         model,
         messages,
-        temperature: 0.7,
+        temperature,
         response_format: { type: 'json_object' }
     };
 };
@@ -339,6 +341,10 @@ export default async function handler(req: Request) {
         const apiKey = process.env.OPENAI_API_KEY;
         const apiUrl = normalizeOpenAIChatCompletionsUrl(process.env.OPENAI_API_URL);
         const model = resolveOpenAICompatibleModel(apiUrl, process.env.OPENAI_API_MODEL);
+        const configuredTemperature = Number.parseFloat(process.env.OPENAI_API_TEMPERATURE?.trim() || '');
+        const temperature = Number.isFinite(configuredTemperature) && configuredTemperature >= 0 && configuredTemperature <= 2
+            ? configuredTemperature
+            : DEFAULT_OPENAI_TEMPERATURE;
         const provider = detectOpenAICompatibleProvider(apiUrl, model);
 
         if (!apiKey) {
@@ -360,7 +366,7 @@ export default async function handler(req: Request) {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${apiKey}`,
             },
-            body: JSON.stringify(buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt)),
+            body: JSON.stringify(buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt, temperature)),
         });
 
         if (!response.ok) {

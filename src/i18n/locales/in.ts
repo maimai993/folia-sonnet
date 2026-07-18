@@ -839,6 +839,8 @@ export default {
     "openaiApiUrl": "URL API OpenAI",
     "openaiApiModel": "Model OpenAI",
     "openaiApiModelDesc": "Diperlukan oleh banyak penyedia kompatibel OpenAI. Contoh: gpt-4o, gpt-4.1-mini, deepseek-v4-flash.",
+    "openaiApiTemperature": "Temperature",
+    "openaiApiTemperatureDesc": "Rentang: 0–2. Nilai default 0,7 digunakan jika dibiarkan kosong.",
     "geminiApiKeyDesc": "Backend API Netease berjalan lokal.",
     "save": "Simpan",
     "grid3dCardStyle": "Gaya Kartu Grid 3D",

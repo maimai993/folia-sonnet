@@ -906,6 +906,8 @@ export default {
     "openaiApiUrl": "OpenAI 接口链接",
     "openaiApiModel": "模型",
     "openaiApiModelDesc": "例如 gpt-4o、gpt-4.1-mini、deepseek-v4-flash。",
+    "openaiApiTemperature": "温度",
+    "openaiApiTemperatureDesc": "范围为 0–2；留空时使用默认值 0.7。",
     "geminiApiKeyDesc": "网易云 API 服务本地运行中",
     "save": "保存",
     "visualizerMode": "动画模式",

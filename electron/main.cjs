@@ -1825,7 +1825,16 @@ ${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
 ${snippet}`;
 }
 
-function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt) {
+const DEFAULT_OPENAI_TEMPERATURE = 0.7;
+
+function resolveOpenAICompatibleTemperature(value) {
+  const temperature = typeof value === 'number' ? value : Number.parseFloat(String(value ?? '').trim());
+  return Number.isFinite(temperature) && temperature >= 0 && temperature <= 2
+    ? temperature
+    : DEFAULT_OPENAI_TEMPERATURE;
+}
+
+function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt, temperature) {
   const messages = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: sourcePrompt }
@@ -1835,7 +1844,7 @@ function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourceP
     return {
       model,
       messages,
-      temperature: 0.7,
+      temperature,
       response_format: {
         type: 'json_schema',
         json_schema: {
@@ -1850,7 +1859,7 @@ function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourceP
   return {
     model,
     messages,
-    temperature: 0.7,
+    temperature,
     response_format: { type: 'json_object' },
   };
 }
@@ -3740,6 +3749,7 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
       const apiKey = store.get('OPENAI_API_KEY');
       const apiUrl = normalizeOpenAIChatCompletionsUrl(store.get('OPENAI_API_URL'));
       const model = resolveOpenAICompatibleModel(apiUrl, store.get('OPENAI_API_MODEL'));
+      const temperature = resolveOpenAICompatibleTemperature(store.get('OPENAI_API_TEMPERATURE'));
       const openAICompatibleProvider = detectOpenAICompatibleProvider(apiUrl, model);
       const systemPrompt = buildThemeSystemPrompt(true);
       const sourcePrompt = buildThemeSourcePrompt(snippet, isPureMusic, songTitle);
@@ -3754,7 +3764,7 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`,
         },
-        body: JSON.stringify(buildOpenAICompatibleRequestBody(model, openAICompatibleProvider, systemPrompt, sourcePrompt)),
+        body: JSON.stringify(buildOpenAICompatibleRequestBody(model, openAICompatibleProvider, systemPrompt, sourcePrompt, temperature)),
       });
 
       if (!response.ok) {
