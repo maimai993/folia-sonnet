@@ -1,5 +1,5 @@
 // src/utils/obsUrl.ts
-// Small helpers to build/parse OBS URLs (pure strings, no external deps -avoids a
+// Small helpers to build/parse OBS URLs (pure strings, no external deps - avoids a
 // cycle with the appearance codec / settings component).
 
 // Extract the appearance shortcode from user input: the input may be a full OBS URL
@@ -18,15 +18,16 @@ export function extractCfgFromInput(raw: string): string {
   return trimmed;
 }
 
-// Build the NowPlaying OBS overlay URL: burn the current appearance shortcode and the
-// source endpoint into a link.
-export function buildObsNowPlayingUrl(shortcode: string, host: string): string {
+// Build an OBS overlay URL for a given web source: burn the appearance shortcode and the
+// endpoint into a link. Source-neutral - obsSource selects the browser-direct source
+// (e.g. 'now-playing', later 'playercap'). Host may be empty to use the page default.
+export function buildObsSourceUrl(obsSource: string, cfg: string, host: string): string {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '/';
   const params = new URLSearchParams();
   params.set('obs', '1');
-  params.set('obsSource', 'now-playing');
+  params.set('obsSource', obsSource);
   if (host) params.set('host', host);
-  if (shortcode) params.set('cfg', shortcode);
+  if (cfg) params.set('cfg', cfg);
   return `${origin}${pathname}?${params.toString()}`;
 }

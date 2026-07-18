@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { compressConfig } from '@/components/modal/settings/AppearanceSettingsSubview';
 import { buildObsAppearanceFromShortcode, parseObsWebParams } from '@/utils/obsWebAppearance';
-import { buildObsNowPlayingUrl, extractCfgFromInput } from '@/utils/obsUrl';
+import { buildObsSourceUrl, extractCfgFromInput } from '@/utils/obsUrl';
 
 // test/unit/obs/obsWebAppearance.test.ts
 // OBS web 外观：cfg shortcode 经 compressConfig→decompress→映射到 VisualizerRenderer props 的 round-trip，
@@ -126,9 +126,9 @@ describe('extractCfgFromInput', () => {
     });
 });
 
-describe('buildObsNowPlayingUrl', () => {
+describe('buildObsSourceUrl', () => {
     it('bakes source + host + cfg into the query', () => {
-        const url = buildObsNowPlayingUrl('folia-theme://abc', 'localhost:9863');
+        const url = buildObsSourceUrl('now-playing', 'folia-theme://abc', 'localhost:9863');
         expect(url).toContain('obs=1');
         expect(url).toContain('obsSource=now-playing');
         expect(url).toContain('host=localhost%3A9863');

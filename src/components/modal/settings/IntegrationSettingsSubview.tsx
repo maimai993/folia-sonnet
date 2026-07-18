@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Activity, AlertCircle, Check, Loader2, Server, Trash2 } from 'lucide-react';
+import { Activity, AlertCircle, Check, Copy, Loader2, Server, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { NowPlayingConnectionStatus, StageSource, StageStatus, Theme } from '../../../types';
 import type { NavidromeServerProfile } from '../../../types/navidrome';
 import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
+import { buildCurrentObsUrl } from '../../../utils/currentObsUrl';
 
 // src/components/modal/settings/IntegrationSettingsSubview.tsx
 // Integration settings for Discord, Stage, Now Playing, OBS, and Navidrome.
@@ -140,6 +141,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         return t('options.updateCheckDisabled');
     };
     const [obsAddressCopied, setObsAddressCopied] = useState(false);
+    const [obsUrlCopied, setObsUrlCopied] = useState(false);
     const nowPlayingStatusLabel = getNowPlayingStatusLabel(nowPlayingConnectionStatus);
     const maskStageTokenWithT = (token: string | null | undefined) => maskStageToken(token, t);
     const discordPresenceStatusLabel = (() => {
@@ -163,6 +165,13 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         await onCopyText(address);
         setObsAddressCopied(true);
         window.setTimeout(() => setObsAddressCopied(false), 1600);
+    };
+
+    // Web NowPlaying OBS static URL: same cfg as the appearance import/export copy.
+    const handleCopyObsUrl = async () => {
+        await onCopyText(buildCurrentObsUrl('now-playing'));
+        setObsUrlCopied(true);
+        window.setTimeout(() => setObsUrlCopied(false), 1600);
     };
 
     return (
@@ -415,8 +424,17 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
 
             {!isElectron && (
                 <section>
-                    <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                        <Server size={14} /> {t('options.stageMode')}
+                    <h3 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center justify-between gap-2" style={{ color: 'var(--text-secondary)' }}>
+                        <span className="flex items-center gap-2 opacity-50"><Server size={14} /> {t('options.stageMode')}</span>
+                        <button
+                            type="button"
+                            onClick={() => void handleCopyObsUrl()}
+                            className="normal-case text-xs font-medium flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 transition-colors"
+                            style={{ color: obsUrlCopied ? '#86efac' : 'var(--text-primary)' }}
+                        >
+                            {obsUrlCopied ? <Check size={13} /> : <Copy size={13} />}
+                            {obsUrlCopied ? t('status.copied') : t('options.copyObsUrl')}
+                        </button>
                     </h3>
                     <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                         <div className="flex items-center justify-between gap-4">

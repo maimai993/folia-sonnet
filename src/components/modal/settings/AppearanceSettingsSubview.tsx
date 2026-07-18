@@ -14,10 +14,11 @@ import {
     type ThemeMode,
     type UrlBackgroundItem,
 } from '../../../types';
-import { applyVisualizerTuningsToSettings, collectVisualizerTunings } from '../../visualizer/tuningRegistry';
+import { applyVisualizerTuningsToSettings } from '../../visualizer/tuningRegistry';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { sanitizeUrlBackgroundItem } from '../../../utils/urlBackground';
-import { buildObsNowPlayingUrl, extractCfgFromInput } from '../../../utils/obsUrl';
+import { buildObsSourceUrl, extractCfgFromInput } from '../../../utils/obsUrl';
+import { buildVisualSettingsConfig } from '../../../utils/visualSettingsConfig';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -491,7 +492,7 @@ export const decompressConfig = (str: string): any => {
     }
 };
 
-const readSavedCustomTheme = (): DualTheme | undefined => {
+export const readSavedCustomTheme = (): DualTheme | undefined => {
     if (typeof window === 'undefined') return undefined;
     const saved = localStorage.getItem('custom_dual_theme');
     if (!saved) return undefined;
@@ -537,6 +538,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     customTheme,
 }) => {
     const { t } = useTranslation();
+    // OBS static URL points to this web deploy, so the copy button is web-only (no shareable URL under Electron).
+    const isElectron = typeof window !== 'undefined' && Boolean((window as { electron?: unknown }).electron);
     const [importText, setImportText] = useState('');
     const [copiedType, setCopiedType] = useState<'none' | 'shortcode' | 'json' | 'obsurl'>('none');
 
@@ -646,36 +649,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         }
         return {
             theme: exportTheme,
-            visualizerMode: store.visualizerMode,
-            randomVisualizerModePerSong: store.randomVisualizerModePerSong,
-            visualizerBackgroundMode: store.visualizerBackgroundMode,
-            backgroundOpacity: store.backgroundOpacity,
-            visualizerOpacity: store.visualizerOpacity,
-            hidePlayerTranslationSubtitle: store.hidePlayerTranslationSubtitle,
-            showSubtitleTranslation: store.showSubtitleTranslation,
-            subtitleOverlayBackground: store.subtitleOverlayBackground,
-            lyricsFontStyle: store.lyricsFontStyle,
-            lyricsFontScale: store.lyricsFontScale,
-            lyricsFontFallbackFamilies: store.lyricsFontFallbackFamilies,
-            subtitleFontInheritsLyrics: store.subtitleFontInheritsLyrics,
-            subtitleFontStyle: store.subtitleFontStyle,
-            subtitleFontFamily: store.subtitleFontFamily,
-            subtitleFontFallbackFamilies: store.subtitleFontFallbackFamilies,
-            visualizerTunings: collectVisualizerTunings(store as unknown as Record<string, unknown>),
-            classicTuning: store.classicTuning,
-            cadenzaTuning: store.cadenzaTuning,
-            partitaTuning: store.partitaTuning,
-            fumeTuning: store.fumeTuning,
-            claddaghTuning: store.claddaghTuning,
-            cappellaTuning: store.cappellaTuning,
-            tiltTuning: store.tiltTuning,
-            dioramaTuning: store.dioramaTuning,
-            monetBackgroundTuning: store.monetBackgroundTuning,
-            nomandBackgroundTuning: store.nomandBackgroundTuning,
-            latentBackgroundTuning: store.latentBackgroundTuning,
-            monetTuning: store.monetTuning,
-            urlBackgroundList: store.urlBackgroundList,
-            urlBackgroundSelectedId: store.urlBackgroundSelectedId,
+            ...buildVisualSettingsConfig(),
             songThemeAutoSwitchEnabled,
             songThemeAutoGenerateEnabled,
         };
@@ -710,7 +684,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     // Copy the NowPlaying OBS overlay URL: burn the current appearance into a link to paste into an OBS browser source.
     const handleCopyObsUrl = async () => {
         const code = compressConfig(buildCurrentConfig());
-        const url = buildObsNowPlayingUrl(code, 'localhost:9863');
+        // Omit host so the OBS page uses its own default endpoint (single source for the default).
+        const url = buildObsSourceUrl('now-playing', code, '');
         try {
             await navigator.clipboard.writeText(url);
             setCopiedType('obsurl');
@@ -1167,17 +1142,19 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             style={{ color: 'var(--text-primary)' }}
                         >
                             {copiedType === 'json' ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
-                            <span>{copiedType === 'json' ? (t('status.copied')) : t('options.importBtn')}</span>
+                            <span>{copiedType === 'json' ? (t('status.copied')) : t('options.copyJson')}</span>
                         </button>
-                        <button
-                            type="button"
-                            onClick={handleCopyObsUrl}
-                            className="px-3 py-2 bg-white/10 hover:bg-white/15 active:bg-white/5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
-                            style={{ color: 'var(--text-primary)' }}
-                        >
-                            {copiedType === 'obsurl' ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
-                            <span>{copiedType === 'obsurl' ? (t('status.copied')) : t('options.copyObsUrl')}</span>
-                        </button>
+                        {!isElectron && (
+                            <button
+                                type="button"
+                                onClick={handleCopyObsUrl}
+                                className="px-3 py-2 bg-white/10 hover:bg-white/15 active:bg-white/5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
+                                style={{ color: 'var(--text-primary)' }}
+                            >
+                                {copiedType === 'obsurl' ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+                                <span>{copiedType === 'obsurl' ? (t('status.copied')) : t('options.copyObsUrl')}</span>
+                            </button>
+                        )}
                         <div className="flex-1 min-w-[20px]" />
                         <button
                             type="button"
