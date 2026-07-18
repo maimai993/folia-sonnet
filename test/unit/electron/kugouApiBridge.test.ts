@@ -1,13 +1,10 @@
 import { createRequire } from 'node:module';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 // test/unit/electron/kugouApiBridge.test.ts
 
 const require = createRequire(import.meta.url);
-const { createKugouApiBridge, createKugouFileLogger } = require('../../../electron/kugouApiBridge.cjs');
+const { createKugouApiBridge } = require('../../../electron/kugouApiBridge.cjs');
 
 const createStore = () => {
     const values = new Map<string, unknown>();
@@ -62,25 +59,4 @@ describe('Electron KuGou API bridge', () => {
         await expect(bridge.request('arbitrary_url', {})).rejects.toThrow('Unsupported KuGou operation');
     });
 
-    it('redacts credentials from the persistent diagnostic log', () => {
-        const writes: string[] = [];
-        const directory = mkdtempSync(join(tmpdir(), 'folia-kugou-log-'));
-        const logPath = join(directory, 'kugou-provider.log');
-        try {
-            const logger = createKugouFileLogger(logPath, {
-                info: (_message: string, details: unknown) => writes.push(JSON.stringify(details)),
-                warn: (_message: string, details: unknown) => writes.push(JSON.stringify(details)),
-            });
-
-            logger.info('test', { token: 'secret', message: 'userid=123&token=abc', hasToken: true });
-
-            expect(writes[0]).not.toContain('secret');
-            const persisted = readFileSync(logPath, 'utf8');
-            expect(persisted).not.toContain('secret');
-            expect(persisted).not.toContain('userid=123');
-            expect(persisted).toContain('[REDACTED]');
-        } finally {
-            rmSync(directory, { recursive: true, force: true });
-        }
-    });
 });

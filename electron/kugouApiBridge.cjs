@@ -1,6 +1,4 @@
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 
 // electron/kugouApiBridge.cjs
 
@@ -80,45 +78,6 @@ const errorSummary = (error) => ({
   name: error instanceof Error ? error.name : 'Error',
   message: error instanceof Error ? error.message : String(error),
 });
-
-const redactLogValue = (value) => {
-  if (Array.isArray(value)) return value.map(redactLogValue);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, child]) => (
-      AUTH_COOKIE_KEYS.has(key.toLowerCase()) || key.toLowerCase() === 'cookie'
-        ? [key, '[REDACTED]']
-        : [key, redactLogValue(child)]
-    )));
-  }
-  if (typeof value === 'string') {
-    return value.replace(/(token|userid|user_id|dfid|cookie)=([^&\s;]+)/gi, '$1=[REDACTED]');
-  }
-  return value;
-};
-
-// Creates a compact JSON-lines logger for packaged builds while retaining terminal output in development.
-function createKugouFileLogger(filePath, consoleLogger = console) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const write = (level, message, details) => {
-    const safeDetails = redactLogValue(details);
-    try {
-      const line = JSON.stringify({
-        timestamp: new Date().toISOString(),
-        level,
-        message,
-        details: safeDetails,
-      });
-      fs.appendFileSync(filePath, `${line}\n`, 'utf8');
-    } catch (error) {
-      consoleLogger.warn('[KuGouApi] log-file:error', errorSummary(error));
-    }
-    consoleLogger[level]?.(message, safeDetails);
-  };
-  return {
-    info: (message, details) => write('info', message, details),
-    warn: (message, details) => write('warn', message, details),
-  };
-}
 
 function createKugouApiBridge({ store, apiLoader = () => require('kugoumusicapi'), logger = console }) {
   let api = null;
@@ -234,4 +193,4 @@ function createKugouApiBridge({ store, apiLoader = () => require('kugoumusicapi'
   };
 }
 
-module.exports = { createKugouApiBridge, createKugouFileLogger, OPERATION_MODULES };
+module.exports = { createKugouApiBridge, OPERATION_MODULES };

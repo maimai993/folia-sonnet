@@ -205,8 +205,7 @@ export const kugouProvider: OnlineMusicProvider = {
                         ?? valueOf(data?.[0], 'url', 'play_url'),
                     );
                     if (url) return {
-                        // KuGou CDN hosts may return a certificate for a different hostname over HTTPS.
-                        // Preserve the signed URL scheme; Electron adds CORS headers for the HTTP media response.
+                        // Preserve the upstream candidate here; the shared playback transport normalizes its scheme.
                         url,
                         fetchedAt: Date.now(),
                         quality: candidateQuality,

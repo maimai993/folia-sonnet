@@ -6,7 +6,7 @@ const Store = require('electron-store').default || require('electron-store');
 const crypto = require('crypto');
 const { createStageApi } = require('./stageApi.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
-const { createKugouApiBridge, createKugouFileLogger } = require('./kugouApiBridge.cjs');
+const { createKugouApiBridge } = require('./kugouApiBridge.cjs');
 const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = require('./discordPresence.cjs');
 const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/themeSanitizer.cjs');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
@@ -17,6 +17,29 @@ const linuxGraphicsMode =
   process.platform !== 'linux'
     ? 'system'
     : (process.env.FOLIA_LINUX_GRAPHICS_MODE || (isAppImageRuntime ? 'swiftshader' : 'system'));
+
+// Trusts only the known KuGou media CDN hostname mismatch while preserving TLS checks elsewhere.
+app.on('certificate-error', (event, _webContents, requestUrl, error, _certificate, callback, isMainFrame) => {
+  let isAllowedKugouMediaRequest = false;
+  try {
+    const parsedUrl = new URL(requestUrl);
+    isAllowedKugouMediaRequest =
+      parsedUrl.protocol === 'https:' &&
+      parsedUrl.hostname === 'fs.youthandroid2.kugou.com' &&
+      error === 'net::ERR_CERT_COMMON_NAME_INVALID' &&
+      isMainFrame === false;
+  } catch {
+    isAllowedKugouMediaRequest = false;
+  }
+
+  if (isAllowedKugouMediaRequest) {
+    event.preventDefault();
+    callback(true);
+    return;
+  }
+
+  callback(false);
+});
 
 // Fix for Arch Linux / Wayland & Vulkan compatibility issues
 if (process.platform === 'linux') {
@@ -48,9 +71,7 @@ if (process.platform === 'darwin' && process.arch === 'x64') {
 }
 
 const store = new Store({ projectName: 'Folia' });
-const kugouLogPath = path.join(path.dirname(store.path), 'logs', 'kugou-provider.log');
-const kugouLogger = createKugouFileLogger(kugouLogPath);
-const kugouApiBridge = createKugouApiBridge({ store, logger: kugouLogger });
+const kugouApiBridge = createKugouApiBridge({ store });
 
 // --- Electron main process locale map ---
 const APP_LOCALE_KEY = 'APP_LOCALE';
@@ -914,14 +935,14 @@ function setupCorsBypassHandlers() {
 
   ses.webRequest.onBeforeRequest({ urls: ['*://*.kugou.com/*'] }, (details, callback) => {
     const requestInfo = getKugouMediaRequestInfo(details);
-    if (requestInfo) kugouLogger.info('[KuGouMedia] request:start', requestInfo);
+    if (requestInfo) console.info('[KuGouMedia] request:start', requestInfo);
     callback({ cancel: false });
   });
 
   ses.webRequest.onCompleted({ urls: ['*://*.kugou.com/*'] }, details => {
     const requestInfo = getKugouMediaRequestInfo(details);
     if (!requestInfo) return;
-    kugouLogger.info('[KuGouMedia] request:completed', {
+    console.info('[KuGouMedia] request:completed', {
       ...requestInfo,
       statusCode: details.statusCode,
       fromCache: details.fromCache,
@@ -931,7 +952,7 @@ function setupCorsBypassHandlers() {
   ses.webRequest.onErrorOccurred({ urls: ['*://*.kugou.com/*'] }, details => {
     const requestInfo = getKugouMediaRequestInfo(details);
     if (!requestInfo) return;
-    kugouLogger.warn('[KuGouMedia] request:error', {
+    console.warn('[KuGouMedia] request:error', {
       ...requestInfo,
       error: details.error,
     });
