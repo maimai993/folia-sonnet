@@ -20,14 +20,22 @@ export function extractCfgFromInput(raw: string): string {
 
 // Build an OBS overlay URL for a given web source: burn the appearance shortcode and the
 // endpoint into a link. Source-neutral - obsSource selects the browser-direct source
-// (e.g. 'now-playing', later 'playercap'). Host may be empty to use the page default.
-export function buildObsSourceUrl(obsSource: string, cfg: string, host: string): string {
+// ('now-playing' or 'playercap'). Host may be empty to use the page default. extra carries
+// source-specific technical params (e.g. daylight, or PlayerCap's player/basis/sticky).
+export function buildObsSourceUrl(obsSource: string, cfg: string, host: string, extra?: Record<string, string>): string {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '/';
+  // All technical params live in `params`; a new source should add its params via `extra` (or above) —
+  // never after cfg.
   const params = new URLSearchParams();
   params.set('obs', '1');
   params.set('obsSource', obsSource);
   if (host) params.set('host', host);
-  if (cfg) params.set('cfg', cfg);
-  return `${origin}${pathname}?${params.toString()}`;
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) params.set(key, value);
+  }
+  // cfg is the long base64 appearance blob — appended as the terminal segment OUTSIDE `params`, so any
+  // future param stays in front of it (readable technical params keep leading the URL) by construction.
+  const cfgSuffix = cfg ? `&${new URLSearchParams({ cfg }).toString()}` : '';
+  return `${origin}${pathname}?${params.toString()}${cfgSuffix}`;
 }

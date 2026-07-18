@@ -891,6 +891,7 @@ export default {
     "exportBtn": "Salin Konfigurasi Saat Ini",
     "copyJson": "Salin JSON",
     "copyObsUrl": "Salin URL OBS Statis",
+    "obsUrlCustomFontHint": "Tersalin (termasuk font kustom); kembali ke bawaan jika tidak terpasang di sistem.",
     "copyStageAddress": "Salin Alamat",
     "stageAddressCopied": "Disalin",
     "importSuccess": "Konfigurasi berhasil diimpor!",

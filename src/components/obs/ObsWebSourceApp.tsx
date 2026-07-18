@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import VisualizerRenderer from '../visualizer/VisualizerRenderer';
+import { buildVisualizerTheme } from '../app/presentation/buildVisualizerTheme';
 import type { Line, Theme } from '../../types';
 import { findLatestActiveLineIndex } from '../../utils/appPlaybackHelpers';
 import { buildBuiltinDualTheme } from '../../hooks/themeControllerState';
@@ -151,6 +152,21 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance })
     // 'idle', which the clock and the visuals would otherwise interpret differently.
     const paused = !state.clock.playing;
 
+    // Overlay the cfg font stack onto the resolved theme so the OBS fonts match the main window
+    // (same helper as the main app). appStyle {} keeps theme.backgroundColor.
+    const { visualizerTheme, visualizerSubtitleTheme } = buildVisualizerTheme({
+        appStyle: {},
+        theme,
+        lyricsFontStyle: appearance.lyricsFontStyle ?? theme.fontStyle,
+        lyricsCustomFontFamily: appearance.lyricsCustomFontFamily ?? null,
+        lyricsFontFallbackFamilies: appearance.lyricsFontFallbackFamilies,
+        subtitleFontInheritsLyrics: appearance.subtitleFontInheritsLyrics,
+        subtitleFontStyle: appearance.subtitleFontStyle,
+        subtitleFontFamily: appearance.subtitleFontFamily,
+        subtitleFontFallbackFamilies: appearance.subtitleFontFallbackFamilies,
+        visualizerMode: appearance.mode,
+    });
+
     return (
         <div
             className="overflow-hidden"
@@ -168,7 +184,8 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance })
                 currentTime={currentTime}
                 currentLineIndex={currentLineIndex}
                 lines={state.lyrics?.lines ?? []}
-                theme={theme}
+                theme={visualizerTheme}
+                subtitleTheme={visualizerSubtitleTheme}
                 isDaylight={isDaylight}
                 audioPower={audioPower}
                 audioBands={audioBands}

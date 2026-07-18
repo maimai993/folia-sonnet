@@ -991,6 +991,7 @@ export default {
     "exportBtn": "复制配置码",
     "copyJson": "复制 JSON",
     "copyObsUrl": "复制 OBS 静态链接",
+    "obsUrlCustomFontHint": "已复制（含自定义字体）；系统未安装字体时将自动回退默认。",
     "importSuccess": "配置导入成功！",
     "importFailed": "配置导入失败，请检查格式是否正确。",
     "exportThemeLabel": "导出时包含的主题",

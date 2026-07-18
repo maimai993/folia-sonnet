@@ -18,7 +18,7 @@ import { applyVisualizerTuningsToSettings } from '../../visualizer/tuningRegistr
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { sanitizeUrlBackgroundItem } from '../../../utils/urlBackground';
 import { buildObsSourceUrl, extractCfgFromInput } from '../../../utils/obsUrl';
-import { buildVisualSettingsConfig } from '../../../utils/visualSettingsConfig';
+import { buildVisualSettingsConfig, hasCustomObsFont } from '../../../utils/visualSettingsConfig';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -365,6 +365,7 @@ export const compressConfig = (config: any): string => {
     if (config.lyricsFontStyle) minified.lfs = config.lyricsFontStyle;
     if (config.lyricsFontScale !== undefined) minified.lfn = config.lyricsFontScale;
     if (config.lyricsFontFallbackFamilies?.length) minified.lff = config.lyricsFontFallbackFamilies;
+    if (config.lyricsCustomFontFamily) minified.lcf = config.lyricsCustomFontFamily;
     if (config.subtitleFontInheritsLyrics !== undefined) minified.sfi = config.subtitleFontInheritsLyrics;
     if (config.subtitleFontStyle) minified.sfs = config.subtitleFontStyle;
     if (config.subtitleFontFamily) minified.sff = config.subtitleFontFamily;
@@ -447,6 +448,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.lfs) decompressed.lyricsFontStyle = parsed.lfs;
         if (parsed.lfn !== undefined) decompressed.lyricsFontScale = parsed.lfn;
         if (parsed.lff) decompressed.lyricsFontFallbackFamilies = parsed.lff;
+        if (parsed.lcf) decompressed.lyricsCustomFontFamily = parsed.lcf;
         if (parsed.sfi !== undefined) decompressed.subtitleFontInheritsLyrics = parsed.sfi;
         if (parsed.sfs) decompressed.subtitleFontStyle = parsed.sfs;
         if (parsed.sff) decompressed.subtitleFontFamily = parsed.sff;
@@ -681,16 +683,19 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         }
     };
 
-    // Copy the NowPlaying OBS overlay URL: burn the current appearance into a link to paste into an OBS browser source.
+    // Copy the OBS overlay URL: burn the current appearance into a link to paste into an OBS browser
+    // source. Bakes the current light/dark preference; warns when the link carries a custom font.
     const handleCopyObsUrl = async () => {
         const code = compressConfig(buildCurrentConfig());
         // Omit host so the OBS page uses its own default endpoint (single source for the default).
-        const url = buildObsSourceUrl('now-playing', code, '');
+        const url = buildObsSourceUrl('now-playing', code, '', isDaylight ? { daylight: '1' } : undefined);
         try {
             await navigator.clipboard.writeText(url);
             setCopiedType('obsurl');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.({ type: 'success', text: t('status.copied') });
+            store.statusSetter?.(hasCustomObsFont()
+                ? { type: 'info', text: t('options.obsUrlCustomFontHint') }
+                : { type: 'success', text: t('status.copied') });
         } catch (err) {
             console.error('Failed to copy OBS URL:', err);
         }

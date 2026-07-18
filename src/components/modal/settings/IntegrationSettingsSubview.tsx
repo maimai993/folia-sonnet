@@ -5,6 +5,8 @@ import type { NowPlayingConnectionStatus, StageSource, StageStatus, Theme } from
 import type { NavidromeServerProfile } from '../../../types/navidrome';
 import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
 import { buildCurrentObsUrl } from '../../../utils/currentObsUrl';
+import { hasCustomObsFont } from '../../../utils/visualSettingsConfig';
+import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 
 // src/components/modal/settings/IntegrationSettingsSubview.tsx
 // Integration settings for Discord, Stage, Now Playing, OBS, and Navidrome.
@@ -167,11 +169,14 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         window.setTimeout(() => setObsAddressCopied(false), 1600);
     };
 
-    // Web NowPlaying OBS static URL: same cfg as the appearance import/export copy.
+    // Web NowPlaying OBS static URL: same effective theme as the appearance import/export copy.
     const handleCopyObsUrl = async () => {
-        await onCopyText(buildCurrentObsUrl('now-playing'));
+        await onCopyText(await buildCurrentObsUrl('now-playing'));
         setObsUrlCopied(true);
         window.setTimeout(() => setObsUrlCopied(false), 1600);
+        if (hasCustomObsFont()) {
+            useSettingsUiStore.getState().statusSetter?.({ type: 'info', text: t('options.obsUrlCustomFontHint') });
+        }
     };
 
     return (

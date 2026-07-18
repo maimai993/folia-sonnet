@@ -987,6 +987,7 @@ export default {
     "exportBtn": "Copy Current Config",
     "copyJson": "Copy JSON",
     "copyObsUrl": "Copy Static OBS URL",
+    "obsUrlCustomFontHint": "Copied (includes a custom font); It will fall back to default if not installed on the system.",
     "importSuccess": "Configuration imported successfully!",
     "importFailed": "Import failed, please check the format.",
     "exportThemeLabel": "Include Theme in Export",

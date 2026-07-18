@@ -25,6 +25,9 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     subtitleFontStyle: store.subtitleFontStyle,
     subtitleFontFamily: store.subtitleFontFamily,
     subtitleFontFallbackFamilies: store.subtitleFontFallbackFamilies,
+    // Only a system font's family name is portable; an uploaded font is a browser-local FontFace
+    // (its generated family resolves nowhere else), so it is not carried.
+    lyricsCustomFontFamily: store.lyricsCustomFont?.source === 'system' ? store.lyricsCustomFont.family : null,
     visualizerTunings: collectVisualizerTunings(store as unknown as Record<string, unknown>),
     classicTuning: store.classicTuning,
     cadenzaTuning: store.cadenzaTuning,
@@ -41,4 +44,15 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     urlBackgroundList: store.urlBackgroundList,
     urlBackgroundSelectedId: store.urlBackgroundSelectedId,
   };
+}
+
+// Whether the current settings use a custom font (a picked system font, an uploaded font, or a
+// custom fallback family) rather than only a builtin sans/serif/mono style — used to warn on copy
+// that the font may be unavailable on the OBS machine (and that an uploaded font never transfers).
+export function hasCustomObsFont(): boolean {
+  const store = useSettingsUiStore.getState();
+  return Boolean(store.lyricsCustomFont)
+    || (store.lyricsFontFallbackFamilies?.length ?? 0) > 0
+    || Boolean(store.subtitleFontFamily)
+    || (store.subtitleFontFallbackFamilies?.length ?? 0) > 0;
 }
