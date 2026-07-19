@@ -220,10 +220,20 @@ const requestKugouCatalogMetadata = (lookupId: string): Promise<any | null> => {
     const request = requestKugou('krm_audio', {
         album_audio_id: lookupId,
         fields: 'album_info,authors.base,base,audio_info',
-    }).then(response => listOf(response)[0] ?? null).catch(error => {
-        kugouCatalogMetadataRequests.delete(lookupId);
-        throw error;
-    });
+    }).then(
+        response => {
+            if (kugouCatalogMetadataRequests.get(lookupId) === request) {
+                kugouCatalogMetadataRequests.delete(lookupId);
+            }
+            return listOf(response)[0] ?? null;
+        },
+        error => {
+            if (kugouCatalogMetadataRequests.get(lookupId) === request) {
+                kugouCatalogMetadataRequests.delete(lookupId);
+            }
+            throw error;
+        },
+    );
     kugouCatalogMetadataRequests.set(lookupId, request);
     return request;
 };

@@ -19,15 +19,14 @@ const linuxGraphicsMode =
     : (process.env.FOLIA_LINUX_GRAPHICS_MODE || (isAppImageRuntime ? 'swiftshader' : 'system'));
 
 // Trusts only the known KuGou media CDN hostname mismatch while preserving TLS checks elsewhere.
-app.on('certificate-error', (event, _webContents, requestUrl, error, _certificate, callback, isMainFrame) => {
+app.on('certificate-error', (event, _webContents, requestUrl, error, _certificate, callback) => {
   let isAllowedKugouMediaRequest = false;
   try {
     const parsedUrl = new URL(requestUrl);
     isAllowedKugouMediaRequest =
       parsedUrl.protocol === 'https:' &&
       parsedUrl.hostname === 'fs.youthandroid2.kugou.com' &&
-      error === 'net::ERR_CERT_COMMON_NAME_INVALID' &&
-      isMainFrame === false;
+      error === 'net::ERR_CERT_COMMON_NAME_INVALID';
   } catch {
     isAllowedKugouMediaRequest = false;
   }
@@ -933,25 +932,10 @@ function setupCorsBypassHandlers() {
     callback({ cancel: false, responseHeaders });
   });
 
-  ses.webRequest.onBeforeRequest({ urls: ['*://*.kugou.com/*'] }, (details, callback) => {
-    const requestInfo = getKugouMediaRequestInfo(details);
-    if (requestInfo) console.info('[KuGouMedia] request:start', requestInfo);
-    callback({ cancel: false });
-  });
-
-  ses.webRequest.onCompleted({ urls: ['*://*.kugou.com/*'] }, details => {
-    const requestInfo = getKugouMediaRequestInfo(details);
-    if (!requestInfo) return;
-    console.info('[KuGouMedia] request:completed', {
-      ...requestInfo,
-      statusCode: details.statusCode,
-      fromCache: details.fromCache,
-    });
-  });
-
   ses.webRequest.onErrorOccurred({ urls: ['*://*.kugou.com/*'] }, details => {
     const requestInfo = getKugouMediaRequestInfo(details);
     if (!requestInfo) return;
+    if (requestInfo.resourceType === 'media' && details.error === 'net::ERR_FAILED') return;
     console.warn('[KuGouMedia] request:error', {
       ...requestInfo,
       error: details.error,
