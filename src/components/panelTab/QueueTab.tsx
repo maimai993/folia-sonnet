@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { SongResult } from '../../types';
 import TextInputDialog from '../shared/TextInputDialog';
 import { getSongUnavailableLabel, isSongUnavailable } from '../../services/onlineMusic/songAvailability';
+import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
 
 // src/components/panelTab/QueueTab.tsx
@@ -82,7 +83,7 @@ const QueueRow = ({
                         </span>
                     )}
                 </div>
-                <div className="text-[10px] opacity-40 truncate">{song.ar?.map(artist => artist.name).join(', ')}</div>
+                <div className="text-[10px] opacity-40 truncate">{getSongArtistLabel(song)}</div>
             </div>
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
                 {[

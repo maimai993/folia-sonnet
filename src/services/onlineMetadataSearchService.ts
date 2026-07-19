@@ -1,6 +1,7 @@
 import type { LocalSong, LyricProviderSource, SongResult } from '../types';
 import type { LocalSongMetadataSource } from '../types/localLibrary';
-import { neteaseApi } from './netease';
+import { getOnlineMusicProvider } from './onlineMusic/providerRegistry';
+import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 import { searchQQLyrics } from '../utils/lyrics/providers/qqLyricProvider';
 import { calculateMatchScoreDetails } from '../utils/lyrics/matchScore';
 import { buildLyricSearchQuery } from '../utils/lyrics/searchQuery';
@@ -74,7 +75,7 @@ export const normalizeOnlineMetadataCandidate = (
         artists: getMatchResultArtistEntities(result),
         album: albumName ? { id: albumId, name: albumName } : undefined,
         coverUrl: getMatchResultCoverUrl(result, source) || undefined,
-        durationMs: result.dt || result.duration || 0,
+        durationMs: getProviderSongMetadata(result, source).durationMs,
         score: details.score,
         titleMatched: details.titleMatched,
         durationMatched: details.durationMatched,
@@ -135,7 +136,11 @@ export async function searchOnlineMetadata(
     throwIfAborted(options.signal);
     const limit = options.limit ?? 10;
     const results = source === 'netease'
-        ? (((await waitForProvider(neteaseApi.cloudSearch(safeQuery, limit), options.signal)).result?.songs as SongResult[] | undefined) || [])
+        ? ((await waitForProvider(
+            getOnlineMusicProvider('netease')?.search?.searchSongs(safeQuery, limit, 0)
+                || Promise.resolve({ items: [], hasMore: false, nextOffset: 0 }),
+            options.signal,
+        )).items as SongResult[])
         : await waitForProvider(searchQQLyrics(safeQuery, 1, limit), options.signal);
     throwIfAborted(options.signal);
     return results

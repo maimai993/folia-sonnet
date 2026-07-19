@@ -10,6 +10,7 @@ import type {
     ProviderUser,
 } from '../../types/onlineMusic';
 import { fetchKugouLyrics } from '../../utils/lyrics/providers/kugouLyricProvider';
+import { createProviderSongMetadata } from '../../utils/songMetadata';
 import { normalizeSongTitleForLyricSearch } from '../../utils/lyrics/searchQuery';
 import { removeProviderSessionValue, readProviderSessionValue } from './providerStorage';
 import { getKugouTransportAvailability, requestKugou } from './kugouTransport';
@@ -177,26 +178,29 @@ export const normalizeKugouSong = (raw: unknown): UnifiedSong => {
     ) ?? valueOf(base, 'SongName', 'songname', 'songName', 'audio_name', 'audioName') ?? '');
     const { title, artists } = normalizeKugouTitleAndArtists(rawTitle, rawArtists);
 
+    const album = {
+        id: albumId,
+        name: albumName,
+        coverUrl: coverOf(item),
+        ...(albumCatalogRef ? { catalogRef: albumCatalogRef } : {}),
+    };
+
     return {
         id: hash,
         name: title,
         artists,
         album: {
-            id: albumId,
-            name: albumName,
-            coverUrl: coverOf(item),
-            picUrl: coverOf(item),
-            ...(albumCatalogRef ? { catalogRef: albumCatalogRef } : {}),
+            ...album,
+            // Keep legacy aliases at the provider boundary for older integrations.
+            ...(album.coverUrl ? { picUrl: album.coverUrl } : {}),
         },
-        duration,
-        ar: artists,
         al: {
             id: Number(albumId) || 0,
             name: albumName,
-            picUrl: coverOf(item),
+            ...(album.coverUrl ? { picUrl: album.coverUrl } : {}),
             ...(albumCatalogRef ? { catalogRef: albumCatalogRef } : {}),
         },
-        dt: duration,
+        duration,
         kgHash: hash,
         sourceRef: { kind: 'online', providerId: 'kugou', mediaId: hash, providerData },
     };
@@ -259,25 +263,25 @@ export const resolveKugouSongCatalogRefs = async (song: UnifiedSong): Promise<Un
     const albumRef = catalogRef('album', albumId);
     const resolvedArtists = normalizeArtists(metadata);
     const artists = resolvedArtists.length > 0 ? resolvedArtists : song.artists;
-    const coverUrl = coverOf(albumInfo) || song.album.coverUrl || song.album.picUrl;
+    const coverUrl = coverOf(albumInfo) || song.album.coverUrl;
+    const resolvedAlbumId = albumId ?? song.album.id;
 
     return {
         ...song,
         artists,
-        ar: artists,
         album: {
             ...song.album,
-            id: albumId ?? song.album.id,
+            id: resolvedAlbumId,
             name: albumName,
             coverUrl,
-            picUrl: coverUrl,
+            ...(coverUrl ? { picUrl: coverUrl } : {}),
             ...(albumRef ? { catalogRef: albumRef } : {}),
         },
         al: {
-            ...song.al,
-            id: Number(albumId ?? song.al?.id) || 0,
+            ...(song.al || { id: Number(resolvedAlbumId) || 0, name: albumName }),
+            id: Number(resolvedAlbumId) || 0,
             name: albumName,
-            picUrl: coverUrl,
+            ...(coverUrl ? { picUrl: coverUrl } : {}),
             ...(albumRef ? { catalogRef: albumRef } : {}),
         },
     };
@@ -379,6 +383,13 @@ export const kugouProvider: OnlineMusicProvider = {
         playlistSubscription: true, playlistTrackMutations: true, likes: false, userAlbums: false,
     },
     normalizeSong: normalizeKugouSong,
+    normalizeUser,
+    normalizeCollection,
+    songMetadata: {
+        getSongMetadata(song) {
+            return createProviderSongMetadata(normalizeKugouSong(song));
+        },
+    },
     search: {
         async searchSongs(query, limit, offset) {
             const page = Math.floor(offset / limit) + 1;

@@ -26,8 +26,6 @@ export interface BaseGridViewCollectionDescriptor {
     name: string;
     type: string;
     coverUrl?: string;
-    coverImgUrl?: string;
-    picUrl?: string;
     description?: string;
     trackCount?: number;
     albumCount?: number;
@@ -95,33 +93,11 @@ export const getProviderCollectionArtistLabel = (
     return artists || collection?.creator?.nickname || '';
 };
 
-export const createNeteaseProviderUser = (user: {
-    userId: number;
-    nickname: string;
-    avatarUrl: string;
-    backgroundUrl?: string;
-    vipType?: number;
-} | null | undefined): ProviderUser | null => user ? ({
-    id: user.userId,
-    nickname: user.nickname,
-    avatarUrl: user.avatarUrl,
-    backgroundUrl: user.backgroundUrl,
-    vipType: user.vipType,
-}) : null;
+export const createNeteaseProviderUser = (user: ProviderUser | null | undefined): ProviderUser | null => user || null;
 
-export const createNeteaseGridViewCollection = (collection: any): GridViewCollectionDescriptor => ({
-    ...createOnlineGridViewCollection(collection, 'netease'),
-    artists: collection.type === 'album'
-        ? collection.raw?.artists?.map((artist: { id?: string | number; name?: string }) => ({
-            id: artist.id ?? 0,
-            name: artist.name || '',
-        })).filter((artist: ProviderArtistSummary) => artist.name)
-        : collection.artists,
-    publishedAt: collection.type === 'album'
-        ? collection.raw?.publishTime
-        : collection.publishedAt,
-    publisher: collection.type === 'album' ? collection.raw?.company : collection.publisher,
-});
+export const createNeteaseGridViewCollection = (collection: ProviderCollection): GridViewCollectionDescriptor => (
+    createOnlineGridViewCollection(collection, 'netease')
+);
 
 export const createOnlineGridViewCollection = (
     collection: any,
@@ -132,22 +108,19 @@ export const createOnlineGridViewCollection = (
         ...collection,
         source: 'online',
         providerId,
-        coverUrl: collection.coverUrl || collection.coverImgUrl || collection.picUrl,
-        trackCount: collection.trackCount ?? collection.size,
+        coverUrl: collection.coverUrl,
+        trackCount: collection.trackCount,
         albumCount: collection.albumCount,
-        isOwned: collection.isOwned ?? collection.providerData?.owned,
+        isOwned: collection.isOwned,
         artists: collection.artists,
         aliases: collection.aliases,
-        publishedAt: collection.publishedAt ?? collection.albumPublishTime,
-        publisher: collection.publisher ?? collection.albumCompany,
+        publishedAt: collection.publishedAt,
+        publisher: collection.publisher,
         playCount: collection.playCount,
-        updatedAt: collection.updatedAt ?? collection.updateTime,
-        tracksUpdatedAt: collection.tracksUpdatedAt ?? collection.trackUpdateTime,
-        isLiked: collection.isLiked ?? collection.specialType === 'liked',
-        creator: creator ? {
-            ...creator,
-            id: creator.id ?? creator.userId ?? 0,
-        } : undefined,
+        updatedAt: collection.updatedAt,
+        tracksUpdatedAt: collection.tracksUpdatedAt,
+        isLiked: collection.isLiked,
+        creator: creator ? { ...creator } : undefined,
         raw: collection.raw || collection,
     };
 };

@@ -10,7 +10,8 @@ import type {
     ProviderArtistSummary,
     ProviderUser,
 } from '../../types/onlineMusic';
-import { processNeteaseLyrics } from '../../utils/lyrics/neteaseProcessing';
+import { parseNeteaseChorusRanges, processNeteaseLyrics } from '../../utils/lyrics/neteaseProcessing';
+import { createProviderSongMetadata } from '../../utils/songMetadata';
 import { isSongMarkedUnavailable, neteaseApi } from '../netease';
 import { writeProviderSessionValue } from './providerStorage';
 
@@ -60,17 +61,17 @@ const normalizeCollection = (raw: any, type = 'playlist'): ProviderCollection =>
         .map(normalizeArtistSummary)
         .filter((artist: ProviderArtistSummary | null): artist is ProviderArtistSummary => Boolean(artist));
     const aliases = normalizeStringList(raw?.alias || raw?.aliases);
-    const publishedAt = Number(raw?.publishTime);
+    const publishedAt = Number(raw?.publishedAt ?? raw?.publishTime);
     const playCount = Number(raw?.playCount);
-    const updatedAt = Number(raw?.updateTime);
-    const tracksUpdatedAt = Number(raw?.trackUpdateTime);
+    const updatedAt = Number(raw?.updatedAt ?? raw?.updateTime);
+    const tracksUpdatedAt = Number(raw?.tracksUpdatedAt ?? raw?.trackUpdateTime);
 
     return {
         providerId: 'netease',
         id: raw?.id ?? 0,
         name: raw?.name || '',
-        type: raw?.specialType === 'cloud' ? 'cloud' : type,
-        coverUrl: raw?.coverImgUrl || raw?.picUrl,
+        type: raw?.type || (raw?.specialType === 'cloud' ? 'cloud' : type),
+        coverUrl: raw?.coverUrl || raw?.coverImgUrl || raw?.picUrl,
         description: raw?.description || raw?.briefDesc || raw?.briefDescription || raw?.copywriter,
         trackCount: raw?.trackCount ?? raw?.size,
         ...(type === 'artist' && Number(raw?.albumSize) > 0 ? { albumCount: Number(raw.albumSize) } : {}),
@@ -78,7 +79,9 @@ const normalizeCollection = (raw: any, type = 'playlist'): ProviderCollection =>
         ...(artists.length > 0 ? { artists } : {}),
         ...(aliases.length > 0 ? { aliases } : {}),
         ...(Number.isFinite(publishedAt) && publishedAt > 0 ? { publishedAt } : {}),
-        ...(typeof raw?.company === 'string' && raw.company ? { publisher: raw.company } : {}),
+        ...(typeof (raw?.publisher || raw?.company) === 'string' && (raw.publisher || raw.company)
+            ? { publisher: raw.publisher || raw.company }
+            : {}),
         ...(Number.isFinite(playCount) && playCount >= 0 ? { playCount } : {}),
         ...(Number.isFinite(updatedAt) && updatedAt > 0 ? { updatedAt } : {}),
         ...(Number.isFinite(tracksUpdatedAt) && tracksUpdatedAt > 0 ? { tracksUpdatedAt } : {}),
@@ -90,8 +93,64 @@ const extractCloudLyricText = (response: any): string => (
     response?.lrc || response?.data?.lrc || response?.lyric || response?.data?.lyric || ''
 );
 
+const neteaseChorusRangesCache = new Map<string, Promise<Array<{ startTime: number; endTime: number }>>>();
+
+const getNeteaseChorusRanges = async (songId: MediaId): Promise<Array<{ startTime: number; endTime: number }>> => {
+    const parsedId = toNeteaseId(songId);
+    const cacheKey = String(parsedId);
+    const cached = neteaseChorusRangesCache.get(cacheKey);
+    if (cached) return cached;
+
+    if (typeof neteaseApi.getChorus !== 'function') return [];
+
+    const request = Promise.resolve(neteaseApi.getChorus(parsedId))
+        .then(parseNeteaseChorusRanges)
+        .catch(error => {
+            console.warn(`[NeteaseProvider] Failed to fetch chorus ranges for song ${songId}:`, error);
+            return [];
+        });
+    neteaseChorusRangesCache.set(cacheKey, request);
+    return request;
+};
+
+// Provides a small canonical fallback for isolated runtimes that do not load the legacy transport normalizer.
+const normalizeNeteaseSongFallback = (raw: unknown): UnifiedSong => {
+    const record = raw && typeof raw === 'object' ? raw as Record<string, any> : {};
+    const base = record.simpleSong && typeof record.simpleSong === 'object' ? record.simpleSong : record;
+    const rawArtists = Array.isArray(base.ar) ? base.ar : (Array.isArray(base.artists) ? base.artists : []);
+    const artists = rawArtists
+        .map((artist: any, index: number) => ({ id: artist?.id ?? index, name: String(artist?.name || '') }))
+        .filter((artist: { id: MediaId; name: string }) => artist.name);
+    const rawAlbum = base.al || base.album || {};
+    const duration = Number(base.dt ?? base.duration ?? record.duration ?? record.songLength ?? 0);
+    const cloud = Number(base.t ?? record.t) === 1 || Number(base.t ?? record.t) === 2 || record.sourceType === 'cloud';
+
+    return {
+        id: base.id ?? record.id ?? 0,
+        name: String(base.name || record.songName || record.fileName || 'Unknown Song'),
+        artists,
+        album: {
+            id: rawAlbum.id ?? 0,
+            name: String(rawAlbum.name || 'Unknown Album'),
+            coverUrl: rawAlbum.coverUrl || rawAlbum.picUrl || record.cover,
+        },
+        duration: Number.isFinite(duration) ? duration : 0,
+        aliases: Array.isArray(base.alia) ? base.alia : (Array.isArray(base.aliases) ? base.aliases : []),
+        translatedNames: Array.isArray(base.tns) ? base.tns : (Array.isArray(base.translatedNames) ? base.translatedNames : []),
+        isPureMusic: Boolean(base.isPureMusic),
+        sourceRef: {
+            kind: 'online',
+            providerId: 'netease',
+            mediaId: String(base.id ?? record.id ?? 0),
+            ...(cloud ? { variant: 'cloud' } : {}),
+        },
+    };
+};
+
 export const normalizeNeteaseSong = (raw: unknown): UnifiedSong => {
-    const normalized = neteaseApi.normalizeSongResult(raw);
+    const normalized = typeof neteaseApi.normalizeSongResult === 'function'
+        ? neteaseApi.normalizeSongResult(raw)
+        : normalizeNeteaseSongFallback(raw);
     const isCloud = normalized.t === 1 || normalized.t === 2 || normalized.sourceType === 'cloud';
     return {
         ...normalized,
@@ -111,7 +170,10 @@ const getLyrics = async (
     if (song.sourceRef?.kind === 'online' && song.sourceRef.variant === 'cloud' && context?.userId != null) {
         const response = await neteaseApi.getCloudLyric(toNeteaseId(context.userId), toNeteaseId(song.id));
         const mainText = extractCloudLyricText(response);
-        const processed = await processNeteaseLyrics({ type: 'netease', lrc: { lyric: mainText } }, { songId: toNeteaseId(song.id) });
+        const processed = await processNeteaseLyrics(
+            { type: 'netease', lrc: { lyric: mainText } },
+            { songId: toNeteaseId(song.id), fetchChorusRanges: getNeteaseChorusRanges },
+        );
         return {
             lyrics: processed.lyrics,
             mainText,
@@ -123,7 +185,12 @@ const getLyrics = async (
     }
 
     const response = await neteaseApi.getLyric(toNeteaseId(song.id));
-    const processed = await processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(response), { songId: toNeteaseId(song.id) });
+    const processed = await processNeteaseLyrics(
+        typeof neteaseApi.getProcessedLyricPayload === 'function'
+            ? neteaseApi.getProcessedLyricPayload(response)
+            : response,
+        { songId: toNeteaseId(song.id), fetchChorusRanges: getNeteaseChorusRanges },
+    );
     return {
         lyrics: processed.lyrics,
         mainText: processed.mainLrc,
@@ -159,6 +226,16 @@ export const neteaseProvider: OnlineMusicProvider = {
         userAlbums: true,
     },
     normalizeSong: normalizeNeteaseSong,
+    normalizeUser,
+    normalizeCollection,
+    songMetadata: {
+        getSongMetadata(song) {
+            return createProviderSongMetadata(normalizeNeteaseSong(song));
+        },
+    },
+    getSongPageUrl(song) {
+        return song.id ? `https://music.163.com/#/song?id=${encodeURIComponent(String(song.id))}` : null;
+    },
     search: {
         async searchSongs(query, limit, offset) {
             const response = await neteaseApi.cloudSearch(query, limit, offset);
@@ -201,12 +278,27 @@ export const neteaseProvider: OnlineMusicProvider = {
             };
         },
     },
-    lyrics: { getLyrics },
+    lyrics: { getLyrics, getChorusRanges: getNeteaseChorusRanges },
     auth: {
         async getLoginStatus() {
-            const response = await neteaseApi.getLoginStatus();
-            const profile = response?.data?.profile;
-            return profile ? normalizeUser(profile) : null;
+            const loginResponse = await neteaseApi.getLoginStatus();
+            const loginProfile = loginResponse?.data?.profile;
+            const loginCode = Number(loginResponse?.code ?? loginResponse?.data?.code);
+            if (!loginProfile || [301, 401, 403].includes(loginCode)) return null;
+
+            const accountResponse = await neteaseApi.getUserAccount();
+            const accountCode = Number(accountResponse?.code ?? accountResponse?.data?.code);
+            const accountProfile = accountResponse?.profile;
+            const accountId = accountResponse?.account?.id ?? accountProfile?.userId;
+            const loginId = loginProfile?.userId ?? loginProfile?.id;
+            if (!accountProfile || [301, 401, 403].includes(accountCode) || !accountId || !loginId || String(accountId) !== String(loginId)) {
+                return null;
+            }
+
+            if (typeof loginResponse?.cookie === 'string' && loginResponse.cookie) {
+                writeProviderSessionValue('netease', 'cookie', loginResponse.cookie);
+            }
+            return normalizeUser({ ...loginProfile, ...accountProfile });
         },
         async logout() { await neteaseApi.logout(); },
         async getQrKey() {
@@ -245,6 +337,20 @@ export const neteaseProvider: OnlineMusicProvider = {
             const response = await neteaseApi.getFavoriteAlbums(limit, offset);
             const items = (response?.data || []).map((item: any) => normalizeCollection(item, 'album'));
             return { items, hasMore: Boolean(response?.hasMore), nextOffset: offset + items.length };
+        },
+        async getCloudCollection(user) {
+            const response = await neteaseApi.getUserCloud(1, 0);
+            const trackCount = Number(response?.count || 0);
+            if (trackCount <= 0) return null;
+            const firstSong = response?.songs?.[0] ? normalizeNeteaseSong(response.songs[0]) : null;
+            return normalizeCollection({
+                id: -100,
+                name: 'cloud',
+                specialType: 'cloud',
+                coverImgUrl: firstSong?.album?.coverUrl || user?.avatarUrl,
+                trackCount,
+                creator: user,
+            }, 'cloud');
         },
     },
     catalog: {

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import { PlayerState } from '../types';
 import type { SongResult } from '../types';
+import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 
 // Bridges Folia playback state to the browser Media Session API.
 type UseMediaSessionBridgeOptions = {
@@ -103,11 +104,9 @@ export const useMediaSessionBridge = ({
             return;
         }
 
-        const artistName = currentSong.ar?.map(a => a.name).join(', ')
-            || currentSong.artists?.map(a => a.name).join(', ')
-            || t('ui.unknownArtist');
-        const albumName = currentSong.al?.name || currentSong.album?.name || '';
-        const cover = cachedCoverUrl || currentSong.al?.picUrl || currentSong.album?.picUrl || '';
+        const artistName = getSongArtistLabel(currentSong) || t('ui.unknownArtist');
+        const albumName = getSongAlbumLabel(currentSong);
+        const cover = cachedCoverUrl || getSongCoverUrl(currentSong) || '';
 
         try {
             mediaSession.metadata = new MediaMetadata({

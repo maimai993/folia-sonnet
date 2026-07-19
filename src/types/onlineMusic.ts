@@ -99,6 +99,23 @@ export interface ProviderLyricsResult {
     chorusRanges?: Array<{ startTime: number; endTime: number }>;
 }
 
+export interface ProviderAlbumSummary {
+    id: MediaId;
+    name: string;
+    coverUrl?: string;
+    entityId?: string;
+    catalogRef?: ProviderCatalogRef;
+}
+
+export interface ProviderSongMetadata {
+    artists: ProviderArtistSummary[];
+    album: ProviderAlbumSummary;
+    durationMs: number;
+    coverUrl?: string;
+    aliases: string[];
+    translatedNames: string[];
+}
+
 export interface ProviderUser {
     id: MediaId;
     nickname: string;
@@ -110,6 +127,7 @@ export interface ProviderUser {
 export interface ProviderArtistSummary {
     id: MediaId;
     name: string;
+    entityId?: string;
     catalogRef?: ProviderCatalogRef;
 }
 
@@ -181,6 +199,11 @@ export interface OnlinePlaybackProvider {
 
 export interface OnlineLyricsProvider {
     getLyrics(song: SongResult, context?: { userId?: MediaId | null }): Promise<ProviderLyricsResult>;
+    getChorusRanges?(songId: MediaId): Promise<Array<{ startTime: number; endTime: number }>>;
+}
+
+export interface OnlineSongMetadataProvider {
+    getSongMetadata(song: SongResult): ProviderSongMetadata;
 }
 
 export interface OnlineAuthProvider {
@@ -195,6 +218,7 @@ export interface OnlineLibraryProvider {
     getUserPlaylists(userId: MediaId, limit: number, offset: number): Promise<ProviderPage<ProviderCollection>>;
     getLikedSongIds?(userId: MediaId): Promise<MediaId[]>;
     getUserAlbums?(userId: MediaId, limit: number, offset: number): Promise<ProviderPage<ProviderCollection>>;
+    getCloudCollection?(user?: ProviderUser): Promise<ProviderCollection | null>;
 }
 
 export interface OnlineCatalogProvider {
@@ -238,6 +262,10 @@ export interface OnlineMusicProvider {
     getAvailability?(): ProviderAvailability;
     capabilities: ProviderCapabilities;
     normalizeSong(raw: unknown): UnifiedSong;
+    normalizeUser?(raw: unknown): ProviderUser;
+    normalizeCollection?(raw: unknown, type?: string): ProviderCollection;
+    songMetadata?: OnlineSongMetadataProvider;
+    getSongPageUrl?(song: SongResult): string | null;
     search?: OnlineSearchProvider;
     playback?: OnlinePlaybackProvider;
     lyrics?: OnlineLyricsProvider;

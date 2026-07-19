@@ -4,6 +4,7 @@ import type { SongResult } from '../types';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
 import { NavidromeScrobbleSessionTracker } from '../utils/navidromeScrobble';
+import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 
 // src/hooks/useNavidromeScrobbleReporter.ts
 // Bridges audio playback events to Navidrome scrobble/now-playing reports.
@@ -52,7 +53,7 @@ export const useNavidromeScrobbleReporter = ({
             return;
         }
 
-        const durationMs = navidromeSong.duration || navidromeSong.dt || currentSong?.duration || currentSong?.dt || 0;
+        const durationMs = getProviderSongMetadata(navidromeSong).durationMs || getProviderSongMetadata(currentSong).durationMs;
         if (tracker.getCurrentSongId() !== songId) {
             tracker.startSession(songId, durationMs);
         }
@@ -74,7 +75,8 @@ export const useNavidromeScrobbleReporter = ({
             }
 
             if (tracker.getCurrentSongId() !== songId) {
-                const durationMs = navidromeSong.duration || navidromeSong.dt || currentSongRef.current?.duration || currentSongRef.current?.dt || 0;
+                const durationMs = getProviderSongMetadata(navidromeSong).durationMs
+                    || getProviderSongMetadata(currentSongRef.current).durationMs;
                 tracker.startSession(songId, durationMs);
             }
             return true;

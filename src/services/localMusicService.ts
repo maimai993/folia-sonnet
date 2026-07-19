@@ -1,10 +1,7 @@
 import { LocalSong, LyricData, LocalLibrarySnapshot, LocalLibrarySnapshotFile, LocalLibrarySnapshotNode, type SongResult } from '../types';
 import { saveLocalSong, saveLocalSongs, deleteLocalSong as dbDeleteLocalSong, deleteLocalSongs as dbDeleteLocalSongs, saveDirHandles, getDirHandles, deleteDirHandle, getLocalSongs, getLocalLibrarySnapshot, saveLocalLibrarySnapshot, deleteLocalLibrarySnapshot } from './db';
-import { neteaseApi } from './netease';
-import { toNeteaseId } from './onlineMusic/neteaseProvider';
 import { getLocalPlaylists, saveLocalPlaylists } from './localPlaylistService';
 import { parseEmbeddedMetadataAsync, type EmbeddedMetadataResult } from '../utils/localMetadataWorkerClient';
-import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { normalizeLyricMatchText } from '../utils/lyrics/matchScore';
@@ -17,6 +14,8 @@ import { buildImportedMetadataSnapshot } from '../utils/localSongMetadata';
 import { getLocalLibraryCatalogSnapshot } from './localLibraryEntityRepository';
 import { resolveLocalSongMetadata } from './playbackAdapters';
 import { removeCachedCover } from './coverCache';
+import { getOnlineMusicProvider } from './onlineMusic/providerRegistry';
+import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
@@ -1371,16 +1370,16 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
 
                     if (bestMatch.source === 'netease' || (bestMatch.source === 'amll' && bestMatch.matchedLyricsProviderPlatform === 'ncm')) {
                         try {
-                            const detailRes = await neteaseApi.getSongDetail(bestMatch.id as number);
-                            const nSong = detailRes.songs?.[0];
+                            const nSong = await getOnlineMusicProvider('netease')?.playback?.getSongDetail(bestMatch.id);
                             if (nSong) {
-                                const coverUrl = nSong.al?.picUrl || nSong.album?.picUrl;
+                                const metadata = getProviderSongMetadata(nSong, 'netease');
+                                const coverUrl = metadata.coverUrl;
                                 await applyMatchedMetadata(song.id, {
                                     source: 'netease',
                                     songId: bestMatch.id,
                                     title: nSong.name,
-                                    artists: nSong.ar || nSong.artists,
-                                    album: nSong.al || nSong.album,
+                                    artists: metadata.artists,
+                                    album: metadata.album,
                                     coverUrl: coverUrl?.replace('http:', 'https:'),
                                 }, {
                                     songPatch: {
@@ -1404,16 +1403,16 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
         }
 
         // Search on Netease
-        const searchRes = await neteaseApi.cloudSearch(searchQuery);
+        const searchPage = await getOnlineMusicProvider('netease')?.search?.searchSongs(searchQuery, 50, 0);
 
-        if (!searchRes.result?.songs || searchRes.result.songs.length === 0) {
+        if (!searchPage?.items?.length) {
             console.warn(`[LocalMusic] No search results for: "${searchQuery}"`);
             return null;
         }
 
         // Try to find a song with matching title
         const localTitle = matchContext.title;
-        const matchedSong = (searchRes.result.songs as SongResult[]).find(candidate => isTitleMatch(localTitle, candidate.name));
+        const matchedSong = searchPage.items.find(candidate => isTitleMatch(localTitle, candidate.name));
 
         // If no exact title match found, return null to trigger manual selection
         if (!matchedSong) {
@@ -1421,20 +1420,21 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
             return null;
         }
 
-        console.log(`[LocalMusic] Found exact title match: ${matchedSong.name} by ${matchedSong.ar?.map(a => a.name).join(', ')}`);
+        const matchedMetadata = getProviderSongMetadata(matchedSong, 'netease');
+        console.log(`[LocalMusic] Found exact title match: ${matchedSong.name} by ${matchedMetadata.artists.map(artist => artist.name).join(', ')}`);
 
         // Check if we should skip lyrics fetching (local or embedded lyrics take priority)
         if ((song.hasLocalLyrics && song.localLyricsContent) || (song.hasEmbeddedLyrics && song.embeddedLyricsContent)) {
             console.log(`[LocalMusic] Local/embedded lyrics exist, skipping online lyrics fetch. Only fetching cover/metadata.`);
 
             // Only update metadata and cover, preserve local lyrics
-            const coverUrl = matchedSong.al?.picUrl || matchedSong.album?.picUrl;
+            const coverUrl = matchedMetadata.coverUrl;
             await applyMatchedMetadata(song.id, {
                 source: 'netease',
                 songId: matchedSong.id,
                 title: matchedSong.name,
-                artists: matchedSong.ar || matchedSong.artists,
-                album: matchedSong.al || matchedSong.album,
+                artists: matchedMetadata.artists,
+                album: matchedMetadata.album,
                 coverUrl: coverUrl?.replace('http:', 'https:'),
             }, {
                 songPatch: { ...song, useOnlineCover: Boolean(coverUrl && !isBlob(song.embeddedCover)) },
@@ -1446,15 +1446,8 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
         }
 
         // Fetch lyrics (only when NO local lyrics)
-        const matchedNeteaseId = toNeteaseId(matchedSong.id);
-        const lyricRes = await neteaseApi.getLyric(matchedNeteaseId);
-        const processed = await processNeteaseLyrics(
-            {
-                type: 'netease',
-                ...lyricRes
-            },
-            { songId: matchedNeteaseId }
-        );
+        const processed = await getOnlineMusicProvider('netease')?.lyrics?.getLyrics(matchedSong);
+        if (!processed) return null;
 
         song.matchedLyricsSongId = matchedSong.id;
         song.matchedLyricsSource = 'netease';
@@ -1466,13 +1459,13 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
             return processed.lyrics;
         }
 
-        const coverUrl = matchedSong.al?.picUrl || matchedSong.album?.picUrl;
+        const coverUrl = matchedMetadata.coverUrl;
         await applyMatchedMetadata(song.id, {
             source: 'netease',
             songId: matchedSong.id,
             title: matchedSong.name,
-            artists: matchedSong.ar || matchedSong.artists,
-            album: matchedSong.al || matchedSong.album,
+            artists: matchedMetadata.artists,
+            album: matchedMetadata.album,
             coverUrl: coverUrl?.replace('http:', 'https:'),
         }, {
             songPatch: { ...song, useOnlineCover: Boolean(coverUrl && !isBlob(song.embeddedCover)) },

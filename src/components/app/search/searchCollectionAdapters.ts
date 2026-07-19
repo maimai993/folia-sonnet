@@ -3,10 +3,11 @@ import type { MediaId } from '../../../types/onlineMusic';
 import type { GridViewCollectionDescriptor } from '../home/gridViewCollectionAdapters';
 import { getPlaybackSourceRef } from '../../../utils/appPlaybackGuards';
 import { resolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
+import { getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
 
 // src/components/app/search/searchCollectionAdapters.ts
 
-const getTrackCoverUrl = (track: UnifiedSong) => track.al?.picUrl || track.album?.picUrl;
+const getTrackCoverUrl = (track: UnifiedSong) => getSongCoverUrl(track);
 
 export const createSearchArtistCollection = (
     track: UnifiedSong,
@@ -97,7 +98,7 @@ export const createSearchAlbumCollection = (
     return resolveSongCatalogRef(track, 'album', {
         id: albumId ?? '',
         name: albumName,
-        picUrl: coverUrl,
+        coverUrl,
         ...(entityId ? { entityId } : {}),
     }).then(ref => ref ? ({
         source: 'online' as const,

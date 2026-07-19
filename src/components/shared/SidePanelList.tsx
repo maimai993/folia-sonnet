@@ -4,6 +4,7 @@ import { X, Play, Plus } from 'lucide-react';
 import { List as VirtualList } from 'react-window';
 import { useTranslation } from 'react-i18next';
 import { getSizedCoverUrl } from '../../utils/coverUrl';
+import { getSongArtistLabel, getSongCoverUrl } from '../../services/onlineMusic/songMetadata';
 
 export interface SidePanelListProps<T> {
     isOpen: boolean;
@@ -147,8 +148,8 @@ export const TrackListItem = React.memo<{
     isActive?: boolean;
 }>(({ track, index, style, onPlay, onAddToQueue, isUnavailable, isActive }) => {
     const { t } = useTranslation();
-    const coverUrl = track.al?.picUrl || track.album?.picUrl || '';
-    const artistName = track.ar?.[0]?.name || track.artists?.[0]?.name || 'Unknown Artist';
+    const coverUrl = getSongCoverUrl(track) || '';
+    const artistName = getSongArtistLabel(track).split(',')[0]?.trim() || 'Unknown Artist';
     
     return (
         <div 

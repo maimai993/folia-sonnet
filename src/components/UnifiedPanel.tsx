@@ -2,7 +2,8 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, NeteasePlaylist, ThemeMode, VisualizerMode } from '../types';
+import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, ThemeMode, VisualizerMode } from '../types';
+import type { ProviderCollection, ProviderUser } from '../types/onlineMusic';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
 import QueueTab from './panelTab/QueueTab';
@@ -93,7 +94,7 @@ type UnifiedPanelQueueProps = {
 };
 
 type UnifiedPanelAccountProps = {
-    user: any; // NeteaseUser | null
+    user: ProviderUser | null;
     onLogout: () => void;
     audioQuality: AudioQualityPreference;
     onAudioQualityChange: (quality: AudioQualityPreference) => void;
@@ -109,7 +110,7 @@ type UnifiedPanelAccountProps = {
 
 type UnifiedPanelLibraryProps = {
     localPlaylists: LocalPlaylist[];
-    neteasePlaylists: NeteasePlaylist[];
+    neteasePlaylists: ProviderCollection[];
     onSaveCurrentQueueAsPlaylist: (name: string) => Promise<void>;
     onAddCurrentSongToLocalPlaylist: (playlistId: string) => Promise<void>;
     onCreateCurrentLocalPlaylist: (name: string) => Promise<void>;

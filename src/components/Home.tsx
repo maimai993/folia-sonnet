@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, User, Loader2, ChevronRight, Settings , ChevronDown } from 'lucide-react';
-import { neteaseApi } from '../services/netease';
-import { HomeViewTab, NeteaseUser, NeteasePlaylist, SongResult, LocalSong, LocalLibraryGroup, LocalPlaylist, type StageStatus, type StageSource, type StatusMessage, type Theme } from '../types';
+import { getOnlineMusicProvider } from '../services/onlineMusic/providerRegistry';
+import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
+import { HomeViewTab, SongResult, LocalSong, LocalLibraryGroup, LocalPlaylist, type StageStatus, type StageSource, type StatusMessage, type Theme } from '../types';
+import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
 import { NavidromeSong, NavidromeViewSelection } from '../types/navidrome';
 import { LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 import LocalMusicView from './LocalMusicView';
@@ -23,14 +25,14 @@ interface HomeProps {
     onPlaySong: (song: SongResult, playlistCtx?: SongResult[], isFmCall?: boolean) => void;
     onBackToPlayer: () => void;
     onRefreshUser: () => void;
-    user: NeteaseUser | null;
-    playlists: NeteasePlaylist[];
-    cloudPlaylist?: NeteasePlaylist | null;
+    user: ProviderUser | null;
+    playlists: ProviderCollection[];
+    cloudPlaylist?: ProviderCollection | null;
     currentTrack?: SongResult | null;
     isPlaying: boolean;
-    onSelectPlaylist: (playlist: NeteasePlaylist) => void;
-    onSelectAlbum: (albumId: number) => void;
-    onSelectArtist: (artistId: number) => void;
+    onSelectPlaylist: (playlist: ProviderCollection) => void;
+    onSelectAlbum: (albumId: MediaId) => void;
+    onSelectArtist: (artistId: MediaId) => void;
     onSelectLocalAlbum?: (albumName: string) => void;
     onSelectLocalArtist?: (artistName: string) => void;
     localSongs: LocalSong[];
@@ -253,7 +255,7 @@ const Home: React.FC<HomeProps> = ({
     const [isLocalPlaylistOpen, setIsLocalPlaylistOpen] = useState(false);
 
     // Favorite Albums
-    const [favoriteAlbums, setFavoriteAlbums] = useState<any[]>([]);
+    const [favoriteAlbums, setFavoriteAlbums] = useState<ProviderCollection[]>([]);
     const [loadingAlbums, setLoadingAlbums] = useState(false);
     const [albumsLoaded, setAlbumsLoaded] = useState(false);
     // Swipe handling
@@ -299,20 +301,20 @@ const Home: React.FC<HomeProps> = ({
     const fetchFavoriteAlbums = async () => {
         setLoadingAlbums(true);
         try {
-            let allAlbums: any[] = [];
+            const userId = user?.id;
+            if (userId == null) return;
+            let allAlbums: ProviderCollection[] = [];
             let offset = 0;
             const limit = 50;
             let hasMore = true;
 
             while (hasMore) {
-                const res = await neteaseApi.getFavoriteAlbums(limit, offset);
-                if (res.data) {
-                    allAlbums = [...allAlbums, ...res.data];
-                }
+                const page = await getOnlineMusicProvider('netease')?.library?.getUserAlbums?.(userId, limit, offset);
+                if (page?.items) allAlbums = [...allAlbums, ...page.items];
 
                 // Use hasMore directly as requested
-                hasMore = res.hasMore;
-                offset += limit;
+                hasMore = Boolean(page?.hasMore);
+                offset = page?.nextOffset ?? offset + limit;
             }
 
             if (allAlbums.length > 0) {
@@ -340,11 +342,9 @@ const Home: React.FC<HomeProps> = ({
     const fetchRadioData = async () => {
         setLoadingRadio(true);
         try {
-            const fmRes = await neteaseApi.getPersonalFm();
-            let fmCoverUrl = '';
-            if (fmRes.data && fmRes.data.length > 0) {
-                fmCoverUrl = fmRes.data[0].album?.picUrl || fmRes.data[0].al?.picUrl || '';
-            }
+            const provider = getOnlineMusicProvider('netease');
+            const fmSongs = await provider?.recommendations?.getPersonalFm?.() || [];
+            const fmCoverUrl = getProviderSongMetadata(fmSongs[0], 'netease').coverUrl || '';
 
             const fmItem = {
                 id: 'personal_fm',
@@ -352,19 +352,18 @@ const Home: React.FC<HomeProps> = ({
                 coverUrl: fmCoverUrl,
                 description: t('home.personalFm'),
                 isFm: true,
+                songs: fmSongs,
             };
 
-            const personalizedRes = await neteaseApi.getPersonalizedPlaylists(35);
-            let personalizedItems: any[] = [];
-            if (personalizedRes.result) {
-                personalizedItems = personalizedRes.result.map((r: any) => ({
-                    id: r.id,
-                    name: r.name,
-                    coverUrl: r.picUrl,
-                    trackCount: r.trackCount,
-                    description: r.copywriter || t('home.playlists')
+            const personalizedItems = (await provider?.recommendations?.getRecommendedCollections?.(35) || [])
+                .map(collection => ({
+                    id: collection.id,
+                    name: collection.name,
+                    coverUrl: collection.coverUrl,
+                    trackCount: collection.trackCount,
+                    description: collection.description || t('home.playlists'),
+                    raw: collection,
                 }));
-            }
             
             setRadioItems([fmItem, ...personalizedItems]);
             setRadioLoaded(true);
@@ -613,9 +612,9 @@ const Home: React.FC<HomeProps> = ({
                                                 items={favoriteAlbums.map(a => ({
                                                     id: a.id,
                                                     name: a.name,
-                                                    coverUrl: a.picUrl,
-                                                    trackCount: a.size,
-                                                    description: a.artists?.[0]?.name
+                                                    coverUrl: a.coverUrl,
+                                                    trackCount: a.trackCount,
+                                                    description: a.artists?.[0]?.name || a.creator?.nickname
                                                 }))}
                                                 onSelect={(album) => onSelectAlbum(album.id)}
                                                 isLoading={loadingAlbums}
@@ -638,11 +637,8 @@ const Home: React.FC<HomeProps> = ({
                                     >
                                         <div className="w-full flex-[0_1_clamp(520px,46vh,760px)] min-h-0 max-h-[clamp(520px,46vh,760px)]">
                                             <Carousel3D
-                                                items={playlistCards.map(p => ({
-                                                    ...p,
-                                                    coverUrl: p.coverImgUrl
-                                                }))}
-                                                onSelect={(pl) => onSelectPlaylist(pl as any)}
+                                                items={playlistCards}
+                                                onSelect={(pl) => onSelectPlaylist(pl as ProviderCollection)}
                                                 isLoading={false}
                                                 emptyMessage={t('home.loadingLibrary')}
                                                 initialFocusedIndex={focusedPlaylistIndex}
@@ -666,18 +662,15 @@ const Home: React.FC<HomeProps> = ({
                                                 items={radioItems}
                                                 onSelect={async (item) => {
                                                     if (item.id === 'personal_fm') {
-                                                        const fmRes = await neteaseApi.getPersonalFm();
-                                                        if (fmRes.data && fmRes.data.length > 0) {
-                                                            onPlaySong(fmRes.data[0], fmRes.data, true);
+                                                        const fmSongs = item.songs?.length
+                                                            ? item.songs
+                                                            : await getOnlineMusicProvider('netease')?.recommendations?.getPersonalFm?.() || [];
+                                                        if (fmSongs.length > 0) {
+                                                            onPlaySong(fmSongs[0], fmSongs, true);
                                                         }
                                                     } else {
-                                                        onSelectPlaylist({
-                                                            id: item.id,
-                                                            name: item.name,
-                                                            coverImgUrl: item.coverUrl,
-                                                            creator: { nickname: item.description },
-                                                            trackCount: item.trackCount
-                                                        } as any);
+                                                        const collection = item.raw as ProviderCollection | undefined;
+                                                        if (collection) onSelectPlaylist(collection);
                                                     }
                                                 }}
                                                 isLoading={loadingRadio}

@@ -1,7 +1,5 @@
 import { LyricData, LyricProviderSource, SongResult } from '../../types';
-import { neteaseApi } from '../../services/netease';
-import { toNeteaseId } from '../../services/onlineMusic/neteaseProvider';
-import { fetchNeteaseChorusRanges, processNeteaseLyrics } from './neteaseProcessing';
+import { getOnlineMusicProvider } from '../../services/onlineMusic/providerRegistry';
 import { applyNeteaseChorusByTime } from './chorusEffects';
 import type { NeteaseChorusRange } from './chorusEffects';
 import { searchQQLyrics, fetchQQLyrics } from './providers/qqLyricProvider';
@@ -22,6 +20,10 @@ const SHOULD_LOG_MATCH_DETAILS = import.meta.env.DEV;
 
 const hasChorusMarkers = (lyrics: LyricData | null): boolean => (
     Boolean(lyrics?.lines.some(line => line.isChorus))
+);
+
+const getNeteaseChorusRanges = (songId: number | string) => (
+    getOnlineMusicProvider('netease')?.lyrics?.getChorusRanges?.(songId) || Promise.resolve([])
 );
 
 export interface AutoMatchBestLyricOptions {
@@ -157,7 +159,7 @@ export async function autoMatchBestLyric(
     console.log(`[autoMatchBestLyric] Initiating best lyric auto-match for "${searchQuery}" (Duration: ${normalizedDurationMs}ms)`);
     const targetSong = { title, artist, album: options.album, durationMs: normalizedDurationMs };
     let neteaseChorusRanges: NeteaseChorusRange[] = options.neteaseCandidate?.chorusRanges ?? [];
-    let neteaseCandidateSongs: any[] | null = null;
+    let neteaseCandidateSongs: SongResult[] | null = null;
     let qqBestCandidate: SongResult | null | undefined;
 
     const defaultOrder: LyricProviderSource[] = ['netease', 'amll', 'qq', 'kugou'];
@@ -169,12 +171,19 @@ export async function autoMatchBestLyric(
         ? [options.metadataCandidate.source]
         : prioritizedSources.filter((source, index) => prioritizedSources.indexOf(source) === index);
 
-    const getNeteaseCandidateSongs = async (): Promise<any[]> => {
+    const getNeteaseCandidateSongs = async (): Promise<SongResult[]> => {
         if (neteaseCandidateSongs) {
             return neteaseCandidateSongs;
         }
         if (options.neteaseCandidate) {
-            neteaseCandidateSongs = [{ id: options.neteaseCandidate.id, name: title, ar: artist ? [{ name: artist }] : [] }];
+            neteaseCandidateSongs = [{
+                id: options.neteaseCandidate.id,
+                name: title,
+                artists: artist ? [{ id: 0, name: artist }] : [],
+                album: { id: 0, name: options.album || '' },
+                duration: normalizedDurationMs,
+                sourceRef: { kind: 'online', providerId: 'netease', mediaId: String(options.neteaseCandidate.id) },
+            }];
             return neteaseCandidateSongs;
         }
         if (options.metadataCandidate?.source === 'netease') {
@@ -182,20 +191,22 @@ export async function autoMatchBestLyric(
             neteaseCandidateSongs = songId ? [{
                 id: songId,
                 name: title,
-                ar: artist ? [{ id: 0, name: artist }] : [],
-                al: options.album ? { id: 0, name: options.album } : undefined,
-                dt: normalizedDurationMs,
+                artists: artist ? [{ id: 0, name: artist }] : [],
+                album: { id: 0, name: options.album || '' },
+                duration: normalizedDurationMs,
+                sourceRef: { kind: 'online', providerId: 'netease', mediaId: String(songId) },
             }] : [];
             return neteaseCandidateSongs;
         }
 
         const neteaseSearchRes = await withTimeout(
-            neteaseApi.cloudSearch(searchQuery, AUTO_MATCH_SEARCH_LIMIT),
+            getOnlineMusicProvider('netease')?.search?.searchSongs(searchQuery, AUTO_MATCH_SEARCH_LIMIT, 0)
+                || Promise.resolve({ items: [], hasMore: false, nextOffset: 0 }),
             PROVIDER_SEARCH_TIMEOUT_MS,
             'NetEase search',
-            { result: { songs: [] } }
+            { items: [], hasMore: false, nextOffset: 0 }
         );
-        const neteaseSongs = neteaseSearchRes.result?.songs || [];
+        const neteaseSongs = neteaseSearchRes.items;
         const bestCandidate = selectBestCandidate('netease', neteaseSongs, targetSong);
         neteaseCandidateSongs = bestCandidate ? [bestCandidate] : [];
         return neteaseCandidateSongs;
@@ -234,15 +245,7 @@ export async function autoMatchBestLyric(
 
         return await withTimeout(
                 (async () => {
-                    const neteaseSongId = toNeteaseId(song.id);
-                    const lyricRes = await neteaseApi.getLyric(neteaseSongId);
-                    return processNeteaseLyrics(
-                        {
-                            type: 'netease',
-                            ...lyricRes
-                        },
-                        { songId: neteaseSongId }
-                    );
+                    return await getOnlineMusicProvider('netease')?.lyrics?.getLyrics(song) || null;
                 })(),
                 PROVIDER_LYRIC_TIMEOUT_MS,
                 `NetEase lyric fetch for ${song.id}`,
@@ -270,7 +273,7 @@ export async function autoMatchBestLyric(
             return null;
         }
         const chorusRanges = platform === 'ncm' && !hasChorusMarkers(lyrics)
-            ? (neteaseChorusRanges.length > 0 ? neteaseChorusRanges : await fetchNeteaseChorusRanges(song.id))
+            ? (neteaseChorusRanges.length > 0 ? neteaseChorusRanges : await getNeteaseChorusRanges(song.id))
             : [];
         const decoratedLyrics = chorusRanges.length > 0
             ? applyNeteaseChorusByTime(lyrics, chorusRanges)
@@ -293,7 +296,7 @@ export async function autoMatchBestLyric(
                 const candidateSongs = await getNeteaseCandidateSongs();
 
                 for (const song of candidateSongs) {
-                    console.log(`[autoMatchBestLyric] Checking NetEase candidate: "${song.name}" by "${song.ar?.map((a: any) => a.name).join(', ')}"`);
+                    console.log(`[autoMatchBestLyric] Checking NetEase candidate: "${song.name}" by "${song.artists?.map(artist => artist.name).join(', ')}"`);
                     const processed = await getNeteaseProcessed(song);
 
                     if (!processed) {

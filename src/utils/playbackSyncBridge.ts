@@ -3,6 +3,7 @@ import type { PlayerChromeVisibilityMode, RemoteControlSnapshot } from '../types
 import type { VideoExportState } from '../types/videoExport';
 import { getPlaybackSongKey, isLocalPlaybackSong, resolveNavidromePlaybackCarrier } from './appPlaybackGuards';
 import { buildStagePlayerSnapshot } from './stagePlayerSnapshot';
+import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 
 // src/utils/playbackSyncBridge.ts
 // Derives shared playback publisher models before adapting them to Electron-facing protocols.
@@ -94,10 +95,7 @@ const getPlaybackSyncBridgeArtist = (song: SongResult | null): string | null => 
         return null;
     }
 
-    const artistNames = song.artists?.map(artist => artist.name).filter(Boolean) ?? [];
-    const primaryArtists = artistNames.length > 0
-        ? artistNames
-        : song.ar?.map(artist => artist.name).filter(Boolean) ?? [];
+    const primaryArtists = getProviderSongMetadata(song).artists.map(artist => artist.name).filter(Boolean);
     if (primaryArtists.length > 0) {
         return primaryArtists.join(', ');
     }
@@ -111,7 +109,7 @@ const getPlaybackSyncBridgeCoverUrl = (
     coverUrl: string | null,
     cachedCoverUrl: string | null | undefined,
 ): string | null => {
-    return coverUrl || cachedCoverUrl || song?.al?.picUrl || song?.album?.picUrl || null;
+    return coverUrl || cachedCoverUrl || getProviderSongMetadata(song).coverUrl || null;
 };
 
 // Builds the single playback model used by Electron publishers with protocol-specific adapters.

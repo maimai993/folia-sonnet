@@ -168,15 +168,11 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         }
 
         const coverUrl = resolvedLocalCollectionCoverUrl
-            || getPersistentCoverUrl(liveSelectedCollection.coverUrl)
-            || getPersistentCoverUrl(liveSelectedCollection.coverImgUrl)
-            || getPersistentCoverUrl(liveSelectedCollection.picUrl);
+            || getPersistentCoverUrl(liveSelectedCollection.coverUrl);
 
         return {
             ...liveSelectedCollection,
             coverUrl,
-            coverImgUrl: coverUrl,
-            picUrl: coverUrl,
         };
     }, [liveSelectedCollection, resolvedLocalCollectionCoverUrl]);
 
@@ -256,7 +252,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
 
         const source = selectedCollection.source;
         const albumName = album?.name || '';
-        const albumCoverUrl = album?.coverUrl || album?.picUrl;
+        const albumCoverUrl = album?.coverUrl;
         if (source === 'online') {
             let resolvedAlbumId = albumId;
             if (track) {
@@ -264,7 +260,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                     const ref = await resolveSongCatalogRef(track as UnifiedSong, 'album', {
                         id: albumId,
                         name: albumName,
-                        picUrl: albumCoverUrl,
+                        coverUrl: albumCoverUrl,
                         catalogRef: album?.catalogRef,
                     });
                     if (!ref) {
@@ -285,9 +281,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                 id: resolvedAlbumId,
                 name: albumName,
                 type: 'album',
-                coverImgUrl: albumCoverUrl,
                 coverUrl: albumCoverUrl,
-                picUrl: albumCoverUrl,
             });
         } else if (source === 'navidrome') {
             handlePushCollection({
@@ -295,9 +289,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                 id: String(albumId),
                 name: albumName,
                 type: 'album',
-                coverImgUrl: albumCoverUrl,
                 coverUrl: albumCoverUrl,
-                picUrl: albumCoverUrl,
             });
         } else if (source === 'local') {
             const catalogIndex = buildLocalLibraryIndex(
@@ -337,9 +329,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                 entityId: localAlbumEntity.id,
                 name: localAlbumName,
                 type: 'album',
-                coverImgUrl: localCoverUrl,
                 coverUrl: localCoverUrl,
-                picUrl: localCoverUrl,
                 description: albumArtist,
                 albumArtist,
                 songIds: albumSongs.map(song => song.id),
@@ -753,7 +743,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             onAddAllToQueue={legacyProps.onAddAllToQueue}
                             onSelectAlbum={handlePushAlbumCollection}
                             onSelectArtist={handlePushArtistCollection}
-                            currentUserId={legacyProps.user?.userId}
+                            currentUserId={legacyProps.user?.id}
                             onPlaylistMutated={legacyProps.onRefreshUser}
                             onStatusMessage={legacyProps.onStatusMessage}
                             externalTracks={externalTracks}

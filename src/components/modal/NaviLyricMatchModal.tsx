@@ -19,6 +19,7 @@ import {
     type LyricMatchSource,
 } from './lyricMatchResultHelpers';
 import { LyricPreviewPanel } from './LyricPreviewPanel';
+import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 
 export interface NavidromeMatchData {
     matchedSongId?: MediaId;
@@ -79,15 +80,16 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
     const enableAlternativeLyricSources = useSettingsUiStore(state => state.enableAlternativeLyricSources);
     const [source, setSource] = useState<LyricMatchSource>('netease');
 
-    const navidromeArtist = song.artists?.map(a => a.name).join(', ') || song.ar?.map(a => a.name).join(', ') || '';
-    const navidromeAlbum = song.album?.name || song.al?.name || '';
+    const navidromeMetadata = getProviderSongMetadata(song);
+    const navidromeArtist = navidromeMetadata.artists.map(a => a.name).join(', ');
+    const navidromeAlbum = navidromeMetadata.album?.name || '';
 
     const songInfo = useMemo(() => {
         return {
             title: song.name || '',
             artist: navidromeArtist || '',
             album: navidromeAlbum || '',
-            durationMs: song.duration || song.dt || 0,
+            durationMs: navidromeMetadata.durationMs,
         };
     }, [song, navidromeArtist, navidromeAlbum]);
 
@@ -242,7 +244,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
         }
     };
 
-    const coverUrl = song.album?.picUrl || song.al?.picUrl || song.navidromeData?.coverArtUrl || null;
+    const coverUrl = navidromeMetadata.coverUrl || song.navidromeData?.coverArtUrl || null;
     const selectedCoverUrl = getMatchResultCoverUrl(selectedResult, source);
     const selectedArtists = getMatchResultArtists(selectedResult);
     const selectedAlbum = getMatchResultAlbumName(selectedResult);

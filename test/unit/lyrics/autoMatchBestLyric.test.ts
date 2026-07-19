@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { autoMatchBestLyric } from '@/utils/lyrics/autoMatchBestLyric';
 import { neteaseApi } from '@/services/netease';
-import { fetchNeteaseChorusRanges, processNeteaseLyrics } from '@/utils/lyrics/neteaseProcessing';
+import { processNeteaseLyrics } from '@/utils/lyrics/neteaseProcessing';
 import { searchQQLyrics, fetchQQLyrics } from '@/utils/lyrics/providers/qqLyricProvider';
 import { searchKugouLyrics, fetchKugouLyrics } from '@/utils/lyrics/providers/kugouLyricProvider';
 import { fetchAmllDbLyrics } from '@/utils/lyrics/providers/amllDbProvider';
@@ -13,12 +13,13 @@ vi.mock('@/services/netease', () => ({
     neteaseApi: {
         cloudSearch: vi.fn(),
         getLyric: vi.fn(),
-        getSongDetail: vi.fn()
+        getSongDetail: vi.fn(),
+        getChorus: vi.fn(),
     }
 }));
 
 vi.mock('@/utils/lyrics/neteaseProcessing', () => ({
-    fetchNeteaseChorusRanges: vi.fn(),
+    parseNeteaseChorusRanges: vi.fn(() => []),
     processNeteaseLyrics: vi.fn()
 }));
 
@@ -45,12 +46,10 @@ describe('autoMatchBestLyric', () => {
     const searchKugouLyricsMock = vi.mocked(searchKugouLyrics);
     const fetchKugouLyricsMock = vi.mocked(fetchKugouLyrics);
     const fetchAmllDbLyricsMock = vi.mocked(fetchAmllDbLyrics);
-    const fetchNeteaseChorusRangesMock = vi.mocked(fetchNeteaseChorusRanges);
 
     beforeEach(() => {
         vi.resetAllMocks();
         fetchAmllDbLyricsMock.mockResolvedValue(null);
-        fetchNeteaseChorusRangesMock.mockResolvedValue([]);
     });
 
     it('prioritizes NetEase when perfect word-by-word match exists', async () => {
@@ -538,7 +537,6 @@ describe('autoMatchBestLyric', () => {
 
         expect(result.source).toBe('amll');
         expect(result.lyrics.lines[0].isChorus).toBe(true);
-        expect(fetchNeteaseChorusRangesMock).not.toHaveBeenCalled();
     });
 
     it('falls back to Kugou Music if both NetEase and QQ Music matches fail', async () => {

@@ -9,7 +9,7 @@ import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { getOnlineMusicProvider } from '../services/onlineMusic/providerRegistry';
 import { createCoverPlaceholder } from '../utils/coverPlaceholders';
 import { getSizedCoverUrl } from '../utils/coverUrl';
-import { getSongAlbumCoverUrl } from '../utils/songMetadata';
+import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import { createSafeObjectUrl, getBlobObjectUrlSignature, isBlob } from '../utils/blobGuards';
 import { PolaroidCard } from './GridView';
 import { HexGridCoord, CubeCoord, getHexCubicSpiral } from './folia-grid/hexViewport';
@@ -677,7 +677,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             itemsList.push({
                 id: song.id,
                 name: song.name,
-                coverUrl: getSongAlbumCoverUrl(song),
+                coverUrl: getSongCoverUrl(song),
                 subtitle: String(idx + 1),
                 description: song.artists?.map(a => a.name).join('/') || '',
                 rawTrack: song,
@@ -699,7 +699,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         return buildArtistGridCoords(topSongs.length, albumGridItems.length, layoutConfig.spacingX, layoutConfig.spacingY);
     }, [topSongs.length, albumGridItems.length, layoutConfig.spacingX, layoutConfig.spacingY]);
 
-    const backgroundCoverUrl = getSongAlbumCoverUrl(topSongs[0]) || '';
+    const backgroundCoverUrl = getSongCoverUrl(topSongs[0]) || '';
 
     const {
         renderedIndexes,

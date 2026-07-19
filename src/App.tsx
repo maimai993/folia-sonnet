@@ -22,7 +22,7 @@ import { buildHomeModel } from './components/app/home/buildHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
 import { createLocalLibraryNavigation } from './components/app/navigation/createLocalLibraryNavigation';
 import { createPanelNavigation } from './components/app/navigation/createPanelNavigation';
-import { createNeteaseGridViewCollection } from './components/app/home/gridViewCollectionAdapters';
+import { createOnlineGridViewCollection } from './components/app/home/gridViewCollectionAdapters';
 import { buildAppStyle } from './components/app/presentation/buildAppStyle';
 import { buildDebugSnapshot } from './components/app/presentation/buildDebugSnapshot';
 import { buildHomeSurfacePresentation } from './components/app/presentation/buildHomeSurfacePresentation';
@@ -39,9 +39,10 @@ import {
 } from './components/app/search/searchCollectionAdapters';
 import { buildPlayerPanelModel } from './components/app/player-panel/buildPlayerPanelModel';
 import { createQueueMutations } from './components/app/player-panel/createQueueMutations';
-import { Album, Artist, LyricData, Theme, PlayerState, SongResult, ReplayGainMode, StatusMessage, PlaybackContext, StageLoopMode, UnifiedSong, NeteasePlaylist } from './types';
-import type { MediaId } from './types/onlineMusic';
+import { Album, Artist, LyricData, Theme, PlayerState, SongResult, ReplayGainMode, StatusMessage, PlaybackContext, StageLoopMode, UnifiedSong } from './types';
+import type { MediaId, ProviderCollection } from './types/onlineMusic';
 import { resolveSongCatalogRef } from './services/onlineMusic/catalogRefs';
+import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from './services/onlineMusic/songMetadata';
 import { isNavidromeEnabled } from './services/navidromeService';
 import { useAppNavigation } from './hooks/useAppNavigation';
 import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
@@ -683,24 +684,13 @@ export default function App() {
         if (!currentSong) {
             return null;
         }
-        const joinedArtists = currentSong.ar?.map(artist => artist.name).filter(Boolean).join(', ');
-        if (joinedArtists) {
-            return joinedArtists;
-        }
-        const fallbackArtists = currentSong.artists?.map(artist => artist.name).filter(Boolean).join(', ');
-        if (fallbackArtists) {
-            return fallbackArtists;
-        }
-        return null;
+        return getSongArtistLabel(currentSong) || null;
     }, [currentSong]);
     const currentSongAlbum = useMemo(() => {
         if (!currentSong) {
             return null;
         }
-        if (currentSong.al?.name || currentSong.album?.name) {
-            return currentSong.al?.name || currentSong.album?.name || null;
-        }
-        return null;
+        return getSongAlbumLabel(currentSong) || null;
     }, [currentSong]);
 
     // Theme Controller
@@ -924,7 +914,7 @@ export default function App() {
     } = useElectronWindowPlaybackHandoff({
         isElectronWindow,
         audioQuality,
-        userId: user?.userId,
+        userId: user?.id,
         activePlaybackContext,
         setActivePlaybackContext,
         currentView,
@@ -1026,7 +1016,7 @@ export default function App() {
         lyrics,
         playQueue,
         likedSongIds,
-        userId: user?.userId,
+        userId: user?.id,
         currentTime,
         setCurrentSong,
         setLyrics,
@@ -1054,7 +1044,7 @@ export default function App() {
 
     useSessionRestoreController({
         audioQuality,
-        userId: user?.userId,
+        userId: user?.id,
         blobUrlRef,
         currentOnlineAudioUrlFetchedAtRef,
         setCurrentSong,
@@ -1138,7 +1128,7 @@ export default function App() {
         searchReturnView,
         localSongs,
         localLibraryCatalog,
-        userId: user?.userId,
+        userId: user?.id,
         currentTime,
         setCurrentSong,
         setLyrics,
@@ -1392,7 +1382,8 @@ export default function App() {
                 const navidromeSong = resolveNavidromePlaybackCarrier(currentSong);
                 return navidromeSong ? starredNavidromeSongIds.has(navidromeSong.navidromeData.id) : false;
             }
-            return getOnlineProviderIdForSong(currentSong) === 'netease' && likedSongIds.has(Number(currentSong.id));
+            return getOnlineProviderIdForSong(currentSong) === 'netease'
+                && [...likedSongIds].some(id => String(id) === String(currentSong.id));
         })(),
         onLike: handleLike,
     });
@@ -1988,11 +1979,11 @@ export default function App() {
         syncStageLyricsClock,
     ]);
 
-    const handlePlaylistSelect = useCallback((playlist: NeteasePlaylist) => {
-        navigateToCollection(createNeteaseGridViewCollection({
+    const handlePlaylistSelect = useCallback((playlist: ProviderCollection) => {
+        navigateToCollection(createOnlineGridViewCollection({
             ...playlist,
-            type: 'playlist',
-        }), 'home');
+            type: playlist.type || 'playlist',
+        }, playlist.providerId || 'netease'), 'home');
     }, [navigateToCollection]);
 
     const handleUnifiedAlbumSelect = useCallback((albumId: MediaId) => {
@@ -2025,7 +2016,7 @@ export default function App() {
                     id: ref.id,
                     type: 'album',
                     name: album.name || t('home.albums'),
-                    coverUrl: album.picUrl,
+                    coverUrl: album.coverUrl,
                 }, 'player');
                 return;
             }
@@ -2276,7 +2267,8 @@ export default function App() {
                 const navidromeSong = resolveNavidromePlaybackCarrier(currentSong);
                 return navidromeSong ? starredNavidromeSongIds.has(navidromeSong.navidromeData.id) : false;
             }
-            return getOnlineProviderIdForSong(currentSong) === 'netease' && likedSongIds.has(Number(currentSong.id));
+            return getOnlineProviderIdForSong(currentSong) === 'netease'
+                && [...likedSongIds].some(id => String(id) === String(currentSong.id));
         })(),
         generateAITheme: generateCurrentSongTheme,
         isGeneratingTheme,
@@ -2365,8 +2357,8 @@ export default function App() {
                             entityId: albumEntity.id,
                             name: albumEntity.displayName,
                             type: 'album',
-                            coverUrl: playerDisplayCurrentSong?.al?.picUrl || playerDisplayCurrentSong?.album?.picUrl || undefined,
-                            description: playerDisplayCurrentSong?.ar?.map(artist => artist.name).join(', '),
+                            coverUrl: getSongCoverUrl(playerDisplayCurrentSong),
+                            description: getSongArtistLabel(playerDisplayCurrentSong),
                             trackCount: songs.length,
                             songIds: songs.map(song => song.id),
                         }, 'player');
@@ -2402,7 +2394,7 @@ export default function App() {
                             entityId: artistEntity.id,
                             name: artistEntity.displayName,
                             type: 'artist',
-                            coverUrl: currentSong.al?.picUrl || currentSong.album?.picUrl || undefined,
+                            coverUrl: getSongCoverUrl(currentSong),
                             description: `${songs.length} ${t('home.songs')}`,
                             trackCount: songs.length,
                             songIds: songs.map(song => song.id),
@@ -2416,13 +2408,13 @@ export default function App() {
             const playbackCarrier = currentNavidromeSong?.navidromeData;
             const albumId = currentNavidromeSong?.albumId || playbackCarrier?.albumId;
             if (albumId) {
-                const albumName = currentSong?.al?.name || currentSong?.album?.name || t('localMusic.unknownAlbum');
+                const albumName = getSongAlbumLabel(currentSong) || t('localMusic.unknownAlbum');
                 navigateToCollection({
                     source: 'navidrome',
                     id: albumId,
                     name: albumName,
                     type: 'album',
-                    coverUrl: currentSong?.al?.picUrl || currentSong?.album?.picUrl || undefined,
+                    coverUrl: getSongCoverUrl(currentSong),
                 }, 'player');
             }
         },
@@ -2431,13 +2423,13 @@ export default function App() {
             const playbackCarrier = currentNavidromeSong?.navidromeData;
             const artistId = currentNavidromeSong?.artistId || playbackCarrier?.artistId;
             if (artistId) {
-                const artistName = currentSong?.ar?.[0]?.name || currentSong?.artists?.[0]?.name || t('localMusic.unknownArtist');
+                const artistName = getSongArtistLabel(currentSong).split(',')[0]?.trim() || t('localMusic.unknownArtist');
                 navigateToCollection({
                     source: 'navidrome',
                     id: artistId,
                     name: artistName,
                     type: 'artist',
-                    coverUrl: currentSong?.al?.picUrl || currentSong?.album?.picUrl || undefined,
+                    coverUrl: getSongCoverUrl(currentSong),
                 }, 'player');
             }
         },

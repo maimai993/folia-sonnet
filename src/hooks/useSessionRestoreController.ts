@@ -7,7 +7,7 @@ import type { ThemeCacheSongKey } from '../services/themeCache';
 import { restorePlaybackSourceForSong } from '../components/app/playback/restorePlaybackSource';
 import { getPlaybackSongKey, isStagePlaybackSong, normalizePlaybackSongSource } from '../utils/appPlaybackGuards';
 import type { LyricData, SongResult, StatusMessage } from '../types';
-import type { AudioQualityPreference } from '../types/onlineMusic';
+import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 
 // src/hooks/useSessionRestoreController.ts
 
@@ -15,7 +15,7 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseSessionRestoreControllerParams = {
     audioQuality: AudioQualityPreference;
-    userId?: number;
+    userId?: MediaId;
     blobUrlRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
     setCurrentSong: SetState<SongResult | null>;

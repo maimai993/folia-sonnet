@@ -56,9 +56,8 @@ export const getPlaybackSourceRef = (song: SongResult): PlaybackSourceRef => {
     }
     return {
         kind: 'online',
-        providerId: song.sourceType === 'cloud' ? 'netease' : 'netease',
+        providerId: 'netease',
         mediaId: String(song.id),
-        ...(song.sourceType === 'cloud' || song.t === 1 || song.t === 2 ? { variant: 'cloud' } : {}),
     };
 };
 

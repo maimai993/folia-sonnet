@@ -15,6 +15,7 @@ import {
     getMatchResultAlbumName,
 } from './lyricMatchResultHelpers';
 import { LyricPreviewPanel } from './LyricPreviewPanel';
+import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 
 // src/components/modal/OnlineLyricMatchModal.tsx
 
@@ -48,12 +49,12 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
     const [source, setSource] = useState<LyricMatchSource>('netease');
 
     const songInfo = React.useMemo(() => {
-        const artist = song.ar?.map(item => item.name).join(', ') || song.artists?.map(item => item.name).join(', ') || '';
+        const metadata = getProviderSongMetadata(song);
         return {
             title: song.name || '',
-            artist,
-            album: song.al?.name || song.album?.name || '',
-            durationMs: song.dt || song.duration || 0,
+            artist: metadata.artists.map(item => item.name).join(', '),
+            album: metadata.album?.name || '',
+            durationMs: metadata.durationMs,
         };
     }, [song]);
 
@@ -88,8 +89,9 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
     useEffect(() => {
         let isCurrent = true;
 
-        const artist = song.ar?.map(item => item.name).join(', ') || song.artists?.map(item => item.name).join(', ') || '';
-        const album = song.al?.name || song.album?.name || '';
+        const metadata = getProviderSongMetadata(song);
+        const artist = metadata.artists.map(item => item.name).join(', ');
+        const album = metadata.album?.name || '';
         const initialQuery = buildLyricSearchQuery(song.name, artist, album);
         setSearchQuery(initialQuery);
         setIsSearching(true);
@@ -310,8 +312,8 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                                         <div className="w-full h-full flex items-center justify-center"><Music size={28} className="opacity-10" /></div>
                                     )
                                 ) : (
-                                    song.al?.picUrl || song.album?.picUrl ? (
-                                        <img src={song.al?.picUrl || song.album?.picUrl || ''} alt="Cover" className="w-full h-full object-cover" />
+                                    getProviderSongMetadata(song).coverUrl ? (
+                                        <img src={getProviderSongMetadata(song).coverUrl || ''} alt="Cover" className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center"><Music size={28} className="opacity-10" /></div>
                                     )
@@ -327,12 +329,12 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                                 <div className={`text-sm opacity-75 font-medium line-clamp-1 ${textPrimary}`}>
                                     {selectedResult
                                         ? getMatchResultArtists(selectedResult)
-                                        : (song.ar?.map(item => item.name).join(', ') || song.artists?.map(item => item.name).join(', ') || '')}
+                                        : getProviderSongMetadata(song).artists.map(item => item.name).join(', ') }
                                 </div>
                                 <div className={`text-xs opacity-60 line-clamp-1 ${textPrimary}`}>
                                     {selectedResult
                                         ? getMatchResultAlbumName(selectedResult)
-                                        : (song.al?.name || song.album?.name || '')}
+                                        : (getProviderSongMetadata(song).album?.name || '')}
                                 </div>
                             </div>
                         </div>

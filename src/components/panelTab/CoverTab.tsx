@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Album, Artist, SongResult, UnifiedSong } from '../../types';
 import { canResolveSongCatalogRef } from '../../services/onlineMusic/catalogRefs';
+import { getProviderSongMetadata, getProviderSongPageUrl } from '../../services/onlineMusic/songMetadata';
 
 interface CoverTabProps {
     currentSong: SongResult | null;
@@ -29,8 +30,9 @@ const CoverTab: React.FC<CoverTabProps> = ({
     const isLocalSong = Boolean(currentSong && (((currentSong as any).isLocal === true) || (currentSong as any).localRef?.songId));
     const isNavidromeSong = Boolean(currentSong && (currentSong as any).isNavidrome === true);
     const isStageSong = Boolean(currentSong && (currentSong as any).isStage === true);
-    const displayArtists = currentSong?.ar?.length ? currentSong.ar : (currentSong?.artists || []);
-    const displayAlbumName = currentSong?.al?.name || currentSong?.album?.name || '';
+    const songMetadata = currentSong ? getProviderSongMetadata(currentSong) : null;
+    const displayArtists = songMetadata?.artists || [];
+    const displayAlbumName = songMetadata?.album?.name || '';
     const canOpenAlbum = Boolean(currentSong && !isStageSong && (
         isLocalSong
         || isNavidromeSong
@@ -40,14 +42,11 @@ const CoverTab: React.FC<CoverTabProps> = ({
     const copyTitleLine = currentSong
         ? `${currentSong.name || ''} - ${displayArtistNames} - ${displayAlbumName}`
         : '';
-    const neteaseSongId = currentSong?.sourceRef?.kind === 'online' && currentSong.sourceRef.providerId === 'netease'
-        ? currentSong.id
-        : undefined;
+    const songPageUrl = getProviderSongPageUrl(currentSong);
     const copyPayload = copyTitleLine
-        ? [copyTitleLine, neteaseSongId ? `https://music.163.com/#/song?id=${neteaseSongId}` : ''].filter(Boolean).join('\n')
+        ? [copyTitleLine, songPageUrl || ''].filter(Boolean).join('\n')
         : '';
     const canCopySongInfo = Boolean(copyPayload);
-    const neteaseSongUrl = neteaseSongId ? `https://music.163.com/#/song?id=${neteaseSongId}` : '';
 
     const copyText = async (text: string) => {
         if (navigator.clipboard?.writeText && window.isSecureContext) {
@@ -71,24 +70,24 @@ const CoverTab: React.FC<CoverTabProps> = ({
         }
     };
 
-    const openNeteaseSongPage = () => {
-        if (!neteaseSongUrl) {
+    const openProviderSongPage = () => {
+        if (!songPageUrl) {
             return;
         }
 
         const openSongPage = window.electron?.openExternalUrl
-            ? window.electron.openExternalUrl(neteaseSongUrl)
-            : Promise.resolve(Boolean(window.open(neteaseSongUrl, '_blank', 'noopener,noreferrer')));
+            ? window.electron.openExternalUrl(songPageUrl)
+            : Promise.resolve(Boolean(window.open(songPageUrl, '_blank', 'noopener,noreferrer')));
 
         void openSongPage.catch((error) => {
-            console.error('Failed to open Netease song page:', error);
+            console.error('Failed to open provider song page:', error);
         });
     };
 
-    // Normal click copies song info; Ctrl+click opens the matched Netease song page when available.
+    // Normal click copies song info; Ctrl+click opens the provider song page when available.
     const handleSongTitleClick = (event: React.MouseEvent<HTMLHeadingElement>) => {
-        if (event.ctrlKey && neteaseSongUrl) {
-            openNeteaseSongPage();
+        if (event.ctrlKey && songPageUrl) {
+            openProviderSongPage();
             return;
         }
 

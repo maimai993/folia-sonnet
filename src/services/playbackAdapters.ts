@@ -93,7 +93,7 @@ const applyLocalLibraryAlbumDisplay = <T extends SongResult>(
             name: entity.name,
         },
         al: {
-            ...(song.al || song.album),
+            ...song.album,
             entityId: entity.entityId,
             name: entity.name,
         },
@@ -114,8 +114,10 @@ export const applyLocalLibraryEntityDisplay = <T extends SongResult>(
 // Applies a resolved local cover URL to both API-compatible album fields used by song cards.
 export const applyLocalSongCoverDisplay = <T extends SongResult>(song: T, coverUrl: string): T => ({
     ...song,
-    al: song.al ? { ...song.al, picUrl: coverUrl } : { id: 0, name: song.album?.name || '', picUrl: coverUrl },
-    album: song.album ? { ...song.album, coverUrl, picUrl: coverUrl } : { id: 0, name: '', coverUrl, picUrl: coverUrl },
+    al: { ...(song.album || { id: 0, name: '' }), picUrl: coverUrl },
+    album: song.album
+        ? { ...song.album, coverUrl, picUrl: coverUrl }
+        : { id: 0, name: '', coverUrl, picUrl: coverUrl },
 });
 
 export const getLocalSongId = (localSong: LocalSong): number => {
@@ -242,27 +244,25 @@ export function buildUnifiedNavidromeSong(
 ): SongResult {
     const displayArtists = (options?.useOnlineMetadata && options.matchedArtists)
         ? [{ id: 0, name: options.matchedArtists }]
-        : (navidromeSong.artists || navidromeSong.ar || []);
-    const displayAlbum = navidromeSong.album || (navidromeSong.al ? {
-        id: navidromeSong.al.id,
-        name: navidromeSong.al.name,
-        coverUrl: navidromeSong.al.picUrl,
-        picUrl: navidromeSong.al.picUrl
-    } : { id: 0, name: '' });
-    const displayAl = options?.coverUrl
-        ? { ...(navidromeSong.al || displayAlbum || { id: 0, name: '' }), picUrl: options.coverUrl }
-        : (navidromeSong.al || displayAlbum);
+        : (navidromeSong.artists || []);
+    const displayAlbum = navidromeSong.album || { id: 0, name: '' };
+    const displayAlbumWithCover = options?.coverUrl
+        ? { ...displayAlbum, coverUrl: options.coverUrl, picUrl: options.coverUrl }
+        : displayAlbum;
 
     return {
         id: navidromeSong.id,
         name: (options?.useOnlineMetadata && options.matchedAlbumName) ? options.matchedAlbumName : navidromeSong.name,
         artists: displayArtists,
-        album: displayAlbum,
-        duration: navidromeSong.duration || navidromeSong.dt || 0,
+        album: displayAlbumWithCover,
+        duration: navidromeSong.duration || 0,
         isPureMusic: navidromeSong.lyricsSource === 'online' ? navidromeSong.matchedIsPureMusic : false,
-        ar: navidromeSong.ar || displayArtists,
-        al: displayAl,
-        dt: navidromeSong.dt,
+        ar: displayArtists,
+        al: {
+            id: displayAlbumWithCover.id,
+            name: displayAlbumWithCover.name,
+            picUrl: displayAlbumWithCover.coverUrl,
+        },
         isNavidrome: true,
         navidromeData: navidromeSong,
         sourceRef: { kind: 'navidrome', mediaId: navidromeSong.navidromeData.id },
@@ -275,18 +275,16 @@ export function buildNavidromeQueue(queue: NavidromeSong[], currentSong?: SongRe
     const convertedQueue = queue.map(song => ({
         id: song.id,
         name: song.name,
-        artists: song.artists || song.ar || [],
-        album: song.album || (song.al ? {
-            id: song.al.id,
-            name: song.al.name,
-            coverUrl: song.al.picUrl,
-            picUrl: song.al.picUrl,
-        } : { id: 0, name: '' }),
-        duration: song.duration || song.dt || 0,
+        artists: song.artists || [],
+        album: song.album || { id: 0, name: '' },
+        duration: song.duration || 0,
         isPureMusic: song.lyricsSource === 'online' ? song.matchedIsPureMusic : false,
-        ar: song.ar || [],
-        al: song.al,
-        dt: song.dt,
+        ar: song.artists || [],
+        al: song.album ? {
+            id: song.album.id,
+            name: song.album.name,
+            picUrl: song.album.coverUrl,
+        } : undefined,
         isNavidrome: true,
         navidromeData: song,
         sourceRef: { kind: 'navidrome', mediaId: song.navidromeData.id },

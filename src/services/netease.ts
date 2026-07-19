@@ -156,8 +156,10 @@ const normalizeArtists = (source: any): { id: number; name: string }[] => {
 
 const getCloudCoverFallback = (raw: any) =>
   raw?.simpleSong?.al?.picUrl ||
+  raw?.simpleSong?.album?.coverUrl ||
   raw?.simpleSong?.album?.picUrl ||
   raw?.al?.picUrl ||
+  raw?.album?.coverUrl ||
   raw?.album?.picUrl ||
   raw?.cover;
 

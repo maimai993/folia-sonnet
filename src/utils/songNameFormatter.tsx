@@ -1,5 +1,6 @@
 import React from 'react';
 import { SongResult } from '../types';
+import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 
 /**
  * 格式化歌曲名称显示，包含 alia 和 tns 信息
@@ -7,8 +8,9 @@ import { SongResult } from '../types';
  * @returns React 元素，包含歌曲名称和别名/翻译名
  */
 export const formatSongName = (song: SongResult): React.ReactNode => {
-  const aliaText = song.alia?.[0] ?? null;
-  const tnsText = song.tns?.[0] ?? null;
+  const metadata = getProviderSongMetadata(song);
+  const aliaText = metadata.aliases[0] ?? null;
+  const tnsText = metadata.translatedNames[0] ?? null;
   const hasAlia = aliaText !== null;
   const hasTns = tnsText !== null;
 

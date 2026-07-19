@@ -6,13 +6,12 @@ import { resolveSearchSource, useSearchNavigationStore } from '../stores/useSear
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import type { LocalLibraryCatalogSnapshot } from '../hooks/useLocalLibraryCatalog';
 import { useShallow } from 'zustand/react/shallow';
-import { SongResult, NeteaseUser, NeteasePlaylist, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState } from '../types';
+import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState } from '../types';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import LocalGrid3DView from './app/home/LocalGrid3DView';
 import NavidromeGrid3DView from './app/home/NavidromeGrid3DView';
 import DesktopGrid3DSurface from './folia-grid/DesktopGrid3DSurface';
 import {
-    createNeteaseProviderUser,
     createOnlineGridViewCollection,
     getProviderCollectionArtistLabel,
 } from './app/home/gridViewCollectionAdapters';
@@ -20,9 +19,9 @@ import { importFolder, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/local
 import { useOnlineProviderQrLogin } from '../hooks/useOnlineProviderQrLogin';
 import type { OnlineProviderPlatformState } from '../hooks/useOnlineProviderPlatform';
 import { getOnlineMusicProvider } from '../services/onlineMusic/providerRegistry';
-import { getSongAlbumCoverUrl } from '../utils/songMetadata';
+import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import OnlineProviderSwitcher from './app/home/OnlineProviderSwitcher';
-import type { ProviderCollection } from '../types/onlineMusic';
+import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -33,14 +32,14 @@ interface Grid3DProps {
     onPlaySong: (song: SongResult, playlistCtx?: SongResult[], isFmCall?: boolean) => void;
     onBackToPlayer: () => void;
     onRefreshUser: () => void;
-    user: NeteaseUser | null;
-    playlists: NeteasePlaylist[];
-    cloudPlaylist?: NeteasePlaylist | null;
+    user: ProviderUser | null;
+    playlists: ProviderCollection[];
+    cloudPlaylist?: ProviderCollection | null;
     currentTrack?: SongResult | null;
     isPlaying: boolean;
-    onSelectPlaylist: (playlist: NeteasePlaylist) => void;
-    onSelectAlbum: (albumId: number) => void;
-    onSelectArtist: (artistId: number) => void;
+    onSelectPlaylist: (playlist: ProviderCollection) => void;
+    onSelectAlbum: (albumId: MediaId) => void;
+    onSelectArtist: (artistId: MediaId) => void;
     onSelectLocalAlbum?: (albumName: string) => void;
     onSelectLocalArtist?: (artistName: string) => void;
     localSongs: LocalSong[];
@@ -143,11 +142,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const activeProviderSummary = onlineProviderPlatform?.activeProvider;
     const activeProvider = getOnlineMusicProvider(activeProviderId);
     const activeUser = activeProviderSummary?.user
-        || (activeProviderId === 'netease' ? createNeteaseProviderUser(user) : null);
+        || (activeProviderId === 'netease' ? user : null);
     const activeCollections: ProviderCollection[] = activeProviderSummary?.collections || (activeProviderId === 'netease'
         ? [
-            ...playlists.map(playlist => createOnlineGridViewCollection(playlist, 'netease')),
-            ...(cloudPlaylist ? [createOnlineGridViewCollection(cloudPlaylist, 'netease')] : []),
+            ...playlists,
+            ...(cloudPlaylist ? [cloudPlaylist] : []),
         ]
         : []);
 
@@ -251,7 +250,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     };
 
     // Online provider collection details
-    const [favoriteAlbums, setFavoriteAlbums] = useState<any[]>([]);
+    const [favoriteAlbums, setFavoriteAlbums] = useState<ProviderCollection[]>([]);
     const [loadingAlbums, setLoadingAlbums] = useState(false);
     const [radioItems, setRadioItems] = useState<any[]>([]);
     const [loadingRadio, setLoadingRadio] = useState(false);
@@ -280,7 +279,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const fetchFavoriteAlbums = async () => {
         setLoadingAlbums(true);
         try {
-            let allAlbums: any[] = [];
+            let allAlbums: ProviderCollection[] = [];
             let offset = 0;
             const limit = 50;
             let hasMore = true;
@@ -325,7 +324,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 activeProvider?.recommendations?.getDailySongs?.() || [],
                 activeProvider?.recommendations?.getRecommendedCollections?.(35) || [],
             ]);
-            const fmCoverUrl = getSongAlbumCoverUrl(fmSongs[0]);
+            const fmCoverUrl = getSongCoverUrl(fmSongs[0], activeProviderId);
 
             const fmItem = {
                 id: 'personal_fm',
@@ -338,7 +337,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             const dailyItem = {
                 id: 'daily_recommendations',
                 name: t('home.dailyRecommendations'),
-                coverUrl: getSongAlbumCoverUrl(dailySongs[0]) || '',
+                coverUrl: getSongCoverUrl(dailySongs[0], activeProviderId) || '',
                 trackCount: dailySongs.length,
                 description: t('home.dailyRecommendationsDescription'),
                 summary: t('home.dailyRecommendationsSummary'),

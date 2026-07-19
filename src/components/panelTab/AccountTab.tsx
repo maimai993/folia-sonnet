@@ -2,13 +2,12 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { LogOut, SlidersHorizontal, HardDrive, Trash2, RefreshCw, Crown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { NeteaseUser } from '../../types';
-import type { AudioQualityPreference } from '../../types/onlineMusic';
+import type { AudioQualityPreference, ProviderUser } from '../../types/onlineMusic';
 import { useOnlineProviderAccountStore } from '../../stores/useOnlineProviderAccountStore';
 import { getOnlineMusicProvider } from '../../services/onlineMusic/providerRegistry';
 
 interface AccountTabProps {
-    user: NeteaseUser | null;
+    user: ProviderUser | null;
     onLogout: () => void;
     audioQuality: AudioQualityPreference;
     onAudioQualityChange: (quality: AudioQualityPreference) => void;
@@ -45,13 +44,7 @@ const AccountTab: React.FC<AccountTabProps> = ({
     const providerAccount = useOnlineProviderAccountStore(state => state.accounts[state.activeProviderId]);
     const clearProviderAccount = useOnlineProviderAccountStore(state => state.clearAccount);
     const provider = getOnlineMusicProvider(activeProviderId);
-    const activeUser = providerAccount?.user || (activeProviderId === 'netease' && user ? {
-        id: user.userId,
-        nickname: user.nickname,
-        avatarUrl: user.avatarUrl,
-        backgroundUrl: user.backgroundUrl,
-        vipType: user.vipType,
-    } : null);
+    const activeUser = providerAccount?.user || (activeProviderId === 'netease' ? user : null);
 
     const handleLogout = async () => {
         if (activeProviderId === 'netease') {

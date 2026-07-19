@@ -10,6 +10,7 @@ import type {
     CommandPaletteSearchSource,
 } from './types';
 import type { SearchSource } from '../../stores/useSearchNavigationStore';
+import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 
 // src/components/command-palette/commandRegistry.ts
 // Defines command palette entries and the lightweight matching used for autocomplete.
@@ -19,19 +20,18 @@ const MAX_COMMAND_MATCHES = 10;
 const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
 const getSongArtistLabel = (song: SongResult) => {
-    const artists = song.ar?.length ? song.ar : song.artists;
-    return artists?.map(artist => artist.name).filter(Boolean).join(', ') || '';
+    return getProviderSongMetadata(song).artists.map(artist => artist.name).filter(Boolean).join(', ');
 };
 
-const getSongAlbumLabel = (song: SongResult) => song.al?.name || song.album?.name || '';
+const getSongAlbumLabel = (song: SongResult) => getProviderSongMetadata(song).album?.name || '';
 
 const buildQueueSearchText = (song: SongResult, index: number) => [
     String(index + 1),
     song.name,
     getSongArtistLabel(song),
     getSongAlbumLabel(song),
-    ...(song.alia ?? []),
-    ...(song.tns ?? []),
+    ...getProviderSongMetadata(song).aliases,
+    ...getProviderSongMetadata(song).translatedNames,
 ].filter(Boolean).join(' ');
 
 const buildQueueSongDescription = (song: SongResult, index: number, context: CommandPaletteContext) => {

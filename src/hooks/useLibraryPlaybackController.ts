@@ -23,19 +23,18 @@ import {
 import { hydrateNavidromeLyricPayload, resolvePreferredNavidromeLyrics } from '../utils/appNavidromeLyrics';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 import { migrateMatchedLyricsCarrierRenderHints } from '../utils/lyrics/storageMigration';
-import { processNeteaseLyrics } from '../utils/lyrics/neteaseProcessing';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { resolveExplicitFileTimedLyricFormat } from '../utils/lyrics/formatDetection';
-import { neteaseApi } from '../services/netease';
-import { getOnlineMusicProviderForSong } from '../services/onlineMusic/providerRegistry';
+import { getOnlineMusicProvider, getOnlineMusicProviderForSong } from '../services/onlineMusic/providerRegistry';
+import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
 import { getSongCacheWithLegacyMigration } from '../services/onlineMusic/resourceCache';
 import { getProviderCacheKey } from '../services/onlineMusic/providerStorage';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { PlayerState } from '../types';
 import type { LyricData, LocalPlaylist, LocalSong, OnlineLyricsState, QueueAddBehavior, SongResult, StatusMessage } from '../types';
-import type { AudioQualityPreference } from '../types/onlineMusic';
+import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 import type { PlaybackSnapshot, PlaybackNavigationOptions } from '../types/appPlayback';
 import type { NavidromeSong } from '../types/navidrome';
 import type { NavidromeMatchData } from '../components/modal/NaviLyricMatchModal';
@@ -80,9 +79,9 @@ type UseLibraryPlaybackControllerParams = {
     currentSong: SongResult | null;
     lyrics: LyricData | null;
     playQueue: SongResult[];
-    likedSongIds: Set<number>;
+    likedSongIds: Set<MediaId>;
     starredNavidromeSongIds: Set<string>;
-    userId?: number;
+    userId?: MediaId;
     currentTime: MotionValue<number>;
     setCurrentSong: SetState<SongResult | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
@@ -95,7 +94,7 @@ type UseLibraryPlaybackControllerParams = {
     setIsLyricsLoading: SetState<boolean>;
     setStatusMsg: SetState<StatusMessage | null>;
     setIsPanelOpen: SetState<boolean>;
-    setLikedSongIds: Dispatch<SetStateAction<Set<number>>>;
+    setLikedSongIds: Dispatch<SetStateAction<Set<MediaId>>>;
     setStarredNavidromeSongIds: Dispatch<SetStateAction<Set<string>>>;
     navigateToPlayer: () => void;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
@@ -796,14 +795,13 @@ export function useLibraryPlaybackController({
                         setStatusMsg({ type: 'info', text: t('status.loadingSong') || '' });
                         showedLoadingToast = true;
                     }
-                    const artistName = navidromeSong.artists?.map(artist => artist.name).filter(Boolean).join(', ')
-                        || navidromeSong.ar?.map(artist => artist.name).filter(Boolean).join(', ')
-                        || '';
-                    const albumName = navidromeSong.album?.name || navidromeSong.al?.name || '';
+                    const navidromeMetadata = getProviderSongMetadata(navidromeSong);
+                    const artistName = navidromeMetadata.artists.map(artist => artist.name).filter(Boolean).join(', ');
+                    const albumName = navidromeMetadata.album?.name || '';
                     const settings = useSettingsUiStore.getState();
 
                     if (settings.enableAlternativeLyricSources && settings.autoUseBestLyric) {
-                        const bestMatch = await autoMatchBestLyric(navidromeSong.name, artistName, navidromeSong.duration || navidromeSong.dt || 0, {
+                        const bestMatch = await autoMatchBestLyric(navidromeSong.name, artistName, navidromeMetadata.durationMs, {
                             album: albumName,
                             preferredSource: settings.preferredAlternativeLyricSource,
                         });
@@ -829,12 +827,12 @@ export function useLibraryPlaybackController({
                             if (bestMatch.source === 'netease' || (bestMatch.source === 'amll' && bestMatch.matchedLyricsProviderPlatform === 'ncm')) {
                                 newMatchData.matchedSongId = bestMatch.id as number;
                                 try {
-                                    const detailRes = await neteaseApi.getSongDetail(bestMatch.id as number);
-                                    const nSong = detailRes.songs?.[0];
+                                    const nSong = await getOnlineMusicProvider('netease')?.playback?.getSongDetail(bestMatch.id);
                                     if (nSong) {
-                                        newMatchData.matchedArtists = nSong.ar?.map((a: any) => a.name).join(', ');
-                                        newMatchData.matchedAlbumName = nSong.al?.name || nSong.album?.name;
-                                        const coverUrl = nSong.al?.picUrl || nSong.album?.picUrl;
+                                        const metadata = getProviderSongMetadata(nSong, 'netease');
+                                        newMatchData.matchedArtists = metadata.artists.map(artist => artist.name).join(', ');
+                                        newMatchData.matchedAlbumName = metadata.album?.name;
+                                        const coverUrl = metadata.coverUrl;
                                         if (coverUrl) {
                                             newMatchData.matchedCoverUrl = coverUrl.replace('http:', 'https:');
                                             newMatchData.useOnlineCover = true;
@@ -851,15 +849,14 @@ export function useLibraryPlaybackController({
 
                     if (!isAutoMatched) {
                         const searchQuery = `${navidromeSong.name} ${artistName}`.trim();
-                        const searchRes = await neteaseApi.cloudSearch(searchQuery, 1);
+                        const searchPage = await getOnlineMusicProvider('netease')?.search?.searchSongs(searchQuery, 1, 0);
 
-                        if (searchRes.result?.songs?.length) {
-                            const matchedSong = searchRes.result.songs[0];
-                            const lyricRes = await neteaseApi.getLyric(matchedSong.id);
-                            const processed = await processNeteaseLyrics({ type: 'netease', ...lyricRes }, { songId: matchedSong.id });
-                            nextLyrics = processed.lyrics;
-                            (navidromeSong as NavidromeSong & { matchedIsPureMusic?: boolean; }).matchedIsPureMusic = processed.isPureMusic;
-                            if (nextLyrics || processed.isPureMusic) {
+                        if (searchPage?.items?.length) {
+                            const matchedSong = searchPage.items[0];
+                            const lyricResult = await getOnlineMusicProvider('netease')?.lyrics?.getLyrics(matchedSong);
+                            nextLyrics = lyricResult?.lyrics || null;
+                            (navidromeSong as NavidromeSong & { matchedIsPureMusic?: boolean; }).matchedIsPureMusic = lyricResult?.isPureMusic || false;
+                            if (nextLyrics || lyricResult?.isPureMusic) {
                                 autoMatchedLyrics = nextLyrics;
                                 isAutoMatched = true;
                                 matchedLyricsSource = 'netease';
@@ -867,7 +864,7 @@ export function useLibraryPlaybackController({
                             const newMatchData: NavidromeMatchData = {
                                 matchedSongId: matchedSong.id,
                                 matchedLyrics: nextLyrics || undefined,
-                                matchedIsPureMusic: processed.isPureMusic,
+                                matchedIsPureMusic: lyricResult?.isPureMusic || false,
                                 matchedLyricsSource: 'netease',
                                     lyricsSource: 'online',
                                     useOnlineLyrics: true,
@@ -907,7 +904,7 @@ export function useLibraryPlaybackController({
             }
 
             if (!coverUrl) {
-                coverUrl = navidromeSong.album?.picUrl || navidromeSong.al?.picUrl || navidromeApi.getCoverArtUrl(config, navidromeId);
+                coverUrl = getProviderSongMetadata(navidromeSong).coverUrl || navidromeApi.getCoverArtUrl(config, navidromeId);
             }
 
             const unifiedSong = buildUnifiedNavidromeSong(navidromeSong, {
@@ -1306,11 +1303,10 @@ export function useLibraryPlaybackController({
                     return false;
                 }
 
-                const artistName = navidromeSong.artists?.map(artist => artist.name).filter(Boolean).join(', ')
-                    || navidromeSong.ar?.map(artist => artist.name).filter(Boolean).join(', ')
-                    || '';
-                const albumName = navidromeSong.album?.name || navidromeSong.al?.name || '';
-                const bestMatch = await autoMatchBestLyric(navidromeSong.name, artistName, navidromeSong.duration || navidromeSong.dt || 0, {
+                const navidromeMetadata = getProviderSongMetadata(navidromeSong);
+                const artistName = navidromeMetadata.artists.map(artist => artist.name).filter(Boolean).join(', ');
+                const albumName = navidromeMetadata.album?.name || '';
+                const bestMatch = await autoMatchBestLyric(navidromeSong.name, artistName, navidromeMetadata.durationMs, {
                     album: albumName,
                     preferredSource: settings.preferredAlternativeLyricSource,
                 });
@@ -1354,11 +1350,10 @@ export function useLibraryPlaybackController({
                 return true;
             }
 
-            const artistName = currentSong.artists?.map(artist => artist.name).filter(Boolean).join(', ')
-                || currentSong.ar?.map(artist => artist.name).filter(Boolean).join(', ')
-                || '';
-            const albumName = currentSong.album?.name || currentSong.al?.name || '';
-            const bestMatch = await autoMatchBestLyric(currentSong.name, artistName, currentSong.duration || currentSong.dt || 0, {
+            const currentSongMetadata = getProviderSongMetadata(currentSong);
+            const artistName = currentSongMetadata.artists.map(artist => artist.name).filter(Boolean).join(', ');
+            const albumName = currentSongMetadata.album?.name || '';
+            const bestMatch = await autoMatchBestLyric(currentSong.name, artistName, currentSongMetadata.durationMs, {
                 album: albumName,
                 preferredSource: settings.preferredAlternativeLyricSource,
             });

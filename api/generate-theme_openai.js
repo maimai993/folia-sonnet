@@ -233,12 +233,6 @@ ${JSON.stringify(THEME_JSON_SCHEMA, null, 2)}` : '';
 const buildThemeSourcePrompt = (snippet, isPureMusic, songTitle) => `Pure instrumental: ${isPureMusic ? 'yes' : 'no'}
 ${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
 ${snippet}`;
-const resolveOpenAICompatibleTemperature = (value) => {
-    const temperature = typeof value === 'number' ? value : Number.parseFloat(String(value ?? '').trim());
-    return Number.isFinite(temperature) && temperature >= 0 && temperature <= 2
-        ? temperature
-        : DEFAULT_OPENAI_TEMPERATURE;
-};
 const buildOpenAICompatibleRequestBody = (model, provider, systemPrompt, sourcePrompt, temperature) => {
     const messages = [
         { role: 'system', content: systemPrompt },
@@ -304,7 +298,10 @@ export default async function handler(req) {
         const apiKey = process.env.OPENAI_API_KEY;
         const apiUrl = normalizeOpenAIChatCompletionsUrl(process.env.OPENAI_API_URL);
         const model = resolveOpenAICompatibleModel(apiUrl, process.env.OPENAI_API_MODEL);
-        const temperature = resolveOpenAICompatibleTemperature(process.env.OPENAI_API_TEMPERATURE);
+        const configuredTemperature = Number.parseFloat(process.env.OPENAI_API_TEMPERATURE?.trim() || '');
+        const temperature = Number.isFinite(configuredTemperature) && configuredTemperature >= 0 && configuredTemperature <= 2
+            ? configuredTemperature
+            : DEFAULT_OPENAI_TEMPERATURE;
         const provider = detectOpenAICompatibleProvider(apiUrl, model);
         if (!apiKey) {
             console.error("OpenAI API Key is missing in server environment.");

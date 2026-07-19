@@ -6,15 +6,15 @@ import {
     removeCacheEntries,
     saveToCache,
 } from '../services/db';
-import { neteaseApi } from '../services/netease';
 import {
     getProviderCacheKey,
     getProviderCacheWithLegacyMigration,
     removeProviderSessionValue,
-    writeProviderSessionValue,
 } from '../services/onlineMusic/providerStorage';
-import { NeteasePlaylist, NeteaseUser, StatusMessage } from '../types';
+import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
+import { StatusMessage } from '../types';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
+import { getOnlineMusicProvider } from '../services/onlineMusic/providerRegistry';
 
 type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 
@@ -33,86 +33,30 @@ const formatBytes = (bytes: number) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-const isAuthExpiredResponse = (response: any): boolean => {
-    const code = Number(response?.code ?? response?.data?.code);
-    return code === 301 || code === 401 || code === 403;
-};
-
-// Confirms the cached cookie can still access account-only Netease endpoints.
-const getVerifiedLoginSession = async (): Promise<{ profile: NeteaseUser; cookie?: string } | null> => {
-    const loginResponse = await neteaseApi.getLoginStatus();
-    const loginProfile = loginResponse?.data?.profile;
-    if (!loginProfile || isAuthExpiredResponse(loginResponse)) {
-        return null;
-    }
-
-    const accountResponse = await neteaseApi.getUserAccount();
-    if (isAuthExpiredResponse(accountResponse)) {
-        return null;
-    }
-
-    const accountProfile = accountResponse?.profile;
-    const accountId = Number(accountResponse?.account?.id ?? accountProfile?.userId ?? 0);
-    const loginUserId = Number(loginProfile.userId ?? 0);
-
-    if (!accountProfile || !accountId || !loginUserId || accountId !== loginUserId) {
-        return null;
-    }
-
-    return {
-        profile: {
-            ...loginProfile,
-            ...accountProfile,
-        },
-        cookie: typeof loginResponse.cookie === 'string' ? loginResponse.cookie : undefined,
-    };
-};
-
-const getAllUserPlaylists = async (uid: number): Promise<NeteasePlaylist[]> => {
-    const allPlaylists: NeteasePlaylist[] = [];
+const getAllUserPlaylists = async (userId: MediaId): Promise<ProviderCollection[]> => {
+    const provider = getOnlineMusicProvider('netease');
+    const allPlaylists: ProviderCollection[] = [];
     let offset = 0;
     const limit = 50;
     let hasMore = true;
 
-    while (hasMore) {
-        const response = await neteaseApi.getUserPlaylists(uid, limit, offset);
-        if (isAuthExpiredResponse(response)) {
-            throw new Error('NETEASE_AUTH_EXPIRED');
-        }
-        if (response.playlist && response.playlist.length > 0) {
-            allPlaylists.push(...response.playlist);
-            hasMore = response.playlist.length === limit;
-            offset += limit;
-        } else {
-            hasMore = false;
-        }
+    while (hasMore && provider?.library?.getUserPlaylists) {
+        const page = await provider.library.getUserPlaylists(userId, limit, offset);
+        allPlaylists.push(...page.items);
+        hasMore = page.hasMore && page.nextOffset > offset;
+        offset = page.nextOffset;
     }
 
     return allPlaylists;
 };
 
-const getUserCloudPlaylist = async (user: NeteaseUser, t: (key: string) => string): Promise<NeteasePlaylist | null> => {
-    const response = await neteaseApi.getUserCloud(1, 0);
-    const trackCount = Number(response.count || 0);
-
-    if (trackCount <= 0) {
-        return null;
-    }
-
-    const coverImgUrl = response.songs?.[0]?.al?.picUrl || response.songs?.[0]?.album?.picUrl || user.avatarUrl;
-
-    return {
-        id: -100,
+const getUserCloudPlaylist = async (user: ProviderUser, t: (key: string) => string): Promise<ProviderCollection | null> => {
+    const collection = await getOnlineMusicProvider('netease')?.library?.getCloudCollection?.(user);
+    return collection ? {
+        ...collection,
         name: t('navidrome.cloudDrive'),
-        coverImgUrl,
-        trackCount,
-        playCount: 0,
-        updateTime: Date.now(),
-        trackUpdateTime: Date.now(),
-        creator: user,
         description: t('navidrome.cloudDriveDesc'),
-        specialType: 'cloud',
-    };
+    } : null;
 };
 
 export function useNeteaseLibrary({
@@ -126,10 +70,10 @@ export function useNeteaseLibrary({
     setStatusMsg: StatusSetter;
     t: (key: string) => string;
 }) {
-    const [user, setUser] = useState<NeteaseUser | null>(null);
-    const [playlists, setPlaylists] = useState<NeteasePlaylist[]>([]);
-    const [cloudPlaylist, setCloudPlaylist] = useState<NeteasePlaylist | null>(null);
-    const [likedSongIds, setLikedSongIds] = useState<Set<number>>(new Set());
+    const [user, setUser] = useState<ProviderUser | null>(null);
+    const [playlists, setPlaylists] = useState<ProviderCollection[]>([]);
+    const [cloudPlaylist, setCloudPlaylist] = useState<ProviderCollection | null>(null);
+    const [likedSongIds, setLikedSongIds] = useState<Set<MediaId>>(new Set());
     const [isSyncing, setIsSyncing] = useState(false);
     const [cacheSize, setCacheSize] = useState<string>('0 B');
     const [isUserDataReady, setIsUserDataReady] = useState(false);
@@ -156,33 +100,8 @@ export function useNeteaseLibrary({
     useEffect(() => {
         updateProviderAccount('netease', {
             status: user ? 'authenticated' : 'anonymous',
-            user: user ? {
-                id: user.userId,
-                nickname: user.nickname,
-                avatarUrl: user.avatarUrl,
-                backgroundUrl: user.backgroundUrl,
-                vipType: user.vipType,
-            } : null,
-            collections: [
-                ...playlists.map(playlist => ({
-                    providerId: 'netease',
-                    id: playlist.id,
-                    name: playlist.name,
-                    type: playlist.specialType === 'cloud' ? 'cloud' : 'playlist',
-                    coverUrl: playlist.coverImgUrl,
-                    description: playlist.description,
-                    trackCount: playlist.trackCount,
-                })),
-                ...(cloudPlaylist ? [{
-                    providerId: 'netease',
-                    id: cloudPlaylist.id,
-                    name: cloudPlaylist.name,
-                    type: 'cloud',
-                    coverUrl: cloudPlaylist.coverImgUrl,
-                    description: cloudPlaylist.description,
-                    trackCount: cloudPlaylist.trackCount,
-                }] : []),
-            ],
+            user,
+            collections: [...playlists, ...(cloudPlaylist ? [cloudPlaylist] : [])],
             likedSongIds: Array.from(likedSongIds),
         });
     }, [cloudPlaylist, likedSongIds, playlists, updateProviderAccount, user]);
@@ -192,22 +111,19 @@ export function useNeteaseLibrary({
         setCacheSize(formatBytes(size));
     }, []);
 
-    const refreshUserData = useCallback(async (uid?: number) => {
+    const refreshUserData = useCallback(async (uid?: MediaId) => {
         lastRefreshAuthExpiredRef.current = false;
         try {
-            const session = await getVerifiedLoginSession();
-            if (session) {
-                const { profile } = session;
+            const provider = getOnlineMusicProvider('netease');
+            const profile = await provider?.auth?.getLoginStatus();
+            if (profile) {
                 setUser(profile);
                 await saveToCache(NETEASE_USER_CACHE_KEYS.profile, profile);
-                if (session.cookie) writeProviderSessionValue('netease', 'cookie', session.cookie);
 
-                const targetUid = uid || profile.userId;
+                const targetUid = uid ?? profile.id;
                 const allPlaylists = await getAllUserPlaylists(targetUid);
-                if (allPlaylists.length > 0) {
-                    setPlaylists(allPlaylists);
-                    await saveToCache(NETEASE_USER_CACHE_KEYS.playlists, allPlaylists);
-                }
+                setPlaylists(allPlaylists);
+                await saveToCache(NETEASE_USER_CACHE_KEYS.playlists, allPlaylists);
 
                 try {
                     const nextCloudPlaylist = await getUserCloudPlaylist(profile, t);
@@ -219,10 +135,10 @@ export function useNeteaseLibrary({
                 }
 
                 try {
-                    const likeRes = await neteaseApi.getLikedSongs(targetUid);
-                    if (likeRes.ids) {
-                        setLikedSongIds(new Set(likeRes.ids));
-                        await saveToCache(NETEASE_USER_CACHE_KEYS.likedSongs, likeRes.ids);
+                    const ids = await provider?.library?.getLikedSongIds?.(targetUid);
+                    if (ids) {
+                        setLikedSongIds(new Set(ids));
+                        await saveToCache(NETEASE_USER_CACHE_KEYS.likedSongs, ids);
                     }
                 } catch (error) {
                     console.warn('Failed to fetch liked songs', error);
@@ -241,25 +157,35 @@ export function useNeteaseLibrary({
             }
         }
         return false;
-    }, [clearAuthState]);
+    }, [clearAuthState, t]);
 
     const loadUserData = useCallback(async () => {
         try {
-            const cachedUser = await getProviderCacheWithLegacyMigration<NeteaseUser>('netease', 'user_profile', ['user_profile']);
-            const cachedPlaylists = await getProviderCacheWithLegacyMigration<NeteasePlaylist[]>('netease', 'user_playlists', ['user_playlists']);
-            const cachedLikedSongs = await getProviderCacheWithLegacyMigration<number[]>('netease', 'user_liked_songs', ['user_liked_songs']);
-            const cachedCloudPlaylist = await getProviderCacheWithLegacyMigration<NeteasePlaylist | null>('netease', 'user_cloud_playlist', ['user_cloud_playlist']);
+            const provider = getOnlineMusicProvider('netease');
+            const cachedUserRaw = await getProviderCacheWithLegacyMigration<unknown>('netease', 'user_profile', ['user_profile']);
+            const cachedPlaylistsRaw = await getProviderCacheWithLegacyMigration<unknown>('netease', 'user_playlists', ['user_playlists']);
+            const cachedLikedSongs = await getProviderCacheWithLegacyMigration<unknown>('netease', 'user_liked_songs', ['user_liked_songs']);
+            const cachedCloudPlaylistRaw = await getProviderCacheWithLegacyMigration<unknown>('netease', 'user_cloud_playlist', ['user_cloud_playlist']);
+            const cachedUser: ProviderUser | null = cachedUserRaw != null
+                ? provider?.normalizeUser?.(cachedUserRaw) || null
+                : null;
+            const cachedPlaylists = Array.isArray(cachedPlaylistsRaw)
+                ? cachedPlaylistsRaw.map(item => provider?.normalizeCollection?.(item, 'playlist')).filter(Boolean) as ProviderCollection[]
+                : [];
+            const cachedCloudPlaylist = cachedCloudPlaylistRaw
+                ? provider?.normalizeCollection?.(cachedCloudPlaylistRaw, 'cloud') || null
+                : null;
 
             if (cachedUser) {
                 setUser(cachedUser);
-                if (cachedPlaylists) {
+                if (cachedPlaylists.length > 0) {
                     setPlaylists(cachedPlaylists);
                 } else {
-                    refreshUserData(cachedUser.userId);
+                    void refreshUserData(cachedUser.id);
                 }
 
-                if (cachedLikedSongs) {
-                    setLikedSongIds(new Set(cachedLikedSongs));
+                if (Array.isArray(cachedLikedSongs)) {
+                    setLikedSongIds(new Set(cachedLikedSongs as MediaId[]));
                 }
                 if (cachedCloudPlaylist) {
                     setCloudPlaylist(cachedCloudPlaylist);
@@ -277,35 +203,37 @@ export function useNeteaseLibrary({
         if (!user) return;
 
         try {
-            const session = await getVerifiedLoginSession();
-            if (!session) {
+            const provider = getOnlineMusicProvider('netease');
+            const profile = await provider?.auth?.getLoginStatus();
+            if (!profile) {
                 await clearAuthState();
                 return;
             }
 
-            const profile = session.profile;
             setUser(profile);
             await saveToCache(NETEASE_USER_CACHE_KEYS.profile, profile);
-            if (session.cookie) writeProviderSessionValue('netease', 'cookie', session.cookie);
 
-            const newPlaylists = await getAllUserPlaylists(profile.userId);
+            const newPlaylists = await getAllUserPlaylists(profile.id);
             if (!newPlaylists || newPlaylists.length === 0) return;
             const nextCloudPlaylist = await getUserCloudPlaylist(profile, t);
 
-            const cachedPlaylists = await getProviderCacheWithLegacyMigration<NeteasePlaylist[]>('netease', 'user_playlists', ['user_playlists']);
+            const cachedPlaylistsRaw = await getProviderCacheWithLegacyMigration<unknown>('netease', 'user_playlists', ['user_playlists']);
+            const cachedPlaylists = Array.isArray(cachedPlaylistsRaw)
+                ? cachedPlaylistsRaw.map(item => provider?.normalizeCollection?.(item, 'playlist')).filter(Boolean) as ProviderCollection[]
+                : [];
 
-            if (!cachedPlaylists) {
+            if (cachedPlaylists.length === 0) {
                 setPlaylists(newPlaylists);
                 await saveToCache(NETEASE_USER_CACHE_KEYS.playlists, newPlaylists);
                 return;
             }
 
-            const cachedMap = new Map<number, NeteasePlaylist>();
+            const cachedMap = new Map<MediaId, ProviderCollection>();
             cachedPlaylists.forEach(playlist => {
                 cachedMap.set(playlist.id, playlist);
             });
 
-            const changedPlaylistIds: number[] = [];
+            const changedPlaylistIds: MediaId[] = [];
             let likedSongsPlaylistChanged = false;
 
             newPlaylists.forEach((newPlaylist, index) => {
@@ -318,8 +246,8 @@ export function useNeteaseLibrary({
                     return;
                 }
 
-                const trackTimeChanged = (newPlaylist.trackUpdateTime || 0) !== (oldPlaylist.trackUpdateTime || 0);
-                const updateTimeChanged = (newPlaylist.updateTime || 0) !== (oldPlaylist.updateTime || 0);
+                const trackTimeChanged = (newPlaylist.tracksUpdatedAt || 0) !== (oldPlaylist.tracksUpdatedAt || 0);
+                const updateTimeChanged = (newPlaylist.updatedAt || 0) !== (oldPlaylist.updatedAt || 0);
 
                 if (trackTimeChanged || updateTimeChanged) {
                     changedPlaylistIds.push(newPlaylist.id);
@@ -352,10 +280,10 @@ export function useNeteaseLibrary({
 
             if (likedSongsPlaylistChanged && newPlaylists.length > 0) {
                 try {
-                    const likeRes = await neteaseApi.getLikedSongs(profile.userId);
-                    if (likeRes.ids) {
-                        setLikedSongIds(new Set(likeRes.ids));
-                        await saveToCache(NETEASE_USER_CACHE_KEYS.likedSongs, likeRes.ids);
+                    const ids = await provider?.library?.getLikedSongIds?.(profile.id);
+                    if (ids) {
+                        setLikedSongIds(new Set(ids));
+                        await saveToCache(NETEASE_USER_CACHE_KEYS.likedSongs, ids);
                     }
                 } catch (error) {
                     console.warn('[PlaylistSync] Failed to refetch liked songs', error);
@@ -367,7 +295,7 @@ export function useNeteaseLibrary({
                 await clearAuthState();
             }
         }
-    }, [clearAuthState, user]);
+    }, [clearAuthState, t, user]);
 
     const handleClearCache = useCallback(async () => {
         const preserveKeys = [...Object.values(NETEASE_USER_CACHE_KEYS), 'last_song', 'last_queue', 'last_theme'];
@@ -391,12 +319,12 @@ export function useNeteaseLibrary({
         if (!user) return;
 
         setIsSyncing(true);
-        console.info('[NeteaseSync] Sync data requested', { userId: user.userId });
+        console.info('[NeteaseSync] Sync data requested', { userId: user.id });
         try {
-            const synced = await refreshUserData(user.userId);
+            const synced = await refreshUserData(user.id);
             if (!synced) {
                 console.info('[NeteaseSync] Sync data skipped because login is expired or unavailable', {
-                    userId: user.userId,
+                    userId: user.id,
                     authExpired: lastRefreshAuthExpiredRef.current,
                 });
                 setStatusMsg({
@@ -406,7 +334,7 @@ export function useNeteaseLibrary({
                 return;
             }
             updateCacheSize();
-            console.info('[NeteaseSync] Sync data completed', { userId: user.userId });
+            console.info('[NeteaseSync] Sync data completed', { userId: user.id });
             setStatusMsg({ type: 'success', text: t('status.dataSynced') });
         } catch (error) {
             console.warn('[NeteaseSync] Sync data failed', error);
@@ -418,7 +346,7 @@ export function useNeteaseLibrary({
 
     const handleLogout = useCallback(async () => {
         try {
-            await neteaseApi.logout();
+            await getOnlineMusicProvider('netease')?.auth?.logout();
         } catch (error) {
             console.warn('Failed to notify logout endpoint', error);
         }

@@ -22,10 +22,11 @@ import { LyricParserFactory } from '../../../utils/lyrics/LyricParserFactory';
 import { isPureMusicLyricText } from '../../../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../../../utils/lyrics/renderHints';
 import { loadOnlineLyricsState, resolveOnlineLyrics } from '../../../utils/onlineLyricsState';
-import type { AudioQualityPreference } from '../../../types/onlineMusic';
+import type { AudioQualityPreference, MediaId } from '../../../types/onlineMusic';
 import { getOnlineMusicProviderForSong, providerSupports } from '../../../services/onlineMusic/providerRegistry';
 import { getSongResourceCacheKey } from '../../../services/onlineMusic/resourceKeys';
 import { getCachedSongAudioBlob, getCachedSongCoverUrl, getSongCacheWithLegacyMigration } from '../../../services/onlineMusic/resourceCache';
+import { getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
 
 // src/components/app/playback/restorePlaybackSource.ts
 // Rehydrates playable audio and lyrics for a remembered song without reusing stale blob URLs.
@@ -34,7 +35,7 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type RestorePlaybackSourceParams = {
     audioQuality: AudioQualityPreference;
-    userId?: number;
+    userId?: MediaId;
     blobUrlRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
     setCurrentSong: SetState<SongResult | null>;
@@ -96,7 +97,7 @@ export const restorePlaybackSourceForSong = async (
 
         currentOnlineAudioUrlFetchedAtRef.current = null;
         setAudioSrc(navidromeApi.getStreamUrl(config, navidromeId));
-        const restoredCoverUrl = song.al?.picUrl || song.album?.picUrl || navidromeSongToRestore.navidromeData.coverArtUrl;
+        const restoredCoverUrl = getSongCoverUrl(song) || navidromeSongToRestore.navidromeData.coverArtUrl;
         if (restoredCoverUrl) {
             setCachedCoverUrl(restoredCoverUrl);
         }

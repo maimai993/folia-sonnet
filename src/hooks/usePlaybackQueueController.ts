@@ -2,17 +2,16 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from '../services/onlinePlayback';
-import { neteaseApi } from '../services/netease';
 import { getSongReplacement, isSongUnavailable } from '../services/onlineMusic/songAvailability';
 import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
-import { canPlayOnlineMusicSong } from '../services/onlineMusic/providerRegistry';
+import { canPlayOnlineMusicSong, getOnlineMusicProvider } from '../services/onlineMusic/providerRegistry';
 import { getCachedSongCoverUrl, hasCachedSongAudio } from '../services/onlineMusic/resourceCache';
 import { getPrefetchedData, invalidateAndRefetch, prefetchNearbySongs } from '../services/prefetchService';
 import type { ThemeCacheSongKey } from '../services/themeCache';
 import { loadOnlineLyricsState } from '../utils/onlineLyricsState';
 import { PlayerState, type StagePlayerQueueDiffOp, type StagePlayerQueueRequest, type StagePlayerSnapshot } from '../types';
 import type { LocalSong, QueueAddBehavior, SongResult, StatusMessage, UnifiedSong } from '../types';
-import type { AudioQualityPreference } from '../types/onlineMusic';
+import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 import type { NextTrackOptions, PlaybackNavigationOptions, SkipPromptMessageKey, UnavailableReplacementRequest } from '../types/appPlayback';
 import type { NavidromeSong } from '../types/navidrome';
 import {
@@ -27,6 +26,7 @@ import { buildStagePlayerSnapshot, resolveStagePlayerQueueItemIndex } from '../u
 import type { LocalLibraryDisplayCatalog } from '../services/playbackAdapters';
 import type { SearchReturnView, SearchSource } from '../stores/useSearchNavigationStore';
 import { dispatchSearchTrackAction } from '../components/app/search/searchTrackActions';
+import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 
 // src/hooks/usePlaybackQueueController.ts
 
@@ -68,7 +68,7 @@ type UsePlaybackQueueControllerParams = {
     searchReturnView: SearchReturnView;
     localSongs: LocalSong[];
     localLibraryCatalog: LocalLibraryDisplayCatalog;
-    userId?: number;
+    userId?: MediaId;
     currentTime: MotionValue<number>;
     setCurrentSong: SetState<SongResult | null>;
     setLyrics: (nextLyrics: any) => void;
@@ -135,7 +135,7 @@ const UNAVAILABLE_SKIP_CONFIRM_TIMEOUT_MS = 5000;
 const UNAVAILABLE_SKIP_CONFIRM_INTERVAL_MS = 1000;
 
 const getStageSnapshotSongDurationMs = (song: SongResult | null, fallbackSec = 0): number => {
-    return Math.max(0, Math.floor(song?.duration || song?.dt || fallbackSec * 1000 || 0));
+    return Math.max(0, Math.floor(getProviderSongMetadata(song).durationMs || fallbackSec * 1000 || 0));
 };
 
 type StagePlayerQueueDiffDraft = {
@@ -830,9 +830,9 @@ export function usePlaybackQueueController({
 
         if (isFmMode && currentIndex >= playQueue.length - 2) {
             try {
-                const fmRes = await neteaseApi.getPersonalFm();
-                if (fmRes.data && fmRes.data.length > 0) {
-                    const nextQueue = [...playQueue, ...fmRes.data];
+                const fmSongs = await getOnlineMusicProvider('netease')?.recommendations?.getPersonalFm?.() || [];
+                if (fmSongs.length > 0) {
+                    const nextQueue = [...playQueue, ...fmSongs];
                     setPlayQueue(nextQueue);
                     void playSong(nextQueue[currentIndex + 1], nextQueue, true, {
                         shouldNavigateToPlayer,
@@ -946,7 +946,7 @@ export function usePlaybackQueueController({
                 || queueCurrentIndex >= 0 && queueCurrentIndex < nextQueue.length - 1
                 || (loopMode === 'all' && hasQueueNeighbors)
             ),
-            coverUrl: nextCurrentSong?.al?.picUrl || nextCurrentSong?.album?.picUrl || null,
+            coverUrl: getProviderSongMetadata(nextCurrentSong).coverUrl || null,
         });
     }, [activePlaybackContext, audioRef, currentTime, isFmMode, isNowPlayingStageActive, loopMode, playerState]);
 
@@ -1001,8 +1001,7 @@ export function usePlaybackQueueController({
 
     const handleStageExternalPlayRequest = useCallback(async (request: { requestId: string; songId: number; appendToQueue?: boolean; }) => {
         try {
-            const detail = await neteaseApi.getSongDetail(request.songId);
-            const song = (detail?.songs || [])[0] as SongResult | undefined;
+            const song = await getOnlineMusicProvider('netease')?.playback?.getSongDetail(request.songId);
             if (!song) {
                 throw new Error(`Song ${request.songId} was not found.`);
             }
@@ -1071,8 +1070,7 @@ export function usePlaybackQueueController({
 
         const songs: SongResult[] = [];
         for (const songId of songIds) {
-            const detail = await neteaseApi.getSongDetail(songId);
-            const song = (detail?.songs || [])[0] as SongResult | undefined;
+            const song = await getOnlineMusicProvider('netease')?.playback?.getSongDetail(songId);
             if (song && !isSongUnavailable(song)) {
                 songs.push(song);
             }

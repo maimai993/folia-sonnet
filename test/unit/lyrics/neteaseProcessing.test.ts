@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { extractNeteaseLyricPayload, processNeteaseLyrics } from '@/utils/lyrics/neteaseProcessing';
+import { extractNeteaseLyricPayload, parseNeteaseChorusRanges, processNeteaseLyrics } from '@/utils/lyrics/neteaseProcessing';
 import { parseLyricsAsync } from '@/utils/lyrics/workerClient';
 import { neteaseApi } from '@/services/netease';
 
@@ -118,7 +118,10 @@ describe('neteaseProcessing', () => {
                 type: 'netease',
                 lrc: { lyric: '[00:10.00]Line 1\n[00:20.00]Line 2\n[00:30.00]Line 3' }
             },
-            { songId: 12345 }
+            {
+                songId: 12345,
+                fetchChorusRanges: async (songId) => parseNeteaseChorusRanges(await getChorusMock(songId)),
+            }
         );
 
         expect(getChorusMock).toHaveBeenCalledWith(12345);
@@ -147,7 +150,10 @@ describe('neteaseProcessing', () => {
                 type: 'netease',
                 lrc: { lyric: '[00:10.00]副歌\n[00:20.00]主歌\n[00:30.00]副歌' }
             },
-            { songId: 12345 }
+            {
+                songId: 12345,
+                fetchChorusRanges: async (songId) => parseNeteaseChorusRanges(await getChorusMock(songId)),
+            }
         );
 
         expect(getChorusMock).toHaveBeenCalledWith(12345);

@@ -7,6 +7,7 @@ import { formatSongName } from '../../../utils/songNameFormatter';
 import { getSizedCoverUrl } from '../../../utils/coverUrl';
 import { getSongUnavailableLabel, isSongUnavailable } from '../../../services/onlineMusic/songAvailability';
 import { canResolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
+import { getProviderSongMetadata } from '../../../services/onlineMusic/songMetadata';
 
 // src/components/app/search/SearchResultRow.tsx
 
@@ -39,9 +40,10 @@ const SearchResultRow: React.FC<SearchResultRowProps> = ({
     const { t } = useTranslation();
     const isUnavailable = isSongUnavailable(track);
     const unavailableLabel = getSongUnavailableLabel(track, t('status.songUnavailableTag'));
-    const coverUrl = getSizedCoverUrl(track.al?.picUrl || track.album?.picUrl, 120);
-    const artists = track.ar?.length ? track.ar : track.artists;
-    const album = track.al || track.album;
+    const metadata = getProviderSongMetadata(track);
+    const coverUrl = getSizedCoverUrl(metadata.coverUrl, 120);
+    const artists = metadata.artists;
+    const album = metadata.album;
     const canOpenAlbum = Boolean(album?.name && (
         track.isLocal ? album.entityId
             : track.isNavidrome ? track.navidromeData?.albumId
@@ -135,7 +137,7 @@ const SearchResultRow: React.FC<SearchResultRowProps> = ({
                 </div>
 
                 <span className="hidden shrink-0 font-mono text-xs opacity-35 sm:block">
-                    {formatDuration(track.dt || track.duration)}
+                    {formatDuration(metadata.durationMs)}
                 </span>
                 {!isUnavailable && (
                     <button

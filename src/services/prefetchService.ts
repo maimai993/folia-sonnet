@@ -17,6 +17,7 @@ import { getOnlineMusicProviderForSong, providerSupports } from './onlineMusic/p
 import { getSongResourceCacheKey } from './onlineMusic/resourceKeys';
 import { getSongCacheWithLegacyMigration, hasCachedSongAudio } from './onlineMusic/resourceCache';
 import { toSafeRemoteUrl } from '../utils/appPlaybackHelpers';
+import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 
 // Prefetch configuration
 const PREFETCH_COUNT_NEXT = 2;  // Prefetch 2 songs ahead
@@ -100,7 +101,7 @@ const prefetchSong = async (
     song: SongResult,
     audioQuality: AudioQualityPreference,
     signal: AbortSignal,
-    userId?: number | null
+    userId?: MediaId | null
 ): Promise<void> => {
     if (signal.aborted) return;
 
@@ -210,9 +211,10 @@ const prefetchSong = async (
 
                 if (shouldAutoMatch) {
                     try {
-                        const artistName = song.artists?.map(a => a.name).join(', ') || '';
-                        const bestMatch = await autoMatchBestLyric(song.name, artistName, song.duration || song.dt || 0, {
-                            album: song.album?.name || song.al?.name,
+                        const metadata = getProviderSongMetadata(song);
+                        const artistName = metadata.artists.map(a => a.name).join(', ');
+                        const bestMatch = await autoMatchBestLyric(song.name, artistName, metadata.durationMs, {
+                            album: metadata.album?.name,
                             preferredSource: settings.preferredAlternativeLyricSource,
                             ...(sourceRef.providerId === 'netease' ? { neteaseCandidate: {
                                 id: song.id,
@@ -262,7 +264,7 @@ const prefetchSong = async (
 
     // Prefetch cover URL (just store the URL, don't download)
     if (!data.coverUrl) {
-        const coverUrl = song.al?.picUrl || song.album?.picUrl;
+        const coverUrl = getProviderSongMetadata(song).coverUrl;
         if (coverUrl) {
             data.coverUrl = coverUrl.startsWith('http:') ? coverUrl.replace('http:', 'https:') : coverUrl;
         }
@@ -312,7 +314,7 @@ export const prefetchNearbySongs = async (
     currentSong: SongResult,
     queue: SongResult[],
     audioQuality: AudioQualityPreference,
-    userId?: number | null
+    userId?: MediaId | null
 ): Promise<void> => {
     // Cancel any ongoing prefetch
     if (currentPrefetchAbortController) {
@@ -413,7 +415,7 @@ export const invalidateAndRefetch = async (
     currentSong: SongResult,
     queue: SongResult[],
     audioQuality: AudioQualityPreference,
-    userId?: number | null
+    userId?: MediaId | null
 ): Promise<void> => {
     console.log('[Prefetch] Queue changed, invalidating and re-prefetching');
     cleanupPrefetchCache(queue);

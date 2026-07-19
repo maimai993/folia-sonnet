@@ -2,6 +2,7 @@ import { LyricParserFactory } from './lyrics/LyricParserFactory';
 import type { LyricData } from '../types';
 import type { NavidromeConfig, NavidromeSong, StructuredLyric } from '../types/navidrome';
 import { navidromeApi } from '../services/navidromeService';
+import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 import { hasEnhancedStructuredLines, hasRenderableLyrics } from './appPlaybackHelpers';
 
 // Navidrome lyric selection and hydration helpers kept outside App.tsx.
@@ -58,7 +59,7 @@ export const hydrateNavidromeLyricPayload = async (config: NavidromeConfig, navi
                 navidromeSong.cachedStructuredLyrics = preferredStructuredLyrics.line;
             }
             if (!preferredStructuredLyrics?.line?.length && !navidromeSong.cachedPlainLyrics) {
-                const artistName = navidromeSong.ar?.[0]?.name || navidromeSong.artists?.[0]?.name || '';
+                const artistName = getProviderSongMetadata(navidromeSong).artists[0]?.name || '';
                 const plainLyrics = await navidromeApi.getLyrics(config, artistName, navidromeSong.name);
                 if (plainLyrics?.trim()) {
                     navidromeSong.cachedPlainLyrics = plainLyrics;

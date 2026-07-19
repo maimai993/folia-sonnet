@@ -7,11 +7,12 @@ import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState } fro
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { createSafeObjectUrl } from '../utils/blobGuards';
-import type { AudioQualityPreference } from '../types/onlineMusic';
+import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 import { getOnlineMusicProviderForSong, providerSupports } from './onlineMusic/providerRegistry';
 import { getSongResourceCacheKey } from './onlineMusic/resourceKeys';
 import { getCachedSongAudioBlob, getSongCacheWithLegacyMigration } from './onlineMusic/resourceCache';
 import { toSafeRemoteUrl } from '../utils/appPlaybackHelpers';
+import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 
 export async function loadOnlineSongAudioSource(
     song: SongResult,
@@ -54,7 +55,7 @@ export async function loadOnlineSongAudioSource(
 export async function loadOnlineSongLyrics(
     song: SongResult,
     prefetched: PrefetchedSongData | null,
-    userId: number | null | undefined,
+    userId: MediaId | null | undefined,
     callbacks: {
         isCurrent: () => boolean;
         onLyrics: (lyrics: LyricData | null) => void;
@@ -164,9 +165,10 @@ export async function loadOnlineSongLyrics(
     if (shouldAutoMatch) {
         try {
             onAutoMatchStart?.();
-            const artistName = song.artists?.map(a => a.name).join(', ') || '';
-            const bestMatch = await autoMatchBestLyric(song.name, artistName, song.duration || song.dt || 0, {
-                album: song.album?.name || song.al?.name,
+            const metadata = getProviderSongMetadata(song);
+            const artistName = metadata.artists.map(a => a.name).join(', ');
+            const bestMatch = await autoMatchBestLyric(song.name, artistName, metadata.durationMs, {
+                album: metadata.album?.name,
                 preferredSource: settings.preferredAlternativeLyricSource,
                 neteaseCandidate: song.sourceRef?.kind === 'online' && song.sourceRef.providerId === 'netease'
                     ? {

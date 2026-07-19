@@ -7,7 +7,7 @@ import { getSongUnavailableLabel, isSongUnavailable } from '../services/onlineMu
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { formatSongName } from '../utils/songNameFormatter';
 import { getSizedCoverUrl } from '../utils/coverUrl';
-import { getSongAlbumCoverUrl } from '../utils/songMetadata';
+import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import { colorWithAlpha } from './visualizer/colorMix';
 import { saveToCache, getFromCache, removeFromCache } from '../services/db';
 import { getOnlineMusicProvider, providerSupports } from '../services/onlineMusic/providerRegistry';
@@ -1371,7 +1371,7 @@ export const GridView: React.FC<GridViewProps> = ({
                     track.aliases?.join(' '),
                     track.translatedNames?.join(' '),
                 ].filter(Boolean).join(' '),
-                coverUrl: getSongAlbumCoverUrl(track),
+                coverUrl: getSongCoverUrl(track),
                 subtitle: String(idx + 1).padStart(2, '0'),
                 description: track.artists?.map(a => a.name).join(', '),
                 rawTrack: track,

@@ -45,9 +45,6 @@ export const useOnlineSongMetadataHydration = (
                         ...existingSong,
                         ...resolvedSong,
                         album: { ...existingSong.album, ...resolvedSong.album },
-                        al: resolvedSong.al
-                            ? { ...existingSong.al, ...resolvedSong.al }
-                            : existingSong.al,
                     };
                     attemptedSongRef.current = hydratedSong;
                     return hydratedSong;
