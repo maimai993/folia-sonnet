@@ -555,7 +555,9 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
     // During a song change the outgoing window is included too, so both tunnels exist: the departing one
     // recedes and disperses while the incoming one is born in the fog and gathers as the camera arrives.
     const corridorSpans = useMemo(() => {
-        if (geometryMode !== 'corridor') return [];
+        // Same master-toggle gate the clouds path gets inside selectVisibleDioramaClusters: with the
+        // point-cloud geometry switched off the tunnel must vanish too, not just the clouds.
+        if (!geometryVisibility.enabled || geometryMode !== 'corridor') return [];
         // Each window extends its OWN segment past that segment's ends (see the builder). During a song
         // change the two tunnels genuinely coexist - the departing one receding, the incoming one born in
         // the fog - so both windows are built whole and simply concatenated. They can hold the same global
@@ -571,7 +573,7 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
             ),
             ...live,
         ];
-    }, [geometryMode, globalIndex, transitionOutgoingIndex, sequencer, linesEpoch]);
+    }, [geometryVisibility.enabled, geometryMode, globalIndex, transitionOutgoingIndex, sequencer, linesEpoch]);
 
     // Clouds mode only: per-line point-cloud anchors matched to each camera move and kept outside the
     // lyric/camera rail. The stable particleSeed excludes GLOBAL indices so a loop rebuilds the same
@@ -631,9 +633,12 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
     const moteAttrRef = useRef<THREE.BufferAttribute>(null);
     // slot -> the line index currently written there. Empty = every slot is stale and will be rewritten.
     const moteWrittenRef = useRef<number[]>([]);
-    // A new buffer (density change) or a new song's dust must not be read as the old window.
-    useEffect(() => { moteWrittenRef.current = []; }, [moteDensity, activeSegKey]);
-    const particleKey = `dust-${activeSegKey}-${moteDensity}`;
+    // A new buffer (density change) or a new song's dust must not be read as the old window. Key on BOTH
+    // axes, not their product: 28x2 and 14x4 share moteDensity=56, so keying on the product alone would
+    // leave every slot marked current and the frame loop would keep the old distribution until a line
+    // recycled or the song changed.
+    useEffect(() => { moteWrittenRef.current = []; }, [moteCircumference, moteRadial, activeSegKey]);
+    const particleKey = `dust-${activeSegKey}-${moteCircumference}x${moteRadial}`;
 
     const activeResolved = resolveGlobal(sequencer, globalIndex);
     const activeLine = activeResolved?.line ?? null;
