@@ -295,6 +295,16 @@
       "contributions": [
         "ideas"
       ]
+    },
+    {
+      "login": "oldking139",
+      "name": "George Kazami",
+      "avatar_url": "https://avatars.githubusercontent.com/u/45203648?v=4",
+      "profile": "https://github.com/oldking139",
+      "contributions": [
+        "code",
+        "ideas"
+      ]
     }
   ],
   "commit": false,
