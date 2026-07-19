@@ -54,10 +54,12 @@ export const getPlaybackSourceRef = (song: SongResult): PlaybackSourceRef => {
         const carrier = resolveNavidromePlaybackCarrier(song);
         return { kind: 'navidrome', mediaId: String(carrier?.navidromeData.id || song.id) };
     }
+    const isLegacyCloudSong = song.sourceType === 'cloud' || song.t === 1 || song.t === 2;
     return {
         kind: 'online',
         providerId: 'netease',
         mediaId: String(song.id),
+        ...(isLegacyCloudSong ? { variant: 'cloud' } : {}),
     };
 };
 

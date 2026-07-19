@@ -117,6 +117,38 @@ describe('online music provider registry', () => {
         expect(getSongResourceCacheKey('audio', kugouSong)).toBe('audio_online:partial-test:ABC123');
     });
 
+    it('preserves the cloud variant when migrating legacy NetEase cloud songs', () => {
+        const sourceTypeCloudSong = normalizePlaybackSongSource({
+            id: 456,
+            name: 'Cloud by source type',
+            artists: [],
+            album: { id: 1, name: 'Album' },
+            duration: 1000,
+            sourceType: 'cloud',
+        });
+        const legacyTypeCloudSong = normalizePlaybackSongSource({
+            id: 789,
+            name: 'Cloud by legacy type',
+            artists: [],
+            album: { id: 1, name: 'Album' },
+            duration: 1000,
+            t: 2,
+        });
+
+        expect(sourceTypeCloudSong.sourceRef).toEqual({
+            kind: 'online',
+            providerId: 'netease',
+            mediaId: '456',
+            variant: 'cloud',
+        });
+        expect(legacyTypeCloudSong.sourceRef).toEqual({
+            kind: 'online',
+            providerId: 'netease',
+            mediaId: '789',
+            variant: 'cloud',
+        });
+    });
+
     it('resolves availability and replacements through the owning provider', async () => {
         registerOnlineMusicProvider(availabilityProvider);
         const blockedSong = availabilitySong(true);
