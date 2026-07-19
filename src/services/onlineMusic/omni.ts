@@ -29,6 +29,8 @@ import {
 } from './providerRegistry';
 
 // src/services/onlineMusic/omni.ts
+// Online Music Network Interface (Omni) - a unified interface for interacting with multiple online music providers.
+
 
 type PageInput = { limit: number; offset: number };
 

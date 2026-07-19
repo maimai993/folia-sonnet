@@ -316,7 +316,7 @@ describe('kugouProvider', () => {
         expect(page?.items[0]).toMatchObject({
             id: 'collection_3_1863870844_4_0',
             isOwned: true,
-            coverUrl: 'https://imge.kugou.com/soft/collection/400/20251014/20251014001841327327.jpg',
+            coverUrl: 'https://c1.kgimg.com/stdmusic/400/20251014/20251014001841327327.jpg',
             providerData: { listId: 12345, globalCollectionId: 'collection_3_1863870844_4_0' },
         });
     });
@@ -347,7 +347,7 @@ describe('kugouProvider', () => {
 
         expect(requestMock).toHaveBeenCalledWith('playlist_detail', { ids: 'collection_3_1863870844_4_0' });
         expect(detail).toMatchObject({
-            coverUrl: 'https://imge.kugou.com/soft/collection/400/20251014/20251014001841327327.jpg',
+            coverUrl: 'https://c1.kgimg.com/stdmusic/400/20251014/20251014001841327327.jpg',
             description: 'Playlist introduction',
             trackCount: 28,
             providerData: { listId: 12345, globalCollectionId: 'collection_3_1863870844_4_0' },
@@ -530,5 +530,30 @@ describe('kugouProvider', () => {
             artists: [{ id: 6539, name: '郁可唯' }],
         });
         expect(requestMock).toHaveBeenCalledWith('album_detail', { id: '194920827' });
+    });
+
+    it('normalizes the actual KuGou album detail response shape', async () => {
+        requestMock.mockResolvedValue({
+            status: 1,
+            data: [{
+                intro: 'Album introduction',
+                sizable_cover: 'http://imge.kugou.com/stdmusic/{size}/20251014/20251014001841327327.jpg',
+                cover: '20251014001841327327.jpg',
+                album_name: '原神-幽暮衬映之月 Outside It Is Growing Dark',
+                album_id: '164446399',
+                author_name: 'HOYO-MiX',
+                authors: [{ author_id: '789658', author_name: 'HOYO-MiX' }],
+            }],
+        });
+
+        const detail = await kugouProvider.catalog?.getAlbumDetail?.(164446399);
+
+        expect(detail).toMatchObject({
+            id: '164446399',
+            name: '原神-幽暮衬映之月 Outside It Is Growing Dark',
+            description: 'Album introduction',
+            coverUrl: 'https://c1.kgimg.com/stdmusic/400/20251014/20251014001841327327.jpg',
+            artists: [{ id: '789658', name: 'HOYO-MiX' }],
+        });
     });
 });

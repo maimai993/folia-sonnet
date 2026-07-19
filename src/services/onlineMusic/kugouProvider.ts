@@ -306,6 +306,8 @@ const normalizeCollection = (raw: any, type = 'playlist', owned = false): Provid
     const tracksUpdatedAt = normalizeTimestamp(valueOf(raw, 'track_update_time', 'trackUpdateTime'));
     const playCount = Number(valueOf(raw, 'play_count', 'playCount'));
     const description = valueOf(raw, 'intro', 'description', 'brief_desc', 'briefDesc', 'brief_description', 'desc');
+    const trackCountValue = valueOf(raw, 'song_count', 'count', 'total', 'music_num');
+    const trackCount = trackCountValue === undefined ? undefined : Number(trackCountValue);
 
     return {
         providerId: 'kugou',
@@ -314,7 +316,7 @@ const normalizeCollection = (raw: any, type = 'playlist', owned = false): Provid
         type,
         coverUrl: coverOf(raw),
         description: description === undefined || description === null ? undefined : String(description),
-        trackCount: Number(valueOf(raw, 'song_count', 'count', 'total', 'music_num') || 0),
+        ...(Number.isFinite(trackCount) ? { trackCount } : {}),
         ...(owned ? { isOwned: true } : {}),
         ...(type === 'artist' ? { albumCount: Number(valueOf(raw, 'album_count', 'albumCount') || 0) } : {}),
         ...(artists.length > 0 ? { artists } : {}),
@@ -568,7 +570,9 @@ export const kugouProvider: OnlineMusicProvider = {
                 name: normalized.name || existingCollection?.name || '',
                 coverUrl: normalized.coverUrl || existingCollection?.coverUrl,
                 description: normalized.description || existingCollection?.description,
-                trackCount: normalized.trackCount || existingCollection?.trackCount,
+                trackCount: normalized.trackCount !== undefined && normalized.trackCount > 0
+                    ? normalized.trackCount
+                    : existingCollection?.trackCount,
                 creator: normalized.creator || existingCollection?.creator,
                 providerData: { ...existingCollection?.providerData, ...normalized.providerData },
             };
@@ -590,7 +594,9 @@ export const kugouProvider: OnlineMusicProvider = {
                 name: normalized.name || existingCollection?.name || '',
                 coverUrl: normalized.coverUrl || existingCollection?.coverUrl,
                 description: normalized.description || existingCollection?.description,
-                trackCount: normalized.trackCount ?? existingCollection?.trackCount,
+                trackCount: normalized.trackCount !== undefined && normalized.trackCount > 0
+                    ? normalized.trackCount
+                    : existingCollection?.trackCount,
                 artists: normalized.artists?.length ? normalized.artists : existingCollection?.artists,
                 aliases: normalized.aliases?.length ? normalized.aliases : existingCollection?.aliases,
                 publishedAt: normalized.publishedAt ?? existingCollection?.publishedAt,
