@@ -55,7 +55,7 @@ const coverOf = (raw: any): string | undefined => {
     if (!value) return undefined;
     const cover = String(value).trim().replace('{size}', '400');
     if (/^\d{8,}\.(?:jpe?g|png|webp)$/i.test(cover)) {
-        return `https://imge.kugou.com/soft/collection/400/${cover.slice(0, 8)}/${cover}`;
+        return `https://c1.kgimg.com/stdmusic/400/${cover.slice(0, 8)}/${cover}`;
     }
     if (cover.startsWith('//')) return `https:${cover}`;
     return cover.replace(/^http:/i, 'https:');
