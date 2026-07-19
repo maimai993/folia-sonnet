@@ -95,6 +95,54 @@ describe('NetEase API startup recovery', () => {
         expect(persistToken).toHaveBeenCalledWith('anonymous-token');
     });
 
+    it('accepts anonymous cookies returned in the top-level cookie array', async () => {
+        const registerAnonymous = vi.fn().mockResolvedValue({
+            status: 200,
+            body: { code: 200 },
+            cookie: ['MUSIC_A=anonymous-token', '__csrf=csrf-token'],
+        });
+        const cookieToJson = vi.fn().mockReturnValue({ MUSIC_A: 'anonymous-token' });
+        const persistToken = vi.fn();
+
+        const refreshed = await refreshAnonymousToken({
+            registerAnonymous,
+            cookieToJson,
+            persistToken,
+            logger: quietLogger,
+            retryOptions: immediateRetryOptions(),
+        });
+
+        expect(refreshed).toBe(true);
+        expect(cookieToJson).toHaveBeenCalledWith(
+            'MUSIC_A=anonymous-token;__csrf=csrf-token',
+        );
+        expect(persistToken).toHaveBeenCalledWith('anonymous-token');
+    });
+
+    it('includes the upstream response status when anonymous registration fails', async () => {
+        const logger = { warn: vi.fn() };
+        const registerAnonymous = vi.fn().mockResolvedValue({
+            status: 503,
+            body: { code: 503, msg: 'service unavailable' },
+            cookie: [],
+        });
+
+        const refreshed = await refreshAnonymousToken({
+            registerAnonymous,
+            cookieToJson: vi.fn(),
+            persistToken: vi.fn(),
+            logger,
+            retryOptions: immediateRetryOptions(),
+        });
+
+        expect(refreshed).toBe(false);
+        expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'status=503, code=503, message=service unavailable',
+            ),
+        );
+    });
+
     it('keeps the existing anonymous token when all refresh attempts fail', async () => {
         const registerAnonymous = vi.fn().mockRejectedValue(new Error('offline'));
         const persistToken = vi.fn();

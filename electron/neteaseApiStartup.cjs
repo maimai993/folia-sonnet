@@ -6,6 +6,14 @@ const DEFAULT_RETRY_JITTER_MS = 100;
 
 const wait = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
 
+function getErrorMessage(error) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return typeof error === 'string' && error.trim() ? error : 'Unknown error';
+}
+
 function hasUsableXeapiPublicKey(publicKey) {
   return Boolean(
     publicKey
@@ -13,6 +21,35 @@ function hasUsableXeapiPublicKey(publicKey) {
     && typeof publicKey.sk === 'string'
     && publicKey.sk.trim(),
   );
+}
+
+function getAnonymousCookie(registration) {
+  const bodyCookie = registration?.body?.cookie;
+  if (typeof bodyCookie === 'string' && bodyCookie.trim()) {
+    return bodyCookie;
+  }
+
+  const responseCookies = registration?.cookie;
+  if (Array.isArray(responseCookies)) {
+    return responseCookies
+      .filter((cookie) => typeof cookie === 'string' && cookie.trim())
+      .join(';');
+  }
+
+  return typeof responseCookies === 'string' ? responseCookies : '';
+}
+
+function describeAnonymousRegistration(registration) {
+  const status = registration?.status;
+  const code = registration?.body?.code;
+  const message = registration?.body?.message || registration?.body?.msg;
+  const details = [
+    status !== undefined ? `status=${status}` : '',
+    code !== undefined ? `code=${code}` : '',
+    typeof message === 'string' && message.trim() ? `message=${message.trim()}` : '',
+  ].filter(Boolean);
+
+  return details.length > 0 ? ` (${details.join(', ')})` : '';
 }
 
 // Retries a short startup operation with bounded exponential backoff and jitter.
@@ -61,7 +98,9 @@ async function resolveXeapiPublicKey({
       {
         ...retryOptions,
         onRetry: (error, attempt) => {
-          logger.warn(`[Netease API] Failed to refresh xeapi public key (attempt ${attempt}), retrying`, error);
+          logger.warn(
+            `[Netease API] Failed to refresh xeapi public key (attempt ${attempt}), retrying: ${getErrorMessage(error)}`,
+          );
           retryOptions?.onRetry?.(error, attempt);
         },
       },
@@ -73,7 +112,9 @@ async function resolveXeapiPublicKey({
       throw error;
     }
 
-    logger.warn('[Netease API] Failed to refresh xeapi public key, using cached key', error);
+    logger.warn(
+      `[Netease API] Failed to refresh xeapi public key, using cached key: ${getErrorMessage(error)}`,
+    );
     return { publicKey: currentPublicKey, refreshed: false };
   }
 }
@@ -89,9 +130,11 @@ async function refreshAnonymousToken({
   try {
     await retryStartupOperation(async () => {
       const registration = await registerAnonymous();
-      const anonymousCookie = registration?.body?.cookie;
-      if (typeof anonymousCookie !== 'string' || !anonymousCookie.trim()) {
-        throw new Error('anonymous registration response missing cookie');
+      const anonymousCookie = getAnonymousCookie(registration);
+      if (!anonymousCookie.trim()) {
+        throw new Error(
+          `anonymous registration response missing cookie${describeAnonymousRegistration(registration)}`,
+        );
       }
 
       const cookieObject = cookieToJson(anonymousCookie);
@@ -103,13 +146,17 @@ async function refreshAnonymousToken({
     }, {
       ...retryOptions,
       onRetry: (error, attempt) => {
-        logger.warn(`[Netease API] Failed to refresh anonymous token (attempt ${attempt}), retrying`, error);
+        logger.warn(
+          `[Netease API] Failed to refresh anonymous token (attempt ${attempt}), retrying: ${getErrorMessage(error)}`,
+        );
         retryOptions?.onRetry?.(error, attempt);
       },
     });
     return true;
   } catch (error) {
-    logger.warn('[Netease API] Failed to refresh anonymous token, keeping existing token', error);
+    logger.warn(
+      `[Netease API] Failed to refresh anonymous token, keeping existing token: ${getErrorMessage(error)}`,
+    );
     return false;
   }
 }
