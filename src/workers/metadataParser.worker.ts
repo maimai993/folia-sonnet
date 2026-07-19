@@ -24,6 +24,7 @@ interface LyricCandidate {
 interface EmbeddedMetadataResult {
     title?: string;
     artist?: string;
+    artists?: string[];
     album?: string;
     trackNumber?: number;
     discNumber?: number;
@@ -216,6 +217,7 @@ async function extractEmbeddedMetadata(file: File, includeCover = false): Promis
     return {
         title: parsed.common.title,
         artist: parsed.common.artist,
+        artists: parsed.common.artists,
         album: parsed.common.album,
         trackNumber: parsed.common.track.no ?? undefined,
         discNumber: parsed.common.disk.no ?? undefined,

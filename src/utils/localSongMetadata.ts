@@ -14,6 +14,7 @@ export const buildImportedMetadataSnapshot = ({
   embeddedTitle,
   fallbackTitle,
   embeddedArtist,
+  embeddedArtists,
   fallbackArtist,
   embeddedAlbum,
   fallbackAlbum,
@@ -22,6 +23,7 @@ export const buildImportedMetadataSnapshot = ({
   embeddedTitle?: string;
   fallbackTitle?: string;
   embeddedArtist?: string;
+  embeddedArtists?: string[];
   fallbackArtist?: string;
   embeddedAlbum?: string;
   fallbackAlbum?: string;
@@ -31,10 +33,13 @@ export const buildImportedMetadataSnapshot = ({
     || cleanLocalLibraryName(fallbackTitle)
     || stripLocalAudioExtension(fileName)
     || fileName;
+  const embeddedArtistNames = (embeddedArtists || []).flatMap(splitLocalLibraryArtistNames);
   return {
     title,
     titleSource: normalizedEmbeddedTitle ? 'embedded' : 'filename',
-    artistNames: splitLocalLibraryArtistNames(embeddedArtist || fallbackArtist),
+    artistNames: embeddedArtistNames.length > 0
+      ? embeddedArtistNames
+      : splitLocalLibraryArtistNames(embeddedArtist || fallbackArtist),
     albumName: cleanLocalLibraryName(embeddedAlbum || fallbackAlbum),
   };
 };

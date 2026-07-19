@@ -20,7 +20,7 @@ import { removeCachedCover } from './coverCache';
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
 
-const EMBEDDED_METADATA_VERSION = 3;
+const EMBEDDED_METADATA_VERSION = 4;
 
 interface ImportPreparationMetrics {
     getFileMs: number;
@@ -773,6 +773,7 @@ async function buildImportedSong(
         embeddedTitle: embeddedMetadata.title,
         fallbackTitle: metadata.title,
         embeddedArtist: embeddedMetadata.artist,
+        embeddedArtists: embeddedMetadata.artists,
         fallbackArtist: metadata.artist,
         embeddedAlbum: embeddedMetadata.album,
     });
@@ -858,6 +859,7 @@ async function hydrateSongMetadata(song: LocalSong): Promise<LocalSong> {
             embeddedTitle: embeddedMetadata.title,
             fallbackTitle: filenameMetadata.title,
             embeddedArtist: embeddedMetadata.artist,
+            embeddedArtists: embeddedMetadata.artists,
             fallbackArtist: filenameMetadata.artist,
             embeddedAlbum: embeddedMetadata.album,
         });

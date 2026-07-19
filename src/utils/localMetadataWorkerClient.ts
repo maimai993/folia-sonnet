@@ -1,6 +1,7 @@
 export interface EmbeddedMetadataResult {
     title?: string;
     artist?: string;
+    artists?: string[];
     album?: string;
     trackNumber?: number;
     discNumber?: number;
