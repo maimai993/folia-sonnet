@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
-import type { HomeViewTab, LocalSong, UnifiedSong } from '../types';
+import type { HomeViewTab, LocalSong, SongResult, UnifiedSong } from '../types';
 import type { OnlineProviderId } from '../types/onlineMusic';
 import {
     applyLocalLibraryEntityDisplay,
@@ -8,6 +8,7 @@ import {
     type LocalLibraryDisplayCatalog,
 } from '../services/playbackAdapters';
 import { getOnlineMusicProvider } from '../services/onlineMusic/providerRegistry';
+import { isLocalPlaybackSong, isNavidromePlaybackSong } from '../utils/appPlaybackGuards';
 
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEFAULT_SEARCH_LIMIT = 30;
@@ -68,6 +69,17 @@ export const resolveSearchSource = (tab: HomeViewTab | SearchSource): SearchSour
     }
     if (tab !== 'playlist' && tab !== 'albums' && tab !== 'radio') return tab as OnlineProviderId;
     return 'netease';
+};
+
+export const resolveCommandPaletteSearchSource = (
+    currentSong: SongResult | null,
+    searchSourceTab: SearchSource,
+    activeOnlineProviderId: OnlineProviderId,
+): SearchSource => {
+    if (currentSong && isLocalPlaybackSong(currentSong)) return 'local';
+    if (currentSong && isNavidromePlaybackSong(currentSong)) return 'navidrome';
+    if (currentSong || searchSourceTab === 'netease') return activeOnlineProviderId;
+    return searchSourceTab;
 };
 
 const mapLocalSongToUnifiedSong = (

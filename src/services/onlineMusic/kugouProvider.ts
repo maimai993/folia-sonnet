@@ -124,7 +124,13 @@ export const normalizeKugouSong = (raw: unknown): UnifiedSong => {
         ['albumId', albumId],
         ['fileId', valueOf(item, 'FileID', 'fileid', 'file_id')],
     ]);
-    const rawTitle = String(valueOf(item, 'SongName', 'songname', 'songName', 'name', 'audio_name') || '');
+    const rawTitle = String(valueOf(
+        item,
+        'SongName', 'songname', 'songName',
+        'OriSongName', 'ori_song_name', 'oriSongName',
+        'FileName', 'filename', 'fileName',
+        'name', 'audio_name',
+    ) || '');
     const { title, artists } = normalizeKugouTitleAndArtists(rawTitle, rawArtists);
 
     return {

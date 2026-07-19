@@ -70,7 +70,7 @@ import { useStagePlaybackController } from './hooks/useStagePlaybackController';
 import { useSongThemeAutoGeneration } from './hooks/useSongThemeAutoGeneration';
 import { useThemeController } from './hooks/useThemeController';
 import { useThemeQuickEditorStore } from './stores/useThemeQuickEditorStore';
-import { resolveSearchSource, useSearchNavigationStore } from './stores/useSearchNavigationStore';
+import { resolveCommandPaletteSearchSource, resolveSearchSource, useSearchNavigationStore } from './stores/useSearchNavigationStore';
 import { useCollectionNavigationStore } from './stores/useCollectionNavigationStore';
 import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -1689,18 +1689,11 @@ export default function App() {
     const toggleDaylightMode = useCallback(() => {
         handleToggleDaylight(!isDaylight);
     }, [handleToggleDaylight, isDaylight]);
-    const currentSearchSourceTabInPalette = useMemo(() => {
-        if (currentSong) {
-            if (isLocalPlaybackSong(currentSong)) {
-                return 'local';
-            }
-            if (isNavidromePlaybackSong(currentSong)) {
-                return 'navidrome';
-            }
-            return 'netease';
-        }
-        return searchSourceTab;
-    }, [currentSong, searchSourceTab]);
+    const currentSearchSourceTabInPalette = useMemo(() => resolveCommandPaletteSearchSource(
+        currentSong,
+        searchSourceTab,
+        onlineProviderPlatform.activeProviderId,
+    ), [currentSong, onlineProviderPlatform.activeProviderId, searchSourceTab]);
     const toggleBrowserFullscreen = useCallback(async () => {
         if (typeof window !== 'undefined' && window.electron?.toggleFullscreenWindow) {
             return window.electron.toggleFullscreenWindow();

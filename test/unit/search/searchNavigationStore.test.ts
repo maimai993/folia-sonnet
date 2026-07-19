@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSearchNavigationStore } from '@/stores/useSearchNavigationStore';
+import { resolveCommandPaletteSearchSource, useSearchNavigationStore } from '@/stores/useSearchNavigationStore';
 import { neteaseApi } from '@/services/netease';
 import { getNavidromeConfig, navidromeApi } from '@/services/navidromeService';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '@/types/localLibrary';
@@ -52,6 +52,17 @@ describe('useSearchNavigationStore', () => {
             scrollTop: 0,
             searchCache: {},
         });
+    });
+
+    it('uses the active online provider for command palette searches', () => {
+        expect(resolveCommandPaletteSearchSource({
+            id: 1,
+            name: 'NetEase track still playing',
+            artists: [],
+            album: { id: 1, name: '' },
+            duration: 1,
+        }, 'netease', 'kugou')).toBe('kugou');
+        expect(resolveCommandPaletteSearchSource(null, 'netease', 'kugou')).toBe('kugou');
     });
 
     it('submits a local search and opens the overlay', async () => {
