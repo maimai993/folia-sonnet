@@ -11,11 +11,16 @@ import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import LocalGrid3DView from './app/home/LocalGrid3DView';
 import NavidromeGrid3DView from './app/home/NavidromeGrid3DView';
 import DesktopGrid3DSurface from './folia-grid/DesktopGrid3DSurface';
-import { createOnlineGridViewCollection } from './app/home/gridViewCollectionAdapters';
+import {
+    createNeteaseProviderUser,
+    createOnlineGridViewCollection,
+    getProviderCollectionArtistLabel,
+} from './app/home/gridViewCollectionAdapters';
 import { importFolder, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
 import { useOnlineProviderQrLogin } from '../hooks/useOnlineProviderQrLogin';
 import type { OnlineProviderPlatformState } from '../hooks/useOnlineProviderPlatform';
 import { getOnlineMusicProvider } from '../services/onlineMusic/providerRegistry';
+import { getSongAlbumCoverUrl } from '../utils/songMetadata';
 import OnlineProviderSwitcher from './app/home/OnlineProviderSwitcher';
 import type { ProviderCollection } from '../types/onlineMusic';
 
@@ -137,23 +142,12 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const activeProviderId = onlineProviderPlatform?.activeProviderId || 'netease';
     const activeProviderSummary = onlineProviderPlatform?.activeProvider;
     const activeProvider = getOnlineMusicProvider(activeProviderId);
-    const activeUser = activeProviderSummary?.user || (activeProviderId === 'netease' && user ? {
-        id: user.userId,
-        nickname: user.nickname,
-        avatarUrl: user.avatarUrl,
-        backgroundUrl: user.backgroundUrl,
-        vipType: user.vipType,
-    } : null);
+    const activeUser = activeProviderSummary?.user
+        || (activeProviderId === 'netease' ? createNeteaseProviderUser(user) : null);
     const activeCollections: ProviderCollection[] = activeProviderSummary?.collections || (activeProviderId === 'netease'
         ? [
-            ...playlists.map(playlist => ({
-                providerId: 'netease', id: playlist.id, name: playlist.name, type: 'playlist',
-                coverUrl: playlist.coverImgUrl, description: playlist.description, trackCount: playlist.trackCount,
-            })),
-            ...(cloudPlaylist ? [{
-                providerId: 'netease', id: cloudPlaylist.id, name: cloudPlaylist.name, type: 'cloud',
-                coverUrl: cloudPlaylist.coverImgUrl, description: cloudPlaylist.description, trackCount: cloudPlaylist.trackCount,
-            }] : []),
+            ...playlists.map(playlist => createOnlineGridViewCollection(playlist, 'netease')),
+            ...(cloudPlaylist ? [createOnlineGridViewCollection(cloudPlaylist, 'netease')] : []),
         ]
         : []);
 
@@ -256,7 +250,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         await startQrLogin(providerId);
     };
 
-    // Netease details
+    // Online provider collection details
     const [favoriteAlbums, setFavoriteAlbums] = useState<any[]>([]);
     const [loadingAlbums, setLoadingAlbums] = useState(false);
     const [radioItems, setRadioItems] = useState<any[]>([]);
@@ -331,7 +325,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 activeProvider?.recommendations?.getDailySongs?.() || [],
                 activeProvider?.recommendations?.getRecommendedCollections?.(35) || [],
             ]);
-            const fmCoverUrl = fmSongs[0]?.album?.picUrl || fmSongs[0]?.al?.picUrl || '';
+            const fmCoverUrl = getSongAlbumCoverUrl(fmSongs[0]);
 
             const fmItem = {
                 id: 'personal_fm',
@@ -344,19 +338,22 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             const dailyItem = {
                 id: 'daily_recommendations',
                 name: t('home.dailyRecommendations'),
-                coverUrl: dailySongs[0]?.al?.picUrl || dailySongs[0]?.album?.picUrl || '',
+                coverUrl: getSongAlbumCoverUrl(dailySongs[0]) || '',
                 trackCount: dailySongs.length,
                 description: t('home.dailyRecommendationsDescription'),
                 summary: t('home.dailyRecommendationsSummary'),
                 isDailyRecommendations: true,
             };
 
-            const recommendedItems = recommendedCollections.map(collection => ({
-                ...collection,
-                coverUrl: collection.coverUrl,
-                description: collection.description || t('home.playlists'),
-                summary: collection.description || '',
-            }));
+            const recommendedItems = recommendedCollections.map(collection => {
+                const description = collection.description || collection.creator?.nickname || '';
+                return {
+                    ...collection,
+                    coverUrl: collection.coverUrl,
+                    description,
+                    summary: description,
+                };
+            });
             setRadioItems([fmItem, dailyItem, ...recommendedItems]);
         } catch (e) {
             console.error('[Grid3D] Failed to fetch radio items', e);
@@ -385,12 +382,12 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             name: a.name,
             coverUrl: a.coverUrl,
             trackCount: a.trackCount,
-            description: a.creator?.nickname || t('player.unknownArtist'),
+            description: getProviderCollectionArtistLabel(a) || t('player.unknownArtist'),
             summary: a.description || '',
             type: 'album' as const,
             raw: a
         }));
-    }, [favoriteAlbums]);
+    }, [favoriteAlbums, t]);
 
     const radioCards = useMemo(() => {
         return radioItems.map(r => ({

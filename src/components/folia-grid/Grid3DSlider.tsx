@@ -34,6 +34,14 @@ const compactDescription = (description?: string, maxLength = 72) => {
     return normalized.length > maxLength ? `${normalized.substring(0, maxLength)}...` : normalized;
 };
 
+export const getGrid3DSliderSecondaryText = (
+    item: Pick<Grid3DSliderItem, 'type' | 'description' | 'summary'>,
+): string => (
+    item.type === 'playlist'
+        ? compactDescription(item.summary) || compactDescription(item.description)
+        : compactDescription(item.description) || compactDescription(item.summary)
+);
+
 const clampFocusedIndex = (index: number, itemCount: number) => {
     if (itemCount <= 0 || !Number.isFinite(index)) {
         return 0;
@@ -513,6 +521,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                     ) : (
                         slicedItems.map((item, index) => {
                             const isFocused = index === safeFocusedIndex;
+                            const secondaryText = getGrid3DSliderSecondaryText(item);
 
                             return (
                                 <div
@@ -560,9 +569,9 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                                 <h3 className="font-bold text-sm truncate max-w-full tracking-tight">
                                                     {item.name}
                                                 </h3>
-                                                {((item.type !== 'playlist' && item.description) || !compactDescription(item.summary)) && (
+                                                {secondaryText && (
                                                     <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
-                                                        {item.type !== 'playlist' && item.description ? item.description : '♫'}
+                                                        {secondaryText}
                                                     </p>
                                                 )}
                                                 {compactDescription(item.summary) && (

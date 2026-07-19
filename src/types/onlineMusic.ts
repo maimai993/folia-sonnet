@@ -78,6 +78,18 @@ export interface ProviderAudioSource {
     quality: AudioQualityPreference;
 }
 
+export type ProviderSongAvailabilityState = 'playable' | 'unavailable' | 'unknown';
+
+export interface ProviderSongAvailability {
+    state: ProviderSongAvailabilityState;
+    label?: string;
+}
+
+export interface ProviderSongReplacement {
+    song: UnifiedSong;
+    label?: string;
+}
+
 export interface ProviderLyricsResult {
     lyrics: LyricData | null;
     mainText?: string | null;
@@ -95,6 +107,12 @@ export interface ProviderUser {
     vipType?: number;
 }
 
+export interface ProviderArtistSummary {
+    id: MediaId;
+    name: string;
+    catalogRef?: ProviderCatalogRef;
+}
+
 export interface ProviderHistoryEntry {
     id: string;
     label: string;
@@ -109,7 +127,17 @@ export interface ProviderCollection {
     coverUrl?: string;
     description?: string;
     trackCount?: number;
+    albumCount?: number;
+    isOwned?: boolean;
     creator?: ProviderUser;
+    artists?: ProviderArtistSummary[];
+    aliases?: string[];
+    publishedAt?: number;
+    publisher?: string;
+    playCount?: number;
+    updatedAt?: number;
+    tracksUpdatedAt?: number;
+    isLiked?: boolean;
     providerData?: Record<string, JsonValue>;
 }
 
@@ -147,6 +175,8 @@ export interface OnlineSearchProvider {
 export interface OnlinePlaybackProvider {
     getSongDetail(id: MediaId): Promise<UnifiedSong | null>;
     getAudioSource(song: SongResult, quality: AudioQualityPreference): Promise<ProviderAudioSource | null>;
+    getAvailability?(song: SongResult): ProviderSongAvailability;
+    getReplacement?(song: SongResult): Promise<ProviderSongReplacement | null>;
 }
 
 export interface OnlineLyricsProvider {
@@ -170,13 +200,14 @@ export interface OnlineLibraryProvider {
 export interface OnlineCatalogProvider {
     canResolveSongCatalogRefs?(song: UnifiedSong): boolean;
     resolveSongCatalogRefs?(song: UnifiedSong): Promise<UnifiedSong>;
-    getPlaylistTracks?(id: MediaId, limit: number, offset: number): Promise<ProviderPage<UnifiedSong>>;
-    getCloudTracks?(limit: number, offset: number): Promise<ProviderPage<UnifiedSong>>;
-    getAlbumTracks?(id: MediaId, limit?: number, offset?: number): Promise<ProviderPage<UnifiedSong>>;
+    getPlaylistTracks?(id: MediaId, limit: number, offset: number, collection?: ProviderCollection): Promise<ProviderPage<UnifiedSong>>;
+    getCloudTracks?(limit: number, offset: number, collection?: ProviderCollection): Promise<ProviderPage<UnifiedSong>>;
+    getAlbumTracks?(id: MediaId, limit?: number, offset?: number, collection?: ProviderCollection): Promise<ProviderPage<UnifiedSong>>;
+    getAlbumDetail?(id: MediaId, collection?: ProviderCollection): Promise<ProviderCollection | null>;
     getArtistSongs?(id: MediaId, limit: number, offset: number): Promise<ProviderPage<UnifiedSong>>;
     getArtistAlbums?(id: MediaId, limit: number, offset: number): Promise<ProviderPage<ProviderCollection>>;
     getArtistDetail?(id: MediaId): Promise<ProviderCollection | null>;
-    getSubscriptionStatus?(type: 'playlist' | 'album', id: MediaId): Promise<boolean>;
+    getSubscriptionStatus?(type: 'playlist' | 'album', id: MediaId, collection?: ProviderCollection): Promise<boolean>;
 }
 
 export interface OnlineRecommendationProvider {

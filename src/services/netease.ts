@@ -277,9 +277,12 @@ const normalizeSongResult = (raw: any): SongResult => {
     album: {
       id: albumId,
       name: albumName,
+      coverUrl: picUrl || undefined,
       picUrl: picUrl || undefined,
     },
     duration,
+    aliases: Array.isArray(base?.alia) ? base.alia : [],
+    translatedNames: Array.isArray(base?.tns) ? base.tns : [],
     t: tValue,
     sourceType,
     sourceRef: {

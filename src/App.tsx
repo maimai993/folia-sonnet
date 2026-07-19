@@ -22,6 +22,7 @@ import { buildHomeModel } from './components/app/home/buildHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
 import { createLocalLibraryNavigation } from './components/app/navigation/createLocalLibraryNavigation';
 import { createPanelNavigation } from './components/app/navigation/createPanelNavigation';
+import { createNeteaseGridViewCollection } from './components/app/home/gridViewCollectionAdapters';
 import { buildAppStyle } from './components/app/presentation/buildAppStyle';
 import { buildDebugSnapshot } from './components/app/presentation/buildDebugSnapshot';
 import { buildHomeSurfacePresentation } from './components/app/presentation/buildHomeSurfacePresentation';
@@ -40,7 +41,6 @@ import { buildPlayerPanelModel } from './components/app/player-panel/buildPlayer
 import { createQueueMutations } from './components/app/player-panel/createQueueMutations';
 import { Album, Artist, LyricData, Theme, PlayerState, SongResult, ReplayGainMode, StatusMessage, PlaybackContext, StageLoopMode, UnifiedSong, NeteasePlaylist } from './types';
 import type { MediaId } from './types/onlineMusic';
-import { isSongMarkedUnavailable, neteaseApi } from './services/netease';
 import { resolveSongCatalogRef } from './services/onlineMusic/catalogRefs';
 import { isNavidromeEnabled } from './services/navidromeService';
 import { useAppNavigation } from './hooks/useAppNavigation';
@@ -1989,13 +1989,10 @@ export default function App() {
     ]);
 
     const handlePlaylistSelect = useCallback((playlist: NeteasePlaylist) => {
-        navigateToCollection({
+        navigateToCollection(createNeteaseGridViewCollection({
             ...playlist,
-            source: 'online',
-            providerId: 'netease',
             type: 'playlist',
-            coverUrl: playlist.coverImgUrl,
-        }, 'home');
+        }), 'home');
     }, [navigateToCollection]);
 
     const handleUnifiedAlbumSelect = useCallback((albumId: MediaId) => {

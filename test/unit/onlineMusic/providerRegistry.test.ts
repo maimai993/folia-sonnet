@@ -10,6 +10,7 @@ import {
 } from '@/services/onlineMusic/providerRegistry';
 import { OnlineProviderError } from '@/types/onlineMusic';
 import { getSongResourceCacheKey } from '@/services/onlineMusic/resourceKeys';
+import { getSongAvailability, getSongReplacement, isSongUnavailable } from '@/services/onlineMusic/songAvailability';
 import { getPlaybackSongKey, normalizePlaybackSongSource } from '@/utils/appPlaybackGuards';
 
 // test/unit/onlineMusic/providerRegistry.test.ts
@@ -46,7 +47,43 @@ const partialProvider: OnlineMusicProvider = {
     },
 };
 
-afterEach(() => unregisterOnlineMusicProvider('partial-test'));
+const availabilitySong = (blocked = false) => ({
+    id: blocked ? 'blocked' : 'replacement',
+    name: blocked ? 'Blocked' : 'Replacement',
+    artists: [],
+    album: { id: '', name: '' },
+    duration: 1000,
+    sourceRef: {
+        kind: 'online' as const,
+        providerId: 'availability-test',
+        mediaId: blocked ? 'blocked' : 'replacement',
+        providerData: { blocked },
+    },
+});
+
+const availabilityProvider: OnlineMusicProvider = {
+    id: 'availability-test',
+    displayName: 'Availability Test',
+    capabilities: capabilities({ playback: true }),
+    normalizeSong: () => availabilitySong(),
+    playback: {
+        async getSongDetail() { return availabilitySong(); },
+        async getAudioSource() { return null; },
+        getAvailability(song) {
+            return song.sourceRef?.kind === 'online' && song.sourceRef.providerData?.blocked === true
+                ? { state: 'unavailable', label: 'Blocked by provider' }
+                : { state: 'playable' };
+        },
+        async getReplacement() {
+            return { song: availabilitySong(), label: 'Provider replacement' };
+        },
+    },
+};
+
+afterEach(() => {
+    unregisterOnlineMusicProvider('partial-test');
+    unregisterOnlineMusicProvider('availability-test');
+});
 
 describe('online music provider registry', () => {
     it('accepts providers that implement only declared capabilities', () => {
@@ -78,5 +115,20 @@ describe('online music provider registry', () => {
         expect(getPlaybackSongKey(kugouSong)).toBe('online:partial-test:ABC123');
         expect(getPlaybackSongKey(legacySong)).toBe('online:netease:123');
         expect(getSongResourceCacheKey('audio', kugouSong)).toBe('audio_online:partial-test:ABC123');
+    });
+
+    it('resolves availability and replacements through the owning provider', async () => {
+        registerOnlineMusicProvider(availabilityProvider);
+        const blockedSong = availabilitySong(true);
+
+        expect(getSongAvailability(blockedSong)).toEqual({
+            state: 'unavailable',
+            label: 'Blocked by provider',
+        });
+        expect(isSongUnavailable(blockedSong)).toBe(true);
+        await expect(getSongReplacement(blockedSong)).resolves.toMatchObject({
+            label: 'Provider replacement',
+            song: { sourceRef: { providerId: 'availability-test', mediaId: 'replacement' } },
+        });
     });
 });

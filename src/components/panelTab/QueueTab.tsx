@@ -5,7 +5,7 @@ import { ListEnd, ListPlus, Shuffle, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult } from '../../types';
 import TextInputDialog from '../shared/TextInputDialog';
-import { getSongUnavailableTagText, isSongMarkedUnavailable } from '../../services/netease';
+import { getSongUnavailableLabel, isSongUnavailable } from '../../services/onlineMusic/songAvailability';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
 
 // src/components/panelTab/QueueTab.tsx
@@ -57,8 +57,8 @@ const QueueRow = ({
 }: RowComponentProps<QueueRowProps>): React.ReactElement => {
     const song = playQueue[index];
     const isActive = currentSongKey === getPlaybackSongKey(song);
-    const isUnavailable = isSongMarkedUnavailable(song);
-    const unavailableTagText = getSongUnavailableTagText(song, labels.unavailable);
+    const isUnavailable = isSongUnavailable(song);
+    const unavailableTagText = getSongUnavailableLabel(song, labels.unavailable);
     const activeRowClass = isDaylight ? 'bg-black/[0.08]' : 'bg-white/20';
     const activeMarkerClass = isDaylight ? 'bg-zinc-700' : 'bg-white';
     const hoverRowClass = isDaylight ? 'hover:bg-black/[0.04]' : 'hover:bg-white/5';

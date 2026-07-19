@@ -629,6 +629,7 @@ export const navidromeApi = {
         const displayAlbum = {
             id: 0,
             name: song.album,
+            coverUrl: coverArtUrl,
             picUrl: coverArtUrl,
         };
 

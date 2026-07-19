@@ -257,6 +257,7 @@ describe('kugouProvider', () => {
 
         expect(page?.items[0]).toMatchObject({
             id: 'collection_3_1863870844_4_0',
+            isOwned: true,
             providerData: { listId: 12345, globalCollectionId: 'collection_3_1863870844_4_0' },
         });
     });
@@ -320,7 +321,13 @@ describe('kugouProvider', () => {
             })
             .mockResolvedValueOnce({
                 total: 1,
-                data: [{ album_id: 194920827, album_name: '见幸福' }],
+                data: [{
+                    album_id: 194920827,
+                    album_name: '见幸福',
+                    image: 'http://img/{size}/album.jpg',
+                    authors: [{ author_id: 6539, author_name: '郁可唯' }],
+                    publish_time: '2020',
+                }],
             });
 
         const detail = await kugouProvider.catalog?.getArtistDetail?.(6539);
@@ -332,9 +339,38 @@ describe('kugouProvider', () => {
             coverUrl: 'http://img/400/artist.jpg',
             providerData: { musicSize: 100, albumSize: 20 },
         });
-        expect(albums?.items[0]).toMatchObject({ id: 194920827, name: '见幸福', type: 'album' });
+        expect(albums?.items[0]).toMatchObject({
+            id: 194920827,
+            name: '见幸福',
+            type: 'album',
+            coverUrl: 'http://img/400/album.jpg',
+            artists: [{ id: 6539, name: '郁可唯' }],
+            publishedAt: Date.UTC(2020, 0, 1),
+        });
         expect(requestMock).toHaveBeenNthCalledWith(2, 'artist_albums', {
             id: '6539', page: 1, pagesize: 50,
         });
+    });
+
+    it('normalizes album detail biographies through the provider boundary', async () => {
+        requestMock.mockResolvedValue({
+            data: {
+                album_id: 194920827,
+                album_name: '见幸福',
+                brief_desc: 'Album biography',
+                image: 'http://img/{size}/album.jpg',
+                authors: [{ author_id: 6539, author_name: '郁可唯' }],
+            },
+        });
+
+        const detail = await kugouProvider.catalog?.getAlbumDetail?.(194920827);
+
+        expect(detail).toMatchObject({
+            id: 194920827,
+            name: '见幸福',
+            description: 'Album biography',
+            artists: [{ id: 6539, name: '郁可唯' }],
+        });
+        expect(requestMock).toHaveBeenCalledWith('album_detail', { id: '194920827' });
     });
 });

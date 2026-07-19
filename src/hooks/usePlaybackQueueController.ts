@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from '../services/onlinePlayback';
-import { isSongMarkedUnavailable, neteaseApi } from '../services/netease';
+import { neteaseApi } from '../services/netease';
+import { getSongReplacement, isSongUnavailable } from '../services/onlineMusic/songAvailability';
 import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
 import { canPlayOnlineMusicSong } from '../services/onlineMusic/providerRegistry';
 import { getCachedSongCoverUrl, hasCachedSongAudio } from '../services/onlineMusic/resourceCache';
@@ -208,7 +209,7 @@ export function usePlaybackQueueController({
         const queueAnchorSong = mainSnapshot?.currentSong ?? (activePlaybackContext === 'main' ? currentSong : null);
         const existingQueue = mainSnapshot?.playQueue ?? (activePlaybackContext === 'main' ? playQueue : []);
         const baseQueue = existingQueue.length > 0 ? existingQueue : (queueAnchorSong ? [queueAnchorSong] : []);
-        const queueableSongs = songs.filter(song => !isSongMarkedUnavailable(song));
+        const queueableSongs = songs.filter(song => !isSongUnavailable(song));
         const { nextQueue, affectedSongs, changed } = applyQueueAddBehavior({
             queue: baseQueue,
             songs: queueableSongs,
@@ -260,7 +261,7 @@ export function usePlaybackQueueController({
     }, [activePlaybackContext, currentSong, mainPlaybackSnapshotRef, persistLastPlaybackCache, playQueue, queueAddBehavior, setPlayQueue, setStatusMsg, t]);
 
     const addOnlineSongToQueue = useCallback((song: SongResult) => {
-        if (isSongMarkedUnavailable(song)) {
+        if (isSongUnavailable(song)) {
             return;
         }
 
@@ -287,7 +288,7 @@ export function usePlaybackQueueController({
         if (isLocalPlaybackSong(queuedSong) || isNavidromePlaybackSong(queuedSong)) {
             return true;
         }
-        return !isSongMarkedUnavailable(queuedSong) && canPlayOnlineMusicSong(queuedSong);
+        return !isSongUnavailable(queuedSong) && canPlayOnlineMusicSong(queuedSong);
     }, []);
 
     // Keeps unavailable provider entries in the queue so they can be retried after configuration changes.
@@ -336,7 +337,7 @@ export function usePlaybackQueueController({
                 return [replacementSong];
             }
 
-            if (isSongMarkedUnavailable(queuedSong)) {
+            if (isSongUnavailable(queuedSong)) {
                 return [];
             }
 
@@ -365,9 +366,9 @@ export function usePlaybackQueueController({
         setIsLyricsLoading(false);
         setStatusMsg({ type: 'info', text: t('status.loadingSong') });
         try {
-            const replacement = await neteaseApi.getUnavailableSongReplacement(song);
+            const replacement = await getSongReplacement(song);
 
-            if (!replacement || !replacement.replacementSong || isSongMarkedUnavailable(replacement.replacementSong)) {
+            if (!replacement || !replacement.song || isSongUnavailable(replacement.song)) {
                 setStatusMsg({ type: 'error', text: t('status.songUnavailable') });
                 return true;
             }
@@ -375,9 +376,9 @@ export function usePlaybackQueueController({
             setStatusMsg(null);
             setPendingUnavailableReplacement({
                 originalSong: song,
-                replacementSong: replacement.replacementSong,
-                replacementSongId: replacement.replacementSongId,
-                typeDesc: replacement.typeDesc,
+                replacementSong: replacement.song,
+                replacementSongId: replacement.song.id,
+                typeDesc: replacement.label,
                 queue,
                 isFmCall,
                 options,
@@ -469,7 +470,7 @@ export function usePlaybackQueueController({
         const skipCount = options.unavailableSkipCount ?? 0;
         playbackAutoSkipCountRef.current = skipCount;
 
-        if (!isLocal && !isNavidrome && isSongMarkedUnavailable(song)) {
+        if (!isLocal && !isNavidrome && isSongUnavailable(song)) {
             if (await handleMarkedUnavailableSong(song, queueContext, isFmCall, options)) {
                 return;
             }
@@ -778,7 +779,7 @@ export function usePlaybackQueueController({
     }, [localLibraryCatalog, localSongs, searchDeps, t]);
 
     const handleSearchResultPlay = useCallback((track: UnifiedSong) => {
-        if (!isSongMarkedUnavailable(track)) {
+        if (!isSongUnavailable(track)) {
             handleQueueAddAndPlay(track);
         }
     }, [handleQueueAddAndPlay]);
@@ -792,7 +793,7 @@ export function usePlaybackQueueController({
         setPendingUnavailableReplacement(null);
 
         try {
-            if (!replacementSong || replacementSong.id !== replacementSongId || isSongMarkedUnavailable(replacementSong)) {
+            if (!replacementSong || String(replacementSong.id) !== String(replacementSongId) || isSongUnavailable(replacementSong)) {
                 setStatusMsg({ type: 'error', text: t('status.songUnavailable') });
                 return;
             }
@@ -1072,7 +1073,7 @@ export function usePlaybackQueueController({
         for (const songId of songIds) {
             const detail = await neteaseApi.getSongDetail(songId);
             const song = (detail?.songs || [])[0] as SongResult | undefined;
-            if (song && !isSongMarkedUnavailable(song)) {
+            if (song && !isSongUnavailable(song)) {
                 songs.push(song);
             }
         }

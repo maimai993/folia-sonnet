@@ -1,6 +1,6 @@
 import type { LocalSong, UnifiedSong } from '../../../types';
 import type { NavidromeSong } from '../../../types/navidrome';
-import { isSongMarkedUnavailable } from '../../../services/netease';
+import { isSongUnavailable } from '../../../services/onlineMusic/songAvailability';
 import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
 
 // src/components/app/search/searchTrackActions.ts
@@ -17,7 +17,7 @@ export const dispatchSearchTrackAction = (
     track: UnifiedSong,
     deps: SearchTrackSourceDeps,
 ): boolean => {
-    if (isSongMarkedUnavailable(track)) {
+    if (isSongUnavailable(track)) {
         return false;
     }
 

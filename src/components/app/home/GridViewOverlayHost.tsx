@@ -256,7 +256,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
 
         const source = selectedCollection.source;
         const albumName = album?.name || '';
-        const albumCoverUrl = album?.coverImgUrl || album?.coverUrl || album?.picUrl;
+        const albumCoverUrl = album?.coverUrl || album?.picUrl;
         if (source === 'online') {
             let resolvedAlbumId = albumId;
             if (track) {
@@ -279,6 +279,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                 }
             }
             handlePushCollection({
+                ...(album && typeof album === 'object' ? album : {}),
                 source: 'online',
                 providerId: selectedCollection.providerId,
                 id: resolvedAlbumId,

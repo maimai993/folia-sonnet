@@ -6,7 +6,12 @@ import { SubsonicSong } from '../../../types/navidrome';
 import { isBlob } from '../../../utils/blobGuards';
 import { sortLocalFolderSongs } from '../../../utils/localSongSorting';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
-import type { OnlineProviderId } from '../../../types/onlineMusic';
+import type {
+    OnlineProviderId,
+    ProviderArtistSummary,
+    ProviderCollection,
+    ProviderUser,
+} from '../../../types/onlineMusic';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/localLibraryIndex';
 
 // src/components/app/home/gridViewCollectionAdapters.ts
@@ -25,6 +30,18 @@ export interface BaseGridViewCollectionDescriptor {
     picUrl?: string;
     description?: string;
     trackCount?: number;
+    albumCount?: number;
+    isOwned?: boolean;
+    artists?: ProviderArtistSummary[];
+    aliases?: string[];
+    publishedAt?: number;
+    publisher?: string;
+    playCount?: number;
+    updatedAt?: number;
+    tracksUpdatedAt?: number;
+    isLiked?: boolean;
+    providerData?: ProviderCollection['providerData'];
+    creator?: ProviderUser;
     albumArtist?: string;
     albumYear?: number;
     albumGenre?: string;
@@ -67,27 +84,73 @@ const getDisplayName = (name: React.ReactNode) => (
         : ''
 );
 
+// Returns the provider-normalized artist label used by collection overview cards.
+export const getProviderCollectionArtistLabel = (
+    collection: Pick<ProviderCollection, 'artists' | 'creator'> | null | undefined,
+): string => {
+    const artists = collection?.artists
+        ?.map(artist => artist.name.trim())
+        .filter(Boolean)
+        .join(', ');
+    return artists || collection?.creator?.nickname || '';
+};
+
+export const createNeteaseProviderUser = (user: {
+    userId: number;
+    nickname: string;
+    avatarUrl: string;
+    backgroundUrl?: string;
+    vipType?: number;
+} | null | undefined): ProviderUser | null => user ? ({
+    id: user.userId,
+    nickname: user.nickname,
+    avatarUrl: user.avatarUrl,
+    backgroundUrl: user.backgroundUrl,
+    vipType: user.vipType,
+}) : null;
+
 export const createNeteaseGridViewCollection = (collection: any): GridViewCollectionDescriptor => ({
-    ...collection,
-    source: 'online',
-    providerId: 'netease',
-    albumArtist: collection.type === 'album'
-        ? collection.raw?.artists?.map((artist: { name?: string }) => artist.name).filter(Boolean).join(' / ') || collection.description
-        : collection.albumArtist,
-    albumPublishTime: collection.type === 'album' ? collection.raw?.publishTime : collection.albumPublishTime,
-    albumCompany: collection.type === 'album' ? collection.raw?.company : collection.albumCompany,
+    ...createOnlineGridViewCollection(collection, 'netease'),
+    artists: collection.type === 'album'
+        ? collection.raw?.artists?.map((artist: { id?: string | number; name?: string }) => ({
+            id: artist.id ?? 0,
+            name: artist.name || '',
+        })).filter((artist: ProviderArtistSummary) => artist.name)
+        : collection.artists,
+    publishedAt: collection.type === 'album'
+        ? collection.raw?.publishTime
+        : collection.publishedAt,
+    publisher: collection.type === 'album' ? collection.raw?.company : collection.publisher,
 });
 
 export const createOnlineGridViewCollection = (
     collection: any,
     providerId: OnlineProviderId,
-): OnlineGridViewCollectionDescriptor => ({
-    ...collection,
-    source: 'online',
-    providerId,
-    coverUrl: collection.coverUrl || collection.coverImgUrl || collection.picUrl,
-    raw: collection.raw || collection,
-});
+): OnlineGridViewCollectionDescriptor => {
+    const creator = collection.creator;
+    return {
+        ...collection,
+        source: 'online',
+        providerId,
+        coverUrl: collection.coverUrl || collection.coverImgUrl || collection.picUrl,
+        trackCount: collection.trackCount ?? collection.size,
+        albumCount: collection.albumCount,
+        isOwned: collection.isOwned ?? collection.providerData?.owned,
+        artists: collection.artists,
+        aliases: collection.aliases,
+        publishedAt: collection.publishedAt ?? collection.albumPublishTime,
+        publisher: collection.publisher ?? collection.albumCompany,
+        playCount: collection.playCount,
+        updatedAt: collection.updatedAt ?? collection.updateTime,
+        tracksUpdatedAt: collection.tracksUpdatedAt ?? collection.trackUpdateTime,
+        isLiked: collection.isLiked ?? collection.specialType === 'liked',
+        creator: creator ? {
+            ...creator,
+            id: creator.id ?? creator.userId ?? 0,
+        } : undefined,
+        raw: collection.raw || collection,
+    };
+};
 
 export const createLocalGridViewCollection = (group: LocalLibraryGroup): LocalGridViewCollectionDescriptor => ({
     source: 'local',
@@ -128,6 +191,7 @@ export const createNavidromeGridViewCollection = (
     albumYear: item.albumYear,
     albumGenre: item.albumGenre,
     albumDuration: item.albumDuration,
+    publishedAt: item.albumYear ? new Date(item.albumYear, 0, 1).getTime() : undefined,
     editable: Boolean((item as { editable?: boolean }).editable),
 });
 

@@ -115,7 +115,7 @@ export const applyLocalLibraryEntityDisplay = <T extends SongResult>(
 export const applyLocalSongCoverDisplay = <T extends SongResult>(song: T, coverUrl: string): T => ({
     ...song,
     al: song.al ? { ...song.al, picUrl: coverUrl } : { id: 0, name: song.album?.name || '', picUrl: coverUrl },
-    album: song.album ? { ...song.album, picUrl: coverUrl } : { id: 0, name: '', picUrl: coverUrl },
+    album: song.album ? { ...song.album, coverUrl, picUrl: coverUrl } : { id: 0, name: '', coverUrl, picUrl: coverUrl },
 });
 
 export const getLocalSongId = (localSong: LocalSong): number => {
@@ -166,7 +166,7 @@ export function buildUnifiedLocalSong({
         id: getLocalSongId(localSong),
         name: displayTitle,
         artists: displayArtists,
-        album: displayAlbum ? { id: 0, name: displayAlbum } : { id: 0, name: '' },
+        album: displayAlbum ? { id: 0, name: displayAlbum, coverUrl: coverUrl || undefined } : { id: 0, name: '' },
         duration: localSong.duration,
         isPureMusic: useMatchedLyrics ? localSong.matchedIsPureMusic : false,
         ar: displayArtists,
@@ -190,7 +190,10 @@ export function buildUnifiedLocalSong({
     }
 
     if (coverUrl) {
-        if (unifiedSong.album) unifiedSong.album.picUrl = coverUrl;
+        if (unifiedSong.album) {
+            unifiedSong.album.coverUrl = coverUrl;
+            unifiedSong.album.picUrl = coverUrl;
+        }
         if (unifiedSong.al) unifiedSong.al.picUrl = coverUrl;
     }
 
@@ -243,6 +246,7 @@ export function buildUnifiedNavidromeSong(
     const displayAlbum = navidromeSong.album || (navidromeSong.al ? {
         id: navidromeSong.al.id,
         name: navidromeSong.al.name,
+        coverUrl: navidromeSong.al.picUrl,
         picUrl: navidromeSong.al.picUrl
     } : { id: 0, name: '' });
     const displayAl = options?.coverUrl
@@ -272,7 +276,12 @@ export function buildNavidromeQueue(queue: NavidromeSong[], currentSong?: SongRe
         id: song.id,
         name: song.name,
         artists: song.artists || song.ar || [],
-        album: song.album || (song.al ? { id: song.al.id, name: song.al.name, picUrl: song.al.picUrl } : { id: 0, name: '' }),
+        album: song.album || (song.al ? {
+            id: song.al.id,
+            name: song.al.name,
+            coverUrl: song.al.picUrl,
+            picUrl: song.al.picUrl,
+        } : { id: 0, name: '' }),
         duration: song.duration || song.dt || 0,
         isPureMusic: song.lyricsSource === 'online' ? song.matchedIsPureMusic : false,
         ar: song.ar || [],

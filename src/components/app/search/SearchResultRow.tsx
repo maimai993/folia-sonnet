@@ -5,7 +5,7 @@ import type { UnifiedSong } from '../../../types';
 import type { MediaId } from '../../../types/onlineMusic';
 import { formatSongName } from '../../../utils/songNameFormatter';
 import { getSizedCoverUrl } from '../../../utils/coverUrl';
-import { getSongUnavailableTagText, isSongMarkedUnavailable } from '../../../services/netease';
+import { getSongUnavailableLabel, isSongUnavailable } from '../../../services/onlineMusic/songAvailability';
 import { canResolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
 
 // src/components/app/search/SearchResultRow.tsx
@@ -37,7 +37,8 @@ const SearchResultRow: React.FC<SearchResultRowProps> = ({
     onOpenAlbum,
 }) => {
     const { t } = useTranslation();
-    const isUnavailable = isSongMarkedUnavailable(track);
+    const isUnavailable = isSongUnavailable(track);
+    const unavailableLabel = getSongUnavailableLabel(track, t('status.songUnavailableTag'));
     const coverUrl = getSizedCoverUrl(track.al?.picUrl || track.album?.picUrl, 120);
     const artists = track.ar?.length ? track.ar : track.artists;
     const album = track.al || track.album;
@@ -90,7 +91,7 @@ const SearchResultRow: React.FC<SearchResultRowProps> = ({
                         </button>
                         {isUnavailable && (
                             <span className="shrink-0 rounded-full border border-current/10 px-2 py-0.5 text-[10px] opacity-60">
-                                {getSongUnavailableTagText(track, t('status.songUnavailableTag'))}
+                    {unavailableLabel}
                             </span>
                         )}
                     </div>

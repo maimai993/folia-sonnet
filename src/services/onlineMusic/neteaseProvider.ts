@@ -5,10 +5,13 @@ import type {
     OnlineMusicProvider,
     ProviderCollection,
     ProviderLyricsResult,
+    ProviderSongAvailability,
+    ProviderSongReplacement,
+    ProviderArtistSummary,
     ProviderUser,
 } from '../../types/onlineMusic';
 import { processNeteaseLyrics } from '../../utils/lyrics/neteaseProcessing';
-import { neteaseApi } from '../netease';
+import { isSongMarkedUnavailable, neteaseApi } from '../netease';
 import { writeProviderSessionValue } from './providerStorage';
 
 // src/services/onlineMusic/neteaseProvider.ts
@@ -33,16 +36,55 @@ const normalizeUser = (raw: any): ProviderUser => ({
     vipType: raw?.vipType,
 });
 
-const normalizeCollection = (raw: any, type = 'playlist'): ProviderCollection => ({
-    providerId: 'netease',
-    id: raw?.id ?? 0,
-    name: raw?.name || '',
-    type: raw?.specialType === 'cloud' ? 'cloud' : type,
-    coverUrl: raw?.coverImgUrl || raw?.picUrl,
-    description: raw?.description,
-    trackCount: raw?.trackCount ?? raw?.size,
-    creator: raw?.creator ? normalizeUser(raw.creator) : undefined,
-});
+const normalizeArtistSummary = (raw: any): ProviderArtistSummary | null => {
+    const name = String(raw?.name || '');
+    if (!name) return null;
+    return {
+        id: raw?.id ?? 0,
+        name,
+    };
+};
+
+const normalizeStringList = (value: unknown): string[] => (
+    Array.isArray(value)
+        ? value.map(item => String(item || '')).filter(Boolean)
+        : []
+);
+
+const normalizeCollection = (raw: any, type = 'playlist'): ProviderCollection => {
+    const artists = (Array.isArray(raw?.artists)
+        ? raw.artists
+        : raw?.artist
+            ? [raw.artist]
+            : [])
+        .map(normalizeArtistSummary)
+        .filter((artist: ProviderArtistSummary | null): artist is ProviderArtistSummary => Boolean(artist));
+    const aliases = normalizeStringList(raw?.alias || raw?.aliases);
+    const publishedAt = Number(raw?.publishTime);
+    const playCount = Number(raw?.playCount);
+    const updatedAt = Number(raw?.updateTime);
+    const tracksUpdatedAt = Number(raw?.trackUpdateTime);
+
+    return {
+        providerId: 'netease',
+        id: raw?.id ?? 0,
+        name: raw?.name || '',
+        type: raw?.specialType === 'cloud' ? 'cloud' : type,
+        coverUrl: raw?.coverImgUrl || raw?.picUrl,
+        description: raw?.description || raw?.briefDesc || raw?.briefDescription || raw?.copywriter,
+        trackCount: raw?.trackCount ?? raw?.size,
+        ...(type === 'artist' && Number(raw?.albumSize) > 0 ? { albumCount: Number(raw.albumSize) } : {}),
+        creator: raw?.creator ? normalizeUser(raw.creator) : undefined,
+        ...(artists.length > 0 ? { artists } : {}),
+        ...(aliases.length > 0 ? { aliases } : {}),
+        ...(Number.isFinite(publishedAt) && publishedAt > 0 ? { publishedAt } : {}),
+        ...(typeof raw?.company === 'string' && raw.company ? { publisher: raw.company } : {}),
+        ...(Number.isFinite(playCount) && playCount >= 0 ? { playCount } : {}),
+        ...(Number.isFinite(updatedAt) && updatedAt > 0 ? { updatedAt } : {}),
+        ...(Number.isFinite(tracksUpdatedAt) && tracksUpdatedAt > 0 ? { tracksUpdatedAt } : {}),
+        ...(raw?.specialType === 'liked' || raw?.isLiked === true ? { isLiked: true } : {}),
+    };
+};
 
 const extractCloudLyricText = (response: any): string => (
     response?.lrc || response?.data?.lrc || response?.lyric || response?.data?.lyric || ''
@@ -141,6 +183,23 @@ export const neteaseProvider: OnlineMusicProvider = {
                 quality,
             };
         },
+        getAvailability(song): ProviderSongAvailability {
+            if (!isSongMarkedUnavailable(song)) return { state: 'playable' };
+            return {
+                state: 'unavailable',
+                label: typeof song.noCopyrightRcmd?.typeDesc === 'string'
+                    ? song.noCopyrightRcmd.typeDesc
+                    : undefined,
+            };
+        },
+        async getReplacement(song): Promise<ProviderSongReplacement | null> {
+            const replacement = await neteaseApi.getUnavailableSongReplacement(song);
+            if (!replacement?.replacementSong) return null;
+            return {
+                song: normalizeNeteaseSong(replacement.replacementSong),
+                label: replacement.typeDesc,
+            };
+        },
     },
     lyrics: { getLyrics },
     auth: {
@@ -202,6 +261,24 @@ export const neteaseProvider: OnlineMusicProvider = {
             });
             return { items, total: response?.count, hasMore: Boolean(response?.hasMore), nextOffset: offset + items.length };
         },
+        async getAlbumDetail(id, existingCollection) {
+            const response = await neteaseApi.getAlbum(toNeteaseId(id));
+            const rawAlbum = response?.album;
+            if (!rawAlbum) return existingCollection || null;
+
+            const normalized = normalizeCollection({ ...rawAlbum, id: rawAlbum.id ?? id }, 'album');
+            return {
+                ...normalized,
+                name: normalized.name || existingCollection?.name || '',
+                coverUrl: normalized.coverUrl || existingCollection?.coverUrl,
+                description: normalized.description || existingCollection?.description,
+                trackCount: normalized.trackCount ?? existingCollection?.trackCount,
+                artists: normalized.artists?.length ? normalized.artists : existingCollection?.artists,
+                aliases: normalized.aliases?.length ? normalized.aliases : existingCollection?.aliases,
+                publishedAt: normalized.publishedAt ?? existingCollection?.publishedAt,
+                publisher: normalized.publisher || existingCollection?.publisher,
+            };
+        },
         async getAlbumTracks(id) {
             const response = await neteaseApi.getAlbum(toNeteaseId(id));
             const items = (response?.songs || []).map(normalizeNeteaseSong);
@@ -224,11 +301,14 @@ export const neteaseProvider: OnlineMusicProvider = {
             return {
                 ...normalizeCollection(artist, 'artist'),
                 coverUrl: artist.cover || artist.picUrl,
+                trackCount: Number(artist.musicSize || 0),
+                albumCount: Number(artist.albumSize || 0),
                 providerData: {
                     musicSize: Number(artist.musicSize || 0),
                     albumSize: Number(artist.albumSize || 0),
                     transNames: Array.isArray(artist.transNames) ? artist.transNames.map(String) : [],
                 },
+                aliases: normalizeStringList(artist.transNames),
             };
         },
         async getSubscriptionStatus(type, id) {

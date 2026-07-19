@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     createLocalGridViewCollection,
     createNavidromeGridViewCollection,
+    getProviderCollectionArtistLabel,
     refreshLocalGridViewCollection,
     resolveLocalAlbumArtistDisplay,
     resolveLocalGridViewCoverSource,
@@ -29,6 +30,20 @@ const buildLocalSong = (id: string, title: string): LocalSong => ({
 });
 
 describe('gridViewCollectionAdapters', () => {
+    it('uses provider-normalized artists for collection card descriptions', () => {
+        expect(getProviderCollectionArtistLabel({
+            artists: [
+                { id: 1, name: 'Artist A' },
+                { id: 2, name: 'Artist B' },
+            ],
+            creator: { id: 3, nickname: 'Playlist Owner' },
+        })).toBe('Artist A, Artist B');
+        expect(getProviderCollectionArtistLabel({
+            artists: [],
+            creator: { id: 3, nickname: 'Playlist Owner' },
+        })).toBe('Playlist Owner');
+    });
+
     it('creates a local descriptor without embedding song objects', () => {
         const songs = [
             buildLocalSong('song-a', 'A'),

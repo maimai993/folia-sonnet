@@ -831,6 +831,7 @@ export interface Artist {
 export interface Album {
   id: MediaId;
   name: string;
+  coverUrl?: string;
   picUrl?: string;
   entityId?: string;
   catalogRef?: ProviderCatalogRef;
@@ -865,6 +866,8 @@ export interface SongResult {
   album: Album;
   duration: number; // milliseconds usually from API
   isPureMusic?: boolean;
+  aliases?: string[];
+  translatedNames?: string[];
   t?: 0 | 1 | 2;
   sourceType?: 'netease' | 'cloud';
   sourceRef?: PlaybackSourceRef;
