@@ -838,8 +838,24 @@ export default function App() {
         netease: refreshUserData,
         kugou: refreshKugouLibrary,
     }), [refreshKugouLibrary, refreshUserData]);
-    const prepareOnlineProviderSwitch = useCallback(async (_currentProviderId: OnlineProviderId, nextProviderId: OnlineProviderId) => {
-        if (!window.confirm(t('home.confirmOnlineProviderSwitch', { provider: omni.getProviderLabel(nextProviderId) }))) return false;
+    const [providerSwitchPending, setProviderSwitchPending] = useState<{
+        nextProviderId: OnlineProviderId;
+        resolve: (confirmed: boolean) => void;
+    } | null>(null);
+
+    const prepareOnlineProviderSwitch = useCallback((_currentProviderId: OnlineProviderId, nextProviderId: OnlineProviderId): Promise<boolean> => {
+        return new Promise<boolean>((resolve) => {
+            setProviderSwitchPending(prev => {
+                prev?.resolve(false);
+                return { nextProviderId, resolve };
+            });
+        });
+    }, []);
+
+    const handleConfirmProviderSwitch = useCallback(() => {
+        if (!providerSwitchPending) return;
+        const { nextProviderId, resolve } = providerSwitchPending;
+        setProviderSwitchPending(null);
 
         const audio = audioRef.current;
         audio?.pause();
@@ -856,8 +872,28 @@ export default function App() {
         clearPrefetchRuntime();
         useSearchNavigationStore.getState().resetRuntime(nextProviderId);
         useCollectionNavigationStore.getState().clear();
-        return true;
-    }, [audioRef, audioSrc, setLyrics, t]);
+
+        resolve(true);
+    }, [audioRef, audioSrc, providerSwitchPending, setLyrics]);
+
+    const handleCancelProviderSwitch = useCallback(() => {
+        if (!providerSwitchPending) return;
+        providerSwitchPending.resolve(false);
+        setProviderSwitchPending(null);
+    }, [providerSwitchPending]);
+
+    const providerSwitchConfirmDialog = useMemo(() => {
+        if (!providerSwitchPending) return null;
+        const providerLabel = omni.getProviderLabel(providerSwitchPending.nextProviderId);
+        return {
+            isOpen: true,
+            isDaylight,
+            title: t('home.switchOnlineProvider'),
+            description: t('home.confirmOnlineProviderSwitch', { provider: providerLabel }),
+            onConfirm: handleConfirmProviderSwitch,
+            onClose: handleCancelProviderSwitch,
+        };
+    }, [handleCancelProviderSwitch, handleConfirmProviderSwitch, isDaylight, providerSwitchPending, t]);
     const onlineProviderPlatform = useOnlineProviderPlatform(onlineProviderRefreshers, prepareOnlineProviderSwitch);
     const refreshActiveProviderPlaylists = useCallback(
         () => omni.refreshProviderPlaylists(onlineProviderPlatform.activeProviderId),
@@ -2709,6 +2745,7 @@ export default function App() {
         setPendingUnavailableReplacement,
         handleUnavailableReplacementConfirm,
         settingsDialog,
+        providerSwitchConfirmDialog,
     }), [
         currentSong,
         handleLyricMatchComplete,
@@ -2718,6 +2755,7 @@ export default function App() {
         isDaylight,
         localSongs,
         pendingUnavailableReplacement,
+        providerSwitchConfirmDialog,
         setPendingUnavailableReplacement,
         setShowLyricMatchModal,
         setShowNaviLyricMatchModal,
