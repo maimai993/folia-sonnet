@@ -9,7 +9,7 @@ export const KUGOU_OPERATIONS = [
     'audio', 'krm_audio', 'song_url', 'search_lyric', 'lyric', 'playlist_track_all',
     'playlist_detail',
     'album_detail', 'album_songs', 'artist_detail', 'artist_albums', 'artist_audios',
-    'everyday_recommend', 'everyday_history', 'personal_fm', 'playlist_add',
+    'everyday_recommend', 'everyday_history', 'personal_fm', 'top_card_youth', 'playlist_add',
     'playlist_del', 'playlist_tracks_add', 'playlist_tracks_del',
 ] as const;
 
@@ -42,6 +42,7 @@ const ENDPOINTS: Record<KugouOperation, string> = {
     everyday_recommend: '/everyday/recommend',
     everyday_history: '/everyday/history',
     personal_fm: '/personal/fm',
+    top_card_youth: '/top/card/youth',
     playlist_add: '/playlist/add',
     playlist_del: '/playlist/del',
     playlist_tracks_add: '/playlist/tracks/add',

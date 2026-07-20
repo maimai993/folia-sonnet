@@ -6,6 +6,7 @@ import type {
     OnlineMusicProvider,
     ProviderCatalogRef,
     ProviderCollection,
+    ProviderHistoryEntry,
     ProviderPage,
     ProviderUser,
 } from '../../types/onlineMusic';
@@ -42,16 +43,41 @@ const audioUrlOf = (raw: unknown): string | undefined => {
 };
 
 const dataOf = (raw: any): any => raw?.data ?? raw?.body?.data ?? raw?.body ?? raw;
+
+// Unwrap the nested envelopes used by the different KuGou recommendation endpoints.
 const listOf = (raw: any): any[] => {
-    const data = dataOf(raw);
-    const list = data?.lists ?? data?.list ?? data?.info ?? data?.songs ?? data?.audios ?? data?.albums ?? data;
-    return Array.isArray(list) ? list : [];
+    const queue: any[] = [dataOf(raw)];
+    const listKeys = [
+        'lists', 'list', 'info', 'songs', 'song_list', 'songlist', 'songList', 'audios', 'albums', 'items', 'records',
+        'special', 'specials', 'special_list', 'playlist', 'playlists',
+        'recommend_list', 'recommendations', 'data', 'result', 'response',
+    ];
+    const visited = new Set<object>();
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (Array.isArray(current)) return current;
+        if (!current || typeof current !== 'object' || visited.has(current)) continue;
+        visited.add(current);
+
+        for (const key of listKeys) {
+            const value = current[key];
+            if (Array.isArray(value)) return value;
+            if (value && typeof value === 'object') queue.push(value);
+        }
+    }
+
+    return [];
 };
 
 const coverOf = (raw: any): string | undefined => {
-    const value = valueOf(raw, 'Image', 'image', 'img', 'pic', 'picUrl', 'cover', 'coverUrl', 'sizable_cover', 'sizable_avatar')
-        ?? valueOf(raw?.album_info, 'cover', 'sizable_cover')
-        ?? valueOf(raw?.trans_param, 'union_cover');
+    // Youth card songs carry the album art in album_info/audio_info; user_pic is only the uploader avatar.
+    const value = valueOf(raw?.album_info, 'sizable_cover', 'cover')
+        ?? valueOf(raw?.albumInfo, 'sizable_cover', 'cover')
+        ?? valueOf(raw?.audio_info?.trans_param, 'union_cover')
+        ?? valueOf(raw?.audioInfo?.transParam, 'union_cover')
+        ?? valueOf(raw?.trans_param, 'union_cover')
+        ?? valueOf(raw, 'Image', 'image', 'img', 'pic', 'picUrl', 'cover', 'coverUrl', 'sizable_cover', 'sizable_avatar');
     if (!value) return undefined;
     const cover = String(value).trim().replace('{size}', '400');
     if (/^\d{8,}\.(?:jpe?g|png|webp)$/i.test(cover)) {
@@ -66,6 +92,43 @@ const hashOf = (raw: any): string => String(
     ?? valueOf(raw?.audio_info, 'hash', 'hash_128')
     ?? '',
 ).toUpperCase();
+
+const isKugouSongPayload = (raw: any): boolean => Boolean(
+    valueOf(raw, 'FileHash', 'fileHash', 'hash', 'Hash', 'songid', 'songId', 'SongName', 'songname', 'songName', 'ori_audio_name', 'audio_name')
+    ?? valueOf(raw?.base, 'songid', 'songId', 'songname', 'songName')
+);
+
+// Finds song arrays even when KuGou wraps recommendations in several data/card envelopes.
+const songListOf = (raw: any): any[] => {
+    const queue: any[] = [dataOf(raw)];
+    const listKeys = [
+        'song_list', 'songlist', 'songList', 'songs', 'audios', 'list', 'lists', 'info', 'items',
+        'records', 'song_info', 'songInfo', 'data', 'result', 'response',
+    ];
+    const visited = new Set<object>();
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (Array.isArray(current)) {
+            if (current.some(isKugouSongPayload)) return current;
+            current.forEach(item => {
+                if (item && typeof item === 'object') queue.push(item);
+            });
+            continue;
+        }
+        if (!current || typeof current !== 'object' || visited.has(current)) continue;
+        visited.add(current);
+        if (isKugouSongPayload(current)) return [current];
+
+        for (const key of listKeys) {
+            const value = current[key];
+            if (Array.isArray(value)) queue.push(value);
+            else if (value && typeof value === 'object') queue.push(value);
+        }
+    }
+
+    return [];
+};
 
 const jsonData = (entries: Array<[string, unknown]>): Record<string, JsonValue> => Object.fromEntries(
     entries.filter((entry): entry is [string, JsonValue] => (
@@ -160,7 +223,7 @@ export const normalizeKugouSong = (raw: unknown): UnifiedSong => {
         ?? ''
     );
     const durationValue = Number(
-        valueOf(item, 'Duration', 'duration', 'timelen', 'timeLength', 'timelength')
+        valueOf(item, 'Duration', 'duration', 'timelen', 'timeLength', 'timelength', 'time_length')
         ?? valueOf(audioInfo, 'duration', 'timelength', 'duration_128')
         ?? 0,
     );
@@ -180,10 +243,12 @@ export const normalizeKugouSong = (raw: unknown): UnifiedSong => {
     const rawTitle = String(valueOf(
         item,
         'SongName', 'songname', 'songName',
+        'ori_audio_name', 'oriAudioName',
         'OriSongName', 'ori_song_name', 'oriSongName',
         'FileName', 'filename', 'fileName',
         'name', 'audio_name',
-    ) ?? valueOf(base, 'SongName', 'songname', 'songName', 'audio_name', 'audioName') ?? '');
+    ) ?? valueOf(audioInfo, 'ori_audio_name', 'oriAudioName', 'audio_name', 'audioName')
+        ?? valueOf(base, 'SongName', 'songname', 'songName', 'audio_name', 'audioName') ?? '');
     const { title, artists } = normalizeKugouTitleAndArtists(rawTitle, rawArtists);
 
     const album = {
@@ -201,6 +266,82 @@ export const normalizeKugouSong = (raw: unknown): UnifiedSong => {
         durationMs: duration,
         kgHash: hash,
         sourceRef: { kind: 'online', providerId: 'kugou', mediaId: hash, providerData },
+    };
+};
+
+const KUGOU_RECOMMENDATION_PAGE_SIZE = 30;
+const KUGOU_RECOMMENDATION_CARDS = [
+    { id: 3006, name: 'VIP 专属推荐' },
+    { id: 3001, name: '私人专属好歌' },
+    { id: 3004, name: '小众宝藏佳作' },
+    { id: 3014, name: '喜欢这首歌的 TA 也喜欢' },
+    { id: 3101, name: '概念 er 新推' },
+    { id: 3005, name: '潮流尝鲜' },
+] as const;
+
+const kugouRecommendationTrackCache = new Map<number, UnifiedSong[]>();
+
+// Loads one KuGou recommendation card and keeps its normalized songs for the virtual playlist.
+const getKugouRecommendationCard = async (cardId: number, pagesize = KUGOU_RECOMMENDATION_PAGE_SIZE) => {
+    const response = await requestKugou('top_card_youth', { card_id: cardId, pagesize });
+    const songs = songListOf(response)
+        .map(normalizeKugouSong)
+        .filter(song => song.id);
+    kugouRecommendationTrackCache.set(cardId, songs);
+    return { response, songs };
+};
+
+const getKugouRecommendationCardId = (collection: ProviderCollection | undefined, id?: MediaId): number | undefined => {
+    const providerCardId = collection?.providerData?.cardId;
+    const cardId = Number(providerCardId ?? String(id ?? '').match(/^kugou-card-(\d+)$/u)?.[1]);
+    return Number.isInteger(cardId) && cardId > 0 ? cardId : undefined;
+};
+
+const isKugouVirtualRecommendation = (collection: ProviderCollection | undefined): boolean => (
+    collection?.providerId === 'kugou' && collection.providerData?.virtualRecommendation === true
+);
+
+// Builds the Omni playlist object used by the radio surface for song-card recommendations.
+const createKugouRecommendationCollection = (
+    card: (typeof KUGOU_RECOMMENDATION_CARDS)[number],
+    response: any,
+    songs: UnifiedSong[],
+): ProviderCollection => {
+    const data = dataOf(response);
+    const name = String(valueOf(data, 'card_name', 'cardName', 'module_name', 'moduleName', 'title', 'name') || card.name);
+    const description = valueOf(data, 'description', 'desc', 'subtitle', 'sub_title');
+
+    return {
+        providerId: 'kugou',
+        id: `kugou-card-${card.id}`,
+        name,
+        type: 'playlist',
+        ...(songs[0]?.album.coverUrl ? { coverUrl: songs[0].album.coverUrl } : {}),
+        ...(description ? { description: String(description) } : {}),
+        trackCount: songs.length,
+        providerData: {
+            virtualRecommendation: true,
+            cardId: card.id,
+        },
+    };
+};
+
+const getKugouRecommendationPage = async (
+    collection: ProviderCollection | undefined,
+    limit: number,
+    offset: number,
+): Promise<ProviderPage<UnifiedSong> | null> => {
+    const cardId = getKugouRecommendationCardId(collection);
+    if (!isKugouVirtualRecommendation(collection) || cardId === undefined) return null;
+
+    const songs = kugouRecommendationTrackCache.get(cardId)
+        ?? (await getKugouRecommendationCard(cardId)).songs;
+    const items = songs.slice(offset, offset + limit);
+    return {
+        items,
+        total: songs.length,
+        hasMore: offset + items.length < songs.length,
+        nextOffset: offset + items.length,
     };
 };
 
@@ -303,7 +444,7 @@ const normalizeUser = (raw: any): ProviderUser => {
 
 const normalizeCollection = (raw: any, type = 'playlist', owned = false): ProviderCollection => {
     const id = type === 'playlist'
-        ? valueOf(raw, 'global_collection_id')
+        ? valueOf(raw, 'global_collection_id', 'globalCollectionId', 'specialid', 'specialId', 'id')
         : type === 'album'
             ? valueOf(raw, 'album_id', 'AlbumID', 'albumId', 'musiclib_id', 'musicLibId', 'list_create_listid')
             : type === 'artist'
@@ -410,6 +551,66 @@ const qualityFallbacks = (quality: AudioQualityPreference): AudioQualityPreferen
 
 const getId = (value: MediaId | ProviderCollection | SongResult) => typeof value === 'object' ? value.id : value;
 
+const getKugouUserId = (): string => String(readProviderSessionValue('kugou', 'userid') || '');
+
+// Finds KuGou's built-in "我喜欢" playlist, which is the provider's song-like collection.
+const getKugouLikedPlaylist = async (userId: MediaId): Promise<any | null> => {
+    const response = await requestKugou('user_playlist', {
+        userid: String(userId),
+        page: 1,
+        pagesize: 100,
+    });
+    return listOf(response).find(item => {
+        if (getKugouUserCollectionType(item) !== 'playlist') return false;
+        const name = String(valueOf(item, 'name', 'listname') || '').trim();
+        return name === '我喜欢' || name === '我喜欢的音乐' || valueOf(item, 'listid', 'list_id') === 2;
+    }) ?? null;
+};
+
+const getKugouTrackAddData = (track: MediaId | SongResult): string => {
+    if (typeof track !== 'object') return `|${String(track).toUpperCase()}|0|0`;
+    const sourceData = track.sourceRef?.kind === 'online' ? track.sourceRef.providerData : undefined;
+    return [
+        track.name,
+        String(sourceData?.hash || track.kgHash || track.id).toUpperCase(),
+        String(sourceData?.albumId || track.album?.id || 0),
+        String(sourceData?.mixSongId || 0),
+    ].join('|');
+};
+
+const getKugouTrackFileId = (track: MediaId | SongResult): string => {
+    if (typeof track !== 'object') return String(track);
+    const sourceData = track.sourceRef?.kind === 'online' ? track.sourceRef.providerData : undefined;
+    return String(sourceData?.fileId || track.id);
+};
+
+const kugouHistoryNameByDate = new Map<string, string>();
+
+const normalizeKugouHistoryEntries = (response: any): ProviderHistoryEntry[] => {
+    const entries = listOf(response).map((item: any) => ({
+        id: String(valueOf(item, 'date', 'history_name', 'id') || ''),
+        label: String(valueOf(item, 'history_name', 'date', 'name') || ''),
+        providerData: jsonData([['date', valueOf(item, 'date')], ['historyName', valueOf(item, 'history_name')]]),
+    }));
+
+    entries.forEach(entry => {
+        const date = String(entry.providerData?.date || entry.id);
+        const historyName = String(entry.providerData?.historyName || entry.label);
+        if (date && historyName) kugouHistoryNameByDate.set(date, historyName);
+    });
+    return entries;
+};
+
+// Resolves the provider's internal history name when the Omni caller only has a display date.
+const getKugouHistoryName = async (date: string): Promise<string> => {
+    const cached = kugouHistoryNameByDate.get(date);
+    if (cached) return cached;
+
+    const response = await requestKugou('everyday_history', { mode: 'list' });
+    normalizeKugouHistoryEntries(response);
+    return kugouHistoryNameByDate.get(date) || date;
+};
+
 export const kugouProvider: OnlineMusicProvider = {
     id: 'kugou',
     displayName: 'KuGou Music',
@@ -419,7 +620,7 @@ export const kugouProvider: OnlineMusicProvider = {
         search: true, playback: true, lyrics: true, auth: true, userLibrary: true,
         playlists: true, albums: true, artists: true, recommendations: true, mutations: true,
         wordByWordLyrics: true, userCloud: true, historyRecommendations: true,
-        playlistSubscription: true, playlistTrackMutations: true, likes: false, userAlbums: true,
+        playlistSubscription: true, playlistTrackMutations: true, likes: true, userAlbums: true,
     },
     normalizeSong: normalizeKugouSong,
     normalizeUser,
@@ -595,11 +796,28 @@ export const kugouProvider: OnlineMusicProvider = {
                 .filter(collection => collection.id !== '');
             return userCollectionPageOf(items, response, limit, offset, rawItems.length);
         },
+        async getLikedSongIds(userId) {
+            const playlist = await getKugouLikedPlaylist(userId);
+            const globalCollectionId = valueOf(playlist, 'global_collection_id', 'globalCollectionId');
+            if (!globalCollectionId) return [];
+            const response = await requestKugou('playlist_track_all', {
+                id: String(globalCollectionId),
+                page: 1,
+                pagesize: 1000,
+            });
+            return listOf(response)
+                .map(normalizeKugouSong)
+                .map(song => song.id)
+                .filter(Boolean);
+        },
     },
     catalog: {
         canResolveSongCatalogRefs: song => Boolean(getKugouCatalogLookupId(song)),
         resolveSongCatalogRefs: resolveKugouSongCatalogRefs,
-        async getPlaylistTracks(id, limit, offset) {
+        async getPlaylistTracks(id, limit, offset, collection) {
+            const recommendationPage = await getKugouRecommendationPage(collection, limit, offset);
+            if (recommendationPage) return recommendationPage;
+
             const response = await requestKugou('playlist_track_all', { id: String(id), pagesize: limit, page: Math.floor(offset / limit) + 1 });
             return pageOf(listOf(response).map(normalizeKugouSong), response, limit, offset);
         },
@@ -612,6 +830,8 @@ export const kugouProvider: OnlineMusicProvider = {
             return pageOf(items, response, limit, offset);
         },
         async getPlaylistDetail(id, existingCollection) {
+            if (existingCollection && isKugouVirtualRecommendation(existingCollection)) return existingCollection;
+
             const response = await requestKugou('playlist_detail', { ids: String(id) });
             const data = dataOf(response);
             const rawPlaylist = listOf(response)[0] ?? data?.info?.[0] ?? data;
@@ -693,57 +913,115 @@ export const kugouProvider: OnlineMusicProvider = {
             const data = dataOf(response);
             return data ? normalizeCollection(data, 'artist') : null;
         },
+        async getSubscriptionStatus(type, id, collection) {
+            if (isKugouVirtualRecommendation(collection)) return false;
+
+            const userId = getKugouUserId();
+            if (!userId) return false;
+            const response = await requestKugou('user_playlist', { userid: userId, page: 1, pagesize: 100 });
+            return listOf(response).some(item => {
+                if (getKugouUserCollectionType(item) !== type) return false;
+                if (type === 'playlist') {
+                    return String(valueOf(item, 'global_collection_id', 'globalCollectionId') || '') === String(id)
+                        || String(valueOf(item, 'listid', 'list_id') || '') === String(id);
+                }
+                return String(valueOf(item, 'musiclib_id', 'musicLibId', 'album_id', 'albumId', 'list_create_listid') || '') === String(id);
+            });
+        },
     },
     recommendations: {
         async getDailySongs() {
             const response = await requestKugou('everyday_recommend');
-            return listOf(response).map(normalizeKugouSong);
+            return songListOf(response).map(normalizeKugouSong).filter(song => song.id);
         },
         async getPersonalFm() {
             const response = await requestKugou('personal_fm');
-            return listOf(response).map(normalizeKugouSong);
+            return songListOf(response).map(normalizeKugouSong).filter(song => song.id);
+        },
+        async getRecommendedCollections(limit) {
+            const pagesize = Math.min(Math.max(Math.floor(limit) || KUGOU_RECOMMENDATION_PAGE_SIZE, 1), KUGOU_RECOMMENDATION_PAGE_SIZE);
+            const collections = await Promise.all(KUGOU_RECOMMENDATION_CARDS.map(async card => {
+                try {
+                    const { response, songs } = await getKugouRecommendationCard(card.id, pagesize);
+                    return songs.length > 0 ? createKugouRecommendationCollection(card, response, songs) : null;
+                } catch (error) {
+                    console.warn('[KugouProvider] recommendation-card:failed', {
+                        cardId: card.id,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                    return null;
+                }
+            }));
+            return collections.filter((collection): collection is ProviderCollection => Boolean(collection));
         },
         async getHistoryEntries() {
-            const response = await requestKugou('everyday_history');
-            return listOf(response).map((item: any) => ({
-                id: String(valueOf(item, 'date', 'history_name', 'id') || ''),
-                label: String(valueOf(item, 'history_name', 'date', 'name') || ''),
-                providerData: jsonData([['date', valueOf(item, 'date')], ['historyName', valueOf(item, 'history_name')]]),
-            }));
+            const response = await requestKugou('everyday_history', { mode: 'list' });
+            kugouHistoryNameByDate.clear();
+            return normalizeKugouHistoryEntries(response);
+        },
+        async getHistoryDates() {
+            const response = await requestKugou('everyday_history', { mode: 'list' });
+            kugouHistoryNameByDate.clear();
+            return normalizeKugouHistoryEntries(response)
+                .map(entry => String(entry.providerData?.date || entry.id))
+                .filter(Boolean);
         },
         async getHistorySongs(entry) {
             const id = typeof entry === 'string' ? entry : entry.id;
-            const response = await requestKugou('everyday_history', { date: id, history_name: typeof entry === 'string' ? entry : String(entry.providerData?.historyName || entry.label) });
-            return listOf(response).map(normalizeKugouSong);
+            const historyName = typeof entry === 'string'
+                ? await getKugouHistoryName(id)
+                : String(entry.providerData?.historyName || entry.label || id);
+            const response = await requestKugou('everyday_history', {
+                mode: 'song',
+                date: id,
+                history_name: historyName,
+            });
+            return songListOf(response).map(normalizeKugouSong).filter(song => song.id);
+        },
+        async dislikeSong(id) {
+            const response = await requestKugou('personal_fm', {
+                action: 'garbage',
+                hash: String(id),
+                songid: String(id),
+            });
+            const replacement = songListOf(response).map(normalizeKugouSong).find(song => song.id);
+            return replacement ? { replacement } : {};
         },
     },
     mutations: {
+        async likeSong(song, liked) {
+            const userId = getKugouUserId();
+            if (!userId) return;
+            const playlist = await getKugouLikedPlaylist(userId);
+            const listId = valueOf(playlist, 'listid', 'list_id');
+            if (listId === undefined || listId === null) return;
+            if (liked) {
+                await requestKugou('playlist_tracks_add', {
+                    listid: String(listId),
+                    data: getKugouTrackAddData(song),
+                });
+                return;
+            }
+            await requestKugou('playlist_tracks_del', {
+                listid: String(listId),
+                fileids: getKugouTrackFileId(song),
+            });
+        },
         async updatePlaylistTracks(operation, playlist, tracks) {
             const collection = typeof playlist === 'object' ? playlist : null;
             const listId = String(collection?.providerData?.listId || getId(playlist));
             if (operation === 'add') {
-                const data = tracks.map(track => {
-                    if (typeof track !== 'object') return `|${String(track).toUpperCase()}|0|0`;
-                    const sourceData = track.sourceRef?.kind === 'online' ? track.sourceRef.providerData : undefined;
-                    return [
-                        track.name,
-                        String(sourceData?.hash || track.kgHash || track.id).toUpperCase(),
-                        String(sourceData?.albumId || track.album?.id || 0),
-                        String(sourceData?.mixSongId || 0),
-                    ].join('|');
-                }).join(',');
+                const data = tracks.map(getKugouTrackAddData).join(',');
                 await requestKugou('playlist_tracks_add', { listid: listId, data });
                 return;
             }
-            const fileids = tracks.map(track => {
-                if (typeof track !== 'object') return String(track);
-                const sourceData = track.sourceRef?.kind === 'online' ? track.sourceRef.providerData : undefined;
-                return String(sourceData?.fileId || track.id);
-            }).join(',');
+            const fileids = tracks.map(getKugouTrackFileId).join(',');
             await requestKugou('playlist_tracks_del', { listid: listId, fileids });
         },
         async subscribePlaylist(playlist, subscribed) {
             const collection = typeof playlist === 'object' ? playlist : null;
+            if (isKugouVirtualRecommendation(collection || undefined)) return;
+
             const providerData = collection?.providerData;
             const listId = String(providerData?.listId || getId(playlist));
             if (!subscribed) {

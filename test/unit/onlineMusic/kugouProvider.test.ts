@@ -607,4 +607,261 @@ describe('kugouProvider', () => {
             artists: [{ id: '789658', name: 'HOYO-MiX' }],
         });
     });
+
+    it('maps the actual personal FM song_list response into Omni songs', async () => {
+        requestMock.mockResolvedValue({
+            data: {
+                song_list: [{
+                    hash: 'D67DAA030838F1F0E9DC11CDCDB4DB5A',
+                    songname: '灰かぶり (灰姑娘)',
+                    singerinfo: [{ id: '9469705', name: '十明' }],
+                    album_id: '75475669',
+                    time_length: 220,
+                    trans_param: {
+                        union_cover: 'http://imge.kugou.com/stdmusic/{size}/20230705/20230705082802161869.jpg',
+                    },
+                }],
+            },
+        });
+
+        const [song] = await kugouProvider.recommendations?.getPersonalFm?.() || [];
+
+        expect(song).toMatchObject({
+            id: 'D67DAA030838F1F0E9DC11CDCDB4DB5A',
+            name: '灰かぶり (灰姑娘)',
+            artists: [{ id: '9469705', name: '十明' }],
+            album: {
+                id: '75475669',
+                coverUrl: 'https://imge.kugou.com/stdmusic/400/20230705/20230705082802161869.jpg',
+            },
+            durationMs: 220_000,
+        });
+    });
+
+    it('reads liked song ids from KuGou\'s built-in liked playlist', async () => {
+        requestMock
+            .mockResolvedValueOnce({
+                data: {
+                    info: [{
+                        type: 0,
+                        source: 1,
+                        listid: 2,
+                        name: '我喜欢',
+                        global_collection_id: 'collection_3_user_2_0',
+                    }],
+                },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    songs: [
+                        { hash: 'abc123', name: 'Song 1' },
+                        { hash: 'def456', name: 'Song 2' },
+                    ],
+                },
+            });
+
+        const ids = await kugouProvider.library?.getLikedSongIds?.('user');
+
+        expect(ids).toEqual(['ABC123', 'DEF456']);
+        expect(requestMock).toHaveBeenNthCalledWith(1, 'user_playlist', {
+            userid: 'user', page: 1, pagesize: 100,
+        });
+        expect(requestMock).toHaveBeenNthCalledWith(2, 'playlist_track_all', {
+            id: 'collection_3_user_2_0', page: 1, pagesize: 1000,
+        });
+    });
+
+    it('uses the liked playlist mutation endpoints for online song favorites', async () => {
+        requestMock
+            .mockResolvedValueOnce({
+                data: {
+                    info: [{
+                        type: 0,
+                        source: 1,
+                        listid: 2,
+                        name: '我喜欢',
+                        global_collection_id: 'collection_3_user_2_0',
+                    }],
+                },
+            })
+            .mockResolvedValueOnce({});
+
+        const song = normalizeKugouSong({
+            hash: 'abc123',
+            name: 'Song 1',
+            album_id: 12,
+            mixsongid: 34,
+        });
+        await kugouProvider.mutations?.likeSong?.(song, true);
+
+        expect(requestMock).toHaveBeenNthCalledWith(2, 'playlist_tracks_add', {
+            listid: '2',
+            data: 'Song 1|ABC123|12|34',
+        });
+
+        requestMock.mockReset();
+        requestMock
+            .mockResolvedValueOnce({
+                data: {
+                    info: [{
+                        type: 0,
+                        source: 1,
+                        listid: 2,
+                        name: '我喜欢',
+                        global_collection_id: 'collection_3_user_2_0',
+                    }],
+                },
+            })
+            .mockResolvedValueOnce({});
+        await kugouProvider.mutations?.likeSong?.(song, false);
+
+        expect(requestMock).toHaveBeenNthCalledWith(2, 'playlist_tracks_del', {
+            listid: '2', fileids: 'ABC123',
+        });
+    });
+
+    it('builds virtual playlists from KuGou song recommendation cards', async () => {
+        requestMock.mockImplementation(async (operation: string, params: Record<string, unknown>) => {
+            if (operation === 'top_card_youth') {
+                return {
+                    data: {
+                        song_list: [{ hash: `card-${params.card_id}`, name: `Card ${params.card_id}` }],
+                    },
+                };
+            }
+            if (operation === 'everyday_history') {
+                if (params.mode === 'song') {
+                    return { data: { songs: [{ hash: 'history-song', name: 'History song' }] } };
+                }
+                return {
+                    data: {
+                        info: [
+                            { date: '20260720', history_name: 'RT_history_20260720' },
+                            { date: '20260719', history_name: 'RT_history_20260719' },
+                        ],
+                    },
+                };
+            }
+            if (operation === 'personal_fm') {
+                return { data: { song_list: [{ hash: 'def456', name: 'Next FM song' }] } };
+            }
+            return {};
+        });
+
+        const recommended = await kugouProvider.recommendations?.getRecommendedCollections?.(35);
+        const entries = await kugouProvider.recommendations?.getHistoryEntries?.();
+        const dates = await kugouProvider.recommendations?.getHistoryDates?.();
+        const historySongs = await kugouProvider.recommendations?.getHistorySongs?.('20260719');
+        const dislikeResult = await kugouProvider.recommendations?.dislikeSong?.('ABC123');
+        const firstCollection = recommended?.[0];
+        const firstTracks = firstCollection
+            ? await kugouProvider.catalog?.getPlaylistTracks?.(firstCollection.id, 30, 0, firstCollection)
+            : undefined;
+
+        expect(recommended).toHaveLength(6);
+        expect(firstCollection).toMatchObject({
+            id: 'kugou-card-3006',
+            type: 'playlist',
+            name: 'VIP 专属推荐',
+            trackCount: 1,
+            providerData: { virtualRecommendation: true, cardId: 3006 },
+        });
+        expect(firstTracks?.items[0].id).toBe('CARD-3006');
+        expect(entries?.[0]).toMatchObject({ id: '20260720', label: 'RT_history_20260720' });
+        expect(dates).toEqual(['20260720', '20260719']);
+        expect(historySongs?.[0].id).toBe('HISTORY-SONG');
+        expect(dislikeResult?.replacement?.id).toBe('DEF456');
+        expect(requestMock.mock.calls.filter(([operation]) => operation === 'top_card_youth')).toHaveLength(6);
+        expect(requestMock).toHaveBeenCalledWith('everyday_history', { mode: 'list' });
+        expect(requestMock).toHaveBeenCalledWith('everyday_history', {
+            mode: 'song', date: '20260719', history_name: 'RT_history_20260719',
+        });
+        expect(requestMock).toHaveBeenCalledWith('personal_fm', {
+            action: 'garbage', hash: 'ABC123', songid: 'ABC123',
+        });
+    });
+
+    it('maps youth card songs to album metadata instead of uploader metadata', async () => {
+        const youthSong = {
+            hash: 'feec2c114d55b5f49db3960273f237cc',
+            authors: [{ author_id: '5883556', author_name: '玩音符的依舟' }],
+            audio_info: {
+                hash: '9041AAF5B06122B0DD126A93DA5AF5C0',
+                timelength: '206654',
+                trans_param: {
+                    union_cover: 'http://imge.kugou.com/stdmusic/{size}/20240621/20240621175302755566.jpg',
+                },
+            },
+            nick_name: '非酋一个-等狼尊复刻',
+            user_pic: 'http://imge.kugou.com/kugouicon/165/20260617/20260617220520557679.jpg',
+            ori_audio_name: '晴天的乐章',
+            album_info: {
+                album_name: '晴天的乐章（芙宁娜原创曲）',
+                album_id: '96920808',
+                sizable_cover: 'http://imge.kugou.com/stdmusic/{size}/20240621/20240621175302755566.jpg',
+            },
+        };
+        requestMock.mockImplementation(async (operation: string) => operation === 'top_card_youth'
+            ? { data: { song_list: [youthSong] } }
+            : {});
+
+        const recommended = await kugouProvider.recommendations?.getRecommendedCollections?.(30);
+        const collection = recommended?.find(item => item.id === 'kugou-card-3004');
+        const tracks = collection
+            ? await kugouProvider.catalog?.getPlaylistTracks?.(collection.id, 30, 0, collection)
+            : undefined;
+
+        expect(collection).toMatchObject({
+            name: '小众宝藏佳作',
+            coverUrl: 'https://imge.kugou.com/stdmusic/400/20240621/20240621175302755566.jpg',
+            trackCount: 1,
+        });
+        expect(tracks?.items[0]).toMatchObject({
+            name: '晴天的乐章',
+            artists: [{ id: '5883556', name: '玩音符的依舟' }],
+            album: {
+                id: '96920808',
+                name: '晴天的乐章（芙宁娜原创曲）',
+                coverUrl: 'https://imge.kugou.com/stdmusic/400/20240621/20240621175302755566.jpg',
+            },
+            durationMs: 206654,
+        });
+        expect(collection?.name).not.toBe(youthSong.nick_name);
+        expect(collection?.coverUrl).not.toBe(youthSong.user_pic);
+    });
+
+    it('unwraps nested recommendation response envelopes', async () => {
+        requestMock
+            .mockResolvedValueOnce({ data: { data: { songs: [{ hash: 'abc123', name: 'Daily song' }] } } })
+            .mockResolvedValueOnce({ body: { data: { result: { info: [{ hash: 'def456', name: 'FM song' }] } } } })
+            .mockResolvedValue({ data: { result: { song_list: [{ hash: 'card123', name: 'Nested card song' }] } } });
+
+        const dailySongs = await kugouProvider.recommendations?.getDailySongs?.();
+        const personalFm = await kugouProvider.recommendations?.getPersonalFm?.();
+        const recommended = await kugouProvider.recommendations?.getRecommendedCollections?.(35);
+
+        expect(dailySongs?.[0].id).toBe('ABC123');
+        expect(personalFm?.[0].id).toBe('DEF456');
+        expect(recommended).toHaveLength(6);
+        expect(recommended?.[0]).toMatchObject({ id: 'kugou-card-3006', type: 'playlist', trackCount: 1 });
+    });
+
+    it('derives playlist subscription status from the mixed user-library response', async () => {
+        requestMock.mockResolvedValue({
+            data: {
+                info: [{
+                    type: 1,
+                    source: 1,
+                    listid: 12,
+                    global_collection_id: 'collection_3_user_12_0',
+                }],
+            },
+        });
+
+        await expect(kugouProvider.catalog?.getSubscriptionStatus?.('playlist', 'collection_3_user_12_0'))
+            .resolves.toBe(true);
+        expect(requestMock).toHaveBeenCalledWith('user_playlist', {
+            userid: 'web-session-user', page: 1, pagesize: 100,
+        });
+    });
 });

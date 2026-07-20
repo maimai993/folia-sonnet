@@ -30,6 +30,7 @@ const OPERATION_MODULES = {
   everyday_recommend: ['everyday_recommend'],
   everyday_history: ['everyday_history'],
   personal_fm: ['personal_fm'],
+  top_card_youth: ['top_card_youth'],
   playlist_add: ['playlist_add'],
   playlist_del: ['playlist_del'],
   playlist_tracks_add: ['playlist_tracks_add'],

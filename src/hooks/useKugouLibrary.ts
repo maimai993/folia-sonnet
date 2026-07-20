@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { omni } from '../services/onlineMusic/omni';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
-import type { ProviderCollection } from '../types/onlineMusic';
+import type { MediaId, ProviderCollection } from '../types/onlineMusic';
 
 // src/hooks/useKugouLibrary.ts
 
@@ -29,13 +29,24 @@ export const useKugouLibrary = () => {
                 return false;
             }
 
-            updateAccount('kugou', { status: 'authenticated', user, collections: [], error: undefined });
+            updateAccount('kugou', { status: 'authenticated', user, collections: [], likedSongIds: [], error: undefined });
             console.info('[KugouLibrary] refresh:authenticated', {
                 hasAvatar: Boolean(user.avatarUrl),
             });
 
             const collections: ProviderCollection[] = [];
+            let likedSongIds: MediaId[] = [];
             try {
+                if (omni.getProviderCapabilities('kugou').likes) {
+                    try {
+                        likedSongIds = await omni.getProviderLikedSongIds('kugou', user.id);
+                    } catch (error) {
+                        console.warn('[KugouLibrary] liked-songs:error', {
+                            name: error instanceof Error ? error.name : 'Error',
+                            message: error instanceof Error ? error.message : String(error),
+                        });
+                    }
+                }
                 if (omni.getProviderCapabilities('kugou').userLibrary) {
                     let offset = 0;
                     let hasMore = true;
@@ -57,8 +68,11 @@ export const useKugouLibrary = () => {
                         coverUrl: user.avatarUrl,
                     });
                 }
-                updateAccount('kugou', { status: 'authenticated', user, collections, error: undefined });
-                console.info('[KugouLibrary] refresh:complete', { collectionCount: collections.length });
+                updateAccount('kugou', { status: 'authenticated', user, collections, likedSongIds, error: undefined });
+                console.info('[KugouLibrary] refresh:complete', {
+                    collectionCount: collections.length,
+                    likedSongCount: likedSongIds.length,
+                });
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'kugou_library_failed';
                 updateAccount('kugou', { status: 'authenticated', user, collections: [], error: message });

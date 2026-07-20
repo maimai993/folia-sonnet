@@ -72,6 +72,21 @@ describe('KuGou Web transport', () => {
         expect(requestUrl.searchParams.get('album_audio_id')).toBe('42');
     });
 
+    it('routes concept recommendation cards to the youth card endpoint', async () => {
+        vi.stubGlobal('window', undefined);
+        storage.set('online_provider:kugou:dfid', 'device');
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({ status: 1, data: { song_list: [] } }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
+
+        await requestKugou('top_card_youth', { card_id: 3006, pagesize: 30 });
+
+        const requestUrl = new URL(fetchMock.mock.calls[0][0]);
+        expect(requestUrl.pathname).toBe('/top/card/youth');
+        expect(requestUrl.searchParams.get('card_id')).toBe('3006');
+        expect(requestUrl.searchParams.get('pagesize')).toBe('30');
+    });
+
     it('does not fall back to Web after an Electron IPC failure', async () => {
         const ipcError = new Error('ipc failed');
         const kugouRequest = vi.fn().mockRejectedValue(ipcError);
