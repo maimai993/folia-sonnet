@@ -1,6 +1,7 @@
 import type { SongResult, UnifiedSong } from '../../types';
 import type {
     AudioQualityPreference,
+    ChorusRange,
     JsonValue,
     MediaId,
     OnlineMusicProvider,
@@ -563,6 +564,38 @@ const getId = (value: MediaId | ProviderCollection | SongResult) => typeof value
 
 const getKugouUserId = (): string => String(readProviderSessionValue('kugou', 'userid') || '');
 
+const kugouChorusRangesCache = new Map<string, Promise<ChorusRange[]>>();
+
+// Converts KuGou's millisecond climax payload into the shared second-based range model.
+const parseKugouChorusRanges = (response: unknown): ChorusRange[] => {
+    const ranges = (response as any)?.data;
+    if (!Array.isArray(ranges)) return [];
+
+    return ranges
+        .map((range: any) => ({
+            startTime: Number(range?.start_time) / 1000,
+            endTime: Number(range?.end_time) / 1000,
+        }))
+        .filter(range => Number.isFinite(range.startTime) && Number.isFinite(range.endTime) && range.endTime > range.startTime);
+};
+
+const getKugouChorusRanges = async (songId: MediaId): Promise<ChorusRange[]> => {
+    const hash = String(songId).trim().toUpperCase();
+    if (!hash) return [];
+
+    const cached = kugouChorusRangesCache.get(hash);
+    if (cached) return cached;
+
+    const request = requestKugou('song_climax', { hash })
+        .then(parseKugouChorusRanges)
+        .catch(error => {
+            console.warn(`[KugouProvider] Failed to fetch chorus ranges for song ${hash}:`, error);
+            return [];
+        });
+    kugouChorusRangesCache.set(hash, request);
+    return request;
+};
+
 const getKugouUserPlaylistItems = async (userId: MediaId): Promise<any[]> => {
     const response = await requestKugou('user_playlist', {
         userid: String(userId),
@@ -761,9 +794,16 @@ export const kugouProvider: OnlineMusicProvider = {
     },
     lyrics: {
         async getLyrics(song) {
-            const lyrics = await fetchKugouLyrics(song);
-            return { lyrics, isPureMusic: Boolean(lyrics?.isPureMusic), wordByWordText: lyrics ? 'krc' : null };
+            const chorusRanges = await getKugouChorusRanges(song.kgHash ?? song.id);
+            const lyrics = await fetchKugouLyrics(song, { chorusRanges });
+            return {
+                lyrics,
+                isPureMusic: Boolean(lyrics?.isPureMusic),
+                wordByWordText: lyrics ? 'krc' : null,
+                chorusRanges,
+            };
         },
+        getChorusRanges: getKugouChorusRanges,
     },
     auth: {
         async getLoginStatus() {

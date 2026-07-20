@@ -70,6 +70,7 @@ Omni 提供的能力按业务模块分类整理如下：
 - `canPlaySong(song)`: 校验歌曲是否具备播放支持。
 - `getAudioSource(song, quality)`: 获取歌曲指定音质（如标准、HQ、SQ、Hi-Res）的播放音频 URL 与格式。
 - `getLyrics(song, context)`: 获取歌曲的歌词信息（支持逐字/逐句时序歌词）。
+- `getChorusRanges(song)`: 通过歌曲所属 Provider 获取标准化的副歌时间区间。
 - `getSongAvailability(song)`: 查询歌曲可用性状态（如版权限制、付费提示）。
 - `getSongReplacement(song)`: 尝试查找不可用歌曲的同曲目替代版本。
 

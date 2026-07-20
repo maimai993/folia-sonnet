@@ -87,6 +87,23 @@ describe('KuGou Web transport', () => {
         expect(requestUrl.searchParams.get('pagesize')).toBe('30');
     });
 
+    it('routes song climax lookups to the documented endpoint', async () => {
+        vi.stubGlobal('window', undefined);
+        storage.set('online_provider:kugou:dfid', 'device');
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({
+            status: 1,
+            data: [{ start_time: '84170', end_time: '142170' }],
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
+
+        await expect(requestKugou('song_climax', { hash: 'HASH' })).resolves.toMatchObject({ status: 1 });
+
+        const requestUrl = new URL(fetchMock.mock.calls[0][0]);
+        expect(requestUrl.pathname).toBe('/song/climax');
+        expect(requestUrl.searchParams.get('hash')).toBe('HASH');
+    });
+
     it('does not fall back to Web after an Electron IPC failure', async () => {
         const ipcError = new Error('ipc failed');
         const kugouRequest = vi.fn().mockRejectedValue(ipcError);

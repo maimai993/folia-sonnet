@@ -55,6 +55,25 @@ describe('kugouProvider', () => {
         expect(song.album.catalogRef).toEqual({ providerId: 'kugou', kind: 'album', id: 9 });
     });
 
+    it('normalizes KuGou climax ranges from millisecond strings', async () => {
+        requestMock.mockResolvedValue({
+            status: 1,
+            error_code: 0,
+            data: [{
+                start_time: '84170',
+                end_time: '142170',
+                timelength: '58000',
+                hash: 'CLIMAX-HASH',
+            }],
+        });
+
+        await expect(kugouProvider.lyrics?.getChorusRanges?.('climax-hash')).resolves.toEqual([{
+            startTime: 84.17,
+            endTime: 142.17,
+        }]);
+        expect(requestMock).toHaveBeenCalledWith('song_climax', { hash: 'CLIMAX-HASH' });
+    });
+
     it('reads canonical song metadata without normalizing it a second time', () => {
         const song = normalizeKugouSong({
             FileHash: 'ab12cd',

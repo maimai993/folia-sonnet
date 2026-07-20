@@ -1,4 +1,5 @@
 import { getOnlineMusicProvider } from '../../services/onlineMusic/providerRegistry';
+import { omni } from '../../services/onlineMusic/omni';
 import type { AmllDbPlatform, LyricData, LyricProviderSource, SongResult } from '../../types';
 import { calculateMatchScore, calculateMatchScoreDetails } from './matchScore';
 import { searchQQLyrics, fetchQQLyrics } from './providers/qqLyricProvider';
@@ -154,7 +155,7 @@ export async function fetchLyricsForMatchSource(
     }
     const lyrics = await fetchAmllDbLyrics(platform, selectedResult.id);
     const chorusRanges = platform === 'ncm' && !hasChorusMarkers(lyrics)
-        ? await getOnlineMusicProvider('netease')?.lyrics?.getChorusRanges?.(selectedResult.id) || []
+        ? await omni.getChorusRanges(selectedResult)
         : [];
 
     return {

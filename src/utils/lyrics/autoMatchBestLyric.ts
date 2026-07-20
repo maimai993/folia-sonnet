@@ -1,5 +1,6 @@
 import { LyricData, LyricProviderSource, SongResult } from '../../types';
 import { getOnlineMusicProvider } from '../../services/onlineMusic/providerRegistry';
+import { omni } from '../../services/onlineMusic/omni';
 import { applyNeteaseChorusByTime } from './chorusEffects';
 import type { NeteaseChorusRange } from './chorusEffects';
 import { searchQQLyrics, fetchQQLyrics } from './providers/qqLyricProvider';
@@ -22,9 +23,7 @@ const hasChorusMarkers = (lyrics: LyricData | null): boolean => (
     Boolean(lyrics?.lines.some(line => line.isChorus))
 );
 
-const getNeteaseChorusRanges = (songId: number | string) => (
-    getOnlineMusicProvider('netease')?.lyrics?.getChorusRanges?.(songId) || Promise.resolve([])
-);
+const getNeteaseChorusRanges = (song: SongResult) => omni.getChorusRanges(song);
 
 export interface AutoMatchBestLyricOptions {
     album?: string;
@@ -273,7 +272,7 @@ export async function autoMatchBestLyric(
             return null;
         }
         const chorusRanges = platform === 'ncm' && !hasChorusMarkers(lyrics)
-            ? (neteaseChorusRanges.length > 0 ? neteaseChorusRanges : await getNeteaseChorusRanges(song.id))
+            ? (neteaseChorusRanges.length > 0 ? neteaseChorusRanges : await getNeteaseChorusRanges(song))
             : [];
         const decoratedLyrics = chorusRanges.length > 0
             ? applyNeteaseChorusByTime(lyrics, chorusRanges)

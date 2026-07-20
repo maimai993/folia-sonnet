@@ -90,13 +90,18 @@ export interface ProviderSongReplacement {
     label?: string;
 }
 
+export interface ChorusRange {
+    startTime: number;
+    endTime: number;
+}
+
 export interface ProviderLyricsResult {
     lyrics: LyricData | null;
     mainText?: string | null;
     wordByWordText?: string | null;
     translationText?: string | null;
     isPureMusic: boolean;
-    chorusRanges?: Array<{ startTime: number; endTime: number }>;
+    chorusRanges?: ChorusRange[];
 }
 
 export interface ProviderAlbumSummary {
@@ -199,7 +204,7 @@ export interface OnlinePlaybackProvider {
 
 export interface OnlineLyricsProvider {
     getLyrics(song: SongResult, context?: { userId?: MediaId | null }): Promise<ProviderLyricsResult>;
-    getChorusRanges?(songId: MediaId): Promise<Array<{ startTime: number; endTime: number }>>;
+    getChorusRanges?(songId: MediaId): Promise<ChorusRange[]>;
 }
 
 export interface OnlineSongMetadataProvider {
@@ -291,6 +296,7 @@ export type OmniAudioSource = ProviderAudioSource;
 export type OmniSongAvailability = ProviderSongAvailability;
 export type OmniSongReplacement = ProviderSongReplacement;
 export type OmniLyricsResult = ProviderLyricsResult;
+export type OmniChorusRange = ChorusRange;
 export type OmniAlbum = ProviderAlbumSummary;
 export type OmniArtist = ProviderArtistSummary;
 export type OmniUser = ProviderUser;

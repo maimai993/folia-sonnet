@@ -54,6 +54,21 @@ describe('omni routing', () => {
         expect(activeSearch).toHaveBeenCalledWith('query', 10, 0);
     });
 
+    it('routes chorus range lookup through the song owner', async () => {
+        const getChorusRanges = vi.fn(async () => [{ startTime: 10, endTime: 20 }]);
+        registerOnlineMusicProvider({
+            ...provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            lyrics: {
+                getLyrics: async () => ({ lyrics: null, isPureMusic: false }),
+                getChorusRanges,
+            },
+        });
+
+        const target = song(providerId, 'chorus-song');
+        await expect(omni.getChorusRanges(target)).resolves.toEqual([{ startTime: 10, endTime: 20 }]);
+        expect(getChorusRanges).toHaveBeenCalledWith('chorus-song');
+    });
+
     it('rejects a late active-provider result after invalidation', async () => {
         let resolveSearch!: (value: { items: UnifiedSong[]; hasMore: false; nextOffset: number }) => void;
         registerOnlineMusicProvider(provider(providerId, {

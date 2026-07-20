@@ -18,6 +18,7 @@ const OPERATION_MODULES = {
   audio: ['audio'],
   krm_audio: ['krm_audio'],
   song_url: ['song_url'],
+  song_climax: ['song_climax'],
   search_lyric: ['search_lyric'],
   lyric: ['lyric'],
   playlist_track_all: ['playlist_track_all', 'playlist_track_all_new'],

@@ -6,7 +6,7 @@ import { readProviderSessionValue, removeProviderSessionValue, writeProviderSess
 export const KUGOU_OPERATIONS = [
     'register_dev', 'login_qr_key', 'login_qr_create', 'login_qr_check', 'logout',
     'user_detail', 'user_playlist', 'user_cloud', 'user_cloud_url', 'search',
-    'audio', 'krm_audio', 'song_url', 'search_lyric', 'lyric', 'playlist_track_all',
+    'audio', 'krm_audio', 'song_url', 'song_climax', 'search_lyric', 'lyric', 'playlist_track_all',
     'playlist_detail',
     'album_detail', 'album_songs', 'artist_detail', 'artist_albums', 'artist_audios',
     'everyday_recommend', 'everyday_history', 'personal_fm', 'top_card_youth', 'playlist_add',
@@ -30,6 +30,7 @@ const ENDPOINTS: Record<KugouOperation, string> = {
     audio: '/audio',
     krm_audio: '/krm/audio',
     song_url: '/song/url',
+    song_climax: '/song/climax',
     search_lyric: '/search/lyric',
     lyric: '/lyric',
     playlist_track_all: '/playlist/track/all',

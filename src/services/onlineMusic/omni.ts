@@ -3,6 +3,7 @@ import type {
     AudioQualityPreference,
     MediaId,
     OmniAudioSource,
+    OmniChorusRange,
     OmniCollection,
     OmniHistoryEntry,
     OmniLyricsResult,
@@ -307,6 +308,11 @@ export const omni = {
         const provider = providerForSong(song);
         if (!provider.lyrics) return unsupported(provider.id, 'lyrics');
         return provider.lyrics.getLyrics(song, context);
+    },
+
+    async getChorusRanges(song: SongResult): Promise<OmniChorusRange[]> {
+        const provider = providerForSong(song);
+        return provider.lyrics?.getChorusRanges?.(song.id) ?? [];
     },
 
     getSongAvailability(song: SongResult): OmniSongAvailability {
