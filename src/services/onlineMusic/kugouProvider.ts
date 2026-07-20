@@ -305,7 +305,7 @@ const normalizeCollection = (raw: any, type = 'playlist', owned = false): Provid
     const id = type === 'playlist'
         ? valueOf(raw, 'global_collection_id')
         : type === 'album'
-            ? valueOf(raw, 'album_id', 'AlbumID', 'albumId')
+            ? valueOf(raw, 'album_id', 'AlbumID', 'albumId', 'musiclib_id', 'musicLibId', 'list_create_listid')
             : type === 'artist'
                 ? valueOf(raw, 'author_id', 'authorId')
                 : undefined;
@@ -353,6 +353,42 @@ const normalizeCollection = (raw: any, type = 'playlist', owned = false): Provid
     };
 };
 
+type KugouUserCollectionType = 'playlist' | 'album';
+
+// Distinguishes KuGou's mixed user-library response before normalizing collection ids.
+const getKugouUserCollectionType = (raw: any): KugouUserCollectionType => {
+    const source = Number(valueOf(raw, 'source'));
+    return source === 2 || valueOf(raw, 'musiclib_id', 'musicLibId') !== undefined
+        ? 'album'
+        : 'playlist';
+};
+
+const isKugouOwnedPlaylist = (raw: any): boolean => {
+    const type = valueOf(raw, 'type');
+    return type === undefined || type === null || Number(type) === 0;
+};
+
+// Advances mixed user-library pagination with the raw response count, not the filtered item count.
+const userCollectionPageOf = <T>(
+    items: T[],
+    response: any,
+    limit: number,
+    offset: number,
+    rawItemCount: number,
+): ProviderPage<T> => {
+    const data = dataOf(response);
+    const totalCandidate = [data?.total, data?.list_count, data?.total_count, data?.count]
+        .map(value => Number(value))
+        .find(value => Number.isFinite(value) && value >= 0);
+    const nextOffset = offset + rawItemCount;
+    return {
+        items,
+        ...(totalCandidate !== undefined ? { total: totalCandidate } : {}),
+        hasMore: totalCandidate !== undefined ? nextOffset < totalCandidate : rawItemCount === limit,
+        nextOffset,
+    };
+};
+
 const pageOf = <T>(items: T[], raw: any, limit: number, offset: number): ProviderPage<T> => {
     const data = dataOf(raw);
     const total = Number(data?.total ?? raw?.total ?? data?.total_count ?? raw?.total_count ?? data?.count ?? items.length);
@@ -383,7 +419,7 @@ export const kugouProvider: OnlineMusicProvider = {
         search: true, playback: true, lyrics: true, auth: true, userLibrary: true,
         playlists: true, albums: true, artists: true, recommendations: true, mutations: true,
         wordByWordLyrics: true, userCloud: true, historyRecommendations: true,
-        playlistSubscription: true, playlistTrackMutations: true, likes: false, userAlbums: false,
+        playlistSubscription: true, playlistTrackMutations: true, likes: false, userAlbums: true,
     },
     normalizeSong: normalizeKugouSong,
     normalizeUser,
@@ -543,10 +579,21 @@ export const kugouProvider: OnlineMusicProvider = {
     library: {
         async getUserPlaylists(userId, limit, offset) {
             const response = await requestKugou('user_playlist', { userid: String(userId), page: Math.floor(offset / limit) + 1, pagesize: limit });
-            const items = listOf(response)
-                .map(item => normalizeCollection(item, 'playlist', true))
+            const rawItems = listOf(response);
+            const items = rawItems
+                .filter(item => getKugouUserCollectionType(item) === 'playlist')
+                .map(item => normalizeCollection(item, 'playlist', isKugouOwnedPlaylist(item)))
                 .filter(collection => collection.id !== '');
-            return pageOf(items, response, limit, offset);
+            return userCollectionPageOf(items, response, limit, offset, rawItems.length);
+        },
+        async getUserAlbums(userId, limit, offset) {
+            const response = await requestKugou('user_playlist', { userid: String(userId), page: Math.floor(offset / limit) + 1, pagesize: limit });
+            const rawItems = listOf(response);
+            const items = rawItems
+                .filter(item => getKugouUserCollectionType(item) === 'album')
+                .map(item => normalizeCollection(item, 'album'))
+                .filter(collection => collection.id !== '');
+            return userCollectionPageOf(items, response, limit, offset, rawItems.length);
         },
     },
     catalog: {

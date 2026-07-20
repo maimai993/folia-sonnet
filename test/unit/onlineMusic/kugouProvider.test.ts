@@ -321,6 +321,57 @@ describe('kugouProvider', () => {
         });
     });
 
+    it('separates mixed user playlists from favorite albums', async () => {
+        const response = {
+            data: {
+                info: [
+                    {
+                        type: 0,
+                        source: 1,
+                        global_collection_id: 'collection_3_user_1_0',
+                        listid: 1,
+                        name: 'Created playlist',
+                        count: 2,
+                    },
+                    {
+                        type: 1,
+                        source: 1,
+                        global_collection_id: 'collection_3_user_2_0',
+                        listid: 2,
+                        name: 'Favorite playlist',
+                        count: 3,
+                    },
+                    {
+                        type: 1,
+                        source: 2,
+                        global_collection_id: 'collection_3_user_3_0',
+                        musiclib_id: 987654,
+                        name: 'Favorite album',
+                        count: 12,
+                    },
+                ],
+                list_count: 3,
+                album_count: 1,
+            },
+        };
+        requestMock.mockResolvedValue(response);
+
+        const playlists = await kugouProvider.library?.getUserPlaylists?.('user', 50, 0);
+        const albums = await kugouProvider.library?.getUserAlbums?.('user', 50, 0);
+
+        expect(playlists?.items).toHaveLength(2);
+        expect(playlists?.items).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: 'collection_3_user_1_0', isOwned: true, type: 'playlist' }),
+            expect.objectContaining({ id: 'collection_3_user_2_0', type: 'playlist' }),
+        ]));
+        expect(playlists?.items.find(item => item.id === 'collection_3_user_2_0')).not.toHaveProperty('isOwned');
+        expect(albums?.items).toEqual([
+            expect.objectContaining({ id: 987654, name: 'Favorite album', type: 'album', trackCount: 12 }),
+        ]);
+        expect(requestMock).toHaveBeenNthCalledWith(1, 'user_playlist', { userid: 'user', page: 1, pagesize: 50 });
+        expect(requestMock).toHaveBeenNthCalledWith(2, 'user_playlist', { userid: 'user', page: 1, pagesize: 50 });
+    });
+
     it('hydrates playlist cover and introduction from playlist detail', async () => {
         requestMock.mockResolvedValue({
             data: {
