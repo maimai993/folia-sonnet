@@ -42,6 +42,10 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     toggleSubtitleTranslation: vi.fn(),
     subtitleOverlayBackground: false,
     toggleSubtitleOverlayBackground: vi.fn(),
+    alwaysShowPlayerBackButton: false,
+    toggleAlwaysShowPlayerBackButton: vi.fn(),
+    alwaysShowMainWindowTitlebar: false,
+    toggleAlwaysShowMainWindowTitlebar: vi.fn(),
     toggleDaylightMode: vi.fn(),
     voiceInputPauseEnabled: false,
     voiceInputPauseSupported: false,
@@ -175,6 +179,16 @@ describe('command palette registry', () => {
         expect(matchBottomSubtitleOverlay.command.id).toBe('settings-toggle-bottom-subtitle-overlay');
         matchBottomSubtitleOverlay.command.execute(matchBottomSubtitleOverlay.input, context);
         expect(context.toggleBottomSubtitleOverlay).toHaveBeenCalled();
+
+        const [playerBackButtonMatch] = getCommandPaletteMatches('始终显示返回按钮');
+        expect(playerBackButtonMatch.command.id).toBe('settings-toggle-player-back-button');
+        playerBackButtonMatch.command.execute(playerBackButtonMatch.input, context);
+        expect(context.toggleAlwaysShowPlayerBackButton).toHaveBeenCalled();
+
+        const [mainWindowTitlebarMatch] = getCommandPaletteMatches('始终显示标题栏');
+        expect(mainWindowTitlebarMatch.command.id).toBe('settings-toggle-main-window-titlebar');
+        mainWindowTitlebarMatch.command.execute(mainWindowTitlebarMatch.input, context);
+        expect(context.toggleAlwaysShowMainWindowTitlebar).toHaveBeenCalled();
 
         const [matchSubtitleTranslation] = getCommandPaletteMatches('字幕翻译');
         expect(matchSubtitleTranslation.command.id).toBe('settings-toggle-subtitle-translation');

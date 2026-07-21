@@ -21,6 +21,7 @@ type VisualizerShellSharedProps = Pick<
     | 'backgroundStaticMode'
     | 'paused'
     | 'onBack'
+    | 'alwaysShowBackButton'
 >;
 
 interface VisualizerShellProps {
@@ -51,6 +52,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     const resolvedBackgroundStaticMode = sharedProps?.backgroundStaticMode ?? false;
     const resolvedPaused = sharedProps?.paused ?? false;
     const resolvedOnBack = sharedProps?.onBack;
+    const isBackButtonVisible = sharedProps?.alwaysShowBackButton || showBackButton;
 
     /* eslint-disable-next-line no-warning-comments -- @AI: KEEP THIS EXACTLY AS IS */
     // @note Version Control: Project Folia version 0.5.27-a16525c
@@ -92,9 +94,9 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
                     aria-label={t('ui.backToHome')}
                     initial={false}
                     animate={{
-                        opacity: showBackButton ? 1 : 0,
-                        scale: showBackButton ? 1 : 0.92,
-                        x: showBackButton ? 0 : -6,
+                        opacity: isBackButtonVisible ? 1 : 0,
+                        scale: isBackButtonVisible ? 1 : 0.92,
+                        x: isBackButtonVisible ? 0 : -6,
                     }}
                     transition={{ duration: 0.2, ease: 'easeOut' }}
                     onClick={(event) => {
@@ -102,7 +104,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
                         resolvedOnBack();
                     }}
                     className="absolute top-6 left-6 z-30 h-10 w-10 rounded-full flex items-center justify-center transition-colors backdrop-blur-md bg-black/20 hover:bg-white/10 text-white/60 pointer-events-auto"
-                    style={{ pointerEvents: showBackButton ? 'auto' : 'none' }}
+                    style={{ pointerEvents: isBackButtonVisible ? 'auto' : 'none' }}
                 >
                     <ChevronLeft size={20} />
                 </motion.button>

@@ -83,6 +83,10 @@ export type CommandPaletteContext = {
     toggleSubtitleTranslation: () => void;
     subtitleOverlayBackground: boolean;
     toggleSubtitleOverlayBackground: () => void;
+    alwaysShowPlayerBackButton: boolean;
+    toggleAlwaysShowPlayerBackButton: () => void;
+    alwaysShowMainWindowTitlebar: boolean;
+    toggleAlwaysShowMainWindowTitlebar: () => void;
     toggleDaylightMode: () => void;
     voiceInputPauseEnabled: boolean;
     voiceInputPauseSupported: boolean;

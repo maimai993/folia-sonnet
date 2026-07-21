@@ -46,6 +46,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         disableHomeDynamicBackground,
         hidePlayerProgressBar,
         hidePlayerRightPanelButton,
+        alwaysShowPlayerBackButton,
+        alwaysShowMainWindowTitlebar,
         hidePlayerTranslationSubtitle,
         isDaylight,
         showOpenPanelCloseButton,
@@ -54,6 +56,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onToggleDisableHomeDynamicBackground,
         onToggleHidePlayerProgressBar,
         onToggleHidePlayerRightPanelButton,
+        onToggleAlwaysShowPlayerBackButton,
+        onToggleAlwaysShowMainWindowTitlebar,
         onToggleHidePlayerTranslationSubtitle,
         onToggleHideTaskbarIcon,
         onToggleMinimizeToTray,
@@ -67,6 +71,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         disableHomeDynamicBackground: state.disableHomeDynamicBackground,
         hidePlayerProgressBar: state.hidePlayerProgressBar,
         hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
+        alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
+        alwaysShowMainWindowTitlebar: state.alwaysShowMainWindowTitlebar,
         hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
         isDaylight: state.isDaylight,
         showOpenPanelCloseButton: state.showOpenPanelCloseButton,
@@ -76,6 +82,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
         onToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
         onToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
+        onToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
+        onToggleAlwaysShowMainWindowTitlebar: state.handleToggleAlwaysShowMainWindowTitlebar,
         onToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
         onToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
         onToggleMinimizeToTray: state.handleToggleMinimizeToTray,
@@ -139,6 +147,14 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     const content = (
         <div className={embedded ? "space-y-4" : "flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6 relative z-10"}>
             <div className={embedded ? "space-y-4" : "space-y-4"}>
+                <div className="pt-1">
+                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {t('options.labPerformanceSection')}
+                    </div>
+                    <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                        {t('options.labPerformanceSectionDesc')}
+                    </div>
+                </div>
                 <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -215,6 +231,15 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     </div>
                                 </div>
 
+                                <div className="border-t border-white/10 pt-5">
+                                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                        {t('options.labPlayerUiSection')}
+                                    </div>
+                                    <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('options.labPlayerUiSectionDesc')}
+                                    </div>
+                                </div>
+
                                 <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -273,6 +298,41 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                         </div>
                                     </div>
                                     {renderToggle(showOpenPanelCloseButton, () => onToggleOpenPanelCloseButton(!showOpenPanelCloseButton))}
+                                </div>
+
+                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                            <ChevronLeft size={14} />
+                                            {t('options.alwaysShowPlayerBackButton')}
+                                        </div>
+                                        <div className="text-xs opacity-50 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.alwaysShowPlayerBackButtonDesc')}
+                                        </div>
+                                    </div>
+                                    {renderToggle(alwaysShowPlayerBackButton, () => onToggleAlwaysShowPlayerBackButton(!alwaysShowPlayerBackButton))}
+                                </div>
+
+                                <div className="border-t border-white/10 pt-5">
+                                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                        {t('options.labWindowAndToolsSection')}
+                                    </div>
+                                    <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('options.labWindowAndToolsSectionDesc')}
+                                    </div>
+                                </div>
+
+                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                            <Monitor size={14} />
+                                            {t('options.alwaysShowMainWindowTitlebar')}
+                                        </div>
+                                        <div className="text-xs opacity-50 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.alwaysShowMainWindowTitlebarDesc')}
+                                        </div>
+                                    </div>
+                                    {renderToggle(alwaysShowMainWindowTitlebar, () => onToggleAlwaysShowMainWindowTitlebar(!alwaysShowMainWindowTitlebar))}
                                 </div>
 
                                 {!isLinux && (

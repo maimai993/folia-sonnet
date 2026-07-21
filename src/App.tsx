@@ -357,6 +357,8 @@ export default function App() {
         subtitleFontFallbackFamilies,
         lyricFilterPattern,
         showOpenPanelCloseButton,
+        alwaysShowPlayerBackButton,
+        alwaysShowMainWindowTitlebar,
         enableNowPlayingStage,
         queueAddBehavior,
         audioOutputDeviceId,
@@ -405,6 +407,8 @@ export default function App() {
         handleSetAppLanguagePreference,
         handleSetLyricFilterPattern,
         handleToggleOpenPanelCloseButton,
+        handleToggleAlwaysShowPlayerBackButton,
+        handleToggleAlwaysShowMainWindowTitlebar,
         handleToggleNowPlayingStage,
         handleSetQueueAddBehavior,
         handleSetAudioOutputDeviceId: persistAudioOutputDeviceId,
@@ -1783,6 +1787,14 @@ export default function App() {
         toggleSubtitleOverlayBackground: () => {
             handleToggleSubtitleOverlayBackground(!subtitleOverlayBackground);
         },
+        alwaysShowPlayerBackButton,
+        toggleAlwaysShowPlayerBackButton: () => {
+            handleToggleAlwaysShowPlayerBackButton(!alwaysShowPlayerBackButton);
+        },
+        alwaysShowMainWindowTitlebar,
+        toggleAlwaysShowMainWindowTitlebar: () => {
+            handleToggleAlwaysShowMainWindowTitlebar(!alwaysShowMainWindowTitlebar);
+        },
         enablePlayerPageNativeBlur,
         toggleDaylightMode,
         voiceInputPauseEnabled,
@@ -1842,6 +1854,10 @@ export default function App() {
         subtitleOverlayBackground,
         handleToggleAlternativeLyricSources,
         handleToggleSubtitleOverlayBackground,
+        handleToggleAlwaysShowPlayerBackButton,
+        handleToggleAlwaysShowMainWindowTitlebar,
+        alwaysShowPlayerBackButton,
+        alwaysShowMainWindowTitlebar,
         setIsUserGuideModalOpen,
         openThemeQuickEditor,
         canOpenThemeQuickEditor,
@@ -2701,6 +2717,7 @@ export default function App() {
             showTransparentWindowBorder={showTransparentWindowBorder}
             isPlayerView={isPlayerView}
             isTitlebarRevealed={isTitlebarRevealed}
+            alwaysShowMainWindowTitlebar={alwaysShowMainWindowTitlebar}
             isMainWindowClickThroughEnabled={isMainWindowClickThroughEnabled}
             showMainWindowClickThroughToggle={isMainWindowClickThroughEnabled ? isClickThroughToggleHotspotActive : isTitlebarRevealed}
             isDaylight={isDaylight}
@@ -2949,6 +2966,7 @@ export default function App() {
                         monetPortraitImage={monetPortraitImage}
                         onLyricLineSeek={visualizerMode === 'monet' ? handleMonetLyricLineSeek : undefined}
                         onBack={navigateBackFromPlayer}
+                        alwaysShowBackButton={alwaysShowPlayerBackButton}
                     />
                 )}
             </div>

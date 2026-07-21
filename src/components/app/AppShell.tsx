@@ -14,6 +14,7 @@ type AppShellProps = {
     showTransparentWindowBorder: boolean;
     isPlayerView: boolean;
     isTitlebarRevealed: boolean;
+    alwaysShowMainWindowTitlebar: boolean;
     isMainWindowClickThroughEnabled: boolean;
     showMainWindowClickThroughToggle: boolean;
     onToggleMainWindowClickThrough: () => void;
@@ -30,6 +31,7 @@ const AppShell: React.FC<AppShellProps> = ({
     showTransparentWindowBorder,
     isPlayerView,
     isTitlebarRevealed,
+    alwaysShowMainWindowTitlebar,
     isMainWindowClickThroughEnabled,
     showMainWindowClickThroughToggle,
     onToggleMainWindowClickThrough,
@@ -71,6 +73,7 @@ const AppShell: React.FC<AppShellProps> = ({
     }, [useCustomWindowRadius]);
 
     const shouldApplyWindowRadius = useCustomWindowRadius && !isWindowMaximized;
+    const areTitlebarControlsVisible = isTitlebarRevealed || alwaysShowMainWindowTitlebar;
     const shouldRenderTitlebarBackdrop = !isPlayerView || (useCustomWindowRadius && !isMainWindowClickThroughEnabled);
     const titlebarBackdropClassName = `absolute inset-0 backdrop-blur-sm ${
         isDaylight
@@ -133,7 +136,7 @@ const AppShell: React.FC<AppShellProps> = ({
                         </div>
                         <div className="pointer-events-auto absolute top-0 right-0 z-10 h-full">
                             <WindowControls
-                                revealed={isTitlebarRevealed}
+                                revealed={areTitlebarControlsVisible}
                                 isDaylight={isDaylight}
                                 isMainWindowClickThroughEnabled={isMainWindowClickThroughEnabled}
                             />

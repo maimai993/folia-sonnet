@@ -965,6 +965,8 @@ export type SettingsUiState = {
     hidePlayerTranslationSubtitle: boolean;
     showSubtitleTranslation: boolean;
     hidePlayerRightPanelButton: boolean;
+    alwaysShowPlayerBackButton: boolean;
+    alwaysShowMainWindowTitlebar: boolean;
     transparentPlayerBackground: boolean;
     enablePlayerPageNativeBlur: boolean;
     autoHidePlayerChrome: boolean;
@@ -1067,6 +1069,8 @@ export type SettingsUiState = {
     handleToggleHidePlayerTranslationSubtitle: (enable: boolean) => void;
     handleToggleShowSubtitleTranslation: (enable: boolean) => void;
     handleToggleHidePlayerRightPanelButton: (enable: boolean) => void;
+    handleToggleAlwaysShowPlayerBackButton: (enable: boolean) => void;
+    handleToggleAlwaysShowMainWindowTitlebar: (enable: boolean) => void;
     handleToggleTransparentPlayerBackground: (enable: boolean) => void;
     handleToggleAutoHidePlayerChrome: (enable: boolean) => void;
     handleToggleDisableVisualizerVignette: (disable: boolean) => void;
@@ -1163,6 +1167,8 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     hidePlayerTranslationSubtitle: getStoredBoolean('hide_player_translation_subtitle', false),
     showSubtitleTranslation: getStoredBoolean(SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY, true),
     hidePlayerRightPanelButton: getStoredBoolean('hide_player_right_panel_button', false),
+    alwaysShowPlayerBackButton: getStoredBoolean('always_show_player_back_button', false),
+    alwaysShowMainWindowTitlebar: getStoredBoolean('always_show_main_window_titlebar', false),
     transparentPlayerBackground: getStoredBoolean('transparent_player_background', false),
     enablePlayerPageNativeBlur: getStoredBoolean('enable_player_page_native_blur', false),
     autoHidePlayerChrome: getStoredBoolean('auto_hide_player_chrome', false),
@@ -1376,6 +1382,22 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         notify(get, {
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'progressBarHidden' : 'progressBarShown')),
+        });
+    },
+    handleToggleAlwaysShowPlayerBackButton: (enable) => {
+        setStoredBoolean('always_show_player_back_button', enable);
+        set({ alwaysShowPlayerBackButton: enable });
+        notify(get, {
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'playerBackButtonAlwaysShown' : 'playerBackButtonAutoHidden')),
+        });
+    },
+    handleToggleAlwaysShowMainWindowTitlebar: (enable) => {
+        setStoredBoolean('always_show_main_window_titlebar', enable);
+        set({ alwaysShowMainWindowTitlebar: enable });
+        notify(get, {
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'mainWindowTitlebarAlwaysShown' : 'mainWindowTitlebarAutoHidden')),
         });
     },
     handleToggleHidePlayerTranslationSubtitle: (enable) => {
@@ -2217,6 +2239,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: state.showSubtitleTranslation,
     hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
+    alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
+    alwaysShowMainWindowTitlebar: state.alwaysShowMainWindowTitlebar,
     transparentPlayerBackground: state.transparentPlayerBackground,
     autoHidePlayerChrome: state.autoHidePlayerChrome,
     disableVisualizerVignette: state.disableVisualizerVignette,
@@ -2288,6 +2312,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
     handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
     handleToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
+    handleToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
+    handleToggleAlwaysShowMainWindowTitlebar: state.handleToggleAlwaysShowMainWindowTitlebar,
     handleToggleTransparentPlayerBackground: state.handleToggleTransparentPlayerBackground,
     enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
     handleTogglePlayerPageNativeBlur: state.handleTogglePlayerPageNativeBlur,

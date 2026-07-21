@@ -623,6 +623,28 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         },
     },
     {
+        id: 'settings-toggle-player-back-button',
+        group: 'settings',
+        title: 'Always show player back button',
+        description: 'Toggle whether the player page back button stays visible',
+        keywords: ['always show back button', 'player back button', 'back button', '返回按钮', '始终显示返回按钮', '播放页返回按钮', 'fanhui annniu', 'bofangye fanhui annniu', 'fh', 'bfyfh'],
+        execute: (_input, context) => {
+            context.toggleAlwaysShowPlayerBackButton();
+            return true;
+        },
+    },
+    {
+        id: 'settings-toggle-main-window-titlebar',
+        group: 'settings',
+        title: 'Always show window control buttons',
+        description: 'Toggle whether the main window control buttons stay visible',
+        keywords: ['always show window controls', 'window control buttons', 'always show titlebar', 'main window titlebar', 'titlebar', '标题栏', '控制按钮', '始终显示标题栏', '始终显示控制按钮', '主窗口标题栏', 'biaoti lan', 'zhuchuangkou biaoti lan', 'kongzhi annniu', 'bt', 'zckbt', 'kzan'],
+        execute: (_input, context) => {
+            context.toggleAlwaysShowMainWindowTitlebar();
+            return true;
+        },
+    },
+    {
         id: 'settings-toggle-bottom-subtitle-overlay',
         group: 'settings',
         title: 'Toggle bottom subtitle overlay',

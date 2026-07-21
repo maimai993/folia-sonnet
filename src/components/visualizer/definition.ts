@@ -52,6 +52,7 @@ export interface VisualizerSharedProps {
     showSubtitleTranslation?: boolean;
     paused?: boolean;
     onBack?: () => void;
+    alwaysShowBackButton?: boolean;
     onLyricLineSeek?: (lyricTimeSec: number) => void;
     isPreviewMode?: boolean;
     visualizerTunings?: VisualizerTuningBundle;
