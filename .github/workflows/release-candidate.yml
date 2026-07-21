@@ -118,12 +118,10 @@ jobs:
           TARGET_VERSION: ${{ needs.prepare-release.outputs.release_version }}
         run: |
           CURRENT_VERSION=$(jq -r .version package.json)
-          if [ "${CURRENT_VERSION}" = "${TARGET_VERSION}" ]; then
-            echo "package.json version already set to ${TARGET_VERSION}; skipping npm version."
-            exit 0
+          if [ "${CURRENT_VERSION}" != "${TARGET_VERSION}" ]; then
+            npm version "${TARGET_VERSION}" --no-git-tag-version
           fi
-
-          npm version "${TARGET_VERSION}" --no-git-tag-version
+          node -e "const fs=require('fs'); const pkg=require('./package.json'); pkg.foliaReleaseChannel='internal'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
 
       - name: Generate pre-release notes from template
         shell: bash
@@ -164,6 +162,8 @@ jobs:
       - name: Build Web App for Electron
         env:
           ELECTRON: "true"
+          APP_VERSION_LABEL: Internal
+          APP_RELEASE_CHANNEL: internal
         run: npm run build
 
       - name: Package Electron App

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../../types';
+import { CustomSelect } from '../../shared/CustomSelect';
 
 // src/components/modal/settings/DesktopSettingsSubview.tsx
 // Desktop-only tray, update, and AI settings separated from the global settings modal.
@@ -32,6 +33,7 @@ type ElectronSettingsState = {
     USE_SYSTEM_PROXY_FOR_AI: boolean;
     ENABLE_UPDATE_CHECK: boolean;
     ENABLE_AUTO_UPDATE: boolean;
+    UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal';
     STAGE_MODE_SOURCE: string;
     DISCORD_RICH_PRESENCE_ENABLED: boolean;
 };
@@ -67,6 +69,7 @@ export type DesktopSettingsModel = {
     onDownloadUpdate: () => Promise<void> | void;
     onInstallUpdate: () => Promise<void> | void;
     onOpenChinaDownload: () => Promise<void> | void;
+    onUpdateChannelChange: (channel: 'realeco' | 'limo' | 'cielo') => Promise<void> | void;
     onSaveElectronSettings: () => Promise<void> | void;
     onToggleAutoUpdate: () => Promise<void> | void;
     onToggleUpdateCheck: () => Promise<void> | void;
@@ -116,6 +119,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
         onDownloadUpdate,
         onInstallUpdate,
         onOpenChinaDownload,
+        onUpdateChannelChange,
         onSaveElectronSettings,
         onToggleAutoUpdate,
         onToggleUpdateCheck,
@@ -250,7 +254,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                     <button
                         type="button"
                         onClick={onCheckForUpdates}
-                        disabled={!electronSettings.ENABLE_UPDATE_CHECK || updateStatus?.status === 'checking'}
+                        disabled={!electronSettings.ENABLE_UPDATE_CHECK || !updateStatus?.updateCheckSupported || updateStatus?.status === 'checking'}
                         className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium transition-all hover:bg-white/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                         style={{ color: 'var(--text-primary)' }}
                     >
@@ -274,7 +278,40 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                 </p>
                             </div>
                         </div>
-                        {renderToggle(electronSettings.ENABLE_UPDATE_CHECK, onToggleUpdateCheck)}
+                        {renderToggle(electronSettings.ENABLE_UPDATE_CHECK, onToggleUpdateCheck, !updateStatus?.updateCheckSupported)}
+                    </div>
+
+                    <div className={`flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors border-b ${borderColor}`}>
+                        <div className="flex items-start gap-3 min-w-0">
+                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
+                                <RefreshCw size={16} />
+                            </div>
+                            <div className="space-y-0.5 text-left">
+                                <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.updateChannel') || 'Update Channel'}
+                                </h4>
+                                <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.updateChannelDesc') || 'Choose which release lane this desktop app follows.'}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="w-44 shrink-0">
+                            <CustomSelect
+                                value={electronSettings.UPDATE_CHANNEL}
+                                onChange={(value) => void onUpdateChannelChange(value as 'realeco' | 'limo' | 'cielo')}
+                                disabled={electronSettings.UPDATE_CHANNEL === 'internal'}
+                                isDaylight={isDaylight}
+                                theme={theme}
+                                ariaLabel={t('options.updateChannel')}
+                                options={electronSettings.UPDATE_CHANNEL === 'internal'
+                                    ? [{ value: 'internal', label: t('options.updateChannelInternal') }]
+                                    : [
+                                        { value: 'realeco', label: t('options.updateChannelRealeco') },
+                                        { value: 'limo', label: t('options.updateChannelLimo') },
+                                        { value: 'cielo', label: t('options.updateChannelCielo') },
+                                    ]}
+                            />
+                        </div>
                     </div>
 
                     <div className="flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
@@ -294,6 +331,18 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                         {renderToggle(electronSettings.ENABLE_AUTO_UPDATE, onToggleAutoUpdate, !canEnableAutoUpdate)}
                     </div>
                 </div>
+
+                {updateStatus?.updateCheckSupportReason === 'system' && (
+                    <div className="px-1 text-xs leading-relaxed text-left text-amber-500">
+                        {t('options.updateUnsupportedSystem') || 'Automatic updates are unavailable on the current system.'}
+                    </div>
+                )}
+
+                {updateStatus?.updateCheckSupportReason === 'channel' && (
+                    <div className="px-1 text-xs leading-relaxed text-left text-amber-500">
+                        {t('options.updateUnsupportedChannel') || 'Automatic updates are unavailable for this internal build.'}
+                    </div>
+                )}
 
                 <div className="text-[10px] opacity-45 px-1 leading-relaxed text-left" style={{ color: 'var(--text-secondary)' }}>
                     {t('options.autoUpdateGithubNotice') || 'Auto update needs access to GitHub; if the network is unstable, keep a system proxy enabled.'}
@@ -350,15 +399,17 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                 <ExternalLink size={14} />
                                 {t('options.openReleasePage') || 'Open Release Page'}
                             </button>
-                            <button
-                                type="button"
-                                onClick={onOpenChinaDownload}
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3.5 py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                                style={{ color: 'var(--text-primary)' }}
-                            >
-                                <ExternalLink size={14} />
-                                {t('options.downloadChina')}
-                            </button>
+                            {electronSettings.UPDATE_CHANNEL === 'realeco' && (
+                                <button
+                                    type="button"
+                                    onClick={onOpenChinaDownload}
+                                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3.5 py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <ExternalLink size={14} />
+                                    {t('options.downloadChina')}
+                                </button>
+                            )}
                             {!electronSettings.ENABLE_AUTO_UPDATE && (
                                 <button
                                     type="button"

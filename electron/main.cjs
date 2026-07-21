@@ -8,6 +8,7 @@ const { createStageApi } = require('./stageApi.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
 const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = require('./discordPresence.cjs');
 const { createVoiceInputPauseMonitor } = require('./voiceInputPause.cjs');
+const { getReleaseUrl, resolveReleaseChannel } = require('./updateChannels.cjs');
 const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/themeSanitizer.cjs');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
 const isAppImageRuntime =
@@ -133,6 +134,7 @@ const WINDOW_STATE_SAVE_DEBOUNCE_MS = 300;
 const CACHE_DIRECTORY_SETTING_KEY = 'CACHE_DIRECTORY';
 const ENABLE_UPDATE_CHECK_SETTING_KEY = 'ENABLE_UPDATE_CHECK';
 const ENABLE_AUTO_UPDATE_SETTING_KEY = 'ENABLE_AUTO_UPDATE';
+const UPDATE_CHANNEL_SETTING_KEY = 'UPDATE_CHANNEL';
 const LAST_SEEN_UPDATE_VERSION_SETTING_KEY = 'LAST_SEEN_UPDATE_VERSION';
 const STAGE_MODE_ENABLED_SETTING_KEY = 'STAGE_MODE_ENABLED';
 const STAGE_MODE_SOURCE_SETTING_KEY = 'STAGE_MODE_SOURCE';
@@ -153,7 +155,6 @@ const VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY = 'VOICE_INPUT_PAUSE_ENABLED';
 const DEFAULT_STAGE_API_PORT = 32107;
 const DEFAULT_OBS_BROWSER_SOURCE_PORT = 32108;
 const FOLIA_RELEASES_URL = 'https://github.com/chthollyphile/folia-major/releases';
-const FOLIA_LATEST_RELEASE_API_URL = 'https://api.github.com/repos/chthollyphile/folia-major/releases/latest';
 const WINDOWS_APP_USER_MODEL_ID = 'top.izuna.foliamajor';
 const REMOTE_CONTROL_WINDOW_TITLE = 'Folia Remote';
 const WINDOW_PLAYBACK_HANDOFF_REQUEST_TIMEOUT_MS = 800;
@@ -261,6 +262,7 @@ function getPublicSettings() {
     [TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY]: readStoredBoolean(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, false),
     [DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY]: readStoredBoolean(DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY, false),
     [VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY]: readStoredBoolean(VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY, false),
+    [UPDATE_CHANNEL_SETTING_KEY]: getCurrentReleaseChannel().id,
     'enable_player_page_native_blur': store.get('enable_player_page_native_blur') === true,
   };
 }
@@ -1098,36 +1100,50 @@ function getAutoUpdateEnabled() {
   return Boolean(store.get(ENABLE_AUTO_UPDATE_SETTING_KEY));
 }
 
-function isUpdateCheckSupported() {
-  return process.platform === 'win32';
-}
-
-function isAutoUpdaterSupported() {
-  return (
-    process.platform === 'win32' &&
-    app.isPackaged &&
-    process.env.ELECTRON_DEV !== 'true' &&
-    process.env.NODE_ENV !== 'development'
-  );
-}
-
 function normalizeVersion(value) {
   return typeof value === 'string' ? value.trim().replace(/^v/i, '') : '';
 }
 
-function compareVersions(a, b) {
-  const left = normalizeVersion(a).split(/[.+-]/).map((part) => Number.parseInt(part, 10) || 0);
-  const right = normalizeVersion(b).split(/[.+-]/).map((part) => Number.parseInt(part, 10) || 0);
-  const length = Math.max(left.length, right.length, 3);
-
-  for (let index = 0; index < length; index += 1) {
-    const diff = (left[index] || 0) - (right[index] || 0);
-    if (diff !== 0) {
-      return diff > 0 ? 1 : -1;
-    }
+function getPackagedReleaseChannel() {
+  try {
+    const packageJsonPath = path.join(app.getAppPath(), 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    return packageJson.foliaReleaseChannel;
+  } catch {
+    return null;
   }
+}
 
-  return 0;
+function getCurrentReleaseChannel() {
+  return resolveReleaseChannel(
+    app.getVersion(),
+    store.get(UPDATE_CHANNEL_SETTING_KEY) || getPackagedReleaseChannel(),
+  );
+}
+
+function normalizeUpdateChannelSelection(value) {
+  const channel = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return channel === 'realeco' || channel === 'limo' || channel === 'cielo' ? channel : null;
+}
+
+function getUpdateCheckSupportReason() {
+  if (process.platform !== 'win32') {
+    return 'system';
+  }
+  return getCurrentReleaseChannel().updateEnabled ? null : 'channel';
+}
+
+function isUpdateCheckSupported() {
+  return getUpdateCheckSupportReason() === null;
+}
+
+function isAutoUpdaterSupported() {
+  return (
+    isUpdateCheckSupported() &&
+    app.isPackaged &&
+    process.env.ELECTRON_DEV !== 'true' &&
+    process.env.NODE_ENV !== 'development'
+  );
 }
 
 const updateState = {
@@ -1147,6 +1163,7 @@ function getUpdateStatus() {
     ...updateState,
     supported: isAutoUpdaterSupported(),
     updateCheckSupported: isUpdateCheckSupported(),
+    updateCheckSupportReason: getUpdateCheckSupportReason(),
     updateCheckEnabled: getUpdateCheckEnabled(),
     autoUpdateEnabled: getAutoUpdateEnabled(),
     lastSeenVersion: store.get(LAST_SEEN_UPDATE_VERSION_SETTING_KEY) || null,
@@ -1186,38 +1203,6 @@ function ensureAutoUpdater() {
   return autoUpdater || null;
 }
 
-async function fetchLatestReleaseMetadata() {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
-
-  if (process.env.FOLIA_MOCK_UPDATE === 'true') {
-    return {
-      tag_name: 'v99.99.99',
-      html_url: 'https://github.com/chthollyphile/folia-major/releases/tag/v99.99.99',
-    };
-  }
-
-  try {
-    const ses = await ensureSystemProxySession();
-    const response = await ses.fetch(FOLIA_LATEST_RELEASE_API_URL, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': `Folia/${app.getVersion()}`,
-      },
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`GitHub release check failed: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json();
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 function setupAutoUpdater() {
   const updater = ensureAutoUpdater();
   if (!updater) {
@@ -1230,8 +1215,37 @@ function setupAutoUpdater() {
   }
 
   updater.autoDownload = false;
-  updater.allowPrerelease = false;
+  if (getCurrentReleaseChannel().updateEnabled) {
+    configureAutoUpdaterChannel(updater);
+  }
   updater.autoInstallOnAppQuit = false;
+
+  updater.on('checking-for-update', () => {
+    setUpdateState({ status: 'checking', error: null, downloadProgress: null });
+  });
+
+  updater.on('update-available', (info) => {
+    const version = normalizeVersion(info?.version);
+    setUpdateState({
+      status: 'available',
+      availableVersion: version || null,
+      updateUrl: getReleaseUrl(getCurrentReleaseChannel().id, version, FOLIA_RELEASES_URL),
+      error: null,
+      lastCheckedAt: Date.now(),
+      downloadProgress: null,
+    });
+  });
+
+  updater.on('update-not-available', () => {
+    setUpdateState({
+      status: 'latest',
+      availableVersion: null,
+      updateUrl: FOLIA_RELEASES_URL,
+      error: null,
+      lastCheckedAt: Date.now(),
+      downloadProgress: null,
+    });
+  });
 
   updater.on('download-progress', (progress) => {
     setUpdateState({
@@ -1263,6 +1277,12 @@ function setupAutoUpdater() {
   });
 }
 
+function configureAutoUpdaterChannel(updater) {
+  const releaseChannel = getCurrentReleaseChannel();
+  updater.channel = releaseChannel.updaterChannel;
+  updater.allowPrerelease = releaseChannel.allowPrerelease;
+}
+
 async function downloadAvailableUpdate() {
   if (!isAutoUpdaterSupported()) {
     setUpdateState({ status: 'unsupported', error: null });
@@ -1289,8 +1309,7 @@ async function downloadAvailableUpdate() {
 
   try {
     setUpdateState({ status: 'downloading', error: null, downloadProgress: null });
-    updater.autoDownload = true;
-    await updater.checkForUpdates();
+    await updater.downloadUpdate();
   } catch (error) {
     setUpdateState({
       status: 'error',
@@ -1313,40 +1332,19 @@ async function checkForUpdates({ manual = false } = {}) {
     return getUpdateStatus();
   }
 
-  setUpdateState({ status: 'checking', error: null, downloadProgress: null });
+  if (!isAutoUpdaterSupported()) {
+    setUpdateState({ status: 'idle', error: null, downloadProgress: null });
+    return getUpdateStatus();
+  }
 
   try {
-    const release = await fetchLatestReleaseMetadata();
-    const latestVersion = normalizeVersion(release?.tag_name || release?.name);
-    const releaseUrl = typeof release?.html_url === 'string' ? release.html_url : FOLIA_RELEASES_URL;
-
-    if (!latestVersion) {
-      throw new Error('Latest release did not include a version tag.');
+    const updater = ensureAutoUpdater();
+    if (!updater) {
+      throw new Error('Failed to initialize auto updater.');
     }
 
-    const hasUpdate = compareVersions(latestVersion, app.getVersion()) > 0;
-    setUpdateState({
-      status: hasUpdate ? 'available' : 'latest',
-      availableVersion: hasUpdate ? latestVersion : null,
-      updateUrl: releaseUrl,
-      error: null,
-      lastCheckedAt: Date.now(),
-      downloadProgress: null,
-    });
-
-    if (hasUpdate && getAutoUpdateEnabled() && isAutoUpdaterSupported()) {
-      const updater = ensureAutoUpdater();
-      if (updater) {
-        updater.autoDownload = true;
-        await updater.checkForUpdates();
-      } else {
-        setUpdateState({
-          status: 'error',
-          error: 'Failed to initialize auto updater.',
-          downloadProgress: null,
-        });
-      }
-    }
+    updater.autoDownload = getAutoUpdateEnabled();
+    await updater.checkForUpdates();
   } catch (error) {
     setUpdateState({
       status: 'error',
@@ -1373,7 +1371,7 @@ function markUpdateSeen(version) {
 async function openUpdateReleasePage(version) {
   const normalizedVersion = normalizeVersion(version || updateState.availableVersion);
   const url = normalizedVersion
-    ? `${FOLIA_RELEASES_URL}/tag/v${normalizedVersion}`
+    ? getReleaseUrl(getCurrentReleaseChannel().id, normalizedVersion, FOLIA_RELEASES_URL)
     : updateState.updateUrl || FOLIA_RELEASES_URL;
 
   await shell.openExternal(url);
@@ -2915,6 +2913,13 @@ ipcMain.handle('save-settings', (event, key, value) => {
   }
 
   let nextValue = value;
+  if (key === UPDATE_CHANNEL_SETTING_KEY) {
+    const channel = normalizeUpdateChannelSelection(value);
+    if (!channel) {
+      return getPublicSettings();
+    }
+    nextValue = channel;
+  }
   if (
     key === MINIMIZE_TO_TRAY_SETTING_KEY ||
     key === HIDE_TASKBAR_ICON_SETTING_KEY ||
@@ -2960,6 +2965,30 @@ ipcMain.handle('save-settings', (event, key, value) => {
     publishUpdateStatus();
     if (Boolean(nextValue) && updateState.availableVersion) {
       downloadAvailableUpdate().catch((error) => {
+        setUpdateState({
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+  }
+
+  if (key === UPDATE_CHANNEL_SETTING_KEY) {
+    const updater = ensureAutoUpdater();
+    if (updater) {
+      configureAutoUpdaterChannel(updater);
+    }
+
+    setUpdateState({
+      status: getUpdateCheckEnabled() && isUpdateCheckSupported() ? 'idle' : 'unsupported',
+      availableVersion: null,
+      updateUrl: FOLIA_RELEASES_URL,
+      error: null,
+      downloadProgress: null,
+    });
+
+    if (getUpdateCheckEnabled() && isAutoUpdaterSupported()) {
+      checkForUpdates().catch((error) => {
         setUpdateState({
           status: 'error',
           error: error instanceof Error ? error.message : String(error),

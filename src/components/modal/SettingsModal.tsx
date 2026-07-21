@@ -66,6 +66,13 @@ interface SettingsModalProps {
 }
 
 const QUARK_DOWNLOAD_URL = 'https://pan.quark.cn/s/6e4c6fa3bc6f';
+const DEFAULT_UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal' = __APP_RELEASE_CHANNEL__ === 'limo'
+    ? 'limo'
+    : __APP_RELEASE_CHANNEL__ === 'cielo'
+        ? 'cielo'
+        : __APP_RELEASE_CHANNEL__ === 'internal'
+            ? 'internal'
+            : 'realeco';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
@@ -338,6 +345,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         USE_SYSTEM_PROXY_FOR_AI: false,
         ENABLE_UPDATE_CHECK: true,
         ENABLE_AUTO_UPDATE: false,
+        UPDATE_CHANNEL: DEFAULT_UPDATE_CHANNEL,
         STAGE_MODE_SOURCE: 'stage-api',
         DISCORD_RICH_PRESENCE_ENABLED: false,
     });
@@ -350,6 +358,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [stageActionStatus, setStageActionStatus] = useState<'idle' | 'regenerating'>('idle');
     const configuredAiProvider = isElectron ? electronSettings.AI_PROVIDER : import.meta.env.VITE_AI_PROVIDER;
     const aiServiceLabel = configuredAiProvider === 'openai' ? 'OpenAI Compatible' : 'Google Gemini';
+    const showQuarkDownload = electronSettings.UPDATE_CHANNEL === 'realeco';
     useEffect(() => {
         if ((window as any).electron) {
             setIsElectron(true);
@@ -476,6 +485,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
             await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
             await (window as any).electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
+            await (window as any).electron.saveSettings('UPDATE_CHANNEL', electronSettings.UPDATE_CHANNEL);
             await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
             setElectronSaveStatus('saved');
             setTimeout(() => setElectronSaveStatus('idle'), 2000);
@@ -527,6 +537,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         const nextEnabled = !electronSettings.ENABLE_AUTO_UPDATE;
         setElectronSettings({ ...electronSettings, ENABLE_AUTO_UPDATE: nextEnabled });
         await window.electron.saveSettings('ENABLE_AUTO_UPDATE', nextEnabled);
+
+        const status = await window.electron.getUpdateStatus?.();
+        if (status) {
+            setUpdateStatus(status);
+        }
+    };
+
+    const handleUpdateChannelChange = async (channel: 'realeco' | 'limo' | 'cielo') => {
+        if (!window.electron?.saveSettings) {
+            return;
+        }
+
+        setElectronSettings((current) => ({ ...current, UPDATE_CHANNEL: channel }));
+        await window.electron.saveSettings('UPDATE_CHANNEL', channel);
 
         const status = await window.electron.getUpdateStatus?.();
         if (status) {
@@ -1293,16 +1317,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     )
                                                 )}
 
-                                                <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
+                                                {showQuarkDownload && (
+                                                    <>
+                                                        <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
 
-                                                <button
-                                                    type="button"
-                                                    onClick={handleOpenChinaDownload}
-                                                    className="opacity-55 hover:opacity-100 transition-opacity hover:underline"
-                                                    style={{ color: 'var(--text-secondary)' }}
-                                                >
-                                                    {t('options.downloadChina')}
-                                                </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleOpenChinaDownload}
+                                                            className="opacity-55 hover:opacity-100 transition-opacity hover:underline"
+                                                            style={{ color: 'var(--text-secondary)' }}
+                                                        >
+                                                            {t('options.downloadChina')}
+                                                        </button>
+                                                    </>
+                                                )}
 
                                                 <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
 
@@ -1318,7 +1346,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         )}
 
                                         {/* 第三行：国内网络提醒小字 */}
-                                        {updateStatus?.availableVersion && (
+                                        {showQuarkDownload && updateStatus?.availableVersion && (
                                             <div className="text-xs opacity-45 mt-0.5" style={{ color: 'var(--text-secondary)' }}>
                                                 {t('options.chinaDownloadHint')}
                                             </div>
@@ -1537,6 +1565,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     onDownloadUpdate: handleDownloadUpdate,
                                                     onInstallUpdate: handleInstallUpdate,
                                                     onOpenChinaDownload: handleOpenChinaDownload,
+                                                    onUpdateChannelChange: handleUpdateChannelChange,
                                                     onSaveElectronSettings: saveElectronSettings,
                                                     onToggleAutoUpdate: handleToggleAutoUpdate,
                                                     onToggleUpdateCheck: handleToggleUpdateCheck,

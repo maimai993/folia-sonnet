@@ -183,7 +183,8 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
     }
   }
 
-  const appVersionLabel = process.env.APP_VERSION_LABEL?.trim() || 'folia-major';
+  const appVersionLabel = process.env.APP_VERSION_LABEL?.trim() || 'Realeco';
+  const appReleaseChannel = process.env.APP_RELEASE_CHANNEL?.trim().toLowerCase() || 'realeco';
 
   return {
     base: process.env.ELECTRON === 'true' ? './' : '/',
@@ -246,7 +247,8 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
       '__COMMIT_HASH__': JSON.stringify(commitHash + commitSuffix),
       '__GIT_BRANCH__': JSON.stringify(gitBranch),
       '__APP_VERSION__': JSON.stringify(JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version),
-      '__APP_VERSION_LABEL__': JSON.stringify(appVersionLabel)
+      '__APP_VERSION_LABEL__': JSON.stringify(appVersionLabel),
+      '__APP_RELEASE_CHANNEL__': JSON.stringify(appReleaseChannel)
     },
     resolve: {
       alias: {

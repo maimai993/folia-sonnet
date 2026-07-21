@@ -5,6 +5,7 @@ declare global {
   const __GIT_BRANCH__: string;
   const __APP_VERSION__: string;
   const __APP_VERSION_LABEL__: string;
+  const __APP_RELEASE_CHANNEL__: string;
 
   interface ElectronCacheDirectoryResult {
     path: string;
@@ -190,6 +191,7 @@ declare global {
     status: ElectronUpdateStatusValue;
     supported: boolean;
     updateCheckSupported: boolean;
+    updateCheckSupportReason?: 'system' | 'channel' | null;
     updateCheckEnabled: boolean;
     autoUpdateEnabled: boolean;
     currentVersion: string;

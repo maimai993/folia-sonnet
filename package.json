@@ -42,6 +42,7 @@
   "build": {
     "appId": "top.izuna.foliamajor",
     "productName": "Folia",
+    "generateUpdatesFilesForAllChannels": true,
     "directories": {
       "output": "release"
     },

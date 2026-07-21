@@ -1,4 +1,4 @@
-name: Nightly Pre-Release
+name: Publish Limo Nightly
 
 on:
   schedule:
@@ -9,15 +9,16 @@ permissions:
   contents: write
 
 concurrency:
-  group: nightly-pre-release
+  group: limo-nightly
   cancel-in-progress: true
 
 jobs:
   check-updates:
-    name: Check for new commits since nightly
+    name: Check for new commits since Limo
     runs-on: ubuntu-latest
     outputs:
-      should_build: ${{ steps.check.outputs.should_build }}
+      should_build: ${{ steps.meta.outputs.should_build }}
+      version: ${{ steps.meta.outputs.version }}
 
     steps:
       - name: Check out Git repository
@@ -25,26 +26,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine whether nightly should run
-        id: check
+      - name: Determine Limo version
+        id: meta
         shell: bash
         run: |
-          if ! git rev-parse --verify refs/tags/nightly >/dev/null 2>&1; then
-            echo "No existing nightly tag found. Building nightly."
-            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]] && git rev-parse --verify refs/tags/limo >/dev/null 2>&1 && git rev-list --count refs/tags/limo..HEAD | grep -qx '0'; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          if git rev-list --count refs/tags/nightly..HEAD | grep -qx '0'; then
-            echo "No new commits since the last nightly release."
-            echo "should_build=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "New commits detected since the last nightly release."
-            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          BASE_VERSION="$(jq -r .version package.json | sed 's/-.*//')"
+          if [[ ! "${BASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "package.json must contain a semver base version" >&2
+            exit 1
           fi
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "version=${BASE_VERSION}-beta.$(date -u +%s)" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build Limo on ${{ matrix.os }}
     needs: check-updates
     if: needs.check-updates.outputs.should_build == 'true'
     runs-on: ${{ matrix.os }}
@@ -63,29 +62,38 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: npm ci
 
-      - name: Build Web App for Electron
+      - name: Stamp Limo package metadata
+        shell: bash
         env:
-          ELECTRON: "true"
+          TARGET_VERSION: ${{ needs.check-updates.outputs.version }}
+        run: |
+          node -e "const fs=require('fs'); const pkg=require('./package.json'); pkg.version=process.env.TARGET_VERSION; pkg.foliaReleaseChannel='limo'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+
+      - name: Build web app for Electron
+        env:
+          ELECTRON: 'true'
+          APP_VERSION_LABEL: Limo
+          APP_RELEASE_CHANNEL: limo
         run: npm run build
 
-      - name: Package Electron App
+      - name: Package Electron app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --publish never
+        run: npx electron-builder --publish never -c.publish.channel=beta
 
       - name: Upload packaged artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: release-${{ matrix.os }}
+          name: limo-${{ matrix.os }}
           path: |
             release/*.dmg
             release/*.zip
             release/*.exe
             release/*.blockmap
-            release/latest*.yml
+            release/*.yml
             release/*.deb
             release/*.rpm
             release/*.tar.gz
@@ -93,7 +101,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish nightly pre-release
+    name: Publish rolling Limo prerelease
     runs-on: ubuntu-latest
     needs: [check-updates, build]
     if: needs.check-updates.outputs.should_build == 'true'
@@ -102,43 +110,21 @@ jobs:
       - name: Download packaged artifacts
         uses: actions/download-artifact@v7
         with:
-          path: nightly-artifacts
+          path: limo-artifacts
 
-      - name: Prepare release metadata
-        id: meta
-        shell: bash
-        run: |
-          echo "published_at=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
-      - name: Delete existing nightly release
+      - name: Replace rolling Limo release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.check-updates.outputs.version }}
         shell: bash
         run: |
-          gh release delete nightly --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes >/dev/null 2>&1 || true
-          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/nightly" >/dev/null 2>&1 || true
+          gh release delete limo --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes >/dev/null 2>&1 || true
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/limo" >/dev/null 2>&1 || true
+          mapfile -d '' files < <(find limo-artifacts -type f -print0)
+          cat > release-notes.md <<EOF
+          Automated Limo nightly build for commit ${GITHUB_SHA}.
 
-      - name: Publish nightly pre-release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          published_at='${{ steps.meta.outputs.published_at }}'
-          mapfile -d '' files < <(find nightly-artifacts -type f -print0)
-          cat > release-notes.txt <<EOF
-          Automated nightly build for commit ${GITHUB_SHA}.
-
+          Version: ${RELEASE_VERSION}
           Source commit: https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}
-          Published at: ${published_at}
-
-          _Organ²/ASLSP 是一首由实验音乐家约翰·凯奇创作的史上最慢的乐曲，使用自动管风琴连续演奏，预计演奏时间为639年，直到2640年9月5日结束。_
           EOF
-
-          gh release create nightly \
-            "${files[@]}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --title "Nightly Build (${published_at})" \
-            --notes-file release-notes.txt \
-            --target "${GITHUB_SHA}" \
-            --prerelease
+          gh release create limo "${files[@]}" --repo "${GITHUB_REPOSITORY}" --title "Limo Nightly (${RELEASE_VERSION})" --notes-file release-notes.md --target "${GITHUB_SHA}" --prerelease

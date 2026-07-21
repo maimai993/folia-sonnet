@@ -1,15 +1,12 @@
-name: Build and Release Electron App
+name: Publish Realeco
 
 on:
   push:
     branches: [main]
-    paths: ['package.json']
+    paths:
+      - realeco-release
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version (e.g. 1.0.1). Leave empty to use package.json version.'
-        required: false
-        type: string
       publish_aur_only:
         description: 'Skip desktop builds and only publish the AUR package'
         required: false
@@ -17,89 +14,97 @@ on:
         type: boolean
 
 permissions:
-  contents: write # Required to upload artifacts and publish releases
+  contents: write
+
+concurrency:
+  group: realeco-release
+  cancel-in-progress: false
 
 jobs:
-  check-version:
-    name: Check version change
+  validate-release:
+    name: Validate Realeco release metadata
     runs-on: ubuntu-latest
     outputs:
-      changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.validate.outputs.version }}
+      tag: ${{ steps.validate.outputs.tag }}
+      version_valid: ${{ steps.validate.outputs.version_valid }}
+      should_build: ${{ steps.validate.outputs.should_build }}
+
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 2
-      - name: Detect version change
-        id: check
+          fetch-depth: 1
+
+      - name: Validate commit message and version sources
+        id: validate
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # If triggered manually, always proceed
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Compare version with previous commit
-          PREV_VERSION=$(git show HEAD^:package.json | jq -r .version)
-          CURR_VERSION=$(cat package.json | jq -r .version)
-          
-          if [ "$PREV_VERSION" != "$CURR_VERSION" ]; then
-            echo "Version changed from $PREV_VERSION to $CURR_VERSION"
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "Version unchanged ($CURR_VERSION)"
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
+          set -euo pipefail
+          COMMIT_MESSAGE="$(git log -1 --format=%B)"
+          RELEASE_FILE_VERSION="$(COMMIT_MESSAGE="${COMMIT_MESSAGE}" node -e "const fs=require('fs'); const { validateRealecoReleaseMetadata }=require('./shared/realecoReleaseMetadata.cjs'); process.stdout.write(validateRealecoReleaseMetadata({ commitMessage: process.env.COMMIT_MESSAGE, releaseFileContent: fs.readFileSync('realeco-release', 'utf8'), packageVersion: require('./package.json').version }));")"
+
+          RELEASES_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100")"
+          RELEASE_FILE_VERSION="${RELEASE_FILE_VERSION}" RELEASES_JSON="${RELEASES_JSON}" node <<'NODE'
+          const fs = require('fs');
+          const target = process.env.RELEASE_FILE_VERSION;
+          const releases = JSON.parse(process.env.RELEASES_JSON || '[]');
+          const parse = (tag) => {
+            const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(tag || '');
+            return match ? match.slice(1).map(Number) : null;
+          };
+          const compare = (left, right) => left.findIndex((part, index) => part !== right[index]);
+          const compareVersions = (left, right) => {
+            const index = compare(left, right);
+            return index === -1 ? 0 : left[index] > right[index] ? 1 : -1;
+          };
+          const targetParts = parse(target);
+          const existing = releases.find((release) => release.tag_name === `v${target}`);
+          const publicReleases = releases.filter((release) => !release.draft && !release.prerelease && parse(release.tag_name));
+          const latest = publicReleases.reduce((current, release) => {
+            if (!current || compareVersions(parse(release.tag_name), parse(current.tag_name)) > 0) return release;
+            return current;
+          }, null);
+
+          if (existing && !existing.draft && !existing.prerelease) {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${target}\ntag=v${target}\nversion_valid=true\nshould_build=false\n`);
+            process.exit(0);
+          }
+          if (existing && !existing.draft) {
+            throw new Error(`v${target} already exists as a pre-release; Realeco tags must be stable releases.`);
+          }
+          if (latest && compareVersions(targetParts, parse(latest.tag_name)) <= 0) {
+            throw new Error(`Realeco version ${target} must be higher than published ${latest.tag_name}.`);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${target}\ntag=v${target}\nversion_valid=true\nshould_build=true\n`);
+          NODE
 
   prepare-release:
-    name: Prepare release target
-    needs: check-version
-    if: needs.check-version.outputs.changed == 'true' && github.event.inputs.publish_aur_only != 'true'
+    name: Prepare Realeco draft
+    needs: validate-release
+    if: needs.validate-release.outputs.should_build == 'true' && github.event.inputs.publish_aur_only != 'true'
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.meta.outputs.version }}
-      tag: ${{ steps.meta.outputs.tag }}
 
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v6
 
-      - name: Determine release version
-        id: meta
-        shell: bash
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION=$(jq -r .version package.json)
-          fi
-
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-
       - name: Clean up orphaned release tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
         shell: bash
         run: |
-          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "Release ${RELEASE_TAG} already exists, keeping current release/tag state."
-            exit 0
-          fi
-
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "Found orphaned tag ${RELEASE_TAG} without a matching release, deleting it."
+          if ! gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 && gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
             gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}"
-          else
-            echo "No orphaned tag found for ${RELEASE_TAG}."
           fi
 
-  release:
-    name: Build on ${{ matrix.os }}
-    needs: [check-version, prepare-release]
-    if: needs.check-version.outputs.changed == 'true' && github.event.inputs.publish_aur_only != 'true'
+  build:
+    name: Build Realeco on ${{ matrix.os }}
+    needs: [validate-release, prepare-release]
+    if: needs.validate-release.outputs.should_build == 'true' && github.event.inputs.publish_aur_only != 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -114,73 +119,60 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: npm
 
-      - name: Update package.json version
-        if: github.event.inputs.version != ''
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Stamp Realeco package metadata
         shell: bash
         env:
-          TARGET_VERSION: ${{ github.event.inputs.version }}
+          TARGET_VERSION: ${{ needs.validate-release.outputs.version }}
         run: |
-          CURRENT_VERSION=$(jq -r .version package.json)
-          if [ "${CURRENT_VERSION}" = "${TARGET_VERSION}" ]; then
-            echo "package.json version already set to ${TARGET_VERSION}; skipping npm version."
-            exit 0
-          fi
+          node -e "const fs=require('fs'); const pkg=require('./package.json'); pkg.version=process.env.TARGET_VERSION; pkg.foliaReleaseChannel='realeco'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
 
-          npm version "${TARGET_VERSION}" --no-git-tag-version
-
-      - name: Generate Release Notes from template
+      - name: Generate release notes
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.inputs.version != '' && github.event.inputs.version || needs.prepare-release.outputs.version }}
-          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
           MACOS_UNSIGNED_HELP_URL: https://github.com/${{ github.repository }}/blob/${{ github.sha }}/docs/desktop/macos-app-damaged.md
         run: |
           node <<'NODE'
           const fs = require('fs');
-          const path = require('path');
-
-          const templatePath = path.join('.github', 'release-draft-template.md');
-          const outputPath = path.join('build', 'release-notes.md');
-          let template = fs.readFileSync(templatePath, 'utf8');
-
+          const template = fs.readFileSync('.github/release-draft-template.md', 'utf8');
           const replacements = {
-            VERSION: process.env.RELEASE_VERSION || '',
-            TAG: process.env.RELEASE_TAG || '',
-            MACOS_UNSIGNED_HELP_URL: process.env.MACOS_UNSIGNED_HELP_URL || '',
+            VERSION: process.env.RELEASE_VERSION,
+            TAG: process.env.RELEASE_TAG,
+            MACOS_UNSIGNED_HELP_URL: process.env.MACOS_UNSIGNED_HELP_URL,
           };
-
-          for (const [key, value] of Object.entries(replacements)) {
-            template = template.split(`{{${key}}}`).join(value);
-          }
-
-          fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-          fs.writeFileSync(outputPath, `${template.trim()}\n`);
+          const notes = Object.entries(replacements).reduce((text, [key, value]) => text.split(`{{${key}}}`).join(value || ''), template);
+          fs.mkdirSync('build', { recursive: true });
+          fs.writeFileSync('build/release-notes.md', `${notes.trim()}\n`);
           NODE
 
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Build Web App for Electron
+      - name: Build web app for Electron
         env:
-          ELECTRON: "true"
+          ELECTRON: 'true'
+          APP_VERSION_LABEL: Realeco
+          APP_RELEASE_CHANNEL: realeco
         run: npm run build
 
-      - name: Package Electron Release
+      - name: Package Electron app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --publish never
+        run: npx electron-builder --publish never -c.publish.channel=latest
 
       - name: Upload packaged artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: release-${{ matrix.os }}
+          name: realeco-${{ matrix.os }}
           path: |
             release/*.dmg
             release/*.zip
             release/*.exe
             release/*.blockmap
-            release/latest*.yml
+            release/*.yml
             release/*.deb
             release/*.rpm
             release/*.tar.gz
@@ -189,68 +181,41 @@ jobs:
           retention-days: 14
 
   publish-release:
-    name: Publish draft release
-    needs: [check-version, prepare-release, release]
-    if: needs.check-version.outputs.changed == 'true' && github.event.inputs.publish_aur_only != 'true'
+    name: Publish Realeco draft
+    needs: [validate-release, build]
+    if: needs.validate-release.outputs.should_build == 'true' && github.event.inputs.publish_aur_only != 'true'
     runs-on: ubuntu-latest
 
     steps:
       - name: Download packaged artifacts
         uses: actions/download-artifact@v7
         with:
-          path: release-artifacts
-
-      - name: Prepare release notes
-        shell: bash
-        run: |
-          NOTES_FILE=$(find release-artifacts -type f -name 'release-notes.md' | head -n 1)
-          if [ -z "${NOTES_FILE}" ]; then
-            echo "Unable to locate release notes artifact"
-            exit 1
-          fi
-          cp "${NOTES_FILE}" release-notes.md
+          path: realeco-artifacts
 
       - name: Publish GitHub draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
         shell: bash
         run: |
-          mapfile -d '' files < <(find release-artifacts -type f ! -name 'release-notes.md' -print0)
-
+          NOTES_FILE=$(find realeco-artifacts -type f -name 'release-notes.md' | head -n 1)
+          mapfile -d '' files < <(find realeco-artifacts -type f ! -name 'release-notes.md' -print0)
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" \
-              "${files[@]}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --clobber
-            gh release edit "${RELEASE_TAG}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --notes-file release-notes.md \
-              --title "${RELEASE_TAG}"
+            gh release upload "${RELEASE_TAG}" "${files[@]}" --repo "${GITHUB_REPOSITORY}" --clobber
+            gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --title "Realeco ${RELEASE_TAG}" --notes-file "${NOTES_FILE}"
           else
-            gh release create "${RELEASE_TAG}" \
-              "${files[@]}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --title "${RELEASE_TAG}" \
-              --notes-file release-notes.md \
-              --target "${GITHUB_SHA}" \
-              --draft
+            gh release create "${RELEASE_TAG}" "${files[@]}" --repo "${GITHUB_REPOSITORY}" --title "Realeco ${RELEASE_TAG}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}" --draft
           fi
 
   publish-aur:
     name: Publish AUR package
-    needs: check-version
-    if: needs.check-version.outputs.changed == 'true'
+    needs: validate-release
+    if: needs.validate-release.outputs.version_valid == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v6
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
 
       - name: Check AUR secrets
         id: aur-secrets
@@ -261,14 +226,13 @@ jobs:
         run: |
           if [[ -z "${AUR_SSH_PRIVATE_KEY}" || -z "${AUR_REPO_SSH_URL}" ]]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "AUR secrets are not configured; skipping AUR publish."
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Prepare AUR metadata
         if: steps.aur-secrets.outputs.configured == 'true'
-        run: ./packaging/aur/folia-major-bin/update.sh
+        run: ./packaging/aur/folia-major-bin/update.sh "${{ needs.validate-release.outputs.version }}"
 
       - name: Set up SSH key
         if: steps.aur-secrets.outputs.configured == 'true'
@@ -289,6 +253,7 @@ jobs:
         shell: bash
         env:
           AUR_REPO_SSH_URL: ${{ secrets.AUR_REPO_SSH_URL }}
+          RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
         run: |
           git clone "${AUR_REPO_SSH_URL}" aur-repo
           cp packaging/aur/folia-major-bin/PKGBUILD aur-repo/PKGBUILD
@@ -297,11 +262,10 @@ jobs:
           cp packaging/aur/folia-major-bin/folia-major.png aur-repo/folia-major.png
           cd aur-repo
           if git diff --quiet -- PKGBUILD .SRCINFO folia-major.desktop folia-major.png; then
-            echo "No AUR changes to publish"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add PKGBUILD .SRCINFO folia-major.desktop folia-major.png
-          git commit -m "Update to v$(jq -r .version ../package.json)"
+          git commit -m "Update to v${RELEASE_VERSION}"
           git push
