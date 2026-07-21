@@ -121,6 +121,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         disableVisualizerVignette,
         disableVisualizerGeometricBackground,
         minimizeToTray,
+        voiceInputPauseEnabled,
         hideTaskbarIcon,
         hideRemoteControlTaskbarIcon,
         openPlayerOnLaunch,
@@ -179,6 +180,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleDisableVisualizerVignette: onToggleDisableVisualizerVignette,
         handleToggleDisableVisualizerGeometricBackground: onToggleDisableVisualizerGeometricBackground,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
+        handleToggleVoiceInputPause: onToggleVoiceInputPause,
         handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
         handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
         handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
@@ -494,6 +496,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac');
+    const isWin = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('win');
 
 
     const handleCheckForUpdates = async () => {
@@ -2688,6 +2691,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClose={() => closeSubviewOrModal(() => setShowLabSettings(false))}
                 onOpenLyricFilterSettings={() => setShowLyricFilterSettings(true)}
                 theme={theme}
+                voiceInputPause={{
+                    enabled: voiceInputPauseEnabled,
+                    supported: isElectron && isWin,
+                    onToggle: () => onToggleVoiceInputPause(!voiceInputPauseEnabled),
+                }}
             />
             <LyricFilterSettingsModal
                 isOpen={showLyricFilterSettings}

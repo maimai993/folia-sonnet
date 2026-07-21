@@ -84,6 +84,9 @@ export type CommandPaletteContext = {
     subtitleOverlayBackground: boolean;
     toggleSubtitleOverlayBackground: () => void;
     toggleDaylightMode: () => void;
+    voiceInputPauseEnabled: boolean;
+    voiceInputPauseSupported: boolean;
+    toggleVoiceInputPause: () => void;
     setAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void> | void;
     enableAlternativeLyricSources: boolean;
     runAutoMatchBestLyric: () => Promise<boolean>;
