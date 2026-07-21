@@ -902,8 +902,8 @@ export const kugouProvider: OnlineMusicProvider = {
                 let user = normalizeUser(response);
                 if (user.id && user.nickname) {
                     try {
-                        const claimedYouthVip = await ensureKugouYouthVip(user.id);
-                        const vipResponse = await requestKugou('user_vip_detail', { userid: user.id });
+                        const claimedYouthVip = await ensureKugouYouthVip(String(user.id));
+                        const vipResponse = await requestKugou('user_vip_detail', { userid: String(user.id) });
                         user = { ...user, vipType: normalizeKugouVipType(vipResponse) };
                         if (claimedYouthVip && user.vipType === 0) {
                             user = { ...user, vipType: 1 };

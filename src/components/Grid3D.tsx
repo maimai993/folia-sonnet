@@ -634,21 +634,52 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             {/* Desktop Canvas Surface */}
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
                 {isOnlineTab && !activeUser ? (
-                    /* Guest Connect Account Page */
-                    <div className="flex flex-1 w-full flex-col items-center justify-center space-y-6">
-                        <div className={`w-24 h-24 rounded-3xl ${isDaylight ? 'bg-white/40 shadow-sm border border-black/5' : 'bg-white/5 border border-white/5'} flex items-center justify-center backdrop-blur-md`}>
-                            <User size={40} className="opacity-20" />
+                    /* Guest Multi-Platform Connect Account Page */
+                    <div className="flex flex-1 w-full flex-col items-center justify-center space-y-6 px-4">
+                        <div className={`w-20 h-20 rounded-3xl ${isDaylight ? 'bg-white/40 shadow-sm border border-black/5' : 'bg-white/5 border border-white/5'} flex items-center justify-center backdrop-blur-md`}>
+                            <User size={36} className="opacity-25" />
                         </div>
-                        <h2 className="text-3xl font-bold opacity-80 text-center">{t('home.guestTitle')}</h2>
-                        <p className="opacity-40 text-sm text-center max-w-md leading-6 whitespace-pre-line">
-                            {t('home.guestPromptProvider', { provider: activeProviderSummary?.displayName || activeProviderId })}
-                        </p>
-                        <button
-                            onClick={() => void initLogin()}
-                            className="px-8 py-3 bg-white text-black rounded-full font-bold text-sm hover:scale-105 transition-transform"
-                        >
-                            {t('home.connectProviderAccount', { provider: activeProviderSummary?.shortName || activeProviderSummary?.displayName || activeProviderId })}
-                        </button>
+                        <div className="text-center max-w-md space-y-2">
+                            <h2 className="text-2xl font-bold opacity-90">{t('home.guestTitle')}</h2>
+                            <p className="opacity-50 text-sm leading-6 whitespace-pre-line">
+                                {t('home.guestPrompt')}
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-3.5 max-w-md w-full pt-2">
+                            {(onlineProviderPlatform?.providers || omni.getProviderSummaries()).map(provider => {
+                                const isAuth = provider.status === 'authenticated';
+                                const configured = provider.availability.configured;
+                                const isCurrentActive = provider.providerId === activeProviderId;
+                                return (
+                                    <button
+                                        key={provider.providerId}
+                                        type="button"
+                                        disabled={!configured}
+                                        onClick={() => {
+                                            if (isAuth) {
+                                                void onlineProviderPlatform?.switchProvider(provider.providerId);
+                                            } else {
+                                                void initLogin(provider.providerId);
+                                            }
+                                        }}
+                                        className={`flex items-center gap-3 px-5 py-3 rounded-2xl font-bold text-sm transition-all hover:scale-105 cursor-pointer border ${
+                                            isCurrentActive
+                                                ? (isDaylight ? 'bg-black text-white border-black shadow-md' : 'bg-white text-black border-white shadow-md')
+                                                : (isDaylight ? 'bg-white/60 hover:bg-white/90 text-zinc-900 border-black/5 shadow-sm' : 'bg-white/5 hover:bg-white/10 text-white border-white/10')
+                                        } ${!configured ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                    >
+                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white ${provider.providerId === 'netease' ? 'bg-red-600' : provider.providerId === 'kugou' ? 'bg-blue-600' : 'bg-zinc-600'}`}>
+                                            {provider.providerId === 'netease' ? '云' : provider.providerId === 'kugou' ? 'K' : provider.shortName.slice(0, 1)}
+                                        </span>
+                                        <span>
+                                            {isAuth
+                                                ? t('home.switchToProvider', { provider: provider.shortName || provider.displayName })
+                                                : t('home.connectProviderAccount', { provider: provider.shortName || provider.displayName })}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 ) : isOnlineTab ? (
                     <DesktopGrid3DSurface
