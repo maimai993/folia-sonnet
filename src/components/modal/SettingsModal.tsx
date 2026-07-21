@@ -1565,13 +1565,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 theme={theme}
                                                 embedded={true}
                                                 voiceInputPause={{
-                                                    enabled: electronSettings.ENABLE_VOICE_INPUT_PAUSE,
-                                                    supported: typeof electronAPI !== 'undefined' && Boolean(electronAPI?.os?.platform === 'win32'),
-                                                    onToggle: () => {
-                                                        const newValue = !electronSettings.ENABLE_VOICE_INPUT_PAUSE;
-                                                        setElectronSettings(prev => ({ ...prev, ENABLE_VOICE_INPUT_PAUSE: newValue }));
-                                                        saveElectronSettings({ ENABLE_VOICE_INPUT_PAUSE: newValue });
-                                                    },
+                                                    enabled: voiceInputPauseEnabled,
+                                                    supported: isElectron && typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('win'),
+                                                    onToggle: () => onToggleVoiceInputPause(!voiceInputPauseEnabled),
                                                 }}
                                             />
                                         )}

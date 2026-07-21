@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, ChevronLeft, ChevronRight, Cpu, GamepadDirectional, Mic, Monitor, PlayCircle, RotateCcw, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { Theme, VisualizerFrameRate } from '../../../types';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../utils/frameRateLimiter';
+import ThemedDialog from '../../shared/ThemedDialog';
 
 // src/components/modal/settings/LabSettingsModal.tsx
 // Experimental settings subview kept outside SettingsModal to avoid another giant inline panel.
@@ -42,6 +43,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
 }) => {
     const { t } = useTranslation();
     const isMouseDownOnOverlayRef = useRef(false);
+    const [isNativeBlurNoticeOpen, setIsNativeBlurNoticeOpen] = useState(false);
     const {
         disableHomeDynamicBackground,
         hidePlayerProgressBar,
@@ -115,6 +117,20 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     const selectedVisualizerFrameRateIndex = VISUALIZER_FRAME_RATE_OPTIONS.indexOf(selectedVisualizerFrameRate);
     const isLinux = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('linux');
 
+    const handleNativeBlurToggle = () => {
+        if (enablePlayerPageNativeBlur) {
+            onTogglePlayerPageNativeBlur(false);
+            return;
+        }
+
+        setIsNativeBlurNoticeOpen(true);
+    };
+
+    const confirmNativeBlur = () => {
+        onTogglePlayerPageNativeBlur(true);
+        setIsNativeBlurNoticeOpen(false);
+    };
+
     const renderToggle = (checked: boolean, onChange: () => void) => (
         <button
             type="button"
@@ -145,7 +161,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     };
 
     const content = (
-        <div className={embedded ? "space-y-4" : "flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6 relative z-10"}>
+        <>
+            <div className={embedded ? "space-y-4" : "flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6 relative z-10"}>
             <div className={embedded ? "space-y-4" : "space-y-4"}>
                 <div className="pt-1">
                     <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -336,7 +353,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                 </div>
 
                                 {!isLinux && (
-                                    <div className={`flex items-center justify-between p-4 rounded-xl border transition-colors hover:bg-white/8 ${settingsCardInteractiveClass}`} onClick={() => onTogglePlayerPageNativeBlur(!enablePlayerPageNativeBlur)}>
+                                    <div className={`flex items-center justify-between p-4 rounded-xl border transition-colors hover:bg-white/8 ${settingsCardInteractiveClass}`} onClick={handleNativeBlurToggle}>
                                         <div className="flex flex-col pr-8">
                                             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                                 {t('options.enablePlayerPageNativeBlur')}
@@ -345,7 +362,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                                 {t('options.enablePlayerPageNativeBlurDesc')}
                                             </span>
                                         </div>
-                                        {renderToggle(enablePlayerPageNativeBlur, () => onTogglePlayerPageNativeBlur(!enablePlayerPageNativeBlur))}
+                                        {renderToggle(enablePlayerPageNativeBlur, handleNativeBlurToggle)}
                                     </div>
                                 )}
 
@@ -382,7 +399,38 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     </div>
                                 )}
             </div>
-        </div>
+            </div>
+            <ThemedDialog
+                isOpen={isNativeBlurNoticeOpen}
+                onClose={() => setIsNativeBlurNoticeOpen(false)}
+                isDaylight={isDaylight}
+                title={t('options.nativeBlurConfirmTitle')}
+                footer={(
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setIsNativeBlurNoticeOpen(false)}
+                            className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${utilityGhostButtonClass}`}
+                            style={{ color: 'var(--text-primary)' }}
+                        >
+                            {t('localMusic.cancel')}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={confirmNativeBlur}
+                            className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                            style={{ backgroundColor: theme?.accentColor || '#3b82f6' }}
+                        >
+                            {t('options.nativeBlurConfirmAction')}
+                        </button>
+                    </>
+                )}
+            >
+                <p className="text-sm leading-6 opacity-75" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.nativeBlurConfirmDesc')}
+                </p>
+            </ThemedDialog>
+        </>
     );
 
     if (embedded) {
