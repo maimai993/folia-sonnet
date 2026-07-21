@@ -1113,6 +1113,25 @@ export default {
         "title": "镜台点云重构",
         "description": "镜台加入涟漪驱动的点云与长廊双模式、更多粒子形态、关键字着色和可调的粒子密度与辉光。"
       }
+    },
+    "v0_6_1": {
+      "intro": "以下是 0.6.1 版本的新功能与改进",
+      "settingsRework": {
+        "title": "设置页面重构",
+        "description": "全新重构的设置页面，结构更清晰、分类更合理，提供更舒适易用的配置体验。"
+      },
+      "autoHideChrome": {
+        "title": "界面元素自动隐藏",
+        "description": "可自由调整是否在静止时自动隐藏顶部标题栏与播放页返回按键。"
+      },
+      "voiceInputPause": {
+        "title": "语音输入自动暂停",
+        "description": "Windows 环境下支持在触发系统语音输入时自动暂停播放，可在实验室设置中开启。"
+      },
+      "obsStaticLink": {
+        "title": "OBS 静态链接分享",
+        "description": "Web 版本支持导出与分享 OBS 静态串流链接，方便推流工具直接引用。"
+      }
     }
   },
   "export": {

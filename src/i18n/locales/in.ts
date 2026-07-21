@@ -1028,6 +1028,25 @@ export default {
         "title": "Pembaruan Partikel Diorama",
         "description": "Diorama kini memiliki mode awan titik dan koridor berbasis riak, lebih banyak bentuk partikel, pewarnaan kata kunci, serta kontrol kepadatan dan cahaya."
       }
+    },
+    "v0_6_1": {
+      "intro": "Berikut adalah fitur dan peningkatan baru di versi 0.6.1.",
+      "settingsRework": {
+        "title": "Desain Ulang Halaman Pengaturan",
+        "description": "Halaman pengaturan yang dirancang ulang sepenuhnya agar lebih terstruktur dan mudah digunakan."
+      },
+      "autoHideChrome": {
+        "title": "Sembunyikan Elemen Otomatis",
+        "description": "Opsi untuk mengatur apakah bilah judul dan tombol kembali halaman pemutar disembunyikan secara otomatis saat tidak aktif."
+      },
+      "voiceInputPause": {
+        "title": "Jeda Otomatis Penginputan Suara",
+        "description": "Menjeda pemutaran secara otomatis saat menggunakan penginputan suara Windows, tersedia di Pengaturan Laboratorium."
+      },
+      "obsStaticLink": {
+        "title": "Berbagi Tautan Statis OBS",
+        "description": "Versi web kini mendukung pembuatan dan pengiriman tautan statis OBS untuk integrasi streaming."
+      }
     }
   },
   "export": {

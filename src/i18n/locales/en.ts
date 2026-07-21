@@ -1112,6 +1112,25 @@ export default {
         "title": "Diorama Particle Rework",
         "description": "Diorama now offers ripple-driven point-cloud and corridor modes, more particle shapes, keyword coloring, and controls for density and glow."
       }
+    },
+    "v0_6_1": {
+      "intro": "Here are the new features and improvements in version 0.6.1.",
+      "settingsRework": {
+        "title": "Redesigned Settings Page",
+        "description": "A completely redesigned settings interface with cleaner structure, logical grouping, and improved usability."
+      },
+      "autoHideChrome": {
+        "title": "Auto-Hide Controls",
+        "description": "Optionally toggle auto-hiding for the top titlebar and player return button when idle."
+      },
+      "voiceInputPause": {
+        "title": "Voice Input Auto-Pause",
+        "description": "Automatically pause playback when using Windows voice typing, available in Lab Settings."
+      },
+      "obsStaticLink": {
+        "title": "OBS Static Link Sharing",
+        "description": "Web version now supports generating and sharing static OBS overlay links for streaming setups."
+      }
     }
   },
   "export": {
