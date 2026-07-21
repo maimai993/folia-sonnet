@@ -63,7 +63,7 @@ export interface PlayerCapLyricLine {
 export interface PlayerCapAllLyricsData {
   title: string;
   duration: number; // full track duration (seconds)
-  play_time: number;
+  position: number; // real-time playback position (seconds) = progress × duration, offset-independent. Named play_time before PlayerCap rc.7.
   progress: number; // full-track progress 0-1 = real-time position / total duration (offset-independent)
   count: number; // number of lyric lines; 0 for instrumental
   lyrics: PlayerCapLyricLine[];
@@ -75,14 +75,20 @@ export interface PlayerCapLyricUpdateData {
   text: string;
   sub_text: string;
   timestamp: number;
-  play_time: number;
+  play_time: number; // on-screen time of THIS line (timestamp − offset; 0 when index=-1). A lyric-timeline point, NOT the playback position — use position for that.
+  position: number; // real-time playback position (seconds) = progress × duration, offset-independent.
   progress: number; // still reflects full-track progress when index=-1, not 0
   text_detailed: PlayerCapMaybeDetailed;
 }
 
-// Payload for playback_pause / playback_resume. play_time is the display position after the pause/seek (display basis).
+// Payload for playback_pause / playback_resume: the real-time playback position, plus progress.
+//
+// resume doubles as the seek notification (it fires on any discontinuous jump, so it outnumbers
+// pause), and the jumped-to position is carried here and nowhere else — honor it or the previous
+// line stays on screen until the next lyric_update.
 export interface PlayerCapPlaybackData {
-  play_time: number;
+  position: number;
+  progress: number;
 }
 
 export interface PlayerCapPlayerSwitchData {

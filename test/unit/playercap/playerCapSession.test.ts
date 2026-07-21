@@ -16,7 +16,7 @@ const wesingAllLyrics: PlayerCapEvent = {
   data: {
     title: '都是夜归人 - 许美静',
     duration: 296,
-    play_time: 1.75,
+    position: 1.75,
     progress: 0.0059121624,
     count: 2,
     lyrics: [
@@ -32,7 +32,7 @@ const sequence: PlayerCapEvent[] = [
   { type: 'status_update', player: 'wesing', data: { status: 'playing', detail: '都是夜归人 - 许美静' } },
   { type: 'song_info_update', player: 'wesing', data: { name: '都是夜归人', singer: '许美静', title: '都是夜归人 - 许美静', cover: '', cover_base64: '' } },
   wesingAllLyrics,
-  { type: 'lyric_update', player: 'wesing', data: { index: 0, text: '是冰冻的时分 已过夜深的夜晚', sub_text: '', timestamp: 25.44, play_time: 25.24, progress: 0.08530405, text_detailed: {} } },
+  { type: 'lyric_update', player: 'wesing', data: { index: 0, text: '是冰冻的时分 已过夜深的夜晚', sub_text: '', timestamp: 25.44, play_time: 25.24, position: 25.25, progress: 0.08530405, text_detailed: {} } },
 ];
 
 function playThrough(events: PlayerCapEvent[], startNow = 1000): PlayerCapSessionState {
@@ -58,25 +58,80 @@ describe('reducePlayerCapEvent (wesing playback sequence replay)', () => {
     expect(s.track).toEqual({ name: '都是夜归人', artist: '许美静', coverUrl: '', title: '都是夜归人 - 许美静' });
   });
 
-  it('all_lyrics → lyrics non-empty, clock duration/position anchored from progress×duration', () => {
+  it('all_lyrics → lyrics non-empty, clock duration/position anchored from position', () => {
     const s = playThrough(sequence.slice(0, 4));
     expect(s.lyrics).not.toBeNull();
     expect(s.clock.durationSec).toBe(296);
-    expect(s.clock.positionSec).toBeCloseTo(1.75, 2); // 0.0059121624 × 296
+    expect(s.clock.positionSec).toBeCloseTo(1.75, 2); // data.position
   });
 
-  it('lyric_update → clock re-anchored to the new progress', () => {
+  it('lyric_update → clock re-anchored to the reported position', () => {
     const s = playThrough(sequence);
-    expect(s.clock.positionSec).toBeCloseTo(25.25, 1); // 0.08530405 × 296
+    expect(s.clock.positionSec).toBeCloseTo(25.25, 2); // data.position
   });
 
-  it('playback_pause / resume toggles playing', () => {
-    const paused = reducePlayerCapEvent(playThrough(sequence), { type: 'playback_pause', player: 'wesing', data: { play_time: 32.2 } }, opts(2000));
+  it('playback_pause / resume toggles playing and anchors to the reported position', () => {
+    const paused = reducePlayerCapEvent(playThrough(sequence), { type: 'playback_pause', player: 'wesing', data: { position: 32.2, progress: 0.108108 } }, opts(2000));
     expect(paused.playerState).toBe('paused');
     expect(paused.clock.playing).toBe(false);
-    const resumed = reducePlayerCapEvent(paused, { type: 'playback_resume', player: 'wesing', data: { play_time: 32.25 } }, opts(2100));
+    expect(paused.clock.positionSec).toBeCloseTo(32.2, 3);
+    const resumed = reducePlayerCapEvent(paused, { type: 'playback_resume', player: 'wesing', data: { position: 32.25, progress: 0.108277 } }, opts(2100));
     expect(resumed.playerState).toBe('playing');
     expect(resumed.clock.playing).toBe(true);
+    expect(resumed.clock.positionSec).toBeCloseTo(32.25, 3);
+  });
+
+  // Values below are from a real rc.7 capture (cloudmusicv3, Sweetest Pie, duration 201.334): every
+  // pair satisfies position = progress × duration, and pause/resume carry position directly — the
+  // real-time playback position with no offset applied.
+  describe('position as the clock anchor (real rc.7 capture)', () => {
+    const DURATION = 201.334;
+    const atPosition = (positionSec: number, nowMs: number) => ({
+      ...initialPlayerCapSession(),
+      playerState: 'playing' as const,
+      clock: { positionSec, durationSec: DURATION, anchoredAtMs: nowMs, playing: true },
+    });
+
+    // resume is also the seek notification, and the jumped-to position is carried nowhere else.
+    it('re-anchors on a seek instead of waiting for the next lyric_update', () => {
+      const beforeSeek = atPosition(59.919067, 75486); // position at the pause before the jump
+      const seeked = reducePlayerCapEvent(
+        beforeSeek,
+        { type: 'playback_resume', player: 'cloudmusicv3', data: { position: 106, progress: 0.5264883 } },
+        opts(83879),
+      );
+      expect(seeked.clock.positionSec).toBeCloseTo(106, 3);
+      // The lyric_update 84ms later reported position 106.084175, so the extrapolated anchor is right.
+      expect(currentPosition(seeked.clock, 83963)).toBeCloseTo(106.084, 2);
+    });
+
+    // A normal pause holds the position it reported; resume from it keeps the same position.
+    it('holds position across a pause and resumes from it', () => {
+      const paused = reducePlayerCapEvent(
+        atPosition(0, 40000),
+        { type: 'playback_pause', player: 'cloudmusicv3', data: { position: 32.299557, progress: 0.16042773 } },
+        opts(40666),
+      );
+      expect(paused.clock.positionSec).toBeCloseTo(32.3, 2);
+      const resumed = reducePlayerCapEvent(
+        paused,
+        { type: 'playback_resume', player: 'cloudmusicv3', data: { position: 32.299557, progress: 0.16042773 } },
+        opts(47867),
+      );
+      expect(resumed.clock.positionSec).toBeCloseTo(32.3, 2);
+      expect(resumed.clock.playing).toBe(true);
+    });
+
+    it('keeps the previous anchor when position is missing', () => {
+      const before = atPosition(100, 10000);
+      const resumed = reducePlayerCapEvent(
+        before,
+        { type: 'playback_resume', player: 'cloudmusicv3', data: {} as never },
+        opts(12000),
+      );
+      expect(resumed.clock.positionSec).toBeCloseTo(102, 3); // extrapolated, as before this change
+      expect(resumed.clock.playing).toBe(true);
+    });
   });
 
   it('player_clear wipes all content', () => {
