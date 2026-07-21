@@ -15,7 +15,7 @@ import type { PlayerCapAllLyricsData } from '../../../src/types/playerCap';
 const wesingLrc: PlayerCapAllLyricsData = {
   title: '都是夜归人 - 许美静',
   duration: 296,
-  play_time: 1.75,
+  position: 1.75,
   progress: 0.0059121624,
   count: 2,
   lyrics: [
@@ -29,7 +29,7 @@ const wesingLrc: PlayerCapAllLyricsData = {
 const cloudmusicYrc: PlayerCapAllLyricsData = {
   title: 'Cold - Maroon 5 / Future',
   duration: 234.308,
-  play_time: 0,
+  position: 0,
   progress: 0,
   count: 1,
   lyrics: [
@@ -61,7 +61,7 @@ const cloudmusicYrc: PlayerCapAllLyricsData = {
 const qqTitlePseudo: PlayerCapAllLyricsData = {
   title: '枝江 - 信陵',
   duration: 195,
-  play_time: 0,
+  position: 0,
   progress: 0,
   count: 3,
   lyrics: [
@@ -76,7 +76,7 @@ const qqTitlePseudo: PlayerCapAllLyricsData = {
 const pureMusic: PlayerCapAllLyricsData = {
   title: 'FAIRY TAIL メインテーマ 2016 - 高梨康治',
   duration: 171,
-  play_time: 0,
+  position: 0,
   progress: 0,
   count: 0,
   lyrics: [],
@@ -128,7 +128,7 @@ describe('buildLyricLines (default play_time basis)', () => {
 const twoWordLines = (nextLineStart: number): PlayerCapAllLyricsData => ({
   title: 't',
   duration: 100,
-  play_time: 0,
+  position: 0,
   progress: 0,
   count: 2,
   lyrics: [
@@ -172,7 +172,7 @@ describe('per-word line close-out (avoid disappearing early under a large offset
 const twoPlainLines = (nextLineStart: number, text = 'ab'): PlayerCapAllLyricsData => ({
   title: 't',
   duration: 100,
-  play_time: 0,
+  position: 0,
   progress: 0,
   count: 2,
   lyrics: [
@@ -198,7 +198,7 @@ describe('whole-line duration cap (long instrumental gap deferred to the interlu
 const lineVsWordOverlap: PlayerCapAllLyricsData = {
   title: 't',
   duration: 100,
-  play_time: 0,
+  position: 0,
   progress: 0,
   count: 2,
   lyrics: [
@@ -228,7 +228,7 @@ const lineVsWordOverlap: PlayerCapAllLyricsData = {
 const mixedWordThenEarlyLine: PlayerCapAllLyricsData = {
   title: 't',
   duration: 100,
-  play_time: 0,
+  position: 0,
   progress: 0,
   count: 2,
   lyrics: [
@@ -267,7 +267,7 @@ describe('monotonic start-point convergence: a line-level time earlier than the 
 
   it('whole-line -> per-word: whole-line index0 has no word tail to consume, hangs to index1 start; per-word index1 keeps its words and word tail intact', () => {
     const lineThenWord: PlayerCapAllLyricsData = {
-      title: 't', duration: 100, play_time: 0, progress: 0, count: 2,
+      title: 't', duration: 100, position: 0, progress: 0, count: 2,
       lyrics: [
         { index: 0, timestamp: 3.0, play_time: 3.0, text: 'plain', sub_text: '', text_detailed: {} }, // whole-line
         {
