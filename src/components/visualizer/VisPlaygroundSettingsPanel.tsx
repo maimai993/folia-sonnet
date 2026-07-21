@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CaptionsOff, Languages, Monitor, PanelTop, RotateCcw, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CaptionsOff, Languages, Monitor, PanelTop, RotateCcw, type LucideIcon } from 'lucide-react';
 import {
     type CappellaAvatarImage,
     type CappellaEmojiImage,
@@ -15,6 +15,7 @@ import {
     type DioramaTuning,
     type VisualizerMode,
 } from '../../types';
+import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { colorWithAlpha } from './colorMix';
 import FontFallbackStackControl from './FontFallbackStackControl';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel, type VisualizerRegistryEntry } from './registry';
@@ -362,6 +363,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         setSubtitleFontFamilyDraft(subtitleFontFamily ?? '');
     }, [subtitleFontFamily]);
 
+    const enablePlayerPageNativeBlur = useSettingsUiStore(state => state.enablePlayerPageNativeBlur);
     const resolvedBackgroundMode = backgroundConfig?.mode ?? DEFAULT_VISUALIZER_BACKGROUND_MODE;
     const backgroundEntry = getVisualizerBackgroundRegistryEntry(resolvedBackgroundMode);
     const backgroundModeOptions = useMemo(() => (
@@ -463,6 +465,12 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
                 {activeSection === 'background' && (
                     <>
+                        {enablePlayerPageNativeBlur && (
+                            <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-500 dark:text-amber-400">
+                                <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+                                <span>{t('options.nativeBlurBackgroundNotice')}</span>
+                            </div>
+                        )}
                         <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="space-y-1">

@@ -552,6 +552,7 @@ export default {
     "transparentPlayerBackgroundDesc": "Hanya berlaku di halaman pemutar. Saat diaktifkan, Folia beralih ke mode jendela transparan untuk sumber browser OBS atau overlay chroma key.",
     "enablePlayerPageNativeBlur": "Aktifkan Blur Asli Halaman Pemutar",
     "enablePlayerPageNativeBlurDesc": "Saat diaktifkan, tema, gambar, Monet, dan latar belakang pemutar lainnya disembunyikan lalu diganti dengan blur asli sistem. Hanya berlaku dalam mode nontransparan di desktop; efek ini memakai lebih banyak sumber daya dan dapat tersendat saat jendela dipindahkan.",
+    "nativeBlurBackgroundNotice": "Blur asli sistem diaktifkan; pengaturan latar belakang animasi lirik saat ini tidak berlaku.",
     "autoHidePlayerChrome": "Sembunyikan kontrol pemutar otomatis",
     "autoHidePlayerChromeDesc": "Saat diaktifkan, bilah kemajuan pemutar dan tombol sisi kanan akan otomatis disembunyikan saat mouse meninggalkan jendela lebih dari 3 detik.",
     "disableVisualizerVignette": "Nonaktifkan vignette",

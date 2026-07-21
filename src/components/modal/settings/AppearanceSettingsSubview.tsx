@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check, ChevronRight } from 'lucide-react';
+import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -564,6 +564,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     // Access ZUSTAND settings store directly for setters & configurations
     const store = useSettingsUiStore(useShallow(state => ({
         statusSetter: state.statusSetter,
+        enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
         visualizerMode: state.visualizerMode,
         randomVisualizerModePerSong: state.randomVisualizerModePerSong,
         visualizerBackgroundMode: state.visualizerBackgroundMode,
@@ -965,6 +966,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                     <Monitor size={14} /> {t('options.lyricsRenderer')}
                 </h3>
                 <div className="space-y-3">
+                    {store.enablePlayerPageNativeBlur && (
+                        <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-500 dark:text-amber-400">
+                            <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+                            <span>{t('options.nativeBlurBackgroundNotice')}</span>
+                        </div>
+                    )}
                     <button
                         type="button"
                         onClick={onOpenVisPlayground}

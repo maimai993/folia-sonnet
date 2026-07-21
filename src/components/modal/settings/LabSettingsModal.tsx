@@ -196,7 +196,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     onToggleHideTaskbarIcon(false);
                                     onToggleOpenPlayerOnLaunch(false);
                                     onVisualizerFrameRateChange('off');
-                                    if (voiceInputPause?.supported) {
+                                    if (voiceInputPause?.supported && voiceInputPause.enabled) {
                                         voiceInputPause.onToggle();
                                     }
                                 }}
