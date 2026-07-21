@@ -179,6 +179,7 @@ jobs:
             release/*.exe
             release/*.blockmap
             release/*.yml
+            !release/builder-debug.yml
             release/*.deb
             release/*.rpm
             release/*.tar.gz

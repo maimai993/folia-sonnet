@@ -130,6 +130,7 @@ jobs:
             release/*.exe
             release/*.blockmap
             release/*.yml
+            !release/builder-debug.yml
             release/*.deb
             release/*.rpm
             release/*.tar.gz
@@ -161,16 +162,15 @@ jobs:
           set -euo pipefail
           gh release delete "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes >/dev/null 2>&1 || true
           mapfile -d '' files < <(find cielo-artifacts -type f -print0)
-          if [[ "${PUBLISH_MODE}" == "rolling" ]]; then
-            RELEASE_SCOPE="This is the rolling Cielo update used by clients on the Cielo channel."
-          else
-            RELEASE_SCOPE="This branch-specific Cielo build is retained for manual testing and does not participate in automatic updates."
-          fi
+          COMMIT_URL="https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          PUBLISHED_AT="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           cat > release-notes.md <<EOF
-          ${RELEASE_SCOPE}
+          Canary build for branch ${BRANCH_NAME} at commit ${GITHUB_SHA}.
 
-          Branch: ${BRANCH_NAME}
+          警告：Canary 版本包含未经充分验证的实验性功能，极有可能存在严重问题或破坏性变更，请勿作为日常使用版本下载。
+
           Version: ${RELEASE_VERSION}
-          Source commit: https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}
+          Source commit: ${COMMIT_URL}
+          Published at: ${PUBLISHED_AT}
           EOF
           gh release create "${RELEASE_TAG}" "${files[@]}" --repo "${GITHUB_REPOSITORY}" --title "${RELEASE_TITLE}" --notes-file release-notes.md --target "${GITHUB_SHA}" --prerelease
