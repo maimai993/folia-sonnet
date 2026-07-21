@@ -1,12 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { SongResult } from '../../types';
+import { Album, Artist, SongResult, UnifiedSong } from '../../types';
+import { canResolveSongCatalogRef } from '../../services/onlineMusic/catalogRefs';
+import { getProviderSongMetadata, getProviderSongPageUrl } from '../../services/onlineMusic/songMetadata';
 
 interface CoverTabProps {
     currentSong: SongResult | null;
-    onAlbumSelect: (albumId: number) => void;
-    onSelectArtist: (artistId: number) => void;
+    onAlbumSelect: (song: SongResult, album: Album) => void;
+    onSelectArtist: (song: SongResult, artist: Artist) => void;
     onOpenCurrentLocalAlbum: () => void;
     onOpenCurrentLocalArtist: (entityId?: string) => void;
     onOpenCurrentNavidromeAlbum: () => void;
@@ -28,18 +30,23 @@ const CoverTab: React.FC<CoverTabProps> = ({
     const isLocalSong = Boolean(currentSong && (((currentSong as any).isLocal === true) || (currentSong as any).localRef?.songId));
     const isNavidromeSong = Boolean(currentSong && (currentSong as any).isNavidrome === true);
     const isStageSong = Boolean(currentSong && (currentSong as any).isStage === true);
-    const displayArtists = currentSong?.ar?.length ? currentSong.ar : (currentSong?.artists || []);
-    const displayAlbumName = currentSong?.al?.name || currentSong?.album?.name || '';
+    const songMetadata = currentSong ? getProviderSongMetadata(currentSong) : null;
+    const displayArtists = songMetadata?.artists || [];
+    const displayAlbumName = songMetadata?.album?.name || '';
+    const canOpenAlbum = Boolean(currentSong && !isStageSong && (
+        isLocalSong
+        || isNavidromeSong
+        || canResolveSongCatalogRef(currentSong as UnifiedSong, 'album', currentSong.album)
+    ));
     const displayArtistNames = displayArtists.map((artist) => artist.name).join(', ');
     const copyTitleLine = currentSong
         ? `${currentSong.name || ''} - ${displayArtistNames} - ${displayAlbumName}`
         : '';
-    const neteaseSongId = !isLocalSong && !isNavidromeSong && !isStageSong ? currentSong?.id : undefined;
+    const songPageUrl = getProviderSongPageUrl(currentSong);
     const copyPayload = copyTitleLine
-        ? [copyTitleLine, neteaseSongId ? `https://music.163.com/#/song?id=${neteaseSongId}` : ''].filter(Boolean).join('\n')
+        ? [copyTitleLine, songPageUrl || ''].filter(Boolean).join('\n')
         : '';
     const canCopySongInfo = Boolean(copyPayload);
-    const neteaseSongUrl = neteaseSongId ? `https://music.163.com/#/song?id=${neteaseSongId}` : '';
 
     const copyText = async (text: string) => {
         if (navigator.clipboard?.writeText && window.isSecureContext) {
@@ -63,24 +70,24 @@ const CoverTab: React.FC<CoverTabProps> = ({
         }
     };
 
-    const openNeteaseSongPage = () => {
-        if (!neteaseSongUrl) {
+    const openProviderSongPage = () => {
+        if (!songPageUrl) {
             return;
         }
 
         const openSongPage = window.electron?.openExternalUrl
-            ? window.electron.openExternalUrl(neteaseSongUrl)
-            : Promise.resolve(Boolean(window.open(neteaseSongUrl, '_blank', 'noopener,noreferrer')));
+            ? window.electron.openExternalUrl(songPageUrl)
+            : Promise.resolve(Boolean(window.open(songPageUrl, '_blank', 'noopener,noreferrer')));
 
         void openSongPage.catch((error) => {
-            console.error('Failed to open Netease song page:', error);
+            console.error('Failed to open provider song page:', error);
         });
     };
 
-    // Normal click copies song info; Ctrl+click opens the matched Netease song page when available.
+    // Normal click copies song info; Ctrl+click opens the provider song page when available.
     const handleSongTitleClick = (event: React.MouseEvent<HTMLHeadingElement>) => {
-        if (event.ctrlKey && neteaseSongUrl) {
-            openNeteaseSongPage();
+        if (event.ctrlKey && songPageUrl) {
+            openProviderSongPage();
             return;
         }
 
@@ -116,13 +123,19 @@ const CoverTab: React.FC<CoverTabProps> = ({
                 </div>
                 <div className="text-sm opacity-60 space-y-1">
                     <div className="font-medium">
-                        {displayArtists.map((a, i) => (
+                        {displayArtists.map((a, i) => {
+                            const canOpenArtist = Boolean(currentSong && !isStageSong && (
+                                isLocalSong
+                                || isNavidromeSong
+                                || canResolveSongCatalogRef(currentSong as UnifiedSong, 'artist', a)
+                            ));
+                            return (
                             <React.Fragment key={`${a.entityId || a.id}-${i}`}>
                                 {i > 0 && ", "}
                                 <span
-                                    className={isStageSong ? '' : 'cursor-pointer hover:underline hover:opacity-100 transition-opacity'}
+                                    className={canOpenArtist ? 'cursor-pointer hover:underline hover:opacity-100 transition-opacity' : ''}
                                     onClick={() => {
-                                        if (isStageSong) {
+                                        if (!canOpenArtist) {
                                             return;
                                         }
                                         if (isLocalSong) {
@@ -133,18 +146,19 @@ const CoverTab: React.FC<CoverTabProps> = ({
                                             onOpenCurrentNavidromeArtist();
                                             return;
                                         }
-                                        onSelectArtist(a.id);
+                                        if (currentSong) onSelectArtist(currentSong, a);
                                     }}
                                 >
                                     {a.name}
                                 </span>
                             </React.Fragment>
-                        ))}
+                            );
+                        })}
                     </div>
                     <div
-                        className={isStageSong ? 'opacity-60' : 'opacity-60 cursor-pointer hover:opacity-100 hover:underline transition-all'}
+                        className={canOpenAlbum ? 'opacity-60 cursor-pointer hover:opacity-100 hover:underline transition-all' : 'opacity-60'}
                         onClick={() => {
-                            if (isStageSong) {
+                            if (!canOpenAlbum) {
                                 return;
                             }
                             if (isLocalSong) {
@@ -155,10 +169,8 @@ const CoverTab: React.FC<CoverTabProps> = ({
                                 onOpenCurrentNavidromeAlbum();
                                 return;
                             }
-                            const albumId = currentSong?.al?.id || currentSong?.album?.id;
-                            if (albumId) {
-                                onAlbumSelect(albumId);
-                            }
+                            const album = currentSong?.album;
+                            if (currentSong && album) onAlbumSelect(currentSong, album);
                         }}
                     >
                         {displayAlbumName}

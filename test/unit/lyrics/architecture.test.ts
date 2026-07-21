@@ -28,16 +28,17 @@ const collectSourceFiles = async (relativeDir: string): Promise<string[]> => {
 describe('lyrics architecture', () => {
     it('keeps Netease call sites on the shared processing helper', async () => {
         const directProcessingCallSites = [
-            'src/hooks/useLibraryPlaybackController.ts',
-            'src/components/app/playback/restorePlaybackSource.ts',
-            'src/services/prefetchService.ts',
-            'src/services/onlinePlayback.ts',
-            'src/services/localMusicService.ts',
-            'src/utils/lyrics/lyricMatchSources.ts'
+            'src/services/onlineMusic/neteaseProvider.ts',
         ];
         const delegatedProcessingCallSites = [
             'src/components/modal/LyricMatchModal.tsx',
-            'src/components/modal/NaviLyricMatchModal.tsx'
+            'src/components/modal/NaviLyricMatchModal.tsx',
+            'src/components/app/playback/restorePlaybackSource.ts',
+            'src/hooks/useLibraryPlaybackController.ts',
+            'src/services/localMusicService.ts',
+            'src/services/prefetchService.ts',
+            'src/services/onlinePlayback.ts',
+            'src/utils/lyrics/lyricMatchSources.ts',
         ];
 
         for (const file of directProcessingCallSites) {
@@ -49,7 +50,7 @@ describe('lyrics architecture', () => {
 
         for (const file of delegatedProcessingCallSites) {
             const content = await readRepoFile(file);
-            expect(content, `${file} should delegate lyric source fetching`).toContain('fetchLyricsForMatchSource');
+            expect(content, `${file} should delegate lyric source fetching`).toMatch(/fetchLyricsForMatchSource|getOnlineMusicProvider|provider\.lyrics|omni\.getLyrics/);
             expect(content, `${file} should not import legacy parsers`).not.toMatch(/lrcParser|yrcParser/);
             expect(content, `${file} should not inline chorus detection`).not.toContain('detectChorusLines');
         }
@@ -87,5 +88,19 @@ describe('lyrics architecture', () => {
         expect(workerContent).not.toContain('buildTimedWords');
         expect(lrcWrapperContent).toContain('parseCoreLRC');
         expect(yrcWrapperContent).toContain('parseCoreYRC');
+    });
+
+    it('keeps multi-source orchestration independent from the active Omni provider', async () => {
+        const orchestrationFiles = [
+            'src/utils/lyrics/autoMatchBestLyric.ts',
+            'src/utils/lyrics/lyricMatchSources.ts',
+        ];
+
+        for (const file of orchestrationFiles) {
+            const content = await readRepoFile(file);
+            expect(content, `${file} should not import active-provider Omni APIs`).not.toMatch(
+                /from ['"].*onlineMusic\/omni['"]|omni\.(?:searchSongs|getLyrics|getChorusRanges)/,
+            );
+        }
     });
 });

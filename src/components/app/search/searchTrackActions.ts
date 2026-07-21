@@ -1,6 +1,6 @@
 import type { LocalSong, UnifiedSong } from '../../../types';
 import type { NavidromeSong } from '../../../types/navidrome';
-import { isSongMarkedUnavailable } from '../../../services/netease';
+import { isSongUnavailable } from '../../../services/onlineMusic/songAvailability';
 import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
 
 // src/components/app/search/searchTrackActions.ts
@@ -9,7 +9,7 @@ type SearchTrackSourceDeps = {
     localSongs: LocalSong[];
     onLocal: (song: LocalSong) => void;
     onNavidrome: (song: NavidromeSong) => void;
-    onNetease: (song: UnifiedSong) => void;
+    onOnline: (song: UnifiedSong) => void;
 };
 
 // Routes a search-result action to the matching playback source without leaking source checks into the UI.
@@ -17,7 +17,7 @@ export const dispatchSearchTrackAction = (
     track: UnifiedSong,
     deps: SearchTrackSourceDeps,
 ): boolean => {
-    if (isSongMarkedUnavailable(track)) {
+    if (isSongUnavailable(track)) {
         return false;
     }
 
@@ -39,6 +39,6 @@ export const dispatchSearchTrackAction = (
         return false;
     }
 
-    deps.onNetease(track);
+    deps.onOnline(track);
     return true;
 };

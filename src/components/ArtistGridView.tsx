@@ -6,9 +6,10 @@ import { SongResult, Theme } from '../types';
 import { LocalSong } from '../types';
 import { applyLocalSongCoverDisplay, buildLocalQueue } from '../services/playbackAdapters';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
-import { neteaseApi } from '../services/netease';
+import { omni } from '../services/onlineMusic/omni';
 import { createCoverPlaceholder } from '../utils/coverPlaceholders';
 import { getSizedCoverUrl } from '../utils/coverUrl';
+import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import { createSafeObjectUrl, getBlobObjectUrlSignature, isBlob } from '../utils/blobGuards';
 import { PolaroidCard } from './GridView';
 import { HexGridCoord, CubeCoord, getHexCubicSpiral } from './folia-grid/hexViewport';
@@ -36,8 +37,8 @@ interface ArtistGridViewProps {
     onBack: () => void;
     onSelectTrack?: (track: SongResult, queue: SongResult[]) => void;
     onAddTrackToQueue?: (track: SongResult) => void;
-    onSelectAlbum?: (albumId: number | string, album?: any) => void;
-    onSelectArtist?: (artistId: number | string, artist?: any) => void;
+    onSelectAlbum?: (albumId: number | string, album?: any, track?: SongResult) => void;
+    onSelectArtist?: (artistId: number | string, artist?: any, track?: SongResult) => void;
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
     theme: Theme;
@@ -180,6 +181,11 @@ const toHttps = (url?: string): string => {
         return url.replace('http:', 'https:');
     }
     return url;
+};
+
+export const getArtistGridAlbumCoverUrl = (album: any): string | undefined => {
+    const coverUrl = album?.coverUrl;
+    return typeof coverUrl === 'string' && coverUrl ? toHttps(coverUrl) : undefined;
 };
 
 const ArtistGridView: React.FC<ArtistGridViewProps> = ({
@@ -399,17 +405,17 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             : embeddedCoverUrl;
     }, [getOrCreateLocalCoverObjectUrl]);
 
-    // Appends Netease album pages without replacing already rendered artist content.
-    const loadNeteaseAlbumPages = async (artistId: number, generation: number, startOffset = 0) => {
+    // Appends online provider album pages without replacing already rendered artist content.
+    const loadOnlineAlbumPages = async (artistId: string | number, generation: number, startOffset = 0) => {
         setBackgroundLoading(true);
         setBackgroundLoadFailed(false);
         try {
             for (let offset = startOffset; offset < 10000; offset += 50) {
-                const response = await neteaseApi.getArtistAlbums(artistId, 50, offset);
+                const response = await omni.getArtistAlbums(collection, { limit: 50, offset });
                 if (generation !== loadGenerationRef.current) return;
-                const pageAlbums = Array.isArray(response?.hotAlbums) ? response.hotAlbums : [];
+                const pageAlbums = response?.items || [];
                 setAlbums(current => appendUniqueByKey(current, pageAlbums, album => String(album.id)));
-                if (!response?.more || pageAlbums.length === 0) break;
+                if (!response?.hasMore || pageAlbums.length === 0) break;
                 await new Promise(resolve => setTimeout(resolve, 60));
             }
         } catch (error) {
@@ -433,20 +439,28 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             const artistId = collection.id;
             const source = collection.source;
 
-            if (source === 'netease') {
-                const [detailRes, topSongsRes] = await Promise.all([
-                    neteaseApi.getArtistDetail(Number(artistId)),
-                    neteaseApi.getArtistTopSongs(Number(artistId)),
+            if (source === 'online') {
+                const [detail, topSongsPage] = await Promise.all([
+                    omni.getArtistDetail(collection),
+                    omni.getArtistSongs(collection, { limit: 10, offset: 0 }),
                 ]);
                 if (generation !== loadGenerationRef.current) return;
-                if (detailRes?.data?.artist) {
-                    setArtistInfo(detailRes.data.artist);
+                if (detail) {
+                    setArtistInfo({
+                        id: detail.id,
+                        name: detail.name,
+                        cover: detail.coverUrl,
+                        description: detail.description,
+                        trackCount: detail.trackCount,
+                        albumCount: detail.albumCount,
+                        aliases: detail.aliases,
+                    });
                 }
-                if (topSongsRes?.songs) {
-                    setTopSongs(topSongsRes.songs.slice(0, 10));
+                if (topSongsPage?.items) {
+                    setTopSongs(topSongsPage.items.slice(0, 10));
                 }
                 setLoading(false);
-                await loadNeteaseAlbumPages(Number(artistId), generation);
+                await loadOnlineAlbumPages(artistId, generation);
             } else if (source === 'navidrome') {
                 const config = getNavidromeConfig();
                 if (config) {
@@ -456,16 +470,16 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     setArtistInfo({
                         name: artistDetail?.name || collection.name,
                         cover: albumsList[0]?.coverArt ? navidromeApi.getCoverArtUrl(config, albumsList[0].coverArt, 600) : undefined,
-                        briefDesc: t('navidrome.artists') || 'Artists',
-                        musicSize: 0,
-                        albumSize: albumsList.length,
+                        description: t('navidrome.artists') || 'Artists',
+                        trackCount: 0,
+                        albumCount: albumsList.length,
                     });
 
                     const mappedAlbums = albumsList.map(alb => ({
                         id: alb.id,
                         name: alb.name,
-                        picUrl: alb.coverArt ? navidromeApi.getCoverArtUrl(config, alb.coverArt, 600) : undefined,
-                        publishTime: alb.year ? new Date(alb.year, 0, 1).getTime() : undefined,
+                        coverUrl: alb.coverArt ? navidromeApi.getCoverArtUrl(config, alb.coverArt, 600) : undefined,
+                        publishedAt: alb.year ? new Date(alb.year, 0, 1).getTime() : undefined,
                     }));
 
                     // Load songs from first few albums to form the topSongs list
@@ -496,7 +510,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 const artistSongIds = new Set(artistAssignments.map(assignment => assignment.songId));
                 const artistSongs = localSongs.filter(song => artistSongIds.has(song.id));
 
-                const albumMap = new Map<string, { id: string, name: string, picUrl?: string, publishTime?: number; }>();
+                const albumMap = new Map<string, { id: string, name: string, coverUrl?: string, publishedAt?: number; }>();
                 artistSongs.forEach(song => {
                     const assignment = catalogIndex.assignmentsBySongId.get(song.id);
                     const albumEntityId = assignment?.albumEntityId
@@ -510,11 +524,11 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         albumMap.set(albumKey, {
                             id: albumKey,
                             name: albumName,
-                            picUrl: coverUrl || undefined,
-                            publishTime: undefined,
+                            coverUrl: coverUrl || undefined,
+                            publishedAt: undefined,
                         });
-                    } else if (coverUrl && !albumMap.get(albumKey)?.picUrl) {
-                        albumMap.get(albumKey)!.picUrl = coverUrl;
+                    } else if (coverUrl && !albumMap.get(albumKey)?.coverUrl) {
+                        albumMap.get(albumKey)!.coverUrl = coverUrl;
                     }
                 });
 
@@ -531,16 +545,16 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         ? followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById)
                         : undefined;
                     const albumKey = albumEntityId || '__unknown-album__';
-                    const coverUrl = resolveLocalSongCoverUrl(localSong) || albumMap.get(albumKey)?.picUrl;
+                    const coverUrl = resolveLocalSongCoverUrl(localSong) || albumMap.get(albumKey)?.coverUrl;
                     return coverUrl ? applyLocalSongCoverDisplay(track, coverUrl) : track;
                 }) as SongResult[];
 
                 setArtistInfo({
                     name: artistName,
-                    cover: albumsList[0]?.picUrl || undefined,
-                    briefDesc: t('artistGrid.localArtist', { artistName }),
-                    musicSize: artistSongs.length,
-                    albumSize: albumsList.length,
+                    cover: albumsList[0]?.coverUrl || undefined,
+                    description: t('artistGrid.localArtist', { artistName }),
+                    trackCount: artistSongs.length,
+                    albumCount: albumsList.length,
                 });
                 setTopSongs(formattedTopSongs);
                 setAlbums(albumsList);
@@ -611,21 +625,24 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         return albums.filter((album) => String(album.name || '').toLowerCase().includes(query));
     }, [albums, deferredSearchQuery]);
 
-    const albumGridItems = useMemo<GridItem[]>(() => filteredAlbums.map((album) => ({
-        id: album.id,
-        name: album.name,
-        coverUrl: album.picUrl,
-        description: album.publishTime ? new Date(album.publishTime).getFullYear().toString() : '',
-        rawCollection: {
+    const albumGridItems = useMemo<GridItem[]>(() => filteredAlbums.map((album) => {
+        const coverUrl = getArtistGridAlbumCoverUrl(album);
+        return {
             id: album.id,
             name: album.name,
-            picUrl: album.picUrl,
-            coverImgUrl: album.picUrl,
-            coverUrl: album.picUrl,
-            type: 'album',
-            source: collection.source,
-        },
-    })), [collection.source, filteredAlbums]);
+            coverUrl,
+            description: album.publishedAt ? new Date(album.publishedAt).getFullYear().toString() : '',
+            rawCollection: {
+                ...album,
+                id: album.id,
+                name: album.name,
+                coverUrl,
+                type: 'album',
+                source: collection.source,
+                providerId: album.providerId || collection.providerId,
+            },
+        };
+    }), [collection.providerId, collection.source, filteredAlbums]);
 
     // Mapping items:
     // Index 0: Avatar
@@ -649,8 +666,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             id: '__artist_bio__',
             name: artistInfo.name,
             coverUrl: artistInfo.cover,
-            description: artistInfo.briefDesc,
-            subtitle: artistInfo.transNames?.[0] || '',
+            description: artistInfo.description,
+            subtitle: artistInfo.aliases?.[0] || '',
         });
 
         // 3. Popular Songs
@@ -658,9 +675,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             itemsList.push({
                 id: song.id,
                 name: song.name,
-                coverUrl: song.al?.picUrl || song.album?.picUrl,
+                coverUrl: getSongCoverUrl(song),
                 subtitle: String(idx + 1),
-                description: song.ar?.map(a => a.name).join('/') || song.artists?.map(a => a.name).join('/') || '',
+                description: song.artists?.map(a => a.name).join('/') || '',
                 rawTrack: song,
                 rawTrackIndex: idx,
             });
@@ -680,7 +697,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         return buildArtistGridCoords(topSongs.length, albumGridItems.length, layoutConfig.spacingX, layoutConfig.spacingY);
     }, [topSongs.length, albumGridItems.length, layoutConfig.spacingX, layoutConfig.spacingY]);
 
-    const backgroundCoverUrl = topSongs[0]?.al?.picUrl || topSongs[0]?.album?.picUrl || '';
+    const backgroundCoverUrl = getSongCoverUrl(topSongs[0]) || '';
 
     const {
         renderedIndexes,
@@ -1040,8 +1057,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
             // Index 1: Editorial Newspaper Biography Card
             if (idx === 1) {
-                const totalTracksText = artistInfo?.musicSize ? `${artistInfo.musicSize} ${t('home.songs') || 'songs'}` : '';
-                const totalAlbumsText = artistInfo?.albumSize ? `${artistInfo.albumSize} ${t('home.albums') || 'albums'}` : '';
+                const totalTracksText = artistInfo?.trackCount ? `${artistInfo.trackCount} ${t('home.songs') || 'songs'}` : '';
+                const totalAlbumsText = artistInfo?.albumCount ? `${artistInfo.albumCount} ${t('home.albums') || 'albums'}` : '';
                 const statsLine = [totalTracksText, totalAlbumsText].filter(Boolean).join(' • ');
 
                 return (
@@ -1247,9 +1264,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 isOpen={showCutInPanel}
                 artistName={artistInfo?.name || collection.name}
                 coverUrl={artistInfo?.cover}
-                description={artistInfo?.briefDesc}
-                musicSize={artistInfo?.musicSize}
-                albumSize={artistInfo?.albumSize}
+                description={artistInfo?.description}
+                trackCount={artistInfo?.trackCount}
+                albumCount={artistInfo?.albumCount}
                 entityId={collection.source === 'local' ? collection.entityId : undefined}
                 onClose={() => setShowCutInPanel(false)}
                 onEditEntity={onEditEntity ? (entityId) => {
@@ -1315,9 +1332,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 <button
                     type="button"
                     onClick={() => {
-                        if (!backgroundLoadFailed || collection.source !== 'netease') return;
+                        if (!backgroundLoadFailed || collection.source !== 'online') return;
                         const generation = ++loadGenerationRef.current;
-                        void loadNeteaseAlbumPages(Number(collection.id), generation, albums.length);
+                        void loadOnlineAlbumPages(collection.id, generation, albums.length);
                     }}
                     className="absolute right-6 top-5 z-[70] flex items-center gap-2 rounded-full px-3 py-2 text-xs backdrop-blur-md"
                     style={{ backgroundColor: 'color-mix(in srgb, var(--bg-color) 65%, transparent)' }}
@@ -1442,7 +1459,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
             {/* Biography Full Text Modal */}
             <AnimatePresence>
-                {showFullBio && artistInfo?.briefDesc && (
+                {showFullBio && artistInfo?.description && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -1471,13 +1488,13 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                                 <h3 className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>
                                     {artistInfo.name}
                                 </h3>
-                                {artistInfo.transNames?.[0] && (
-                                    <p className="text-xs opacity-50 mt-0.5">{artistInfo.transNames[0]}</p>
+                                {artistInfo.aliases?.[0] && (
+                                    <p className="text-xs opacity-50 mt-0.5">{artistInfo.aliases[0]}</p>
                                 )}
                             </div>
 
                             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 leading-relaxed text-sm opacity-80 break-words whitespace-pre-wrap">
-                                {artistInfo.briefDesc}
+                                {artistInfo.description}
                             </div>
                         </motion.div>
                     </motion.div>

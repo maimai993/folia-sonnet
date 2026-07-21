@@ -1,5 +1,6 @@
 import { PlayerState, type SongResult, type StagePlayerPlaybackContext, type StagePlayerQueueItem, type StagePlayerSnapshot } from '../types';
-import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './appPlaybackGuards';
+import { getPlaybackSongSource, isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './appPlaybackGuards';
+import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 
 // src/utils/stagePlayerSnapshot.ts
 // Builds the public Stage player snapshot without coupling Electron bridge code to song source details.
@@ -30,9 +31,7 @@ const getSongArtists = (song: SongResult | null): string => {
         return '';
     }
 
-    const artistNames = song.ar?.map(artist => artist.name).filter(Boolean)
-        ?? song.artists?.map(artist => artist.name).filter(Boolean)
-        ?? [];
+    const artistNames = getProviderSongMetadata(song).artists.map(artist => artist.name).filter(Boolean);
     if (artistNames.length > 0) {
         return artistNames.join(', ');
     }
@@ -46,8 +45,9 @@ const getSongAlbum = (song: SongResult | null): string => {
         return '';
     }
 
-    if (song.al?.name || song.album?.name) {
-        return song.al?.name || song.album?.name || '';
+    const albumName = getProviderSongMetadata(song).album?.name || '';
+    if (albumName) {
+        return albumName;
     }
 
     const navidromeSong = resolveNavidromePlaybackCarrier(song);
@@ -71,7 +71,7 @@ const getSongSource = (song: SongResult | null): string => {
         return 'navidrome';
     }
 
-    return 'netease';
+    return getPlaybackSongSource(song);
 };
 
 export const buildStagePlayerQueueItemId = (song: SongResult, index: number): string => {
@@ -114,13 +114,13 @@ const getSongDurationMs = (song: SongResult | null, fallbackMs = 0): number => {
         return Math.max(0, Math.floor(fallbackMs));
     }
 
-    return Math.max(0, Math.floor(song.duration || song.dt || fallbackMs || 0));
+    return Math.max(0, Math.floor(getProviderSongMetadata(song).durationMs || fallbackMs || 0));
 };
 
 const buildQueueItem = (song: SongResult, index: number, fallbackCoverUrl: string | null): StagePlayerQueueItem => {
     const source = getSongSource(song);
     const id = String(song.id ?? `${source}-${index}`);
-    const coverUrl = song.al?.picUrl || song.album?.picUrl || fallbackCoverUrl || null;
+    const coverUrl = getProviderSongMetadata(song).coverUrl || fallbackCoverUrl || null;
 
     return {
         queueItemId: buildStagePlayerQueueItemId(song, index),
@@ -211,7 +211,7 @@ export const buildStagePlayerSnapshot = ({
                 artist: getSongArtists(currentSong),
                 album: getSongAlbum(currentSong),
                 durationMs: safeDurationMs,
-                coverUrl: coverUrl || currentSong.al?.picUrl || currentSong.album?.picUrl || null,
+                coverUrl: coverUrl || getProviderSongMetadata(currentSong).coverUrl || null,
             }
             : null,
         playerState,

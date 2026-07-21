@@ -2,9 +2,12 @@ import React from 'react';
 import { Disc, Play, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { UnifiedSong } from '../../../types';
+import type { MediaId } from '../../../types/onlineMusic';
 import { formatSongName } from '../../../utils/songNameFormatter';
 import { getSizedCoverUrl } from '../../../utils/coverUrl';
-import { getSongUnavailableTagText, isSongMarkedUnavailable } from '../../../services/netease';
+import { getSongUnavailableLabel, isSongUnavailable } from '../../../services/onlineMusic/songAvailability';
+import { canResolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
+import { getProviderSongMetadata } from '../../../services/onlineMusic/songMetadata';
 
 // src/components/app/search/SearchResultRow.tsx
 
@@ -14,8 +17,8 @@ type SearchResultRowProps = {
     isDaylight: boolean;
     onPlayTrack: (track: UnifiedSong) => void;
     onAddTrackToQueue: (track: UnifiedSong) => void;
-    onOpenArtist: (track: UnifiedSong, artistName: string, artistId?: number, entityId?: string) => void;
-    onOpenAlbum: (track: UnifiedSong, albumName: string, albumId?: number, entityId?: string) => void;
+    onOpenArtist: (track: UnifiedSong, artistName: string, artistId?: MediaId, entityId?: string) => void;
+    onOpenAlbum: (track: UnifiedSong, albumName: string, albumId?: MediaId, entityId?: string) => void;
 };
 
 const formatDuration = (duration: number) => {
@@ -35,14 +38,16 @@ const SearchResultRow: React.FC<SearchResultRowProps> = ({
     onOpenAlbum,
 }) => {
     const { t } = useTranslation();
-    const isUnavailable = isSongMarkedUnavailable(track);
-    const coverUrl = getSizedCoverUrl(track.al?.picUrl || track.album?.picUrl, 120);
-    const artists = track.ar?.length ? track.ar : track.artists;
-    const album = track.al || track.album;
+    const isUnavailable = isSongUnavailable(track);
+    const unavailableLabel = getSongUnavailableLabel(track, t('status.songUnavailableTag'));
+    const metadata = getProviderSongMetadata(track);
+    const coverUrl = getSizedCoverUrl(metadata.coverUrl, 120);
+    const artists = metadata.artists;
+    const album = metadata.album;
     const canOpenAlbum = Boolean(album?.name && (
         track.isLocal ? album.entityId
             : track.isNavidrome ? track.navidromeData?.albumId
-                : album.id
+                : canResolveSongCatalogRef(track, 'album', album)
     ));
 
     return (
@@ -88,7 +93,7 @@ const SearchResultRow: React.FC<SearchResultRowProps> = ({
                         </button>
                         {isUnavailable && (
                             <span className="shrink-0 rounded-full border border-current/10 px-2 py-0.5 text-[10px] opacity-60">
-                                {getSongUnavailableTagText(track, t('status.songUnavailableTag'))}
+                    {unavailableLabel}
                             </span>
                         )}
                     </div>
@@ -98,7 +103,7 @@ const SearchResultRow: React.FC<SearchResultRowProps> = ({
                                 const canOpenArtist = Boolean(
                                     track.isLocal ? artist.entityId
                                         : track.isNavidrome ? track.navidromeData?.artistId
-                                            : artist.id
+                                            : canResolveSongCatalogRef(track, 'artist', artist)
                                 );
                                 return (
                                     <React.Fragment key={`${artist.entityId || artist.id}-${index}`}>
@@ -132,7 +137,7 @@ const SearchResultRow: React.FC<SearchResultRowProps> = ({
                 </div>
 
                 <span className="hidden shrink-0 font-mono text-xs opacity-35 sm:block">
-                    {formatDuration(track.dt || track.duration)}
+                    {formatDuration(metadata.durationMs)}
                 </span>
                 {!isUnavailable && (
                     <button

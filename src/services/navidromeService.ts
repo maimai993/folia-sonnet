@@ -629,7 +629,7 @@ export const navidromeApi = {
         const displayAlbum = {
             id: 0,
             name: song.album,
-            picUrl: coverArtUrl,
+            coverUrl: coverArtUrl,
         };
 
         return {
@@ -638,11 +638,9 @@ export const navidromeApi = {
             name: song.title,
             artists: displayArtists,
             album: displayAlbum,
-            ar: displayArtists,
-            al: displayAlbum,
-            dt: song.duration * 1000,
-            duration: song.duration * 1000, // Convert to milliseconds
+            durationMs: song.duration * 1000, // Convert to milliseconds
             isNavidrome: true,
+            sourceRef: { kind: 'navidrome', mediaId: song.id },
             navidromeData: {
                 id: song.id,
                 streamUrl: navidromeApi.getStreamUrl(config, song.id),

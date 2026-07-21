@@ -4,7 +4,6 @@ import { Check, Loader2, Music, Search, X } from 'lucide-react';
 import type { OnlineLyricsState, SongResult } from '../../types';
 import { formatSongName } from '../../utils/songNameFormatter';
 import { loadOnlineLyricsState, saveOnlineLyricsState } from '../../utils/onlineLyricsState';
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { calculateMatchScore } from '../../utils/lyrics/matchScore';
 import { buildLyricSearchQuery } from '../../utils/lyrics/searchQuery';
 import { fetchLyricsForMatchSource, LYRIC_MATCH_SOURCES, searchLyricsByMatchSource, sourceSupportsManualSearch } from '../../utils/lyrics/lyricMatchSources';
@@ -15,6 +14,7 @@ import {
     getMatchResultAlbumName,
 } from './lyricMatchResultHelpers';
 import { LyricPreviewPanel } from './LyricPreviewPanel';
+import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 
 // src/components/modal/OnlineLyricMatchModal.tsx
 
@@ -28,7 +28,6 @@ interface OnlineLyricMatchModalProps {
 const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onClose, onMatch, isDaylight }) => {
     const { t } = useTranslation();
     const isMouseDownOnOverlayRef = useRef(false);
-    const enableAlternativeLyricSources = useSettingsUiStore(state => state.enableAlternativeLyricSources);
     const bgClass = isDaylight ? 'bg-white/90 border-white/20' : 'bg-zinc-900/95 border-white/10';
     const textPrimary = isDaylight ? 'text-zinc-900' : 'text-white';
     const textSecondary = isDaylight ? 'text-zinc-500' : 'text-zinc-400';
@@ -48,12 +47,12 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
     const [source, setSource] = useState<LyricMatchSource>('netease');
 
     const songInfo = React.useMemo(() => {
-        const artist = song.ar?.map(item => item.name).join(', ') || song.artists?.map(item => item.name).join(', ') || '';
+        const metadata = getProviderSongMetadata(song);
         return {
             title: song.name || '',
-            artist,
-            album: song.al?.name || song.album?.name || '',
-            durationMs: song.dt || song.duration || 0,
+            artist: metadata.artists.map(item => item.name).join(', '),
+            album: metadata.album?.name || '',
+            durationMs: metadata.durationMs,
         };
     }, [song]);
 
@@ -88,8 +87,9 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
     useEffect(() => {
         let isCurrent = true;
 
-        const artist = song.ar?.map(item => item.name).join(', ') || song.artists?.map(item => item.name).join(', ') || '';
-        const album = song.al?.name || song.album?.name || '';
+        const metadata = getProviderSongMetadata(song);
+        const artist = metadata.artists.map(item => item.name).join(', ');
+        const album = metadata.album?.name || '';
         const initialQuery = buildLyricSearchQuery(song.name, artist, album);
         setSearchQuery(initialQuery);
         setIsSearching(true);
@@ -123,12 +123,6 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
             isCurrent = false;
         };
     }, [song, source]);
-
-    useEffect(() => {
-        if (!enableAlternativeLyricSources && source !== 'netease') {
-            setSource('netease');
-        }
-    }, [enableAlternativeLyricSources, source]);
 
     const handleConfirm = async () => {
         if (!selectedResult) {
@@ -193,7 +187,6 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                     <div className={`w-[62%] flex flex-col border-r ${borderColor} p-6 gap-5 min-h-0`}>
                         <div className={`flex border-b ${borderColor} pb-2 gap-4`}>
                             {LYRIC_MATCH_SOURCES
-                                .filter(id => id === 'netease' || enableAlternativeLyricSources)
                                 .map(id => ({ id, label: getLyricMatchSourceLabel(id) }))
                                 .map(t => {
                                 const isSelected = source === t.id;
@@ -310,8 +303,8 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                                         <div className="w-full h-full flex items-center justify-center"><Music size={28} className="opacity-10" /></div>
                                     )
                                 ) : (
-                                    song.al?.picUrl || song.album?.picUrl ? (
-                                        <img src={song.al?.picUrl || song.album?.picUrl || ''} alt="Cover" className="w-full h-full object-cover" />
+                                    getProviderSongMetadata(song).coverUrl ? (
+                                        <img src={getProviderSongMetadata(song).coverUrl || ''} alt="Cover" className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center"><Music size={28} className="opacity-10" /></div>
                                     )
@@ -327,12 +320,12 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                                 <div className={`text-sm opacity-75 font-medium line-clamp-1 ${textPrimary}`}>
                                     {selectedResult
                                         ? getMatchResultArtists(selectedResult)
-                                        : (song.ar?.map(item => item.name).join(', ') || song.artists?.map(item => item.name).join(', ') || '')}
+                                        : getProviderSongMetadata(song).artists.map(item => item.name).join(', ') }
                                 </div>
                                 <div className={`text-xs opacity-60 line-clamp-1 ${textPrimary}`}>
                                     {selectedResult
                                         ? getMatchResultAlbumName(selectedResult)
-                                        : (song.al?.name || song.album?.name || '')}
+                                        : (getProviderSongMetadata(song).album?.name || '')}
                                 </div>
                             </div>
                         </div>

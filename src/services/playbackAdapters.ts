@@ -69,7 +69,6 @@ export const applyLocalLibraryArtistDisplay = <T extends SongResult>(
     return {
         ...song,
         artists,
-        ar: artists,
     };
 };
 
@@ -92,11 +91,6 @@ const applyLocalLibraryAlbumDisplay = <T extends SongResult>(
             entityId: entity.entityId,
             name: entity.name,
         },
-        al: {
-            ...(song.al || song.album),
-            entityId: entity.entityId,
-            name: entity.name,
-        },
     };
 };
 
@@ -111,11 +105,12 @@ export const applyLocalLibraryEntityDisplay = <T extends SongResult>(
     preparedIndex,
 );
 
-// Applies a resolved local cover URL to both API-compatible album fields used by song cards.
+// Applies a resolved local cover URL to the canonical album field used by song cards.
 export const applyLocalSongCoverDisplay = <T extends SongResult>(song: T, coverUrl: string): T => ({
     ...song,
-    al: song.al ? { ...song.al, picUrl: coverUrl } : { id: 0, name: song.album?.name || '', picUrl: coverUrl },
-    album: song.album ? { ...song.album, picUrl: coverUrl } : { id: 0, name: '', picUrl: coverUrl },
+    album: song.album
+        ? { ...song.album, coverUrl }
+        : { id: 0, name: '', coverUrl },
 });
 
 export const getLocalSongId = (localSong: LocalSong): number => {
@@ -166,22 +161,12 @@ export function buildUnifiedLocalSong({
         id: getLocalSongId(localSong),
         name: displayTitle,
         artists: displayArtists,
-        album: displayAlbum ? { id: 0, name: displayAlbum } : { id: 0, name: '' },
-        duration: localSong.duration,
+        album: displayAlbum ? { id: 0, name: displayAlbum, coverUrl: coverUrl || undefined } : { id: 0, name: '' },
+        durationMs: localSong.duration,
         isPureMusic: useMatchedLyrics ? localSong.matchedIsPureMusic : false,
-        ar: displayArtists,
-        al: displayAlbum ? {
-            id: 0,
-            name: displayAlbum,
-            picUrl: coverUrl || undefined
-        } : coverUrl ? {
-            id: 0,
-            name: '',
-            picUrl: coverUrl
-        } : undefined,
-        dt: localSong.duration,
         isLocal: true,
         localRef: { songId: localSong.id },
+        sourceRef: { kind: 'local', mediaId: localSong.id },
     };
 
     if (!matchedSong) {
@@ -189,8 +174,9 @@ export function buildUnifiedLocalSong({
     }
 
     if (coverUrl) {
-        if (unifiedSong.album) unifiedSong.album.picUrl = coverUrl;
-        if (unifiedSong.al) unifiedSong.al.picUrl = coverUrl;
+        if (unifiedSong.album) {
+            unifiedSong.album.coverUrl = coverUrl;
+        }
     }
 
     return unifiedSong;
@@ -238,28 +224,22 @@ export function buildUnifiedNavidromeSong(
 ): SongResult {
     const displayArtists = (options?.useOnlineMetadata && options.matchedArtists)
         ? [{ id: 0, name: options.matchedArtists }]
-        : (navidromeSong.artists || navidromeSong.ar || []);
-    const displayAlbum = navidromeSong.album || (navidromeSong.al ? {
-        id: navidromeSong.al.id,
-        name: navidromeSong.al.name,
-        picUrl: navidromeSong.al.picUrl
-    } : { id: 0, name: '' });
-    const displayAl = options?.coverUrl
-        ? { ...(navidromeSong.al || displayAlbum || { id: 0, name: '' }), picUrl: options.coverUrl }
-        : (navidromeSong.al || displayAlbum);
+        : (navidromeSong.artists || []);
+    const displayAlbum = navidromeSong.album || { id: 0, name: '' };
+    const displayAlbumWithCover = options?.coverUrl
+        ? { ...displayAlbum, coverUrl: options.coverUrl }
+        : displayAlbum;
 
     return {
         id: navidromeSong.id,
         name: (options?.useOnlineMetadata && options.matchedAlbumName) ? options.matchedAlbumName : navidromeSong.name,
         artists: displayArtists,
-        album: displayAlbum,
-        duration: navidromeSong.duration || navidromeSong.dt || 0,
+        album: displayAlbumWithCover,
+        durationMs: navidromeSong.durationMs || 0,
         isPureMusic: navidromeSong.lyricsSource === 'online' ? navidromeSong.matchedIsPureMusic : false,
-        ar: navidromeSong.ar || displayArtists,
-        al: displayAl,
-        dt: navidromeSong.dt,
         isNavidrome: true,
         navidromeData: navidromeSong,
+        sourceRef: { kind: 'navidrome', mediaId: navidromeSong.navidromeData.id },
         matchedLyricsSource: options?.matchedLyricsSource,
         matchedLyricsProviderPlatform: options?.matchedLyricsProviderPlatform
     } as any;
@@ -269,15 +249,13 @@ export function buildNavidromeQueue(queue: NavidromeSong[], currentSong?: SongRe
     const convertedQueue = queue.map(song => ({
         id: song.id,
         name: song.name,
-        artists: song.artists || song.ar || [],
-        album: song.album || (song.al ? { id: song.al.id, name: song.al.name, picUrl: song.al.picUrl } : { id: 0, name: '' }),
-        duration: song.duration || song.dt || 0,
+        artists: song.artists || [],
+        album: song.album || { id: 0, name: '' },
+        durationMs: song.durationMs || 0,
         isPureMusic: song.lyricsSource === 'online' ? song.matchedIsPureMusic : false,
-        ar: song.ar || [],
-        al: song.al,
-        dt: song.dt,
         isNavidrome: true,
-        navidromeData: song
+        navidromeData: song,
+        sourceRef: { kind: 'navidrome', mediaId: song.navidromeData.id },
     } as any));
 
     if (!currentSong) {

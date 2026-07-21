@@ -1,9 +1,7 @@
-import { neteaseApi } from '../../services/netease';
+import { getOnlineMusicProvider } from '../../services/onlineMusic/providerRegistry';
 import type { AmllDbPlatform, LyricData, LyricProviderSource, SongResult } from '../../types';
-import { fetchNeteaseChorusRanges, processNeteaseLyrics } from './neteaseProcessing';
 import { calculateMatchScore, calculateMatchScoreDetails } from './matchScore';
 import { searchQQLyrics, fetchQQLyrics } from './providers/qqLyricProvider';
-import { searchKugouLyrics, fetchKugouLyrics } from './providers/kugouLyricProvider';
 import { fetchAmllDbLyrics } from './providers/amllDbProvider';
 import { applyNeteaseChorusByTime } from './chorusEffects';
 
@@ -65,12 +63,13 @@ export async function searchAmllDbLyricCandidates(
     target: LyricMatchSearchTarget,
 ): Promise<SongResult[]> {
     const [neteaseResult, qqResult] = await Promise.allSettled([
-        neteaseApi.cloudSearch(query, AMLL_DB_SEARCH_LIMIT_PER_SOURCE),
+        getOnlineMusicProvider('netease')?.search?.searchSongs(query, AMLL_DB_SEARCH_LIMIT_PER_SOURCE, 0)
+            || Promise.resolve({ items: [], hasMore: false, nextOffset: 0 }),
         searchQQLyrics(query, 1, AMLL_DB_SEARCH_LIMIT_PER_SOURCE),
     ]);
 
     const neteaseSongs = neteaseResult.status === 'fulfilled'
-        ? ((neteaseResult.value.result?.songs as SongResult[] | undefined) ?? []).map(song => withAmllDbPlatform(song, 'ncm'))
+        ? neteaseResult.value.items.map(song => withAmllDbPlatform(song, 'ncm'))
         : [];
     const qqSongs = qqResult.status === 'fulfilled'
         ? qqResult.value.map(song => withAmllDbPlatform(song, 'qq'))
@@ -111,14 +110,15 @@ export async function searchLyricsByMatchSource(
     target: LyricMatchSearchTarget,
 ): Promise<SongResult[]> {
     if (source === 'netease') {
-        const response = await neteaseApi.cloudSearch(query);
-        return sortByMatchScore((response.result?.songs as SongResult[] | undefined) ?? [], target);
+        const page = await getOnlineMusicProvider('netease')?.search?.searchSongs(query, 50, 0);
+        return sortByMatchScore(page?.items || [], target);
     }
     if (source === 'qq') {
         return sortByMatchScore(await searchQQLyrics(query), target);
     }
     if (source === 'kugou') {
-        return sortByMatchScore(await searchKugouLyrics(query), target);
+        const page = await getOnlineMusicProvider('kugou')?.search?.searchSongs(query, 50, 0);
+        return sortByMatchScore(page?.items || [], target);
     }
     return searchAmllDbLyricCandidates(query, target);
 }
@@ -128,8 +128,12 @@ export async function fetchLyricsForMatchSource(
     selectedResult: SongResult,
 ): Promise<LyricMatchFetchResult | null> {
     if (source === 'netease') {
-        const lyricResponse = await neteaseApi.getLyric(selectedResult.id);
-        return processNeteaseLyrics(neteaseApi.getProcessedLyricPayload(lyricResponse), { songId: selectedResult.id });
+        const result = await getOnlineMusicProvider('netease')?.lyrics?.getLyrics(selectedResult);
+        if (!result) return null;
+        return {
+            lyrics: result.lyrics,
+            isPureMusic: result.isPureMusic,
+        };
     }
     if (source === 'qq') {
         return {
@@ -138,10 +142,9 @@ export async function fetchLyricsForMatchSource(
         };
     }
     if (source === 'kugou') {
-        return {
-            lyrics: await fetchKugouLyrics(selectedResult),
-            isPureMusic: false,
-        };
+        const result = await getOnlineMusicProvider('kugou')?.lyrics?.getLyrics(selectedResult);
+        if (!result) return null;
+        return { lyrics: result.lyrics, isPureMusic: result.isPureMusic };
     }
 
     const platform = selectedResult.amllDbPlatform;
@@ -150,7 +153,7 @@ export async function fetchLyricsForMatchSource(
     }
     const lyrics = await fetchAmllDbLyrics(platform, selectedResult.id);
     const chorusRanges = platform === 'ncm' && !hasChorusMarkers(lyrics)
-        ? await fetchNeteaseChorusRanges(selectedResult.id)
+        ? await getOnlineMusicProvider('netease')?.lyrics?.getChorusRanges?.(selectedResult.id) ?? []
         : [];
 
     return {

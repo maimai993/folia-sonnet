@@ -1317,7 +1317,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     )
                                                 )}
 
-                                                {showQuarkDownload && (
+                                                {showQuarkDownload && updateStatus.platform !== 'linux' && (
                                                     <>
                                                         <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
 
@@ -1345,10 +1345,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                             </div>
                                         )}
 
-                                        {/* 第三行：国内网络提醒小字 */}
-                                        {showQuarkDownload && updateStatus?.availableVersion && (
-                                            <div className="text-xs opacity-45 mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                                                {t('options.chinaDownloadHint')}
+                                        {/* 第三行：多平台网络与手动下载提醒小字 */}
+                                        {updateStatus?.availableVersion && (
+                                            <div className="text-xs opacity-60 mt-0.5 space-y-0.5" style={{ color: 'var(--text-secondary)' }}>
+                                                {(updateStatus.platform === 'darwin' || updateStatus.platform === 'linux' || !updateStatus.supported) && (
+                                                    <div>
+                                                        {updateStatus.platform === 'darwin'
+                                                            ? t('options.macManualUpdateNotice')
+                                                            : updateStatus.platform === 'linux'
+                                                            ? t('options.linuxManualUpdateNotice')
+                                                            : t('options.manualUpdateNotice')}
+                                                    </div>
+                                                )}
+                                                {showQuarkDownload && updateStatus.platform !== 'linux' && (
+                                                    <div>{t('options.chinaDownloadHint')}</div>
+                                                )}
                                             </div>
                                         )}
                                     </div>

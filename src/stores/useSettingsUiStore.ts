@@ -13,9 +13,11 @@ import { buildStoredMonetPortraitImage, clearMonetPortraitImage, isSupportedMone
 import { parseVisualizerFrameRate, setGlobalVisualizerFrameRate, VISUALIZER_FRAME_RATE_STORAGE_KEY } from '../utils/frameRateLimiter';
 import { sanitizeUrlBackgroundItem, sanitizeUrlBackgroundList } from '../utils/urlBackground';
 import { getLyricProviderPreferenceLabel } from '../utils/lyrics/lyricSourceLabels';
+import { migratePreferredLyricSource } from '../utils/lyrics/sourcePriority';
 import { applyAppLanguagePreference, readStoredAppLanguagePreference, type AppLanguagePreference } from '../i18n/config';
 import { normalizeFontFamilyStack } from '../utils/fontStacks';
 import i18n from '../i18n/config';
+import type { AudioQualityPreference } from '../types/onlineMusic';
 
 // src/stores/useSettingsUiStore.ts
 // Shared settings state and actions used by App, Home, and SettingsModal.
@@ -25,7 +27,7 @@ export const CACHE_SIZE_KEY = 'folia_cache_size';
 const ENABLE_MEDIA_CACHE_KEY = 'folia_enable_media_cache';
 const LAST_SEEN_GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';
 
-export type AudioQuality = 'exhigh' | 'lossless' | 'hires';
+export type AudioQuality = AudioQualityPreference;
 export type SettingsModalInitialTab = 'help' | 'options';
 export type SettingsSubviewId = 'appearance' | 'general' | 'playback' | 'integration' | 'storage' | 'desktop' | 'lab' | 'visualizer' | 'themePark' | 'lyricFilter';
 export type VisualizerSettingsSection = 'common' | 'background' | 'visualizer' | 'subtitle';
@@ -84,13 +86,21 @@ const readStoredDisableHomeDynamicBackground = (): boolean => {
     return false;
 };
 
+export const resolveStoredAudioQuality = (saved: string | null): AudioQuality => (
+    saved === 'standard' || saved === 'lossless' || saved === 'hires' ? saved : 'high'
+);
+
 const readStoredAudioQuality = (): AudioQuality => {
     if (typeof window === 'undefined') {
-        return 'exhigh';
+        return 'high';
     }
 
     const saved = localStorage.getItem('default_audio_quality');
-    return saved === 'lossless' || saved === 'hires' ? saved : 'exhigh';
+    const quality = resolveStoredAudioQuality(saved);
+    if (saved === 'exhigh') {
+        localStorage.setItem('default_audio_quality', 'high');
+    }
+    return quality;
 };
 
 const readStoredBackgroundOpacity = () => {
@@ -923,10 +933,17 @@ const readStoredHomeLayoutStyle = (): 'carousel' | 'grid' => {
     return 'grid';
 };
 
+const PREFERRED_LYRIC_SOURCE_STORAGE_KEY_V2 = 'preferred_alternative_lyric_source_v2';
+
 const readStoredPreferredAlternativeLyricSource = (): LyricProviderSource => {
-    if (typeof window === 'undefined') return 'netease';
-    const saved = localStorage.getItem('preferred_alternative_lyric_source');
-    return saved === 'qq' || saved === 'kugou' || saved === 'amll' ? saved : 'netease';
+    if (typeof window === 'undefined') return 'qq';
+    const versioned = localStorage.getItem(PREFERRED_LYRIC_SOURCE_STORAGE_KEY_V2);
+    const legacy = localStorage.getItem('preferred_alternative_lyric_source');
+    const migrated = migratePreferredLyricSource(versioned, legacy);
+    if (versioned !== migrated) {
+        localStorage.setItem(PREFERRED_LYRIC_SOURCE_STORAGE_KEY_V2, migrated);
+    }
+    return migrated;
 };
 
 /**
@@ -958,7 +975,6 @@ export type SettingsUiState = {
     useCoverColorBg: boolean;
     staticMode: boolean;
     disableHomeDynamicBackground: boolean;
-    enableAlternativeLyricSources: boolean;
     autoUseBestLyric: boolean;
     preferredAlternativeLyricSource: LyricProviderSource;
     hidePlayerProgressBar: boolean;
@@ -1062,7 +1078,6 @@ export type SettingsUiState = {
     handleToggleCoverColorBg: (enable: boolean) => void;
     handleToggleStaticMode: (enable: boolean) => void;
     handleToggleDisableHomeDynamicBackground: (disable: boolean) => void;
-    handleToggleAlternativeLyricSources: (enable: boolean) => void;
     handleToggleAutoUseBestLyric: (enable: boolean) => void;
     handleSetPreferredAlternativeLyricSource: (source: LyricProviderSource) => void;
     handleToggleHidePlayerProgressBar: (enable: boolean) => void;
@@ -1160,7 +1175,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     useCoverColorBg: getStoredBoolean('use_cover_color_bg', false),
     staticMode: getStoredBoolean('static_mode', false),
     disableHomeDynamicBackground: readStoredDisableHomeDynamicBackground(),
-    enableAlternativeLyricSources: getStoredBoolean('enable_alternative_lyric_sources', true),
     autoUseBestLyric: getStoredBoolean('auto_use_best_lyric', true),
     preferredAlternativeLyricSource: readStoredPreferredAlternativeLyricSource(),
     hidePlayerProgressBar: getStoredBoolean('hide_player_progress_bar', false),
@@ -1350,14 +1364,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             text: i18n.t('notifications.' + (disable ? 'homeBgDisabled' : 'homeBgEnabled')),
         });
     },
-    handleToggleAlternativeLyricSources: (enable) => {
-        setStoredBoolean('enable_alternative_lyric_sources', enable);
-        set({ enableAlternativeLyricSources: enable });
-        notify(get, {
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'altLyricsOn' : 'altLyricsOff')),
-        });
-    },
     handleToggleAutoUseBestLyric: (enable) => {
         setStoredBoolean('auto_use_best_lyric', enable);
         set({ autoUseBestLyric: enable });
@@ -1368,7 +1374,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     },
     handleSetPreferredAlternativeLyricSource: (source) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('preferred_alternative_lyric_source', source);
+            localStorage.setItem(PREFERRED_LYRIC_SOURCE_STORAGE_KEY_V2, source);
         }
         set({ preferredAlternativeLyricSource: source });
         notify(get, {

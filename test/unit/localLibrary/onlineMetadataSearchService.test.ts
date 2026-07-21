@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { neteaseApi } from '@/services/netease';
 import { searchQQLyrics } from '@/utils/lyrics/providers/qqLyricProvider';
+import { getOnlineMusicProvider } from '@/services/onlineMusic/providerRegistry';
 import {
     findAutomaticOnlineMetadataCandidate,
     searchOnlineMetadata,
@@ -43,10 +44,38 @@ describe('onlineMetadataSearchService', () => {
             { id: 1, name: 'Completely Unrelated Melody', dt: 200000, ar: [{ name: 'Someone Else' }] },
         ] } });
         vi.mocked(searchQQLyrics).mockResolvedValue([
-            { id: 9, qqMid: 'qq-mid', name: 'Target Song', duration: 200000, artists: [{ id: 7, name: 'Target Artist' }], album: { id: 8, name: 'Target Album' } },
+            { id: 9, qqMid: 'qq-mid', name: 'Target Song', durationMs: 200000, artists: [{ id: 7, name: 'Target Artist' }], album: { id: 8, name: 'Target Album' } },
         ]);
         const candidate = await findAutomaticOnlineMetadataCandidate(song);
         expect(candidate).toMatchObject({ source: 'qq', songId: 'qq-mid', titleMatched: true });
+    });
+
+    it('falls back to provider-backed KuGou when NetEase and QQ have no title-compatible candidate', async () => {
+        vi.mocked(neteaseApi.cloudSearch).mockResolvedValue({ result: { songs: [] } });
+        vi.mocked(searchQQLyrics).mockResolvedValue([]);
+        const kugouProvider = getOnlineMusicProvider('kugou')!;
+        vi.spyOn(kugouProvider.search!, 'searchSongs').mockResolvedValue({
+            items: [{
+                id: 'HASH',
+                kgHash: 'HASH',
+                name: 'Target Song',
+                durationMs: 200000,
+                artists: [{ id: 7, name: 'Target Artist' }],
+                album: { id: 8, name: 'Target Album', coverUrl: 'https://example.test/kugou-cover.jpg' },
+                sourceRef: { kind: 'online', providerId: 'kugou', mediaId: 'HASH' },
+            }],
+            hasMore: false,
+            nextOffset: 1,
+        });
+
+        const candidate = await findAutomaticOnlineMetadataCandidate(song);
+
+        expect(candidate).toMatchObject({
+            source: 'kugou',
+            songId: 'HASH',
+            titleMatched: true,
+            coverUrl: 'https://example.test/kugou-cover.jpg',
+        });
     });
 
     it('passes a manual query only to the selected source', async () => {

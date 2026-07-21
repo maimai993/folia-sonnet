@@ -24,7 +24,9 @@ const buildCoverRequestUrl = (coverUrl: string): string => {
     if (typeof window !== 'undefined' && window.electron) return coverUrl;
     try {
         const hostname = new URL(coverUrl).hostname;
-        if (hostname === 'y.gtimg.cn') {
+        if (hostname === 'y.gtimg.cn'
+            || hostname === 'kugou.com' || hostname.endsWith('.kugou.com')
+            || hostname === 'kgimg.com' || hostname.endsWith('.kgimg.com')) {
             return `/api/lyric-proxy?url=${encodeURIComponent(coverUrl)}`;
         }
     } catch {
@@ -81,6 +83,15 @@ export async function loadCachedOrFetchCover(cacheKey: string, coverUrl?: string
         console.warn('Failed to cache cover:', error);
         return coverUrl;
     }
+}
+
+export async function saveCoverBlob(cacheKey: string, coverBlob: Blob): Promise<void> {
+    const descriptor = await writeCoverAsset(cacheKey, coverBlob).catch(() => null);
+    if (descriptor) {
+        await saveToCache(cacheKey, descriptor);
+        return;
+    }
+    await saveToCache(cacheKey, coverBlob);
 }
 
 // Replaces the cached online cover used by local-song playback without changing the audio file.

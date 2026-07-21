@@ -6,7 +6,7 @@ import { getFromCache, removeFromCache, saveToCache } from '../services/db';
 import { NowPlayingProvider } from '../services/nowPlayingProvider';
 import { findLatestActiveLineIndex, hasRenderableLyrics } from '../utils/appPlaybackHelpers';
 import { buildStageEntryKey, getStageLyricsTimelineBounds } from '../utils/appStageHelpers';
-import { isStagePlaybackSong } from '../utils/appPlaybackGuards';
+import { getPlaybackSongKey, isStagePlaybackSong } from '../utils/appPlaybackGuards';
 import {
     buildNowPlayingContentLoadKey,
     clampNowPlayingTimeSec,
@@ -297,13 +297,11 @@ export function useStagePlaybackController({
         id: -Math.max(1, Math.floor(session.updatedAt || Date.now())),
         name: session.title || 'Stage Session',
         artists: [{ id: 0, name: session.artist || 'Stage' }],
-        album: { id: 0, name: session.album || 'Stage', picUrl: session.coverArtUrl || session.coverUrl || undefined },
-        duration: Math.max(0, Math.floor(session.durationMs || 0)),
-        al: { id: 0, name: session.album || 'Stage', picUrl: session.coverArtUrl || session.coverUrl || undefined },
-        ar: [{ id: 0, name: session.artist || 'Stage' }],
-        dt: Math.max(0, Math.floor(session.durationMs || 0)),
+        album: { id: 0, name: session.album || 'Stage', coverUrl: session.coverArtUrl || session.coverUrl || undefined },
+        durationMs: Math.max(0, Math.floor(session.durationMs || 0)),
         sourceType: 'cloud',
         isStage: true,
+        sourceRef: { kind: 'stage', mediaId: session.id },
         stageData: session,
     } as SongResult), []);
 
@@ -519,13 +517,11 @@ export function useStagePlaybackController({
         id: -Math.max(1, Math.floor(session.updatedAt || Date.now())),
         name: session.title || lyricData.title || 'Stage Lyrics',
         artists: [{ id: 0, name: session.artist || lyricData.artist || 'Stage' }],
-        album: { id: 0, name: session.album || 'Stage', picUrl: undefined },
-        duration: Math.max(0, Math.floor(getStageLyricsTimelineBounds(lyricData).endTimeSec * 1000)),
-        al: { id: 0, name: session.album || 'Stage', picUrl: undefined },
-        ar: [{ id: 0, name: session.artist || lyricData.artist || 'Stage' }],
-        dt: Math.max(0, Math.floor(getStageLyricsTimelineBounds(lyricData).endTimeSec * 1000)),
+        album: { id: 0, name: session.album || 'Stage' },
+        durationMs: Math.max(0, Math.floor(getStageLyricsTimelineBounds(lyricData).endTimeSec * 1000)),
         sourceType: 'cloud',
         isStage: true,
+        sourceRef: { kind: 'stage', mediaId: String(session.updatedAt) },
         stageData: session,
     } as SongResult), []);
 
@@ -554,7 +550,7 @@ export function useStagePlaybackController({
 
         resetStageLyricsClock();
         const stageSong = buildStagePlaybackSong(session);
-        currentSongRef.current = stageSong.id;
+        currentSongRef.current = getPlaybackSongKey(stageSong);
         setIsLyricsLoading(false);
         let parsedLyrics: LyricData | null = null;
         if (session.lyricsText?.trim()) {
@@ -636,7 +632,7 @@ export function useStagePlaybackController({
         clearPlaybackSurface();
         shouldAutoPlayRef.current = false;
         pendingResumeTimeRef.current = null;
-        currentSongRef.current = stageSong.id;
+        currentSongRef.current = getPlaybackSongKey(stageSong);
         setCurrentSong(stageSong);
         setCachedCoverUrl(null);
         setAudioSrc(null);
@@ -714,18 +710,16 @@ export function useStagePlaybackController({
             id: -Math.max(1, Math.floor(Date.now())),
             name: fallbackTitle,
             artists: [{ id: 0, name: fallbackArtist }],
-            album: { id: 0, name: fallbackAlbum || 'Now Playing', picUrl: fallbackCoverUrl || undefined },
-            duration: Math.max(0, Math.floor(resolvedDurationSec * 1000)),
-            al: { id: 0, name: fallbackAlbum || 'Now Playing', picUrl: fallbackCoverUrl || undefined },
-            ar: [{ id: 0, name: fallbackArtist }],
-            dt: Math.max(0, Math.floor(resolvedDurationSec * 1000)),
+            album: { id: 0, name: fallbackAlbum || 'Now Playing', coverUrl: fallbackCoverUrl || undefined },
+            durationMs: Math.max(0, Math.floor(resolvedDurationSec * 1000)),
             sourceType: 'cloud',
             isStage: true,
+            sourceRef: { kind: 'stage', mediaId: String(track?.id || `${fallbackTitle}|${fallbackArtist}`) },
         } as SongResult) : null;
 
         shouldAutoPlayRef.current = false;
         pendingResumeTimeRef.current = null;
-        currentSongRef.current = fallbackSong?.id ?? null;
+        currentSongRef.current = fallbackSong ? getPlaybackSongKey(fallbackSong) : null;
         setCurrentSong(fallbackSong);
         setCachedCoverUrl(fallbackCoverUrl);
         setAudioSrc(null);

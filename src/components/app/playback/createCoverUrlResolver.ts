@@ -1,4 +1,5 @@
 import type { SongResult } from '../../../types';
+import { getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
 import { toSafeRemoteUrl } from '../../../utils/appPlaybackHelpers';
 
 // src/components/app/playback/createCoverUrlResolver.ts
@@ -10,9 +11,7 @@ export const createCoverUrlResolver = (
 ) => {
     return () => {
         if (cachedCoverUrl) return cachedCoverUrl;
-        let url = null;
-        if (currentSong?.al?.picUrl) url = currentSong.al.picUrl;
-        else if (currentSong?.album?.picUrl) url = currentSong.album.picUrl;
+        const url = getSongCoverUrl(currentSong) || null;
         return toSafeRemoteUrl(url) || null;
     };
 };

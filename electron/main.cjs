@@ -6,6 +6,7 @@ const Store = require('electron-store').default || require('electron-store');
 const crypto = require('crypto');
 const { createStageApi } = require('./stageApi.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
+const { createKugouApiBridge } = require('./kugouApiBridge.cjs');
 const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = require('./discordPresence.cjs');
 const { createVoiceInputPauseMonitor } = require('./voiceInputPause.cjs');
 const { getReleaseUrl, resolveReleaseChannel } = require('./updateChannels.cjs');
@@ -18,6 +19,28 @@ const linuxGraphicsMode =
   process.platform !== 'linux'
     ? 'system'
     : (process.env.FOLIA_LINUX_GRAPHICS_MODE || (isAppImageRuntime ? 'swiftshader' : 'system'));
+
+// Trusts only the known KuGou media CDN hostname mismatch while preserving TLS checks elsewhere.
+app.on('certificate-error', (event, _webContents, requestUrl, error, _certificate, callback) => {
+  let isAllowedKugouMediaRequest = false;
+  try {
+    const parsedUrl = new URL(requestUrl);
+    isAllowedKugouMediaRequest =
+      parsedUrl.protocol === 'https:' &&
+      parsedUrl.hostname === 'fs.youthandroid2.kugou.com' &&
+      error === 'net::ERR_CERT_COMMON_NAME_INVALID';
+  } catch {
+    isAllowedKugouMediaRequest = false;
+  }
+
+  if (isAllowedKugouMediaRequest) {
+    event.preventDefault();
+    callback(true);
+    return;
+  }
+
+  callback(false);
+});
 
 // Fix for Arch Linux / Wayland & Vulkan compatibility issues
 if (process.platform === 'linux') {
@@ -49,6 +72,7 @@ if (process.platform === 'darwin' && process.arch === 'x64') {
 }
 
 const store = new Store({ projectName: 'Folia' });
+const kugouApiBridge = createKugouApiBridge({ store });
 
 // --- Electron main process locale map ---
 const APP_LOCALE_KEY = 'APP_LOCALE';
@@ -880,6 +904,16 @@ function setupFileSystemAccessPermissionHandlers() {
 
 function setupCorsBypassHandlers() {
   const ses = session.defaultSession;
+
+  const getKugouMediaRequestInfo = details => {
+    const parsedUrl = new URL(details.url);
+    const isMediaRequest = details.resourceType === 'media' || parsedUrl.hostname.startsWith('fs.');
+    return isMediaRequest ? {
+      protocol: parsedUrl.protocol,
+      hostname: parsedUrl.hostname,
+      resourceType: details.resourceType,
+    } : null;
+  };
   ses.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = { ...details.responseHeaders };
     const originUrl = details.url;
@@ -908,6 +942,16 @@ function setupCorsBypassHandlers() {
 
     callback({ cancel: false, responseHeaders });
   });
+
+  ses.webRequest.onErrorOccurred({ urls: ['*://*.kugou.com/*'] }, details => {
+    const requestInfo = getKugouMediaRequestInfo(details);
+    if (!requestInfo) return;
+    if (requestInfo.resourceType === 'media' && details.error === 'net::ERR_FAILED') return;
+    console.warn('[KuGouMedia] request:error', {
+      ...requestInfo,
+      error: details.error,
+    });
+  });
 }
 
 function removeCorsResponseHeaders(responseHeaders) {
@@ -930,6 +974,8 @@ function isAllowedLyricProxyHost(hostname) {
     hostname === 'y.gtimg.cn' ||
     hostname === 'kugou.com' ||
     hostname.endsWith('.kugou.com') ||
+    hostname === 'kgimg.com' ||
+    hostname.endsWith('.kgimg.com') ||
     hostname === 'amll-ttml-db.stevexmh.net'
   );
 }
@@ -1164,6 +1210,7 @@ function getUpdateStatus() {
     supported: isAutoUpdaterSupported(),
     updateCheckSupported: isUpdateCheckSupported(),
     updateCheckSupportReason: getUpdateCheckSupportReason(),
+    platform: process.platform,
     updateCheckEnabled: getUpdateCheckEnabled(),
     autoUpdateEnabled: getAutoUpdateEnabled(),
     lastSeenVersion: store.get(LAST_SEEN_UPDATE_VERSION_SETTING_KEY) || null,
@@ -3168,6 +3215,9 @@ ipcMain.handle('get-netease-port', () => {
 ipcMain.handle('get-netease-api-status', () => {
   return neteaseApiStatus;
 });
+
+ipcMain.handle('kugou-api-status', () => kugouApiBridge.getStatus());
+ipcMain.handle('kugou-api-request', (_event, operation, params) => kugouApiBridge.request(operation, params));
 
 ipcMain.handle('window-minimize', () => {
   if (!mainWindow || mainWindow.isDestroyed()) {

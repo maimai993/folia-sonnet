@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     createLocalGridViewCollection,
     createNavidromeGridViewCollection,
+    getProviderCollectionArtistLabel,
     refreshLocalGridViewCollection,
     resolveLocalAlbumArtistDisplay,
     resolveLocalGridViewCoverSource,
@@ -29,6 +30,20 @@ const buildLocalSong = (id: string, title: string): LocalSong => ({
 });
 
 describe('gridViewCollectionAdapters', () => {
+    it('uses provider-normalized artists for collection card descriptions', () => {
+        expect(getProviderCollectionArtistLabel({
+            artists: [
+                { id: 1, name: 'Artist A' },
+                { id: 2, name: 'Artist B' },
+            ],
+            creator: { id: 3, nickname: 'Playlist Owner' },
+        })).toBe('Artist A, Artist B');
+        expect(getProviderCollectionArtistLabel({
+            artists: [],
+            creator: { id: 3, nickname: 'Playlist Owner' },
+        })).toBe('Playlist Owner');
+    });
+
     it('creates a local descriptor without embedding song objects', () => {
         const songs = [
             buildLocalSong('song-a', 'A'),
@@ -106,8 +121,8 @@ describe('gridViewCollectionAdapters', () => {
 
         const [track] = resolveLocalGridViewTracks(descriptor, [song]);
         expect(track.name).toBe('Online Title');
-        expect(track.ar?.[0]?.name).toBe('Online Artist');
-        expect(track.al).toMatchObject({ name: 'Online Album', picUrl: 'https://example.com/online.jpg' });
+        expect(track.artists[0]?.name).toBe('Online Artist');
+        expect(track.album).toMatchObject({ name: 'Online Album', coverUrl: 'https://example.com/online.jpg' });
     });
 
     it('exposes assigned local artists as separate entity links', () => {
@@ -152,11 +167,10 @@ describe('gridViewCollectionAdapters', () => {
 
         const [track] = resolveLocalGridViewTracks(descriptor, [song], { entities, assignments });
 
-        expect(track.ar).toEqual([
+        expect(track.artists).toEqual([
             { id: 0, entityId: 'artist-a', name: '小山百代' },
             { id: 0, entityId: 'artist-b', name: '三森すずこ' },
         ]);
-        expect(track.artists).toEqual(track.ar);
     });
 
     it('exposes the assigned local album UUID as the card navigation target', () => {
@@ -189,9 +203,8 @@ describe('gridViewCollectionAdapters', () => {
         const [rawPlayerTrack] = resolveLocalGridViewTracks(descriptor, [song]);
         const playerTrack = applyLocalLibraryEntityDisplay(rawPlayerTrack, { entities, assignments });
 
-        expect(track.al).toMatchObject({ entityId: 'album-entity', name: 'Renamed Album' });
         expect(track.album).toMatchObject({ entityId: 'album-entity', name: 'Renamed Album' });
-        expect(playerTrack.al).toMatchObject({ entityId: 'album-entity', name: 'Renamed Album' });
+        expect(playerTrack.album).toMatchObject({ entityId: 'album-entity', name: 'Renamed Album' });
     });
 
     it('applies a resolved local cover even when the track has no album metadata', () => {
@@ -206,8 +219,7 @@ describe('gridViewCollectionAdapters', () => {
 
         const coveredTrack = applyLocalSongCoverDisplay(track, 'blob:local-cover');
 
-        expect(coveredTrack.al?.picUrl).toBe('blob:local-cover');
-        expect(coveredTrack.album.picUrl).toBe('blob:local-cover');
+        expect(coveredTrack.album.coverUrl).toBe('blob:local-cover');
     });
 
     it('refreshes virtual all songs descriptors from the current local song list', () => {

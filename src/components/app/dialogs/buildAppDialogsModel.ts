@@ -4,6 +4,7 @@ import type NaviLyricMatchModal from '../../modal/NaviLyricMatchModal';
 import type OnlineLyricMatchModal from '../../modal/OnlineLyricMatchModal';
 import type UnavailableReplacementDialog from '../../modal/UnavailableReplacementDialog';
 import type SettingsModal from '../../modal/SettingsModal';
+import type ConfirmDialog from '../../shared/ConfirmDialog';
 import type { StatusMessage, SongResult, LocalSong } from '../../../types';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } from '../../../utils/appPlaybackGuards';
 
@@ -14,6 +15,7 @@ type NaviLyricMatchDialogProps = React.ComponentProps<typeof NaviLyricMatchModal
 type OnlineLyricMatchDialogProps = React.ComponentProps<typeof OnlineLyricMatchModal>;
 type UnavailableReplacementDialogProps = React.ComponentProps<typeof UnavailableReplacementDialog>;
 type SettingsDialogProps = React.ComponentProps<typeof SettingsModal>;
+type ConfirmDialogProps = React.ComponentProps<typeof ConfirmDialog>;
 
 type AppStatusToast = StatusMessage & {
     isDaylight: boolean;
@@ -27,6 +29,7 @@ export type AppDialogsModel = {
     onlineLyricMatchDialog?: OnlineLyricMatchDialogProps | null;
     unavailableReplacementDialog?: UnavailableReplacementDialogProps | null;
     settingsDialog?: SettingsDialogProps | null;
+    providerSwitchConfirmDialog?: ConfirmDialogProps | null;
 };
 
 type BuildAppDialogsModelParams = {
@@ -51,6 +54,7 @@ type BuildAppDialogsModelParams = {
     setPendingUnavailableReplacement: React.Dispatch<React.SetStateAction<any>>;
     handleUnavailableReplacementConfirm: () => Promise<void>;
     settingsDialog?: SettingsDialogProps | null;
+    providerSwitchConfirmDialog?: ConfirmDialogProps | null;
 };
 
 // Builds the centralized dialog model for toast, lyric matching, and unavailable-song replacement.
@@ -72,6 +76,7 @@ export const buildAppDialogsModel = ({
     setPendingUnavailableReplacement,
     handleUnavailableReplacementConfirm,
     settingsDialog = null,
+    providerSwitchConfirmDialog = null,
 }: BuildAppDialogsModelParams): AppDialogsModel => ({
     statusToast: statusMsg
         ? {
@@ -117,4 +122,5 @@ export const buildAppDialogsModel = ({
         onConfirm: handleUnavailableReplacementConfirm,
     },
     settingsDialog,
+    providerSwitchConfirmDialog,
 });

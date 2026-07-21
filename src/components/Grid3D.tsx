@@ -1,37 +1,48 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, User, Loader2, Settings, ChevronRight } from 'lucide-react';
+import { Search, Loader2, Settings } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { resolveSearchSource, useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import type { LocalLibraryCatalogSnapshot } from '../hooks/useLocalLibraryCatalog';
 import { useShallow } from 'zustand/react/shallow';
-import { SongResult, NeteaseUser, NeteasePlaylist, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState } from '../types';
-import { neteaseApi, isSongMarkedUnavailable } from '../services/netease';
+import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState } from '../types';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import LocalGrid3DView from './app/home/LocalGrid3DView';
 import NavidromeGrid3DView from './app/home/NavidromeGrid3DView';
-import { formatSongName } from '../utils/songNameFormatter';
 import DesktopGrid3DSurface from './folia-grid/DesktopGrid3DSurface';
-import { createNeteaseGridViewCollection } from './app/home/gridViewCollectionAdapters';
+import {
+    createOnlineGridViewCollection,
+    getProviderCollectionArtistLabel,
+} from './app/home/gridViewCollectionAdapters';
 import { importFolder, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
+import { useOnlineProviderQrLogin } from '../hooks/useOnlineProviderQrLogin';
+import type { OnlineProviderPlatformState } from '../hooks/useOnlineProviderPlatform';
+import { omni } from '../services/onlineMusic/omni';
+import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
+import OnlineProviderSwitcher from './app/home/OnlineProviderSwitcher';
+import OnlineProviderConnectPanel from './app/home/OnlineProviderConnectPanel';
+import OnlineProviderLoginModal from './app/home/OnlineProviderLoginModal';
+import { resolveOnlineProviderAccountView } from './app/home/onlineProviderAccountView';
+import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
 // Supports cover sliding with auto-fading header controls and delegates GridView opening upward.
 
 interface Grid3DProps {
+    onlineProviderPlatform?: OnlineProviderPlatformState;
     onPlaySong: (song: SongResult, playlistCtx?: SongResult[], isFmCall?: boolean) => void;
     onBackToPlayer: () => void;
     onRefreshUser: () => void;
-    user: NeteaseUser | null;
-    playlists: NeteasePlaylist[];
-    cloudPlaylist?: NeteasePlaylist | null;
+    user: ProviderUser | null;
+    playlists: ProviderCollection[];
+    cloudPlaylist?: ProviderCollection | null;
     currentTrack?: SongResult | null;
     isPlaying: boolean;
-    onSelectPlaylist: (playlist: NeteasePlaylist) => void;
-    onSelectAlbum: (albumId: number) => void;
-    onSelectArtist: (artistId: number) => void;
+    onSelectPlaylist: (playlist: ProviderCollection) => void;
+    onSelectAlbum: (albumId: MediaId) => void;
+    onSelectArtist: (artistId: MediaId) => void;
     onSelectLocalAlbum?: (albumName: string) => void;
     onSelectLocalArtist?: (artistName: string) => void;
     localSongs: LocalSong[];
@@ -108,6 +119,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         stageEnabled = false,
         stageIsActive = false,
         onOpenStagePlayer,
+        onlineProviderPlatform,
     } = props;
 
     const { t } = useTranslation();
@@ -128,7 +140,22 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         submitSearch: state.submitSearch,
     })));
 
-    const isNeteaseTab = homeViewTab === 'playlist' || homeViewTab === 'albums' || homeViewTab === 'radio';
+    const isOnlineTab = homeViewTab === 'playlist' || homeViewTab === 'albums' || homeViewTab === 'radio';
+    const activeProviderId = onlineProviderPlatform?.activeProviderId || 'netease';
+    const activeProviderSummary = onlineProviderPlatform?.activeProvider;
+    const activeUser = activeProviderSummary?.user
+        || (activeProviderId === 'netease' ? user : null);
+    const activeAccountView = resolveOnlineProviderAccountView({
+        provider: activeProviderSummary,
+        hasUser: Boolean(activeUser),
+        platformAvailable: Boolean(onlineProviderPlatform),
+    });
+    const activeCollections: ProviderCollection[] = activeProviderSummary?.collections || (activeProviderId === 'netease'
+        ? [
+            ...playlists,
+            ...(cloudPlaylist ? [cloudPlaylist] : []),
+        ]
+        : []);
 
     const [focusedIndex, setFocusedIndex] = useState(0);
     const [isLocalImporting, setIsLocalImporting] = useState(false);
@@ -200,98 +227,78 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
     // Login QR State
     const [showLoginModal, setShowLoginModal] = useState(false);
-    const [qrCodeImg, setQrCodeImg] = useState<string>("");
-    const [qrStatus, setQrStatus] = useState<string>("");
-    const qrCheckInterval = useRef<any>(null);
+    const [loginProviderId, setLoginProviderId] = useState(activeProviderId);
+    const {
+        qrCodeImg,
+        qrState,
+        qrStatusText,
+        start: startQrLogin,
+        stop: stopQrLogin,
+    } = useOnlineProviderQrLogin({
+        providerId: loginProviderId,
+        t,
+        onConfirmed: async (confirmedProviderId) => {
+            setShowLoginModal(false);
+            if (onlineProviderPlatform) {
+                await onlineProviderPlatform.completeLogin(confirmedProviderId);
+            } else {
+                onRefreshUser();
+            }
+        },
+    });
 
-    const initLogin = async () => {
+    const initLogin = async (providerId = activeProviderId) => {
+        const summary = onlineProviderPlatform?.providers.find(provider => provider.providerId === providerId);
+        if (summary && !summary.availability.configured) return;
+        setLoginProviderId(providerId);
         setShowLoginModal(true);
-        setQrStatus(t('home.loadingQr'));
-        try {
-            const keyRes = await neteaseApi.getQrKey();
-            const key = keyRes.data.unikey;
-
-            const createRes = await neteaseApi.createQr(key);
-            setQrCodeImg(createRes.data.qrimg);
-            setQrStatus(t('home.scanQr'));
-
-            if (qrCheckInterval.current) clearInterval(qrCheckInterval.current);
-            qrCheckInterval.current = setInterval(async () => {
-                try {
-                    const checkRes = await neteaseApi.checkQr(key);
-                    const code = checkRes.code;
-
-                    if (code === 800) {
-                        setQrStatus(t('home.qrExpired'));
-                        clearInterval(qrCheckInterval.current);
-                    } else if (code === 801) {
-                        // Waiting
-                    } else if (code === 802) {
-                        setQrStatus(t('home.qrScanned'));
-                    } else if (code === 803) {
-                        setQrStatus(t('home.loginSuccess'));
-                        clearInterval(qrCheckInterval.current);
-                        if (checkRes.cookie) {
-                            localStorage.setItem('netease_cookie', checkRes.cookie);
-                        }
-                        // Trigger parent refresh
-                        setTimeout(async () => {
-                            onRefreshUser();
-                            setShowLoginModal(false);
-                        }, 1000);
-                    }
-                } catch (e) {
-                    console.error(e);
-                }
-            }, 3000);
-
-        } catch (e) {
-            setQrStatus(t('home.loginError'));
-        }
+        await startQrLogin(providerId);
     };
 
-    useEffect(() => {
-        return () => {
-            if (qrCheckInterval.current) clearInterval(qrCheckInterval.current);
-        };
-    }, []);
-
-    // Netease details
-    const [favoriteAlbums, setFavoriteAlbums] = useState<any[]>([]);
+    // Online provider collection details
+    const [favoriteAlbums, setFavoriteAlbums] = useState<ProviderCollection[]>([]);
     const [loadingAlbums, setLoadingAlbums] = useState(false);
     const [radioItems, setRadioItems] = useState<any[]>([]);
     const [loadingRadio, setLoadingRadio] = useState(false);
 
     const isLoading =
-        (homeViewTab === 'playlist' && playlists.length === 0 && user !== null) ||
+        (homeViewTab === 'playlist' && activeCollections.length === 0 && activeUser !== null) ||
         (homeViewTab === 'albums' && loadingAlbums) ||
         (homeViewTab === 'radio' && loadingRadio);
 
     // Load favorite albums and recommendations
     useEffect(() => {
-        if (homeViewTab === 'albums' && favoriteAlbums.length === 0 && user) {
+        if (homeViewTab === 'albums' && favoriteAlbums.length === 0 && activeUser) {
             fetchFavoriteAlbums();
         }
-        if (homeViewTab === 'radio' && radioItems.length === 0 && user) {
+        if (homeViewTab === 'radio' && radioItems.length === 0 && activeUser) {
             fetchRadioItems();
         }
-    }, [homeViewTab, user]);
+    }, [activeProviderId, activeUser, homeViewTab]);
+
+    useEffect(() => {
+        setFavoriteAlbums([]);
+        setRadioItems([]);
+        setFocusedIndex(0);
+    }, [activeProviderId]);
 
     const fetchFavoriteAlbums = async () => {
         setLoadingAlbums(true);
         try {
-            let allAlbums: any[] = [];
+            let allAlbums: ProviderCollection[] = [];
             let offset = 0;
             const limit = 50;
             let hasMore = true;
 
+            if (!activeUser) {
+                setFavoriteAlbums([]);
+                return;
+            }
             while (hasMore) {
-                const res = await neteaseApi.getFavoriteAlbums(limit, offset);
-                if (res.data) {
-                    allAlbums = [...allAlbums, ...res.data];
-                }
-                hasMore = res.hasMore;
-                offset += limit;
+                const page = await omni.getUserAlbums(activeUser.id, { limit, offset });
+                allAlbums = [...allAlbums, ...page.items];
+                hasMore = page.hasMore && page.nextOffset > offset;
+                offset = page.nextOffset;
             }
             setFavoriteAlbums(allAlbums);
         } catch (e) {
@@ -317,15 +324,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const fetchRadioItems = async () => {
         setLoadingRadio(true);
         try {
-            const [fmRes, dailyRes, personalizedRes] = await Promise.all([
-                neteaseApi.getPersonalFm(),
-                neteaseApi.getDailyRecommendedSongs(),
-                neteaseApi.getPersonalizedPlaylists(35),
-            ]);
-            let fmCoverUrl = '';
-            if (fmRes.data && fmRes.data.length > 0) {
-                fmCoverUrl = fmRes.data[0].album?.picUrl || fmRes.data[0].al?.picUrl || '';
-            }
+            const { personalFm: fmSongs, dailySongs, recommendedCollections } = await omni.getHomeFeed(35);
+            const fmCoverUrl = getSongCoverUrl(fmSongs[0], activeProviderId);
 
             const fmItem = {
                 id: 'personal_fm',
@@ -335,29 +335,26 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 isFm: true,
             };
 
-            const dailySongs = dailyRes.songs || [];
             const dailyItem = {
                 id: 'daily_recommendations',
                 name: t('home.dailyRecommendations'),
-                coverUrl: dailySongs[0]?.al?.picUrl || dailySongs[0]?.album?.picUrl || '',
+                coverUrl: getSongCoverUrl(dailySongs[0], activeProviderId) || '',
                 trackCount: dailySongs.length,
                 description: t('home.dailyRecommendationsDescription'),
                 summary: t('home.dailyRecommendationsSummary'),
                 isDailyRecommendations: true,
             };
 
-            let personalizedItems: any[] = [];
-            if (personalizedRes.result) {
-                personalizedItems = personalizedRes.result.map((r: any) => ({
-                    id: r.id,
-                    name: r.name,
-                    coverUrl: r.picUrl,
-                    trackCount: r.trackCount,
-                    description: r.copywriter || t('home.playlists'),
-                    summary: r.copywriter || ''
-                }));
-            }
-            setRadioItems([fmItem, dailyItem, ...personalizedItems]);
+            const recommendedItems = recommendedCollections.map(collection => {
+                const description = collection.description || collection.creator?.nickname || '';
+                return {
+                    ...collection,
+                    coverUrl: collection.coverUrl,
+                    description,
+                    summary: description,
+                };
+            });
+            setRadioItems([fmItem, dailyItem, ...recommendedItems]);
         } catch (e) {
             console.error('[Grid3D] Failed to fetch radio items', e);
         } finally {
@@ -367,35 +364,30 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
     // Filter cloud and local playlists
     const playlistCards = useMemo(() => {
-        const base = cloudPlaylist
-            ? (playlists.length > 0
-                ? [playlists[0], cloudPlaylist, ...playlists.slice(1)]
-                : [cloudPlaylist])
-            : playlists;
-        return base.map(p => ({
+        return activeCollections.map(p => ({
             id: p.id,
             name: p.name,
-            coverUrl: p.coverImgUrl || (p as any).coverUrl,
+            coverUrl: p.coverUrl,
             trackCount: p.trackCount,
             description: p.creator?.nickname || t('home.playlists'),
             summary: p.description || '',
-            type: 'playlist' as const,
+            type: p.type,
             raw: p
         }));
-    }, [playlists, cloudPlaylist]);
+    }, [activeCollections, t]);
 
     const albumCards = useMemo(() => {
         return favoriteAlbums.map(a => ({
             id: a.id,
             name: a.name,
-            coverUrl: a.picUrl,
-            trackCount: a.size,
-            description: a.artists?.[0]?.name || t('player.unknownArtist'),
-            summary: a.description || a.briefDesc || '',
+            coverUrl: a.coverUrl,
+            trackCount: a.trackCount,
+            description: getProviderCollectionArtistLabel(a) || t('player.unknownArtist'),
+            summary: a.description || '',
             type: 'album' as const,
             raw: a
         }));
-    }, [favoriteAlbums]);
+    }, [favoriteAlbums, t]);
 
     const radioCards = useMemo(() => {
         return radioItems.map(r => ({
@@ -427,9 +419,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const handleSelectCollectionCard = async (card: any) => {
         if (card.id === 'personal_fm' || card.raw?.id === 'personal_fm') {
             try {
-                const fmRes = await neteaseApi.getPersonalFm();
-                if (fmRes.data && fmRes.data.length > 0) {
-                    onPlaySong(fmRes.data[0], fmRes.data, true);
+                const fmSongs = await omni.getPersonalFm();
+                if (fmSongs.length > 0) {
+                    onPlaySong(fmSongs[0], fmSongs, true);
                 }
             } catch (e) {
                 console.error('[Grid3D] Failed to fetch and play Personal FM:', e);
@@ -440,7 +432,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         const collection = card.raw
             ? { ...card.raw, type: card.type }
             : card;
-        onOpenGridView?.(createNeteaseGridViewCollection(collection));
+        onOpenGridView?.(createOnlineGridViewCollection(collection, activeProviderId));
     };
 
     const handleFolderImport = async () => {
@@ -466,9 +458,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         const query = searchQuery.trim();
         if (!query) return;
 
+        const searchSource = isOnlineTab ? activeProviderId : resolveSearchSource(homeViewTab);
         const didSearch = await submitSearch({
             query,
-            sourceTab: resolveSearchSource(homeViewTab),
+            sourceTab: searchSource,
             deps: {
                 localSongs,
                 localLibraryCatalog,
@@ -477,7 +470,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         });
 
         if (didSearch) {
-            onSearchCommitted(query, homeViewTab);
+            onSearchCommitted(query, searchSource);
         }
     };
 
@@ -505,11 +498,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         </h1>
                         <button
                             onClick={() => onOpenSettings?.('help')}
-                            className={`relative flex items-center gap-1.5 p-2 rounded-full hover:bg-white/10 transition-all ml-4 ${
-                                showUpdateIndicator 
-                                    ? 'opacity-90 hover:opacity-100' 
+                            className={`relative flex items-center gap-1.5 p-2 rounded-full hover:bg-white/10 transition-all ml-4 ${showUpdateIndicator
+                                    ? 'opacity-90 hover:opacity-100'
                                     : 'opacity-40 hover:opacity-100'
-                            }`}
+                                }`}
                             title="Help & Options"
                         >
                             <Settings size={20} style={{ color: 'var(--text-primary)' }} />
@@ -535,9 +527,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     title={t('options.scanProgress')}
                                 >
                                     <div
-                                        className={`relative flex items-center justify-center min-w-[56px] h-7 px-2.5 rounded-full backdrop-blur-md ${
-                                            isDaylight ? 'bg-white/95 text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-zinc-950/92 text-zinc-100'
-                                        }`}
+                                        className={`relative flex items-center justify-center min-w-[56px] h-7 px-2.5 rounded-full backdrop-blur-md ${isDaylight ? 'bg-white/95 text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-zinc-950/92 text-zinc-100'
+                                            }`}
                                     >
                                         <span className="relative z-10 text-[10px] font-semibold tabular-nums leading-none">
                                             {scanProgressPercent}%
@@ -550,9 +541,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             initial={{ opacity: 0, y: -6 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -6 }}
-                                            className={`absolute left-0 top-full mt-2 w-72 p-4 rounded-2xl border backdrop-blur-xl shadow-xl ${
-                                                isDaylight ? 'bg-white/85 border-black/10 text-zinc-800' : 'bg-black/60 border-white/10 text-zinc-100'
-                                            }`}
+                                            className={`absolute left-0 top-full mt-2 w-72 p-4 rounded-2xl border backdrop-blur-xl shadow-xl ${isDaylight ? 'bg-white/85 border-black/10 text-zinc-800' : 'bg-black/60 border-white/10 text-zinc-100'
+                                                }`}
                                         >
                                             <div className="text-sm font-semibold truncate">
                                                 {t('options.scanningFolder', { folderName: scanProgress.folderName })}
@@ -648,22 +638,29 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
             {/* Desktop Canvas Surface */}
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
-                {isNeteaseTab && !user ? (
-                    /* Guest Connect Account Page */
-                    <div className="flex flex-1 w-full flex-col items-center justify-center space-y-6">
-                        <div className={`w-24 h-24 rounded-3xl ${isDaylight ? 'bg-white/40 shadow-sm border border-black/5' : 'bg-white/5 border border-white/5'} flex items-center justify-center backdrop-blur-md`}>
-                            <User size={40} className="opacity-20" />
-                        </div>
-                        <h2 className="text-3xl font-bold opacity-80 text-center">{t('home.guestTitle')}</h2>
-                        <p className="opacity-40 text-sm text-center max-w-md leading-6 whitespace-pre-line">{t('home.guestPrompt')}</p>
-                        <button
-                            onClick={initLogin}
-                            className="px-8 py-3 bg-white text-black rounded-full font-bold text-sm hover:scale-105 transition-transform"
-                        >
-                            {t('home.connectAccount')}
-                        </button>
+                {isOnlineTab && activeAccountView === 'resolving' ? (
+                    <div className="flex flex-1 w-full items-center justify-center" aria-busy="true">
+                        <Loader2 className="animate-spin opacity-30" size={28} />
                     </div>
-                ) : isNeteaseTab ? (
+                ) : isOnlineTab && activeAccountView === 'guest' ? (
+                    <OnlineProviderConnectPanel
+                        providers={onlineProviderPlatform?.providers || omni.getProviderSummaries()}
+                        activeProviderId={activeProviderId}
+                        isDaylight={isDaylight}
+                        title={t('home.guestTitle')}
+                        prompt={t('home.guestPrompt')}
+                        getActionLabel={provider => provider.status === 'authenticated'
+                            ? t('home.switchToProvider', { provider: provider.shortName || provider.displayName })
+                            : t('home.connectProviderAccount', { provider: provider.shortName || provider.displayName })}
+                        onSelect={provider => {
+                            if (provider.status === 'authenticated') {
+                                void onlineProviderPlatform?.switchProvider(provider.providerId);
+                            } else {
+                                void initLogin(provider.providerId);
+                            }
+                        }}
+                    />
+                ) : isOnlineTab ? (
                     <DesktopGrid3DSurface
                         title={
                             homeViewTab === 'playlist'
@@ -728,70 +725,37 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             {/* Login Modal */}
             <AnimatePresence>
                 {showLoginModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.25 }}
-                        className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4"
-                    >
-                        <motion.div
-                            initial={{ scale: 0.92, opacity: 0, y: 24 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.92, opacity: 0, y: 12 }}
-                            transition={{ type: 'spring', bounce: 0, duration: 0.5 }}
-                            className="bg-zinc-900/90 border border-white/10 p-8 rounded-3xl max-w-sm w-full text-center relative shadow-2xl"
-                        >
-                            <button
-                                onClick={() => {
-                                    setShowLoginModal(false);
-                                    if (qrCheckInterval.current) clearInterval(qrCheckInterval.current);
-                                }}
-                                className="absolute top-4 right-4 opacity-30 hover:opacity-100 rounded-full bg-white/5 p-1 transition-colors cursor-pointer"
-                                style={{ color: 'var(--text-primary)' }}
-                            >
-                                ✕
-                            </button>
-                            <h3 className="text-lg font-bold mb-6" style={{ color: 'var(--text-primary)' }}>{t('home.loginTitle')}</h3>
-
-                            <div className="relative inline-block bg-white p-2 rounded-xl mb-4 shadow-inner">
-                                {qrCodeImg ? (
-                                    <img src={qrCodeImg} alt="QR Code" className="w-40 h-40" />
-                                ) : (
-                                    <div className="w-40 h-40 flex items-center justify-center bg-gray-100 rounded-lg">
-                                        <Loader2 className="animate-spin text-gray-400" size={24} />
-                                    </div>
-                                )}
-                            </div>
-
-                            <p className={`text-xs font-medium mt-2 ${qrStatus.includes('Success') ? 'text-green-400' : 'opacity-60'}`} style={{ color: qrStatus.includes('Success') ? undefined : 'var(--text-secondary)' }}>
-                                {qrStatus}
-                            </p>
-
-                            <p className="text-[10px] opacity-30 mt-6" style={{ color: 'var(--text-secondary)' }}>
-                                {t('home.loginNote')}
-                            </p>
-                        </motion.div>
-                    </motion.div>
+                    <OnlineProviderLoginModal
+                        title={t(loginProviderId === 'kugou' ? 'home.loginTitleKugou' : 'home.loginTitle')}
+                        note={t(loginProviderId === 'kugou' ? 'home.loginNoteKugou' : 'home.loginNote')}
+                        qrCodeImg={qrCodeImg}
+                        statusText={qrStatusText}
+                        state={qrState}
+                        retryLabel={t('home.retryQr')}
+                        closeLabel={t('home.closeLogin')}
+                        onRetry={() => void startQrLogin(loginProviderId)}
+                        onClose={() => {
+                            setShowLoginModal(false);
+                            stopQrLogin();
+                        }}
+                    />
                 )}
             </AnimatePresence>
 
-            {/* User Avatar - Back to Player */}
-            {user && (
-                <div className="absolute bottom-8 right-8 z-[100]">
-                    <div
-                        onClick={onBackToPlayer}
-                        className="group relative w-12 h-12 cursor-pointer rounded-full border border-white/20 hover:scale-105 transition-all overflow-hidden shadow-lg pointer-events-auto"
-                        title="Return to Player"
-                    >
-                        <img src={user.avatarUrl?.replace('http:', 'https:')} alt={user.nickname} className="w-full h-full object-cover" />
-
-                        {/* Hover Overlay */}
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-[2px]">
-                            <ChevronRight className="text-white" size={24} />
-                        </div>
-                    </div>
-                </div>
+            {onlineProviderPlatform && (
+                <OnlineProviderSwitcher
+                    providers={onlineProviderPlatform.providers}
+                    activeProviderId={activeProviderId}
+                    isDaylight={isDaylight}
+                    onBackToPlayer={onBackToPlayer}
+                    onSelect={provider => {
+                        if (provider.status === 'authenticated') {
+                            void onlineProviderPlatform.switchProvider(provider.providerId);
+                        } else {
+                            void initLogin(provider.providerId);
+                        }
+                    }}
+                />
             )}
 
         </div>

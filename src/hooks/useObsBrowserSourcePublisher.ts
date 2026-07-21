@@ -40,6 +40,7 @@ import {
 } from '../utils/obsBrowserSource';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
+import { getSongAlbumLabel, getSongArtistLabel } from '../services/onlineMusic/songMetadata';
 
 // src/hooks/useObsBrowserSourcePublisher.ts
 // Publishes the single playback surface to the local OBS browser source.
@@ -88,13 +89,9 @@ const emptyObsStatus = (): ObsBrowserSourceStatus => ({
     clientCount: 0,
 });
 
-const getSongArtist = (song: SongResult | null) =>
-    song?.artists?.map(artist => artist.name).join(', ')
-    || song?.ar?.map(artist => artist.name).join(', ')
-    || null;
+const getSongArtist = (song: SongResult | null) => getSongArtistLabel(song) || null;
 
-const getSongAlbum = (song: SongResult | null) =>
-    song?.album?.name || song?.al?.name || null;
+const getSongAlbum = (song: SongResult | null) => getSongAlbumLabel(song) || null;
 
 export const useObsBrowserSourcePublisher = ({
     isElectronWindow,

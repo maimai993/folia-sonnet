@@ -10,8 +10,8 @@ type ArtistGridInfoCutInPanelProps = {
     artistName: string;
     coverUrl?: string;
     description?: string;
-    musicSize?: number;
-    albumSize?: number;
+    trackCount?: number;
+    albumCount?: number;
     entityId?: string;
     onClose: () => void;
     onEditEntity?: (entityId: string) => void;
@@ -22,16 +22,16 @@ export const ArtistGridInfoCutInPanel = ({
     artistName,
     coverUrl,
     description,
-    musicSize,
-    albumSize,
+    trackCount,
+    albumCount,
     entityId,
     onClose,
     onEditEntity,
 }: ArtistGridInfoCutInPanelProps) => {
     const { t } = useTranslation();
     const stats = [
-        musicSize !== undefined ? `${musicSize} ${t('home.songs')}` : '',
-        albumSize !== undefined ? `${albumSize} ${t('home.albums')}` : '',
+        trackCount !== undefined ? `${trackCount} ${t('home.songs')}` : '',
+        albumCount !== undefined ? `${albumCount} ${t('home.albums')}` : '',
     ].filter(Boolean).join(' • ');
 
     return (
