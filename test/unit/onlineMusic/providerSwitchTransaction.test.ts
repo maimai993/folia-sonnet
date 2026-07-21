@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { switchOnlineProviderTransaction } from '@/hooks/useOnlineProviderPlatform';
+import {
+    completeOnlineProviderLoginTransaction,
+    switchOnlineProviderTransaction,
+} from '@/hooks/useOnlineProviderPlatform';
 
 // test/unit/onlineMusic/providerSwitchTransaction.test.ts
 
@@ -25,5 +28,50 @@ describe('online provider switch transaction', () => {
         })).resolves.toBe(true);
         expect(order).toEqual(['cleanup', 'commit', 'refresh']);
         expect(commit).toHaveBeenCalledWith('kugou');
+    });
+});
+
+describe('online provider login transaction', () => {
+    it('refreshes the current provider after QR confirmation without activating it again', async () => {
+        const refresh = vi.fn().mockResolvedValue(true);
+        const activate = vi.fn().mockResolvedValue(true);
+
+        await expect(completeOnlineProviderLoginTransaction({
+            currentProviderId: 'netease',
+            loginProviderId: 'netease',
+            refresh,
+            activate,
+        })).resolves.toBe(true);
+
+        expect(refresh).toHaveBeenCalledOnce();
+        expect(activate).not.toHaveBeenCalled();
+    });
+
+    it('refreshes a different provider before asking to activate it', async () => {
+        const order: string[] = [];
+        const refresh = vi.fn(async () => { order.push('refresh'); return true; });
+        const activate = vi.fn(async () => { order.push('activate'); return true; });
+
+        await expect(completeOnlineProviderLoginTransaction({
+            currentProviderId: 'netease',
+            loginProviderId: 'kugou',
+            refresh,
+            activate,
+        })).resolves.toBe(true);
+
+        expect(order).toEqual(['refresh', 'activate']);
+    });
+
+    it('does not activate a provider when its authenticated account cannot be refreshed', async () => {
+        const activate = vi.fn().mockResolvedValue(true);
+
+        await expect(completeOnlineProviderLoginTransaction({
+            currentProviderId: 'netease',
+            loginProviderId: 'kugou',
+            refresh: vi.fn().mockResolvedValue(false),
+            activate,
+        })).resolves.toBe(false);
+
+        expect(activate).not.toHaveBeenCalled();
     });
 });

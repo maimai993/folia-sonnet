@@ -74,7 +74,6 @@ export function useNeteaseLibrary({
     const [isUserDataReady, setIsUserDataReady] = useState(false);
     const lastRefreshAuthExpiredRef = useRef(false);
     const updateProviderAccount = useOnlineProviderAccountStore(state => state.updateAccount);
-    const clearProviderAccount = useOnlineProviderAccountStore(state => state.clearAccount);
 
     const clearAuthState = useCallback(async () => {
         removeProviderSessionValue('netease', 'cookie', ['netease_cookie']);
@@ -82,23 +81,22 @@ export function useNeteaseLibrary({
         setPlaylists([]);
         setCloudPlaylist(null);
         setLikedSongIds(new Set());
-        clearProviderAccount('netease');
 
         try {
             await removeCacheEntries(Object.values(NETEASE_USER_CACHE_KEYS));
         } catch (error) {
             console.warn('Failed to clear auth cache', error);
         }
-    }, [clearProviderAccount]);
+    }, []);
 
     useEffect(() => {
         updateProviderAccount('netease', {
-            status: user ? 'authenticated' : 'anonymous',
+            status: isUserDataReady ? (user ? 'authenticated' : 'anonymous') : 'unknown',
             user,
             collections: [...playlists, ...(cloudPlaylist ? [cloudPlaylist] : [])],
             likedSongIds: Array.from(likedSongIds),
         });
-    }, [cloudPlaylist, likedSongIds, playlists, updateProviderAccount, user]);
+    }, [cloudPlaylist, isUserDataReady, likedSongIds, playlists, updateProviderAccount, user]);
 
     const updateCacheSize = useCallback(async () => {
         const size = await getCacheUsage();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, User, Loader2, Settings } from 'lucide-react';
+import { Search, Loader2, Settings } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { resolveSearchSource, useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
@@ -21,6 +21,9 @@ import type { OnlineProviderPlatformState } from '../hooks/useOnlineProviderPlat
 import { omni } from '../services/onlineMusic/omni';
 import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import OnlineProviderSwitcher from './app/home/OnlineProviderSwitcher';
+import OnlineProviderConnectPanel from './app/home/OnlineProviderConnectPanel';
+import OnlineProviderLoginModal from './app/home/OnlineProviderLoginModal';
+import { resolveOnlineProviderAccountView } from './app/home/onlineProviderAccountView';
 import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
 
 // src/components/Grid3D.tsx
@@ -142,6 +145,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const activeProviderSummary = onlineProviderPlatform?.activeProvider;
     const activeUser = activeProviderSummary?.user
         || (activeProviderId === 'netease' ? user : null);
+    const activeAccountView = resolveOnlineProviderAccountView({
+        provider: activeProviderSummary,
+        hasUser: Boolean(activeUser),
+        platformAvailable: Boolean(onlineProviderPlatform),
+    });
     const activeCollections: ProviderCollection[] = activeProviderSummary?.collections || (activeProviderId === 'netease'
         ? [
             ...playlists,
@@ -222,20 +230,20 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const [loginProviderId, setLoginProviderId] = useState(activeProviderId);
     const {
         qrCodeImg,
+        qrState,
         qrStatusText,
-        isConfirmed: isQrConfirmed,
         start: startQrLogin,
         stop: stopQrLogin,
     } = useOnlineProviderQrLogin({
         providerId: loginProviderId,
         t,
         onConfirmed: async (confirmedProviderId) => {
+            setShowLoginModal(false);
             if (onlineProviderPlatform) {
-                await onlineProviderPlatform.switchProvider(confirmedProviderId);
+                await onlineProviderPlatform.completeLogin(confirmedProviderId);
             } else {
                 onRefreshUser();
             }
-            setShowLoginModal(false);
         },
     });
 
@@ -490,11 +498,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         </h1>
                         <button
                             onClick={() => onOpenSettings?.('help')}
-                            className={`relative flex items-center gap-1.5 p-2 rounded-full hover:bg-white/10 transition-all ml-4 ${
-                                showUpdateIndicator 
-                                    ? 'opacity-90 hover:opacity-100' 
+                            className={`relative flex items-center gap-1.5 p-2 rounded-full hover:bg-white/10 transition-all ml-4 ${showUpdateIndicator
+                                    ? 'opacity-90 hover:opacity-100'
                                     : 'opacity-40 hover:opacity-100'
-                            }`}
+                                }`}
                             title="Help & Options"
                         >
                             <Settings size={20} style={{ color: 'var(--text-primary)' }} />
@@ -520,9 +527,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     title={t('options.scanProgress')}
                                 >
                                     <div
-                                        className={`relative flex items-center justify-center min-w-[56px] h-7 px-2.5 rounded-full backdrop-blur-md ${
-                                            isDaylight ? 'bg-white/95 text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-zinc-950/92 text-zinc-100'
-                                        }`}
+                                        className={`relative flex items-center justify-center min-w-[56px] h-7 px-2.5 rounded-full backdrop-blur-md ${isDaylight ? 'bg-white/95 text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-zinc-950/92 text-zinc-100'
+                                            }`}
                                     >
                                         <span className="relative z-10 text-[10px] font-semibold tabular-nums leading-none">
                                             {scanProgressPercent}%
@@ -535,9 +541,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             initial={{ opacity: 0, y: -6 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -6 }}
-                                            className={`absolute left-0 top-full mt-2 w-72 p-4 rounded-2xl border backdrop-blur-xl shadow-xl ${
-                                                isDaylight ? 'bg-white/85 border-black/10 text-zinc-800' : 'bg-black/60 border-white/10 text-zinc-100'
-                                            }`}
+                                            className={`absolute left-0 top-full mt-2 w-72 p-4 rounded-2xl border backdrop-blur-xl shadow-xl ${isDaylight ? 'bg-white/85 border-black/10 text-zinc-800' : 'bg-black/60 border-white/10 text-zinc-100'
+                                                }`}
                                         >
                                             <div className="text-sm font-semibold truncate">
                                                 {t('options.scanningFolder', { folderName: scanProgress.folderName })}
@@ -633,54 +638,28 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
             {/* Desktop Canvas Surface */}
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
-                {isOnlineTab && !activeUser ? (
-                    /* Guest Multi-Platform Connect Account Page */
-                    <div className="flex flex-1 w-full flex-col items-center justify-center space-y-6 px-4">
-                        <div className={`w-20 h-20 rounded-3xl ${isDaylight ? 'bg-white/40 shadow-sm border border-black/5' : 'bg-white/5 border border-white/5'} flex items-center justify-center backdrop-blur-md`}>
-                            <User size={36} className="opacity-25" />
-                        </div>
-                        <div className="text-center max-w-md space-y-2">
-                            <h2 className="text-2xl font-bold opacity-90">{t('home.guestTitle')}</h2>
-                            <p className="opacity-50 text-sm leading-6 whitespace-pre-line">
-                                {t('home.guestPrompt')}
-                            </p>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-center gap-3.5 max-w-md w-full pt-2">
-                            {(onlineProviderPlatform?.providers || omni.getProviderSummaries()).map(provider => {
-                                const isAuth = provider.status === 'authenticated';
-                                const configured = provider.availability.configured;
-                                const isCurrentActive = provider.providerId === activeProviderId;
-                                return (
-                                    <button
-                                        key={provider.providerId}
-                                        type="button"
-                                        disabled={!configured}
-                                        onClick={() => {
-                                            if (isAuth) {
-                                                void onlineProviderPlatform?.switchProvider(provider.providerId);
-                                            } else {
-                                                void initLogin(provider.providerId);
-                                            }
-                                        }}
-                                        className={`flex items-center gap-3 px-5 py-3 rounded-2xl font-bold text-sm transition-all hover:scale-105 cursor-pointer border ${
-                                            isCurrentActive
-                                                ? (isDaylight ? 'bg-black text-white border-black shadow-md' : 'bg-white text-black border-white shadow-md')
-                                                : (isDaylight ? 'bg-white/60 hover:bg-white/90 text-zinc-900 border-black/5 shadow-sm' : 'bg-white/5 hover:bg-white/10 text-white border-white/10')
-                                        } ${!configured ? 'opacity-40 cursor-not-allowed' : ''}`}
-                                    >
-                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white ${provider.providerId === 'netease' ? 'bg-red-600' : provider.providerId === 'kugou' ? 'bg-blue-600' : 'bg-zinc-600'}`}>
-                                            {provider.providerId === 'netease' ? '云' : provider.providerId === 'kugou' ? 'K' : provider.shortName.slice(0, 1)}
-                                        </span>
-                                        <span>
-                                            {isAuth
-                                                ? t('home.switchToProvider', { provider: provider.shortName || provider.displayName })
-                                                : t('home.connectProviderAccount', { provider: provider.shortName || provider.displayName })}
-                                        </span>
-                                    </button>
-                                );
-                            })}
-                        </div>
+                {isOnlineTab && activeAccountView === 'resolving' ? (
+                    <div className="flex flex-1 w-full items-center justify-center" aria-busy="true">
+                        <Loader2 className="animate-spin opacity-30" size={28} />
                     </div>
+                ) : isOnlineTab && activeAccountView === 'guest' ? (
+                    <OnlineProviderConnectPanel
+                        providers={onlineProviderPlatform?.providers || omni.getProviderSummaries()}
+                        activeProviderId={activeProviderId}
+                        isDaylight={isDaylight}
+                        title={t('home.guestTitle')}
+                        prompt={t('home.guestPrompt')}
+                        getActionLabel={provider => provider.status === 'authenticated'
+                            ? t('home.switchToProvider', { provider: provider.shortName || provider.displayName })
+                            : t('home.connectProviderAccount', { provider: provider.shortName || provider.displayName })}
+                        onSelect={provider => {
+                            if (provider.status === 'authenticated') {
+                                void onlineProviderPlatform?.switchProvider(provider.providerId);
+                            } else {
+                                void initLogin(provider.providerId);
+                            }
+                        }}
+                    />
                 ) : isOnlineTab ? (
                     <DesktopGrid3DSurface
                         title={
@@ -746,53 +725,20 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             {/* Login Modal */}
             <AnimatePresence>
                 {showLoginModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.25 }}
-                        className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4"
-                    >
-                        <motion.div
-                            initial={{ scale: 0.92, opacity: 0, y: 24 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.92, opacity: 0, y: 12 }}
-                            transition={{ type: 'spring', bounce: 0, duration: 0.5 }}
-                            className="bg-zinc-900/90 border border-white/10 p-8 rounded-3xl max-w-sm w-full text-center relative shadow-2xl"
-                        >
-                            <button
-                                onClick={() => {
-                                    setShowLoginModal(false);
-                                    stopQrLogin();
-                                }}
-                                className="absolute top-4 right-4 opacity-30 hover:opacity-100 rounded-full bg-white/5 p-1 transition-colors cursor-pointer"
-                                style={{ color: 'var(--text-primary)' }}
-                            >
-                                ✕
-                            </button>
-                            <h3 className="text-lg font-bold mb-6" style={{ color: 'var(--text-primary)' }}>
-                                {t(loginProviderId === 'kugou' ? 'home.loginTitleKugou' : 'home.loginTitle')}
-                            </h3>
-
-                            <div className="relative inline-block bg-white p-2 rounded-xl mb-4 shadow-inner">
-                                {qrCodeImg ? (
-                                    <img src={qrCodeImg} alt="QR Code" className="w-40 h-40" />
-                                ) : (
-                                    <div className="w-40 h-40 flex items-center justify-center bg-gray-100 rounded-lg">
-                                        <Loader2 className="animate-spin text-gray-400" size={24} />
-                                    </div>
-                                )}
-                            </div>
-
-                            <p className={`text-xs font-medium mt-2 ${isQrConfirmed ? 'text-green-400' : 'opacity-60'}`} style={{ color: isQrConfirmed ? undefined : 'var(--text-secondary)' }}>
-                                {qrStatusText}
-                            </p>
-
-                            <p className="text-[10px] opacity-30 mt-6" style={{ color: 'var(--text-secondary)' }}>
-                                {t(loginProviderId === 'kugou' ? 'home.loginNoteKugou' : 'home.loginNote')}
-                            </p>
-                        </motion.div>
-                    </motion.div>
+                    <OnlineProviderLoginModal
+                        title={t(loginProviderId === 'kugou' ? 'home.loginTitleKugou' : 'home.loginTitle')}
+                        note={t(loginProviderId === 'kugou' ? 'home.loginNoteKugou' : 'home.loginNote')}
+                        qrCodeImg={qrCodeImg}
+                        statusText={qrStatusText}
+                        state={qrState}
+                        retryLabel={t('home.retryQr')}
+                        closeLabel={t('home.closeLogin')}
+                        onRetry={() => void startQrLogin(loginProviderId)}
+                        onClose={() => {
+                            setShowLoginModal(false);
+                            stopQrLogin();
+                        }}
+                    />
                 )}
             </AnimatePresence>
 

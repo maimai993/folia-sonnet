@@ -219,6 +219,7 @@ async function installBaseState(
     localStorage.setItem('static_mode', 'true');
     localStorage.setItem('last_app_view', 'home');
     localStorage.setItem('last_home_view_tab', 'playlist');
+    localStorage.setItem('folia_last_seen_guide_version', '0.6.0');
 
     if (payload.navidromeEnabled) {
       localStorage.setItem('navidrome_enabled', 'true');
@@ -235,6 +236,7 @@ async function installBaseState(
         getAudioCacheUsage: async () => 0,
         clearAudioCache: async () => {},
         getAudioCacheStats: async () => ({ size: 0, count: 0 }),
+        isWindowMaximized: async () => false,
       },
     });
 
@@ -373,11 +375,26 @@ async function installBaseState(
 }
 
 async function mockNeteaseApi(page: Page, mode: MockNeteaseMode) {
+  let qrConfirmed = false;
   await page.route('**/__mock_netease__/**', async route => {
     const url = new URL(route.request().url());
     const endpoint = url.pathname.replace('/__mock_netease__', '');
 
-    if (mode === 'guest') {
+    if (mode === 'guest' && endpoint === '/login/qr/key') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { unikey: 'fixture-qr-key' } }) });
+      return;
+    }
+    if (mode === 'guest' && endpoint === '/login/qr/create') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { qrimg: svgDataUrl('QR', '#ffffff', '#111827') } }) });
+      return;
+    }
+    if (mode === 'guest' && endpoint === '/login/qr/check') {
+      qrConfirmed = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ code: 803, cookie: 'fixture-cookie' }) });
+      return;
+    }
+
+    if (mode === 'guest' && !qrConfirmed) {
       if (endpoint === '/login/status') {
         await route.fulfill({
           status: 200,
@@ -609,5 +626,19 @@ test.describe('frontend screenshot coverage', () => {
       scale: 'css',
       fullPage: true,
     });
+  });
+
+  test('refreshes the active provider and closes the QR dialog after login', async ({ page }) => {
+    test.setTimeout(30_000);
+    await installBaseState(page, { neteaseMode: 'guest' });
+    await mockNeteaseApi(page, 'guest');
+
+    await openApp(page);
+    await page.getByRole('button', { name: /Connect .* Account/ }).first().click();
+
+    const loginDialog = page.getByRole('dialog');
+    await expect(loginDialog).toBeVisible();
+    await expect(loginDialog).toBeHidden({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: 'Daily Mix' }).first()).toBeVisible();
   });
 });

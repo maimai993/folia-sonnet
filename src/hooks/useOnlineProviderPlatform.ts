@@ -12,6 +12,7 @@ export type OnlineProviderPlatformState = {
     activeProvider: ProviderAccountSummary | undefined;
     switchProvider: (providerId: OnlineProviderId) => Promise<boolean>;
     refreshProvider: (providerId: OnlineProviderId) => Promise<unknown>;
+    completeLogin: (providerId: OnlineProviderId) => Promise<boolean>;
 };
 
 type ProviderSwitchTransaction = {
@@ -20,6 +21,26 @@ type ProviderSwitchTransaction = {
     prepare?: (currentProviderId: OnlineProviderId, nextProviderId: OnlineProviderId) => Promise<boolean>;
     commit: (providerId: OnlineProviderId) => void;
     refresh?: () => Promise<unknown>;
+};
+
+type ProviderLoginTransaction = {
+    currentProviderId: OnlineProviderId;
+    loginProviderId: OnlineProviderId;
+    refresh: () => Promise<unknown>;
+    activate: () => Promise<boolean>;
+};
+
+// Refreshes the authenticated account before optionally activating its provider.
+export const completeOnlineProviderLoginTransaction = async ({
+    currentProviderId,
+    loginProviderId,
+    refresh,
+    activate,
+}: ProviderLoginTransaction): Promise<boolean> => {
+    const refreshed = await refresh();
+    if (refreshed === false) return false;
+    if (loginProviderId === currentProviderId) return true;
+    return activate();
 };
 
 // Commits a provider change only after cleanup is confirmed, then refreshes the new account namespace.
@@ -59,7 +80,18 @@ export const useOnlineProviderPlatform = (
         commit: setActiveProviderId,
         refresh: refreshers[providerId],
     }), [activeProviderId, prepareSwitch, refreshers, setActiveProviderId]);
+    const completeLogin = useCallback((providerId: OnlineProviderId) => completeOnlineProviderLoginTransaction({
+        currentProviderId: activeProviderId,
+        loginProviderId: providerId,
+        refresh: async () => await refreshers[providerId]?.(),
+        activate: () => switchOnlineProviderTransaction({
+            currentProviderId: activeProviderId,
+            nextProviderId: providerId,
+            prepare: prepareSwitch,
+            commit: setActiveProviderId,
+        }),
+    }), [activeProviderId, prepareSwitch, refreshers, setActiveProviderId]);
 
     const activeProvider = providers.find(provider => provider.providerId === activeProviderId) || providers[0];
-    return { providers, activeProviderId, activeProvider, switchProvider, refreshProvider };
+    return { providers, activeProviderId, activeProvider, switchProvider, refreshProvider, completeLogin };
 };

@@ -380,6 +380,8 @@ export default {
     "qrScanned": "Dipindai! Konfirmasi di ponsel Anda.",
     "loginSuccess": "Login Berhasil!",
     "loginError": "Kesalahan Login",
+    "retryQr": "Segarkan kode QR",
+    "closeLogin": "Tutup login",
     "logout": "Logout",
     "backToPlayer": "Kembali ke Pemutar",
     "switchOnlineProvider": "Ganti penyedia musik online",

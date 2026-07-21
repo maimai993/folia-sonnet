@@ -405,6 +405,8 @@ export default {
     "qrScanned": "Scanned! Confirm on your phone.",
     "loginSuccess": "Login Successful!",
     "loginError": "Login Error",
+    "retryQr": "Refresh QR code",
+    "closeLogin": "Close login",
     "logout": "Logout",
     "backToPlayer": "Back to Player",
     "backToHome": "Return to Home",

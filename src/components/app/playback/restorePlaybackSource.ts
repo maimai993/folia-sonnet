@@ -27,6 +27,7 @@ import { omni } from '../../../services/onlineMusic/omni';
 import { getSongResourceCacheKey } from '../../../services/onlineMusic/resourceKeys';
 import { getCachedSongAudioBlob, getCachedSongCoverUrl, getSongCacheWithLegacyMigration } from '../../../services/onlineMusic/resourceCache';
 import { getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
+import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
 
 // src/components/app/playback/restorePlaybackSource.ts
 // Rehydrates playable audio and lyrics for a remembered song without reusing stale blob URLs.
@@ -264,7 +265,11 @@ export const restorePlaybackSourceForSong = async (
         return true;
     }
 
-    const processed = await omni.getLyrics(song, { userId });
+    const songProviderId = song.sourceRef?.kind === 'online' ? song.sourceRef.providerId : null;
+    const effectiveUserId = songProviderId
+        ? (useOnlineProviderAccountStore.getState().accounts[songProviderId]?.user?.id ?? userId)
+        : userId;
+    const processed = await omni.getLyrics(song, { userId: effectiveUserId });
     const resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, processed.lyrics);
     setCurrentSong(prev => {
         if (!prev || !isSamePlaybackSong(prev, song)) return prev;

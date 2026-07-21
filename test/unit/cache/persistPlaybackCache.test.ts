@@ -45,12 +45,12 @@ describe('persistPlaybackCache', () => {
         await persistPlaybackCache(local, [netease, local, navidrome]);
 
         expect(saveToCache).toHaveBeenCalledWith('last_queue', [
-            netease,
+            expect.objectContaining(netease),
             expect.objectContaining({
                 isLocal: true,
                 localRef: { songId: 'local-1' },
             }),
-            navidrome,
+            expect.objectContaining(navidrome),
         ]);
     });
 });

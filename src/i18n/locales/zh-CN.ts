@@ -406,6 +406,8 @@ export default {
     "qrScanned": "扫描成功！请在手机上确认。",
     "loginSuccess": "登录成功！",
     "loginError": "登录错误",
+    "retryQr": "刷新二维码",
+    "closeLogin": "关闭登录窗口",
     "logout": "退出登录",
     "backToPlayer": "返回播放器",
     "backToHome": "返回主页",

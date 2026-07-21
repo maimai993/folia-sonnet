@@ -308,7 +308,8 @@ export const omni = {
     async getLyrics(song: SongResult, context?: { userId?: MediaId | null }): Promise<OmniLyricsResult> {
         const provider = providerForSong(song);
         if (!provider.lyrics) return unsupported(provider.id, 'lyrics');
-        const providerResult = await provider.lyrics.getLyrics(song, context);
+        const providerUserId = useOnlineProviderAccountStore.getState().accounts[provider.id]?.user?.id ?? context?.userId;
+        const providerResult = await provider.lyrics.getLyrics(song, { ...context, userId: providerUserId });
         return (await resolveProviderLyricsChorus(providerResult, {
             providerId: provider.id,
             songId: song.id,

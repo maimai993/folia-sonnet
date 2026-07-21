@@ -7,7 +7,7 @@ import { isStagePlaybackSong, normalizePlaybackSongSource } from '../../../utils
 const sanitizePlaybackSong = (song: SongResult): SongResult => {
     const unified = normalizePlaybackSongSource(song) as UnifiedSong & { localData?: { id?: string } };
     const localSongId = unified.localRef?.songId || unified.localData?.id;
-    if (!localSongId) return song;
+    if (!localSongId) return unified;
     const { localData: _legacyLocalData, ...snapshot } = unified;
     return { ...snapshot, isLocal: true, localRef: { songId: localSongId } } as UnifiedSong;
 };
