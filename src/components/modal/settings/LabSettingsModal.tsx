@@ -20,6 +20,7 @@ type LabSettingsModalProps = {
         supported: boolean;
         onToggle: () => void;
     };
+    embedded?: boolean;
 };
 
 const shellTransition = { duration: 0.24, ease: 'easeOut' as const };
@@ -37,6 +38,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     onOpenLyricFilterSettings,
     theme,
     voiceInputPause,
+    embedded,
 }) => {
     const { t } = useTranslation();
     const isMouseDownOnOverlayRef = useRef(false);
@@ -134,83 +136,10 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         }
     };
 
-    return (
-        <AnimatePresence>
-            {isOpen && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={shellTransition}
-                    className="fixed inset-0 z-[136] backdrop-blur-xl p-3 sm:p-5"
-                    style={{ backgroundColor: overlayBackground }}
-                    onMouseDown={handleOverlayMouseDown}
-                    onClick={handleBackdropClick}
-                >
-                    <motion.div
-                        {...panelMotion}
-                        transition={shellTransition}
-                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${subviewPanelBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)] relative`}
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        {/* Decorative background blobs */}
-                        <div className="absolute inset-0 pointer-events-none z-0">
-                            <div 
-                                className={`absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
-                                style={{ backgroundColor: theme?.accentColor || (isDaylight ? '#60a5fa' : '#3b82f6') }} 
-                            />
-                            <div 
-                                className={`absolute -bottom-24 -left-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
-                                style={{ backgroundColor: theme?.secondaryColor || theme?.accentColor || (isDaylight ? '#c084fc' : '#a855f7') }} 
-                            />
-                        </div>
-                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6 relative z-10">
-                            <div className="flex items-center gap-3 min-w-0">
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className={`h-10 w-10 rounded-full border flex items-center justify-center transition-colors ${utilityGhostButtonClass}`}
-                                    style={{ color: 'var(--text-primary)' }}
-                                >
-                                    <ChevronLeft size={18} />
-                                </button>
-                                <div className="min-w-0">
-                                    <div className="text-lg sm:text-xl font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.labSettings')}
-                                    </div>
-                                    <div className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.labSettingsDesc')}
-                                    </div>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    onToggleStaticMode(false);
-                                    onToggleDisableHomeDynamicBackground(false);
-                                    onToggleHidePlayerProgressBar(false);
-                                    onToggleHidePlayerTranslationSubtitle(false);
-                                    onToggleHidePlayerRightPanelButton(false);
-                                    onToggleOpenPanelCloseButton(true);
-                                    onToggleMinimizeToTray(false);
-                                    onToggleHideTaskbarIcon(false);
-                                    onToggleOpenPlayerOnLaunch(false);
-                                    onVisualizerFrameRateChange('off');
-                                    if (voiceInputPause?.supported && voiceInputPause.enabled) {
-                                        voiceInputPause.onToggle();
-                                    }
-                                }}
-                                className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${utilityGhostButtonClass}`}
-                                style={{ color: 'var(--text-primary)' }}
-                            >
-                                <RotateCcw size={14} />
-                                <span>{t('ui.default')}</span>
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6 relative z-10">
-                            <div className="space-y-4">
-                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
+    const content = (
+        <div className={embedded ? "space-y-4" : "flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6 relative z-10"}>
+            <div className={embedded ? "space-y-4" : "space-y-4"}>
+                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                             <Monitor size={14} />
@@ -392,8 +321,65 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                         {renderToggle(voiceInputPause.enabled, voiceInputPause.onToggle)}
                                     </div>
                                 )}
+            </div>
+        </div>
+    );
+
+    if (embedded) {
+        return content;
+    }
+
+    return (
+        <AnimatePresence>
+            {isOpen && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={shellTransition}
+                    className="fixed inset-0 z-[136] backdrop-blur-xl p-3 sm:p-5"
+                    style={{ backgroundColor: overlayBackground }}
+                    onMouseDown={handleOverlayMouseDown}
+                    onClick={handleBackdropClick}
+                >
+                    <motion.div
+                        {...panelMotion}
+                        transition={shellTransition}
+                        className={`mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${subviewPanelBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)] relative`}
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="absolute inset-0 pointer-events-none z-0">
+                            <div 
+                                className={`absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                                style={{ backgroundColor: theme?.accentColor || (isDaylight ? '#60a5fa' : '#3b82f6') }} 
+                            />
+                            <div 
+                                className={`absolute -bottom-24 -left-24 w-64 h-64 rounded-full blur-[80px] ${isDaylight ? 'opacity-20' : 'opacity-10'}`} 
+                                style={{ backgroundColor: theme?.secondaryColor || theme?.accentColor || (isDaylight ? '#c084fc' : '#a855f7') }} 
+                            />
+                        </div>
+                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6 relative z-10">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className={`h-10 w-10 rounded-full border flex items-center justify-center transition-colors ${utilityGhostButtonClass}`}
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <ChevronLeft size={18} />
+                                </button>
+                                <div className="min-w-0">
+                                    <div className="text-lg sm:text-xl font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                                        {t('options.labSettings')}
+                                    </div>
+                                    <div className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('options.labSettingsDesc')}
+                                    </div>
+                                </div>
                             </div>
                         </div>
+
+                        {content}
                     </motion.div>
                 </motion.div>
             )}
