@@ -199,7 +199,7 @@ describe('kugouProvider', () => {
 
     it('accepts the user id returned with user details', async () => {
         requestMock.mockResolvedValue({
-            data: { userid: '123', nickname: 'Kugou User', pic: 'https://example.test/avatar.jpg' },
+            data: { userid: '123', nickname: 'Kugou User', pic: 'https://example.test/avatar.jpg', is_vip: 1 },
         });
 
         await expect(kugouProvider.auth?.getLoginStatus()).resolves.toMatchObject({
@@ -213,13 +213,40 @@ describe('kugouProvider', () => {
                 data: { userid: '123', nickname: 'Kugou User', vip_type: 0 },
             })
             .mockResolvedValueOnce({
+                data: { is_vip: 1 },
+            })
+            .mockResolvedValueOnce({
                 data: { is_vip: 0, vip_type: 0, busi_vip: [{ is_vip: 1, busi_type: 'concept' }] },
             });
 
         await expect(kugouProvider.auth?.getLoginStatus()).resolves.toMatchObject({
             id: '123', nickname: 'Kugou User', vipType: 1,
         });
-        expect(requestMock).toHaveBeenNthCalledWith(2, 'user_vip_detail', { userid: '123' });
+        expect(requestMock).toHaveBeenNthCalledWith(2, 'youth_union_vip', expect.objectContaining({ userid: '123' }));
+        expect(requestMock).toHaveBeenNthCalledWith(3, 'user_vip_detail', { userid: '123' });
+    });
+
+    it('claims daily VIP via youth_day_vip when youth_union_vip is not VIP', async () => {
+        requestMock
+            .mockResolvedValueOnce({
+                data: { userid: '123', nickname: 'Kugou User', vip_type: 0 },
+            })
+            .mockResolvedValueOnce({
+                data: { is_vip: 0 },
+            })
+            .mockResolvedValueOnce({
+                data: { status: 1, msg: 'success' },
+            })
+            .mockResolvedValueOnce({
+                data: { is_vip: 0, vip_type: 0 },
+            });
+
+        await expect(kugouProvider.auth?.getLoginStatus()).resolves.toMatchObject({
+            id: '123', nickname: 'Kugou User', vipType: 1,
+        });
+        expect(requestMock).toHaveBeenNthCalledWith(2, 'youth_union_vip', expect.objectContaining({ userid: '123' }));
+        expect(requestMock).toHaveBeenNthCalledWith(3, 'youth_day_vip', expect.objectContaining({ userid: '123' }));
+        expect(requestMock).toHaveBeenNthCalledWith(4, 'user_vip_detail', { userid: '123' });
     });
 
     it('maps quality and source metadata to the song URL request', async () => {

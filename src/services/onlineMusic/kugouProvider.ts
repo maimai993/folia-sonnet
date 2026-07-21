@@ -455,6 +455,36 @@ const normalizeKugouVipType = (raw: any): number => {
     return businessVips.some((entry: any) => Number(valueOf(entry, 'is_vip', 'vip_type') || 0) > 0) ? 1 : 0;
 };
 
+const ensureKugouYouthVip = async (userId?: string): Promise<boolean> => {
+    try {
+        const token = readProviderSessionValue('kugou', 'token');
+        const params = {
+            ...(userId ? { userid: userId } : {}),
+            ...(token ? { token } : {}),
+        };
+        const unionResponse: any = await requestKugou('youth_union_vip', params);
+        const unionData = dataOf(unionResponse);
+        const errCode = Number(valueOf(unionResponse, 'errcode', 'error_code') ?? valueOf(unionData, 'errcode', 'error_code') ?? 0);
+
+        if (errCode !== 0 || !unionData || typeof unionData !== 'object') {
+            console.warn('[KugouProvider] youth-union-vip:api-error', { errCode, response: unionResponse });
+            return false;
+        }
+
+        const isUnionVip = normalizeKugouVipType(unionResponse) > 0;
+        if (!isUnionVip) {
+            console.info('[KugouProvider] youth-union-vip:not-vip, requesting youth_day_vip');
+            await requestKugou('youth_day_vip', params);
+            return true;
+        }
+        console.info('[KugouProvider] youth-union-vip:already-vip, skipping youth_day_vip');
+    } catch (error) {
+        const message = error instanceof Error ? error.message : typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error);
+        console.warn('[KugouProvider] youth-vip-check:failed', { error: message });
+    }
+    return false;
+};
+
 const normalizeCollection = (raw: any, type = 'playlist', owned = false): ProviderCollection => {
     const id = type === 'playlist'
         ? valueOf(raw, 'global_collection_id', 'globalCollectionId', 'specialid', 'specialId', 'id')
@@ -872,8 +902,12 @@ export const kugouProvider: OnlineMusicProvider = {
                 let user = normalizeUser(response);
                 if (user.id && user.nickname) {
                     try {
+                        const claimedYouthVip = await ensureKugouYouthVip(user.id);
                         const vipResponse = await requestKugou('user_vip_detail', { userid: user.id });
                         user = { ...user, vipType: normalizeKugouVipType(vipResponse) };
+                        if (claimedYouthVip && user.vipType === 0) {
+                            user = { ...user, vipType: 1 };
+                        }
                     } catch (error) {
                         console.warn('[KugouProvider] login-status:vip-error', {
                             name: error instanceof Error ? error.name : 'Error',

@@ -12,6 +12,8 @@ const OPERATION_MODULES = {
   logout: [],
   user_detail: ['user_detail'],
   user_vip_detail: ['user_vip_detail'],
+  youth_union_vip: ['youth_union_vip'],
+  youth_day_vip: ['youth_day_vip'],
   user_playlist: ['user_playlist'],
   user_cloud: ['user_cloud'],
   user_cloud_url: ['user_cloud_url'],
