@@ -4,7 +4,7 @@
   "repoType": "github",
   "repoHost": "https://github.com",
   "files": [
-    "README.md"
+    "CONTRIBUTORS.md"
   ],
   "imageSize": 100,
   "contributorsPerLine": 7,
@@ -332,6 +332,15 @@
       "profile": "https://github.com/Ckey1225",
       "contributions": [
         "bug"
+      ]
+    },
+    {
+      "login": "mmmpipi",
+      "name": "mmmpipi",
+      "avatar_url": "https://avatars.githubusercontent.com/u/153883613?v=4",
+      "profile": "https://github.com/mmmpipi",
+      "contributions": [
+        "ideas"
       ]
     }
   ],
