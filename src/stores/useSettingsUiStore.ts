@@ -2064,9 +2064,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     },
     handleSetLyricsCustomFont: (font) => {
         if (!font?.family?.trim()) {
-            set({ lyricsCustomFont: null });
+            set({ lyricsCustomFont: null, lyricsFontFallbackFamilies: [] });
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('lyrics_custom_font');
+                localStorage.removeItem(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY);
             }
             void clearUploadedLyricsFont();
             return;
@@ -2074,9 +2075,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
 
         const next = resolveStoredCustomLyricsFont(font);
         if (!next) {
-            set({ lyricsCustomFont: null });
+            set({ lyricsCustomFont: null, lyricsFontFallbackFamilies: [] });
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('lyrics_custom_font');
+                localStorage.removeItem(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY);
             }
             void clearUploadedLyricsFont();
             return;
