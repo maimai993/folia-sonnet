@@ -20,7 +20,7 @@ import * as THREE from 'three';
 // dot ● glow sitting high: the glow IS the blurred dot).
 
 export const DIORAMA_RASTER_FONT_PX = 128;
-const FONT_WEIGHT = 700;
+const DEFAULT_FONT_WEIGHT = 700;
 // Vertical band around the middle baseline (covers ascenders/descenders across fonts).
 const LINE_BAND_EM = 1.4;
 // Padding for the glow spread (must contain the widest shadow blur below plus ink overshoot).
@@ -34,8 +34,8 @@ const GLOW_BLUR_EM = 0.16;
 
 // `fontStack` is the CSS font-family stack from resolveThemeFontStack(theme) - resolved by the
 // caller so rasters only rebuild when the actual font selection changes, not on every theme tweak.
-export const buildDioramaFontSpec = (fontStack: string): string =>
-    `${FONT_WEIGHT} ${DIORAMA_RASTER_FONT_PX}px ${fontStack}`;
+export const buildDioramaFontSpec = (fontStack: string, fontWeight = DEFAULT_FONT_WEIGHT): string =>
+    `${fontWeight} ${DIORAMA_RASTER_FONT_PX}px ${fontStack}`;
 
 let measureCtx: CanvasRenderingContext2D | null = null;
 const getMeasureCtx = (): CanvasRenderingContext2D => {
@@ -143,15 +143,15 @@ export interface DioramaLineRaster {
 }
 
 /** Rasterise a whole (neighbour) line as one plain white texture - no glow, small pad. */
-export const rasterDioramaLine = (text: string, fontStack: string): DioramaLineRaster => {
+export const rasterDioramaLine = (text: string, fontStack: string, fontWeight = DEFAULT_FONT_WEIGHT): DioramaLineRaster => {
     let fontPx = DIORAMA_RASTER_FONT_PX;
-    let fontSpec = buildDioramaFontSpec(fontStack);
+    let fontSpec = buildDioramaFontSpec(fontStack, fontWeight);
     let advancePx = Math.max(1, Math.ceil(measureDioramaText(text, fontSpec)));
     const pad = Math.ceil(fontPx * PLAIN_PAD_EM);
     if (advancePx + pad * 2 > MAX_CANVAS_PX) {
         const shrink = (MAX_CANVAS_PX - pad * 2) / advancePx;
         fontPx = Math.max(24, Math.floor(fontPx * shrink));
-        fontSpec = `${FONT_WEIGHT} ${fontPx}px ${fontStack}`;
+        fontSpec = `${fontWeight} ${fontPx}px ${fontStack}`;
         advancePx = Math.max(1, Math.ceil(measureDioramaText(text, fontSpec)));
     }
     const canvasWidthPx = advancePx + pad * 2;

@@ -16,7 +16,9 @@ export const selectPreferredStructuredLyric = (items: StructuredLyric[] | null |
         return null;
     }
 
-    return nonEmptyItems.find(hasEnhancedStructuredLines)
+    return nonEmptyItems.find(item => item.kind === 'main' && hasEnhancedStructuredLines(item))
+        || nonEmptyItems.find(item => item.kind === 'main')
+        || nonEmptyItems.find(hasEnhancedStructuredLines)
         || nonEmptyItems.find(item => item.synced)
         || nonEmptyItems[0];
 };
@@ -24,9 +26,12 @@ export const selectPreferredStructuredLyric = (items: StructuredLyric[] | null |
 export const resolvePreferredNavidromeLyrics = async (
     navidromeSong: Pick<NavidromeSong, 'cachedStructuredLyrics' | 'cachedPlainLyrics'>
 ): Promise<LyricData | null> => {
-    const structuredLyrics = navidromeSong.cachedStructuredLyrics?.filter(line => (line.value || '').trim().length > 0);
+    const cachedStructuredLyrics = navidromeSong.cachedStructuredLyrics;
+    const structuredLyrics = Array.isArray(cachedStructuredLyrics)
+        ? cachedStructuredLyrics.filter(line => (line.value || '').trim().length > 0)
+        : cachedStructuredLyrics;
 
-    if (structuredLyrics && structuredLyrics.length > 0) {
+    if (structuredLyrics && (Array.isArray(structuredLyrics) ? structuredLyrics.length > 0 : structuredLyrics.line.length > 0 || structuredLyrics.cueLine?.length)) {
         const parsedStructuredLyrics = await LyricParserFactory.parse({ type: 'navidrome', structuredLyrics });
         if (hasRenderableLyrics(parsedStructuredLyrics)) {
             return parsedStructuredLyrics;
@@ -50,13 +55,15 @@ export const hydrateNavidromeLyricPayload = async (config: NavidromeConfig, navi
         return;
     }
 
-    if (!navidromeSong.cachedStructuredLyrics?.length) {
+    const hasCurrentStructuredLyrics = !Array.isArray(navidromeSong.cachedStructuredLyrics)
+        && Boolean(navidromeSong.cachedStructuredLyrics?.line.length || navidromeSong.cachedStructuredLyrics?.cueLine?.length);
+    if (!hasCurrentStructuredLyrics) {
         try {
             const structuredLyrics = await navidromeApi.getLyricsBySongId(config, navidromeId);
             const preferredStructuredLyrics = selectPreferredStructuredLyric(structuredLyrics);
 
-            if (preferredStructuredLyrics?.line?.length) {
-                navidromeSong.cachedStructuredLyrics = preferredStructuredLyrics.line;
+            if (preferredStructuredLyrics?.line?.length || preferredStructuredLyrics?.cueLine?.length) {
+                navidromeSong.cachedStructuredLyrics = preferredStructuredLyrics;
             }
             if (!preferredStructuredLyrics?.line?.length && !navidromeSong.cachedPlainLyrics) {
                 const artistName = getProviderSongMetadata(navidromeSong).artists[0]?.name || '';

@@ -1,5 +1,6 @@
 import { LyricData } from '../../types';
 import type { LyricParseFormat } from './parserCore';
+import type { StructuredLyric, StructuredLyricLine } from '../../types/navidrome';
 
 export type UnifiedLyric = LyricData;
 
@@ -49,7 +50,7 @@ export interface RawNeteaseLyric {
 export interface RawNavidromeLyric {
     type: 'navidrome';
     // OpenSubsonic structured lyrics
-    structuredLyrics?: Array<{ start?: number, value?: string }>;
+    structuredLyrics?: StructuredLyric | StructuredLyricLine[];
     // Standard Subsonic plain lyrics string
     plainLyrics?: string;
 }

@@ -3,7 +3,7 @@ import { motion, MotionValue } from 'framer-motion';
 import { layoutWithLines, prepareWithSegments, type PreparedTextWithSegments, type LayoutCursor, type PrepareOptions } from '@chenglou/pretext';
 import { Hourglass } from 'lucide-react';
 import { AudioBands, DEFAULT_FUME_TUNING, FumeTuning, Line, Theme, Word as WordType } from '../../../types';
-import { resolveThemeFontStack } from '../../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { buildWordGraphemeTimings, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime, getLineRenderHints, getLineTransitionTiming } from '../../../utils/lyrics/renderHints';
 import { colorWithAlpha, mixColors } from '../colorMix';
@@ -639,8 +639,9 @@ const buildFontSpec = (
     fontPx: number,
     variant: 'body' | 'hero',
     fontFamily: string,
+    theme: Pick<Theme, 'fontWeight'>,
 ) => {
-    const fontWeight = variant === 'hero' ? 780 : 640;
+    const fontWeight = resolveThemeFontWeight(theme, variant === 'hero' ? 780 : 640);
     return `${fontWeight} ${fontPx}px ${fontFamily}`;
 };
 
@@ -821,6 +822,7 @@ const buildPreparedSingleLine = (
     lyricsFontScale: number,
     densityScale: number,
     heroScale: number,
+    theme: Pick<Theme, 'fontWeight'>,
 ) => {
     let low = variant === 'hero' ? 18 : 10;
     let high = variant === 'hero' ? 58 : 30;
@@ -837,7 +839,7 @@ const buildPreparedSingleLine = (
             * lyricsFontScale
             * densityScale
             * (variant === 'hero' ? heroScale : 1);
-        const fontSpec = buildFontSpec(candidateFontPx, variant, fontFamily);
+        const fontSpec = buildFontSpec(candidateFontPx, variant, fontFamily, theme);
         const prepared = prepareWithSegments(text, fontSpec, FUME_PRETEXT_OPTIONS);
         const layout = layoutWithLines(prepared, width, Math.round(candidateFontPx * (variant === 'hero' ? 1.02 : 1.06)));
 
@@ -861,7 +863,7 @@ const buildPreparedSingleLine = (
         * lyricsFontScale
         * densityScale
         * (variant === 'hero' ? heroScale : 1);
-    const fontSpec = buildFontSpec(fallbackFontPx, variant, fontFamily);
+    const fontSpec = buildFontSpec(fallbackFontPx, variant, fontFamily, theme);
     const prepared = prepareWithSegments(text, fontSpec, FUME_PRETEXT_OPTIONS);
     return {
         fontPx: fallbackFontPx,
@@ -873,7 +875,7 @@ const buildPreparedSingleLine = (
 const buildLayoutCacheKey = (
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack' | 'fontWeight'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
 ) => {
@@ -892,6 +894,7 @@ const buildLayoutCacheKey = (
         layoutTheme.fontStyle,
         layoutTheme.fontFamily ?? '',
         layoutTheme.fontFamilyStack?.join(',') ?? '',
+        layoutTheme.fontWeight ?? 'auto',
         layoutTheme.name,
         lyricsFontScale.toFixed(4),
         fumeTuning.heroScale.toFixed(4),
@@ -984,7 +987,7 @@ export const resolvePrintedGraphemeProgress = (
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack' | 'fontWeight'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
     options: FumeLayoutAttemptOptions & { mode: 'measure' },
@@ -992,7 +995,7 @@ function buildArticleLayoutAttempt(
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack' | 'fontWeight'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
     options: FumeLayoutAttemptOptions & { mode?: 'render' },
@@ -1000,7 +1003,7 @@ function buildArticleLayoutAttempt(
 function buildArticleLayoutAttempt(
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack' | 'fontWeight'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
     options: FumeLayoutAttemptOptions,
@@ -1071,6 +1074,7 @@ function buildArticleLayoutAttempt(
             lyricsFontScale,
             densityScale,
             fumeTuning.heroScale,
+            layoutTheme,
         );
         if (timing) {
             timing.prepareLayoutMs += nowMs() - prepareLayoutStart;
@@ -1156,7 +1160,7 @@ function buildArticleLayoutAttempt(
             // Render passes continue and build every structure needed for glyph printing and per-line focus.
             const renderDetailsStart = timing ? nowMs() : 0;
             const prepared = preparedSingleLine.prepared;
-            const fontSpec = buildFontSpec(fontPx, variant, fontFamily);
+            const fontSpec = buildFontSpec(fontPx, variant, fontFamily, layoutTheme);
             const { graphemes, segmentMetas } = buildSegmentMetas(prepared);
             const wordRanges = buildWordRangesFromWords(line, graphemes);
             const wordRangeIndexByOffset = buildWordRangeIndexByOffset(graphemes.length, wordRanges);
@@ -1263,7 +1267,7 @@ function buildArticleLayoutAttempt(
 const buildArticleLayout = (
     lines: Line[],
     viewport: ViewportSize,
-    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>,
+    layoutTheme: Pick<Theme, 'name' | 'fontStyle' | 'fontFamily' | 'fontFamilyStack' | 'fontWeight'>,
     lyricsFontScale: number,
     fumeTuning: FumeTuning,
 ): FumeArticleLayout | null => {
@@ -1521,7 +1525,7 @@ const resolveBlockEntryFocusPoint = (
 
 const buildCanvasFont = (block: FumeBlock, theme: Theme) => {
     const fontFamily = resolveThemeFontStack(theme);
-    return buildFontSpec(block.fontPx, block.variant, fontFamily);
+    return buildFontSpec(block.fontPx, block.variant, fontFamily, theme);
 };
 
 const buildTextStyleKey = (
@@ -1961,8 +1965,9 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
             fontStyle: theme.fontStyle,
             fontFamily: theme.fontFamily,
             fontFamilyStack: theme.fontFamilyStack,
+            fontWeight: theme.fontWeight,
         }),
-        [theme.fontFamily, theme.fontFamilyStack, theme.fontStyle, theme.name],
+        [theme.fontFamily, theme.fontFamilyStack, theme.fontStyle, theme.fontWeight, theme.name],
     );
     const layoutFumeTuning = useMemo<FumeTuning>(() => ({
         ...DEFAULT_FUME_TUNING,

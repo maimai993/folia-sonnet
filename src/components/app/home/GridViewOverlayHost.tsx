@@ -754,6 +754,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             onStatusMessage={surfaceProps.onStatusMessage}
                             externalTracks={externalTracks}
                             externalTracksLoading={externalTracksLoading}
+                            localSongs={legacyProps.localSongs}
                             sourceActions={sourceActions}
                             theme={surfaceProps.theme}
                             isDaylight={isDaylight}

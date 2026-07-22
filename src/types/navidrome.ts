@@ -272,12 +272,39 @@ export interface StructuredLyricLine {
     value: string;
 }
 
+export interface StructuredLyricCue {
+    start?: number;
+    end?: number;
+    value: string;
+    byteStart?: number;
+    byteEnd?: number;
+}
+
+export interface StructuredLyricCueLine {
+    index: number;
+    start?: number;
+    end?: number;
+    value: string;
+    agentId?: string;
+    cue?: StructuredLyricCue[];
+}
+
+export interface StructuredLyricAgent {
+    id: string;
+    role?: string;
+    name?: string;
+}
+
 export interface StructuredLyric {
-    displayArtist: string;
-    displayTitle: string;
-    lang: string;
+    displayArtist?: string;
+    displayTitle?: string;
+    lang?: string;
+    kind?: 'main' | 'translation' | 'pronunciation' | string;
     line: StructuredLyricLine[];
-    synced: boolean;
+    cueLine?: StructuredLyricCueLine[];
+    agents?: StructuredLyricAgent[];
+    offset?: number;
+    synced?: boolean;
 }
 
 export type NavidromeViewSelection =
@@ -315,7 +342,7 @@ export interface NavidromeSong extends SongResult {
     noAutoMatch?: boolean;
     matchedLyricsSource?: LyricProviderSource;
     matchedLyricsProviderPlatform?: AmllDbPlatform;
-    cachedStructuredLyrics?: StructuredLyricLine[];
+    cachedStructuredLyrics?: StructuredLyric | StructuredLyricLine[];
     cachedPlainLyrics?: string;
 }
 

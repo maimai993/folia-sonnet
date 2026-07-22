@@ -10,6 +10,7 @@ import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { resolveWordColor } from '../wordColoring';
+import { resolveThemeFontWeight } from '../../../utils/fontStacks';
 
 // This one is still word-driven, but unlike Classic it needs to pre-build a column/chunk structure first.
 // The flow is basically: ask runtime for the active line, optionally preheat the upcoming line,
@@ -324,6 +325,7 @@ const buildPartitaLayoutCacheKey = (
         line.words.length,
         line.fullText,
         theme.animationIntensity,
+        theme.fontWeight ?? 'auto',
         windowHeightBucket,
         tuning.staggerMin,
         tuning.staggerMax,
@@ -407,9 +409,10 @@ const PartitaWord: React.FC<{
             variants={layoutVariants}
             initial="waiting"
             animate={status}
-            className="font-bold inline-block origin-center relative will-change-transform whitespace-nowrap"
+            className="inline-block origin-center relative will-change-transform whitespace-nowrap"
             style={{
                 fontSize,
+                fontWeight: resolveThemeFontWeight(theme, 700),
                 lineHeight: 1.22,
                 marginRight: '0.8rem',
             }}

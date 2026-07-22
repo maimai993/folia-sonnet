@@ -4,7 +4,7 @@
   "repoType": "github",
   "repoHost": "https://github.com",
   "files": [
-    "README.md"
+    "CONTRIBUTORS.md"
   ],
   "imageSize": 100,
   "contributorsPerLine": 7,
@@ -321,6 +321,33 @@
       "name": "Rika Tsuki",
       "avatar_url": "https://avatars.githubusercontent.com/u/63525418?v=4",
       "profile": "https://github.com/xinjiu-qwq",
+      "contributions": [
+        "ideas"
+      ]
+    },
+    {
+      "login": "Ckey1225",
+      "name": "Ckey1225",
+      "avatar_url": "https://avatars.githubusercontent.com/u/291420673?v=4",
+      "profile": "https://github.com/Ckey1225",
+      "contributions": [
+        "bug"
+      ]
+    },
+    {
+      "login": "mmmpipi",
+      "name": "mmmpipi",
+      "avatar_url": "https://avatars.githubusercontent.com/u/153883613?v=4",
+      "profile": "https://github.com/mmmpipi",
+      "contributions": [
+        "ideas"
+      ]
+    },
+    {
+      "login": "imyifeng",
+      "name": "YiFENG",
+      "avatar_url": "https://avatars.githubusercontent.com/u/70053196?v=4",
+      "profile": "http://www.imyifeng.top",
       "contributions": [
         "ideas"
       ]

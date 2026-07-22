@@ -59,6 +59,8 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 - `claddagh`：用 `buildLineGraphemeTimeline` 保留逐字时间，使用 `pretext` 做字符间距测量，并在 `useLayoutEffect` 中直接写入有限数量 ring line 的 DOM 样式；中心线的音频响应由独立 RAF 驱动，必须清理订阅和 RAF。
 - `VisPlayground`：预览时间可以推进 MotionValue，但派生到 React state 时必须只更新当前行等低频状态。
 
+所有 visualizer 的歌词和字幕字重都必须通过 `src/utils/fontStacks.ts` 的 `resolveThemeFontWeight(theme, modeFallback)` 获取。模式设计字重只能作为 fallback，不能用 `font-bold`、`font-medium`、固定内联 `fontWeight` 或字体规格中的硬编码数字覆盖用户设置。DOM、Canvas、pretext 和光栅化路径必须使用同一个最终字重。
+
 新增 visualizer 时，先决定：
 
 - 这段动画是入场/离场动画，还是播放期间持续动画？
@@ -125,6 +127,7 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 - `ResizeObserver` 里只在尺寸真实变化时 `setState`。
 - 长文本测量和 `Intl.Segmenter` 结果不要在 render 中反复重算，除非文本很短且路径低频。
 - cache key 必须包含影响布局的主题、字体、尺寸、tuning 和歌词内容。
+- 字体相关 cache key、memo 依赖和测量规格必须包含 `resolveThemeFontWeight` 得到的最终字重；测量与实际 DOM / Canvas / 光栅化渲染不得使用不同字重。
 - RAF / timeout / observer 必须在 effect cleanup 中释放。
 
 ### Module Boundaries
@@ -152,6 +155,8 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 - 单测通过是否只是放宽断言，而不是验证了目标行为？
 - 变更是否需要 UI 截图测试或手动性能观察，而不只是 unit test？
 - 新增缓存是否有失效条件，旧 DOM/canvas 节点是否会被清理？
+- 歌词和字幕是否统一使用 `resolveThemeFontWeight`，且最终字重已进入测量规格、memo 依赖和布局缓存键？
+- 是否存在会覆盖用户字重设置的 `font-bold`、`font-medium`、固定 `fontWeight` 或固定 Canvas / pretext 字体规格？
 - 新增 visualizer 是否遵守 registry、runtime、shell、subtitle overlay 的既有结构？
 
 ## Validation
@@ -176,3 +181,4 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 - 测试断言比需求更宽，无法约束时序、分割或性能目标
 - 新功能让已很大的 visualizer 文件继续膨胀，却没有拆 layout/util/hook
 - cache key 漏掉主题、字体、窗口尺寸或 tuning，导致旧布局复用
+- 歌词或字幕硬编码字重，或测量与实际渲染使用不同字重

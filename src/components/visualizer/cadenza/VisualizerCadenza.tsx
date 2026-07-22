@@ -5,7 +5,7 @@ import { layoutWithLines, prepareWithSegments, type LayoutLine, type LayoutCurso
 import { AudioBands, DEFAULT_CADENZA_TUNING, Line, Theme, Word as WordType, type CadenzaTuning } from '../../../types';
 import { buildWordGraphemeTimings, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime, getLineTransitionTiming, type LineTransitionTiming } from '../../../utils/lyrics/renderHints';
-import { resolveThemeFontStack } from '../../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { colorWithAlpha, mixColors } from '../colorMix';
 import { prepareActiveAndUpcoming, useVisualizerRuntime } from '../runtime';
 import { type VisualizerSharedProps } from '../definition';
@@ -490,7 +490,7 @@ const chooseFontPx = (width: number, line: Line) => {
     return clamp(widthBase - lengthPenalty - densityPenalty, 28, 104);
 };
 
-const buildCanvasFont = (theme: Theme, fontPx: number) => `700 ${fontPx}px ${resolveThemeFontStack(theme)}`;
+const buildCanvasFont = (theme: Theme, fontPx: number) => `${resolveThemeFontWeight(theme, 700)} ${fontPx}px ${resolveThemeFontStack(theme)}`;
 
 const buildPreparedState = (
     line: Line,
@@ -1330,6 +1330,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             theme.fontStyle,
             theme.fontFamily ?? '',
             theme.fontFamilyStack?.join(',') ?? '',
+            theme.fontWeight ?? 'auto',
             theme.animationIntensity,
             theme.accentColor,
             tuning.fontScale,
@@ -1342,6 +1343,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         theme.animationIntensity,
         theme.fontFamily,
         theme.fontFamilyStack,
+        theme.fontWeight,
         theme.fontStyle,
         theme.wordColors,
         tuning.fontScale,

@@ -53,9 +53,13 @@ const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisual
     if (typeof value.subtitleOverlayBackground === 'boolean') settings.subtitleOverlayBackground = value.subtitleOverlayBackground;
     if (isFontStyle(value.lyricsFontStyle)) settings.lyricsFontStyle = value.lyricsFontStyle;
     if (isFiniteNumber(value.lyricsFontScale)) settings.lyricsFontScale = value.lyricsFontScale;
+    if (value.lyricsFontWeight === null) settings.lyricsFontWeight = null;
+    else if (isFiniteNumber(value.lyricsFontWeight) && value.lyricsFontWeight >= 100 && value.lyricsFontWeight <= 900) settings.lyricsFontWeight = value.lyricsFontWeight;
     if (isStringArray(value.lyricsFontFallbackFamilies)) settings.lyricsFontFallbackFamilies = value.lyricsFontFallbackFamilies;
     if (typeof value.subtitleFontInheritsLyrics === 'boolean') settings.subtitleFontInheritsLyrics = value.subtitleFontInheritsLyrics;
     if (isFontStyle(value.subtitleFontStyle)) settings.subtitleFontStyle = value.subtitleFontStyle;
+    if (value.subtitleFontWeight === null) settings.subtitleFontWeight = null;
+    else if (isFiniteNumber(value.subtitleFontWeight) && value.subtitleFontWeight >= 100 && value.subtitleFontWeight <= 900) settings.subtitleFontWeight = value.subtitleFontWeight;
     if (value.subtitleFontFamily === null) settings.subtitleFontFamily = null;
     else if (typeof value.subtitleFontFamily === 'string') settings.subtitleFontFamily = value.subtitleFontFamily;
     if (isStringArray(value.subtitleFontFallbackFamilies)) settings.subtitleFontFallbackFamilies = value.subtitleFontFallbackFamilies;

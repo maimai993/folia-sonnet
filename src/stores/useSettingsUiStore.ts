@@ -15,7 +15,7 @@ import { sanitizeUrlBackgroundItem, sanitizeUrlBackgroundList } from '../utils/u
 import { getLyricProviderPreferenceLabel } from '../utils/lyrics/lyricSourceLabels';
 import { migratePreferredLyricSource } from '../utils/lyrics/sourcePriority';
 import { applyAppLanguagePreference, readStoredAppLanguagePreference, type AppLanguagePreference } from '../i18n/config';
-import { normalizeFontFamilyStack } from '../utils/fontStacks';
+import { normalizeFontFamilyStack, normalizeFontWeight } from '../utils/fontStacks';
 import i18n from '../i18n/config';
 import type { AudioQualityPreference } from '../types/onlineMusic';
 
@@ -47,10 +47,12 @@ export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
 export const SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY = 'subtitle_overlay_background';
 export const SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY = 'show_subtitle_translation';
 const LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'lyrics_font_fallback_families';
+const LYRICS_FONT_WEIGHT_STORAGE_KEY = 'lyrics_font_weight';
 const SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY = 'subtitle_font_inherits_lyrics';
 const SUBTITLE_FONT_STYLE_STORAGE_KEY = 'subtitle_font_style';
 const SUBTITLE_FONT_FAMILY_STORAGE_KEY = 'subtitle_font_family';
 const SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'subtitle_font_fallback_families';
+const SUBTITLE_FONT_WEIGHT_STORAGE_KEY = 'subtitle_font_weight';
 export const VISUALIZER_OPACITY_STORAGE_KEY = 'visualizer_opacity';
 
 const getStoredBoolean = (key: string, fallback: boolean) => {
@@ -798,6 +800,15 @@ const readStoredLyricsFontScale = (): number => {
     return Math.min(1.4, Math.max(0.85, parsed));
 };
 
+const readStoredFontWeight = (key: string): number | null => {
+    if (typeof window === 'undefined') return null;
+
+    const saved = localStorage.getItem(key);
+    if (saved === null) return null;
+
+    return normalizeFontWeight(Number(saved));
+};
+
 const readStoredFontFamilyStack = (key: string): string[] => {
     if (typeof window === 'undefined') {
         return [];
@@ -1032,10 +1043,12 @@ export type SettingsUiState = {
     appLanguagePreference: AppLanguagePreference;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
+    lyricsFontWeight: number | null;
     lyricsCustomFont: StoredCustomLyricsFont | null;
     lyricsFontFallbackFamilies: string[];
     subtitleFontInheritsLyrics: boolean;
     subtitleFontStyle: Theme['fontStyle'];
+    subtitleFontWeight: number | null;
     subtitleFontFamily: string | null;
     subtitleFontFallbackFamilies: string[];
     lyricFilterPattern: string;
@@ -1145,11 +1158,13 @@ export type SettingsUiState = {
     handleClearCustomCappellaAvatar: () => Promise<void>;
     handleSetLyricsFontStyle: (fontStyle: Theme['fontStyle']) => void;
     handleSetLyricsFontScale: (fontScale: number) => void;
+    handleSetLyricsFontWeight: (fontWeight: number | null) => void;
     handleSetLyricsCustomFont: (font: StoredCustomLyricsFont | null) => void;
     handleUploadLyricsCustomFont: (file: File) => Promise<{ ok: boolean; error?: string; }>;
     handleSetLyricsFontFallbackFamilies: (families: string[]) => void;
     handleSetSubtitleFontInheritsLyrics: (inheritsLyrics: boolean) => void;
     handleSetSubtitleFontStyle: (fontStyle: Theme['fontStyle']) => void;
+    handleSetSubtitleFontWeight: (fontWeight: number | null) => void;
     handleSetSubtitleFontFamily: (fontFamily: string | null) => void;
     handleSetSubtitleFontFallbackFamilies: (families: string[]) => void;
     handleSetAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void>;
@@ -1232,10 +1247,12 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     appLanguagePreference: readStoredAppLanguagePreference(),
     lyricsFontStyle: readStoredLyricsFontStyle(),
     lyricsFontScale: readStoredLyricsFontScale(),
+    lyricsFontWeight: readStoredFontWeight(LYRICS_FONT_WEIGHT_STORAGE_KEY),
     lyricsCustomFont: readStoredCustomLyricsFont(),
     lyricsFontFallbackFamilies: readStoredFontFamilyStack(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY),
     subtitleFontInheritsLyrics: getStoredBoolean(SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY, true),
     subtitleFontStyle: readStoredSubtitleFontStyle(),
+    subtitleFontWeight: readStoredFontWeight(SUBTITLE_FONT_WEIGHT_STORAGE_KEY),
     subtitleFontFamily: readStoredSubtitleFontFamily(),
     subtitleFontFallbackFamilies: readStoredFontFamilyStack(SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY),
     lyricFilterPattern: readStoredLyricFilterPattern(),
@@ -2037,6 +2054,14 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ lyricsFontScale: next });
     },
+    handleSetLyricsFontWeight: (fontWeight) => {
+        const next = normalizeFontWeight(fontWeight);
+        if (typeof window !== 'undefined') {
+            if (next === null) localStorage.removeItem(LYRICS_FONT_WEIGHT_STORAGE_KEY);
+            else localStorage.setItem(LYRICS_FONT_WEIGHT_STORAGE_KEY, String(next));
+        }
+        set({ lyricsFontWeight: next });
+    },
     handleSetLyricsCustomFont: (font) => {
         if (!font?.family?.trim()) {
             set({ lyricsCustomFont: null });
@@ -2102,6 +2127,14 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem(SUBTITLE_FONT_STYLE_STORAGE_KEY, fontStyle);
         }
         set({ subtitleFontStyle: fontStyle });
+    },
+    handleSetSubtitleFontWeight: (fontWeight) => {
+        const next = normalizeFontWeight(fontWeight);
+        if (typeof window !== 'undefined') {
+            if (next === null) localStorage.removeItem(SUBTITLE_FONT_WEIGHT_STORAGE_KEY);
+            else localStorage.setItem(SUBTITLE_FONT_WEIGHT_STORAGE_KEY, String(next));
+        }
+        set({ subtitleFontWeight: next });
     },
     handleSetSubtitleFontFamily: (fontFamily) => {
         const next = fontFamily?.trim() || null;
@@ -2297,11 +2330,13 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     appLanguagePreference: state.appLanguagePreference,
     lyricsFontStyle: state.lyricsFontStyle,
     lyricsFontScale: state.lyricsFontScale,
+    lyricsFontWeight: state.lyricsFontWeight,
     lyricsCustomFontFamily: state.lyricsCustomFont?.family ?? null,
     lyricsCustomFontLabel: state.lyricsCustomFont?.label ?? null,
     lyricsFontFallbackFamilies: state.lyricsFontFallbackFamilies,
     subtitleFontInheritsLyrics: state.subtitleFontInheritsLyrics,
     subtitleFontStyle: state.subtitleFontStyle,
+    subtitleFontWeight: state.subtitleFontWeight,
     subtitleFontFamily: state.subtitleFontFamily,
     subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
     lyricFilterPattern: state.lyricFilterPattern,
@@ -2383,11 +2418,13 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleClearCustomCappellaAvatar: state.handleClearCustomCappellaAvatar,
     handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
     handleSetLyricsFontScale: state.handleSetLyricsFontScale,
+    handleSetLyricsFontWeight: state.handleSetLyricsFontWeight,
     handleSetLyricsCustomFont: state.handleSetLyricsCustomFont,
     handleUploadLyricsCustomFont: state.handleUploadLyricsCustomFont,
     handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
     handleSetSubtitleFontInheritsLyrics: state.handleSetSubtitleFontInheritsLyrics,
     handleSetSubtitleFontStyle: state.handleSetSubtitleFontStyle,
+    handleSetSubtitleFontWeight: state.handleSetSubtitleFontWeight,
     handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,
     handleSetSubtitleFontFallbackFamilies: state.handleSetSubtitleFontFallbackFamilies,
     handleSetAppLanguagePreference: state.handleSetAppLanguagePreference,

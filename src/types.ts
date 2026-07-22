@@ -85,6 +85,7 @@ export interface Theme {
   fontStyle: 'sans' | 'serif' | 'mono';
   fontFamily?: string;
   fontFamilyStack?: string[];
+  fontWeight?: number;
   animationIntensity: 'calm' | 'normal' | 'chaotic';
   wordColors?: { word: string; color: string; }[];
   lyricsIcons?: string[];

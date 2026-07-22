@@ -354,11 +354,13 @@ export default function App() {
         urlBackgroundSelectedId,
         lyricsFontStyle,
         lyricsFontScale,
+        lyricsFontWeight,
         lyricsCustomFontFamily,
         lyricsCustomFontLabel,
         lyricsFontFallbackFamilies,
         subtitleFontInheritsLyrics,
         subtitleFontStyle,
+        subtitleFontWeight,
         subtitleFontFamily,
         subtitleFontFallbackFamilies,
         lyricFilterPattern,
@@ -408,6 +410,7 @@ export default function App() {
         handleClearCustomCappellaEmojiPack,
         handleSetLyricsFontStyle,
         handleSetLyricsFontScale,
+        handleSetLyricsFontWeight,
         handleSetLyricsCustomFont,
         handleUploadLyricsCustomFont,
         handleSetAppLanguagePreference,
@@ -1575,10 +1578,12 @@ export default function App() {
         appStyle,
         theme,
         lyricsFontStyle,
+        lyricsFontWeight,
         lyricsCustomFontFamily,
         lyricsFontFallbackFamilies,
         subtitleFontInheritsLyrics,
         subtitleFontStyle,
+        subtitleFontWeight,
         subtitleFontFamily,
         subtitleFontFallbackFamilies,
         currentSongId: currentSong?.id,
@@ -1589,10 +1594,12 @@ export default function App() {
         lyricsCustomFontFamily,
         lyricsFontFallbackFamilies,
         lyricsFontStyle,
+        lyricsFontWeight,
         subtitleFontFallbackFamilies,
         subtitleFontFamily,
         subtitleFontInheritsLyrics,
         subtitleFontStyle,
+        subtitleFontWeight,
         theme,
         visualizerMode,
     ]);
@@ -2270,6 +2277,7 @@ export default function App() {
         handleSetFumeTuning,
         handleSetLyricsCustomFont,
         handleSetLyricsFontScale,
+        handleSetLyricsFontWeight,
         handleSetLyricsFontStyle,
         handleUploadLyricsCustomFont,
         handleSetPartitaTuning,
@@ -2312,6 +2320,7 @@ export default function App() {
         lyricsCustomFontFamily,
         lyricsCustomFontLabel,
         lyricsFontScale,
+        lyricsFontWeight,
         lyricsFontStyle,
         navigateToPlayer,
         navigateToSearch,
@@ -3117,6 +3126,7 @@ export default function App() {
                     lyrics={lyrics}
                     currentLineIndex={currentLineIndex}
                     visualizerTheme={visualizerTheme}
+                    subtitleTheme={visualizerSubtitleTheme}
                     lyricsFontScale={lyricsFontScale}
                     shouldHidePlayerTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
                     isDaylight={isDaylight}

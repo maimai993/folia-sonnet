@@ -127,7 +127,10 @@ export const resolveDebugLyricsSource = (
         if (navidromeSong.matchedLyrics) {
             return 'online';
         }
-        if (lyrics || navidromeSong.cachedStructuredLyrics?.length || navidromeSong.cachedPlainLyrics?.trim()) {
+        const hasStructuredLyrics = Array.isArray(navidromeSong.cachedStructuredLyrics)
+            ? navidromeSong.cachedStructuredLyrics.length > 0
+            : Boolean(navidromeSong.cachedStructuredLyrics?.line.length || navidromeSong.cachedStructuredLyrics?.cueLine?.length);
+        if (lyrics || hasStructuredLyrics || navidromeSong.cachedPlainLyrics?.trim()) {
             return 'navi';
         }
         return 'none';
@@ -143,12 +146,14 @@ export const resolveDebugLyricsSource = (
 type NavidromeSongLike = SongResult & {
     lyricsSource?: 'navi' | 'online';
     matchedLyrics?: LyricData;
-    cachedStructuredLyrics?: StructuredLyric['line'];
+    cachedStructuredLyrics?: StructuredLyric | StructuredLyric['line'];
     cachedPlainLyrics?: string;
 };
 
 export const hasEnhancedStructuredLines = (item: StructuredLyric): boolean => {
-    return item.line?.some(line => detectTimedLyricFormat(line.value) === 'enhanced-lrc') ?? false;
+    return item.cueLine?.some(cueLine => cueLine.cue?.some(cue => typeof cue.start === 'number'))
+        || item.line?.some(line => detectTimedLyricFormat(line.value) === 'enhanced-lrc')
+        || false;
 };
 
 export const toDebugLineSnapshot = (line: LyricData['lines'][number] | null) => {

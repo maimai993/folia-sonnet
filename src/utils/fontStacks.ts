@@ -1,5 +1,21 @@
 import type { Theme } from '../types';
 
+export const MIN_FONT_WEIGHT = 100;
+export const MAX_FONT_WEIGHT = 900;
+export const FONT_WEIGHT_STEP = 10;
+
+export const normalizeFontWeight = (fontWeight: unknown): number | null => {
+    if (typeof fontWeight !== 'number' || !Number.isFinite(fontWeight)) return null;
+
+    const clamped = Math.min(MAX_FONT_WEIGHT, Math.max(MIN_FONT_WEIGHT, fontWeight));
+    return Math.round(clamped / FONT_WEIGHT_STEP) * FONT_WEIGHT_STEP;
+};
+
+export const resolveThemeFontWeight = (
+    theme: Pick<Theme, 'fontWeight'> | null | undefined,
+    fallback: number,
+) => normalizeFontWeight(theme?.fontWeight) ?? fallback;
+
 const SUGAR_SERIF_FAMILY = '"獅尾四季春加糖SC"';
 
 export const BUILTIN_FONT_STACKS: Record<Theme['fontStyle'], string> = {

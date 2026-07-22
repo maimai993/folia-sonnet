@@ -119,10 +119,16 @@ CJK 语义分组、sticky 标点、英文 contraction 已有布局工具：
 - `resolveThemeFontStack`
 - `resolveThemeTranslationFontStack`
 - `getBuiltinThemeFontStack`
+- `resolveThemeFontWeight`
+- `normalizeFontWeight`
 
 位置：`src/utils/fontStacks.ts`
 
 需要 CSS `fontFamily`、canvas `font`、pretext `fontSpec` 时，先用 resolver。不要手写一份新的 fallback font stack。
+
+歌词和字幕的最终字重必须使用 `resolveThemeFontWeight(theme, modeFallback)`。模式自身的 300、400、500、700 等设计值只能作为 `modeFallback`：`theme.fontWeight` 有值时必须由用户值覆盖，没有值时才保留模式原设计。DOM、Canvas、pretext 和光栅化文本必须复用同一个解析结果；测量规格、memo 依赖和布局缓存键也必须包含该最终字重。
+
+不要在歌词或字幕渲染路径中使用 `font-bold`、`font-medium`、固定 `style.fontWeight`，也不要把固定字重直接写进 Canvas / pretext 字体规格。这些写法会绕开视觉设置，并造成测量与渲染不一致。
 
 ### Visualizer Colors
 
@@ -223,6 +229,8 @@ const { t } = useTranslation();
 - 是否新增硬编码文案却没有更新 i18n 字典？
 - 是否新增设置却没有接入视觉配置导入导出或 command palette？
 - 是否新增固定颜色却没有从 `Theme` / `DualTheme` 动态派生并检查明暗两套表现？
+- 是否硬编码歌词或字幕字重，而没有使用 `resolveThemeFontWeight` 和模式 fallback？
+- DOM、Canvas、pretext、光栅化的最终字重以及布局缓存键是否一致？
 - 是否创建了相似 helper，却没有搜索已有实现或测试？
 
 ## Validation

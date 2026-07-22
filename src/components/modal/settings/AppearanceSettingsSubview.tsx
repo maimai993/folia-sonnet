@@ -364,10 +364,12 @@ export const compressConfig = (config: any): string => {
     if (config.subtitleOverlayBackground !== undefined) minified.sob = config.subtitleOverlayBackground;
     if (config.lyricsFontStyle) minified.lfs = config.lyricsFontStyle;
     if (config.lyricsFontScale !== undefined) minified.lfn = config.lyricsFontScale;
+    if (config.lyricsFontWeight !== undefined) minified.lfw = config.lyricsFontWeight;
     if (config.lyricsFontFallbackFamilies?.length) minified.lff = config.lyricsFontFallbackFamilies;
     if (config.lyricsCustomFontFamily) minified.lcf = config.lyricsCustomFontFamily;
     if (config.subtitleFontInheritsLyrics !== undefined) minified.sfi = config.subtitleFontInheritsLyrics;
     if (config.subtitleFontStyle) minified.sfs = config.subtitleFontStyle;
+    if (config.subtitleFontWeight !== undefined) minified.sfw = config.subtitleFontWeight;
     if (config.subtitleFontFamily) minified.sff = config.subtitleFontFamily;
     if (config.subtitleFontFallbackFamilies?.length) minified.sfff = config.subtitleFontFallbackFamilies;
 
@@ -427,6 +429,8 @@ export const decompressConfig = (str: string): any => {
         || parsed.hpts !== undefined
         || parsed.sst !== undefined
         || parsed.sob !== undefined
+        || parsed.lfw !== undefined
+        || parsed.sfw !== undefined
         || parsed.lff !== undefined
         || parsed.sfi !== undefined;
     if (isMinified) {
@@ -447,10 +451,12 @@ export const decompressConfig = (str: string): any => {
         if (parsed.sob !== undefined) decompressed.subtitleOverlayBackground = parsed.sob;
         if (parsed.lfs) decompressed.lyricsFontStyle = parsed.lfs;
         if (parsed.lfn !== undefined) decompressed.lyricsFontScale = parsed.lfn;
+        if (parsed.lfw !== undefined) decompressed.lyricsFontWeight = parsed.lfw;
         if (parsed.lff) decompressed.lyricsFontFallbackFamilies = parsed.lff;
         if (parsed.lcf) decompressed.lyricsCustomFontFamily = parsed.lcf;
         if (parsed.sfi !== undefined) decompressed.subtitleFontInheritsLyrics = parsed.sfi;
         if (parsed.sfs) decompressed.subtitleFontStyle = parsed.sfs;
+        if (parsed.sfw !== undefined) decompressed.subtitleFontWeight = parsed.sfw;
         if (parsed.sff) decompressed.subtitleFontFamily = parsed.sff;
         if (parsed.sfff) decompressed.subtitleFontFallbackFamilies = parsed.sfff;
 
@@ -478,8 +484,8 @@ export const decompressConfig = (str: string): any => {
             'theme', 'visualizerMode', 'randomVisualizerModePerSong', 'visualizerBackgroundMode', 'backgroundOpacity',
             'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation',
             'subtitleOverlayBackground',
-            'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontFallbackFamilies',
-            'subtitleFontInheritsLyrics', 'subtitleFontStyle', 'subtitleFontFamily',
+            'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontWeight', 'lyricsFontFallbackFamilies',
+            'subtitleFontInheritsLyrics', 'subtitleFontStyle', 'subtitleFontWeight', 'subtitleFontFamily',
             'subtitleFontFallbackFamilies', 'visualizerTunings', 'classicTuning',
             'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'claddaghTuning', 'cappellaTuning',
             'tiltTuning', 'dioramaTuning', 'monetBackgroundTuning', 'nomandBackgroundTuning', 'latentBackgroundTuning', 'monetTuning',
@@ -575,9 +581,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         subtitleOverlayBackground: state.subtitleOverlayBackground,
         lyricsFontStyle: state.lyricsFontStyle,
         lyricsFontScale: state.lyricsFontScale,
+        lyricsFontWeight: state.lyricsFontWeight,
         lyricsFontFallbackFamilies: state.lyricsFontFallbackFamilies,
         subtitleFontInheritsLyrics: state.subtitleFontInheritsLyrics,
         subtitleFontStyle: state.subtitleFontStyle,
+        subtitleFontWeight: state.subtitleFontWeight,
         subtitleFontFamily: state.subtitleFontFamily,
         subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
         classicTuning: state.classicTuning,
@@ -605,9 +613,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
         handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
         handleSetLyricsFontScale: state.handleSetLyricsFontScale,
+        handleSetLyricsFontWeight: state.handleSetLyricsFontWeight,
         handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
         handleSetSubtitleFontInheritsLyrics: state.handleSetSubtitleFontInheritsLyrics,
         handleSetSubtitleFontStyle: state.handleSetSubtitleFontStyle,
+        handleSetSubtitleFontWeight: state.handleSetSubtitleFontWeight,
         handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,
         handleSetSubtitleFontFallbackFamilies: state.handleSetSubtitleFontFallbackFamilies,
         handleSetClassicTuning: state.handleSetClassicTuning,
@@ -750,6 +760,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             if (config.lyricsFontScale !== undefined) {
                 store.handleSetLyricsFontScale(config.lyricsFontScale);
             }
+            if (config.lyricsFontWeight !== undefined) {
+                store.handleSetLyricsFontWeight(config.lyricsFontWeight);
+            }
             if (config.lyricsFontFallbackFamilies) {
                 store.handleSetLyricsFontFallbackFamilies(config.lyricsFontFallbackFamilies);
             }
@@ -758,6 +771,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (config.subtitleFontStyle) {
                 store.handleSetSubtitleFontStyle(config.subtitleFontStyle);
+            }
+            if (config.subtitleFontWeight !== undefined) {
+                store.handleSetSubtitleFontWeight(config.subtitleFontWeight);
             }
             if (config.subtitleFontFamily !== undefined) {
                 store.handleSetSubtitleFontFamily(config.subtitleFontFamily);

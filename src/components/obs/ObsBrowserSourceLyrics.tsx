@@ -2,11 +2,13 @@ import React from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LyricData, Theme } from '../../types';
+import { resolveThemeFontWeight } from '../../utils/fontStacks';
 
 export type ObsBrowserSourceLyricsProps = {
     lyrics: LyricData | null;
     currentLineIndex: number;
     visualizerTheme: Theme;
+    subtitleTheme?: Theme;
     lyricsFontScale: number;
     shouldHidePlayerTranslationSubtitle: boolean;
     isDaylight: boolean;
@@ -17,6 +19,7 @@ export const ObsBrowserSourceLyrics: React.FC<ObsBrowserSourceLyricsProps> = ({
     lyrics,
     currentLineIndex,
     visualizerTheme,
+    subtitleTheme,
     lyricsFontScale,
     shouldHidePlayerTranslationSubtitle,
     isDaylight,
@@ -68,11 +71,12 @@ export const ObsBrowserSourceLyrics: React.FC<ObsBrowserSourceLyricsProps> = ({
                         <div key={lineIndex} className="flex flex-col items-center w-full max-w-4xl">
                             {line.fullText && (
                                 <div
-                                    className={`drop-shadow-md text-center tracking-[0.02em] ${isCurrent ? 'text-[2.5rem] font-bold opacity-100 leading-tight' : 'text-3xl font-semibold opacity-30'}`}
+                                    className={`drop-shadow-md text-center tracking-[0.02em] ${isCurrent ? 'text-[2.5rem] opacity-100 leading-tight' : 'text-3xl opacity-30'}`}
                                     style={{
                                         color: visualizerTheme.primaryColor,
                                         fontFamily: visualizerTheme.fontFamily || 'inherit',
                                         scale: lyricsFontScale,
+                                        fontWeight: resolveThemeFontWeight(visualizerTheme, isCurrent ? 700 : 600),
                                     }}
                                 >
                                     {line.fullText}
@@ -80,11 +84,12 @@ export const ObsBrowserSourceLyrics: React.FC<ObsBrowserSourceLyricsProps> = ({
                             )}
                             {line.translation && !shouldHidePlayerTranslationSubtitle && (
                                 <div
-                                    className={`drop-shadow-sm text-center tracking-wide ${isCurrent ? 'text-2xl font-medium opacity-80 mt-3' : 'text-xl opacity-30 mt-2'}`}
+                                    className={`drop-shadow-sm text-center tracking-wide ${isCurrent ? 'text-2xl opacity-80 mt-3' : 'text-xl opacity-30 mt-2'}`}
                                     style={{
                                         color: visualizerTheme.secondaryColor,
                                         fontFamily: visualizerTheme.fontFamily || 'inherit',
                                         scale: lyricsFontScale,
+                                        fontWeight: resolveThemeFontWeight(subtitleTheme ?? visualizerTheme, isCurrent ? 500 : 400),
                                     }}
                                 >
                                     {line.translation}

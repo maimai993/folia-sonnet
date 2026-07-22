@@ -42,6 +42,8 @@ const sampleConfig = {
     showSubtitleTranslation: false,
     subtitleOverlayBackground: true,
     lyricsFontScale: 1.25,
+    lyricsFontWeight: 650,
+    subtitleFontWeight: 350,
 };
 
 describe('buildObsAppearanceFromShortcode', () => {
@@ -52,6 +54,8 @@ describe('buildObsAppearanceFromShortcode', () => {
         expect(a.mode).toBe('monet');
         expect(a.visualizerOpacity).toBe(0.95);
         expect(a.lyricsFontScale).toBe(1.25);
+        expect(a.lyricsFontWeight).toBe(650);
+        expect(a.subtitleFontWeight).toBe(350);
         expect(a.hideTranslationSubtitle).toBe(true); // hidePlayerTranslationSubtitle → hideTranslationSubtitle
         expect(a.showSubtitleTranslation).toBe(false);
         expect(a.subtitleOverlayBackground).toBe(true);

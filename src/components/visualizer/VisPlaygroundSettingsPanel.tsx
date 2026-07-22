@@ -78,6 +78,10 @@ interface VisPlaygroundSettingsPanelProps {
     fontScale: number;
     fontScaleOptions: PresetOption<number>[];
     onFontScaleChange: (fontScale: number) => void;
+    fontWeight: number | null;
+    fontWeightOptions: PresetOption<number>[];
+    onFontWeightChange: (fontWeight: number | null) => void;
+    onFontWeightFollowChange: (follow: boolean) => void;
     onResetCommonSettings?: () => void;
     classicTuning: ClassicTuning;
     onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
@@ -119,7 +123,10 @@ interface VisPlaygroundSettingsPanelProps {
     subtitleFontInheritsLyrics: boolean;
     onSubtitleFontInheritsLyricsChange?: (inheritsLyrics: boolean) => void;
     subtitleFontStyle: Theme['fontStyle'];
+    subtitleFontWeight: number | null;
     onSubtitleFontStyleChange?: (fontStyle: Theme['fontStyle']) => void;
+    onSubtitleFontWeightChange?: (fontWeight: number | null) => void;
+    onSubtitleFontWeightFollowChange?: (follow: boolean) => void;
     subtitleFontFamily?: string | null;
     onSubtitleFontFamilyChange?: (fontFamily: string | null) => void;
     subtitleFontFallbackFamilies: string[];
@@ -210,6 +217,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({
         </div>
         <button
             type="button"
+            aria-label={label}
             aria-pressed={checked}
             onClick={() => onChange?.(!checked)}
             className="w-12 h-6 rounded-full p-1 transition-colors shrink-0 disabled:opacity-45"
@@ -300,6 +308,10 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         fontScale,
         fontScaleOptions,
         onFontScaleChange,
+        fontWeight,
+        fontWeightOptions,
+        onFontWeightChange,
+        onFontWeightFollowChange,
         onResetCommonSettings,
         classicTuning,
         onClassicTuningChange,
@@ -340,6 +352,9 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         subtitleFontInheritsLyrics,
         onSubtitleFontInheritsLyricsChange,
         subtitleFontStyle,
+        subtitleFontWeight,
+        onSubtitleFontWeightChange,
+        onSubtitleFontWeightFollowChange,
         onSubtitleFontStyleChange,
         subtitleFontFamily,
         onSubtitleFontFamilyChange,
@@ -350,6 +365,15 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onSliderPointerDown,
         onSliderCommit,
     } = props;
+    const [fontWeightSliderValue, setFontWeightSliderValue] = useState(fontWeight ?? 400);
+    const [subtitleFontWeightSliderValue, setSubtitleFontWeightSliderValue] = useState(subtitleFontWeight ?? 400);
+
+    useEffect(() => {
+        if (fontWeight !== null) setFontWeightSliderValue(fontWeight);
+    }, [fontWeight]);
+    useEffect(() => {
+        if (subtitleFontWeight !== null) setSubtitleFontWeightSliderValue(subtitleFontWeight);
+    }, [subtitleFontWeight]);
 
     const modeOptions = useMemo(() => (
         VISUALIZER_REGISTRY.map(entry => ({
@@ -440,6 +464,55 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 className={rangeInputClass}
                             />
                         </div>
+
+                        <ToggleRow
+                            label={t('options.fontWeightAuto')}
+                            description={t('options.fontWeightAutoDesc')}
+                            checked={fontWeight === null}
+                            onChange={onFontWeightFollowChange}
+                            theme={theme}
+                        />
+
+                        {fontWeight !== null && (
+                            <div className="space-y-4">
+                                <PresetGroup
+                                    label={t('options.fontWeight')}
+                                    value={fontWeightSliderValue}
+                                    options={fontWeightOptions}
+                                    onChange={(next) => {
+                                        setFontWeightSliderValue(next);
+                                        onFontWeightChange(next);
+                                    }}
+                                    isDaylight={isDaylight}
+                                    theme={theme}
+                                />
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
+                                        <span>{t('options.fontWeight')}</span>
+                                        <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
+                                            {fontWeightSliderValue}
+                                        </span>
+                                    </div>
+                                    <input
+                                        aria-label={t('options.fontWeight')}
+                                        type="range"
+                                        min="100"
+                                        max="900"
+                                        step="10"
+                                        value={fontWeightSliderValue}
+                                        onChange={(event) => {
+                                            const next = parseInt(event.target.value, 10);
+                                            setFontWeightSliderValue(next);
+                                            onFontWeightChange(next);
+                                        }}
+                                        onPointerDown={onSliderPointerDown}
+                                        onPointerUp={onSliderCommit}
+                                        onPointerCancel={onSliderCommit}
+                                        className={rangeInputClass}
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
@@ -657,6 +730,53 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     isDaylight={isDaylight}
                                     theme={theme}
                                 />
+                                <ToggleRow
+                                    label={t('options.fontWeightAuto')}
+                                    description={t('options.fontWeightAutoDesc')}
+                                    checked={subtitleFontWeight === null}
+                                    onChange={onSubtitleFontWeightFollowChange}
+                                    theme={theme}
+                                />
+                                {subtitleFontWeight !== null && (
+                                    <div className="space-y-4">
+                                        <PresetGroup
+                                            label={t('options.subtitleFontWeight')}
+                                            value={subtitleFontWeightSliderValue}
+                                            options={fontWeightOptions}
+                                            onChange={(next) => {
+                                                setSubtitleFontWeightSliderValue(next);
+                                                onSubtitleFontWeightChange?.(next);
+                                            }}
+                                            isDaylight={isDaylight}
+                                            theme={theme}
+                                        />
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
+                                                <span>{t('options.subtitleFontWeight')}</span>
+                                                <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
+                                                    {subtitleFontWeightSliderValue}
+                                                </span>
+                                            </div>
+                                            <input
+                                                aria-label={t('options.subtitleFontWeight')}
+                                                type="range"
+                                                min="100"
+                                                max="900"
+                                                step="10"
+                                                value={subtitleFontWeightSliderValue}
+                                                onChange={(event) => {
+                                                    const next = parseInt(event.target.value, 10);
+                                                    setSubtitleFontWeightSliderValue(next);
+                                                    onSubtitleFontWeightChange?.(next);
+                                                }}
+                                                onPointerDown={onSliderPointerDown}
+                                                onPointerUp={onSliderCommit}
+                                                onPointerCancel={onSliderCommit}
+                                                className={rangeInputClass}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 

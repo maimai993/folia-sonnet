@@ -4,7 +4,7 @@ import { type MotionValue } from 'framer-motion';
 import * as THREE from 'three';
 import { type AudioBands, type DioramaGeometryVisibility, type Line, type Theme } from '../../../types';
 import { buildLineGraphemeTimeline, splitLyricGraphemes, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
-import { resolveThemeFontStack } from '../../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { prepareDioramaKeywordMatchers, resolveDioramaKeywordUnitColors } from './dioramaKeywordColor';
 import {
     buildFormation,
@@ -488,7 +488,8 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [theme.fontStyle, theme.fontFamily, fontsEpoch]
     );
-    const fontSpec = useMemo(() => buildDioramaFontSpec(fontStack), [fontStack]);
+    const fontWeight = resolveThemeFontWeight(theme, 700);
+    const fontSpec = useMemo(() => buildDioramaFontSpec(fontStack, fontWeight), [fontStack, fontWeight]);
 
     // The active (newest) segment - the corridor currently playing. During a transition the previous
     // segment is still in the sequencer (the outgoing scene); everything on screen is one of the two.
@@ -800,7 +801,7 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
             for (let n = 0; n < NEIGHBOR_RASTER_BUDGET && qi < missing.length; n += 1, qi += 1) {
                 const entry = visibleLines.find((e) => e.index === missing[qi]);
                 if (entry?.line?.fullText && !cache.has(missing[qi])) {
-                    cache.set(missing[qi], rasterDioramaLine(entry.line.fullText, fontStack));
+                    cache.set(missing[qi], rasterDioramaLine(entry.line.fullText, fontStack, fontWeight));
                 }
             }
             bumpNeighborTick((v) => v + 1);
@@ -808,7 +809,7 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         };
         rafId = requestAnimationFrame(buildBatch);
         return () => { cancelled = true; if (rafId) cancelAnimationFrame(rafId); };
-    }, [visibleLines, globalIndex, fontSpec, fontStack, linesEpoch]);
+    }, [visibleLines, globalIndex, fontSpec, fontStack, fontWeight, linesEpoch]);
 
     // Free the neighbour cache's WebGL textures on UNMOUNT. The incremental effect above only disposes
     // textures it prunes (index no longer wanted) or flushes (font change); its cleanup just cancels the
@@ -829,7 +830,7 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
     if (transitionOutgoingIndex != null && !lineRasterCacheRef.current.has(transitionOutgoingIndex)) {
         const leaving = visibleLines.find((entry) => entry.index === transitionOutgoingIndex);
         if (leaving?.line?.fullText) {
-            lineRasterCacheRef.current.set(transitionOutgoingIndex, rasterDioramaLine(leaving.line.fullText, fontStack));
+            lineRasterCacheRef.current.set(transitionOutgoingIndex, rasterDioramaLine(leaving.line.fullText, fontStack, fontWeight));
         }
     }
 

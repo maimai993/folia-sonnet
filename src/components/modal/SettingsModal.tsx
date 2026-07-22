@@ -165,11 +165,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         urlBackgroundSelectedId,
         lyricsFontStyle,
         lyricsFontScale,
+        lyricsFontWeight,
         lyricsCustomFontFamily,
         lyricsCustomFontLabel,
         lyricsFontFallbackFamilies,
         subtitleFontInheritsLyrics,
         subtitleFontStyle,
+        subtitleFontWeight,
         subtitleFontFamily,
         subtitleFontFallbackFamilies,
         lyricFilterPattern,
@@ -234,11 +236,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleClearCustomCappellaAvatar: onClearCappellaCustomAvatar,
         handleSetLyricsFontStyle: onLyricsFontStyleChange,
         handleSetLyricsFontScale: onLyricsFontScaleChange,
+        handleSetLyricsFontWeight: onLyricsFontWeightChange,
         handleSetLyricsCustomFont: onLyricsCustomFontChange,
         handleUploadLyricsCustomFont: onLyricsCustomFontUpload,
         handleSetLyricsFontFallbackFamilies: onLyricsFontFallbackFamiliesChange,
         handleSetSubtitleFontInheritsLyrics: onSubtitleFontInheritsLyricsChange,
         handleSetSubtitleFontStyle: onSubtitleFontStyleChange,
+        handleSetSubtitleFontWeight: onSubtitleFontWeightChange,
         handleSetSubtitleFontFamily: onSubtitleFontFamilyChange,
         handleSetSubtitleFontFallbackFamilies: onSubtitleFontFallbackFamiliesChange,
         handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
@@ -1717,20 +1721,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         monetPortraitImage={monetPortraitImage}
                         fontStyle={lyricsFontStyle}
                         fontScale={lyricsFontScale}
+                        fontWeight={lyricsFontWeight}
                         customFontFamily={lyricsCustomFontFamily}
                         customFontLabel={lyricsCustomFontLabel}
                         fontFallbackFamilies={lyricsFontFallbackFamilies}
                         subtitleFontInheritsLyrics={subtitleFontInheritsLyrics}
                         subtitleFontStyle={subtitleFontStyle}
+                        subtitleFontWeight={subtitleFontWeight}
                         subtitleFontFamily={subtitleFontFamily}
                         subtitleFontFallbackFamilies={subtitleFontFallbackFamilies}
                         onFontStyleChange={onLyricsFontStyleChange}
                         onFontScaleChange={onLyricsFontScaleChange}
+                        onFontWeightChange={onLyricsFontWeightChange}
                         onCustomFontChange={onLyricsCustomFontChange}
                         onUploadCustomFont={onLyricsCustomFontUpload}
                         onFontFallbackFamiliesChange={onLyricsFontFallbackFamiliesChange}
                         onSubtitleFontInheritsLyricsChange={onSubtitleFontInheritsLyricsChange}
                         onSubtitleFontStyleChange={onSubtitleFontStyleChange}
+                        onSubtitleFontWeightChange={onSubtitleFontWeightChange}
                         onSubtitleFontFamilyChange={onSubtitleFontFamilyChange}
                         onSubtitleFontFallbackFamiliesChange={onSubtitleFontFallbackFamiliesChange}
                         onVisualizerModeChange={onVisualizerModeChange}
@@ -1810,6 +1818,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         showSubtitleTranslation={showSubtitleTranslation}
                         lyricsFontStyle={lyricsFontStyle}
                         lyricsFontScale={lyricsFontScale}
+                        lyricsFontWeight={lyricsFontWeight}
                         lyricsCustomFontFamily={lyricsCustomFontFamily}
                         onSaveTheme={(dualTheme) => {
                             onSaveCustomTheme(dualTheme);

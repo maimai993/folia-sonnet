@@ -77,20 +77,24 @@ interface VisPlaygroundProps {
     monetPortraitImage?: MonetPortraitImage | null;
     fontStyle: Theme['fontStyle'];
     fontScale: number;
+    fontWeight: number | null;
     customFontFamily: string | null;
     customFontLabel: string | null;
     fontFallbackFamilies?: string[];
     subtitleFontInheritsLyrics?: boolean;
     subtitleFontStyle?: Theme['fontStyle'];
+    subtitleFontWeight?: number | null;
     subtitleFontFamily?: string | null;
     subtitleFontFallbackFamilies?: string[];
     onFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
     onFontScaleChange: (fontScale: number) => void;
+    onFontWeightChange: (fontWeight: number | null) => void;
     onCustomFontChange: (font: StoredCustomLyricsFont | null) => void;
     onUploadCustomFont?: (file: File) => Promise<{ ok: boolean; error?: string; }>;
     onFontFallbackFamiliesChange?: (families: string[]) => void;
     onSubtitleFontInheritsLyricsChange?: (inheritsLyrics: boolean) => void;
     onSubtitleFontStyleChange?: (fontStyle: Theme['fontStyle']) => void;
+    onSubtitleFontWeightChange?: (fontWeight: number | null) => void;
     onSubtitleFontFamilyChange?: (fontFamily: string | null) => void;
     onSubtitleFontFallbackFamiliesChange?: (families: string[]) => void;
     onVisualizerModeChange?: (mode: VisualizerMode) => void;
@@ -164,6 +168,12 @@ const FONT_SCALE_OPTIONS: PresetOption<number>[] = [
     { label: '110%', value: 1.1 },
     { label: '125%', value: 1.25 },
 ];
+
+const FONT_WEIGHT_PRESETS = [
+    { value: 300, labelKey: 'options.fontWeightThin' },
+    { value: 400, labelKey: 'options.fontWeightRegular' },
+    { value: 700, labelKey: 'options.fontWeightBold' },
+] as const;
 
 const FONT_ROW_HEIGHT = 94;
 
@@ -277,20 +287,24 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     monetPortraitImage = null,
     fontStyle,
     fontScale,
+    fontWeight,
     customFontFamily,
     customFontLabel,
     fontFallbackFamilies = [],
     subtitleFontInheritsLyrics = true,
     subtitleFontStyle = 'sans',
+    subtitleFontWeight = null,
     subtitleFontFamily = null,
     subtitleFontFallbackFamilies = [],
     onFontStyleChange,
     onFontScaleChange,
+    onFontWeightChange,
     onCustomFontChange,
     onUploadCustomFont,
     onFontFallbackFamiliesChange,
     onSubtitleFontInheritsLyricsChange,
     onSubtitleFontStyleChange,
+    onSubtitleFontWeightChange,
     onSubtitleFontFamilyChange,
     onSubtitleFontFallbackFamiliesChange,
     onVisualizerModeChange,
@@ -352,6 +366,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [draftVisualizerOpacity, setDraftVisualizerOpacity] = useState(visualizerOpacity);
     const [draftSubtitleOverlayOpacity, setDraftSubtitleOverlayOpacity] = useState(subtitleOverlayOpacity);
     const [draftFontScale, setDraftFontScale] = useState(fontScale);
+    const [draftFontWeight, setDraftFontWeight] = useState<number | null>(fontWeight);
+    const [draftSubtitleFontWeight, setDraftSubtitleFontWeight] = useState<number | null>(subtitleFontWeight);
     const [draftClassicTuning, setDraftClassicTuning] = useState<ClassicTuning>(classicTuning);
     const [draftPartitaTuning, setDraftPartitaTuning] = useState<PartitaTuning>(partitaTuning);
     const [draftFumeTuning, setDraftFumeTuning] = useState<FumeTuning>(fumeTuning);
@@ -383,13 +399,20 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         { value: 'serif', label: t('options.fontSerif') },
         { value: 'mono', label: t('options.fontMono') },
     ]), [t]);
+    const fontWeightOptions: PresetOption<number>[] = useMemo(() => (
+        FONT_WEIGHT_PRESETS.map(preset => ({
+            value: preset.value,
+            label: t(preset.labelKey),
+        }))
+    ), [t]);
     const baseTheme = theme ?? PREVIEW_THEME;
     const previewTheme = useMemo<Theme>(() => ({
         ...baseTheme,
         fontStyle,
         fontFamily: customFontFamily ?? undefined,
         fontFamilyStack: fontFallbackFamilies,
-    }), [baseTheme, customFontFamily, fontFallbackFamilies, fontStyle]);
+        fontWeight: fontWeight ?? undefined,
+    }), [baseTheme, customFontFamily, fontFallbackFamilies, fontStyle, fontWeight]);
     const previewSubtitleTheme = useMemo<Theme>(() => (
         subtitleFontInheritsLyrics
             ? previewTheme
@@ -398,6 +421,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                 fontStyle: subtitleFontStyle,
                 fontFamily: subtitleFontFamily ?? undefined,
                 fontFamilyStack: subtitleFontFallbackFamilies,
+                fontWeight: subtitleFontWeight ?? undefined,
             }
     ), [
         baseTheme,
@@ -406,6 +430,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         subtitleFontFamily,
         subtitleFontInheritsLyrics,
         subtitleFontStyle,
+        subtitleFontWeight,
     ]);
     const activePickerFontFamily = fontPickerTarget === 'subtitle' ? subtitleFontFamily : customFontFamily;
     const activePickerTheme = fontPickerTarget === 'subtitle' ? previewSubtitleTheme : previewTheme;
@@ -483,6 +508,16 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     useEffect(() => { setDraftVisualizerOpacity(visualizerOpacity); }, [visualizerOpacity]);
     useEffect(() => { setDraftSubtitleOverlayOpacity(subtitleOverlayOpacity); }, [subtitleOverlayOpacity]);
     useEffect(() => { setDraftFontScale(fontScale); }, [fontScale]);
+    useEffect(() => { setDraftFontWeight(fontWeight); }, [fontWeight]);
+    useEffect(() => { setDraftSubtitleFontWeight(subtitleFontWeight); }, [subtitleFontWeight]);
+    const lastFontWeightRef = useRef(fontWeight ?? 400);
+    const lastSubtitleFontWeightRef = useRef(subtitleFontWeight ?? 400);
+    useEffect(() => {
+        if (fontWeight !== null) lastFontWeightRef.current = fontWeight;
+    }, [fontWeight]);
+    useEffect(() => {
+        if (subtitleFontWeight !== null) lastSubtitleFontWeightRef.current = subtitleFontWeight;
+    }, [subtitleFontWeight]);
     useEffect(() => { setDraftClassicTuning(classicTuning); }, [classicTuning]);
     useEffect(() => { setDraftPartitaTuning(partitaTuning); }, [partitaTuning]);
     useEffect(() => { setDraftFumeTuning(fumeTuning); }, [fumeTuning]);
@@ -782,6 +817,36 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         }
     };
 
+    const handleFontWeightDraft = (weight: number | null) => {
+        if (weight !== null) lastFontWeightRef.current = weight;
+        if (isDraggingSlider.current) {
+            pendingCommitRef.current = () => onFontWeightChange(weight);
+            return;
+        }
+
+        setDraftFontWeight(weight);
+        onFontWeightChange(weight);
+    };
+
+    const handleSubtitleFontWeightDraft = (weight: number | null) => {
+        if (weight !== null) lastSubtitleFontWeightRef.current = weight;
+        if (isDraggingSlider.current) {
+            pendingCommitRef.current = () => onSubtitleFontWeightChange?.(weight);
+            return;
+        }
+
+        setDraftSubtitleFontWeight(weight);
+        onSubtitleFontWeightChange?.(weight);
+    };
+
+    const handleFontWeightFollowChange = (follow: boolean) => {
+        handleFontWeightDraft(follow ? null : lastFontWeightRef.current);
+    };
+
+    const handleSubtitleFontWeightFollowChange = (follow: boolean) => {
+        handleSubtitleFontWeightDraft(follow ? null : lastSubtitleFontWeightRef.current);
+    };
+
     const handleClassicTuningDraft = (patch: Partial<ClassicTuning>) => {
         setDraftClassicTuning(prev => ({ ...prev, ...patch }));
         if (!isDraggingSlider.current) {
@@ -856,17 +921,21 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         onSubtitleOverlayOpacityChange?.(0.6);
         onSubtitleFontInheritsLyricsChange?.(true);
         onSubtitleFontStyleChange?.('sans');
+        setDraftSubtitleFontWeight(null);
+        onSubtitleFontWeightChange?.(null);
         onSubtitleFontFamilyChange?.(null);
         onSubtitleFontFallbackFamiliesChange?.([]);
     };
 
     const handleResetCommonSettings = () => {
         setDraftFontScale(1);
+        setDraftFontWeight(null);
         setDraftVisualizerOpacity(1);
         onCustomFontChange(null);
         onFontFallbackFamiliesChange?.([]);
         onFontStyleChange('sans');
         onFontScaleChange(1);
+        onFontWeightChange(null);
         onVisualizerOpacityChange?.(1);
     };
 
@@ -1030,6 +1099,10 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         fontScale={normalizedFontScale}
                         fontScaleOptions={FONT_SCALE_OPTIONS}
                         onFontScaleChange={handleFontScaleDraft}
+                        fontWeight={draftFontWeight}
+                        fontWeightOptions={fontWeightOptions}
+                        onFontWeightChange={handleFontWeightDraft}
+                        onFontWeightFollowChange={handleFontWeightFollowChange}
                         onResetCommonSettings={handleResetCommonSettings}
                         classicTuning={draftClassicTuning}
                         onClassicTuningChange={handleClassicTuningDraft}
@@ -1071,6 +1144,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         subtitleFontInheritsLyrics={subtitleFontInheritsLyrics}
                         onSubtitleFontInheritsLyricsChange={onSubtitleFontInheritsLyricsChange}
                         subtitleFontStyle={subtitleFontStyle}
+                        subtitleFontWeight={draftSubtitleFontWeight}
+                        onSubtitleFontWeightChange={handleSubtitleFontWeightDraft}
+                        onSubtitleFontWeightFollowChange={handleSubtitleFontWeightFollowChange}
                         onSubtitleFontStyleChange={onSubtitleFontStyleChange}
                         subtitleFontFamily={subtitleFontFamily}
                         onSubtitleFontFamilyChange={onSubtitleFontFamilyChange}

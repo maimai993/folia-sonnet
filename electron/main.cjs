@@ -9,7 +9,7 @@ const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cj
 const { createKugouApiBridge } = require('./kugouApiBridge.cjs');
 const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = require('./discordPresence.cjs');
 const { createVoiceInputPauseMonitor } = require('./voiceInputPause.cjs');
-const { getReleaseUrl, resolveReleaseChannel } = require('./updateChannels.cjs');
+const { getReleaseUrl, getUpdateProviderConfig, resolveReleaseChannel } = require('./updateChannels.cjs');
 const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/themeSanitizer.cjs');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
 const isAppImageRuntime =
@@ -179,6 +179,10 @@ const VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY = 'VOICE_INPUT_PAUSE_ENABLED';
 const DEFAULT_STAGE_API_PORT = 32107;
 const DEFAULT_OBS_BROWSER_SOURCE_PORT = 32108;
 const FOLIA_RELEASES_URL = 'https://github.com/chthollyphile/folia-major/releases';
+const FOLIA_GITHUB_REPOSITORY = {
+  owner: 'chthollyphile',
+  repo: 'folia-major',
+};
 const WINDOWS_APP_USER_MODEL_ID = 'top.izuna.foliamajor';
 const REMOTE_CONTROL_WINDOW_TITLE = 'Folia Remote';
 const WINDOW_PLAYBACK_HANDOFF_REQUEST_TIMEOUT_MS = 800;
@@ -1328,6 +1332,11 @@ function configureAutoUpdaterChannel(updater) {
   const releaseChannel = getCurrentReleaseChannel();
   updater.channel = releaseChannel.updaterChannel;
   updater.allowPrerelease = releaseChannel.allowPrerelease;
+
+  const providerConfig = getUpdateProviderConfig(releaseChannel, FOLIA_GITHUB_REPOSITORY);
+  if (providerConfig) {
+    updater.setFeedURL(providerConfig);
+  }
 }
 
 async function downloadAvailableUpdate() {

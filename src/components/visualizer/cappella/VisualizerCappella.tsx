@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useMotionValueEvent, type MotionValue } from '
 import { useTranslation } from 'react-i18next';
 import { layoutWithLines, prepareWithSegments, type PrepareOptions } from '@chenglou/pretext';
 import { DEFAULT_CAPPELLA_TUNING, type AudioBands, type CappellaEmojiImage, type CappellaTuning, type Line, type Theme } from '../../../types';
-import { resolveThemeFontStack } from '../../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { buildLineGraphemeTimeline, buildWordGraphemeTimings, splitLyricGraphemes } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime, getLineRenderHints } from '../../../utils/lyrics/renderHints';
 import { mixColors } from '../colorMix';
@@ -842,7 +842,7 @@ const measureBubbleText = ({
     const safeText = text || ' ';
     const prepared = prepareWithSegments(
         safeText,
-        `${CAPPELLA_BUBBLE_FONT_WEIGHT} ${fontSize}px ${resolveThemeFontStack(theme)}`,
+        `${resolveThemeFontWeight(theme, CAPPELLA_BUBBLE_FONT_WEIGHT)} ${fontSize}px ${resolveThemeFontStack(theme)}`,
         CAPPELLA_BUBBLE_TEXT_OPTIONS
     );
     const layout = layoutWithLines(prepared, Math.max(1, maxTextWidth), Math.round(lineHeightPx));
@@ -880,6 +880,8 @@ const getBubbleMetricsCacheKey = ({
     line.endTime,
     line.words.length,
     theme.name,
+    resolveThemeFontStack(theme),
+    resolveThemeFontWeight(theme, CAPPELLA_BUBBLE_FONT_WEIGHT),
     fontSize.toFixed(3),
     lineHeightPx.toFixed(3),
     maxTextWidth,
@@ -1435,7 +1437,7 @@ const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessageRowPr
                                 border: `1px solid ${bubbleColors.borderColor}`,
                                 color: bubbleColors.textColor,
                                 fontSize: bubbleFontSize,
-                                fontWeight: CAPPELLA_BUBBLE_FONT_WEIGHT,
+                                fontWeight: resolveThemeFontWeight(theme, CAPPELLA_BUBBLE_FONT_WEIGHT),
                                 lineHeight: 1.45,
                                 maxWidth: maxTextWidth + bubblePaddingX * 2 + 2,
                                 minHeight: Math.max(

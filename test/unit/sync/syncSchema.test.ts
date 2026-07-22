@@ -26,7 +26,9 @@ describe('sync schema parsing', () => {
                 showSubtitleTranslation: true,
                 subtitleOverlayBackground: true,
                 lyricsFontStyle: 'fantasy',
+                lyricsFontWeight: 650,
                 subtitleFontStyle: 'serif',
+                subtitleFontWeight: null,
                 lyricsFontFallbackFamilies: ['Inter', 'Arial'],
                 subtitleFontFallbackFamilies: ['Noto Sans'],
                 visualizerTunings: {
@@ -43,6 +45,8 @@ describe('sync schema parsing', () => {
             showSubtitleTranslation: true,
             subtitleOverlayBackground: true,
             subtitleFontStyle: 'serif',
+            lyricsFontWeight: 650,
+            subtitleFontWeight: null,
             lyricsFontFallbackFamilies: ['Inter', 'Arial'],
             subtitleFontFallbackFamilies: ['Noto Sans'],
             visualizerTunings: {
