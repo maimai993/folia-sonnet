@@ -1,15 +1,23 @@
 import { collectVisualizerTunings } from '../components/visualizer/tuningRegistry';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
+import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled } from '../services/themePreferences';
 
 // src/utils/visualSettingsConfig.ts
-// The visual-settings subset of the shareable appearance config: everything compressConfig
-// serializes except the theme and the song-theme automation flags. Reads the live settings
-// store, so both the import/export "copy config" and the OBS URL builder stay in sync from a
-// single field list.
+// Everything compressConfig serializes except the theme. Reads the live settings store, so both
+// the import/export "copy config" and the OBS URL builder stay in sync from a single field list.
 
 export function buildVisualSettingsConfig(): Record<string, unknown> {
   const store = useSettingsUiStore.getState();
+  // The song-theme automation flags live in theme preferences, not the settings store. The overlay
+  // ignores them, but a copied OBS URL is also a restore payload (the import box accepts one), so
+  // dropping them here would silently lose both toggles on re-import. Auto-generate is ANDed with
+  // auto-switch exactly as useThemeController composes it at mount, so a config can never carry the
+  // impossible "generate on, switch off" pair.
+  const songThemeAutoSwitchEnabled = readStoredThemeAutoSwitchEnabled();
+  const songThemeAutoGenerateEnabled = songThemeAutoSwitchEnabled && readStoredThemeAutoGenerateEnabled();
   return {
+    songThemeAutoSwitchEnabled,
+    songThemeAutoGenerateEnabled,
     visualizerMode: store.visualizerMode,
     randomVisualizerModePerSong: store.randomVisualizerModePerSong,
     visualizerBackgroundMode: store.visualizerBackgroundMode,
