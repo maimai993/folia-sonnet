@@ -581,7 +581,7 @@ export default {
     "updateCheck": "更新检查",
     "updateCheckDisabled": "已关闭",
     "updateChecking": "检查中",
-    "updateAvailable": "发现",
+    "updateAvailable": "发现新版本",
     "updateLatest": "已是最新",
     "updateCheckFailed": "检查失败",
     "updateUnsupported": "不可用",

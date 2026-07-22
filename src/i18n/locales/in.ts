@@ -533,7 +533,7 @@ export default {
     "updateCheck": "Periksa Pembaruan",
     "updateCheckDisabled": "Dimatikan",
     "updateChecking": "Memeriksa",
-    "updateAvailable": "Ditemukan",
+    "updateAvailable": "Ditemukan pembaruan baru",
     "updateLatest": "Terbaru",
     "updateCheckFailed": "Gagal memeriksa",
     "updateUnsupported": "Tidak tersedia",

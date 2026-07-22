@@ -580,7 +580,7 @@ export default {
     "updateCheck": "Update Check",
     "updateCheckDisabled": "Disabled",
     "updateChecking": "Checking",
-    "updateAvailable": "Found",
+    "updateAvailable": "Found new version",
     "updateLatest": "Up to date",
     "updateCheckFailed": "Check failed",
     "updateUnsupported": "Unavailable",
