@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/themePreferences', () => ({ readStoredLastAppliedThemePointer: vi.fn() }));
 vi.mock('@/services/themeCache', () => ({ getLastDualTheme: vi.fn() }));
-vi.mock('@/components/modal/settings/AppearanceSettingsSubview', () => ({
+vi.mock('@/utils/appearanceCodec', () => ({
     readSavedCustomTheme: vi.fn(),
     compressConfig: vi.fn(() => 'folia-theme://x'),
 }));
@@ -15,7 +15,7 @@ vi.mock('@/components/modal/settings/AppearanceSettingsSubview', () => ({
 import { readEffectiveExportTheme } from '@/utils/currentObsUrl';
 import { readStoredLastAppliedThemePointer } from '@/services/themePreferences';
 import { getLastDualTheme } from '@/services/themeCache';
-import { readSavedCustomTheme } from '@/components/modal/settings/AppearanceSettingsSubview';
+import { readSavedCustomTheme } from '@/utils/appearanceCodec';
 
 const pointerMock = vi.mocked(readStoredLastAppliedThemePointer);
 const aiMock = vi.mocked(getLastDualTheme);

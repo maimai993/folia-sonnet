@@ -2,7 +2,7 @@ import type { SubtitleContentMode, Theme, VisualizerMode } from '../types';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
 import { DEFAULT_VISUALIZER_MODE, hasVisualizerMode } from '../components/visualizer/registry';
-import { decompressConfig } from '../components/modal/settings/AppearanceSettingsSubview';
+import { decompressConfig } from './appearanceCodec';
 
 // src/utils/obsWebAppearance.ts
 // Parse the OBS URL params (including the appearance cfg shortcode) into the appearance

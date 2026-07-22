@@ -1,5 +1,5 @@
 import type { DualTheme } from '../types';
-import { compressConfig, readSavedCustomTheme } from '../components/modal/settings/AppearanceSettingsSubview';
+import { compressConfig, readSavedCustomTheme } from './appearanceCodec';
 import { buildVisualSettingsConfig } from './visualSettingsConfig';
 import { buildObsSourceUrl } from './obsUrl';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';

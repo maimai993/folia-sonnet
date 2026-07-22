@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compressConfig } from '@/components/modal/settings/AppearanceSettingsSubview';
+import { compressConfig } from '@/utils/appearanceCodec';
 import { buildObsAppearanceFromShortcode, parseObsWebParams } from '@/utils/obsWebAppearance';
 import { buildObsSourceUrl, extractCfgFromInput } from '@/utils/obsUrl';
 
