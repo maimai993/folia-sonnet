@@ -580,7 +580,10 @@ export const navidromeApi = {
         id: string
     ): Promise<StructuredLyric[] | null> => {
         try {
-            const res = await fetchSubsonic<LyricsBySongIdResponse>(config, 'getLyricsBySongId', { id });
+            const res = await fetchSubsonic<LyricsBySongIdResponse>(config, 'getLyricsBySongId', {
+                id,
+                enhanced: true,
+            });
             if (res['subsonic-response'].status === 'ok' && res['subsonic-response'].lyricsList?.structuredLyrics) {
                 return res['subsonic-response'].lyricsList.structuredLyrics;
             }

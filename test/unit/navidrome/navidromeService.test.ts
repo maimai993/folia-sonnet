@@ -91,6 +91,26 @@ describe('navidromeService P0 endpoints', () => {
         expect(url.searchParams.getAll('songIndexToRemove')).toEqual(['0', '2']);
     });
 
+    it('requests enhanced songLyrics so Navidrome returns word cue timing', async () => {
+        const fetchMock = vi.fn(async () => okResponse(subsonicOk({
+            lyricsList: {
+                structuredLyrics: [{
+                    line: [{ start: 1000, value: 'One' }],
+                    cueLine: [{ index: 0, start: 1000, end: 1200, value: 'One', cue: [{ start: 1000, end: 1200, value: 'One' }] }],
+                }],
+            },
+        }))) as any;
+        vi.stubGlobal('fetch', fetchMock);
+
+        const lyrics = await navidromeApi.getLyricsBySongId(config, 'song-1');
+
+        const url = new URL(fetchMock.mock.calls[0][0]);
+        expect(url.pathname).toBe('/rest/getLyricsBySongId');
+        expect(url.searchParams.get('id')).toBe('song-1');
+        expect(url.searchParams.get('enhanced')).toBe('true');
+        expect(lyrics?.[0].cueLine?.[0].cue?.[0].start).toBe(1000);
+    });
+
     it('keeps generated media URLs stable across repeated renders', () => {
         stubIncrementingCrypto();
 
