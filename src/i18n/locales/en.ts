@@ -1095,7 +1095,7 @@ export default {
     "obsThemeModeAiHint": "Built-in plus a per-song AI-regenerated theme; falls back to built-in if AI is unset or unreachable.",
     "importSuccess": "Configuration imported successfully!",
     "importFailed": "Import failed, please check the format.",
-    "exportThemeLabel": "Include Theme in Export",
+    "exportThemeLabel": "Theme included in the config code",
     "exportAiTheme": "AI Theme",
     "exportCustomTheme": "Custom Theme",
     "exportNoTheme": "No Theme",

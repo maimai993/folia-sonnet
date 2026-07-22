@@ -1099,7 +1099,7 @@ export default {
     "obsThemeModeAiHint": "在动态·内置基础上逐曲用 AI 重新生成；未配 key 或连不上时自动回退内置。",
     "importSuccess": "配置导入成功！",
     "importFailed": "配置导入失败，请检查格式是否正确。",
-    "exportThemeLabel": "导出时包含的主题",
+    "exportThemeLabel": "复制配置码时包含的主题",
     "exportAiTheme": "AI 主题",
     "exportCustomTheme": "自定义主题",
     "exportNoTheme": "不包含主题",

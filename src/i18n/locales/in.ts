@@ -961,7 +961,7 @@ export default {
     "stageAddressCopied": "Disalin",
     "importSuccess": "Konfigurasi berhasil diimpor!",
     "importFailed": "Impor gagal, periksa formatnya.",
-    "exportThemeLabel": "Sertakan Tema dalam Ekspor",
+    "exportThemeLabel": "Tema yang disertakan dalam kode konfigurasi",
     "exportAiTheme": "Tema AI",
     "exportCustomTheme": "Tema Kustom",
     "exportNoTheme": "Tidak Ada Tema",

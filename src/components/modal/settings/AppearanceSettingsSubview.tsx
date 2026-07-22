@@ -99,16 +99,23 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         if (customTheme) return 'custom';
         return 'none';
     });
+    // A deliberate pick (clicking a theme button) freezes the auto-follow below; without it the
+    // effect keeps overwriting the user's choice on any theme change.
+    const exportThemePickedRef = React.useRef(false);
+    const pickExportThemeType = (value: 'custom' | 'ai' | 'none') => {
+        exportThemePickedRef.current = true;
+        setExportThemeType(value);
+    };
 
+    // Until the user picks, track whichever theme is available (AI-preferred); after a pick, repair
+    // only -- demote to 'none' when the picked option's theme disappears, but never override a
+    // deliberate choice. bgMode is not a dependency -- the buttons are gated on the themes themselves.
     React.useEffect(() => {
-        if (bgMode === 'ai' && aiTheme) {
-            setExportThemeType('ai');
-        } else if (customTheme) {
-            setExportThemeType('custom');
-        } else {
-            setExportThemeType('none');
-        }
-    }, [aiTheme, customTheme, bgMode]);
+        setExportThemeType(prev => {
+            if (!exportThemePickedRef.current) return aiTheme ? 'ai' : customTheme ? 'custom' : 'none';
+            return (prev === 'ai' && !aiTheme) || (prev === 'custom' && !customTheme) ? 'none' : prev;
+        });
+    }, [aiTheme, customTheme]);
 
     // Access ZUSTAND settings store directly for setters & configurations
     const store = useSettingsUiStore(useShallow(state => ({
@@ -690,7 +697,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             {aiTheme && (
                                 <button
                                     type="button"
-                                    onClick={() => setExportThemeType('ai')}
+                                    onClick={() => pickExportThemeType('ai')}
                                     className="px-2.5 py-1.5 rounded-lg text-xs border transition-all flex items-center gap-1.5"
                                     style={getAccentOptionStyle(exportThemeType === 'ai')}
                                 >
@@ -701,7 +708,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             {customTheme && (
                                 <button
                                     type="button"
-                                    onClick={() => setExportThemeType('custom')}
+                                    onClick={() => pickExportThemeType('custom')}
                                     className="px-2.5 py-1.5 rounded-lg text-xs border transition-all flex items-center gap-1.5"
                                     style={getAccentOptionStyle(exportThemeType === 'custom')}
                                 >
@@ -711,7 +718,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             )}
                             <button
                                 type="button"
-                                onClick={() => setExportThemeType('none')}
+                                onClick={() => pickExportThemeType('none')}
                                 className="px-2.5 py-1.5 rounded-lg text-xs border transition-all flex items-center gap-1.5"
                                 style={getAccentOptionStyle(exportThemeType === 'none')}
                             >
