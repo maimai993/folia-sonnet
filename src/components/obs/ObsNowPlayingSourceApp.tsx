@@ -11,12 +11,12 @@ const DEFAULT_NOW_PLAYING_HOST = 'localhost:9863';
 
 const ObsNowPlayingSourceApp: React.FC = () => {
     const paramsRef = useRef(parseObsWebParams(window.location.search));
-    const { host, cfg, isDaylight, transparent, visualizer } = paramsRef.current;
+    const { host, cfg, isDaylight, transparent, visualizer, themeMode } = paramsRef.current;
 
     const source = useNowPlayingSource({ enabled: true, host: host || DEFAULT_NOW_PLAYING_HOST });
     const appearance = useMemo(
-        () => buildObsAppearanceFromShortcode(cfg, { isDaylight, transparent, visualizerOverride: visualizer }),
-        [cfg, isDaylight, transparent, visualizer],
+        () => buildObsAppearanceFromShortcode(cfg, { isDaylight, transparent, visualizerOverride: visualizer, themeMode }),
+        [cfg, isDaylight, transparent, visualizer, themeMode],
     );
 
     return <ObsWebSourceApp source={source} appearance={appearance} />;

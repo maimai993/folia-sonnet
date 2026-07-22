@@ -12,7 +12,9 @@ import { applyVisualizerTuningsToSettings } from '../../visualizer/tuningRegistr
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { sanitizeUrlBackgroundItem } from '../../../utils/urlBackground';
 import { compressConfig, decompressConfig, readSavedCustomTheme } from '../../../utils/appearanceCodec';
-import { buildObsSourceUrl, extractCfgFromInput } from '../../../utils/obsUrl';
+import { extractCfgFromInput } from '../../../utils/obsUrl';
+import { buildCurrentObsUrl } from '../../../utils/currentObsUrl';
+import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
 import { resolveWebObsTarget, selectWebObsSource } from '../../../utils/webObsTarget';
 import { buildVisualSettingsConfig, hasCustomObsFont } from '../../../utils/visualSettingsConfig';
 
@@ -251,12 +253,10 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     const handleCopyObsUrl = async () => {
         const target = resolveWebObsTarget();
         if (!target) return;
-        const code = compressConfig(buildCurrentConfig());
-        // daylight + transparent baked into extra (before cfg); PlayerCap host/params come from the resolved target.
-        const extra: Record<string, string> = {};
-        if (isDaylight) extra.daylight = '1';
-        extra.transparent = transparentPlayerBackground ? '1' : '0';
-        const url = buildObsSourceUrl(target.source, code, target.host, { ...extra, ...target.extra });
+        // Same builder as the stage header's button, so both produce an identical link. The theme
+        // follows the OBS theme mode and the applied theme -- not the export toggle below, which
+        // governs the config code only. PlayerCap host/params come from the resolved target.
+        const url = await buildCurrentObsUrl(target.source, target.host, target.extra);
         try {
             await navigator.clipboard.writeText(url);
             setCopiedType('obsurl');
@@ -265,7 +265,10 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 ? { type: 'info', text: t('options.obsUrlCustomFontHint') }
                 : { type: 'success', text: t('status.copied') });
         } catch (err) {
+            // The URL is built asynchronously, so a browser that requires the write to stay inside the
+            // click's own task can reject here. Say so instead of leaving the button looking inert.
             console.error('Failed to copy OBS URL:', err);
+            store.statusSetter?.({ type: 'error', text: t('status.copyFailed') });
         }
     };
 
@@ -746,16 +749,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             <span>{copiedType === 'json' ? (t('status.copied')) : t('options.copyJson')}</span>
                         </button>
                         {!isElectron && (
-                            <button
-                                type="button"
-                                onClick={handleCopyObsUrl}
+                            <ObsCopyUrlButton
+                                onCopy={handleCopyObsUrl}
+                                copied={copiedType === 'obsurl'}
                                 disabled={webObsSource === null}
-                                className="px-3 py-2 bg-white/10 hover:bg-white/15 active:bg-white/5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                                style={{ color: 'var(--text-primary)' }}
-                            >
-                                {copiedType === 'obsurl' ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
-                                <span>{copiedType === 'obsurl' ? (t('status.copied')) : t('options.copyObsUrl')}</span>
-                            </button>
+                            />
                         )}
                         <div className="flex-1 min-w-[20px]" />
                         <button

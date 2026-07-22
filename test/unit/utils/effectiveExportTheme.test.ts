@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // test/unit/utils/effectiveExportTheme.test.ts
-// Locks readEffectiveExportTheme (the theme the OBS copy link bakes). The AI branch is hard to
-// exercise by hand, so it is pinned here: AI active -> the cached AI theme; otherwise the saved
-// custom theme (unchanged from the prior behavior for non-AI cases).
+// Locks readEffectiveExportTheme (the theme the OBS copy link bakes). It follows the last-applied
+// pointer, not whatever happens to be saved: AI active -> the cached AI theme, custom active -> the
+// saved custom theme, default preset -> null. That last case matters — a user who once saved a
+// custom theme and then went back to the preset must not get the stale custom theme baked in.
 
 vi.mock('@/services/themePreferences', () => ({ readStoredLastAppliedThemePointer: vi.fn() }));
 vi.mock('@/services/themeCache', () => ({ getLastDualTheme: vi.fn() }));
@@ -43,9 +44,11 @@ describe('readEffectiveExportTheme', () => {
         expect(aiMock).not.toHaveBeenCalled();
     });
 
-    it('bakes the saved custom theme on default (unchanged non-AI behavior)', async () => {
+    it('returns null on the default preset, ignoring a leftover saved custom theme', async () => {
         pointerMock.mockReturnValue('default');
-        expect(await readEffectiveExportTheme()).toBe(CUSTOM);
+        expect(await readEffectiveExportTheme()).toBeNull();
+        expect(customMock).not.toHaveBeenCalled();
+        expect(aiMock).not.toHaveBeenCalled();
     });
 
     it('returns null when AI is active but no AI theme is cached (avoids a stale bake)', async () => {
@@ -54,8 +57,8 @@ describe('readEffectiveExportTheme', () => {
         expect(await readEffectiveExportTheme()).toBeNull();
     });
 
-    it('returns null when no saved custom theme exists', async () => {
-        pointerMock.mockReturnValue('default');
+    it('returns null when custom is active but nothing was saved', async () => {
+        pointerMock.mockReturnValue('custom');
         customMock.mockReturnValue(undefined);
         expect(await readEffectiveExportTheme()).toBeNull();
     });
