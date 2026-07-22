@@ -20,6 +20,7 @@ import PlaylistSelectionDialog from './shared/PlaylistSelectionDialog';
 import TextInputDialog from './shared/TextInputDialog';
 import { SidePanelList, TrackListItem } from './shared/SidePanelList';
 import { GridListSearchButton } from './shared/GridListSearchButton';
+import { LocalTrackSortDirectionButton, LocalTrackSortMenu } from './shared/LocalTrackSortMenu';
 import { CustomSelect } from './shared/CustomSelect';
 import { gridSearchPanelMotion } from './shared/gridSearchPanelMotion';
 import {
@@ -29,6 +30,7 @@ import {
     GRID_INITIAL_BATCH_SIZE,
 } from './folia-grid/progressiveGrid';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
+import { compareLocalFolderSongs, type LocalSongFolderSortDirection, type LocalSongFolderSortField } from '../utils/localSongSorting';
 import { resolveGridViewContextTracks } from './folia-grid/gridViewContextActions';
 import {
     resolveGridTrackAlbumTargetId,
@@ -93,6 +95,7 @@ interface GridViewProps {
     onPlaylistMutated?: () => Promise<void> | void;
     externalTracks?: SongResult[];
     externalTracksLoading?: boolean;
+    localSongs?: LocalSong[];
     sourceActions?: GridViewSourceActions;
     onStatusMessage?: (message: StatusMessage) => void;
 }
@@ -491,6 +494,7 @@ export const GridView: React.FC<GridViewProps> = ({
     onPlaylistMutated,
     externalTracks,
     externalTracksLoading = false,
+    localSongs,
     sourceActions,
     onStatusMessage,
 }) => {
@@ -662,12 +666,9 @@ export const GridView: React.FC<GridViewProps> = ({
     const [removingTrackKeys, setRemovingTrackKeys] = useState<Set<string>>(() => new Set());
     const trackRemovalTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     const [removedExternalTrackKeys, setRemovedExternalTrackKeys] = useState<Set<string>>(() => new Set());
+    const [localTrackSortField, setLocalTrackSortField] = useState<LocalSongFolderSortField>('fileName');
+    const [localTrackSortDirection, setLocalTrackSortDirection] = useState<LocalSongFolderSortDirection>('asc');
     const baseDisplayTracks = externalTracks ?? tracks;
-    const displayTracks = useMemo(() => (
-        baseDisplayTracks.filter((track, index) => (
-            !removedExternalTrackKeys.has(`${track.id}-${index}`) && !removedExternalTrackKeys.has(String(track.id))
-        ))
-    ), [baseDisplayTracks, removedExternalTrackKeys]);
     const usesExternalTracks = externalTracks !== undefined;
     const [isEditMode, setIsEditMode] = useState(false);
     const [editableTitle, setEditableTitle] = useState(title);
@@ -726,12 +727,38 @@ export const GridView: React.FC<GridViewProps> = ({
         : null;
     const isLocalFolderCollection = isLocalCollection && collection?.type === 'folder' && !collection?.isVirtual;
     const isLocalAllSongsCollection = isLocalCollection && collection?.type === 'folder' && Boolean(collection?.isVirtual);
+    const supportsLocalTrackSorting = isLocalFolderCollection || isLocalAllSongsCollection;
     const isLocalPlaylistCollection = isLocalCollection && collection?.type === 'playlist' && Boolean(collection?.playlistId) && !collection?.isVirtual;
     const isLocalEntityCollection = isLocalCollection && Boolean(collection?.entityId);
     const isNavidromePlaylistCollection = isNavidromeCollection && collection?.type === 'playlist' && Boolean(collection?.editable);
     const canAddNavidromeToPlaylist = isNavidromeCollection
         && collection?.type !== 'playlist'
         && Boolean(sourceActions?.navidrome?.onAddToPlaylist || sourceActions?.navidrome?.onCreatePlaylist);
+    const localSongsById = useMemo(() => new Map(localSongs?.map(song => [song.id, song])), [localSongs]);
+    const displayTracks = useMemo(() => {
+        const filteredTracks = baseDisplayTracks.filter((track, index) => (
+            !removedExternalTrackKeys.has(`${track.id}-${index}`) && !removedExternalTrackKeys.has(String(track.id))
+        ));
+        if (!supportsLocalTrackSorting || localSongsById.size === 0) {
+            return filteredTracks;
+        }
+
+        return [...filteredTracks].sort((left, right) => {
+            const leftLocalRef = (left as UnifiedSong).localRef;
+            const rightLocalRef = (right as UnifiedSong).localRef;
+            const leftLocalSong = leftLocalRef ? localSongsById.get(leftLocalRef.songId) : undefined;
+            const rightLocalSong = rightLocalRef ? localSongsById.get(rightLocalRef.songId) : undefined;
+            if (!leftLocalSong || !rightLocalSong) return 0;
+            return compareLocalFolderSongs(leftLocalSong, rightLocalSong, localTrackSortField, localTrackSortDirection);
+        });
+    }, [
+        baseDisplayTracks,
+        supportsLocalTrackSorting,
+        localSongsById,
+        localTrackSortDirection,
+        localTrackSortField,
+        removedExternalTrackKeys,
+    ]);
 
     useEffect(() => {
         if (isDraggingRef.current || pendingFocusCommitTimeoutRef.current) return;
@@ -2415,6 +2442,19 @@ export const GridView: React.FC<GridViewProps> = ({
                     itemHeight={60}
                     isDaylight={isDaylight}
                     focusedIndex={focusedIndex}
+                    hideTitle={supportsLocalTrackSorting}
+                    headerLeadingActions={supportsLocalTrackSorting ? (
+                        <LocalTrackSortDirectionButton
+                            direction={localTrackSortDirection}
+                            onDirectionChange={setLocalTrackSortDirection}
+                        />
+                    ) : undefined}
+                    headerActions={supportsLocalTrackSorting ? (
+                        <LocalTrackSortMenu
+                            field={localTrackSortField}
+                            onFieldChange={setLocalTrackSortField}
+                        />
+                    ) : undefined}
                     renderItem={(track, index, style) => (
                         <TrackListItem
                             key={`${track.id}-${index}`}
