@@ -70,7 +70,9 @@ const ThemedDialog: React.FC<ThemedDialogProps> = ({
                         <div className="mb-5 pr-10">
                             <h2 className={`text-xl font-bold ${textPrimary}`}>{title}</h2>
                             {description && (
-                                <p className={`mt-2 text-sm ${textSecondary}`}>{description}</p>
+                                // pre-line so a description can break where its meaning does rather
+                                // than wherever the width happens to run out.
+                                <p className={`mt-2 whitespace-pre-line text-sm ${textSecondary}`}>{description}</p>
                             )}
                         </div>
 
