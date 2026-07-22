@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeFontFamilyStack, resolveThemeFontStack, resolveThemeTranslationFontStack } from '@/utils/fontStacks';
+import { normalizeFontFamilyStack, normalizeFontWeight, resolveThemeFontStack, resolveThemeFontWeight, resolveThemeTranslationFontStack } from '@/utils/fontStacks';
 import type { Theme } from '@/types';
 
 describe('fontStacks', () => {
+    it('normalizes adjustable weights and preserves visualizer fallbacks', () => {
+        expect(normalizeFontWeight(654)).toBe(650);
+        expect(normalizeFontWeight(20)).toBe(100);
+        expect(normalizeFontWeight(950)).toBe(900);
+        expect(normalizeFontWeight(Number.NaN)).toBeNull();
+        expect(resolveThemeFontWeight({}, 780)).toBe(780);
+        expect(resolveThemeFontWeight({ fontWeight: 530 }, 780)).toBe(530);
+    });
+
     it('returns the built-in stack when no custom font is provided', () => {
         const theme: Pick<Theme, 'fontStyle' | 'fontFamily'> = {
             fontStyle: 'serif',

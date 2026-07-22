@@ -53,6 +53,7 @@ interface ThemeParkProps {
     showSubtitleTranslation?: boolean;
     lyricsFontStyle: Theme['fontStyle'];
     lyricsFontScale: number;
+    lyricsFontWeight?: number | null;
     lyricsCustomFontFamily?: string | null;
     onClose: () => void;
     onSaveTheme: (dualTheme: DualTheme) => void;
@@ -324,6 +325,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
     showSubtitleTranslation = true,
     lyricsFontStyle,
     lyricsFontScale,
+    lyricsFontWeight,
     lyricsCustomFontFamily,
     onClose,
     onSaveTheme,
@@ -418,14 +420,16 @@ const ThemePark: React.FC<ThemeParkProps> = ({
         light: {
             ...safeDraftTheme.light,
             fontStyle: lyricsFontStyle,
+            fontWeight: lyricsFontWeight ?? undefined,
             fontFamily: lyricsCustomFontFamily ?? undefined,
         },
         dark: {
             ...safeDraftTheme.dark,
             fontStyle: lyricsFontStyle,
+            fontWeight: lyricsFontWeight ?? undefined,
             fontFamily: lyricsCustomFontFamily ?? undefined,
         },
-    }), [safeDraftTheme, lyricsCustomFontFamily, lyricsFontStyle]);
+    }), [safeDraftTheme, lyricsCustomFontFamily, lyricsFontStyle, lyricsFontWeight]);
 
     const updateColor = (mode: EditableMode, key: EditableColorKey, value: string) => {
         setDraftTheme(previous => ({

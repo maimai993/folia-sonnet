@@ -39,9 +39,11 @@ describe('Visual Settings Import and Export', () => {
         subtitleOverlayBackground: true,
         lyricsFontStyle: 'sans',
         lyricsFontScale: 1.25,
+        lyricsFontWeight: 650,
         lyricsFontFallbackFamilies: ['Songti SC', 'SimSun', 'serif'],
         subtitleFontInheritsLyrics: false,
         subtitleFontStyle: 'sans',
+        subtitleFontWeight: 350,
         subtitleFontFamily: 'Microsoft YaHei',
         subtitleFontFallbackFamilies: ['PingFang SC', 'sans-serif'],
         classicTuning: {
@@ -178,9 +180,11 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.subtitleOverlayBackground).toBe(true);
+        expect(decoded.lyricsFontWeight).toBe(650);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);
         expect(decoded.subtitleFontStyle).toBe('sans');
+        expect(decoded.subtitleFontWeight).toBe(350);
         expect(decoded.subtitleFontFamily).toBe('Microsoft YaHei');
         expect(decoded.subtitleFontFallbackFamilies).toEqual(['PingFang SC', 'sans-serif']);
         expect(decoded.classicTuning?.breathingFloatMultiplier).toBe(1.2);
@@ -222,9 +226,11 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.subtitleOverlayBackground).toBe(true);
+        expect(decoded.lyricsFontWeight).toBe(650);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);
         expect(decoded.subtitleFontStyle).toBe('sans');
+        expect(decoded.subtitleFontWeight).toBe(350);
         expect(decoded.subtitleFontFamily).toBe('Microsoft YaHei');
         expect(decoded.subtitleFontFallbackFamilies).toEqual(['PingFang SC', 'sans-serif']);
         expect(decoded.claddaghTuning?.ellipseTiltDeg).toBe(52);
@@ -232,6 +238,16 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.theme?.dark.accentColor).toBe('#fbbf24');
         expect(decoded.songThemeAutoSwitchEnabled).toBe(true);
         expect(decoded.songThemeAutoGenerateEnabled).toBe(true);
+    });
+
+    it('round-trips null weights so imports can restore follow-visualizer mode', () => {
+        const decoded = decompressConfig(compressConfig({
+            lyricsFontWeight: null,
+            subtitleFontWeight: null,
+        }));
+
+        expect(decoded.lyricsFontWeight).toBeNull();
+        expect(decoded.subtitleFontWeight).toBeNull();
     });
 
     it('migrates the removed Nomand random dithering option to 8x8', () => {

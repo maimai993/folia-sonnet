@@ -223,6 +223,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     translationFontPx={translationFontPx}
                                     fontStack={lyricFontStack}
                                     translationFontStack={translationFontStack}
+                                    subtitleTheme={subtitleTheme}
                                     keywordColoringEnabled={monetTuning.keywordColoringEnabled}
                                     emptyText=""
                                     showSubtitleTranslation={showSubtitleTranslation}

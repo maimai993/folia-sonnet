@@ -128,6 +128,7 @@ export default VisualizerFoo;
 
 - `theme`: 当前歌词主题。包含颜色、字体风格、动画强度等。
   新增颜色必须从当前 `Theme` / `DualTheme` 的 light / dark 结果动态派生，优先使用 `backgroundColor`、`primaryColor`、`accentColor`、`secondaryColor` 及 `colorMix.ts` 工具；不要长期写死只适配暗色或亮色的固定 hex / rgba。
+  歌词字重必须通过 `resolveThemeFontWeight(theme, modeFallback)` 解析：用户启用“自动字重”时使用当前模式原有的 fallback，用户指定字重时统一覆盖模式默认值。DOM、Canvas、pretext 和光栅化文本必须使用同一个解析结果，禁止用 `font-bold`、`font-medium`、固定 `fontWeight` 或写死在字体规格中的数字绕过主题设置。
 - `isDaylight`: 当前是否是浅色主题，适合细调边框、阴影和控制面板对比度。
 - `audioPower`: 音频整体能量。
 - `audioBands`: 分频能量，用于驱动背景或局部动画。
@@ -426,6 +427,8 @@ visualizer/
   作用：给更复杂的入场/退场计算提供统一时序
 - `resolveThemeFontStack`
   作用：根据主题和自定义字体解析实际 `font-family`
+- `resolveThemeFontWeight`
+  作用：根据 `theme.fontWeight` 和当前模式的设计 fallback 解析最终字重；所有测量、布局缓存和实际渲染必须复用同一个结果
 
 常用共享模块：
 
@@ -722,7 +725,18 @@ resetSettings: props => {
 
 用户样式设置面板会统一控制字号，如果新模式忽略它，会导致该模式和其它模式体验不一致。
 
-### 3. 调参应通过 props 注入
+### 3. 不要硬编码歌词或字幕字重
+
+每个模式可以保留自己的设计字重，但只能作为 `resolveThemeFontWeight(theme, modeFallback)` 的 fallback。最终字重必须同时用于 DOM 样式、Canvas `font`、pretext `fontSpec`、Diorama 等光栅化文本，以及所有依赖字体尺寸的 memo、测量规格和布局缓存键。字幕使用 `subtitleTheme` 按同样规则解析；继承歌词字体时由上游主题复用主歌词字重。
+
+禁止以下写法覆盖用户设置：
+
+- 歌词或字幕节点上的 `font-bold`、`font-medium` 等固定字重 class
+- `style={{ fontWeight: 700 }}` 等固定内联值
+- Canvas、pretext 或光栅化字体字符串中的固定字重
+- 测量使用一种字重、实际渲染使用另一种字重
+
+### 4. 调参应通过 props 注入
 
 如果某个参数会进入设置面板，就不要只写成文件顶部常量。应该：
 
@@ -730,7 +744,7 @@ resetSettings: props => {
 - 在 `useAppPreferences.ts` 持久化
 - 在统一 renderer 和对应设置入口中传入
 
-### 4. 尽量保持背景层行为一致
+### 5. 尽量保持背景层行为一致
 
 建议继续复用：
 
@@ -740,7 +754,7 @@ resetSettings: props => {
 
 这样不同模式切换时，用户不会感觉整套播放器逻辑被打散。
 
-### 5. 预览和实际播放必须一致
+### 6. 预览和实际播放必须一致
 
 `VisPlayground` 不应该使用和播放器完全不同的一套参数解释方式。预览应尽量复用真实组件，而不是复制一个“假实现”。
 
@@ -771,6 +785,8 @@ resetSettings: props => {
 - 是否处理 `activeLine` 不存在的情况
 - 是否支持 `showText = false`
 - 是否正确使用 `lyricsFontScale`
+- 是否通过 `resolveThemeFontWeight` 解析最终字重，且 DOM、Canvas、pretext、光栅化、测量和缓存键保持一致
+- 是否移除了会覆盖用户字重设置的 `font-bold`、`font-medium`、固定 `fontWeight` 或固定字体规格
 - 是否没有用 `useState` / store / reducer 每帧保存当前精确时间
 - 是否所有新增 UI 文案都已经写入中英文 i18n 字典
 - 是否所有新增颜色都从当前 light / dark theme 动态派生

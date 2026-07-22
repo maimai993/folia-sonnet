@@ -17,9 +17,11 @@ export const buildSyncedVisualSettings = (state: SettingsUiState): SyncedVisualS
     subtitleOverlayBackground: state.subtitleOverlayBackground,
     lyricsFontStyle: state.lyricsFontStyle,
     lyricsFontScale: state.lyricsFontScale,
+    lyricsFontWeight: state.lyricsFontWeight,
     lyricsFontFallbackFamilies: state.lyricsFontFallbackFamilies,
     subtitleFontInheritsLyrics: state.subtitleFontInheritsLyrics,
     subtitleFontStyle: state.subtitleFontStyle,
+    subtitleFontWeight: state.subtitleFontWeight,
     subtitleFontFamily: state.subtitleFontFamily,
     subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
     visualizerTunings: collectVisualizerTunings(state as unknown as Record<string, unknown>),
@@ -72,9 +74,11 @@ export const applySyncedVisualSettings = (
     if (settings.subtitleOverlayBackground !== undefined) state.handleToggleSubtitleOverlayBackground(Boolean(settings.subtitleOverlayBackground));
     if (settings.lyricsFontStyle !== undefined) state.handleSetLyricsFontStyle(settings.lyricsFontStyle);
     if (settings.lyricsFontScale !== undefined) state.handleSetLyricsFontScale(settings.lyricsFontScale);
+    if (settings.lyricsFontWeight !== undefined) state.handleSetLyricsFontWeight(settings.lyricsFontWeight);
     if (settings.lyricsFontFallbackFamilies !== undefined) state.handleSetLyricsFontFallbackFamilies(settings.lyricsFontFallbackFamilies);
     if (settings.subtitleFontInheritsLyrics !== undefined) state.handleSetSubtitleFontInheritsLyrics(Boolean(settings.subtitleFontInheritsLyrics));
     if (settings.subtitleFontStyle !== undefined) state.handleSetSubtitleFontStyle(settings.subtitleFontStyle);
+    if (settings.subtitleFontWeight !== undefined) state.handleSetSubtitleFontWeight(settings.subtitleFontWeight);
     if (settings.subtitleFontFamily !== undefined) state.handleSetSubtitleFontFamily(settings.subtitleFontFamily);
     if (settings.subtitleFontFallbackFamilies !== undefined) state.handleSetSubtitleFontFallbackFamilies(settings.subtitleFontFallbackFamilies);
     if (settings.visualizerTunings !== undefined) {

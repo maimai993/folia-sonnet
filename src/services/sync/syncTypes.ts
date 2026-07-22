@@ -35,9 +35,11 @@ export type SyncedVisualSettings = {
     subtitleOverlayBackground?: boolean;
     lyricsFontStyle?: Theme['fontStyle'];
     lyricsFontScale?: number;
+    lyricsFontWeight?: number | null;
     lyricsFontFallbackFamilies?: string[];
     subtitleFontInheritsLyrics?: boolean;
     subtitleFontStyle?: Theme['fontStyle'];
+    subtitleFontWeight?: number | null;
     subtitleFontFamily?: string | null;
     subtitleFontFallbackFamilies?: string[];
     visualizerTunings?: VisualizerTuningBundle;

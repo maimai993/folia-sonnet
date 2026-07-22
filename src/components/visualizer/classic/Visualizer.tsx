@@ -9,7 +9,7 @@ import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { buildPostLyricLayoutUnits, buildDisplayWordsFromLayoutUnits } from '../../../utils/lyrics/cjkSemanticLayout';
 import { buildWordGraphemeTimings } from '../../../utils/lyrics/graphemeTiming';
-import { resolveThemeFontStack } from '../../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { resolveWordColor } from '../wordColoring';
 
 // This mode is the most straightforward lyric pipeline in the folder.
@@ -145,7 +145,7 @@ let classicMeasureCanvas: HTMLCanvasElement | null = null;
 /**
  * Measures the width of a given word text using a 2D canvas context.
  */
-const measureWordWidth = (text: string, pxSize: number, fontStack: string): number => {
+const measureWordWidth = (text: string, pxSize: number, fontStack: string, fontWeight: number): number => {
     if (typeof document === 'undefined') {
         return text.length * pxSize * 0.65;
     }
@@ -156,7 +156,7 @@ const measureWordWidth = (text: string, pxSize: number, fontStack: string): numb
     if (!context) {
         return text.length * pxSize * 0.65;
     }
-    context.font = `700 ${pxSize}px ${fontStack}`;
+    context.font = `${fontWeight} ${pxSize}px ${fontStack}`;
     return context.measureText(text).width;
 };
 
@@ -211,9 +211,10 @@ const Word: React.FC<{
             initial="waiting"
             animate={status}
             // Add `whitespace-nowrap` to prevent unexpected line breaks
-            className="font-bold inline-block origin-center relative will-change-transform whitespace-nowrap"
+            className="inline-block origin-center relative will-change-transform whitespace-nowrap"
             style={{
                 fontSize,
+                fontWeight: resolveThemeFontWeight(theme, 700),
                 marginRight: config.marginRight,
                 alignSelf: config.alignSelf,
                 lineHeight: 1.22,
@@ -373,6 +374,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         // Word layouts stay deterministic for a given line.
         // That is important because time should change the animation state, not the base geometry.
         const fontStack = resolveThemeFontStack(theme);
+        const fontWeight = resolveThemeFontWeight(theme, 700);
         const getPixelFontSize = (fontScale: number, width: number): number => {
             const rem = 16;
             const minPx = 2.25 * fontScale * rem;
@@ -381,7 +383,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
             return Math.max(minPx, Math.min(valPx, maxPx));
         };
         const pxFontSize = getPixelFontSize(lyricsFontScale, viewportWidth);
-        const wordWidths = displayWords.map(w => measureWordWidth(w.text, pxFontSize, fontStack));
+        const wordWidths = displayWords.map(w => measureWordWidth(w.text, pxFontSize, fontStack, fontWeight));
 
         const baseSpread = isChaotic ? 60 : isCalm ? 0 : 20;
         const baseRotate = isChaotic ? 30 : isCalm ? 0 : 5;

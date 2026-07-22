@@ -1,7 +1,7 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Line, Theme } from '../../types';
-import { resolveThemeTranslationFontStack } from '../../utils/fontStacks';
+import { resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../utils/fontStacks';
 import { colorWithAlpha } from './colorMix';
 
 // Some songs' lyric data carries pure marker/separator lines ("//", "●●●", dashes, stray slashes from
@@ -121,11 +121,12 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0 }}
                                 data-font-debug-target="visualizer-translation"
-                                className="font-medium max-w-4xl mx-auto"
+                                className="max-w-4xl mx-auto"
                                 style={{
                                     color: theme.secondaryColor,
                                     fontSize: translationFontSize,
                                     fontFamily: resolveThemeTranslationFontStack(subtitleTheme ?? theme),
+                                    fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 500),
                                     textShadow,
                                 }}
                             >
@@ -141,6 +142,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                                     style={{
                                         color: theme.secondaryColor,
                                         fontSize: upcomingFontSize,
+                                        fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 400),
                                         textShadow,
                                     }}
                                 >

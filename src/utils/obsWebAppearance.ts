@@ -27,6 +27,7 @@ export interface ObsWebAppearance {
   visualizerTunings?: VisualizerTuningBundle;
   visualizerOpacity?: number;
   lyricsFontScale?: number;
+  lyricsFontWeight?: number | null;
   hideTranslationSubtitle?: boolean;
   showSubtitleTranslation?: boolean;
   subtitleOverlayBackground?: boolean;
@@ -37,6 +38,7 @@ export interface ObsWebAppearance {
   lyricsFontFallbackFamilies?: string[];
   subtitleFontInheritsLyrics?: boolean;
   subtitleFontStyle?: Theme['fontStyle'];
+  subtitleFontWeight?: number | null;
   subtitleFontFamily?: string | null;
   subtitleFontFallbackFamilies?: string[];
   background: VisualizerBackgroundConfig;
@@ -111,6 +113,7 @@ export function buildObsAppearanceFromShortcode(
     visualizerTunings: decoded?.visualizerTunings,
     visualizerOpacity: decoded?.visualizerOpacity,
     lyricsFontScale: decoded?.lyricsFontScale,
+    lyricsFontWeight: decoded?.lyricsFontWeight,
     hideTranslationSubtitle: decoded?.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: decoded?.showSubtitleTranslation,
     subtitleOverlayBackground: decoded?.subtitleOverlayBackground,
@@ -121,6 +124,7 @@ export function buildObsAppearanceFromShortcode(
     lyricsFontFallbackFamilies: Array.isArray(decoded?.lyricsFontFallbackFamilies) ? decoded.lyricsFontFallbackFamilies : undefined,
     subtitleFontInheritsLyrics: decoded?.subtitleFontInheritsLyrics,
     subtitleFontStyle: decoded?.subtitleFontStyle,
+    subtitleFontWeight: decoded?.subtitleFontWeight,
     subtitleFontFamily: decoded?.subtitleFontFamily,
     subtitleFontFallbackFamilies: Array.isArray(decoded?.subtitleFontFallbackFamilies) ? decoded.subtitleFontFallbackFamilies : undefined,
     background,

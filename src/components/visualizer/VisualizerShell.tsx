@@ -3,7 +3,7 @@ import { motion, MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { AudioBands, Theme } from '../../types';
-import { resolveThemeFontStack } from '../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeFontWeight } from '../../utils/fontStacks';
 import { type VisualizerSharedProps } from './definition';
 import VisualizerBackgroundRenderer from './backgrounds/VisualizerBackgroundRenderer';
 
@@ -72,6 +72,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
             style={{
                 backgroundColor: 'transparent',
                 fontFamily: resolveThemeFontStack(theme),
+                fontWeight: resolveThemeFontWeight(theme, 400),
                 opacity: resolvedVisualizerOpacity,
             }}
             onMouseMove={(event) => {
