@@ -21,6 +21,7 @@ const {
         updaterChannel: string | null;
         allowPrerelease: boolean;
         updateEnabled: boolean;
+        rollingReleaseTag: string | null;
     };
 };
 
