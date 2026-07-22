@@ -3,6 +3,7 @@ import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegi
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
 import { DEFAULT_VISUALIZER_MODE, hasVisualizerMode } from '../components/visualizer/registry';
 import { decompressConfig } from './appearanceCodec';
+import type { ObsAiConfig } from '../services/gemini';
 
 // src/utils/obsWebAppearance.ts
 // Parse the OBS URL params (including the appearance cfg shortcode) into the appearance
@@ -72,6 +73,16 @@ export function parseObsWebParams(search: string): ObsWebParams {
     visualizer: params.get('visualizer')?.trim() || '',
     themeMode: readObsThemeMode(params),
   };
+}
+
+// Dynamic AI overlay params: returns the AI connection under obsTheme=ai, else null. The overlay is
+// keyless — the provider is fixed at build time (VITE_AI_PROVIDER) and the endpoint uses its own env
+// key — so the URL carries only the mode marker, no AI secrets.
+export function parseObsAiParams(search: string): ObsAiConfig | null {
+  const params = new URLSearchParams(search);
+  if (readObsThemeMode(params) !== 'ai') return null;
+  const provider = import.meta.env.VITE_AI_PROVIDER === 'openai' ? 'openai' : 'gemini';
+  return { provider };
 }
 
 interface BuildAppearanceOptions {
