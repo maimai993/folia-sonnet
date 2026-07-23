@@ -697,8 +697,8 @@ export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
 export const DEFAULT_NOMAND_BACKGROUND_TUNING: NomandBackgroundTuning = {
   imageSource: 'cover-derived',
   ditheringType: '8x8',
-  size: 2,
-  colorSteps: 2,
+  size: 3,
+  colorSteps: 4,
   originalColors: false,
   inverted: false,
   overlayEnabled: true,
