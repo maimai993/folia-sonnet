@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { neteaseApi } from '@/services/netease';
 import { neteaseProvider } from '@/services/onlineMusic/neteaseProvider';
 import type { UnifiedSong } from '@/types';
+import { parseLyricsAsync } from '@/utils/lyrics/workerClient';
 
 // test/unit/onlineMusic/neteaseProvider.test.ts
 
@@ -10,6 +11,7 @@ vi.mock('@/services/netease', () => ({
     neteaseApi: {
         normalizeSongResult: vi.fn((raw: unknown) => raw),
         getSongUrl: vi.fn(),
+        getLyric: vi.fn(),
         getUnavailableSongReplacement: vi.fn(),
         cloudSearch: vi.fn(),
         getAlbum: vi.fn(),
@@ -18,6 +20,10 @@ vi.mock('@/services/netease', () => ({
         getPersonalizedPlaylists: vi.fn(),
         checkQr: vi.fn(),
     },
+}));
+
+vi.mock('@/utils/lyrics/workerClient', () => ({
+    parseLyricsAsync: vi.fn(),
 }));
 
 const song: UnifiedSong = {
@@ -39,6 +45,34 @@ describe('neteaseProvider', () => {
             quality: 'high',
         });
         expect(neteaseApi.getSongUrl).toHaveBeenCalledWith(42, 'exhigh');
+    });
+
+    it('exposes NetEase romanization alongside the parsed lyric result', async () => {
+        vi.mocked(parseLyricsAsync).mockResolvedValue({
+            lines: [{
+                words: [],
+                fullText: '君のことが好き',
+                startTime: 1,
+                endTime: 2,
+                translation: '我喜欢你',
+                romanization: 'Kimi no koto ga suki',
+            }],
+        });
+        vi.mocked(neteaseApi.getLyric).mockResolvedValue({
+            lrc: { lyric: '[00:01.00]君のことが好き' },
+            tlyric: { lyric: '[00:01.00]我喜欢你' },
+            romalrc: { lyric: '[00:01.00]Kimi no koto ga suki' },
+        } as any);
+
+        await expect(neteaseProvider.lyrics!.getLyrics(song)).resolves.toMatchObject({
+            romanizationText: '[00:01.00]Kimi no koto ga suki',
+            lyrics: {
+                lines: [{
+                    translation: '我喜欢你',
+                    romanization: 'Kimi no koto ga suki',
+                }],
+            },
+        });
     });
 
     it('normalizes search results and paging metadata', async () => {

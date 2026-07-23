@@ -18,7 +18,7 @@ export const normalizeWorkerFormat = (format: string): LyricParseFormat => {
 
 if (typeof self !== 'undefined') {
     self.onmessage = (e: MessageEvent) => {
-        const { type, format, content, translation, options, requestId } = e.data;
+        const { type, format, content, translation, romanization, options, requestId } = e.data;
 
         if (type !== 'parse') {
             self.postMessage({ type: 'error', message: 'Unknown message type', requestId });
@@ -26,7 +26,7 @@ if (typeof self !== 'undefined') {
         }
 
         try {
-            const result = parseLyricsByFormat(normalizeWorkerFormat(format), content, translation || '', options);
+            const result = parseLyricsByFormat(normalizeWorkerFormat(format), content, translation || '', options, romanization || '');
             self.postMessage({ type: 'result', data: result, requestId });
         } catch (err) {
             self.postMessage({ type: 'error', message: String(err), requestId });

@@ -47,7 +47,8 @@ export const parseLyricsAsync = (
     format: LyricParseFormat,
     content: string,
     translation?: string,
-    options?: LyricProcessingOptions
+    options?: LyricProcessingOptions,
+    romanization?: string
 ): Promise<LyricData | null> => {
     return new Promise((resolve) => {
         const worker = initLyricsWorker();
@@ -58,6 +59,7 @@ export const parseLyricsAsync = (
             format,
             content,
             translation,
+            romanization,
             options: toWorkerLyricProcessingOptions(options),
             requestId,
         });

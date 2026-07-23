@@ -205,6 +205,11 @@ export const measureMonetGraphemeOffsets = (text: string, fontPx: number, fontSp
     return rememberGraphemeOffsets(cacheKey, offsets);
 };
 
+/** Keeps the sweep narrow enough for short CJK lyric tokens to hand off continuously. */
+export const resolveMonetSweepEdgeSoftness = (fontPx: number): number => (
+    Math.max(Math.min(fontPx * 0.45, 16), 6)
+);
+
 /** Extends the mask front so its soft trailing edge has fully cleared the word at its end time. */
 export const resolveMonetSweepEnd = (filledWidthPx: number, fullWidthPx: number, edgeSoftnessPx: number): number => {
     if (fullWidthPx <= 0) {

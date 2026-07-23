@@ -52,7 +52,8 @@ describe('neteaseProcessing', () => {
             'yrc',
             '[0,100](0,100,0)副歌',
             '[00:00.00]chorus',
-            { includeInterludes: true }
+            { includeInterludes: true },
+            ''
         );
         expect(result.isPureMusic).toBe(false);
         expect(result.lyrics?.lines[0].isChorus).toBeUndefined();

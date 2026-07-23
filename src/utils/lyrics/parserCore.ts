@@ -401,7 +401,8 @@ const parseTimedTextEntries = (content: string): ParsedTimedEntriesResult => {
 export const parseLRC = (
     lrcString: string,
     translationString: string = '',
-    options: LyricProcessingOptions = {}
+    options: LyricProcessingOptions = {},
+    romanizationString: string = ''
 ): LyricData => {
     const lines: Line[] = [];
     const rawEntries: TimedTextEntry[] = [];
@@ -423,9 +424,14 @@ export const parseLRC = (
 
     const sortedRawEntries = sortByStartTimeIfNeeded(rawEntries, rawEntriesSorted);
     const transEntries = parseTimedTextEntries(translationString).entries;
+    const romanizationEntries = parseTimedTextEntries(romanizationString).entries;
     const translations = findTranslationsForSortedStartTimes(
         sortedRawEntries.map(entry => entry.startTime),
         transEntries
+    );
+    const romanizations = findTranslationsForSortedStartTimes(
+        sortedRawEntries.map(entry => entry.startTime),
+        romanizationEntries
     );
 
     for (let index = 0; index < sortedRawEntries.length; index += 1) {
@@ -445,7 +451,8 @@ export const parseLRC = (
             startTime: current.startTime,
             endTime,
             fullText: current.text,
-            translation
+            translation,
+            romanization: romanizations[index]
         });
     }
 
@@ -455,7 +462,8 @@ export const parseLRC = (
 export const parseYRC = (
     yrcString: string,
     translationString: string = '',
-    options: LyricProcessingOptions = {}
+    options: LyricProcessingOptions = {},
+    romanizationString: string = ''
 ): LyricData => {
     const rawLinesData: Array<{
         words: Word[];
@@ -464,6 +472,7 @@ export const parseYRC = (
         fullText: string;
     }> = [];
     const translationEntries = parseTimedTextEntries(translationString).entries;
+    const romanizationEntries = parseTimedTextEntries(romanizationString).entries;
     const rawLines = yrcString.replace(/^\uFEFF/, '').split(/\r?\n/);
     let isSorted = true;
     let lastStartTime = Number.NEGATIVE_INFINITY;
@@ -518,9 +527,14 @@ export const parseYRC = (
         sortedRawLines.map(line => line.startTime),
         translationEntries
     );
+    const romanizations = findTranslationsForSortedStartTimes(
+        sortedRawLines.map(line => line.startTime),
+        romanizationEntries
+    );
     const lines: Line[] = sortedRawLines.map((line, index) => ({
         ...line,
-        translation: translations[index]
+        translation: translations[index],
+        romanization: romanizations[index]
     }));
 
     return { lines: finalizeParsedLyricLines(lines, options) };
@@ -529,7 +543,8 @@ export const parseYRC = (
 export const parseQRC = (
     qrcString: string,
     translationString: string = '',
-    options: LyricProcessingOptions = {}
+    options: LyricProcessingOptions = {},
+    romanizationString: string = ''
 ): LyricData => {
     const rawLinesData: Array<{
         words: Word[];
@@ -537,7 +552,18 @@ export const parseQRC = (
         endTime: number;
         fullText: string;
     }> = [];
-    const translationEntries = parseTimedTextEntries(translationString).entries;
+    const parseQrcTrackEntries = (track: string): TimedTextEntry[] => {
+        if (!track.trim()) return [];
+
+        const qrcLines = parseQRC(track).lines;
+        if (qrcLines.length > 0) {
+            return qrcLines.map(line => ({ startTime: line.startTime, text: line.fullText }));
+        }
+
+        return parseTimedTextEntries(track).entries;
+    };
+    const translationEntries = parseQrcTrackEntries(translationString);
+    const romanizationEntries = parseQrcTrackEntries(romanizationString);
     const rawLines = qrcString.replace(/^\uFEFF/, '').split(/\r?\n/);
     let isSorted = true;
     let lastStartTime = Number.NEGATIVE_INFINITY;
@@ -633,9 +659,14 @@ export const parseQRC = (
         sortedRawLines.map(line => line.startTime),
         translationEntries
     );
+    const romanizations = findTranslationsForSortedStartTimes(
+        sortedRawLines.map(line => line.startTime),
+        romanizationEntries
+    );
     const lines: Line[] = sortedRawLines.map((line, index) => ({
         ...line,
-        translation: translations[index]
+        translation: translations[index],
+        romanization: romanizations[index]
     }));
 
     return { lines: finalizeParsedLyricLines(lines, options) };
@@ -722,13 +753,19 @@ const parseVTTEntries = (vttString: string): TimedTextEntry[] => {
 export const parseVTT = (
     vttString: string,
     translationString: string = '',
-    options: LyricProcessingOptions = {}
+    options: LyricProcessingOptions = {},
+    romanizationString: string = ''
 ): LyricData => {
     const entries = parseVTTEntries(vttString);
     const translationEntries = parseVTTEntries(translationString);
+    const romanizationEntries = parseVTTEntries(romanizationString);
     const translations = findTranslationsForSortedStartTimes(
         entries.map(entry => entry.startTime),
         translationEntries
+    );
+    const romanizations = findTranslationsForSortedStartTimes(
+        entries.map(entry => entry.startTime),
+        romanizationEntries
     );
     const lines: Line[] = [];
 
@@ -743,7 +780,8 @@ export const parseVTT = (
             startTime: current.startTime,
             endTime,
             fullText: current.text,
-            translation: translations[index]
+            translation: translations[index],
+            romanization: romanizations[index]
         });
     }
 
@@ -753,7 +791,8 @@ export const parseVTT = (
 export const parseTTML = (
     ttmlString: string,
     _translationString: string = '',
-    options: LyricProcessingOptions = {}
+    options: LyricProcessingOptions = {},
+    _romanizationString: string = ''
 ): LyricData => {
     const ttmlResult = TTMLParser.parse(ttmlString.replace(/^\uFEFF/, ''), {
         domParser: new DOMParser(),
@@ -772,11 +811,13 @@ export const parseTTML = (
 export const parseEnhancedLRC = (
     lrcString: string,
     translationString: string = '',
-    options: LyricProcessingOptions = {}
+    options: LyricProcessingOptions = {},
+    romanizationString: string = ''
 ): LyricData => {
     const metadata: LrcMetadata = {};
     const drafts: DraftLine[] = [];
     const translationEntries = parseTimedTextEntries(translationString).entries;
+    const romanizationEntries = parseTimedTextEntries(romanizationString).entries;
     const rawLines = lrcString.replace(/^\uFEFF/, '').split(/\r?\n/);
     let isSorted = true;
     let lastStartTime = Number.NEGATIVE_INFINITY;
@@ -832,6 +873,10 @@ export const parseEnhancedLRC = (
         sortedDrafts.map(draft => draft.startTime),
         translationEntries
     );
+    const romanizations = findTranslationsForSortedStartTimes(
+        sortedDrafts.map(draft => draft.startTime),
+        romanizationEntries
+    );
 
     const lines: Line[] = sortedDrafts.map((draft, index) => {
         let lineEndTime = Math.max(draft.endTime ?? sortedDrafts[index + 1]?.startTime ?? (draft.startTime + 5), draft.startTime + 0.001);
@@ -858,7 +903,8 @@ export const parseEnhancedLRC = (
             startTime: draft.startTime,
             endTime: lineEndTime,
             fullText: draft.fullText,
-            translation: translations[index]
+            translation: translations[index],
+            romanization: romanizations[index]
         };
     });
 
@@ -877,7 +923,8 @@ export const parseEnhancedLRC = (
 export const parseKRC = (
     krcString: string,
     translationString: string = '',
-    options: LyricProcessingOptions = {}
+    options: LyricProcessingOptions = {},
+    romanizationString: string = ''
 ): LyricData => {
     const rawLinesData: Array<{
         words: Word[];
@@ -888,6 +935,7 @@ export const parseKRC = (
 
     // Decode [language:...] tag from the KRC string itself if available
     let embeddedTranslations: string[] = [];
+    let embeddedRomanizations: string[] = [];
     const langMatch = krcString.match(/\[language:([^\]]*)\]/);
     if (langMatch) {
         try {
@@ -899,21 +947,25 @@ export const parseKRC = (
                 ? Buffer.from(cleanB64, 'base64').toString('utf8')
                 : new TextDecoder('utf-8').decode(Uint8Array.from(atob(cleanB64), c => c.charCodeAt(0)));
             const obj = JSON.parse(decoded);
-            const translationObj = obj.content?.find((item: any) => item.type === 1);
-            if (translationObj && Array.isArray(translationObj.lyricContent)) {
-                embeddedTranslations = translationObj.lyricContent.map((lines: any) => {
+            const readEmbeddedTrack = (type: number): string[] => {
+                const track = obj.content?.find((item: any) => item.type === type);
+                if (!track || !Array.isArray(track.lyricContent)) return [];
+                return track.lyricContent.map((lines: any) => {
                     if (Array.isArray(lines)) {
                         return lines.join('').trim();
                     }
                     return String(lines).trim();
                 });
-            }
+            };
+            embeddedRomanizations = readEmbeddedTrack(0);
+            embeddedTranslations = readEmbeddedTrack(1);
         } catch (err) {
             console.error('[Kugou KRC] Failed to decode/parse language tag:', err);
         }
     }
 
     const translationEntries = parseTimedTextEntries(translationString).entries;
+    const romanizationEntries = parseTimedTextEntries(romanizationString).entries;
     const rawLines = krcString.replace(/^\uFEFF/, '').split(/\r?\n/);
     let isSorted = true;
     let lastStartTime = Number.NEGATIVE_INFINITY;
@@ -976,13 +1028,19 @@ export const parseKRC = (
     const sortedRawLines = sortByStartTimeIfNeeded(rawLinesData, isSorted);
     const lines: Line[] = sortedRawLines.map((line, index) => {
         let translation = embeddedTranslations[index] || undefined;
+        let romanization = embeddedRomanizations[index] || undefined;
         if (!translation && translationEntries.length > 0) {
             const externalTrans = findTranslationsForSortedStartTimes([line.startTime], translationEntries);
             translation = externalTrans[0] || undefined;
         }
+        if (!romanization && romanizationEntries.length > 0) {
+            const externalRomanization = findTranslationsForSortedStartTimes([line.startTime], romanizationEntries);
+            romanization = externalRomanization[0] || undefined;
+        }
         return {
             ...line,
-            translation
+            translation,
+            romanization
         };
     });
 
@@ -993,23 +1051,24 @@ export const parseLyricsByFormat = (
     format: LyricParseFormat,
     content: string,
     translation: string = '',
-    options: LyricProcessingOptions = {}
+    options: LyricProcessingOptions = {},
+    romanization: string = ''
 ): LyricData => {
     switch (format) {
         case 'yrc':
-            return parseYRC(content, translation, options);
+            return parseYRC(content, translation, options, romanization);
         case 'qrc':
-            return parseQRC(content, translation, options);
+            return parseQRC(content, translation, options, romanization);
         case 'krc':
-            return parseKRC(content, translation, options);
+            return parseKRC(content, translation, options, romanization);
         case 'enhanced-lrc':
-            return parseEnhancedLRC(content, translation, options);
+            return parseEnhancedLRC(content, translation, options, romanization);
         case 'vtt':
-            return parseVTT(content, translation, options);
+            return parseVTT(content, translation, options, romanization);
         case 'ttml':
-            return parseTTML(content, translation, options);
+            return parseTTML(content, translation, options, romanization);
         case 'lrc':
         default:
-            return parseLRC(content, translation, options);
+            return parseLRC(content, translation, options, romanization);
     }
 };

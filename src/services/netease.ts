@@ -482,10 +482,10 @@ export const getOnlineSongCacheKey = (
 
 const getProcessedLyricPayload = (response: any) => {
   if (!response) return { type: 'netease' as const };
-  if (response.lrc || response.yrc || response.tlyric || response.ytlrc) {
+  if (response.lrc || response.yrc || response.tlyric || response.ytlrc || response.romalrc || response.yromalrc) {
     return { type: 'netease' as const, ...response };
   }
-  if (response.data && (response.data.lrc || response.data.yrc || response.data.tlyric || response.data.ytlrc)) {
+  if (response.data && (response.data.lrc || response.data.yrc || response.data.tlyric || response.data.ytlrc || response.data.romalrc || response.data.yromalrc)) {
     return { type: 'netease' as const, ...response.data };
   }
 

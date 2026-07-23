@@ -103,6 +103,7 @@ export interface ProviderLyricsResult {
     mainText?: string | null;
     wordByWordText?: string | null;
     translationText?: string | null;
+    romanizationText?: string | null;
     isPureMusic: boolean;
     chorusRanges?: ChorusRange[];
 }

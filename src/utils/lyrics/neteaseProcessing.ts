@@ -10,6 +10,7 @@ export interface ExtractedNeteaseLyricPayload {
     mainLrc: string | null;
     yrcLrc: string | null;
     transLrc: string | null;
+    romanizationLrc?: string | null;
     isPureMusic: boolean;
 }
 
@@ -44,14 +45,18 @@ export const extractNeteaseLyricPayload = (source?: RawNeteaseLyric | null): Ext
     const mainLrc = source?.lrc?.lyric || null;
     const yrcLrc = source?.yrc?.lyric || source?.lrc?.yrc?.lyric || null;
     const ytlrc = source?.ytlrc?.lyric || source?.lrc?.ytlrc?.lyric || null;
+    const yromalrc = source?.yromalrc?.lyric || source?.lrc?.yromalrc?.lyric || null;
     const tlyric = source?.tlyric?.lyric || null;
+    const romalrc = source?.romalrc?.lyric || source?.lrc?.romalrc?.lyric || null;
     const transLrc = (yrcLrc && ytlrc) ? ytlrc : tlyric;
+    const romanizationLrc = (yrcLrc && yromalrc) ? yromalrc : romalrc;
     const isPureMusic = hasNeteasePureMusicFlag(source) || isPureMusicLyricText(mainLrc);
 
     return {
         mainLrc,
         yrcLrc,
         transLrc,
+        romanizationLrc,
         isPureMusic
     };
 };
@@ -76,7 +81,8 @@ export const processNeteaseLyrics = async (
         format,
         primaryLyrics,
         payload.transLrc || '',
-        resolveLyricProcessingOptions(options)
+        resolveLyricProcessingOptions(options),
+        payload.romanizationLrc || ''
     );
 
     if (lyrics) {

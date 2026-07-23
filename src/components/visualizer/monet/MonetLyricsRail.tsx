@@ -16,6 +16,7 @@ import {
     buildMonetDisplayTokens,
     measureMonetGraphemeOffsets,
     measureMonetLineLayout,
+    resolveMonetSweepEdgeSoftness,
     resolveMonetSweepEnd,
     resolveMonetWordStatus,
     type MonetLineStatus,
@@ -524,8 +525,7 @@ const MonetWordSweep: React.FC<{
         });
 
         const maskImage = useTransform(fillWidth, latest => {
-            // Original narrower sweep: Math.max(Math.min(fontPx * 0.45, 16), 6)
-            const edgeSoftness = Math.max(Math.min(fontPx * 1.35, 36), 18);
+            const edgeSoftness = resolveMonetSweepEdgeSoftness(fontPx);
             const fullWidth = graphemeOffsets[graphemeOffsets.length - 1] ?? 0;
             const sweepEnd = resolveMonetSweepEnd(latest, fullWidth, edgeSoftness);
             const solidEnd = Math.max(sweepEnd - edgeSoftness, 0);

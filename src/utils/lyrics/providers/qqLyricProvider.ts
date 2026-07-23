@@ -181,6 +181,7 @@ export async function fetchQQLyrics(
     const data = await requestQQ("GetPlayLyricInfo", "music.musichallSong.PlayLyricInfo", param);
     const encryptedLyricHex = data?.lyric;
     const encryptedTransHex = data?.trans;
+    const encryptedRomanizationHex = data?.roma;
 
     if (!encryptedLyricHex) {
       return null;
@@ -188,11 +189,12 @@ export async function fetchQQLyrics(
 
     const decryptedLyric = await qrcDecrypt(encryptedLyricHex);
     const decryptedTrans = encryptedTransHex ? await qrcDecrypt(encryptedTransHex) : '';
+    const decryptedRomanization = encryptedRomanizationHex ? await qrcDecrypt(encryptedRomanizationHex) : '';
 
     const isQrc = detectIsQrc(decryptedLyric);
     const format = isQrc ? 'qrc' : detectTimedLyricFormat(decryptedLyric);
 
-    const parsed = parseLyricsByFormat(format, decryptedLyric, decryptedTrans);
+    const parsed = parseLyricsByFormat(format, decryptedLyric, decryptedTrans, {}, decryptedRomanization);
     if (!parsed) {
       return null;
     }

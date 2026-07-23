@@ -40,10 +40,14 @@ export interface RawNeteaseLyric {
         pureMusic?: boolean;
         yrc?: { lyric?: string; pureMusic?: boolean };
         ytlrc?: { lyric?: string; pureMusic?: boolean };
+        yromalrc?: { lyric?: string; pureMusic?: boolean };
+        romalrc?: { lyric?: string; pureMusic?: boolean };
     };
     yrc?: { lyric?: string; pureMusic?: boolean };
     ytlrc?: { lyric?: string; pureMusic?: boolean };
+    yromalrc?: { lyric?: string; pureMusic?: boolean };
     tlyric?: { lyric?: string; pureMusic?: boolean };
+    romalrc?: { lyric?: string; pureMusic?: boolean };
     pureMusic?: boolean;
 }
 

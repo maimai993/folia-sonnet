@@ -187,6 +187,7 @@ const getLyrics = async (
             mainText,
             wordByWordText: null,
             translationText: null,
+            romanizationText: null,
             isPureMusic: processed.isPureMusic,
             chorusRanges: await getNeteaseChorusRanges(song.id),
         };
@@ -203,6 +204,7 @@ const getLyrics = async (
         mainText: processed.mainLrc,
         wordByWordText: processed.yrcLrc,
         translationText: processed.transLrc,
+        romanizationText: processed.romanizationLrc,
         isPureMusic: processed.isPureMusic,
         chorusRanges: await getNeteaseChorusRanges(song.id),
     };
