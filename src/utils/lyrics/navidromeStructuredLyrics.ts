@@ -2,6 +2,7 @@ import type { LyricData, Line, Word } from '../../types';
 import type { StructuredLyric, StructuredLyricCueLine } from '../../types/navidrome';
 import { detectTimedLyricFormat } from './formatDetection';
 import { finalizeParsedLyricLines, findTranslationsForSortedStartTimes, type TimedTextEntry } from './parserCore';
+import { isRomanizationCandidate, hasCjkScript } from './timelineSplitter';
 import type { LyricProcessingOptions } from './types';
 
 // Converts OpenSubsonic songLyrics v2 cue timing into Folia's native lyric timeline.
@@ -102,6 +103,14 @@ const parseNavidromeLineLyrics = (
         return null;
     }
 
+    const hasDuplicateTimestamps = timedLines.some((line, index) => 
+        index > 0 && line.startTime === timedLines[index - 1].startTime
+    );
+
+    if (hasDuplicateTimestamps) {
+        return null;
+    }
+
     const lines: Line[] = timedLines.map((line, index) => ({
         words: [],
         startTime: line.startTime,
@@ -117,21 +126,41 @@ const parseNavidromeLineLyrics = (
 };
 
 // Navidrome v0.63+ stores untimed translations next to their indexed cue line.
-const findInlineTranslation = (lyrics: StructuredLyric, cueLine: StructuredLyricCueLine): string | undefined => {
+const findInlineAlternates = (
+    lyrics: StructuredLyric,
+    cueLine: StructuredLyricCueLine
+): { translation?: string; romanization?: string } => {
     const mainLine = lyrics.line[cueLine.index];
-    const translationLine = lyrics.line[cueLine.index + 1];
+    if (!mainLine) return {};
 
-    if (
-        !mainLine
-        || !translationLine
-        || mainLine.start !== translationLine.start
-        || lyrics.cueLine?.some(candidate => candidate.index === cueLine.index + 1)
+    const alternates: string[] = [];
+    let i = cueLine.index + 1;
+
+    while (
+        i < lyrics.line.length &&
+        lyrics.line[i].start === mainLine.start &&
+        !lyrics.cueLine?.some(candidate => candidate.index === i)
     ) {
-        return undefined;
+        const val = lyrics.line[i].value.trim();
+        if (val && val !== cueLine.value.trim()) {
+            alternates.push(val);
+        }
+        i++;
     }
 
-    const translation = translationLine.value.trim();
-    return translation && translation !== cueLine.value.trim() ? translation : undefined;
+    if (alternates.length === 0) return {};
+
+    if (alternates.length === 1) {
+        return { translation: alternates[0] };
+    }
+
+    const romanizationCandidates = hasCjkScript(mainLine.value)
+        ? alternates.filter(isRomanizationCandidate)
+        : [];
+    const romanization = romanizationCandidates.length === 1 ? romanizationCandidates[0] : undefined;
+    const translation = alternates.find(candidate => candidate !== romanization);
+
+    return { translation, romanization };
 };
 
 export const parseNavidromeStructuredLyrics = (
@@ -163,13 +192,15 @@ export const parseNavidromeStructuredLyrics = (
             return [{ text: cue.value, startTime: wordStart, endTime: wordEnd }];
         });
         const endTime = Math.max(explicitEnd ?? words[words.length - 1]?.endTime ?? fallbackLineEnd, startTime + 0.001);
+        const alternates = findInlineAlternates(lyrics, cueLine);
 
         return {
             words,
             startTime,
             endTime,
             fullText: cueLine.value || words.map(word => word.text).join(''),
-            translation: findInlineTranslation(lyrics, cueLine),
+            translation: alternates.translation,
+            romanization: alternates.romanization,
         };
     });
 

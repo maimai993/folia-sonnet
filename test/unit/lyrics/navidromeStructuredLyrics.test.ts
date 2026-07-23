@@ -179,6 +179,59 @@ describe('parseNavidromeStructuredLyrics', () => {
         ]);
     });
 
+    it('attaches untimed romanization and translation interleaved with cue lines', () => {
+        const parsed = parseNavidromeStructuredLyrics({
+            displayArtist: 'DECO*27 / 初音ミク',
+            displayTitle: '妄想感傷代償連盟',
+            kind: 'main',
+            lang: 'xxx',
+            line: [
+                { start: 8227, value: '言っちゃった' },
+                { start: 8227, value: "i 't cha 't ta" },
+                { start: 8227, value: '我说了' },
+            ],
+            synced: true,
+            cueLine: [
+                {
+                    index: 0,
+                    start: 8227,
+                    end: 8727,
+                    value: '言っちゃった',
+                    cue: [
+                        { start: 8227, end: 8232, value: '言' },
+                        { start: 8232, end: 8247, value: 'っ' },
+                        { start: 8247, end: 8313, value: 'ち' },
+                        { start: 8313, end: 8380, value: 'ゃ' },
+                        { start: 8380, end: 8527, value: 'っ' },
+                        { start: 8527, end: 8727, value: 'た' },
+                    ],
+                },
+            ],
+        }, { includeInterludes: false });
+
+        expect(parsed?.lines).toMatchObject([
+            {
+                fullText: '言っちゃった',
+                translation: '我说了',
+                romanization: "i 't cha 't ta",
+            },
+        ]);
+    });
+
+    it('returns null for line-level lyrics with inline translations to trigger full parse', () => {
+        const parsed = parseNavidromeStructuredLyrics({
+            line: [
+                { start: 2081, value: 'In the boundless expanse of the multiverse' },
+                { start: 2081, value: '在无穷无尽的的多元宇宙中' },
+                { start: 5134, value: 'the allure of travelling through parallel universes beckons intrepid adventures' },
+                { start: 5134, value: '对穿梭在平行宇宙间的诱惑带来属于勇者的冒险' },
+            ],
+            synced: true,
+        }, { includeInterludes: false });
+
+        expect(parsed).toBeNull();
+    });
+
     it('does not treat an adjacent timed line as a translation', () => {
         const parsed = parseNavidromeStructuredLyrics({
             line: [

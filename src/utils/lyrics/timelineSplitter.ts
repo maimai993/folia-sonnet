@@ -1,3 +1,12 @@
+export const hasCjkScript = (text: string): boolean => /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/u.test(text);
+
+export const isRomanizationCandidate = (text: string): boolean => {
+    const lyricText = text.replace(/\[[^\]]*\]|<[^>]*>/gu, '');
+    const letters = lyricText.match(/[A-Za-z\u00c0-\u024f]/gu) || [];
+    const nonWhitespace = lyricText.match(/\S/gu) || [];
+    return letters.length >= 2 && letters.length / Math.max(nonWhitespace.length, 1) >= 0.45 && !hasCjkScript(text);
+};
+
 export function splitCombinedTimeline(rawText: string): { main: string, trans: string, romanization: string } {
     if (!rawText) return { main: '', trans: '', romanization: '' };
 
@@ -60,14 +69,6 @@ export function splitCombinedTimeline(rawText: string): { main: string, trans: s
     const transLines: string[] = [];
     const romanizationLines: string[] = [];
     let isCombined = false;
-
-    const hasCjkScript = (text: string): boolean => /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/u.test(text);
-    const isRomanizationCandidate = (text: string): boolean => {
-        const lyricText = text.replace(/\[[^\]]*\]|<[^>]*>/gu, '');
-        const letters = lyricText.match(/[A-Za-z\u00c0-\u024f]/gu) || [];
-        const nonWhitespace = lyricText.match(/\S/gu) || [];
-        return letters.length >= 2 && letters.length / Math.max(nonWhitespace.length, 1) >= 0.45 && !hasCjkScript(text);
-    };
     const sharesTimeline = (left: typeof extracted[number], right: typeof extracted[number]): boolean => (
         left.timestampSignature !== '' && left.timestampSignature === right.timestampSignature
     ) || (
