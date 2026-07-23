@@ -79,10 +79,8 @@ export type CommandPaletteContext = {
     toggleTransparentBackground: () => void;
     hideBottomSubtitleOverlay: boolean;
     toggleBottomSubtitleOverlay: () => void;
-    showSubtitleTranslation: boolean;
     subtitleContentMode: SubtitleContentMode;
-    setSubtitleContentMode: (mode: SubtitleContentMode) => void;
-    toggleSubtitleTranslation: () => void;
+    cycleSubtitleContentMode: () => void;
     subtitleOverlayBackground: boolean;
     toggleSubtitleOverlayBackground: () => void;
     alwaysShowPlayerBackButton: boolean;

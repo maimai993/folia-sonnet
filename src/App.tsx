@@ -1906,11 +1906,9 @@ export default function App() {
         toggleBottomSubtitleOverlay: () => {
             handleToggleHidePlayerTranslationSubtitle(!hidePlayerTranslationSubtitle);
         },
-        showSubtitleTranslation,
         subtitleContentMode,
-        setSubtitleContentMode: handleSetSubtitleContentMode,
-        toggleSubtitleTranslation: () => {
-            handleToggleShowSubtitleTranslation(!showSubtitleTranslation);
+        cycleSubtitleContentMode: () => {
+            handleSetSubtitleContentMode(subtitleContentMode === 'translation' ? 'romanization' : 'translation');
         },
         subtitleOverlayBackground,
         toggleSubtitleOverlayBackground: () => {
@@ -1948,7 +1946,6 @@ export default function App() {
         handleSetVisualizerBackgroundMode,
         handleSetMonetBackgroundTuning,
         handleToggleHidePlayerTranslationSubtitle,
-        handleToggleShowSubtitleTranslation,
         handleSetSubtitleContentMode,
         hidePlayerTranslationSubtitle,
         isGeneratingTheme,
@@ -1978,7 +1975,7 @@ export default function App() {
         toggleDaylightMode,
         voiceInputPauseEnabled,
         handleToggleVoiceInputPause,
-        showSubtitleTranslation,
+
         subtitleContentMode,
         subtitleOverlayBackground,
         handleToggleSubtitleOverlayBackground,

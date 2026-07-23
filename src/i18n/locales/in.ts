@@ -269,7 +269,7 @@ export default {
       "settings-toggle-player-back-button": { "title": "Selalu tampilkan tombol kembali pemutar", "description": "Alihkan apakah tombol kembali halaman pemutar tetap terlihat" },
       "settings-toggle-main-window-titlebar": { "title": "Selalu tampilkan tombol kontrol jendela", "description": "Alihkan apakah tombol kontrol jendela utama tetap terlihat" },
       "settings-toggle-bottom-subtitle-overlay": { "title": "Alihkan overlay subtitle bawah", "description": "Tampilkan atau sembunyikan seluruh overlay subtitle bawah" },
-      "settings-toggle-subtitle-translation": { "title": "Alihkan terjemahan subtitle", "description": "Tampilkan atau sembunyikan teks terjemahan di subtitle visualizer" },
+      "settings-cycle-subtitle-content-mode": { "title": "Alihkan mode konten subtitle", "description": "Beralih antara mode terjemahan dan romanisasi" },
       "settings-toggle-subtitle-background": { "title": "Alihkan latar subtitle", "description": "Tampilkan atau sembunyikan latar agar subtitle lebih mudah dibaca" },
       "settings-language-system": { "title": "Ikuti bahasa sistem", "description": "Gunakan bahasa browser atau sistem" },
       "settings-language-zh-CN": { "title": "Ganti bahasa ke Tionghoa", "description": "Gunakan Bahasa Tionghoa Sederhana di antarmuka" },

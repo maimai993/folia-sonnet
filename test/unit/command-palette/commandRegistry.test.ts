@@ -38,10 +38,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     toggleTransparentBackground: vi.fn(),
     hideBottomSubtitleOverlay: false,
     toggleBottomSubtitleOverlay: vi.fn(),
-    showSubtitleTranslation: true,
     subtitleContentMode: 'translation',
-    setSubtitleContentMode: vi.fn(),
-    toggleSubtitleTranslation: vi.fn(),
+    cycleSubtitleContentMode: vi.fn(),
     subtitleOverlayBackground: false,
     toggleSubtitleOverlayBackground: vi.fn(),
     alwaysShowPlayerBackButton: false,
@@ -63,17 +61,13 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
 });
 
 describe('command palette registry', () => {
-    it.each([
-        ['settings-subtitle-translation', 'translation'],
-        ['settings-subtitle-romanization', 'romanization'],
-        ['settings-subtitle-none', 'none'],
-    ] as const)('sets an explicit subtitle content mode via %s', async (commandId, mode) => {
+    it('cycles the subtitle content mode via the unified command', async () => {
         const context = createContext();
-        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === commandId);
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === 'settings-cycle-subtitle-content-mode');
 
         expect(command).toBeDefined();
         await command!.execute('', context);
-        expect(context.setSubtitleContentMode).toHaveBeenCalledWith(mode);
+        expect(context.cycleSubtitleContentMode).toHaveBeenCalled();
     });
 
     it('parses source-specific search input', async () => {
@@ -204,10 +198,10 @@ describe('command palette registry', () => {
         mainWindowTitlebarMatch.command.execute(mainWindowTitlebarMatch.input, context);
         expect(context.toggleAlwaysShowMainWindowTitlebar).toHaveBeenCalled();
 
-        const [matchSubtitleTranslation] = getCommandPaletteMatches('字幕翻译');
-        expect(matchSubtitleTranslation.command.id).toBe('settings-toggle-subtitle-translation');
-        matchSubtitleTranslation.command.execute(matchSubtitleTranslation.input, context);
-        expect(context.toggleSubtitleTranslation).toHaveBeenCalled();
+        const [matchSubtitleCycle] = getCommandPaletteMatches('字幕翻译');
+        expect(matchSubtitleCycle.command.id).toBe('settings-cycle-subtitle-content-mode');
+        matchSubtitleCycle.command.execute(matchSubtitleCycle.input, context);
+        expect(context.cycleSubtitleContentMode).toHaveBeenCalled();
 
         const [matchSubtitleBackground] = getCommandPaletteMatches('字幕背景');
         expect(matchSubtitleBackground.command.id).toBe('settings-toggle-subtitle-background');

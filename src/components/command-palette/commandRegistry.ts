@@ -679,67 +679,41 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         },
     },
     {
-        id: 'settings-toggle-subtitle-translation',
+        id: 'settings-cycle-subtitle-content-mode',
         group: 'settings',
-        title: 'Toggle subtitle translation',
-        description: 'Show or hide translation text in visualizer subtitles',
+        title: 'Cycle subtitle content mode',
+        description: 'Switch between translation and romanization subtitle modes',
         keywords: [
             'subtitle translation',
             'translation subtitle',
             'show subtitle translation',
-            'hide subtitle translation',
             'lyrics translation',
             'caption translation',
+            'subtitle romanization',
+            'romanized lyrics',
+            'romaji',
             '字幕翻译',
             '显示翻译',
-            '隐藏翻译',
             '翻译字幕',
             '歌词翻译',
+            '切换翻译字幕',
+            '罗马音',
+            '罗马字',
+            '副字幕',
             'zimu fanyi',
             'xianshi fanyi',
-            'yincang fanyi',
             'fanyi zimu',
             'geci fanyi',
+            'luomayin',
             'zmfy',
             'xsfy',
-            'ycfy',
             'gc fy',
+            'lmy',
+            'fzm',
+            'qhfyzm',
         ],
         execute: (_input, context) => {
-            context.toggleSubtitleTranslation();
-            return true;
-        },
-    },
-    {
-        id: 'settings-subtitle-translation',
-        group: 'settings',
-        title: 'Use translation subtitles',
-        description: 'Show the translation track as the visualizer subtitle',
-        keywords: ['subtitle translation', 'translation track', '显示翻译', '翻译字幕', 'fanyi zimu', 'fy'],
-        execute: (_input, context) => {
-            context.setSubtitleContentMode('translation');
-            return true;
-        },
-    },
-    {
-        id: 'settings-subtitle-romanization',
-        group: 'settings',
-        title: 'Use romanization subtitles',
-        description: 'Show the romanization track as the visualizer subtitle',
-        keywords: ['subtitle romanization', 'romanized lyrics', 'romaji', '罗马音', '罗马字', 'luomayin', 'lmy'],
-        execute: (_input, context) => {
-            context.setSubtitleContentMode('romanization');
-            return true;
-        },
-    },
-    {
-        id: 'settings-subtitle-none',
-        group: 'settings',
-        title: 'Hide subtitle text',
-        description: 'Hide translation and romanization while keeping upcoming-line hints',
-        keywords: ['hide subtitle text', 'no translation', '隐藏副字幕', '隐藏翻译', '隐藏罗马音', 'yincang fuzimu', 'ycfzm'],
-        execute: (_input, context) => {
-            context.setSubtitleContentMode('none');
+            context.cycleSubtitleContentMode();
             return true;
         },
     },
