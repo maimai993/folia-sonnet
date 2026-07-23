@@ -371,6 +371,7 @@ export const compressConfig = (config: any): string => {
     if (config.lyricsFontFallbackFamilies?.length) minified.lff = config.lyricsFontFallbackFamilies;
     if (config.lyricsCustomFontFamily) minified.lcf = config.lyricsCustomFontFamily;
     if (config.subtitleFontInheritsLyrics !== undefined) minified.sfi = config.subtitleFontInheritsLyrics;
+    if (config.subtitleFontScale !== undefined) minified.sfsz = config.subtitleFontScale;
     if (config.subtitleFontStyle) minified.sfs = config.subtitleFontStyle;
     if (config.subtitleFontWeight !== undefined) minified.sfw = config.subtitleFontWeight;
     if (config.subtitleFontFamily) minified.sff = config.subtitleFontFamily;
@@ -463,6 +464,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.lff) decompressed.lyricsFontFallbackFamilies = parsed.lff;
         if (parsed.lcf) decompressed.lyricsCustomFontFamily = parsed.lcf;
         if (parsed.sfi !== undefined) decompressed.subtitleFontInheritsLyrics = parsed.sfi;
+        if (parsed.sfsz !== undefined) decompressed.subtitleFontScale = parsed.sfsz;
         if (parsed.sfs) decompressed.subtitleFontStyle = parsed.sfs;
         if (parsed.sfw !== undefined) decompressed.subtitleFontWeight = parsed.sfw;
         if (parsed.sff) decompressed.subtitleFontFamily = parsed.sff;
@@ -494,7 +496,7 @@ export const decompressConfig = (str: string): any => {
             'subtitleOverlayBackground',
             'showHarmonySubtitle', 'harmonySubtitleBackground',
             'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontWeight', 'lyricsFontFallbackFamilies',
-            'subtitleFontInheritsLyrics', 'subtitleFontStyle', 'subtitleFontWeight', 'subtitleFontFamily',
+            'subtitleFontInheritsLyrics', 'subtitleFontScale', 'subtitleFontStyle', 'subtitleFontWeight', 'subtitleFontFamily',
             'subtitleFontFallbackFamilies', 'visualizerTunings', 'classicTuning',
             'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'claddaghTuning', 'cappellaTuning',
             'tiltTuning', 'dioramaTuning', 'monetBackgroundTuning', 'nomandBackgroundTuning', 'latentBackgroundTuning', 'monetTuning',
@@ -596,6 +598,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         lyricsFontWeight: state.lyricsFontWeight,
         lyricsFontFallbackFamilies: state.lyricsFontFallbackFamilies,
         subtitleFontInheritsLyrics: state.subtitleFontInheritsLyrics,
+        subtitleFontScale: state.subtitleFontScale,
         subtitleFontStyle: state.subtitleFontStyle,
         subtitleFontWeight: state.subtitleFontWeight,
         subtitleFontFamily: state.subtitleFontFamily,
@@ -631,6 +634,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleSetLyricsFontWeight: state.handleSetLyricsFontWeight,
         handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
         handleSetSubtitleFontInheritsLyrics: state.handleSetSubtitleFontInheritsLyrics,
+        handleSetSubtitleFontScale: state.handleSetSubtitleFontScale,
         handleSetSubtitleFontStyle: state.handleSetSubtitleFontStyle,
         handleSetSubtitleFontWeight: state.handleSetSubtitleFontWeight,
         handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,
@@ -796,6 +800,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (config.subtitleFontInheritsLyrics !== undefined) {
                 store.handleSetSubtitleFontInheritsLyrics(Boolean(config.subtitleFontInheritsLyrics));
+            }
+            if (config.subtitleFontScale !== undefined) {
+                store.handleSetSubtitleFontScale(config.subtitleFontScale);
             }
             if (config.subtitleFontStyle) {
                 store.handleSetSubtitleFontStyle(config.subtitleFontStyle);

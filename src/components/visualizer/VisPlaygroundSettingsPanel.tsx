@@ -79,6 +79,8 @@ interface VisPlaygroundSettingsPanelProps {
     fontScale: number;
     fontScaleOptions: PresetOption<number>[];
     onFontScaleChange: (fontScale: number) => void;
+    subtitleFontScale: number;
+    onSubtitleFontScaleChange: (fontScale: number) => void;
     fontWeight: number | null;
     fontWeightOptions: PresetOption<number>[];
     onFontWeightChange: (fontWeight: number | null) => void;
@@ -314,6 +316,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         fontScale,
         fontScaleOptions,
         onFontScaleChange,
+        subtitleFontScale,
+        onSubtitleFontScaleChange,
         fontWeight,
         fontWeightOptions,
         onFontWeightChange,
@@ -727,6 +731,27 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             theme={theme}
                             icon={Monitor}
                         />
+
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
+                                <span>{t('options.subtitleFontScale')}</span>
+                                <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
+                                    {Math.round(subtitleFontScale * 100)}%
+                                </span>
+                            </div>
+                            <input
+                                aria-label={t('options.subtitleFontScale')}
+                                type="range"
+                                min="0.85"
+                                max="1.4"
+                                step="0.05"
+                                value={subtitleFontScale}
+                                onChange={(event) => onSubtitleFontScaleChange(parseFloat(event.target.value))}
+                                onPointerDown={onSliderPointerDown}
+                                onPointerUp={onSliderCommit}
+                                className={rangeInputClass}
+                            />
+                        </div>
 
                         {!subtitleFontInheritsLyrics && (
                             <div className="space-y-4">

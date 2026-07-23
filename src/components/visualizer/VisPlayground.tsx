@@ -81,6 +81,7 @@ interface VisPlaygroundProps {
     monetPortraitImage?: MonetPortraitImage | null;
     fontStyle: Theme['fontStyle'];
     fontScale: number;
+    subtitleFontScale?: number;
     fontWeight: number | null;
     customFontFamily: string | null;
     customFontLabel: string | null;
@@ -92,6 +93,7 @@ interface VisPlaygroundProps {
     subtitleFontFallbackFamilies?: string[];
     onFontStyleChange: (fontStyle: Theme['fontStyle']) => void;
     onFontScaleChange: (fontScale: number) => void;
+    onSubtitleFontScaleChange?: (fontScale: number) => void;
     onFontWeightChange: (fontWeight: number | null) => void;
     onCustomFontChange: (font: StoredCustomLyricsFont | null) => void;
     onUploadCustomFont?: (file: File) => Promise<{ ok: boolean; error?: string; }>;
@@ -297,6 +299,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     monetPortraitImage = null,
     fontStyle,
     fontScale,
+    subtitleFontScale = 1,
     fontWeight,
     customFontFamily,
     customFontLabel,
@@ -308,6 +311,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     subtitleFontFallbackFamilies = [],
     onFontStyleChange,
     onFontScaleChange,
+    onSubtitleFontScaleChange,
     onFontWeightChange,
     onCustomFontChange,
     onUploadCustomFont,
@@ -381,6 +385,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [draftVisualizerOpacity, setDraftVisualizerOpacity] = useState(visualizerOpacity);
     const [draftSubtitleOverlayOpacity, setDraftSubtitleOverlayOpacity] = useState(subtitleOverlayOpacity);
     const [draftFontScale, setDraftFontScale] = useState(fontScale);
+    const [draftSubtitleFontScale, setDraftSubtitleFontScale] = useState(subtitleFontScale);
     const [draftFontWeight, setDraftFontWeight] = useState<number | null>(fontWeight);
     const [draftSubtitleFontWeight, setDraftSubtitleFontWeight] = useState<number | null>(subtitleFontWeight);
     const [draftClassicTuning, setDraftClassicTuning] = useState<ClassicTuning>(classicTuning);
@@ -409,6 +414,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     }), [bass, lowMid, mid, spectrum, treble, vocal]);
 
     const normalizedFontScale = clampFontScale(draftFontScale);
+    const normalizedSubtitleFontScale = clampFontScale(draftSubtitleFontScale);
     const builtinFontOptions: PresetOption<Theme['fontStyle']>[] = useMemo(() => ([
         { value: 'sans', label: t('options.fontSans') },
         { value: 'serif', label: t('options.fontSerif') },
@@ -523,6 +529,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     useEffect(() => { setDraftVisualizerOpacity(visualizerOpacity); }, [visualizerOpacity]);
     useEffect(() => { setDraftSubtitleOverlayOpacity(subtitleOverlayOpacity); }, [subtitleOverlayOpacity]);
     useEffect(() => { setDraftFontScale(fontScale); }, [fontScale]);
+    useEffect(() => { setDraftSubtitleFontScale(subtitleFontScale); }, [subtitleFontScale]);
     useEffect(() => { setDraftFontWeight(fontWeight); }, [fontWeight]);
     useEffect(() => { setDraftSubtitleFontWeight(subtitleFontWeight); }, [subtitleFontWeight]);
     const lastFontWeightRef = useRef(fontWeight ?? 400);
@@ -832,6 +839,15 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         }
     };
 
+    const handleSubtitleFontScaleDraft = (scale: number) => {
+        setDraftSubtitleFontScale(scale);
+        if (!isDraggingSlider.current) {
+            onSubtitleFontScaleChange?.(scale);
+        } else {
+            pendingCommitRef.current = () => onSubtitleFontScaleChange?.(scale);
+        }
+    };
+
     const handleFontWeightDraft = (weight: number | null) => {
         if (weight !== null) lastFontWeightRef.current = weight;
         if (isDraggingSlider.current) {
@@ -930,6 +946,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
     const handleResetSubtitleSettings = () => {
         setDraftSubtitleOverlayOpacity(0.6);
+        setDraftSubtitleFontScale(1);
         onToggleHideTranslationSubtitle?.(false);
         if (onSubtitleContentModeChange) {
             onSubtitleContentModeChange('translation');
@@ -940,6 +957,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         onToggleShowHarmonySubtitle?.(true);
         onToggleHarmonySubtitleBackground?.(false);
         onSubtitleOverlayOpacityChange?.(0.6);
+        onSubtitleFontScaleChange?.(1);
         onSubtitleFontInheritsLyricsChange?.(true);
         onSubtitleFontStyleChange?.('sans');
         setDraftSubtitleFontWeight(null);
@@ -1027,7 +1045,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                 exit={{ opacity: 0, y: 18, scale: 0.98 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
                 onClick={(event) => event.stopPropagation()}
-                className={`mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${glassBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
+                className={`mx-auto flex h-full max-w-[1600px] flex-col overflow-hidden rounded-[32px] border ${borderColor} ${glassBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
             >
                 <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6">
                     <div className="flex items-center gap-3 min-w-0">
@@ -1076,6 +1094,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
                                 background={draftBackgroundConfig}
                                 lyricsFontScale={normalizedFontScale}
+                                subtitleFontScale={normalizedSubtitleFontScale}
                                 subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                                 subtitleOverlayBackground={subtitleOverlayBackground}
                                 showHarmonySubtitle={showHarmonySubtitle}
@@ -1123,6 +1142,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         fontScale={normalizedFontScale}
                         fontScaleOptions={FONT_SCALE_OPTIONS}
                         onFontScaleChange={handleFontScaleDraft}
+                        subtitleFontScale={normalizedSubtitleFontScale}
+                        onSubtitleFontScaleChange={handleSubtitleFontScaleDraft}
                         fontWeight={draftFontWeight}
                         fontWeightOptions={fontWeightOptions}
                         onFontWeightChange={handleFontWeightDraft}

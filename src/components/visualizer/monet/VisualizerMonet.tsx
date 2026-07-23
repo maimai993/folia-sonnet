@@ -29,6 +29,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         lines,
         theme,
         subtitleTheme,
+        subtitleFontScale = 1,
         audioPower,
         audioBands,
         showText = true,
@@ -133,7 +134,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         2.28,
     ) * fontScale;
     const inactiveFontPx = resolveClampFontPx(1.08, 2, 1.48) * fontScale;
-    const translationFontPx = resolveClampFontPx(0.94, 1.28, 1.14) * fontScale;
+    const translationFontPx = resolveClampFontPx(0.94, 1.28, 1.14) * fontScale * subtitleFontScale;
 
     /* eslint-disable-next-line no-warning-comments -- @AI: KEEP THIS EXACTLY AS IS */
     // @note Version Control: Project Folia version 0.5.27-a16525c

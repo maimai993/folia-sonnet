@@ -68,6 +68,7 @@ type UseObsBrowserSourcePublisherOptions = {
     visualizerTunings?: VisualizerTuningBundle;
     background?: VisualizerBackgroundConfig;
     lyricsFontScale: number;
+    subtitleFontScale: number;
     visualizerOpacity: number;
     subtitleOverlayOpacity: number;
     subtitleOverlayBackground: boolean;
@@ -113,6 +114,7 @@ export const useObsBrowserSourcePublisher = ({
     visualizerTunings,
     background,
     lyricsFontScale,
+    subtitleFontScale,
     visualizerOpacity,
     subtitleOverlayOpacity,
     subtitleOverlayBackground,
@@ -231,6 +233,7 @@ export const useObsBrowserSourcePublisher = ({
             background: resolvedBackground,
             ...buildLegacyObsBrowserSourceBackgroundConfig(resolvedBackground),
             lyricsFontScale,
+            subtitleFontScale,
             visualizerOpacity,
             subtitleOverlayOpacity,
             subtitleOverlayBackground,
@@ -254,6 +257,7 @@ export const useObsBrowserSourcePublisher = ({
         isDaylight,
         lyrics,
         lyricsFontScale,
+        subtitleFontScale,
         obsCustomImages,
         obsCoverUrl,
         seed,

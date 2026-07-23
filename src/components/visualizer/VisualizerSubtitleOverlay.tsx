@@ -21,6 +21,7 @@ interface VisualizerSubtitleOverlayProps {
     subtitleTheme?: Theme;
     translationFontSize: string;
     upcomingFontSize: string;
+    subtitleFontScale?: number;
     opacity?: number;
     subtitleOverlayOpacity?: number;
     subtitleOverlayBackground?: boolean;
@@ -69,6 +70,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
     subtitleTheme,
     translationFontSize,
     upcomingFontSize,
+    subtitleFontScale = 1,
     opacity = 0.6,
     subtitleOverlayOpacity,
     subtitleOverlayBackground = false,
@@ -90,6 +92,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
         subtitleContentMode,
     });
     const resolvedOpacity = subtitleOverlayOpacity ?? opacity;
+    const scaleFontSize = (fontSize: string) => fontSize.replace(/(-?\d*\.?\d+)(rem|vw|px)/g, (_match, value, unit) => `${(Number(value) * subtitleFontScale).toFixed(3)}${unit}`);
     const contentClassName = subtitleOverlayBackground
         ? 'inline-block rounded px-1.5 py-0.5'
         : 'inline-block';
@@ -130,7 +133,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                                 className="max-w-4xl mx-auto"
                                 style={{
                                     color: theme.secondaryColor,
-                                    fontSize: translationFontSize,
+                                    fontSize: scaleFontSize(translationFontSize),
                                     fontFamily: resolveThemeTranslationFontStack(subtitleTheme ?? theme),
                                     fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 500),
                                     textShadow,
@@ -147,7 +150,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                                     className="truncate max-w-2xl mx-auto transition-all duration-500 blur-[1px]"
                                     style={{
                                         color: theme.secondaryColor,
-                                        fontSize: upcomingFontSize,
+                                        fontSize: scaleFontSize(upcomingFontSize),
                                         fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 400),
                                         textShadow,
                                     }}

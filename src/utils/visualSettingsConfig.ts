@@ -25,6 +25,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     lyricsFontScale: store.lyricsFontScale,
     lyricsFontFallbackFamilies: store.lyricsFontFallbackFamilies,
     subtitleFontInheritsLyrics: store.subtitleFontInheritsLyrics,
+    subtitleFontScale: store.subtitleFontScale,
     subtitleFontStyle: store.subtitleFontStyle,
     subtitleFontFamily: store.subtitleFontFamily,
     subtitleFontFallbackFamilies: store.subtitleFontFallbackFamilies,

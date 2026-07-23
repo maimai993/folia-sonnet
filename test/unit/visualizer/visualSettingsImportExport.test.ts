@@ -45,6 +45,7 @@ describe('Visual Settings Import and Export', () => {
         lyricsFontWeight: 650,
         lyricsFontFallbackFamilies: ['Songti SC', 'SimSun', 'serif'],
         subtitleFontInheritsLyrics: false,
+        subtitleFontScale: 1.2,
         subtitleFontStyle: 'sans',
         subtitleFontWeight: 350,
         subtitleFontFamily: 'Microsoft YaHei',
@@ -189,6 +190,7 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.lyricsFontWeight).toBe(650);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);
+        expect(decoded.subtitleFontScale).toBe(1.2);
         expect(decoded.subtitleFontStyle).toBe('sans');
         expect(decoded.subtitleFontWeight).toBe(350);
         expect(decoded.subtitleFontFamily).toBe('Microsoft YaHei');
@@ -238,6 +240,7 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.lyricsFontWeight).toBe(650);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);
+        expect(decoded.subtitleFontScale).toBe(1.2);
         expect(decoded.subtitleFontStyle).toBe('sans');
         expect(decoded.subtitleFontWeight).toBe(350);
         expect(decoded.subtitleFontFamily).toBe('Microsoft YaHei');

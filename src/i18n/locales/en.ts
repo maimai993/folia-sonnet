@@ -897,6 +897,7 @@ export default {
     "fontFallbackFamiliesPlaceholder": "Songti SC, SimSun, serif",
     "subtitleFontInheritsLyrics": "Subtitle Uses Lyrics Font",
     "subtitleFontInheritsLyricsDesc": "Turn off to set a separate subtitle font.",
+    "subtitleFontScale": "Subtitle scale",
     "subtitleFontFamily": "Subtitle Font",
     "subtitleFontWeight": "Subtitle Font Weight",
     "subtitlePrimaryFont": "Subtitle Primary Font",

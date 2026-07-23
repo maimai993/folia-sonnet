@@ -37,6 +37,7 @@ const VisualizerRenderer: React.FC<VisualizerRendererProps> = ({ mode, ...props 
                 subtitleContentMode={resolvedProps.subtitleContentMode}
                 showHarmonySubtitle={resolvedProps.showHarmonySubtitle}
                 harmonySubtitleBackground={resolvedProps.harmonySubtitleBackground}
+                subtitleFontScale={resolvedProps.subtitleFontScale}
             />
         </>
     );

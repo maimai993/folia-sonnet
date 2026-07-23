@@ -168,6 +168,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         urlBackgroundSelectedId,
         lyricsFontStyle,
         lyricsFontScale,
+        subtitleFontScale,
         lyricsFontWeight,
         lyricsCustomFontFamily,
         lyricsCustomFontLabel,
@@ -242,6 +243,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleClearCustomCappellaAvatar: onClearCappellaCustomAvatar,
         handleSetLyricsFontStyle: onLyricsFontStyleChange,
         handleSetLyricsFontScale: onLyricsFontScaleChange,
+        handleSetSubtitleFontScale: onSubtitleFontScaleChange,
         handleSetLyricsFontWeight: onLyricsFontWeightChange,
         handleSetLyricsCustomFont: onLyricsCustomFontChange,
         handleUploadLyricsCustomFont: onLyricsCustomFontUpload,
@@ -1730,6 +1732,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         monetPortraitImage={monetPortraitImage}
                         fontStyle={lyricsFontStyle}
                         fontScale={lyricsFontScale}
+                        subtitleFontScale={subtitleFontScale}
                         fontWeight={lyricsFontWeight}
                         customFontFamily={lyricsCustomFontFamily}
                         customFontLabel={lyricsCustomFontLabel}
@@ -1741,6 +1744,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         subtitleFontFallbackFamilies={subtitleFontFallbackFamilies}
                         onFontStyleChange={onLyricsFontStyleChange}
                         onFontScaleChange={onLyricsFontScaleChange}
+                        onSubtitleFontScaleChange={onSubtitleFontScaleChange}
                         onFontWeightChange={onLyricsFontWeightChange}
                         onCustomFontChange={onLyricsCustomFontChange}
                         onUploadCustomFont={onLyricsCustomFontUpload}

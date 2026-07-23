@@ -27,6 +27,7 @@ export interface ObsWebAppearance {
   visualizerTunings?: VisualizerTuningBundle;
   visualizerOpacity?: number;
   lyricsFontScale?: number;
+  subtitleFontScale?: number;
   lyricsFontWeight?: number | null;
   hideTranslationSubtitle?: boolean;
   showSubtitleTranslation?: boolean;
@@ -114,6 +115,7 @@ export function buildObsAppearanceFromShortcode(
     visualizerTunings: decoded?.visualizerTunings,
     visualizerOpacity: decoded?.visualizerOpacity,
     lyricsFontScale: decoded?.lyricsFontScale,
+    subtitleFontScale: decoded?.subtitleFontScale,
     lyricsFontWeight: decoded?.lyricsFontWeight,
     hideTranslationSubtitle: decoded?.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: decoded?.showSubtitleTranslation,

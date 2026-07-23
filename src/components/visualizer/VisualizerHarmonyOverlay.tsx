@@ -28,6 +28,7 @@ interface VisualizerHarmonyOverlayProps {
     subtitleContentMode?: SubtitleContentMode;
     showHarmonySubtitle?: boolean;
     harmonySubtitleBackground?: boolean;
+    subtitleFontScale?: number;
 }
 
 const EMPTY_HARMONY_SNAPSHOT: HarmonySnapshot = { signature: '', lines: [] };
@@ -73,8 +74,9 @@ const HarmonyGlowText: React.FC<{
     vocal: LyricBackgroundVocal;
     currentTime: MotionValue<number>;
     theme: Theme;
-}> = ({ vocal, currentTime, theme }) => {
-    const fontPx = resolveClampFontPx(0.95, 1.8, 1.3);
+    subtitleFontScale: number;
+}> = ({ vocal, currentTime, theme, subtitleFontScale }) => {
+    const fontPx = resolveClampFontPx(0.95, 1.8, 1.3) * subtitleFontScale;
     const fontWeight = resolveThemeFontWeight(theme, 500);
     const fontFamily = resolveThemeFontStack(theme);
     const fontSpec = `${fontWeight} ${fontPx}px ${fontFamily}`;
@@ -135,7 +137,7 @@ const HarmonyGlowText: React.FC<{
     return (
         <span
             className="relative inline-block overflow-visible whitespace-pre-wrap break-words"
-            style={{ fontFamily, fontSize: 'clamp(0.95rem, 1.8vw, 1.3rem)', fontWeight, lineHeight: 1.3 }}
+            style={{ fontFamily, fontSize: `clamp(${(0.95 * subtitleFontScale).toFixed(3)}rem, ${(1.8 * subtitleFontScale).toFixed(3)}vw, ${(1.3 * subtitleFontScale).toFixed(3)}rem)`, fontWeight, lineHeight: 1.3 }}
         >
             {renderParts(false)}
             <motion.span
@@ -172,6 +174,7 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
     subtitleContentMode,
     showHarmonySubtitle = true,
     harmonySubtitleBackground = false,
+    subtitleFontScale = 1,
 }) => {
     const backgroundVocals = useMemo(() => getLyricsBackgroundVocals(lines), [lines]);
     const buildSnapshot = useCallback(
@@ -236,7 +239,7 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
                             exit={{ opacity: 0, scale: 0.97 }}
                             className="max-w-4xl overflow-visible whitespace-pre-wrap break-words"
                         >
-                            <HarmonyGlowText vocal={entry.vocal} currentTime={currentTime} theme={subtitleTheme ?? theme} />
+                            <HarmonyGlowText vocal={entry.vocal} currentTime={currentTime} theme={subtitleTheme ?? theme} subtitleFontScale={subtitleFontScale} />
                             {alternateText && (
                                 <motion.div
                                     initial={{ opacity: 0, y: -4 }}
@@ -245,7 +248,7 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
                                     style={{
                                         color: (subtitleTheme ?? theme).secondaryColor,
                                         fontFamily: resolveThemeTranslationFontStack(subtitleTheme ?? theme),
-                                        fontSize: 'clamp(0.72rem, 1.2vw, 0.9rem)',
+                                        fontSize: `clamp(${(0.72 * subtitleFontScale).toFixed(3)}rem, ${(1.2 * subtitleFontScale).toFixed(3)}vw, ${(0.9 * subtitleFontScale).toFixed(3)}rem)`,
                                         fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 400),
                                         lineHeight: 1.3,
                                     }}

@@ -900,6 +900,7 @@ export default {
     "fontFallbackFamiliesPlaceholder": "Songti SC, SimSun, serif",
     "subtitleFontInheritsLyrics": "字幕继承歌词字体",
     "subtitleFontInheritsLyricsDesc": "关闭后可为字幕单独设置字体。",
+    "subtitleFontScale": "字幕缩放",
     "subtitleFontFamily": "字幕字体",
     "subtitleFontWeight": "字幕字重",
     "subtitlePrimaryFont": "字幕主字体",

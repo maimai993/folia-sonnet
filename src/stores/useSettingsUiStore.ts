@@ -52,6 +52,7 @@ export const SUBTITLE_CONTENT_MODE_STORAGE_KEY = 'subtitle_content_mode';
 const LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'lyrics_font_fallback_families';
 const LYRICS_FONT_WEIGHT_STORAGE_KEY = 'lyrics_font_weight';
 const SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY = 'subtitle_font_inherits_lyrics';
+const SUBTITLE_FONT_SCALE_STORAGE_KEY = 'subtitle_font_scale';
 const SUBTITLE_FONT_STYLE_STORAGE_KEY = 'subtitle_font_style';
 const SUBTITLE_FONT_FAMILY_STORAGE_KEY = 'subtitle_font_family';
 const SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'subtitle_font_fallback_families';
@@ -800,12 +801,12 @@ const readStoredLyricsFontStyle = (): Theme['fontStyle'] => {
     return saved === 'serif' || saved === 'mono' ? saved : 'sans';
 };
 
-const readStoredLyricsFontScale = (): number => {
+const readStoredFontScale = (key: string): number => {
     if (typeof window === 'undefined') {
         return 1;
     }
 
-    const saved = localStorage.getItem('lyrics_font_scale');
+    const saved = localStorage.getItem(key);
     if (!saved) return 1;
 
     const parsed = parseFloat(saved);
@@ -1064,6 +1065,7 @@ export type SettingsUiState = {
     lyricsCustomFont: StoredCustomLyricsFont | null;
     lyricsFontFallbackFamilies: string[];
     subtitleFontInheritsLyrics: boolean;
+    subtitleFontScale: number;
     subtitleFontStyle: Theme['fontStyle'];
     subtitleFontWeight: number | null;
     subtitleFontFamily: string | null;
@@ -1183,6 +1185,7 @@ export type SettingsUiState = {
     handleUploadLyricsCustomFont: (file: File) => Promise<{ ok: boolean; error?: string; }>;
     handleSetLyricsFontFallbackFamilies: (families: string[]) => void;
     handleSetSubtitleFontInheritsLyrics: (inheritsLyrics: boolean) => void;
+    handleSetSubtitleFontScale: (fontScale: number) => void;
     handleSetSubtitleFontStyle: (fontStyle: Theme['fontStyle']) => void;
     handleSetSubtitleFontWeight: (fontWeight: number | null) => void;
     handleSetSubtitleFontFamily: (fontFamily: string | null) => void;
@@ -1269,11 +1272,12 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     isLoadingMonetPortraitImage: true,
     appLanguagePreference: readStoredAppLanguagePreference(),
     lyricsFontStyle: readStoredLyricsFontStyle(),
-    lyricsFontScale: readStoredLyricsFontScale(),
+    lyricsFontScale: readStoredFontScale('lyrics_font_scale'),
     lyricsFontWeight: readStoredFontWeight(LYRICS_FONT_WEIGHT_STORAGE_KEY),
     lyricsCustomFont: readStoredCustomLyricsFont(),
     lyricsFontFallbackFamilies: readStoredFontFamilyStack(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY),
     subtitleFontInheritsLyrics: getStoredBoolean(SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY, true),
+    subtitleFontScale: readStoredFontScale(SUBTITLE_FONT_SCALE_STORAGE_KEY),
     subtitleFontStyle: readStoredSubtitleFontStyle(),
     subtitleFontWeight: readStoredFontWeight(SUBTITLE_FONT_WEIGHT_STORAGE_KEY),
     subtitleFontFamily: readStoredSubtitleFontFamily(),
@@ -2171,6 +2175,13 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         setStoredBoolean(SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY, inheritsLyrics);
         set({ subtitleFontInheritsLyrics: inheritsLyrics });
     },
+    handleSetSubtitleFontScale: (fontScale) => {
+        const next = Math.min(1.4, Math.max(0.85, fontScale));
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(SUBTITLE_FONT_SCALE_STORAGE_KEY, String(next));
+        }
+        set({ subtitleFontScale: next });
+    },
     handleSetSubtitleFontStyle: (fontStyle) => {
         if (typeof window !== 'undefined') {
             localStorage.setItem(SUBTITLE_FONT_STYLE_STORAGE_KEY, fontStyle);
@@ -2387,6 +2398,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     lyricsCustomFontLabel: state.lyricsCustomFont?.label ?? null,
     lyricsFontFallbackFamilies: state.lyricsFontFallbackFamilies,
     subtitleFontInheritsLyrics: state.subtitleFontInheritsLyrics,
+    subtitleFontScale: state.subtitleFontScale,
     subtitleFontStyle: state.subtitleFontStyle,
     subtitleFontWeight: state.subtitleFontWeight,
     subtitleFontFamily: state.subtitleFontFamily,
@@ -2478,6 +2490,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleUploadLyricsCustomFont: state.handleUploadLyricsCustomFont,
     handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
     handleSetSubtitleFontInheritsLyrics: state.handleSetSubtitleFontInheritsLyrics,
+    handleSetSubtitleFontScale: state.handleSetSubtitleFontScale,
     handleSetSubtitleFontStyle: state.handleSetSubtitleFontStyle,
     handleSetSubtitleFontWeight: state.handleSetSubtitleFontWeight,
     handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,

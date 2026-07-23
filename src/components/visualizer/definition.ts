@@ -46,6 +46,7 @@ export interface VisualizerSharedProps {
     visualizerOpacity?: number;
     background?: VisualizerBackgroundConfig;
     lyricsFontScale?: number;
+    subtitleFontScale?: number;
     subtitleOverlayOpacity?: number;
     subtitleOverlayBackground?: boolean;
     showHarmonySubtitle?: boolean;

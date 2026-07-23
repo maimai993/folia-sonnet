@@ -357,6 +357,7 @@ export default function App() {
         urlBackgroundSelectedId,
         lyricsFontStyle,
         lyricsFontScale,
+        subtitleFontScale,
         lyricsFontWeight,
         lyricsCustomFontFamily,
         lyricsCustomFontLabel,
@@ -1798,6 +1799,7 @@ export default function App() {
             transparent: isPlayerPageTransparent,
         },
         lyricsFontScale,
+        subtitleFontScale,
         visualizerOpacity,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
@@ -3110,6 +3112,7 @@ export default function App() {
                             },
                         }}
                         lyricsFontScale={lyricsFontScale}
+                        subtitleFontScale={subtitleFontScale}
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
                         subtitleOverlayBackground={subtitleOverlayBackground}
                         showHarmonySubtitle={showHarmonySubtitle}
@@ -3137,6 +3140,7 @@ export default function App() {
                     visualizerTheme={visualizerTheme}
                     subtitleTheme={visualizerSubtitleTheme}
                     lyricsFontScale={lyricsFontScale}
+                    subtitleFontScale={subtitleFontScale}
                     shouldHidePlayerTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
                     isDaylight={isDaylight}
                     navigateToHome={navigateBackFromPlayer}
