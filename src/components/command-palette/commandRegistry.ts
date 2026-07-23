@@ -711,6 +711,39 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         },
     },
     {
+        id: 'settings-subtitle-translation',
+        group: 'settings',
+        title: 'Use translation subtitles',
+        description: 'Show the translation track as the visualizer subtitle',
+        keywords: ['subtitle translation', 'translation track', '显示翻译', '翻译字幕', 'fanyi zimu', 'fy'],
+        execute: (_input, context) => {
+            context.setSubtitleContentMode('translation');
+            return true;
+        },
+    },
+    {
+        id: 'settings-subtitle-romanization',
+        group: 'settings',
+        title: 'Use romanization subtitles',
+        description: 'Show the romanization track as the visualizer subtitle',
+        keywords: ['subtitle romanization', 'romanized lyrics', 'romaji', '罗马音', '罗马字', 'luomayin', 'lmy'],
+        execute: (_input, context) => {
+            context.setSubtitleContentMode('romanization');
+            return true;
+        },
+    },
+    {
+        id: 'settings-subtitle-none',
+        group: 'settings',
+        title: 'Hide subtitle text',
+        description: 'Hide translation and romanization while keeping upcoming-line hints',
+        keywords: ['hide subtitle text', 'no translation', '隐藏副字幕', '隐藏翻译', '隐藏罗马音', 'yincang fuzimu', 'ycfzm'],
+        execute: (_input, context) => {
+            context.setSubtitleContentMode('none');
+            return true;
+        },
+    },
+    {
         id: 'settings-toggle-subtitle-background',
         group: 'settings',
         title: 'Toggle subtitle background',

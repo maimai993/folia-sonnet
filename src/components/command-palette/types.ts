@@ -1,7 +1,7 @@
 import type React from 'react';
 import type { SearchReturnView, SearchSource } from '../../stores/useSearchNavigationStore';
 import type { LocalLibraryDisplayCatalog } from '../../services/playbackAdapters';
-import type { HomeViewTab, LatentBackgroundTuning, LocalSong, PlayerState, SongResult, StatusMessage, VisualizerMode, VisualizerBackgroundMode, MonetBackgroundTuning } from '../../types';
+import type { HomeViewTab, LatentBackgroundTuning, LocalSong, PlayerState, SongResult, StatusMessage, SubtitleContentMode, VisualizerMode, VisualizerBackgroundMode, MonetBackgroundTuning } from '../../types';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/useSettingsUiStore';
@@ -80,6 +80,8 @@ export type CommandPaletteContext = {
     hideBottomSubtitleOverlay: boolean;
     toggleBottomSubtitleOverlay: () => void;
     showSubtitleTranslation: boolean;
+    subtitleContentMode: SubtitleContentMode;
+    setSubtitleContentMode: (mode: SubtitleContentMode) => void;
     toggleSubtitleTranslation: () => void;
     subtitleOverlayBackground: boolean;
     toggleSubtitleOverlayBackground: () => void;

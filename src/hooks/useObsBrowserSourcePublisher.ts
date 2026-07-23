@@ -19,6 +19,7 @@ import type {
     PlayerState,
     SongResult,
     StageSource,
+    SubtitleContentMode,
     Theme,
     TiltTuning,
     VisualizerMode,
@@ -73,6 +74,7 @@ type UseObsBrowserSourcePublisherOptions = {
     staticMode: boolean;
     hideTranslationSubtitle: boolean;
     showSubtitleTranslation: boolean;
+    subtitleContentMode: SubtitleContentMode;
     seed: string | number;
     audioPower: MotionValue<number>;
     audioBands: AudioBands;
@@ -117,6 +119,7 @@ export const useObsBrowserSourcePublisher = ({
     staticMode,
     hideTranslationSubtitle,
     showSubtitleTranslation,
+    subtitleContentMode,
     seed,
     audioPower,
     audioBands,
@@ -234,6 +237,7 @@ export const useObsBrowserSourcePublisher = ({
             staticMode,
             hideTranslationSubtitle,
             showSubtitleTranslation,
+            subtitleContentMode,
             seed,
             cappellaCustomEmojiImages: obsCustomImages.cappellaEmoji,
             cappellaCustomAvatarImages: obsCustomImages.cappellaAvatar,
@@ -246,6 +250,7 @@ export const useObsBrowserSourcePublisher = ({
         currentSong,
         hideTranslationSubtitle,
         showSubtitleTranslation,
+        subtitleContentMode,
         isDaylight,
         lyrics,
         lyricsFontScale,

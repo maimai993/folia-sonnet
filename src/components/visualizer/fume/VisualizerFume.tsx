@@ -1864,6 +1864,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
+        subtitleContentMode,
         paused = false,
     } = props;
     const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -3067,6 +3068,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}
+                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

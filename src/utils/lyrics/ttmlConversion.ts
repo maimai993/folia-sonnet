@@ -175,8 +175,64 @@ const convertLine = (line: TtmlLyricLine, buildTimedWords: TimedWordBuilder): Li
         ...(typeof line.blockIndex === 'number' ? { blockIndex: line.blockIndex } : {}),
         ...(getFirstText(line.romanizations) ? { romanization: getFirstText(line.romanizations) } : {}),
         ...(alternateTexts.length > 0 ? { alternateTexts } : {}),
-        ...(backgroundVocal ? { backgroundVocal } : {}),
+        ...(backgroundVocal ? { backgroundVocal, backgroundVocals: [backgroundVocal] } : {}),
     };
+};
+
+const lineToBackgroundVocal = (line: Line): LyricBackgroundVocal => ({
+    text: line.fullText,
+    startTime: line.startTime,
+    endTime: line.endTime,
+    words: line.words,
+    ...(line.agentId ? { agentId: line.agentId } : {}),
+    ...(line.translation ? { translation: line.translation } : {}),
+    ...(line.romanization ? { romanization: line.romanization } : {}),
+    ...(line.alternateTexts?.length ? { alternateTexts: line.alternateTexts } : {}),
+});
+
+const isSameTtmlBlock = (mainLine: Line, candidate: Line): boolean =>
+    mainLine.blockIndex === undefined
+    || candidate.blockIndex === undefined
+    || mainLine.blockIndex === candidate.blockIndex;
+
+const isAgentOverlapHarmony = (mainLine: Line, candidate: Line): boolean =>
+    Boolean(
+        mainLine.agentId
+        && candidate.agentId
+        && mainLine.agentId !== candidate.agentId
+        && candidate.startTime < mainLine.endTime
+        && candidate.endTime > mainLine.startTime
+        && isSameTtmlBlock(mainLine, candidate)
+    );
+
+// Some TTML files encode simultaneous vocals as overlapping <p> lines with different agents.
+// Fold the later line into the still-active main line so every visualizer receives one main timeline.
+const foldAgentOverlapHarmonyLines = (lines: Line[]): Line[] => {
+    const mainLines: Line[] = [];
+
+    for (const line of lines) {
+        const mainLine = [...mainLines]
+            .reverse()
+            .find(candidate => isAgentOverlapHarmony(candidate, line));
+
+        if (!mainLine) {
+            mainLines.push(line);
+            continue;
+        }
+
+        const inferredVocals = [
+            lineToBackgroundVocal(line),
+            ...(line.backgroundVocals ?? (line.backgroundVocal ? [line.backgroundVocal] : [])),
+        ];
+        const existingVocals = mainLine.backgroundVocals
+            ?? (mainLine.backgroundVocal ? [mainLine.backgroundVocal] : []);
+        const backgroundVocals = [...existingVocals, ...inferredVocals];
+
+        mainLine.backgroundVocals = backgroundVocals;
+        mainLine.backgroundVocal = backgroundVocals[0];
+    }
+
+    return mainLines;
 };
 
 const convertAgents = (agents: Record<string, TtmlAgent> | undefined): LyricData['ttml'] => {
@@ -202,13 +258,16 @@ export const buildLyricDataFromTTMLResult = (
     buildTimedWords: TimedWordBuilder
 ): LyricData => {
     const convertedAgents = convertAgents(result.metadata.agents)?.agents;
+    const lines = foldAgentOverlapHarmonyLines(
+        result.lines.map(line => convertLine(line, buildTimedWords))
+    );
     const ttml = {
         ...(result.metadata.timingMode ? { timingMode: result.metadata.timingMode } : {}),
         ...(convertedAgents ? { agents: convertedAgents } : {}),
     };
 
     return {
-        lines: result.lines.map(line => convertLine(line, buildTimedWords)),
+        lines,
         isWordByWord: result.metadata.timingMode === 'Word',
         ...(Object.keys(ttml).length > 0 ? { ttml } : {}),
     };

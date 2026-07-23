@@ -314,6 +314,7 @@ export default function App() {
         hidePlayerProgressBar,
         hidePlayerTranslationSubtitle,
         showSubtitleTranslation,
+        subtitleContentMode,
         hidePlayerRightPanelButton,
         transparentPlayerBackground,
         enablePlayerPageNativeBlur,
@@ -377,6 +378,7 @@ export default function App() {
         handleToggleHidePlayerProgressBar,
         handleToggleHidePlayerTranslationSubtitle,
         handleToggleShowSubtitleTranslation,
+        handleSetSubtitleContentMode,
         handleToggleSubtitleOverlayBackground,
         handleToggleHidePlayerRightPanelButton,
         handleToggleTransparentPlayerBackground,
@@ -1800,6 +1802,7 @@ export default function App() {
         staticMode,
         hideTranslationSubtitle: shouldHidePlayerTranslationSubtitle,
         showSubtitleTranslation,
+        subtitleContentMode,
         seed: visualizerGeometrySeed,
         audioPower,
         audioBands,
@@ -1902,6 +1905,8 @@ export default function App() {
             handleToggleHidePlayerTranslationSubtitle(!hidePlayerTranslationSubtitle);
         },
         showSubtitleTranslation,
+        subtitleContentMode,
+        setSubtitleContentMode: handleSetSubtitleContentMode,
         toggleSubtitleTranslation: () => {
             handleToggleShowSubtitleTranslation(!showSubtitleTranslation);
         },
@@ -1942,6 +1947,7 @@ export default function App() {
         handleSetMonetBackgroundTuning,
         handleToggleHidePlayerTranslationSubtitle,
         handleToggleShowSubtitleTranslation,
+        handleSetSubtitleContentMode,
         hidePlayerTranslationSubtitle,
         isGeneratingTheme,
         localLibraryCatalog,
@@ -1971,6 +1977,7 @@ export default function App() {
         voiceInputPauseEnabled,
         handleToggleVoiceInputPause,
         showSubtitleTranslation,
+        subtitleContentMode,
         subtitleOverlayBackground,
         handleToggleSubtitleOverlayBackground,
         handleToggleAlwaysShowPlayerBackButton,
@@ -3109,6 +3116,7 @@ export default function App() {
                         isPlayerChromeHidden={isPlayerChromeHidden}
                         hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
                         showSubtitleTranslation={showSubtitleTranslation}
+                        subtitleContentMode={subtitleContentMode}
                         visualizerTunings={visualizerTunings}
                         onMonetTuningChange={handleSetMonetTuning}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}

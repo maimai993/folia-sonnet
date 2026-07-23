@@ -30,6 +30,7 @@ import {
     type MonetTuning,
     type PartitaTuning,
     type StoredCustomLyricsFont,
+    type SubtitleContentMode,
     type Theme,
     type TiltTuning,
     type DioramaTuning,
@@ -61,6 +62,7 @@ interface VisPlaygroundProps {
     backgroundActions?: VisualizerBackgroundActions;
     hideTranslationSubtitle?: boolean;
     showSubtitleTranslation?: boolean;
+    subtitleContentMode?: SubtitleContentMode;
     subtitleOverlayOpacity?: number;
     subtitleOverlayBackground?: boolean;
     classicTuning?: ClassicTuning;
@@ -101,6 +103,7 @@ interface VisPlaygroundProps {
     onVisualizerOpacityChange?: (opacity: number) => void;
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
     onToggleShowSubtitleTranslation?: (shown: boolean) => void;
+    onSubtitleContentModeChange?: (mode: SubtitleContentMode) => void;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     onToggleSubtitleOverlayBackground?: (enabled: boolean) => void;
     onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
@@ -271,6 +274,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     backgroundActions,
     hideTranslationSubtitle = false,
     showSubtitleTranslation = true,
+    subtitleContentMode,
     subtitleOverlayOpacity = 0.6,
     subtitleOverlayBackground = false,
     classicTuning = DEFAULT_CLASSIC_TUNING,
@@ -311,6 +315,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onVisualizerOpacityChange,
     onToggleHideTranslationSubtitle,
     onToggleShowSubtitleTranslation,
+    onSubtitleContentModeChange,
     onSubtitleOverlayOpacityChange,
     onToggleSubtitleOverlayBackground,
     onClassicTuningChange,
@@ -340,6 +345,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     isLoadingCappellaCustomAvatarPack = false,
     onClose,
 }) => {
+    const resolvedSubtitleContentMode = subtitleContentMode
+        ?? (showSubtitleTranslation ? 'translation' : 'none');
     const { t } = useTranslation();
     const backgroundOpacity = backgroundConfig?.common?.opacity ?? 0.75;
     const monetBackgroundTuning = backgroundConfig?.monet?.tuning ?? DEFAULT_MONET_BACKGROUND_TUNING;
@@ -916,7 +923,11 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const handleResetSubtitleSettings = () => {
         setDraftSubtitleOverlayOpacity(0.6);
         onToggleHideTranslationSubtitle?.(false);
-        onToggleShowSubtitleTranslation?.(true);
+        if (onSubtitleContentModeChange) {
+            onSubtitleContentModeChange('translation');
+        } else {
+            onToggleShowSubtitleTranslation?.(true);
+        }
         onToggleSubtitleOverlayBackground?.(false);
         onSubtitleOverlayOpacityChange?.(0.6);
         onSubtitleFontInheritsLyricsChange?.(true);
@@ -1059,6 +1070,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 subtitleOverlayBackground={subtitleOverlayBackground}
                                 hideTranslationSubtitle={hideTranslationSubtitle}
                                 showSubtitleTranslation={showSubtitleTranslation}
+                                subtitleContentMode={resolvedSubtitleContentMode}
                                 visualizerTunings={draftVisualizerTunings}
                                 onMonetTuningChange={handleMonetTuningDraft}
                                 cappellaCustomEmojiImages={cappellaCustomEmojiImages}
@@ -1135,8 +1147,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         isLoadingMonetPortraitImage={isLoadingMonetPortraitImage}
                         hideTranslationSubtitle={hideTranslationSubtitle}
                         onToggleHideTranslationSubtitle={onToggleHideTranslationSubtitle}
-                        showSubtitleTranslation={showSubtitleTranslation}
                         onToggleShowSubtitleTranslation={onToggleShowSubtitleTranslation}
+                        subtitleContentMode={resolvedSubtitleContentMode}
+                        onSubtitleContentModeChange={onSubtitleContentModeChange}
                         subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                         onSubtitleOverlayOpacityChange={handleSubtitleOverlayOpacityDraft}
                         subtitleOverlayBackground={subtitleOverlayBackground}

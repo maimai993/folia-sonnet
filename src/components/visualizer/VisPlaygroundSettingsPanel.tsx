@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CaptionsOff, Languages, Monitor, PanelTop, RotateCcw, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CaptionsOff, Monitor, PanelTop, RotateCcw, type LucideIcon } from 'lucide-react';
 import {
     type CappellaAvatarImage,
     type CappellaEmojiImage,
@@ -11,6 +11,7 @@ import {
     type MonetTuning,
     type PartitaTuning,
     type Theme,
+    type SubtitleContentMode,
     type TiltTuning,
     type DioramaTuning,
     type VisualizerMode,
@@ -114,8 +115,9 @@ interface VisPlaygroundSettingsPanelProps {
     isLoadingMonetPortraitImage?: boolean;
     hideTranslationSubtitle: boolean;
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
-    showSubtitleTranslation: boolean;
     onToggleShowSubtitleTranslation?: (shown: boolean) => void;
+    subtitleContentMode: SubtitleContentMode;
+    onSubtitleContentModeChange?: (mode: SubtitleContentMode) => void;
     subtitleOverlayOpacity: number;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     subtitleOverlayBackground: boolean;
@@ -343,8 +345,9 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         isLoadingMonetPortraitImage,
         hideTranslationSubtitle,
         onToggleHideTranslationSubtitle,
-        showSubtitleTranslation,
         onToggleShowSubtitleTranslation,
+        subtitleContentMode,
+        onSubtitleContentModeChange,
         subtitleOverlayOpacity,
         onSubtitleOverlayOpacityChange,
         subtitleOverlayBackground,
@@ -686,13 +689,17 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             icon={CaptionsOff}
                         />
 
-                        <ToggleRow
-                            label={t('options.showSubtitleTranslation')}
-                            description={t('options.showSubtitleTranslationDesc')}
-                            checked={showSubtitleTranslation}
-                            onChange={onToggleShowSubtitleTranslation}
+                        <PresetGroup
+                            label={t('options.subtitleContentMode')}
+                            value={subtitleContentMode}
+                            options={[
+                                { label: t('options.subtitleContentTranslation'), value: 'translation' },
+                                { label: t('options.subtitleContentRomanization'), value: 'romanization' },
+                                { label: t('options.subtitleContentNone'), value: 'none' },
+                            ]}
+                            onChange={onSubtitleContentModeChange ?? (mode => onToggleShowSubtitleTranslation?.(mode !== 'none'))}
+                            isDaylight={isDaylight}
                             theme={theme}
-                            icon={Languages}
                         />
 
                         <ToggleRow

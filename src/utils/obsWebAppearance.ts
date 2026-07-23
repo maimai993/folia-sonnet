@@ -1,4 +1,4 @@
-import type { Theme, VisualizerMode } from '../types';
+import type { SubtitleContentMode, Theme, VisualizerMode } from '../types';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
 import { DEFAULT_VISUALIZER_MODE, hasVisualizerMode } from '../components/visualizer/registry';
@@ -30,6 +30,7 @@ export interface ObsWebAppearance {
   lyricsFontWeight?: number | null;
   hideTranslationSubtitle?: boolean;
   showSubtitleTranslation?: boolean;
+  subtitleContentMode?: SubtitleContentMode;
   subtitleOverlayBackground?: boolean;
   // Font stack (raw store fields; overlaid onto the theme in ObsWebSourceApp so fonts match the
   // main window). Only a system custom font's family transfers (uploaded fonts do not).
@@ -116,6 +117,7 @@ export function buildObsAppearanceFromShortcode(
     lyricsFontWeight: decoded?.lyricsFontWeight,
     hideTranslationSubtitle: decoded?.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: decoded?.showSubtitleTranslation,
+    subtitleContentMode: decoded?.subtitleContentMode,
     subtitleOverlayBackground: decoded?.subtitleOverlayBackground,
     lyricsFontStyle: decoded?.lyricsFontStyle,
     lyricsCustomFontFamily: decoded?.lyricsCustomFontFamily,

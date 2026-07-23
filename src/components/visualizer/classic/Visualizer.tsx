@@ -299,6 +299,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
+        subtitleContentMode,
         classicTuning,
     } = props;
     const { t } = useTranslation();
@@ -738,6 +739,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}
+                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

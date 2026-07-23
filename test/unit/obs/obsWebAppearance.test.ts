@@ -40,6 +40,7 @@ const sampleConfig = {
     visualizerOpacity: 0.95,
     hidePlayerTranslationSubtitle: true,
     showSubtitleTranslation: false,
+    subtitleContentMode: 'romanization' as const,
     subtitleOverlayBackground: true,
     lyricsFontScale: 1.25,
     lyricsFontWeight: 650,
@@ -58,6 +59,7 @@ describe('buildObsAppearanceFromShortcode', () => {
         expect(a.subtitleFontWeight).toBe(350);
         expect(a.hideTranslationSubtitle).toBe(true); // hidePlayerTranslationSubtitle → hideTranslationSubtitle
         expect(a.showSubtitleTranslation).toBe(false);
+        expect(a.subtitleContentMode).toBe('romanization');
         expect(a.subtitleOverlayBackground).toBe(true);
         expect(a.background.mode).toBe('monet');
         expect(a.background.common?.opacity).toBe(0.85);

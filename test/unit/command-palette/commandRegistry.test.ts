@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PlayerState } from '../../../src/types';
-import { getCommandPaletteMatches } from '../../../src/components/command-palette/commandRegistry';
+import { COMMAND_PALETTE_COMMANDS, getCommandPaletteMatches } from '../../../src/components/command-palette/commandRegistry';
 import type { CommandPaletteContext } from '../../../src/components/command-palette/types';
 
 const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandPaletteContext => ({
@@ -39,6 +39,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     hideBottomSubtitleOverlay: false,
     toggleBottomSubtitleOverlay: vi.fn(),
     showSubtitleTranslation: true,
+    subtitleContentMode: 'translation',
+    setSubtitleContentMode: vi.fn(),
     toggleSubtitleTranslation: vi.fn(),
     subtitleOverlayBackground: false,
     toggleSubtitleOverlayBackground: vi.fn(),
@@ -61,6 +63,19 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
 });
 
 describe('command palette registry', () => {
+    it.each([
+        ['settings-subtitle-translation', 'translation'],
+        ['settings-subtitle-romanization', 'romanization'],
+        ['settings-subtitle-none', 'none'],
+    ] as const)('sets an explicit subtitle content mode via %s', async (commandId, mode) => {
+        const context = createContext();
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === commandId);
+
+        expect(command).toBeDefined();
+        await command!.execute('', context);
+        expect(context.setSubtitleContentMode).toHaveBeenCalledWith(mode);
+    });
+
     it('parses source-specific search input', async () => {
         const context = createContext();
         const [match] = getCommandPaletteMatches('local touhou');
