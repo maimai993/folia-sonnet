@@ -3,6 +3,7 @@ import type { Line, LyricBackgroundVocal } from '@/types';
 import {
     getLineBackgroundVocals,
     getLyricsBackgroundVocals,
+    resolveHarmonyAlternateText,
     resolveHarmonySnapshot,
     resolveHarmonySnapshotFromVocals,
 } from '@/components/visualizer/harmonyRuntime';
@@ -18,6 +19,8 @@ const vocal: LyricBackgroundVocal = {
         { text: 'echoes', startTime: 2, endTime: 2.8 },
         { text: 'now', startTime: 3, endTime: 4 },
     ],
+    translation: '回声此刻',
+    romanization: 'huí shēng cǐ kè',
 };
 
 const line: Line = {
@@ -74,5 +77,11 @@ describe('harmony runtime', () => {
         const vocals = getLyricsBackgroundVocals(lines);
 
         expect(resolveHarmonySnapshotFromVocals(vocals, 5.5).lines[0]?.vocal).toBe(trailingVocal);
+    });
+
+    it('resolves harmony translation and romanization through the subtitle mode', () => {
+        expect(resolveHarmonyAlternateText(vocal, 'translation')).toBe('回声此刻');
+        expect(resolveHarmonyAlternateText(vocal, 'romanization')).toBe('huí shēng cǐ kè');
+        expect(resolveHarmonyAlternateText(vocal, 'none')).toBeNull();
     });
 });

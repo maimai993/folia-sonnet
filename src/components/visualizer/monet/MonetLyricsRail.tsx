@@ -88,7 +88,6 @@ const MONET_SCROLL_TRANSITION = {
     opacity: { duration: 0.28, ease: [0.32, 0.72, 0, 1] },
     filter: { duration: 0.32, ease: [0.32, 0.72, 0, 1] },
 } as const;
-
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const clampScrollSteps = (steps: number) => Math.max(-1, Math.min(1, steps));
 const getScrollDirection = (delta: number) => (delta === 0 ? 0 : delta > 0 ? 1 : -1);
@@ -524,7 +523,8 @@ const MonetWordSweep: React.FC<{
         });
 
         const maskImage = useTransform(fillWidth, latest => {
-            const edgeSoftness = Math.max(Math.min(fontPx * 0.45, 16), 6);
+            // Original narrower sweep: Math.max(Math.min(fontPx * 0.45, 16), 6)
+            const edgeSoftness = Math.max(Math.min(fontPx * 1.35, 36), 18);
             const solidEnd = Math.max(latest - edgeSoftness, 0);
             const featherStart = Math.max(latest - edgeSoftness * 0.55, 0);
             const featherEnd = Math.max(latest, 0);

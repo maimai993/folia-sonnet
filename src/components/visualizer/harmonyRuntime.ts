@@ -1,4 +1,5 @@
-import type { Line, LyricBackgroundVocal, Word } from '../../types';
+import type { Line, LyricBackgroundVocal, SubtitleContentMode, Word } from '../../types';
+import { resolveLyricAlternateText, resolveSubtitleContentMode } from '../../utils/lyrics/alternateText';
 
 // src/components/visualizer/harmonyRuntime.ts
 // Builds the small discrete state used by the shared top harmony overlay.
@@ -36,6 +37,15 @@ export const getLyricsBackgroundVocals = (lines: Line[]): LyricBackgroundVocal[]
     lines
         .flatMap(line => getLineBackgroundVocals(line))
         .sort((left, right) => left.startTime - right.startTime || left.endTime - right.endTime);
+
+export const resolveHarmonyAlternateText = (
+    vocal: LyricBackgroundVocal,
+    subtitleContentMode: SubtitleContentMode | undefined,
+    legacyShowTranslation = true,
+): string | null => resolveLyricAlternateText(
+    vocal,
+    resolveSubtitleContentMode(subtitleContentMode, legacyShowTranslation),
+);
 
 const resolveWordStatus = (word: Word, currentTime: number): HarmonyTokenStatus => {
     if (currentTime < word.startTime) return 'waiting';

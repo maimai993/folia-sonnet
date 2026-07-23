@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion, type MotionValue, useMotionValueEvent } from 'framer-motion';
-import type { Line, Theme } from '../../types';
-import { resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../utils/fontStacks';
+import { AnimatePresence, motion, type MotionValue, useMotionValueEvent, useTransform } from 'framer-motion';
+import type { Line, LyricBackgroundVocal, SubtitleContentMode, Theme, Word } from '../../types';
+import { resolveThemeFontStack, resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../utils/fontStacks';
+import { buildLineGraphemeTimeline } from '../../utils/lyrics/graphemeTiming';
+import { measureMonetGraphemeOffsets, resolveClampFontPx } from './monet/monetLyricsModel';
 import { colorWithAlpha } from './colorMix';
+import { resolveWordColor } from './wordColoring';
 import {
     getLyricsBackgroundVocals,
+    resolveHarmonyAlternateText,
     resolveHarmonySnapshotFromVocals,
     type HarmonySnapshot,
-    type HarmonyTokenStatus,
 } from './harmonyRuntime';
 
 // src/components/visualizer/VisualizerHarmonyOverlay.tsx
@@ -20,15 +23,139 @@ interface VisualizerHarmonyOverlayProps {
     theme: Theme;
     subtitleTheme?: Theme;
     isPlayerChromeHidden?: boolean;
+    hideTranslationSubtitle?: boolean;
+    showSubtitleTranslation?: boolean;
+    subtitleContentMode?: SubtitleContentMode;
 }
 
 const EMPTY_HARMONY_SNAPSHOT: HarmonySnapshot = { signature: '', lines: [] };
 
-const resolveTokenColor = (status: HarmonyTokenStatus, theme: Theme) => {
-    if (status === 'active') return theme.accentColor;
-    if (status === 'passed') return colorWithAlpha(theme.primaryColor, 0.92);
-    if (status === 'static') return colorWithAlpha(theme.primaryColor, 0.74);
-    return colorWithAlpha(theme.secondaryColor, 0.58);
+interface HarmonyTextPart {
+    key: string;
+    text: string;
+    word?: Word;
+}
+
+// Preserves punctuation and whitespace while letting each timed word own its color and sweep.
+const buildHarmonyTextParts = (vocal: LyricBackgroundVocal): HarmonyTextPart[] => {
+    const parts: HarmonyTextPart[] = [];
+    let cursor = 0;
+
+    vocal.words.forEach((word, index) => {
+        const matchIndex = vocal.text.indexOf(word.text, cursor);
+        if (matchIndex < 0) {
+            return;
+        }
+        if (matchIndex > cursor) {
+            parts.push({ key: `static-${cursor}`, text: vocal.text.slice(cursor, matchIndex) });
+        }
+        parts.push({ key: `word-${index}-${word.startTime}`, text: word.text, word });
+        cursor = matchIndex + word.text.length;
+    });
+
+    if (cursor < vocal.text.length) {
+        parts.push({ key: `static-${cursor}`, text: vocal.text.slice(cursor) });
+    }
+
+    return parts.length > 0 ? parts : [{ key: 'full', text: vocal.text }];
+};
+
+const createHarmonyLine = (vocal: LyricBackgroundVocal): Line => ({
+    fullText: vocal.text,
+    startTime: vocal.startTime,
+    endTime: vocal.endTime,
+    words: vocal.words,
+});
+
+const HarmonyGlowText: React.FC<{
+    vocal: LyricBackgroundVocal;
+    currentTime: MotionValue<number>;
+    theme: Theme;
+}> = ({ vocal, currentTime, theme }) => {
+    const fontPx = resolveClampFontPx(0.95, 1.8, 1.3);
+    const fontWeight = resolveThemeFontWeight(theme, 500);
+    const fontFamily = resolveThemeFontStack(theme);
+    const fontSpec = `${fontWeight} ${fontPx}px ${fontFamily}`;
+    const parts = useMemo(() => buildHarmonyTextParts(vocal), [vocal]);
+    const graphemeTimings = useMemo(() => buildLineGraphemeTimeline(createHarmonyLine(vocal)), [vocal]);
+    const graphemeOffsets = useMemo(
+        () => measureMonetGraphemeOffsets(vocal.text, fontPx, fontSpec),
+        [fontPx, fontSpec, vocal.text],
+    );
+    const fillWidth = useTransform(currentTime, latest => {
+        const fullWidth = graphemeOffsets[graphemeOffsets.length - 1] ?? 0;
+        if (latest <= vocal.startTime) return 0;
+        if (latest >= vocal.endTime) return fullWidth;
+
+        const timingCount = Math.min(graphemeTimings.length, graphemeOffsets.length - 1);
+        for (let index = 0; index < timingCount; index += 1) {
+            const timing = graphemeTimings[index];
+            const start = Math.max(vocal.startTime, timing.startTime);
+            const end = Math.max(start, timing.endTime);
+            const startWidth = graphemeOffsets[index] ?? 0;
+            const endWidth = graphemeOffsets[index + 1] ?? startWidth;
+
+            if (latest < start) return startWidth;
+            if (latest <= end) {
+                return startWidth + (endWidth - startWidth)
+                    * ((latest - start) / Math.max(0.001, end - start));
+            }
+        }
+
+        return fullWidth;
+    });
+    const glowPaddingPx = Math.round(Math.max(fontPx * 0.85, 16));
+    const paddedMaskImage = useTransform(fillWidth, latest => {
+        const softness = Math.max(Math.min(fontPx * 1.35, 36), 18);
+        const edge = latest + glowPaddingPx;
+        const solidEnd = Math.max(edge - softness, 0);
+        return `linear-gradient(90deg, #000 0px, #000 ${solidEnd}px, rgba(0,0,0,0.86) ${Math.max(solidEnd, edge - softness * 0.5)}px, transparent ${edge}px, transparent 100%)`;
+    });
+    const renderParts = (active: boolean) => parts.map(part => {
+        const color = part.word
+            ? resolveWordColor(part.word.text, theme.wordColors, theme.accentColor, { cjkMatchMode: 'exact' })
+            : theme.secondaryColor;
+        return (
+            <span
+                key={part.key}
+                style={active
+                    ? {
+                        color,
+                        WebkitTextFillColor: color,
+                    }
+                    : { color: colorWithAlpha(color, 0.56) }}
+            >
+                {part.text}
+            </span>
+        );
+    });
+
+    return (
+        <span
+            className="relative inline-block overflow-visible whitespace-pre-wrap break-words"
+            style={{ fontFamily, fontSize: 'clamp(0.95rem, 1.8vw, 1.3rem)', fontWeight, lineHeight: 1.3 }}
+        >
+            {renderParts(false)}
+            <motion.span
+                aria-hidden
+                className="pointer-events-none absolute block whitespace-pre-wrap"
+                style={{
+                    left: -glowPaddingPx,
+                    right: -glowPaddingPx,
+                    top: -glowPaddingPx,
+                    padding: glowPaddingPx,
+                    WebkitMaskImage: paddedMaskImage,
+                    maskImage: paddedMaskImage,
+                    WebkitMaskSize: '100% 100%',
+                    maskSize: '100% 100%',
+                    WebkitMaskRepeat: 'no-repeat',
+                    maskRepeat: 'no-repeat',
+                }}
+            >
+                <span className="block whitespace-pre-wrap break-words">{renderParts(true)}</span>
+            </motion.span>
+        </span>
+    );
 };
 
 const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
@@ -38,6 +165,9 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
     theme,
     subtitleTheme,
     isPlayerChromeHidden = false,
+    hideTranslationSubtitle = false,
+    showSubtitleTranslation = true,
+    subtitleContentMode,
 }) => {
     const backgroundVocals = useMemo(() => getLyricsBackgroundVocals(lines), [lines]);
     const buildSnapshot = useCallback(
@@ -80,34 +210,43 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
                     }}
                     className="pointer-events-none absolute left-0 right-0 z-30 flex flex-col items-center gap-1.5 px-5 text-center"
                 >
-                    {snapshot.lines.map(entry => (
-                        <motion.div
+                    {snapshot.lines.map(entry => {
+                        const alternateText = hideTranslationSubtitle
+                            ? null
+                            : resolveHarmonyAlternateText(
+                                entry.vocal,
+                                subtitleContentMode,
+                                showSubtitleTranslation,
+                            );
+
+                        return (
+                            <motion.div
                             key={entry.key}
                             initial={{ opacity: 0, scale: 0.97 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.97 }}
-                            className="max-w-4xl whitespace-pre-wrap break-words"
-                            style={{
-                                fontFamily: resolveThemeTranslationFontStack(subtitleTheme ?? theme),
-                                fontSize: 'clamp(0.95rem, 1.8vw, 1.3rem)',
-                                fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 500),
-                                lineHeight: 1.3,
-                                textShadow: `0 2px 12px ${colorWithAlpha(theme.backgroundColor, 0.68)}`,
-                            }}
+                            className="max-w-4xl overflow-visible whitespace-pre-wrap break-words"
                         >
-                            {entry.tokens.map(token => (
-                                <span
-                                    key={token.key}
+                            <HarmonyGlowText vocal={entry.vocal} currentTime={currentTime} theme={theme} />
+                            {alternateText && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -4 }}
+                                    animate={{ opacity: 0.82, y: 0 }}
+                                    className="mt-0.5"
                                     style={{
-                                        color: resolveTokenColor(token.status, theme),
-                                        transition: 'color 160ms ease-out',
+                                        color: (subtitleTheme ?? theme).secondaryColor,
+                                        fontFamily: resolveThemeTranslationFontStack(subtitleTheme ?? theme),
+                                        fontSize: 'clamp(0.72rem, 1.2vw, 0.9rem)',
+                                        fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 400),
+                                        lineHeight: 1.3,
                                     }}
                                 >
-                                    {token.text}
-                                </span>
-                            ))}
+                                    {alternateText}
+                                </motion.div>
+                            )}
                         </motion.div>
-                    ))}
+                        );
+                    })}
                 </motion.div>
             )}
         </AnimatePresence>

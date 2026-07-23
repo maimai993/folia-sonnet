@@ -32,6 +32,9 @@ const VisualizerRenderer: React.FC<VisualizerRendererProps> = ({ mode, ...props 
                 theme={resolvedProps.theme}
                 subtitleTheme={resolvedProps.subtitleTheme}
                 isPlayerChromeHidden={resolvedProps.isPlayerChromeHidden}
+                hideTranslationSubtitle={resolvedProps.hideTranslationSubtitle}
+                showSubtitleTranslation={resolvedProps.showSubtitleTranslation}
+                subtitleContentMode={resolvedProps.subtitleContentMode}
             />
         </>
     );
