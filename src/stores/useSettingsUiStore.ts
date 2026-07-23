@@ -1080,6 +1080,10 @@ export type SettingsUiState = {
     loopMode: 'off' | 'all' | 'one';
     homeLayoutStyle: 'carousel' | 'grid';
     grid3dCardStyle: 'image' | 'card';
+    showHomeTabPlaylist: boolean;
+    showHomeTabRadio: boolean;
+    showHomeTabAlbums: boolean;
+    showHomeTabLocal: boolean;
     isSubSettingsViewOpen: boolean;
     settingsModalState: SettingsModalState;
     lastSeenGuideVersion: string | null;
@@ -1201,6 +1205,10 @@ export type SettingsUiState = {
     handleToggleLoopMode: () => void;
     handleSetHomeLayoutStyle: (style: 'carousel' | 'grid') => void;
     handleSetGrid3dCardStyle: (style: 'image' | 'card') => void;
+    handleToggleHomeTabPlaylist: (show: boolean) => void;
+    handleToggleHomeTabRadio: (show: boolean) => void;
+    handleToggleHomeTabAlbums: (show: boolean) => void;
+    handleToggleHomeTabLocal: (show: boolean) => void;
 };
 
 const notify = (get: () => SettingsUiState, message: StatusMessage) => {
@@ -1292,6 +1300,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     loopMode: readStoredLoopMode(),
     homeLayoutStyle: readStoredHomeLayoutStyle(),
     grid3dCardStyle: readStoredGrid3dCardStyle(),
+    showHomeTabPlaylist: getStoredBoolean('show_home_tab_playlist', true),
+    showHomeTabRadio: getStoredBoolean('show_home_tab_radio', true),
+    showHomeTabAlbums: getStoredBoolean('show_home_tab_albums', true),
+    showHomeTabLocal: getStoredBoolean('show_home_tab_local', true),
     isSubSettingsViewOpen: false,
     settingsModalState: {
         isOpen: false,
@@ -2317,14 +2329,28 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         });
     },
     handleSetGrid3dCardStyle: (style) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('grid3d_card_style', style);
-        }
         set({ grid3dCardStyle: style });
+        if (typeof window !== 'undefined') localStorage.setItem('grid3d_card_style', style);
         notify(get, {
             type: 'info',
             text: i18n.t('notifications.' + (style === 'image' ? 'cardStyleImage' : 'cardStyleCard')),
         });
+    },
+    handleToggleHomeTabPlaylist: (show) => {
+        set({ showHomeTabPlaylist: show });
+        if (typeof window !== 'undefined') localStorage.setItem('show_home_tab_playlist', show.toString());
+    },
+    handleToggleHomeTabRadio: (show) => {
+        set({ showHomeTabRadio: show });
+        if (typeof window !== 'undefined') localStorage.setItem('show_home_tab_radio', show.toString());
+    },
+    handleToggleHomeTabAlbums: (show) => {
+        set({ showHomeTabAlbums: show });
+        if (typeof window !== 'undefined') localStorage.setItem('show_home_tab_albums', show.toString());
+    },
+    handleToggleHomeTabLocal: (show) => {
+        set({ showHomeTabLocal: show });
+        if (typeof window !== 'undefined') localStorage.setItem('show_home_tab_local', show.toString());
     },
 }));
 

@@ -123,7 +123,19 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     } = props;
 
     const { t } = useTranslation();
-    const isDaylight = useSettingsUiStore(state => state.isDaylight);
+    const {
+        isDaylight,
+        showHomeTabPlaylist,
+        showHomeTabRadio,
+        showHomeTabAlbums,
+        showHomeTabLocal,
+    } = useSettingsUiStore(useShallow(state => ({
+        isDaylight: state.isDaylight,
+        showHomeTabPlaylist: state.showHomeTabPlaylist,
+        showHomeTabRadio: state.showHomeTabRadio,
+        showHomeTabAlbums: state.showHomeTabAlbums,
+        showHomeTabLocal: state.showHomeTabLocal,
+    })));
     const {
         homeViewTab,
         setHomeViewTab,
@@ -575,10 +587,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
                             <div className="inline-flex items-center gap-0">
                                 {[
-                                    { key: 'playlist', label: t('home.playlists') },
-                                    { key: 'radio', label: t('home.radio') },
-                                    { key: 'albums', label: t('home.albums') },
-                                    { key: 'local', label: t('localMusic.folder') },
+                                    ...(showHomeTabPlaylist ? [{ key: 'playlist', label: t('home.playlists') }] : []),
+                                    ...(showHomeTabRadio ? [{ key: 'radio', label: t('home.radio') }] : []),
+                                    ...(showHomeTabAlbums ? [{ key: 'albums', label: t('home.albums') }] : []),
+                                    ...(showHomeTabLocal ? [{ key: 'local', label: t('localMusic.folder') }] : []),
                                     ...(navidromeEnabled ? [{ key: 'navidrome', label: t('navidrome.title') || 'Navidrome' }] : []),
                                 ].map((tab) => {
                                     const isActive = homeViewTab === tab.key;
