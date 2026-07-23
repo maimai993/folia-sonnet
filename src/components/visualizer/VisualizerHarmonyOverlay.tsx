@@ -26,6 +26,8 @@ interface VisualizerHarmonyOverlayProps {
     hideTranslationSubtitle?: boolean;
     showSubtitleTranslation?: boolean;
     subtitleContentMode?: SubtitleContentMode;
+    showHarmonySubtitle?: boolean;
+    harmonySubtitleBackground?: boolean;
 }
 
 const EMPTY_HARMONY_SNAPSHOT: HarmonySnapshot = { signature: '', lines: [] };
@@ -168,13 +170,15 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
     hideTranslationSubtitle = false,
     showSubtitleTranslation = true,
     subtitleContentMode,
+    showHarmonySubtitle = true,
+    harmonySubtitleBackground = false,
 }) => {
     const backgroundVocals = useMemo(() => getLyricsBackgroundVocals(lines), [lines]);
     const buildSnapshot = useCallback(
-        (time: number) => showText
+        (time: number) => showText && showHarmonySubtitle
             ? resolveHarmonySnapshotFromVocals(backgroundVocals, time)
             : EMPTY_HARMONY_SNAPSHOT,
-        [backgroundVocals, showText],
+        [backgroundVocals, showHarmonySubtitle, showText],
     );
     const initialSnapshot = buildSnapshot(currentTime.get());
     const [snapshot, setSnapshot] = useState<HarmonySnapshot>(initialSnapshot);
@@ -194,6 +198,7 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
     }, [currentTime, updateSnapshot]);
 
     useMotionValueEvent(currentTime, 'change', updateSnapshot);
+    const harmonyTopPx = isPlayerChromeHidden ? 28 : 76;
 
     return (
         <AnimatePresence>
@@ -201,15 +206,19 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
                 <motion.div
                     key="visualizer-harmony-overlay"
                     initial={{ opacity: 0, y: -12 }}
-                    animate={{ opacity: 1, y: 0, top: isPlayerChromeHidden ? 28 : 76 }}
+                    animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -12 }}
                     transition={{
-                        top: { type: 'spring', stiffness: 280, damping: 28 },
                         opacity: { duration: 0.2, ease: 'easeOut' },
                         y: { duration: 0.2, ease: 'easeOut' },
                     }}
                     className="pointer-events-none absolute left-0 right-0 z-30 flex flex-col items-center gap-1.5 px-5 text-center"
+                    style={{ top: harmonyTopPx }}
                 >
+                    <div
+                        className={`flex max-w-full flex-col items-center gap-1.5 ${harmonySubtitleBackground ? 'rounded-2xl px-4 py-2' : ''}`}
+                        style={harmonySubtitleBackground ? { backgroundColor: colorWithAlpha(theme.backgroundColor, 0.45) } : undefined}
+                    >
                     {snapshot.lines.map(entry => {
                         const alternateText = hideTranslationSubtitle
                             ? null
@@ -227,7 +236,7 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
                             exit={{ opacity: 0, scale: 0.97 }}
                             className="max-w-4xl overflow-visible whitespace-pre-wrap break-words"
                         >
-                            <HarmonyGlowText vocal={entry.vocal} currentTime={currentTime} theme={theme} />
+                            <HarmonyGlowText vocal={entry.vocal} currentTime={currentTime} theme={subtitleTheme ?? theme} />
                             {alternateText && (
                                 <motion.div
                                     initial={{ opacity: 0, y: -4 }}
@@ -247,6 +256,7 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
                         </motion.div>
                         );
                     })}
+                    </div>
                 </motion.div>
             )}
         </AnimatePresence>

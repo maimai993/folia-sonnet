@@ -19,6 +19,8 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     showSubtitleTranslation: store.showSubtitleTranslation,
     subtitleContentMode: store.subtitleContentMode,
     subtitleOverlayBackground: store.subtitleOverlayBackground,
+    showHarmonySubtitle: store.showHarmonySubtitle,
+    harmonySubtitleBackground: store.harmonySubtitleBackground,
     lyricsFontStyle: store.lyricsFontStyle,
     lyricsFontScale: store.lyricsFontScale,
     lyricsFontFallbackFamilies: store.lyricsFontFallbackFamilies,

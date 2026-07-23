@@ -137,6 +137,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         backgroundOpacity,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
+        showHarmonySubtitle,
+        harmonySubtitleBackground,
         visualizerOpacity,
         visualizerBackgroundMode,
         isDaylight,
@@ -199,6 +201,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetBackgroundOpacity: setBackgroundOpacity,
         handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
         handleToggleSubtitleOverlayBackground: onToggleSubtitleOverlayBackground,
+        handleToggleShowHarmonySubtitle: onToggleShowHarmonySubtitle,
+        handleToggleHarmonySubtitleBackground: onToggleHarmonySubtitleBackground,
         handleSetVisualizerOpacity: setVisualizerOpacity,
         handleSetVisualizerBackgroundMode: onVisualizerBackgroundModeChange,
         handleSetVisualizerMode: onVisualizerModeChange,
@@ -1710,6 +1714,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         subtitleContentMode={subtitleContentMode}
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
                         subtitleOverlayBackground={subtitleOverlayBackground}
+                        showHarmonySubtitle={showHarmonySubtitle}
+                        harmonySubtitleBackground={harmonySubtitleBackground}
                         classicTuning={classicTuning}
                         cadenzaTuning={cadenzaTuning}
                         partitaTuning={partitaTuning}
@@ -1751,6 +1757,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onSubtitleContentModeChange={onSubtitleContentModeChange}
                         onSubtitleOverlayOpacityChange={setSubtitleOverlayOpacity}
                         onToggleSubtitleOverlayBackground={onToggleSubtitleOverlayBackground}
+                        onToggleShowHarmonySubtitle={onToggleShowHarmonySubtitle}
+                        onToggleHarmonySubtitleBackground={onToggleHarmonySubtitleBackground}
                         onClassicTuningChange={onClassicTuningChange}
                         onResetClassicTuning={onResetClassicTuning}
                         onPartitaTuningChange={onPartitaTuningChange}

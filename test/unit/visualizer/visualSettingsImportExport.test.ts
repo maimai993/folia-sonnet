@@ -38,6 +38,8 @@ describe('Visual Settings Import and Export', () => {
         showSubtitleTranslation: false,
         subtitleContentMode: 'romanization' as const,
         subtitleOverlayBackground: true,
+        showHarmonySubtitle: false,
+        harmonySubtitleBackground: true,
         lyricsFontStyle: 'sans',
         lyricsFontScale: 1.25,
         lyricsFontWeight: 650,
@@ -182,6 +184,8 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.subtitleContentMode).toBe('romanization');
         expect(decoded.subtitleOverlayBackground).toBe(true);
+        expect(decoded.showHarmonySubtitle).toBe(false);
+        expect(decoded.harmonySubtitleBackground).toBe(true);
         expect(decoded.lyricsFontWeight).toBe(650);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);
@@ -229,6 +233,8 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.subtitleContentMode).toBe('romanization');
         expect(decoded.subtitleOverlayBackground).toBe(true);
+        expect(decoded.showHarmonySubtitle).toBe(false);
+        expect(decoded.harmonySubtitleBackground).toBe(true);
         expect(decoded.lyricsFontWeight).toBe(650);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);

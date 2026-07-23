@@ -65,6 +65,8 @@ interface VisPlaygroundProps {
     subtitleContentMode?: SubtitleContentMode;
     subtitleOverlayOpacity?: number;
     subtitleOverlayBackground?: boolean;
+    showHarmonySubtitle?: boolean;
+    harmonySubtitleBackground?: boolean;
     classicTuning?: ClassicTuning;
     cadenzaTuning?: CadenzaTuning;
     partitaTuning?: PartitaTuning;
@@ -106,6 +108,8 @@ interface VisPlaygroundProps {
     onSubtitleContentModeChange?: (mode: SubtitleContentMode) => void;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     onToggleSubtitleOverlayBackground?: (enabled: boolean) => void;
+    onToggleShowHarmonySubtitle?: (enabled: boolean) => void;
+    onToggleHarmonySubtitleBackground?: (enabled: boolean) => void;
     onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
     onResetClassicTuning?: () => void;
     onPartitaTuningChange?: (patch: Partial<PartitaTuning>) => void;
@@ -277,6 +281,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     subtitleContentMode,
     subtitleOverlayOpacity = 0.6,
     subtitleOverlayBackground = false,
+    showHarmonySubtitle = true,
+    harmonySubtitleBackground = false,
     classicTuning = DEFAULT_CLASSIC_TUNING,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
     partitaTuning = DEFAULT_PARTITA_TUNING,
@@ -318,6 +324,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onSubtitleContentModeChange,
     onSubtitleOverlayOpacityChange,
     onToggleSubtitleOverlayBackground,
+    onToggleShowHarmonySubtitle,
+    onToggleHarmonySubtitleBackground,
     onClassicTuningChange,
     onResetClassicTuning,
     onPartitaTuningChange,
@@ -929,6 +937,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             onToggleShowSubtitleTranslation?.(true);
         }
         onToggleSubtitleOverlayBackground?.(false);
+        onToggleShowHarmonySubtitle?.(true);
+        onToggleHarmonySubtitleBackground?.(false);
         onSubtitleOverlayOpacityChange?.(0.6);
         onSubtitleFontInheritsLyricsChange?.(true);
         onSubtitleFontStyleChange?.('sans');
@@ -1068,6 +1078,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 lyricsFontScale={normalizedFontScale}
                                 subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                                 subtitleOverlayBackground={subtitleOverlayBackground}
+                                showHarmonySubtitle={showHarmonySubtitle}
+                                harmonySubtitleBackground={harmonySubtitleBackground}
                                 hideTranslationSubtitle={hideTranslationSubtitle}
                                 showSubtitleTranslation={showSubtitleTranslation}
                                 subtitleContentMode={resolvedSubtitleContentMode}
@@ -1154,6 +1166,10 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onSubtitleOverlayOpacityChange={handleSubtitleOverlayOpacityDraft}
                         subtitleOverlayBackground={subtitleOverlayBackground}
                         onToggleSubtitleOverlayBackground={onToggleSubtitleOverlayBackground}
+                        showHarmonySubtitle={showHarmonySubtitle}
+                        onToggleShowHarmonySubtitle={onToggleShowHarmonySubtitle}
+                        harmonySubtitleBackground={harmonySubtitleBackground}
+                        onToggleHarmonySubtitleBackground={onToggleHarmonySubtitleBackground}
                         subtitleFontInheritsLyrics={subtitleFontInheritsLyrics}
                         onSubtitleFontInheritsLyricsChange={onSubtitleFontInheritsLyricsChange}
                         subtitleFontStyle={subtitleFontStyle}

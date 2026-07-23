@@ -122,6 +122,10 @@ interface VisPlaygroundSettingsPanelProps {
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     subtitleOverlayBackground: boolean;
     onToggleSubtitleOverlayBackground?: (enabled: boolean) => void;
+    showHarmonySubtitle: boolean;
+    onToggleShowHarmonySubtitle?: (enabled: boolean) => void;
+    harmonySubtitleBackground: boolean;
+    onToggleHarmonySubtitleBackground?: (enabled: boolean) => void;
     subtitleFontInheritsLyrics: boolean;
     onSubtitleFontInheritsLyricsChange?: (inheritsLyrics: boolean) => void;
     subtitleFontStyle: Theme['fontStyle'];
@@ -352,6 +356,10 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onSubtitleOverlayOpacityChange,
         subtitleOverlayBackground,
         onToggleSubtitleOverlayBackground,
+        showHarmonySubtitle,
+        onToggleShowHarmonySubtitle,
+        harmonySubtitleBackground,
+        onToggleHarmonySubtitleBackground,
         subtitleFontInheritsLyrics,
         onSubtitleFontInheritsLyricsChange,
         subtitleFontStyle,
@@ -806,6 +814,37 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 className={rangeInputClass}
                             />
                         </div>
+                    </div>
+                )}
+
+                {activeSection === 'subtitle' && (
+                    <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
+                                {t('options.harmonySubtitleSettings')}
+                            </div>
+                            <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
+                                {t('options.harmonySubtitleSettingsDesc')}
+                            </div>
+                        </div>
+
+                        <ToggleRow
+                            label={t('options.showHarmonySubtitle')}
+                            description={t('options.showHarmonySubtitleDesc')}
+                            checked={showHarmonySubtitle}
+                            onChange={onToggleShowHarmonySubtitle}
+                            theme={theme}
+                            icon={Monitor}
+                        />
+
+                        <ToggleRow
+                            label={t('options.harmonySubtitleBackground')}
+                            description={t('options.harmonySubtitleBackgroundDesc')}
+                            checked={harmonySubtitleBackground}
+                            onChange={onToggleHarmonySubtitleBackground}
+                            theme={theme}
+                            icon={PanelTop}
+                        />
                     </div>
                 )}
             </div>

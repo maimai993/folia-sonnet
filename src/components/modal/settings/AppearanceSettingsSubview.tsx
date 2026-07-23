@@ -363,6 +363,8 @@ export const compressConfig = (config: any): string => {
     if (config.showSubtitleTranslation !== undefined) minified.sst = config.showSubtitleTranslation;
     if (config.subtitleContentMode !== undefined) minified.scm = config.subtitleContentMode;
     if (config.subtitleOverlayBackground !== undefined) minified.sob = config.subtitleOverlayBackground;
+    if (config.showHarmonySubtitle !== undefined) minified.shs = config.showHarmonySubtitle;
+    if (config.harmonySubtitleBackground !== undefined) minified.hsb = config.harmonySubtitleBackground;
     if (config.lyricsFontStyle) minified.lfs = config.lyricsFontStyle;
     if (config.lyricsFontScale !== undefined) minified.lfn = config.lyricsFontScale;
     if (config.lyricsFontWeight !== undefined) minified.lfw = config.lyricsFontWeight;
@@ -430,6 +432,8 @@ export const decompressConfig = (str: string): any => {
         || parsed.hpts !== undefined
         || parsed.sst !== undefined
         || parsed.sob !== undefined
+        || parsed.shs !== undefined
+        || parsed.hsb !== undefined
         || parsed.lfw !== undefined
         || parsed.sfw !== undefined
         || parsed.lff !== undefined
@@ -451,6 +455,8 @@ export const decompressConfig = (str: string): any => {
         if (parsed.sst !== undefined) decompressed.showSubtitleTranslation = parsed.sst;
         if (parsed.scm !== undefined) decompressed.subtitleContentMode = parsed.scm;
         if (parsed.sob !== undefined) decompressed.subtitleOverlayBackground = parsed.sob;
+        if (parsed.shs !== undefined) decompressed.showHarmonySubtitle = parsed.shs;
+        if (parsed.hsb !== undefined) decompressed.harmonySubtitleBackground = parsed.hsb;
         if (parsed.lfs) decompressed.lyricsFontStyle = parsed.lfs;
         if (parsed.lfn !== undefined) decompressed.lyricsFontScale = parsed.lfn;
         if (parsed.lfw !== undefined) decompressed.lyricsFontWeight = parsed.lfw;
@@ -486,6 +492,7 @@ export const decompressConfig = (str: string): any => {
             'theme', 'visualizerMode', 'randomVisualizerModePerSong', 'visualizerBackgroundMode', 'backgroundOpacity',
             'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation', 'subtitleContentMode',
             'subtitleOverlayBackground',
+            'showHarmonySubtitle', 'harmonySubtitleBackground',
             'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontWeight', 'lyricsFontFallbackFamilies',
             'subtitleFontInheritsLyrics', 'subtitleFontStyle', 'subtitleFontWeight', 'subtitleFontFamily',
             'subtitleFontFallbackFamilies', 'visualizerTunings', 'classicTuning',
@@ -582,6 +589,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         showSubtitleTranslation: state.showSubtitleTranslation,
         subtitleContentMode: state.subtitleContentMode,
         subtitleOverlayBackground: state.subtitleOverlayBackground,
+        showHarmonySubtitle: state.showHarmonySubtitle,
+        harmonySubtitleBackground: state.harmonySubtitleBackground,
         lyricsFontStyle: state.lyricsFontStyle,
         lyricsFontScale: state.lyricsFontScale,
         lyricsFontWeight: state.lyricsFontWeight,
@@ -615,6 +624,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
         handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
         handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
+        handleToggleShowHarmonySubtitle: state.handleToggleShowHarmonySubtitle,
+        handleToggleHarmonySubtitleBackground: state.handleToggleHarmonySubtitleBackground,
         handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
         handleSetLyricsFontScale: state.handleSetLyricsFontScale,
         handleSetLyricsFontWeight: state.handleSetLyricsFontWeight,
@@ -764,6 +775,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (config.subtitleOverlayBackground !== undefined) {
                 store.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
+            }
+            if (config.showHarmonySubtitle !== undefined) {
+                store.handleToggleShowHarmonySubtitle(Boolean(config.showHarmonySubtitle));
+            }
+            if (config.harmonySubtitleBackground !== undefined) {
+                store.handleToggleHarmonySubtitleBackground(Boolean(config.harmonySubtitleBackground));
             }
             if (config.lyricsFontStyle) {
                 store.handleSetLyricsFontStyle(config.lyricsFontStyle);

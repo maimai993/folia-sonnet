@@ -35,6 +35,8 @@ const VisualizerRenderer: React.FC<VisualizerRendererProps> = ({ mode, ...props 
                 hideTranslationSubtitle={resolvedProps.hideTranslationSubtitle}
                 showSubtitleTranslation={resolvedProps.showSubtitleTranslation}
                 subtitleContentMode={resolvedProps.subtitleContentMode}
+                showHarmonySubtitle={resolvedProps.showHarmonySubtitle}
+                harmonySubtitleBackground={resolvedProps.harmonySubtitleBackground}
             />
         </>
     );
