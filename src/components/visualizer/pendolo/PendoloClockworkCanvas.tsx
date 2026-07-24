@@ -8,6 +8,7 @@ export interface PendoloClockworkCanvasProps {
     centerX: number;
     centerY: number;
     baseRadius: number;
+    lyricRingRadius: number;
     escapementAngleMotionValue: MotionValue<number>;
     audioBassMotionValue?: MotionValue<number>;
     audioBass?: number;
@@ -178,6 +179,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     centerX,
     centerY,
     baseRadius,
+    lyricRingRadius,
     escapementAngleMotionValue,
     audioBassMotionValue,
     audioBass = 0.18,
@@ -199,6 +201,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
         centerX,
         centerY,
         baseRadius,
+        lyricRingRadius,
         audioBass,
         primaryTextColor,
         accentTextColor,
@@ -211,13 +214,14 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             centerX,
             centerY,
             baseRadius,
+            lyricRingRadius,
             audioBass,
             primaryTextColor,
             accentTextColor,
             showGearDecor,
             paused,
         };
-    }, [centerX, centerY, baseRadius, audioBass, primaryTextColor, accentTextColor, showGearDecor, paused]);
+    }, [centerX, centerY, baseRadius, lyricRingRadius, audioBass, primaryTextColor, accentTextColor, showGearDecor, paused]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -477,7 +481,9 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             );
 
             // 6. Escapement Focal Axis Alignment Line (Horizontal 0 deg)
-            const focalAxisEndRadius = p.baseRadius * 1.02;
+            const focalAxisEndRadius = Math.min(
+                p.lyricRingRadius - Math.max(14, p.baseRadius * 0.025),
+            );
             ctx.strokeStyle = gearAccentStrongAlpha;
             ctx.lineWidth = 2;
             ctx.beginPath();

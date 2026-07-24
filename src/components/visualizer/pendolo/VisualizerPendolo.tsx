@@ -101,6 +101,8 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const centerX = viewportSize.width * pendoloTuning.wheelCenterX;
     const centerY = viewportSize.height * pendoloTuning.wheelCenterY;
     const baseRadius = Math.min(viewportSize.width, viewportSize.height) * pendoloTuning.arcRadius;
+    const lyricRadiusOffset = Math.min(viewportSize.width, viewportSize.height) * 0.06;
+    const lyricRingRadius = baseRadius + lyricRadiusOffset;
 
     // Escapement angular shift calculation
     const totalArcRad = (pendoloTuning.arcAngleDeg * Math.PI) / 180;
@@ -147,7 +149,6 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
 
     // Calculate line items for wheel
     const lineItems = useMemo(() => {
-        const lyricRadiusOffset = Math.min(viewportSize.width, viewportSize.height) * 0.06;
         return calculatePendoloWheelLayout(
             lines,
             targetLineIndex,
@@ -185,6 +186,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     centerX={centerX}
                     centerY={centerY}
                     baseRadius={baseRadius}
+                    lyricRingRadius={lyricRingRadius}
                     escapementAngleMotionValue={gearRotationAngleRad}
                     audioBassMotionValue={audioBands.bass}
                     primaryTextColor={primaryTextColor}
