@@ -1,97 +1,18 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { motion, useSpring, useTransform, type MotionValue } from 'framer-motion';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { motion, useSpring, useTransform } from 'framer-motion';
 import { Star, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
-import {
-    DEFAULT_PENDOLO_TUNING,
-    type Line,
-} from '../../../types';
-import { colorWithAlpha, mixColors } from '../colorMix';
+import { DEFAULT_PENDOLO_TUNING } from '../../../types';
+import { colorWithAlpha } from '../colorMix';
 import { type VisualizerSharedProps } from '../definition';
-import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
-import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import PendoloClockworkCanvas from './PendoloClockworkCanvas';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
-import { buildLineGraphemeTimeline } from '../../../utils/lyrics/graphemeTiming';
-import { measureMonetGraphemeOffsets } from '../monet/monetLyricsModel';
 import { calculatePendoloWheelLayout } from './pendoloGeometry';
+import PendoloActiveLyricSweep from './PendoloActiveLyricSweep';
+import { buildPendoloTextLayout } from './pendoloTextLayout';
 
 // src/components/visualizer/pendolo/VisualizerPendolo.tsx
-
-interface PendoloActiveLyricSweepProps {
-    line: Line;
-    currentTime: MotionValue<number>;
-    fontFamily: string;
-    fontWeight: number;
-    primaryTextColor: string;
-    accentTextColor: string;
-}
-
-/** Draws a Monet-style timed text sweep without its glow treatment. */
-const PendoloActiveLyricSweep: React.FC<PendoloActiveLyricSweepProps> = ({
-    line,
-    currentTime,
-    fontFamily,
-    fontWeight,
-    primaryTextColor,
-    accentTextColor,
-}) => {
-    const text = line.fullText;
-    const fontPx = 28;
-    const fontSpec = `${fontWeight} ${fontPx}px ${fontFamily}`;
-    const graphemeTimings = useMemo(() => buildLineGraphemeTimeline(line), [line]);
-    const graphemeOffsets = useMemo(
-        () => measureMonetGraphemeOffsets(text, fontPx, fontSpec),
-        [fontPx, fontSpec, text],
-    );
-    const fillWidth = useTransform(currentTime, latest => {
-        const fullWidth = graphemeOffsets[graphemeOffsets.length - 1] ?? 0;
-        const timingCount = Math.min(graphemeTimings.length, graphemeOffsets.length - 1);
-        if (timingCount === 0 || latest <= line.startTime) return 0;
-
-        for (let index = 0; index < timingCount; index += 1) {
-            const timing = graphemeTimings[index];
-            const start = Math.max(line.startTime, timing.startTime);
-            const end = Math.max(start, timing.endTime);
-            const startWidth = graphemeOffsets[index] ?? 0;
-            const endWidth = graphemeOffsets[index + 1] ?? startWidth;
-            if (latest < start) return startWidth;
-            if (latest <= end) {
-                return startWidth + (endWidth - startWidth)
-                    * ((latest - start) / Math.max(0.001, end - start));
-            }
-        }
-
-        return fullWidth;
-    });
-    const maskImage = useTransform(fillWidth, width => {
-        const edgeSoftness = Math.min(Math.max(fontPx * 0.42, 8), 16);
-        const solidEnd = Math.max(width - edgeSoftness, 0);
-        return `linear-gradient(90deg, #000 0px, #000 ${solidEnd}px, rgba(0, 0, 0, 0.84) ${width}px, transparent ${width + edgeSoftness}px)`;
-    });
-    const fillColor = mixColors(primaryTextColor, accentTextColor, 0.32);
-
-    return (
-        <span className="relative inline-block whitespace-nowrap" style={{ fontSize: `${fontPx}px` }}>
-            <span style={{ color: colorWithAlpha(primaryTextColor, 0.52) }}>{text}</span>
-            <motion.span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 block whitespace-nowrap"
-                style={{
-                    color: fillColor,
-                    WebkitMaskImage: maskImage,
-                    maskImage,
-                    WebkitMaskRepeat: 'no-repeat',
-                    maskRepeat: 'no-repeat',
-                    textShadow: 'none',
-                }}
-            >
-                {text}
-            </motion.span>
-        </span>
-    );
-};
 
 /**
  * VisualizerPendolo: Escapement wheel & pendulum clockwork lyric visualizer.
@@ -107,37 +28,39 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
         audioBands,
         audioPower,
         showText = true,
-        subtitleTheme,
-        hideTranslationSubtitle,
         showSubtitleTranslation = true,
         subtitleContentMode = 'translation',
-        subtitleOverlayOpacity,
-        subtitleOverlayBackground,
-        subtitleFontScale,
         pendoloTuning = DEFAULT_PENDOLO_TUNING,
         onLyricLineSeek,
     } = props;
-
-    const { activeLine, recentCompletedLine, nextLines } = useVisualizerRuntime({
-        currentTime,
-        currentLineIndex,
-        lines,
-    });
 
     const [viewportSize, setViewportSize] = useState({
         width: typeof window !== 'undefined' ? window.innerWidth : 1920,
         height: typeof window !== 'undefined' ? window.innerHeight : 1080,
     });
+    const visualizerRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
-        const handleResize = () => {
-            setViewportSize({
-                width: window.innerWidth,
-                height: window.innerHeight,
-            });
+        const element = visualizerRef.current;
+        if (!element) return;
+
+        const updateViewportSize = () => {
+            const width = Math.round(element.clientWidth);
+            const height = Math.round(element.clientHeight);
+            if (width === 0 || height === 0) return;
+            setViewportSize(previous => (
+                previous.width === width && previous.height === height
+                    ? previous
+                    : { width, height }
+            ));
         };
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
+
+        updateViewportSize();
+        const observer = new ResizeObserver(updateViewportSize);
+        observer.observe(element);
+        return () => {
+            observer.disconnect();
+        };
     }, []);
 
     const lastValidLineIndexRef = React.useRef<number>(0);
@@ -192,8 +115,39 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const textRotationCorrectionDeg = useTransform(wheelRotationDeg, value => -value * 0.65);
     const gearRotationAngleRad = useTransform(tickSpring, value => value * angleStepRad);
 
+    const lineBlockHeights = useMemo(() => {
+        const measureWidth = Math.max(140, viewportSize.width * 0.38);
+        return lines.map((line, index) => {
+            if (Math.abs(index - targetLineIndex) > 5) {
+                return 0;
+            }
+            const isFocal = index === targetLineIndex;
+            const fontPx = isFocal ? 28 : 22;
+            const mainHeight = buildPendoloTextLayout(
+                line.fullText,
+                `${fontWeight} ${fontPx}px ${fontFamily}`,
+                measureWidth,
+                Math.round(fontPx * 1.2),
+            ).height;
+            const translation = showSubtitleTranslation
+                ? line.translation
+                : subtitleContentMode === 'romanization' ? line.romanization : undefined;
+            const translationHeight = translation
+                ? buildPendoloTextLayout(
+                    translation,
+                    `${fontWeight} ${isFocal ? 16 : 12}px ${fontFamily}`,
+                    measureWidth,
+                    Math.round((isFocal ? 16 : 12) * 1.2),
+                ).height + 4
+                : 0;
+            const scale = isFocal ? pendoloTuning.activeScale : Math.max(0.7, 1 - Math.abs(index - targetLineIndex) * 0.08);
+            return (mainHeight + translationHeight) * scale;
+        });
+    }, [fontFamily, fontWeight, lines, pendoloTuning.activeScale, showSubtitleTranslation, subtitleContentMode, targetLineIndex, viewportSize.width]);
+
     // Calculate line items for wheel
     const lineItems = useMemo(() => {
+        const lyricRadiusOffset = Math.min(viewportSize.width, viewportSize.height) * 0.06;
         return calculatePendoloWheelLayout(
             lines,
             targetLineIndex,
@@ -201,8 +155,10 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
             viewportSize.width,
             viewportSize.height,
             pendoloTuning,
+            lyricRadiusOffset,
+            lineBlockHeights,
         );
-    }, [lines, targetLineIndex, viewportSize, pendoloTuning]);
+    }, [lineBlockHeights, lines, targetLineIndex, viewportSize, pendoloTuning]);
 
     const primaryTextColor = theme.primaryColor || '#FFFFFF';
     const accentTextColor = theme.accentColor || '#3B82F6';
@@ -223,7 +179,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
             audioBands={audioBands}
             sharedProps={props}
         >
-            <div className="relative w-full h-full overflow-hidden select-none pointer-events-none">
+            <div ref={visualizerRef} className="relative w-full h-full overflow-hidden select-none pointer-events-none">
                 {/* Wireframe Dynamic Clockwork Canvas (Gears, Escapement & Hairspring) */}
                 <PendoloClockworkCanvas
                     centerX={centerX}
@@ -269,15 +225,19 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                             const isFocal = item.isActive;
                             const displayTranslation = showSubtitleTranslation && Boolean(item.line.translation);
                             const displayRomanization = subtitleContentMode === 'romanization' && Boolean(item.line.romanization);
+                            const availableTextWidth = Math.max(
+                                140,
+                                Math.min(viewportSize.width * 0.46, viewportSize.width - item.x - 48),
+                            );
+                            const maxTextWidth = availableTextWidth / item.scale;
 
                             return (
                                 <div
                                     key={item.line.id ?? `pendolo-line-${item.index}`}
-                                    className="absolute transform -translate-y-1/2 transition-opacity duration-300 pointer-events-auto cursor-pointer"
+                                    className="absolute transition-opacity duration-300 pointer-events-auto cursor-pointer"
                                     style={{
                                         left: `${item.x}px`,
                                         top: `${item.y}px`,
-                                        transform: 'translate(0, -50%)',
                                         transformOrigin: 'left center',
                                         opacity: item.alpha,
                                         fontFamily,
@@ -291,38 +251,51 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                     >
                                     {/* Main Lyric Text with Mechanical Press & Drop */}
                                     <div
-                                        className="relative inline-block whitespace-nowrap"
+                                        className="relative inline-block"
                                         style={{ transform: `rotate(${item.angleDeg * 0.35}deg) scale(${item.scale})`, transformOrigin: 'left center' }}
                                     >
-                                        {isFocal ? (
-                                            <PendoloActiveLyricSweep
-                                                line={item.line}
-                                                currentTime={currentTime}
-                                                fontFamily={fontFamily}
-                                                fontWeight={fontWeight}
-                                                primaryTextColor={primaryTextColor}
-                                                accentTextColor={accentTextColor}
-                                            />
-                                        ) : (
-                                            <div
-                                                className="transition-all duration-200"
-                                                style={{
-                                                    fontSize: '22px',
-                                                    color: colorWithAlpha(primaryTextColor, 0.75),
-                                                    letterSpacing: '0.01em',
-                                                }}
-                                            >
-                                                {item.line.fullText}
-                                            </div>
-                                        )}
+                                        <div style={{ transform: 'translateY(-50%)' }}>
+                                            {isFocal ? (
+                                                <PendoloActiveLyricSweep
+                                                    line={item.line}
+                                                    currentTime={currentTime}
+                                                    fontFamily={fontFamily}
+                                                    fontWeight={fontWeight}
+                                                    maxWidth={maxTextWidth}
+                                                    primaryTextColor={primaryTextColor}
+                                                    accentTextColor={accentTextColor}
+                                                />
+                                            ) : (
+                                                <div
+                                                    className="transition-all duration-200 whitespace-pre-wrap"
+                                                    style={{
+                                                        fontSize: '22px',
+                                                        maxWidth: `${maxTextWidth}px`,
+                                                        color: colorWithAlpha(primaryTextColor, 0.75),
+                                                        letterSpacing: '0.01em',
+                                                        whiteSpace: 'pre-wrap',
+                                                        overflowWrap: 'anywhere',
+                                                        wordBreak: 'break-word',
+                                                    }}
+                                                >
+                                                    {item.line.fullText}
+                                                </div>
+                                            )}
+                                        </div>
                                     {/* Secondary Translation / Romanization Line */}
                                     {(displayTranslation || displayRomanization) && (
                                         <div
-                                            className="whitespace-nowrap mt-1 transition-opacity duration-200"
+                                            className="whitespace-pre-wrap transition-opacity duration-200"
                                             style={{
                                                 fontSize: isFocal ? '16px' : '12px',
+                                                maxWidth: `${maxTextWidth}px`,
                                                 color: isFocal ? secondaryTextColor : colorWithAlpha(secondaryTextColor, 0.6),
                                                 letterSpacing: '0.01em',
+                                                whiteSpace: 'pre-wrap',
+                                                overflowWrap: 'anywhere',
+                                                wordBreak: 'break-word',
+                                                transform: 'translateY(-50%)',
+                                                marginTop: isFocal ? '-0.7em' : '-0.4em',
                                             }}
                                         >
                                             {displayTranslation ? item.line.translation : item.line.romanization}
@@ -336,25 +309,6 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     </motion.div>
                 )}
             </div>
-
-            {showText && (
-                <VisualizerSubtitleOverlay
-                    showText={showText}
-                    activeLine={activeLine}
-                    recentCompletedLine={recentCompletedLine}
-                    nextLines={nextLines}
-                    theme={theme}
-                    subtitleTheme={subtitleTheme}
-                    translationFontSize="clamp(1.1rem, 2.2vw, 1.45rem)"
-                    upcomingFontSize="clamp(0.95rem, 1.8vw, 1.2rem)"
-                    subtitleOverlayOpacity={subtitleOverlayOpacity}
-                    subtitleOverlayBackground={subtitleOverlayBackground}
-                    subtitleFontScale={subtitleFontScale}
-                    hideTranslationSubtitle={hideTranslationSubtitle}
-                    showSubtitleTranslation={showSubtitleTranslation}
-                    subtitleContentMode={subtitleContentMode}
-                />
-            )}
         </VisualizerShell>
     );
 };

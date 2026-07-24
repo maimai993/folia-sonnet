@@ -26,10 +26,12 @@ export function calculatePendoloWheelLayout(
     viewportWidth: number,
     viewportHeight: number,
     tuning: PendoloTuning,
+    radiusOffsetPx = 0,
+    lineBlockHeights?: number[],
 ): PendoloLineItem[] {
     const centerX = viewportWidth * tuning.wheelCenterX;
     const centerY = viewportHeight * tuning.wheelCenterY;
-    const baseRadius = Math.min(viewportWidth, viewportHeight) * tuning.arcRadius;
+    const baseRadius = Math.min(viewportWidth, viewportHeight) * tuning.arcRadius + radiusOffsetPx;
 
     // Angle step between adjacent lyric lines along the wheel arc (in radians)
     const totalArcRad = (tuning.arcAngleDeg * Math.PI) / 180;
@@ -47,6 +49,24 @@ export function calculatePendoloWheelLayout(
     const centerRef = Math.max(0, Math.min(lines.length - 1, Math.floor(targetLineIndex >= 0 ? targetLineIndex : 0)));
     const windowStart = Math.max(0, centerRef - 4);
     const windowEnd = Math.min(lines.length - 1, centerRef + 4);
+    const visualAngles = new Map<number, number>();
+
+    if (Number.isInteger(targetLineIndex) && targetLineIndex >= windowStart && targetLineIndex <= windowEnd) {
+        const activeIndex = targetLineIndex;
+        visualAngles.set(activeIndex, 0);
+        for (let index = activeIndex + 1; index <= windowEnd; index += 1) {
+            const previousHeight = lineBlockHeights?.[index - 1] ?? 0;
+            const currentHeight = lineBlockHeights?.[index] ?? 0;
+            const spacing = Math.max(angleStepRad, (previousHeight + currentHeight + 24) / (2 * baseRadius));
+            visualAngles.set(index, (visualAngles.get(index - 1) ?? 0) + spacing);
+        }
+        for (let index = activeIndex - 1; index >= windowStart; index -= 1) {
+            const nextHeight = lineBlockHeights?.[index + 1] ?? 0;
+            const currentHeight = lineBlockHeights?.[index] ?? 0;
+            const spacing = Math.max(angleStepRad, (nextHeight + currentHeight + 24) / (2 * baseRadius));
+            visualAngles.set(index, (visualAngles.get(index + 1) ?? 0) - spacing);
+        }
+    }
 
     for (let i = windowStart; i <= windowEnd; i++) {
         const line = lines[i];
@@ -55,7 +75,7 @@ export function calculatePendoloWheelLayout(
         const distanceIndex = i - targetLineIndex;
         // Base focal angle is 0 (horizontal to right).
         // Upcoming lines curve downward (positive angle), past lines curve upward (negative angle).
-        const rawAngleRad = distanceIndex * angleStepRad + escapementAngleOffsetRad;
+        const rawAngleRad = (visualAngles.get(i) ?? distanceIndex * angleStepRad) + escapementAngleOffsetRad;
 
         // Cartesian coordinates on screen relative to center on left edge
         const x = centerX + baseRadius * Math.cos(rawAngleRad);

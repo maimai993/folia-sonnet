@@ -190,6 +190,10 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     const phaseRef = useRef(0);
     const smoothedBassRef = useRef(0.15);
     const lastTimestampRef = useRef<number | null>(null);
+    const secondGearElapsedRef = useRef(0);
+    const secondGearStepRef = useRef(0);
+    const secondGearAngleRef = useRef(0);
+    const secondGearVelocityRef = useRef(0);
 
     const propsRef = useRef({
         centerX,
@@ -244,6 +248,17 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             // 1. Balance wheel phase accumulation & harmonic swing (Audio Bass regulator)
             if (!p.paused) {
                 phaseRef.current += dt * (2.8 + bass * 3.5);
+                secondGearElapsedRef.current += dt;
+                const completedSteps = Math.floor(secondGearElapsedRef.current);
+                if (completedSteps > 0) {
+                    secondGearStepRef.current += completedSteps;
+                    secondGearElapsedRef.current -= completedSteps;
+                }
+                const secondGearTarget = secondGearStepRef.current * (Math.PI * 2 / 15);
+                const displacement = secondGearTarget - secondGearAngleRef.current;
+                secondGearVelocityRef.current += displacement * 92 * dt;
+                secondGearVelocityRef.current *= Math.exp(-13 * dt);
+                secondGearAngleRef.current += secondGearVelocityRef.current * dt;
             }
             const bassOscillation = Math.sin(phaseRef.current) * (0.15 + bass * 0.70);
 
@@ -431,16 +446,47 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 1.5,
             );
 
+            // Seconds gear: advances one tooth at a time on each active playback second.
+            const secondGearTeeth = 15;
+            const secondGearCx = p.centerX + p.baseRadius * 0.68;
+            const secondGearCy = p.centerY + p.baseRadius * 0.76;
+            const secondGearR = p.baseRadius * 0.16;
+            const secondGearAngle = secondGearAngleRef.current;
+            drawGearTeeth(
+                ctx,
+                secondGearCx,
+                secondGearCy,
+                secondGearR,
+                secondGearTeeth,
+                5,
+                secondGearAngle,
+                gearAccentAlpha,
+                1.8,
+                colorWithAlpha(p.accentTextColor, 0.06 * decorOpacityMultiplier),
+            );
+            drawSpokedWheel(
+                ctx,
+                secondGearCx,
+                secondGearCy,
+                secondGearR * 0.28,
+                secondGearR * 0.76,
+                4,
+                -secondGearAngle,
+                gearPrimarySubtleAlpha,
+                1.3,
+            );
+
             // 6. Escapement Focal Axis Alignment Line (Horizontal 0 deg)
+            const focalAxisEndRadius = p.baseRadius * 1.02;
             ctx.strokeStyle = gearAccentStrongAlpha;
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(p.centerX + p.baseRadius * 0.8, p.centerY);
-            ctx.lineTo(p.centerX + p.baseRadius * 1.15, p.centerY);
+            ctx.lineTo(p.centerX + focalAxisEndRadius, p.centerY);
             ctx.stroke();
 
             // Focal Arrowhead Indicator
-            const arrowX = p.centerX + p.baseRadius * 1.15;
+            const arrowX = p.centerX + focalAxisEndRadius;
             ctx.fillStyle = gearAccentStrongAlpha;
             ctx.beginPath();
             ctx.moveTo(arrowX, p.centerY - 4);
