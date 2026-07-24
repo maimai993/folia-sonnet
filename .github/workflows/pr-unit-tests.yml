@@ -39,3 +39,11 @@ jobs:
 
       - name: Run unit tests
         run: npm run test:unit
+
+      - name: Install sync-server dependencies
+        run: npm ci
+        working-directory: ./sync-server
+
+      - name: Run sync-server typecheck
+        run: npm run build:node
+        working-directory: ./sync-server
