@@ -294,11 +294,13 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         audioBands,
         showText = true,
         lyricsFontScale = 1,
+        subtitleFontScale = 1,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
+        subtitleContentMode,
         classicTuning,
     } = props;
     const { t } = useTranslation();
@@ -735,9 +737,11 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 subtitleOverlayBackground={subtitleOverlayBackground}
+                subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}
+                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

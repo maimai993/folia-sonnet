@@ -32,6 +32,7 @@ interface NavidromeGrid3DViewProps {
 
 const RANDOM_PLAYLIST_ID = '__navi_random__';
 const FAVORITES_PLAYLIST_ID = '__navi_favorites__';
+const NAVIDROME_LAST_SECTION_KEY = 'folia_navidrome_last_section';
 const ALBUM_PAGE_SIZE = 500;
 const MAX_ALBUM_PAGES = 20;
 
@@ -48,7 +49,17 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
 }) => {
     const { t } = useTranslation();
     const [localAlbumIndex, setLocalAlbumIndex] = useDebouncedFocusSync(focusedAlbumIndex, setFocusedAlbumIndex);
-    const [section, setSection] = useState<NaviSection>('albums');
+    const [section, setSection] = useState<NaviSection>(() => {
+        try {
+            const saved = localStorage.getItem(NAVIDROME_LAST_SECTION_KEY);
+            if (saved === 'albums' || saved === 'playlists' || saved === 'artists') {
+                return saved;
+            }
+        } catch (e) {
+            console.warn('[NavidromeGrid3DView] Failed to restore navidrome last section:', e);
+        }
+        return 'albums';
+    });
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [focusedArtistIndex, setFocusedArtistIndex] = useState(0);
     const [albums, setAlbums] = useState<SubsonicAlbum[]>([]);
@@ -58,6 +69,14 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
     const [favoriteSongs, setFavoriteSongs] = useState<SubsonicSong[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [config] = useState(() => getNavidromeConfig());
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(NAVIDROME_LAST_SECTION_KEY, section);
+        } catch (e) {
+            console.warn('[NavidromeGrid3DView] Failed to save navidrome last section:', e);
+        }
+    }, [section]);
 
     // Loads every Navidrome album page so Grid3D reflects the full album library.
     const fetchAllAlbums = useCallback(async () => {
@@ -132,6 +151,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
                 coverUrl: randomCover || createCoverPlaceholder(t('navidrome.random') || 'Random', 'playlist'),
                 description: t('navidrome.randomDesc'),
                 trackCount: randomSongs.length,
+                type: 'playlist' as const,
             },
             {
                 id: FAVORITES_PLAYLIST_ID,
@@ -139,6 +159,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
                 coverUrl: favoritesCover || createCoverPlaceholder(t('navidrome.favorites') || 'Favorites', 'playlist'),
                 description: t('navidrome.favorites'),
                 trackCount: favoriteSongs.length,
+                type: 'playlist' as const,
             },
             ...playlists.map(playlist => ({
                 id: playlist.id,
@@ -147,6 +168,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
                 description: playlist.owner || t('home.playlists'),
                 trackCount: playlist.songCount,
                 editable: true,
+                type: 'playlist' as const,
             })),
         ];
     }, [config, favoriteSongs, playlists, randomSongs, t]);
@@ -267,6 +289,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
             theme={theme}
             isDaylight={isDaylight}
             hasFloatingPlayer={hasFloatingPlayer}
+            playlistVisibilityScope="navidrome"
         />
     );
 };

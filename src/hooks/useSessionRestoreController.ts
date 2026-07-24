@@ -4,17 +4,19 @@ import { getFromCache, getLocalSongs } from '../services/db';
 import { getLocalLibraryCatalogSnapshot } from '../services/localLibraryEntityRepository';
 import { buildLocalQueue } from '../services/playbackAdapters';
 import type { ThemeCacheSongKey } from '../services/themeCache';
+import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import { restorePlaybackSourceForSong } from '../components/app/playback/restorePlaybackSource';
-import { getPlaybackSongKey, isStagePlaybackSong } from '../utils/appPlaybackGuards';
+import { getPlaybackSongKey, isStagePlaybackSong, normalizePlaybackSongSource } from '../utils/appPlaybackGuards';
 import type { LyricData, SongResult, StatusMessage } from '../types';
+import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 
 // src/hooks/useSessionRestoreController.ts
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseSessionRestoreControllerParams = {
-    audioQuality: string;
-    userId?: number;
+    audioQuality: AudioQualityPreference;
+    userId?: MediaId;
     blobUrlRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
     setCurrentSong: SetState<SongResult | null>;
@@ -23,7 +25,7 @@ type UseSessionRestoreControllerParams = {
     setAudioSrc: SetState<string | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
     setStatusMsg: SetState<StatusMessage | null>;
-    restoreCachedThemeForSong: (songId: ThemeCacheSongKey, options?: {
+    restoreCachedThemeForSong: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
     }) => Promise<'legacy' | 'dual' | 'fallback-dual' | 'restored' | 'none'>;
@@ -81,6 +83,9 @@ export function useSessionRestoreController({
                 let lastSong = await getFromCache<SongResult>('last_song');
                 let lastQueue = await getFromCache<SongResult[]>('last_queue');
 
+                if (lastSong) lastSong = normalizePlaybackSongSource(lastSong);
+                if (lastQueue) lastQueue = lastQueue.map(normalizePlaybackSongSource);
+
                 if (isStagePlaybackSong(lastSong) || lastQueue?.some(song => isStagePlaybackSong(song))) {
                     await clearPersistedStagePlaybackCache();
                     return;
@@ -119,6 +124,13 @@ export function useSessionRestoreController({
                 }
 
                 console.log('[Session] Restoring last song:', lastSong.name);
+                if (lastSong.sourceRef?.kind === 'online' && lastSong.sourceRef.providerId) {
+                    const currentActiveProviderId = useOnlineProviderAccountStore.getState().activeProviderId;
+                    if (currentActiveProviderId !== lastSong.sourceRef.providerId) {
+                        console.log(`[Session] Aligning active provider to restored song provider: ${lastSong.sourceRef.providerId}`);
+                        useOnlineProviderAccountStore.getState().setActiveProviderId(lastSong.sourceRef.providerId);
+                    }
+                }
                 setCurrentSong(lastSong);
                 setPlayQueue(lastQueue && lastQueue.length > 0 ? lastQueue : [lastSong]);
 

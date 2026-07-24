@@ -1491,11 +1491,13 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
         coverUrl,
         seed,
         lyricsFontScale = 1,
+        subtitleFontScale = 1,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
+        subtitleContentMode,
         cappellaTuning = DEFAULT_CAPPELLA_TUNING,
         cappellaCustomEmojiImages = [],
         cappellaCustomAvatarImages = [],
@@ -1666,9 +1668,11 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
                 upcomingFontSize={`${Math.max(12, 14 * lyricsFontScale)}px`}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 subtitleOverlayBackground={subtitleOverlayBackground}
+                subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}
+                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

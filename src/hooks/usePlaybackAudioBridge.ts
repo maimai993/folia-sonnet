@@ -3,8 +3,10 @@ import type { MutableRefObject, RefObject } from 'react';
 import { PlayerState } from '../types';
 import type { ReplayGainMode, SongResult, StatusMessage } from '../types';
 import type { LocalSong } from '../types';
-import { hasCachedAudio, saveAudioBlob } from '../services/audioCache';
-import { getOnlineSongCacheKey } from '../services/netease';
+import { saveAudioBlob } from '../services/audioCache';
+import { hasCachedSongAudio } from '../services/onlineMusic/resourceCache';
+import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
+import { resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
 import { saveToCache } from '../services/db';
 
 // src/hooks/usePlaybackAudioBridge.ts
@@ -91,7 +93,7 @@ export function usePlaybackAudioBridge({
     const cacheSongAssets = useCallback(async () => {
         if (!currentSong || !audioSrc || audioSrc.startsWith('blob:')) return;
 
-        const existing = await hasCachedAudio(getOnlineSongCacheKey('audio', currentSong));
+        const existing = await hasCachedSongAudio(currentSong);
         if (existing || !enableMediaCache) return;
 
         console.log('[Cache] Caching fully played song:', currentSong.name);
@@ -99,7 +101,7 @@ export function usePlaybackAudioBridge({
         try {
             const response = await fetch(audioSrc);
             const blob = await response.blob();
-            await saveAudioBlob(getOnlineSongCacheKey('audio', currentSong), blob);
+            await saveAudioBlob(getSongResourceCacheKey('audio', currentSong), blob);
             console.log('[Cache] Audio saved');
         } catch (error) {
             console.error('[Cache] Failed to download audio for cache', error);
@@ -110,7 +112,7 @@ export function usePlaybackAudioBridge({
             try {
                 const response = await fetch(coverUrl, { mode: 'cors' });
                 const blob = await response.blob();
-                await saveToCache(getOnlineSongCacheKey('cover', currentSong), blob);
+                await saveToCache(getSongResourceCacheKey('cover', currentSong), blob);
                 console.log('[Cache] Cover saved');
             } catch (error) {
                 console.error('[Cache] Failed to download cover for cache', error);
@@ -153,6 +155,18 @@ export function usePlaybackAudioBridge({
                         ? localData.replayGainTrackGain
                         : (typeof localData.replayGain === 'number' ? localData.replayGain : 0));
                 replayGainPeak = localData.replayGainAlbumPeak ?? localData.replayGainTrackPeak;
+            }
+        }
+
+        const navidromeSong = resolveNavidromePlaybackCarrier(currentSong);
+        const navidromeReplayGain = navidromeSong?.navidromeData.replayGain;
+        if (navidromeReplayGain) {
+            if (replayGainMode === 'track') {
+                replayGainDb = navidromeReplayGain.trackGain ?? 0;
+                replayGainPeak = navidromeReplayGain.trackPeak;
+            } else if (replayGainMode === 'album') {
+                replayGainDb = navidromeReplayGain.albumGain ?? navidromeReplayGain.trackGain ?? 0;
+                replayGainPeak = navidromeReplayGain.albumPeak ?? navidromeReplayGain.trackPeak;
             }
         }
 

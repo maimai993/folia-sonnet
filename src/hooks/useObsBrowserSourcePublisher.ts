@@ -19,6 +19,7 @@ import type {
     PlayerState,
     SongResult,
     StageSource,
+    SubtitleContentMode,
     Theme,
     TiltTuning,
     VisualizerMode,
@@ -40,6 +41,7 @@ import {
 } from '../utils/obsBrowserSource';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
+import { getSongAlbumLabel, getSongArtistLabel } from '../services/onlineMusic/songMetadata';
 
 // src/hooks/useObsBrowserSourcePublisher.ts
 // Publishes the single playback surface to the local OBS browser source.
@@ -66,12 +68,14 @@ type UseObsBrowserSourcePublisherOptions = {
     visualizerTunings?: VisualizerTuningBundle;
     background?: VisualizerBackgroundConfig;
     lyricsFontScale: number;
+    subtitleFontScale: number;
     visualizerOpacity: number;
     subtitleOverlayOpacity: number;
     subtitleOverlayBackground: boolean;
     staticMode: boolean;
     hideTranslationSubtitle: boolean;
     showSubtitleTranslation: boolean;
+    subtitleContentMode: SubtitleContentMode;
     seed: string | number;
     audioPower: MotionValue<number>;
     audioBands: AudioBands;
@@ -88,13 +92,9 @@ const emptyObsStatus = (): ObsBrowserSourceStatus => ({
     clientCount: 0,
 });
 
-const getSongArtist = (song: SongResult | null) =>
-    song?.artists?.map(artist => artist.name).join(', ')
-    || song?.ar?.map(artist => artist.name).join(', ')
-    || null;
+const getSongArtist = (song: SongResult | null) => getSongArtistLabel(song) || null;
 
-const getSongAlbum = (song: SongResult | null) =>
-    song?.album?.name || song?.al?.name || null;
+const getSongAlbum = (song: SongResult | null) => getSongAlbumLabel(song) || null;
 
 export const useObsBrowserSourcePublisher = ({
     isElectronWindow,
@@ -114,12 +114,14 @@ export const useObsBrowserSourcePublisher = ({
     visualizerTunings,
     background,
     lyricsFontScale,
+    subtitleFontScale,
     visualizerOpacity,
     subtitleOverlayOpacity,
     subtitleOverlayBackground,
     staticMode,
     hideTranslationSubtitle,
     showSubtitleTranslation,
+    subtitleContentMode,
     seed,
     audioPower,
     audioBands,
@@ -231,12 +233,14 @@ export const useObsBrowserSourcePublisher = ({
             background: resolvedBackground,
             ...buildLegacyObsBrowserSourceBackgroundConfig(resolvedBackground),
             lyricsFontScale,
+            subtitleFontScale,
             visualizerOpacity,
             subtitleOverlayOpacity,
             subtitleOverlayBackground,
             staticMode,
             hideTranslationSubtitle,
             showSubtitleTranslation,
+            subtitleContentMode,
             seed,
             cappellaCustomEmojiImages: obsCustomImages.cappellaEmoji,
             cappellaCustomAvatarImages: obsCustomImages.cappellaAvatar,
@@ -249,9 +253,11 @@ export const useObsBrowserSourcePublisher = ({
         currentSong,
         hideTranslationSubtitle,
         showSubtitleTranslation,
+        subtitleContentMode,
         isDaylight,
         lyrics,
         lyricsFontScale,
+        subtitleFontScale,
         obsCustomImages,
         obsCoverUrl,
         seed,

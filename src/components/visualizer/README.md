@@ -12,13 +12,15 @@
 - `tilt/VisualizerTilt.tsx`: 倾诉模式
 - `claddagh/VisualizerCladdagh.tsx`: 回环模式
 - `monet/VisualizerMonet.tsx`: 莫奈海报模式
+- `diorama/VisualizerDiorama.tsx`: 漫游模式（3D 景深立影与动态相机步进）
 - `definition.ts`: visualizer 共享契约、registry entry 定义
 - `settingsPanels.tsx`: 模式自带设置面板
 - `VisualizerShell.tsx`: 共享外层容器、背景层、返回按钮
-- `VisualizerSubtitleOverlay.tsx`: 共享底部翻译 / 下一句提示层
+- `VisualizerSubtitleOverlay.tsx`: 共享底部翻译 / 罗马音 / 下一句提示层
+- `VisualizerHarmonyOverlay.tsx`: 共享顶部 TTML 和声层
 - `runtime.ts`: 共享 runtime 工具与基础 hook（当前行、下一句、最近完成句、预热入口）
 - `FumeBackground.ts`: Fume 专用 canvas 几何背景
-- `backgrounds/<mode>/`: shell 级背景模式目录，包含 `entry.tsx`、渲染层和可选设置卡
+- `backgrounds/<mode>/`: shell 级背景模式目录，包含 `entry.tsx`、渲染层和可选设置卡；当前包含 common, monet, latent, nomand, url, sora
 - `backgrounds/registry.tsx`: 自动发现 `backgrounds/*/entry.tsx`
 - `backgrounds/definition.ts`: 背景统一配置、动作和注册入口契约
 - `VisPlayground.tsx`: 可视化预览和样式设置面板
@@ -34,7 +36,7 @@ Visualizer 接收的是歌词流水线已经整理好的 `Line[]`，不应该在
 
 `Line.isChorus` 表示副歌行。新 visualizer 应为副歌准备独立于普通行的强化表现，例如更强的 glow、不同的排版、额外粒子或音频响应。副歌特效只改变视觉表现，仍应沿用同一套行索引和字符 timing；当 `isChorus` 或 `chorusEffect` 缺失时必须自然回退到普通行效果。
 
-TTML 歌词可以选择性支持更高级的表现。当前统一数据中可能包含音节 timing、ruby、逐行翻译或罗马音、`backgroundVocal`、`agentId` / `ttml.agents`、`songPart`、`blockIndex` 等信息，适合实现注音、伴唱、多歌手分轨或段落级布局。但这些是增量能力，不是 TTML 文件的稳定必备字段，目前也不是 visualizer 的主要依赖。实现时必须逐项检查字段是否存在，并始终保留只依赖 `Line.fullText`、`Line.words` 和基础 timing 的标准渲染路径，不能假设每一份 TTML 都带有相同的高级特性。
+TTML 歌词可以选择性支持更高级的表现。当前统一数据中可能包含音节 timing、ruby、逐行翻译或罗马音、`backgroundVocal`、`agentId` / `ttml.agents`、`songPart`、`blockIndex` 等信息，适合实现注音、伴唱、多歌手分轨或段落级布局。显式 `x-bg` 会直接转换成和声；同一 block 内时间重叠且 `agentId` 不同的后续歌词行也会在 TTML 转换层折叠为和声轨。这些是增量能力，不是 TTML 文件的稳定必备字段，目前也不是 visualizer 的主要依赖。实现时必须逐项检查字段是否存在，并始终保留只依赖 `Line.fullText`、`Line.words` 和基础 timing 的标准渲染路径，不能假设每一份 TTML 都带有相同的高级特性。
 
 ## 目标
 
@@ -73,6 +75,7 @@ interface VisualizerSharedProps {
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
     showSubtitleTranslation?: boolean;
+    subtitleContentMode?: 'translation' | 'romanization' | 'none';
     paused?: boolean;
     isPreviewMode?: boolean;
     onBack?: () => void;
@@ -149,7 +152,7 @@ export default VisualizerFoo;
 - `backgroundStaticMode`: 仅要求 shell 背景静止，适合主页动态背景开关等不应影响歌词 renderer 的设置。
 - `isPlayerChromeHidden`: 播放器外层 chrome 是否隐藏，适合做边距或字幕策略调整。
 - `hideTranslationSubtitle`: 关闭整个底部 subtitle overlay 时使用，包括翻译和下一句提示；这是旧设置的前向兼容语义。
-- `showSubtitleTranslation`: 控制翻译文本是否显示，默认 `true`。新 visualizer 中涉及翻译字幕时优先接入这个参数。
+- `subtitleContentMode`: 选择翻译、罗马音或不显示副字幕；未提供时兼容旧的 `showSubtitleTranslation`。
 - `paused`: 当前播放是否暂停；背景可以降至低速而不必完全静止，设置要求的硬静止应使用 `backgroundStaticMode`。
 - `onBack`: 返回按钮回调。播放器全屏/主视图里会用到。
 - `onLyricLineSeek`: 可选的歌词行点击跳转回调；需要让 visualizer 参与时间轴交互时使用，不要在 renderer 里直接操作 audio 元素。
@@ -324,10 +327,10 @@ visualizer/
 
 ### 视觉分层
 
-- 整体是 `VisualizerShell -> renderer -> VisualizerSubtitleOverlay` 三层。
+- 整体由 `VisualizerRenderer` 统一装配模式 renderer 与顶部和声层；模式内部继续通过 `VisualizerShell` 和 `VisualizerSubtitleOverlay` 处理主视觉及底部副字幕。
 - `VisualizerShell` 负责稳定的沉浸式舞台：底色、封面取色流体背景、几何背景、返回按钮。
 - renderer 负责“当前模式独有的排版和动画语法”，例如自由散射、分栏、文章镜头、聊天气泡。
-- `VisualizerSubtitleOverlay` 负责翻译、最近完成句、下一句提示，不把这些辅助信息塞进每个 renderer 内部重写。
+- `VisualizerSubtitleOverlay` 负责翻译/罗马音、最近完成句、下一句提示；`VisualizerHarmonyOverlay` 负责并行和声，不把这些辅助信息塞进每个 renderer 内部重写。
 
 这套分层的目的不是纯粹复用，而是把“舞台氛围”和“歌词叙事方式”拆开。切模式时，用户保留同一套播放器世界观，只切换歌词语言本身。
 
@@ -691,7 +694,7 @@ resetSettings: props => {
 
 如果你的模式会在主题预览中明显受益于专属 tuning，这里也要确认对应 props 已经透传。
 
-#### `src/components/app/Home.tsx` / `src/components/Home.tsx`
+#### `src/components/app/Home.tsx`
 
 如果 `SettingsModal` 的 props 发生变化，通常需要先检查 app-level dialogs 包装层，再同步全局设置入口。
 

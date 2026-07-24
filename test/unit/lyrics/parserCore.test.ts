@@ -40,6 +40,23 @@ const TTML_ADVANCED_FIXTURE = [
     '</tt>',
 ].join('');
 
+const TTML_AGENT_OVERLAP_FIXTURE = [
+    '<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Word">',
+    '<body><div>',
+    '<p begin="00:01.000" end="00:05.000" itunes:key="L1" ttm:agent="v1">',
+    '<span begin="00:01.000" end="00:05.000">Main</span>',
+    '</p>',
+    '<p begin="00:02.000" end="00:06.000" itunes:key="L2" ttm:agent="v2">',
+    '<span begin="00:02.000" end="00:06.000">Harmony</span>',
+    '<span ttm:role="x-translation" xml:lang="zh-CN">和声翻译</span>',
+    '</p>',
+    '<p begin="00:06.000" end="00:08.000" itunes:key="L3" ttm:agent="v2">',
+    '<span begin="00:06.000" end="00:08.000">Next</span>',
+    '</p>',
+    '</div></body>',
+    '</tt>',
+].join('');
+
 describe('parserCore', () => {
     it('resolves explicit lyric formats from supported file names', () => {
         expect(resolveExplicitFileTimedLyricFormat('song.vtt')).toBe('vtt');
@@ -174,7 +191,44 @@ describe('parserCore', () => {
         expect(line.backgroundVocal?.text).toBe('echoes');
         expect(line.backgroundVocal?.translation).toBe('回声');
         expect(line.backgroundVocal?.words.map(word => word.text)).toEqual(['echoes']);
+        expect(line.backgroundVocals).toEqual([line.backgroundVocal]);
         expect(lyrics.lines).toHaveLength(1);
+    });
+
+    it('folds overlapping TTML lines from a different agent into harmony vocals', () => {
+        const lyrics = parseTTML(TTML_AGENT_OVERLAP_FIXTURE, '', { includeInterludes: false });
+
+        expect(lyrics.lines.map(line => line.fullText)).toEqual(['Main', 'Next']);
+        expect(lyrics.lines[0].backgroundVocal?.text).toBe('Harmony');
+        expect(lyrics.lines[0].backgroundVocal?.agentId).toBe('v2');
+        expect(lyrics.lines[0].backgroundVocal?.translation).toBe('和声翻译');
+        expect(lyrics.lines[0].backgroundVocal?.startTime).toBe(2);
+        expect(lyrics.lines[0].backgroundVocal?.endTime).toBe(6);
+    });
+
+    it('does not fold an overlapping TTML line from the same agent', () => {
+        const fixture = TTML_AGENT_OVERLAP_FIXTURE.replace(
+            'itunes:key="L2" ttm:agent="v2"',
+            'itunes:key="L2" ttm:agent="v1"'
+        );
+        const lyrics = parseTTML(fixture, '', { includeInterludes: false });
+
+        expect(lyrics.lines.map(line => line.fullText)).toEqual(['Main', 'Harmony', 'Next']);
+        expect(lyrics.lines.every(line => line.backgroundVocal === undefined)).toBe(true);
+    });
+
+    it('does not fold different-agent TTML lines that only touch at their boundary', () => {
+        const fixture = TTML_AGENT_OVERLAP_FIXTURE.replace(
+            'begin="00:02.000" end="00:06.000" itunes:key="L2"',
+            'begin="00:05.000" end="00:06.000" itunes:key="L2"'
+        ).replace(
+            '<span begin="00:02.000" end="00:06.000">Harmony</span>',
+            '<span begin="00:05.000" end="00:06.000">Harmony</span>'
+        );
+        const lyrics = parseTTML(fixture, '', { includeInterludes: false });
+
+        expect(lyrics.lines.map(line => line.fullText)).toEqual(['Main', 'Harmony', 'Next']);
+        expect(lyrics.lines.every(line => line.backgroundVocal === undefined)).toBe(true);
     });
 
     it('dispatches formats through parseLyricsByFormat', () => {

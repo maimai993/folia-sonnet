@@ -11,6 +11,7 @@ describe('VisualizerSubtitleOverlay content resolution', () => {
         endTime: 2,
         fullText: 'Hello',
         translation: '你好',
+        romanization: 'Harō',
         words: [],
     };
     const nextLine: Line = {
@@ -31,7 +32,7 @@ describe('VisualizerSubtitleOverlay content resolution', () => {
         });
 
         expect(content.shouldRenderOverlay).toBe(false);
-        expect(content.translationText).toBeNull();
+        expect(content.subtitleText).toBeNull();
         expect(content.upcomingLines).toEqual([]);
     });
 
@@ -46,7 +47,51 @@ describe('VisualizerSubtitleOverlay content resolution', () => {
         });
 
         expect(content.shouldRenderOverlay).toBe(true);
-        expect(content.translationText).toBeNull();
+        expect(content.subtitleText).toBeNull();
         expect(content.upcomingLines).toEqual([nextLine]);
+    });
+
+    it('selects romanization without falling back to translation', () => {
+        const romanized = resolveVisualizerSubtitleOverlayContent({
+            showText: true,
+            activeLine,
+            recentCompletedLine: null,
+            nextLines: [nextLine],
+            hideTranslationSubtitle: false,
+            showSubtitleTranslation: true,
+            subtitleContentMode: 'romanization',
+        });
+        const missingRomanization = resolveVisualizerSubtitleOverlayContent({
+            showText: true,
+            activeLine: { ...activeLine, romanization: undefined },
+            recentCompletedLine: null,
+            nextLines: [nextLine],
+            hideTranslationSubtitle: false,
+            showSubtitleTranslation: true,
+            subtitleContentMode: 'romanization',
+        });
+
+        expect(romanized.subtitleText).toBe('Harō');
+        expect(romanized.upcomingLines).toEqual([]);
+        expect(missingRomanization.subtitleText).toBeNull();
+        expect(missingRomanization.upcomingLines).toEqual([nextLine]);
+    });
+
+    it('resolves romanization from alternate texts when the direct field is absent', () => {
+        const content = resolveVisualizerSubtitleOverlayContent({
+            showText: true,
+            activeLine: {
+                ...activeLine,
+                romanization: undefined,
+                alternateTexts: [{ role: 'romanization', text: 'Hello' }],
+            },
+            recentCompletedLine: null,
+            nextLines: [],
+            hideTranslationSubtitle: false,
+            showSubtitleTranslation: true,
+            subtitleContentMode: 'romanization',
+        });
+
+        expect(content.subtitleText).toBe('Hello');
     });
 });

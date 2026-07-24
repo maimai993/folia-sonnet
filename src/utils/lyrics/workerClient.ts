@@ -6,6 +6,19 @@ let lyricsWorker: Worker | null = null;
 let workerRequestId = 0;
 const workerCallbacks = new Map<string, (data: LyricData | null) => void>();
 
+type WorkerLyricProcessingOptions = Pick<LyricProcessingOptions, 'includeInterludes' | 'filterPattern'>;
+
+// Keeps orchestration-only values such as provider callbacks outside the structured-clone boundary.
+export const toWorkerLyricProcessingOptions = (
+    options?: LyricProcessingOptions,
+): WorkerLyricProcessingOptions | undefined => {
+    if (!options) return undefined;
+    return {
+        ...(options.includeInterludes !== undefined ? { includeInterludes: options.includeInterludes } : {}),
+        ...(options.filterPattern !== undefined ? { filterPattern: options.filterPattern } : {}),
+    };
+};
+
 export const initLyricsWorker = (): Worker => {
     if (!lyricsWorker) {
         // Need to use correct relative path or alias
@@ -34,12 +47,21 @@ export const parseLyricsAsync = (
     format: LyricParseFormat,
     content: string,
     translation?: string,
-    options?: LyricProcessingOptions
+    options?: LyricProcessingOptions,
+    romanization?: string
 ): Promise<LyricData | null> => {
     return new Promise((resolve) => {
         const worker = initLyricsWorker();
         const requestId = `req_${++workerRequestId}`;
         workerCallbacks.set(requestId, resolve);
-        worker.postMessage({ type: 'parse', format, content, translation, options, requestId });
+        worker.postMessage({
+            type: 'parse',
+            format,
+            content,
+            translation,
+            romanization,
+            options: toWorkerLyricProcessingOptions(options),
+            requestId,
+        });
     });
 };

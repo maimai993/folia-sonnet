@@ -694,11 +694,13 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
         showText = true,
         partitaTuning = DEFAULT_PARTITA_TUNING,
         lyricsFontScale = 1,
+        subtitleFontScale = 1,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
+        subtitleContentMode,
     } = props;
     const { t } = useTranslation();
     const [windowHeight, setWindowHeight] = useState(800);
@@ -1025,9 +1027,11 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 subtitleOverlayBackground={subtitleOverlayBackground}
+                subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}
+                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

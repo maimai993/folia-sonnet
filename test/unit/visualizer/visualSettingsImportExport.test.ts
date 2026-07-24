@@ -36,12 +36,16 @@ describe('Visual Settings Import and Export', () => {
         visualizerOpacity: 0.95,
         hidePlayerTranslationSubtitle: true,
         showSubtitleTranslation: false,
+        subtitleContentMode: 'romanization' as const,
         subtitleOverlayBackground: true,
+        showHarmonySubtitle: false,
+        harmonySubtitleBackground: true,
         lyricsFontStyle: 'sans',
         lyricsFontScale: 1.25,
         lyricsFontWeight: 650,
         lyricsFontFallbackFamilies: ['Songti SC', 'SimSun', 'serif'],
         subtitleFontInheritsLyrics: false,
+        subtitleFontScale: 1.2,
         subtitleFontStyle: 'sans',
         subtitleFontWeight: 350,
         subtitleFontFamily: 'Microsoft YaHei',
@@ -179,10 +183,14 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.backgroundOpacity).toBe(0.85);
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
+        expect(decoded.subtitleContentMode).toBe('romanization');
         expect(decoded.subtitleOverlayBackground).toBe(true);
+        expect(decoded.showHarmonySubtitle).toBe(false);
+        expect(decoded.harmonySubtitleBackground).toBe(true);
         expect(decoded.lyricsFontWeight).toBe(650);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);
+        expect(decoded.subtitleFontScale).toBe(1.2);
         expect(decoded.subtitleFontStyle).toBe('sans');
         expect(decoded.subtitleFontWeight).toBe(350);
         expect(decoded.subtitleFontFamily).toBe('Microsoft YaHei');
@@ -225,10 +233,14 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.backgroundOpacity).toBe(0.85);
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
+        expect(decoded.subtitleContentMode).toBe('romanization');
         expect(decoded.subtitleOverlayBackground).toBe(true);
+        expect(decoded.showHarmonySubtitle).toBe(false);
+        expect(decoded.harmonySubtitleBackground).toBe(true);
         expect(decoded.lyricsFontWeight).toBe(650);
         expect(decoded.lyricsFontFallbackFamilies).toEqual(['Songti SC', 'SimSun', 'serif']);
         expect(decoded.subtitleFontInheritsLyrics).toBe(false);
+        expect(decoded.subtitleFontScale).toBe(1.2);
         expect(decoded.subtitleFontStyle).toBe('sans');
         expect(decoded.subtitleFontWeight).toBe(350);
         expect(decoded.subtitleFontFamily).toBe('Microsoft YaHei');

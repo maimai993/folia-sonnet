@@ -4,12 +4,15 @@ import { AlertCircle, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme, UnifiedSong } from '../../../types';
+import type { MediaId } from '../../../types/onlineMusic';
 import {
     type SearchSource,
     useSearchNavigationStore,
 } from '../../../stores/useSearchNavigationStore';
 import SearchResultsList from './SearchResultsList';
 import { useCollectionNavigationStore } from '../../../stores/useCollectionNavigationStore';
+import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
+import { omni } from '../../../services/onlineMusic/omni';
 
 // src/components/app/search/SearchWorkspace.tsx
 
@@ -21,11 +24,9 @@ type SearchWorkspaceProps = {
     onLoadMore: () => void;
     onPlayTrack: (track: UnifiedSong) => void;
     onAddTrackToQueue: (track: UnifiedSong) => void;
-    onOpenArtist: (track: UnifiedSong, artistName: string, artistId?: number, entityId?: string) => void;
-    onOpenAlbum: (track: UnifiedSong, albumName: string, albumId?: number, entityId?: string) => void;
+    onOpenArtist: (track: UnifiedSong, artistName: string, artistId?: MediaId, entityId?: string) => void;
+    onOpenAlbum: (track: UnifiedSong, albumName: string, albumId?: MediaId, entityId?: string) => void;
 };
-
-const SOURCES: SearchSource[] = ['netease', 'local', 'navidrome'];
 
 const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
     theme,
@@ -65,12 +66,14 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
         setSearchScrollTop: state.setSearchScrollTop,
     })));
     const results = searchResults || [];
+    const activeOnlineProviderId = useOnlineProviderAccountStore(state => state.activeProviderId);
+    const sources = useMemo<SearchSource[]>(() => [activeOnlineProviderId, 'local', 'navidrome'], [activeOnlineProviderId]);
     const hasCollection = useCollectionNavigationStore(state => Boolean(state.snapshot?.stack.length));
-    const sourceLabels = useMemo<Record<SearchSource, string>>(() => ({
-        netease: t('search.sourceNetease'),
-        local: t('search.sourceLocal'),
-        navidrome: t('search.sourceNavidrome'),
-    }), [t]);
+    const getSourceLabel = (source: SearchSource) => {
+        if (source === 'local') return t('search.sourceLocal');
+        if (source === 'navidrome') return t('search.sourceNavidrome');
+        return omni.getProviderLabel(source);
+    };
 
     useEffect(() => {
         if (!isSearchOpen || hasCollection) return;
@@ -137,7 +140,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                         </div>
 
                         <nav className="flex gap-2 overflow-x-auto pb-1">
-                            {SOURCES.map(source => (
+                            {sources.map(source => (
                                 <button
                                     type="button"
                                     key={source}
@@ -158,7 +161,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                                         color: theme.backgroundColor,
                                     } : undefined}
                                 >
-                                    {sourceLabels[source]}
+                                    {getSourceLabel(source)}
                                 </button>
                             ))}
                         </nav>

@@ -2,7 +2,8 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, NeteasePlaylist, ThemeMode, VisualizerMode } from '../types';
+import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, ThemeMode, VisualizerMode } from '../types';
+import type { ProviderCollection, ProviderUser } from '../types/onlineMusic';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
 import QueueTab from './panelTab/QueueTab';
@@ -14,8 +15,9 @@ import OnlineLyricsTab from './panelTab/OnlineLyricsTab';
 import PlaylistSelectionDialog from './shared/PlaylistSelectionDialog';
 import TextInputDialog from './shared/TextInputDialog';
 import type { OnlineLyricsState } from '../types';
+import type { AudioQualityPreference } from '../types/onlineMusic';
 import type { ThemeSourceModel } from '../hooks/themeControllerState';
-import { getPlaybackSongSource, hasMixedPlaybackSources } from '../utils/appPlaybackGuards';
+import { getPlaybackSourceRef, getPlaybackSongSource, hasMixedPlaybackSources } from '../utils/appPlaybackGuards';
 
 export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics';
 
@@ -28,8 +30,8 @@ type UnifiedPanelPlaybackProps = {
     onNavigateHomeDirect: () => void;
     coverUrl: string | null;
     currentSong: SongResult | null;
-    onAlbumSelect: (albumId: number) => void;
-    onSelectArtist: (artistId: number) => void;
+    onAlbumSelect: (song: SongResult, album: Album) => void;
+    onSelectArtist: (song: SongResult, artist: Artist) => void;
     loopMode: 'off' | 'all' | 'one';
     onToggleLoop: () => void;
     onLike: () => void;
@@ -92,10 +94,10 @@ type UnifiedPanelQueueProps = {
 };
 
 type UnifiedPanelAccountProps = {
-    user: any; // NeteaseUser | null
+    user: ProviderUser | null;
     onLogout: () => void;
-    audioQuality: 'exhigh' | 'lossless' | 'hires';
-    onAudioQualityChange: (quality: 'exhigh' | 'lossless' | 'hires') => void;
+    audioQuality: AudioQualityPreference;
+    onAudioQualityChange: (quality: AudioQualityPreference) => void;
     cacheSize: string;
     onClearCache: () => void;
     onSyncData: () => void;
@@ -108,11 +110,11 @@ type UnifiedPanelAccountProps = {
 
 type UnifiedPanelLibraryProps = {
     localPlaylists: LocalPlaylist[];
-    neteasePlaylists: NeteasePlaylist[];
+    onlinePlaylists: ProviderCollection[];
     onSaveCurrentQueueAsPlaylist: (name: string) => Promise<void>;
     onAddCurrentSongToLocalPlaylist: (playlistId: string) => Promise<void>;
     onCreateCurrentLocalPlaylist: (name: string) => Promise<void>;
-    onAddCurrentSongToNeteasePlaylist: (playlistId: number) => Promise<void>;
+    onAddCurrentSongToOnlinePlaylist: (playlist: ProviderCollection) => Promise<void>;
     onAddCurrentSongToNavidromePlaylist: (playlistId: string) => Promise<void>;
     onCreateCurrentNavidromePlaylist: (name: string) => Promise<void>;
     onOpenCurrentLocalAlbum: () => void;
@@ -199,11 +201,11 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const { playQueue, onPlaySong, queueScrollRef, onShuffle, onRemoveSong, onMoveSongToEnd, onMoveSongToNext } = queue;
     const {
         localPlaylists,
-        neteasePlaylists,
+        onlinePlaylists,
         onSaveCurrentQueueAsPlaylist,
         onAddCurrentSongToLocalPlaylist,
         onCreateCurrentLocalPlaylist,
-        onAddCurrentSongToNeteasePlaylist,
+        onAddCurrentSongToOnlinePlaylist,
         onAddCurrentSongToNavidromePlaylist,
         onCreateCurrentNavidromePlaylist,
         onOpenCurrentLocalAlbum,
@@ -237,12 +239,13 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const isStage = isStageContext || Boolean(currentSong && (currentSong as any).isStage === true);
     const isNavidrome = currentSong && (currentSong as any).isNavidrome === true;
     const isLocal = currentSong && !isNavidrome && (((currentSong as any).isLocal === true) || Boolean((currentSong as any).localRef?.songId));
-    const isNetease = Boolean(currentSong && !isLocal && !isNavidrome && !isStage);
+    const playbackSourceRef = currentSong ? getPlaybackSourceRef(currentSong) : null;
+    const isOnline = playbackSourceRef?.kind === 'online';
     const canCreateLocalPlaylist = isLocal;
     const canCreateNavidromePlaylist = isNavidrome;
     const canAddCurrentSongToPlaylist =
         (isLocal && (localPlaylists.length > 0 || canCreateLocalPlaylist))
-        || (isNetease && neteasePlaylists.length > 0)
+        || (isOnline && onlinePlaylists.length > 0)
         || (isNavidrome && (navidromePlaylists.length > 0 || canCreateNavidromePlaylist));
     const supportsHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     const refreshNavidromePlaylists = React.useCallback(async () => {
@@ -270,8 +273,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             }));
         }
 
-        if (isNetease) {
-            return neteasePlaylists.map((playlist) => ({
+        if (isOnline) {
+            return onlinePlaylists.map((playlist) => ({
                 id: playlist.id,
                 name: playlist.name,
                 description: `${playlist.trackCount || 0} ${t('playlist.tracks')}`,
@@ -283,7 +286,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         }
 
         return [];
-    }, [isLocal, isNetease, isNavidrome, localPlaylists, navidromePlaylists, neteasePlaylists, t]);
+    }, [isLocal, isOnline, isNavidrome, localPlaylists, navidromePlaylists, onlinePlaylists, t]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -319,7 +322,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         tabs.splice(1, 0, { id: 'local' as PanelTab, label: t('localMusic.folder'), icon: FileAudio });
     } else if (isNavidrome) {
         tabs.splice(1, 0, { id: 'navi' as PanelTab, label: 'Navidrome', icon: Cloud });
-    } else if (isNetease) {
+    } else if (isOnline) {
         tabs.splice(1, 0, { id: 'onlineLyrics' as PanelTab, label: t('localMusic.lyrics'), icon: FileText });
     }
 
@@ -746,12 +749,12 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                     {currentTab === 'cover' && (
                                         <CoverTab
                                             currentSong={currentSong}
-                                            onAlbumSelect={(albumId) => {
-                                                onAlbumSelect(albumId);
+                                            onAlbumSelect={(song, album) => {
+                                                onAlbumSelect(song, album);
                                                 onToggle();
                                             }}
-                                            onSelectArtist={(artistId) => {
-                                                onSelectArtist(artistId);
+                                            onSelectArtist={(song, artist) => {
+                                                onSelectArtist(song, artist);
                                                 onToggle();
                                             }}
                                             onOpenCurrentLocalAlbum={() => {
@@ -881,16 +884,19 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                     )}
                                     {currentTab === 'navi' && isNavidrome && (
                                         <NaviTab
-                                            currentSong={currentSong as any}
+                                            currentSong={currentSong}
                                             hasLyrics={hasLyrics}
                                             onMatchOnline={onMatchOnline}
                                             lyricTimelineOffsetMs={lyricTimelineOffsetMs}
                                             onLyricTimelineOffsetChange={onLyricTimelineOffsetChange}
+                                            replayGainMode={replayGainMode}
+                                            onChangeReplayGainMode={onChangeReplayGainMode}
                                             isDaylight={isDaylight}
                                         />
                                     )}
-                                    {currentTab === 'onlineLyrics' && isNetease && currentSong && (
+                                    {currentTab === 'onlineLyrics' && isOnline && currentSong && (
                                         <OnlineLyricsTab
+                                            song={currentSong}
                                             onlineLyricsState={onlineLyricsState}
                                             onImportLyrics={onImportOnlineLyrics}
                                             onChangeLyricsSource={onChangeOnlineLyricsSource}
@@ -922,8 +928,10 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                             return;
                         }
 
-                        if (isNetease) {
-                            await onAddCurrentSongToNeteasePlaylist(Number(playlistId));
+                        if (isOnline) {
+                            const playlist = onlinePlaylists.find(item => String(item.id) === String(playlistId));
+                            if (!playlist) throw new Error('Selected playlist is unavailable');
+                            await onAddCurrentSongToOnlinePlaylist(playlist);
                             return;
                         }
 

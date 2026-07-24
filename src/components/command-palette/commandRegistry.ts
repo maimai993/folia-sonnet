@@ -10,6 +10,7 @@ import type {
     CommandPaletteSearchSource,
 } from './types';
 import type { SearchSource } from '../../stores/useSearchNavigationStore';
+import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 
 // src/components/command-palette/commandRegistry.ts
 // Defines command palette entries and the lightweight matching used for autocomplete.
@@ -19,19 +20,18 @@ const MAX_COMMAND_MATCHES = 10;
 const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
 const getSongArtistLabel = (song: SongResult) => {
-    const artists = song.ar?.length ? song.ar : song.artists;
-    return artists?.map(artist => artist.name).filter(Boolean).join(', ') || '';
+    return getProviderSongMetadata(song).artists.map(artist => artist.name).filter(Boolean).join(', ');
 };
 
-const getSongAlbumLabel = (song: SongResult) => song.al?.name || song.album?.name || '';
+const getSongAlbumLabel = (song: SongResult) => getProviderSongMetadata(song).album?.name || '';
 
 const buildQueueSearchText = (song: SongResult, index: number) => [
     String(index + 1),
     song.name,
     getSongArtistLabel(song),
     getSongAlbumLabel(song),
-    ...(song.alia ?? []),
-    ...(song.tns ?? []),
+    ...getProviderSongMetadata(song).aliases,
+    ...getProviderSongMetadata(song).translatedNames,
 ].filter(Boolean).join(' ');
 
 const buildQueueSongDescription = (song: SongResult, index: number, context: CommandPaletteContext) => {
@@ -679,34 +679,41 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         },
     },
     {
-        id: 'settings-toggle-subtitle-translation',
+        id: 'settings-cycle-subtitle-content-mode',
         group: 'settings',
-        title: 'Toggle subtitle translation',
-        description: 'Show or hide translation text in visualizer subtitles',
+        title: 'Cycle subtitle content mode',
+        description: 'Switch between translation and romanization subtitle modes',
         keywords: [
             'subtitle translation',
             'translation subtitle',
             'show subtitle translation',
-            'hide subtitle translation',
             'lyrics translation',
             'caption translation',
+            'subtitle romanization',
+            'romanized lyrics',
+            'romaji',
             '字幕翻译',
             '显示翻译',
-            '隐藏翻译',
             '翻译字幕',
             '歌词翻译',
+            '切换翻译字幕',
+            '罗马音',
+            '罗马字',
+            '副字幕',
             'zimu fanyi',
             'xianshi fanyi',
-            'yincang fanyi',
             'fanyi zimu',
             'geci fanyi',
+            'luomayin',
             'zmfy',
             'xsfy',
-            'ycfy',
             'gc fy',
+            'lmy',
+            'fzm',
+            'qhfyzm',
         ],
         execute: (_input, context) => {
-            context.toggleSubtitleTranslation();
+            context.cycleSubtitleContentMode();
             return true;
         },
     },
@@ -762,10 +769,6 @@ export const getAvailableCommandPaletteCommands = (context?: CommandPaletteConte
         if (!isElectron || !context?.voiceInputPauseSupported) {
             return false;
         }
-    }
-
-    if (command.id === 'playback-auto-match-best-lyric') {
-        return Boolean(context?.enableAlternativeLyricSources);
     }
 
     if (command.id === 'theme-generate-current') {

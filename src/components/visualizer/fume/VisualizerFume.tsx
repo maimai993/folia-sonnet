@@ -1858,12 +1858,14 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         seed,
         staticMode = false,
         lyricsFontScale = 1,
+        subtitleFontScale = 1,
         fumeTuning,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
+        subtitleContentMode,
         paused = false,
     } = props;
     const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -3064,9 +3066,11 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 subtitleOverlayBackground={subtitleOverlayBackground}
+                subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}
+                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

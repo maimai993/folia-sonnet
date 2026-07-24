@@ -1,4 +1,5 @@
 import type { LineRenderHints } from './utils/lyrics/renderHints';
+import type { MediaId, PlaybackSourceRef, ProviderCatalogRef } from './types/onlineMusic';
 
 export interface LyricRuby {
   text: string;
@@ -35,10 +36,13 @@ export interface LyricBackgroundVocal {
   startTime: number; // Seconds
   endTime: number; // Seconds
   words: Word[];
+  agentId?: string;
   translation?: string;
   romanization?: string;
   alternateTexts?: LyricAlternateText[];
 }
+
+export type SubtitleContentMode = 'translation' | 'romanization' | 'none';
 
 export interface LyricAgent {
   id: string;
@@ -59,6 +63,7 @@ export interface Line {
   romanization?: string;
   alternateTexts?: LyricAlternateText[];
   backgroundVocal?: LyricBackgroundVocal;
+  backgroundVocals?: LyricBackgroundVocal[];
   renderHints?: LineRenderHints;
   isChorus?: boolean;
   chorusEffect?: 'bars' | 'circles' | 'beams';
@@ -692,8 +697,8 @@ export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
 export const DEFAULT_NOMAND_BACKGROUND_TUNING: NomandBackgroundTuning = {
   imageSource: 'cover-derived',
   ditheringType: '8x8',
-  size: 2,
-  colorSteps: 2,
+  size: 3,
+  colorSteps: 4,
   originalColors: false,
   inverted: false,
   overlayEnabled: true,
@@ -822,16 +827,18 @@ export interface NeteasePlaylist {
 }
 
 export interface Artist {
-  id: number;
+  id: MediaId;
   name: string;
   entityId?: string;
+  catalogRef?: ProviderCatalogRef;
 }
 
 export interface Album {
-  id: number;
+  id: MediaId;
   name: string;
-  picUrl?: string;
+  coverUrl?: string;
   entityId?: string;
+  catalogRef?: ProviderCatalogRef;
 }
 
 export interface SongPrivilege {
@@ -857,25 +864,17 @@ export type LyricProviderSource = 'netease' | 'qq' | 'kugou' | 'amll';
 export type AmllDbPlatform = 'ncm' | 'qq';
 
 export interface SongResult {
-  id: number;
+  id: MediaId;
   name: string;
   artists: Artist[];
   album: Album;
-  duration: number; // milliseconds usually from API
+  durationMs: number;
   isPureMusic?: boolean;
+  aliases?: string[];
+  translatedNames?: string[];
   t?: 0 | 1 | 2;
   sourceType?: 'netease' | 'cloud';
-  // Netease API raw fields
-  al?: {
-    id: number;
-    name: string;
-    picUrl?: string;
-    entityId?: string;
-  };
-  ar?: Artist[];
-  dt?: number; // duration in ms
-  alia?: string[]; // 别名
-  tns?: string[]; // 翻译名
+  sourceRef?: PlaybackSourceRef;
   fee?: number;
   noCopyrightRcmd?: NoCopyrightRecommendation | null;
   resourceState?: boolean;
@@ -894,7 +893,7 @@ export interface OnlineLyricsState {
   importedLyricsName?: string | null;
   hasOnlineOverride?: boolean;
   onlineOverrideLyrics?: LyricData | null;
-  matchedSongId?: number;
+  matchedSongId?: MediaId;
   matchedIsPureMusic?: boolean;
   matchedLyricsSource?: LyricProviderSource;
   matchedLyricsProviderPlatform?: AmllDbPlatform;
@@ -1029,6 +1028,7 @@ export type {
 
 // Extend SongResult to support local files and Navidrome files
 export interface UnifiedSong extends SongResult {
+  sourceRef: PlaybackSourceRef;
   isLocal?: boolean;
   localRef?: import('./types/localLibrary').LocalSongReference;
   isNavidrome?: boolean;

@@ -83,8 +83,12 @@ const MONET_INACTIVE_TEXT_LINE_LIMIT = 2;
 const MONET_TRANSLATION_LINE_LIMIT = 2;
 const MONET_MIN_MEASURE_WIDTH_PX = 180;
 const MONET_GRAPHEME_OFFSETS_CACHE_LIMIT = 420;
+const MONET_VERTICAL_METRICS_CACHE_LIMIT = 420;
+const MONET_GLYPH_VERTICAL_SAFETY_PX = 2;
 
 const monetGraphemeOffsetsCache = new Map<string, number[]>();
+const monetVerticalMetricsCache = new Map<string, number>();
+let monetVerticalMeasureContext: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
 
 const graphemeSegmenter = typeof Intl !== 'undefined'
     ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
@@ -118,6 +122,50 @@ const measureTextLineCount = (text: string, fontSpec: string, maxWidthPx: number
     const prepared = prepareWithSegments(text || ' ', fontSpec);
     const layout = layoutWithLines(prepared, Math.max(maxWidthPx, MONET_MIN_MEASURE_WIDTH_PX), lineHeightPx);
     return Math.max(layout.lines.length, 1);
+};
+
+const getMonetVerticalMeasureContext = () => {
+    if (monetVerticalMeasureContext) {
+        return monetVerticalMeasureContext;
+    }
+    if (typeof OffscreenCanvas !== 'undefined') {
+        monetVerticalMeasureContext = new OffscreenCanvas(1, 1).getContext('2d');
+        return monetVerticalMeasureContext;
+    }
+    if (typeof document !== 'undefined') {
+        monetVerticalMeasureContext = document.createElement('canvas').getContext('2d');
+    }
+    return monetVerticalMeasureContext;
+};
+
+/** Measures the tallest painted glyph bounds so descenders remain inside Monet's clipped line box. */
+const measureMonetLineHeight = (text: string, fontSpec: string, fontPx: number, defaultLineHeightPx: number): number => {
+    const cacheKey = `${fontSpec}|${text}`;
+    const cached = monetVerticalMetricsCache.get(cacheKey);
+    if (cached !== undefined) {
+        return cached;
+    }
+
+    const context = getMonetVerticalMeasureContext();
+    if (!context) {
+        return defaultLineHeightPx;
+    }
+
+    context.font = fontSpec;
+    const metrics = context.measureText(text || 'Hg');
+    const glyphHeightPx = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+    const measuredLineHeightPx = glyphHeightPx > 0
+        ? Math.max(defaultLineHeightPx, Math.ceil(glyphHeightPx + MONET_GLYPH_VERTICAL_SAFETY_PX))
+        : defaultLineHeightPx;
+
+    if (monetVerticalMetricsCache.size >= MONET_VERTICAL_METRICS_CACHE_LIMIT) {
+        const oldestKey = monetVerticalMetricsCache.keys().next().value;
+        if (oldestKey) {
+            monetVerticalMetricsCache.delete(oldestKey);
+        }
+    }
+    monetVerticalMetricsCache.set(cacheKey, measuredLineHeightPx);
+    return measuredLineHeightPx;
 };
 
 const measureTextWidthAtPx = (text: string, fontPx: number, fontSpec: string): number => {
@@ -155,6 +203,20 @@ export const measureMonetGraphemeOffsets = (text: string, fontPx: number, fontSp
         offsets[index] = measureTextWidthAtPx(graphemes.slice(0, index).join(''), fontPx, fontSpec);
     }
     return rememberGraphemeOffsets(cacheKey, offsets);
+};
+
+/** Keeps the sweep narrow enough for short CJK lyric tokens to hand off continuously. */
+export const resolveMonetSweepEdgeSoftness = (fontPx: number): number => (
+    Math.max(Math.min(fontPx * 0.45, 16), 6)
+);
+
+/** Extends the mask front so its soft trailing edge has fully cleared the word at its end time. */
+export const resolveMonetSweepEnd = (filledWidthPx: number, fullWidthPx: number, edgeSoftnessPx: number): number => {
+    if (fullWidthPx <= 0) {
+        return 0;
+    }
+    const progress = Math.min(1, Math.max(0, filledWidthPx / fullWidthPx));
+    return filledWidthPx + edgeSoftnessPx * progress;
 };
 
 export const resolveMonetLineStatus = (
@@ -358,14 +420,14 @@ export const measureMonetLineLayout = ({
     maxWidthPx,
     showSubtitleTranslation = true,
 }: MeasureMonetLineLayoutOptions): MonetMeasuredLineLayout => {
-    const lineHeightPx = fontPx * 1.18;
-    const translationLineHeightPx = translationFontPx * 1.28;
+    const fontSpec = `${fontWeight} ${fontPx}px ${fontStack}`;
+    const translationFontSpec = `${translationFontWeight} ${translationFontPx}px ${translationFontStack ?? fontStack}`;
+    const lineHeightPx = measureMonetLineHeight(line.fullText, fontSpec, fontPx, fontPx * 1.18);
+    const translationLineHeightPx = measureMonetLineHeight(line.translation ?? '', translationFontSpec, translationFontPx, translationFontPx * 1.28);
     const textPaddingTopPx = Math.max(fontPx * 0.16, 8);
     const textPaddingBottomPx = Math.max(fontPx * 0.34, 14);
     const translationPaddingTopPx = Math.max(translationFontPx * 0.45, 7);
     const translationPaddingBottomPx = Math.max(translationFontPx * 0.18, 5);
-    const fontSpec = `${fontWeight} ${fontPx}px ${fontStack}`;
-    const translationFontSpec = `${translationFontWeight} ${translationFontPx}px ${translationFontStack ?? fontStack}`;
     const textLineCount = measureTextLineCount(line.fullText, fontSpec, maxWidthPx, lineHeightPx);
     const textLimit = status === 'active' ? MONET_ACTIVE_TEXT_LINE_LIMIT : MONET_INACTIVE_TEXT_LINE_LIMIT;
     const visibleTextLineCount = Math.min(textLineCount, textLimit);

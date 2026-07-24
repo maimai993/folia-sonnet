@@ -1,4 +1,6 @@
 import type { SongResult, UnifiedSong } from '../../types';
+import { getPlaybackSourceRef } from '../../utils/appPlaybackGuards';
+import { getProviderSongMetadata } from '../onlineMusic/songMetadata';
 
 // src/services/sync/syncFingerprint.ts
 // Stable song fingerprints keep synced theme keys independent from local API ids.
@@ -16,20 +18,13 @@ const normalizeArtists = (song: SongResult) => {
         : typeof unified.navidromeData?.artistName === 'string'
             ? unified.navidromeData.artistName
             : '';
-    const artists = song.ar?.length ? song.ar : song.artists;
-    const artistText = artists?.map(artist => artist.name).filter(Boolean).join(', ') || navidromeArtist;
+    const artistText = getProviderSongMetadata(song).artists.map(artist => artist.name).filter(Boolean).join(', ') || navidromeArtist;
     return normalizeText(artistText);
 };
 
 const getSongSourceKind = (song: SongResult) => {
-    const unified = song as UnifiedSong;
-    if (unified.isLocal || unified.localRef) {
-        return 'local';
-    }
-    if (unified.isNavidrome || unified.navidromeData) {
-        return 'navidrome';
-    }
-    return song.sourceType || 'netease';
+    const sourceRef = getPlaybackSourceRef(song);
+    return sourceRef.kind === 'online' ? sourceRef.providerId : sourceRef.kind;
 };
 
 const getSongTitle = (song: SongResult) => {
@@ -42,7 +37,7 @@ const getSongTitle = (song: SongResult) => {
 
 const getDurationMs = (song: SongResult) => {
     const unified = song as UnifiedSong;
-    const candidate = song.dt ?? song.duration ?? unified.navidromeData?.durationMs;
+    const candidate = getProviderSongMetadata(song).durationMs || unified.navidromeData?.durationMs;
     if (typeof candidate === 'number' && Number.isFinite(candidate)) {
         return candidate < 1000 ? candidate * 1000 : candidate;
     }
@@ -81,11 +76,9 @@ export const createSongSyncFingerprint = (song: SongResult | null) => {
     }
 
     const sourceKind = getSongSourceKind(song);
-    if (sourceKind === 'netease') {
-        const stableIdFingerprint = createNeteaseSongIdFingerprint(song.id);
-        if (stableIdFingerprint) {
-            return stableIdFingerprint;
-        }
+    const sourceRef = getPlaybackSourceRef(song);
+    if (sourceRef.kind === 'online') {
+        return `${sourceRef.providerId}:id:${sourceRef.mediaId}`;
     }
 
     return createSongMetadataFingerprint(song, sourceKind);
@@ -101,5 +94,9 @@ export const createSongSyncFingerprintCandidates = (song: SongResult | null) => 
         createSongSyncFingerprint(song),
         createSongMetadataFingerprint(song, sourceKind),
     ];
+    const sourceRef = getPlaybackSourceRef(song);
+    if (sourceRef.kind === 'online' && sourceRef.providerId === 'netease') {
+        candidates.push(createNeteaseSongIdFingerprint(song.id));
+    }
     return Array.from(new Set(candidates.filter((value): value is string => Boolean(value))));
 };

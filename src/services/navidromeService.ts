@@ -5,6 +5,7 @@ import {
     SubsonicSong,
     AlbumList2Response,
     AlbumResponse,
+    SongResponse,
     PingResponse,
     LyricsResponse,
     Search3Response,
@@ -520,6 +521,19 @@ export const navidromeApi = {
         return null;
     },
 
+    // Fetches the full OpenSubsonic song payload, including ReplayGain when supported by the server.
+    getSong: async (config: NavidromeConfig, id: string): Promise<SubsonicSong | null> => {
+        try {
+            const res = await fetchSubsonic<SongResponse>(config, 'getSong', { id });
+            if (res['subsonic-response'].status === 'ok') {
+                return res['subsonic-response'].song || null;
+            }
+        } catch (e) {
+            console.warn('[Navidrome] getSong failed:', e);
+        }
+        return null;
+    },
+
     // Get streaming URL
     getStreamUrl: (config: NavidromeConfig, songId: string, format?: string): string => {
         const url = new URL(`${config.serverUrl}/rest/stream`);
@@ -632,7 +646,7 @@ export const navidromeApi = {
         const displayAlbum = {
             id: 0,
             name: song.album,
-            picUrl: coverArtUrl,
+            coverUrl: coverArtUrl,
         };
 
         return {
@@ -641,11 +655,9 @@ export const navidromeApi = {
             name: song.title,
             artists: displayArtists,
             album: displayAlbum,
-            ar: displayArtists,
-            al: displayAlbum,
-            dt: song.duration * 1000,
-            duration: song.duration * 1000, // Convert to milliseconds
+            durationMs: song.duration * 1000, // Convert to milliseconds
             isNavidrome: true,
+            sourceRef: { kind: 'navidrome', mediaId: song.id },
             navidromeData: {
                 id: song.id,
                 streamUrl: navidromeApi.getStreamUrl(config, song.id),
@@ -656,6 +668,7 @@ export const navidromeApi = {
                 bitRate: song.bitRate,
                 suffix: song.suffix,
                 starred: song.starred,
+                replayGain: song.replayGain,
             },
         };
     },

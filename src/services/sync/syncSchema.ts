@@ -50,6 +50,9 @@ const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisual
     if (isFiniteNumber(value.visualizerOpacity)) settings.visualizerOpacity = value.visualizerOpacity;
     if (typeof value.hidePlayerTranslationSubtitle === 'boolean') settings.hidePlayerTranslationSubtitle = value.hidePlayerTranslationSubtitle;
     if (typeof value.showSubtitleTranslation === 'boolean') settings.showSubtitleTranslation = value.showSubtitleTranslation;
+    if (value.subtitleContentMode === 'translation' || value.subtitleContentMode === 'romanization' || value.subtitleContentMode === 'none') {
+        settings.subtitleContentMode = value.subtitleContentMode;
+    }
     if (typeof value.subtitleOverlayBackground === 'boolean') settings.subtitleOverlayBackground = value.subtitleOverlayBackground;
     if (isFontStyle(value.lyricsFontStyle)) settings.lyricsFontStyle = value.lyricsFontStyle;
     if (isFiniteNumber(value.lyricsFontScale)) settings.lyricsFontScale = value.lyricsFontScale;

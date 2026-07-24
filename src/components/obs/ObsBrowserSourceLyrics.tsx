@@ -10,6 +10,7 @@ export type ObsBrowserSourceLyricsProps = {
     visualizerTheme: Theme;
     subtitleTheme?: Theme;
     lyricsFontScale: number;
+    subtitleFontScale: number;
     shouldHidePlayerTranslationSubtitle: boolean;
     isDaylight: boolean;
     navigateToHome: () => void;
@@ -21,6 +22,7 @@ export const ObsBrowserSourceLyrics: React.FC<ObsBrowserSourceLyricsProps> = ({
     visualizerTheme,
     subtitleTheme,
     lyricsFontScale,
+    subtitleFontScale,
     shouldHidePlayerTranslationSubtitle,
     isDaylight,
     navigateToHome,
@@ -88,7 +90,7 @@ export const ObsBrowserSourceLyrics: React.FC<ObsBrowserSourceLyricsProps> = ({
                                     style={{
                                         color: visualizerTheme.secondaryColor,
                                         fontFamily: visualizerTheme.fontFamily || 'inherit',
-                                        scale: lyricsFontScale,
+                                        scale: lyricsFontScale * subtitleFontScale,
                                         fontWeight: resolveThemeFontWeight(subtitleTheme ?? visualizerTheme, isCurrent ? 500 : 400),
                                     }}
                                 >

@@ -10,6 +10,7 @@ interface NomandBackgroundLayerProps {
     monetBackgroundImage?: MonetBackgroundImage | null;
     tuning?: NomandBackgroundTuning;
     theme: Theme;
+    isDaylight?: boolean;
 }
 
 const NomandBackgroundLayer: React.FC<NomandBackgroundLayerProps> = ({
@@ -17,6 +18,7 @@ const NomandBackgroundLayer: React.FC<NomandBackgroundLayerProps> = ({
     monetBackgroundImage,
     tuning: tuningOverride,
     theme,
+    isDaylight,
 }) => {
     const tuning = tuningOverride ?? DEFAULT_NOMAND_BACKGROUND_TUNING;
     const sourceUrl = tuning.imageSource === 'uploaded-global'
@@ -46,7 +48,7 @@ const NomandBackgroundLayer: React.FC<NomandBackgroundLayerProps> = ({
                 colorFront={theme.accentColor}
                 colorHighlight={theme.primaryColor}
                 originalColors={tuning.originalColors}
-                inverted={tuning.inverted}
+                inverted={isDaylight && !tuning.originalColors ? !tuning.inverted : tuning.inverted}
                 type={tuning.ditheringType}
                 size={tuning.size}
                 colorSteps={tuning.colorSteps}

@@ -4,6 +4,7 @@ import type { MotionValue } from 'framer-motion';
 import { restorePlaybackSourceForSong } from '../components/app/playback/restorePlaybackSource';
 import { PlayerState } from '../types';
 import type { LyricData, SongResult, StageSource, StageStatus, StatusMessage } from '../types';
+import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 import type { ThemeCacheSongKey } from '../services/themeCache';
 import { isStagePlaybackSong } from '../utils/appPlaybackGuards';
 import type {
@@ -20,8 +21,8 @@ export type WindowPlaybackHandoffRestoreStatus = 'checking' | 'none' | 'restored
 
 type UseElectronWindowPlaybackHandoffParams = {
     isElectronWindow: boolean;
-    audioQuality: string;
-    userId?: number;
+    audioQuality: AudioQualityPreference;
+    userId?: MediaId;
     activePlaybackContext: 'main' | 'stage';
     setActivePlaybackContext: SetState<'main' | 'stage'>;
     currentView: 'home' | 'player';
@@ -70,7 +71,7 @@ type UseElectronWindowPlaybackHandoffParams = {
     setShowTransparentWindowBorder: SetState<boolean>;
     transparentPlayerBackground: boolean;
     applyTransparentPlayerBackground: (enabled: boolean) => void;
-    restoreCachedThemeForSong: (songId: ThemeCacheSongKey, options?: {
+    restoreCachedThemeForSong: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
     }) => Promise<unknown>;

@@ -28,8 +28,5 @@ export const resolveGridTrackAlbumTargetId = (
         return resolveNavidromePlaybackCarrier(track)?.navidromeData.albumId;
     }
 
-    return track?.al?.entityId
-        || track?.album?.entityId
-        || track?.al?.id
-        || track?.album?.id;
+    return track?.album?.entityId || track?.album?.id;
 };

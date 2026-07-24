@@ -16,6 +16,8 @@ import {
     buildMonetDisplayTokens,
     measureMonetGraphemeOffsets,
     measureMonetLineLayout,
+    resolveMonetSweepEdgeSoftness,
+    resolveMonetSweepEnd,
     resolveMonetWordStatus,
     type MonetLineStatus,
     type MonetMeasuredLineLayout,
@@ -88,7 +90,6 @@ const MONET_SCROLL_TRANSITION = {
     opacity: { duration: 0.28, ease: [0.32, 0.72, 0, 1] },
     filter: { duration: 0.32, ease: [0.32, 0.72, 0, 1] },
 } as const;
-
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const clampScrollSteps = (steps: number) => Math.max(-1, Math.min(1, steps));
 const getScrollDirection = (delta: number) => (delta === 0 ? 0 : delta > 0 ? 1 : -1);
@@ -524,10 +525,12 @@ const MonetWordSweep: React.FC<{
         });
 
         const maskImage = useTransform(fillWidth, latest => {
-            const edgeSoftness = Math.max(Math.min(fontPx * 0.45, 16), 6);
-            const solidEnd = Math.max(latest - edgeSoftness, 0);
-            const featherStart = Math.max(latest - edgeSoftness * 0.55, 0);
-            const featherEnd = Math.max(latest, 0);
+            const edgeSoftness = resolveMonetSweepEdgeSoftness(fontPx);
+            const fullWidth = graphemeOffsets[graphemeOffsets.length - 1] ?? 0;
+            const sweepEnd = resolveMonetSweepEnd(latest, fullWidth, edgeSoftness);
+            const solidEnd = Math.max(sweepEnd - edgeSoftness, 0);
+            const featherStart = Math.max(sweepEnd - edgeSoftness * 0.55, 0);
+            const featherEnd = Math.max(sweepEnd, 0);
             return `linear-gradient(90deg, rgba(0, 0, 0, 1) 0px, rgba(0, 0, 0, 1) ${solidEnd}px, rgba(0, 0, 0, 0.92) ${featherStart}px, rgba(0, 0, 0, 0) ${featherEnd}px, rgba(0, 0, 0, 0) 100%)`;
         });
 
@@ -698,7 +701,7 @@ const MonetRailLine: React.FC<{
                 />
             )}
             <div
-                className="min-w-0 overflow-hidden"
+                className="min-w-0 overflow-hidden pointer-events-none"
                 style={{
                     marginLeft: `-${glowBufferPx}px`,
                     marginRight: `-${glowBufferPx}px`,

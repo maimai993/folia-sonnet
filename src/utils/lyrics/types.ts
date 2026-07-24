@@ -8,6 +8,7 @@ export interface LyricProcessingOptions {
     includeInterludes?: boolean;
     filterPattern?: string | null;
     songId?: number;
+    fetchChorusRanges?: (songId: number) => Promise<Array<{ startTime: number; endTime: number }>>;
 }
 
 export interface RawEmbeddedLyric {
@@ -39,17 +40,21 @@ export interface RawNeteaseLyric {
         pureMusic?: boolean;
         yrc?: { lyric?: string; pureMusic?: boolean };
         ytlrc?: { lyric?: string; pureMusic?: boolean };
+        yromalrc?: { lyric?: string; pureMusic?: boolean };
+        romalrc?: { lyric?: string; pureMusic?: boolean };
     };
     yrc?: { lyric?: string; pureMusic?: boolean };
     ytlrc?: { lyric?: string; pureMusic?: boolean };
+    yromalrc?: { lyric?: string; pureMusic?: boolean };
     tlyric?: { lyric?: string; pureMusic?: boolean };
+    romalrc?: { lyric?: string; pureMusic?: boolean };
     pureMusic?: boolean;
 }
 
 export interface RawNavidromeLyric {
     type: 'navidrome';
     // OpenSubsonic structured lyrics
-    structuredLyrics?: StructuredLyric | StructuredLyricLine[];
+    structuredLyrics?: StructuredLyric | StructuredLyric[] | StructuredLyricLine[];
     // Standard Subsonic plain lyrics string
     plainLyrics?: string;
 }

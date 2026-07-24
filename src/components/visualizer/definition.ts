@@ -14,6 +14,7 @@ import {
     type MonetPortraitImage,
     type MonetTuning,
     type PartitaTuning,
+    type SubtitleContentMode,
     type Theme,
     type TiltTuning,
     type VisualizerMode,
@@ -45,11 +46,15 @@ export interface VisualizerSharedProps {
     visualizerOpacity?: number;
     background?: VisualizerBackgroundConfig;
     lyricsFontScale?: number;
+    subtitleFontScale?: number;
     subtitleOverlayOpacity?: number;
     subtitleOverlayBackground?: boolean;
+    showHarmonySubtitle?: boolean;
+    harmonySubtitleBackground?: boolean;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
     showSubtitleTranslation?: boolean;
+    subtitleContentMode?: SubtitleContentMode;
     paused?: boolean;
     onBack?: () => void;
     alwaysShowBackButton?: boolean;

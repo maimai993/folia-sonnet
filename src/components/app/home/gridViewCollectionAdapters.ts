@@ -6,12 +6,18 @@ import { SubsonicSong } from '../../../types/navidrome';
 import { isBlob } from '../../../utils/blobGuards';
 import { sortLocalFolderSongs } from '../../../utils/localSongSorting';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
+import type {
+    OnlineProviderId,
+    ProviderArtistSummary,
+    ProviderCollection,
+    ProviderUser,
+} from '../../../types/onlineMusic';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/localLibraryIndex';
 
 // src/components/app/home/gridViewCollectionAdapters.ts
 // Converts home-surface collections into small GridView descriptors and resolves non-Netease tracks outside GridView.
 
-export type GridViewCollectionSource = 'netease' | 'local' | 'navidrome';
+export type GridViewCollectionSource = 'online' | 'local' | 'navidrome';
 export type NavidromeGridViewCollectionType = 'album' | 'playlist' | 'artist' | 'random' | 'favorites';
 
 export interface BaseGridViewCollectionDescriptor {
@@ -20,10 +26,20 @@ export interface BaseGridViewCollectionDescriptor {
     name: string;
     type: string;
     coverUrl?: string;
-    coverImgUrl?: string;
-    picUrl?: string;
     description?: string;
     trackCount?: number;
+    albumCount?: number;
+    isOwned?: boolean;
+    artists?: ProviderArtistSummary[];
+    aliases?: string[];
+    publishedAt?: number;
+    publisher?: string;
+    playCount?: number;
+    updatedAt?: number;
+    tracksUpdatedAt?: number;
+    isLiked?: boolean;
+    providerData?: ProviderCollection['providerData'];
+    creator?: ProviderUser;
     albumArtist?: string;
     albumYear?: number;
     albumGenre?: string;
@@ -49,8 +65,14 @@ export interface NavidromeGridViewCollectionDescriptor extends BaseGridViewColle
     editable?: boolean;
 }
 
+export interface OnlineGridViewCollectionDescriptor extends BaseGridViewCollectionDescriptor {
+    source: 'online';
+    providerId: OnlineProviderId;
+    raw?: any;
+}
+
 export type GridViewCollectionDescriptor =
-    | (BaseGridViewCollectionDescriptor & { source: 'netease'; raw?: any; })
+    | OnlineGridViewCollectionDescriptor
     | LocalGridViewCollectionDescriptor
     | NavidromeGridViewCollectionDescriptor;
 
@@ -60,15 +82,48 @@ const getDisplayName = (name: React.ReactNode) => (
         : ''
 );
 
-export const createNeteaseGridViewCollection = (collection: any): GridViewCollectionDescriptor => ({
-    ...collection,
-    source: 'netease',
-    albumArtist: collection.type === 'album'
-        ? collection.raw?.artists?.map((artist: { name?: string }) => artist.name).filter(Boolean).join(' / ') || collection.description
-        : collection.albumArtist,
-    albumPublishTime: collection.type === 'album' ? collection.raw?.publishTime : collection.albumPublishTime,
-    albumCompany: collection.type === 'album' ? collection.raw?.company : collection.albumCompany,
-});
+// Returns the provider-normalized artist label used by collection overview cards.
+export const getProviderCollectionArtistLabel = (
+    collection: Pick<ProviderCollection, 'artists' | 'creator'> | null | undefined,
+): string => {
+    const artists = collection?.artists
+        ?.map(artist => artist.name.trim())
+        .filter(Boolean)
+        .join(', ');
+    return artists || collection?.creator?.nickname || '';
+};
+
+export const createNeteaseProviderUser = (user: ProviderUser | null | undefined): ProviderUser | null => user || null;
+
+export const createNeteaseGridViewCollection = (collection: ProviderCollection): GridViewCollectionDescriptor => (
+    createOnlineGridViewCollection(collection, 'netease')
+);
+
+export const createOnlineGridViewCollection = (
+    collection: any,
+    providerId: OnlineProviderId,
+): OnlineGridViewCollectionDescriptor => {
+    const creator = collection.creator;
+    return {
+        ...collection,
+        source: 'online',
+        providerId,
+        coverUrl: collection.coverUrl,
+        trackCount: collection.trackCount,
+        albumCount: collection.albumCount,
+        isOwned: collection.isOwned,
+        artists: collection.artists,
+        aliases: collection.aliases,
+        publishedAt: collection.publishedAt,
+        publisher: collection.publisher,
+        playCount: collection.playCount,
+        updatedAt: collection.updatedAt,
+        tracksUpdatedAt: collection.tracksUpdatedAt,
+        isLiked: collection.isLiked,
+        creator: creator ? { ...creator } : undefined,
+        raw: collection.raw || collection,
+    };
+};
 
 export const createLocalGridViewCollection = (group: LocalLibraryGroup): LocalGridViewCollectionDescriptor => ({
     source: 'local',
@@ -109,6 +164,7 @@ export const createNavidromeGridViewCollection = (
     albumYear: item.albumYear,
     albumGenre: item.albumGenre,
     albumDuration: item.albumDuration,
+    publishedAt: item.albumYear ? new Date(item.albumYear, 0, 1).getTime() : undefined,
     editable: Boolean((item as { editable?: boolean }).editable),
 });
 
@@ -280,4 +336,4 @@ export const isNavidromeGridViewCollection = (
 
 export const isNeteaseGridViewCollection = (
     collection: GridViewCollectionDescriptor
-) => collection.source === 'netease';
+) => collection.source === 'online' && collection.providerId === 'netease';

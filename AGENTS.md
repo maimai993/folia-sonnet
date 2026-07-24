@@ -40,6 +40,10 @@
   路径：`skills/settings-feature-integration/SKILL.md`
   用于新增或调整设置项时判断接入位置：视觉相关设置必须进入视觉配置导入导出，功能性设置和可执行动作必须注册到 command palette。
 
+- `kugou-provider-alignment`
+  路径：`skills/kugou-provider-alignment/SKILL.md`
+  用于开发阶段根据 `docs\ku-go-api-docs.md`、`.env.local` 中的真实 KuGou 服务和 `test-results\.dev-credentials` 对齐酷狗 provider 的请求与响应，禁止猜测接口结构。
+
 全局沟通规则：
 
 - 不需要使用skills的时候，不要读取它们。

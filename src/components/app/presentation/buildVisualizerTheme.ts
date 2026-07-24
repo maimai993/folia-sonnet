@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Theme, VisualizerMode } from '../../../types';
+import type { MediaId } from '../../../types/onlineMusic';
 
 // src/components/app/presentation/buildVisualizerTheme.ts
 
@@ -30,7 +31,7 @@ export const buildVisualizerTheme = ({
     subtitleFontWeight?: number | null;
     subtitleFontFamily?: string | null;
     subtitleFontFallbackFamilies?: string[];
-    currentSongId?: number | null;
+    currentSongId?: MediaId | null;
     visualizerMode: VisualizerMode;
 }) => {
     const visualizerBackgroundColor = String(

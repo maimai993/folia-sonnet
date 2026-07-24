@@ -27,6 +27,26 @@ describe('LocalFileLyricAdapter', () => {
             '[1000,500]<0,500,0>Hello',
             '',
             {},
+            '',
+        );
+    });
+
+    it('separates local main, translation, and romanization tracks conservatively', async () => {
+        await new LocalFileLyricAdapter().parse({
+            type: 'local',
+            lrcContent: [
+                '[00:01.00]君のことが好き',
+                '[00:01.00]我喜欢你',
+                '[00:01.00]Kimi no koto ga suki',
+            ].join('\n'),
+        });
+
+        expect(parseLyricsAsync).toHaveBeenCalledWith(
+            'lrc',
+            '[00:01.00]君のことが好き',
+            '[00:01.00]我喜欢你',
+            {},
+            '[00:01.00]Kimi no koto ga suki',
         );
     });
 });

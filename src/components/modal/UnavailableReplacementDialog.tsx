@@ -4,6 +4,7 @@ import { ArrowDown } from 'lucide-react';
 import type { SongResult } from '../../types';
 import ThemedDialog from '../shared/ThemedDialog';
 import { formatSongName } from '../../utils/songNameFormatter';
+import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 
 interface UnavailableReplacementDialogProps {
     isOpen: boolean;
@@ -52,8 +53,9 @@ const UnavailableReplacementDialog: React.FC<UnavailableReplacementDialogProps> 
     const songName = originalSong?.name || t('status.songUnavailable');
 
     const renderSongCard = (song: SongResult | null, tone: 'muted' | 'normal') => {
-        const artistText = song?.ar?.map((artist) => artist.name).join(', ') || song?.artists?.map((artist) => artist.name).join(', ') || '';
-        const albumText = song?.al?.name || song?.album?.name || '';
+        const metadata = song ? getProviderSongMetadata(song) : null;
+        const artistText = metadata?.artists.map(artist => artist.name).join(', ') || '';
+        const albumText = metadata?.album?.name || '';
         const cardClass = tone === 'muted'
             ? (isDaylight ? 'border-black/8 bg-black/[0.025]' : 'border-white/10 bg-white/[0.025]')
             : (isDaylight ? 'border-black/8 bg-black/[0.045]' : 'border-white/10 bg-white/[0.05]');

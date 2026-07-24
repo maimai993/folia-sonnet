@@ -6,6 +6,7 @@ import NaviLyricMatchModal from '../../modal/NaviLyricMatchModal';
 import OnlineLyricMatchModal from '../../modal/OnlineLyricMatchModal';
 import UnavailableReplacementDialog from '../../modal/UnavailableReplacementDialog';
 import SettingsModal from '../../modal/SettingsModal';
+import ConfirmDialog from '../../shared/ConfirmDialog';
 import type { AppDialogsModel } from './buildAppDialogsModel';
 
 // Centralized app-level dialog and toast renderer for the player shell.
@@ -14,7 +15,7 @@ type AppDialogsProps = {
 };
 
 const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
-    const { statusToast, lyricMatchDialog, naviLyricMatchDialog, onlineLyricMatchDialog, unavailableReplacementDialog, settingsDialog } = model;
+    const { statusToast, lyricMatchDialog, naviLyricMatchDialog, onlineLyricMatchDialog, unavailableReplacementDialog, settingsDialog, providerSwitchConfirmDialog } = model;
 
     return (
         <>
@@ -59,6 +60,7 @@ const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
             {naviLyricMatchDialog && <NaviLyricMatchModal {...naviLyricMatchDialog} />}
             {onlineLyricMatchDialog && <OnlineLyricMatchModal {...onlineLyricMatchDialog} />}
             {unavailableReplacementDialog && <UnavailableReplacementDialog {...unavailableReplacementDialog} />}
+            {providerSwitchConfirmDialog && <ConfirmDialog {...providerSwitchConfirmDialog} />}
             <AnimatePresence>
                 {settingsDialog && <SettingsModal {...settingsDialog} />}
             </AnimatePresence>

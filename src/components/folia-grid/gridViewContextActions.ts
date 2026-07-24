@@ -1,5 +1,5 @@
 import type { SongResult } from '../../types';
-import { isSongMarkedUnavailable } from '../../services/netease';
+import { isSongUnavailable } from '../../services/onlineMusic/songAvailability';
 
 // src/components/folia-grid/gridViewContextActions.ts
 
@@ -18,7 +18,7 @@ export const resolveGridViewContextTracks = (
     }
 
     return visibleItems.flatMap(item => (
-        item.rawTrack && !isSongMarkedUnavailable(item.rawTrack)
+        item.rawTrack && !isSongUnavailable(item.rawTrack)
             ? [item.rawTrack]
             : []
     ));

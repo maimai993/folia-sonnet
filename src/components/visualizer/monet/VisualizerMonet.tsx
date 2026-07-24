@@ -9,6 +9,7 @@ import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { resolveThemeFontStack, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
+import { resolveLyricAlternateText, resolveSubtitleContentMode } from '../../../utils/lyrics/alternateText';
 import AudioOverlay from './AudioOverlay';
 import MonetFloatingDecor from './MonetFloatingDecor';
 import MonetLyricsRail from './MonetLyricsRail';
@@ -28,10 +29,12 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         lines,
         theme,
         subtitleTheme,
+        subtitleFontScale = 1,
         audioPower,
         audioBands,
         showText = true,
         showSubtitleTranslation = true,
+        subtitleContentMode,
         songTitle,
         songArtist,
         songAlbum,
@@ -45,6 +48,16 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         seed,
     } = props;
     const { t } = useTranslation();
+    const resolvedSubtitleContentMode = resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation);
+    const displayLines = useMemo(() => {
+        if (resolvedSubtitleContentMode !== 'romanization') {
+            return lines;
+        }
+        return lines.map(line => ({
+            ...line,
+            translation: resolveLyricAlternateText(line, resolvedSubtitleContentMode) ?? undefined,
+        }));
+    }, [lines, resolvedSubtitleContentMode]);
 
     const handleSetMonetTuning = onMonetTuningChange;
 
@@ -87,12 +100,12 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
     } = useVisualizerRuntime({
         currentTime,
         currentLineIndex,
-        lines,
+        lines: displayLines,
         getLineEndTime: getLineRenderEndTime,
     });
 
     const visibleLineEntries = useMemo(() => buildMonetVisibleLineEntries({
-        lines,
+        lines: displayLines,
         currentLineIndex,
         activeLine,
         recentCompletedLine,
@@ -104,7 +117,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         activeLine,
         currentLineIndex,
         currentTimeValue,
-        lines,
+        displayLines,
         recentCompletedLine,
         upcomingLine,
     ]);
@@ -121,7 +134,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         2.28,
     ) * fontScale;
     const inactiveFontPx = resolveClampFontPx(1.08, 2, 1.48) * fontScale;
-    const translationFontPx = resolveClampFontPx(0.94, 1.28, 1.14) * fontScale;
+    const translationFontPx = resolveClampFontPx(0.94, 1.28, 1.14) * fontScale * subtitleFontScale;
 
     /* eslint-disable-next-line no-warning-comments -- @AI: KEEP THIS EXACTLY AS IS */
     // @note Version Control: Project Folia version 0.5.27-a16525c
@@ -214,7 +227,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                             >
                                 <MonetLyricsRail
                                     entries={visibleLineEntries}
-                                    lines={lines}
+                                    lines={displayLines}
                                     currentLineIndex={currentLineIndex}
                                     currentTime={currentTime}
                                     theme={theme}
@@ -226,7 +239,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     subtitleTheme={subtitleTheme}
                                     keywordColoringEnabled={monetTuning.keywordColoringEnabled}
                                     emptyText=""
-                                    showSubtitleTranslation={showSubtitleTranslation}
+                                    showSubtitleTranslation={resolvedSubtitleContentMode !== 'none'}
                                     audioPower={audioPower}
                                     audioBands={audioBands}
                                     onLyricLineSeek={onLyricLineSeek}

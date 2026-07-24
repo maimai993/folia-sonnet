@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PlayerState } from '../../../src/types';
-import { getCommandPaletteMatches } from '../../../src/components/command-palette/commandRegistry';
+import { COMMAND_PALETTE_COMMANDS, getCommandPaletteMatches } from '../../../src/components/command-palette/commandRegistry';
 import type { CommandPaletteContext } from '../../../src/components/command-palette/types';
 
 const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandPaletteContext => ({
@@ -38,8 +38,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     toggleTransparentBackground: vi.fn(),
     hideBottomSubtitleOverlay: false,
     toggleBottomSubtitleOverlay: vi.fn(),
-    showSubtitleTranslation: true,
-    toggleSubtitleTranslation: vi.fn(),
+    subtitleContentMode: 'translation',
+    cycleSubtitleContentMode: vi.fn(),
     subtitleOverlayBackground: false,
     toggleSubtitleOverlayBackground: vi.fn(),
     alwaysShowPlayerBackButton: false,
@@ -51,7 +51,6 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     voiceInputPauseSupported: false,
     toggleVoiceInputPause: vi.fn(),
     setAppLanguagePreference: vi.fn(async () => undefined),
-    enableAlternativeLyricSources: false,
     runAutoMatchBestLyric: vi.fn(async () => true),
     setIsUserGuideModalOpen: vi.fn(),
     openThemeQuickEditor: vi.fn(),
@@ -62,6 +61,15 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
 });
 
 describe('command palette registry', () => {
+    it('cycles the subtitle content mode via the unified command', async () => {
+        const context = createContext();
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === 'settings-cycle-subtitle-content-mode');
+
+        expect(command).toBeDefined();
+        await command!.execute('', context);
+        expect(context.cycleSubtitleContentMode).toHaveBeenCalled();
+    });
+
     it('parses source-specific search input', async () => {
         const context = createContext();
         const [match] = getCommandPaletteMatches('local touhou');
@@ -190,10 +198,10 @@ describe('command palette registry', () => {
         mainWindowTitlebarMatch.command.execute(mainWindowTitlebarMatch.input, context);
         expect(context.toggleAlwaysShowMainWindowTitlebar).toHaveBeenCalled();
 
-        const [matchSubtitleTranslation] = getCommandPaletteMatches('字幕翻译');
-        expect(matchSubtitleTranslation.command.id).toBe('settings-toggle-subtitle-translation');
-        matchSubtitleTranslation.command.execute(matchSubtitleTranslation.input, context);
-        expect(context.toggleSubtitleTranslation).toHaveBeenCalled();
+        const [matchSubtitleCycle] = getCommandPaletteMatches('字幕翻译');
+        expect(matchSubtitleCycle.command.id).toBe('settings-cycle-subtitle-content-mode');
+        matchSubtitleCycle.command.execute(matchSubtitleCycle.input, context);
+        expect(context.cycleSubtitleContentMode).toHaveBeenCalled();
 
         const [matchSubtitleBackground] = getCommandPaletteMatches('字幕背景');
         expect(matchSubtitleBackground.command.id).toBe('settings-toggle-subtitle-background');
@@ -334,16 +342,13 @@ describe('command palette registry', () => {
         expect(context.shuffleQueue).toHaveBeenCalled();
     });
 
-    it('shows best lyric auto-match command only when alternative lyric sources are enabled', async () => {
-        const disabledContext = createContext({ enableAlternativeLyricSources: false });
-        expect(getCommandPaletteMatches('最佳歌词', disabledContext).some(match => match.command.id === 'playback-auto-match-best-lyric')).toBe(false);
-
-        const enabledContext = createContext({ enableAlternativeLyricSources: true });
-        const [match] = getCommandPaletteMatches('最佳歌词', enabledContext);
+    it('always exposes the best lyric auto-match command', async () => {
+        const context = createContext();
+        const [match] = getCommandPaletteMatches('最佳歌词', context);
         expect(match.command.id).toBe('playback-auto-match-best-lyric');
 
-        await match.command.execute(match.input, enabledContext);
-        expect(enabledContext.runAutoMatchBestLyric).toHaveBeenCalled();
+        await match.command.execute(match.input, context);
+        expect(context.runAutoMatchBestLyric).toHaveBeenCalled();
     });
 
     it('filters out settings-desktop command in a web browser environment without electron', () => {

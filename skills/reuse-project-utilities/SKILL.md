@@ -126,7 +126,7 @@ CJK 语义分组、sticky 标点、英文 contraction 已有布局工具：
 
 需要 CSS `fontFamily`、canvas `font`、pretext `fontSpec` 时，先用 resolver。不要手写一份新的 fallback font stack。
 
-歌词和字幕的最终字重必须使用 `resolveThemeFontWeight(theme, modeFallback)`。模式自身的 300、400、500、700 等设计值只能作为 `modeFallback`：`theme.fontWeight` 有值时必须由用户值覆盖，没有值时才保留模式原设计。DOM、Canvas、pretext 和光栅化文本必须复用同一个解析结果；测量规格、memo 依赖和布局缓存键也必须包含该最终字重。
+歌词和字幕的最终字重必须使用 `resolveThemeFontWeight(theme, modeFallback)`。模式自身的 300、400、500、700 等设计值只能作为 `modeFallback`：`theme.fontWeight` 有值时必须由用户值覆盖，没有值时才保留模式原设计。当用户在设置面板或快捷设置中清空/重置自定义字体栈时，系统会自动清空保存的自定义字重。DOM、Canvas、pretext 和光栅化文本必须复用同一个解析结果；测量规格、memo 依赖和布局缓存键也必须包含该最终字重。
 
 不要在歌词或字幕渲染路径中使用 `font-bold`、`font-medium`、固定 `style.fontWeight`，也不要把固定字重直接写进 Canvas / pretext 字体规格。这些写法会绕开视觉设置，并造成测量与渲染不一致。
 
@@ -190,7 +190,8 @@ const { t } = useTranslation();
 - 网易云 API：`src/services/netease.ts`
 - Navidrome / Subsonic：`src/services/navidromeService.ts`
 - 本地音乐：`src/services/localMusicService.ts`
-- 在线播放和歌词加载：`src/services/onlinePlayback.ts`
+- 在线歌曲搜索、播放、歌词、歌单、账户和 provider 路由：`src/services/onlineMusic/omni.ts`
+- 在线播放编排：`src/services/onlinePlayback.ts`（内部在线数据仍须通过 Omni）
 - 播放结构统一：`src/services/playbackAdapters.ts`
 - IndexedDB：`src/services/db.ts`
 - 队列预取：`src/services/prefetchService.ts`

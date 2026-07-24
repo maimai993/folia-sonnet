@@ -10,6 +10,7 @@ import type {
     StageSource,
     StageStatus,
 } from '../types';
+import type { MediaId } from './onlineMusic';
 
 // Shared playback-specific types extracted from App.tsx.
 export type PlaybackNavigationOptions = {
@@ -25,7 +26,7 @@ export type NextTrackOptions = PlaybackNavigationOptions & {
 export type UnavailableReplacementRequest = {
     originalSong: SongResult;
     replacementSong: SongResult;
-    replacementSongId: number;
+    replacementSongId: MediaId;
     typeDesc?: string;
     queue: SongResult[];
     isFmCall: boolean;

@@ -1,4 +1,5 @@
 import { NeteaseUser, NeteasePlaylist, NoCopyrightRecommendation, SongPrivilege, SongResult } from "../types";
+import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './onlineMusic/providerStorage';
 
 type UnavailableSongReplacement = {
   replacementSong: SongResult;
@@ -77,7 +78,7 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
   // Note: For Vercel hosted APIs, we rely on the `cookie` query param if cross-site cookies are blocked,
   // or `credentials: 'include'` if the server allows it. 
 
-  const storedCookie = typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function' ? null : localStorage.getItem('netease_cookie');
+  const storedCookie = readProviderSessionValue('netease', 'cookie', ['netease_cookie']);
 
   let cookieToUse = storedCookie;
 
@@ -88,15 +89,13 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
       endpoint.startsWith('/logout');
 
     if (!isLoginOrStatusEndpoint) {
-      let anonCookie = typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function' ? null : localStorage.getItem('netease_anonymous_cookie');
+      let anonCookie = readProviderSessionValue('netease', 'anonymous_cookie', ['netease_anonymous_cookie']);
       if (!anonCookie && !endpoint.startsWith('/register/anonimous')) {
         try {
           const anonRes = await fetch(`${base}/register/anonimous?timestamp=${Date.now()}`).then(r => r.json());
           if (anonRes && typeof anonRes.cookie === 'string' && anonRes.cookie) {
             anonCookie = anonRes.cookie;
-            if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
-              localStorage.setItem('netease_anonymous_cookie', anonRes.cookie);
-            }
+            writeProviderSessionValue('netease', 'anonymous_cookie', anonRes.cookie);
           }
         } catch (e) {
           console.warn('Failed to fetch anonymous cookie', e);
@@ -116,9 +115,7 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
   const data = await res.json();
 
   if (!storedCookie && cookieToUse && (data?.code === 301 || data?.code === 401 || data?.code === 403)) {
-    if (typeof localStorage !== 'undefined' && typeof localStorage.removeItem === 'function') {
-      localStorage.removeItem('netease_anonymous_cookie');
-    }
+    removeProviderSessionValue('netease', 'anonymous_cookie', ['netease_anonymous_cookie']);
   }
 
   return data;
@@ -159,8 +156,10 @@ const normalizeArtists = (source: any): { id: number; name: string }[] => {
 
 const getCloudCoverFallback = (raw: any) =>
   raw?.simpleSong?.al?.picUrl ||
+  raw?.simpleSong?.album?.coverUrl ||
   raw?.simpleSong?.album?.picUrl ||
   raw?.al?.picUrl ||
+  raw?.album?.coverUrl ||
   raw?.album?.picUrl ||
   raw?.cover;
 
@@ -228,7 +227,7 @@ const mergeSongsWithPrivileges = (songs: any, privileges: any): SongResult[] => 
     const alignedPrivilege = normalizedPrivileges[index];
     const privilege = alignedPrivilege?.id === song.id
       ? alignedPrivilege
-      : privilegeById.get(song.id) ?? alignedPrivilege;
+      : privilegeById.get(Number(song.id)) ?? alignedPrivilege;
 
     if (!privilege) {
       return song;
@@ -266,6 +265,7 @@ const normalizeSongResult = (raw: any): SongResult => {
 
   const picUrl = toHttps(getCloudCoverFallback(raw));
   const duration = Number(
+    base?.durationMs ??
     base?.dt ??
     base?.duration ??
     raw?.duration ??
@@ -280,20 +280,19 @@ const normalizeSongResult = (raw: any): SongResult => {
     album: {
       id: albumId,
       name: albumName,
-      picUrl: picUrl || undefined,
+      coverUrl: picUrl || undefined,
     },
-    duration,
+    durationMs: duration,
+    aliases: Array.isArray(base?.alia) ? base.alia : [],
+    translatedNames: Array.isArray(base?.tns) ? base.tns : [],
     t: tValue,
     sourceType,
-    al: {
-      id: albumId,
-      name: albumName,
-      picUrl: picUrl || undefined,
+    sourceRef: {
+      kind: 'online',
+      providerId: 'netease',
+      mediaId: String(Number(base?.id ?? raw?.id ?? 0)),
+      ...(sourceType === 'cloud' ? { variant: 'cloud' } : {}),
     },
-    ar: artists,
-    dt: duration,
-    alia: Array.isArray(base?.alia) ? base.alia : [],
-    tns: Array.isArray(base?.tns) ? base.tns : [],
     fee: typeof (base?.fee ?? raw?.fee) === 'number' ? Number(base?.fee ?? raw?.fee) : undefined,
     noCopyrightRcmd: normalizeNoCopyrightRecommendation(base?.noCopyrightRcmd ?? raw?.noCopyrightRcmd),
     resourceState: typeof (base?.resourceState ?? raw?.resourceState) === 'boolean'
@@ -388,7 +387,7 @@ const normalizeUnavailableSongReplacement = (response: any): UnavailableSongRepl
 
   return {
     replacementSong,
-    replacementSongId: replacementSong.id,
+    replacementSongId: Number(replacementSong.id),
     typeDesc,
   };
 };
@@ -443,7 +442,7 @@ const getUnavailableSongReplacement = async (
   }
 
   try {
-    const replacement = await getSongCopyrightRecommendation(song.id);
+    const replacement = await getSongCopyrightRecommendation(Number(song.id));
     if (replacement) {
       songCopyrightRecommendationApiSupported = true;
       return {
@@ -483,10 +482,10 @@ export const getOnlineSongCacheKey = (
 
 const getProcessedLyricPayload = (response: any) => {
   if (!response) return { type: 'netease' as const };
-  if (response.lrc || response.yrc || response.tlyric || response.ytlrc) {
+  if (response.lrc || response.yrc || response.tlyric || response.ytlrc || response.romalrc || response.yromalrc) {
     return { type: 'netease' as const, ...response };
   }
-  if (response.data && (response.data.lrc || response.data.yrc || response.data.tlyric || response.data.ytlrc)) {
+  if (response.data && (response.data.lrc || response.data.yrc || response.data.tlyric || response.data.ytlrc || response.data.romalrc || response.data.yromalrc)) {
     return { type: 'netease' as const, ...response.data };
   }
 

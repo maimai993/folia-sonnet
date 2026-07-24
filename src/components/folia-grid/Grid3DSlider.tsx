@@ -34,6 +34,21 @@ const compactDescription = (description?: string, maxLength = 72) => {
     return normalized.length > maxLength ? `${normalized.substring(0, maxLength)}...` : normalized;
 };
 
+export const getGrid3DSliderSecondaryText = (
+    item: Pick<Grid3DSliderItem, 'type' | 'description' | 'summary'>,
+): string => (
+    item.type === 'playlist'
+        ? compactDescription(item.summary) || compactDescription(item.description)
+        : compactDescription(item.description) || compactDescription(item.summary)
+);
+
+export const getGrid3DSliderSummaryText = (
+    item: Pick<Grid3DSliderItem, 'type' | 'description' | 'summary'>,
+): string => {
+    const summary = compactDescription(item.summary);
+    return summary && summary !== getGrid3DSliderSecondaryText(item) ? summary : '';
+};
+
 const clampFocusedIndex = (index: number, itemCount: number) => {
     if (itemCount <= 0 || !Number.isFinite(index)) {
         return 0;
@@ -134,6 +149,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     const coverSize = useCompactMetrics
         ? (isDesktopWidth ? 208 : 192)
         : (isDesktopWidth ? (isUltraDesktop ? 360 : isLargeDesktop ? 312 : 218) : 224);
+    const edgePadding = Math.max(0, (containerSize.width - coverSize) / 2);
 
     const safeFocusedIndex = clampFocusedIndex(focusedIndex, items.length);
     const itemsSignature = useMemo(() => items.map(item => item.id).join(','), [items]);
@@ -483,7 +499,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                 }`}
                 style={{ scrollbarWidth: 'none' }}
             >
-                <div className="flex px-[40vw] gap-12">
+                <div className="flex gap-12" style={{ paddingInline: edgePadding }}>
                     {isLoading ? (
                         Array.from({ length: 5 }).map((_, index) => (
                             <div key={`skeleton-${index}`} className="shrink-0 pointer-events-none select-none">
@@ -513,6 +529,8 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                     ) : (
                         slicedItems.map((item, index) => {
                             const isFocused = index === safeFocusedIndex;
+                            const secondaryText = getGrid3DSliderSecondaryText(item);
+                            const summaryText = getGrid3DSliderSummaryText(item);
 
                             return (
                                 <div
@@ -560,14 +578,14 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                                 <h3 className="font-bold text-sm truncate max-w-full tracking-tight">
                                                     {item.name}
                                                 </h3>
-                                                {((item.type !== 'playlist' && item.description) || !compactDescription(item.summary)) && (
+                                                {secondaryText && (
                                                     <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
-                                                        {item.type !== 'playlist' && item.description ? item.description : '♫'}
+                                                        {secondaryText}
                                                     </p>
                                                 )}
-                                                {compactDescription(item.summary) && (
+                                                {summaryText && (
                                                     <p className="text-[10px] leading-snug opacity-45 mt-2 line-clamp-2">
-                                                        {compactDescription(item.summary)}
+                                                        {summaryText}
                                                     </p>
                                                 )}
                                             </div>

@@ -11,11 +11,12 @@ vi.mock('@/services/netease', () => ({
     neteaseApi: {
         cloudSearch: vi.fn(),
         getLyric: vi.fn(),
+        getChorus: vi.fn(),
     }
 }));
 
 vi.mock('@/utils/lyrics/neteaseProcessing', () => ({
-    fetchNeteaseChorusRanges: vi.fn(),
+    parseNeteaseChorusRanges: vi.fn(() => []),
     processNeteaseLyrics: vi.fn(),
 }));
 

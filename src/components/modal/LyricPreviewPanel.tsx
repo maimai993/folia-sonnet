@@ -365,6 +365,7 @@ export const LyricPreviewPanel: React.FC<LyricPreviewPanelProps> = ({
     // 检测当前歌词源包含的特征
     const isWordByWord = !!lyricData.isWordByWord;
     const hasTranslation = lyricData.lines?.some(line => !!line.translation);
+    const hasRomanization = lyricData.lines?.some(line => !!line.romanization);
 
     const timeValue = (window as any).__folia_current_time;
     const initialVal = timeValue ? timeValue.get() : 0;
@@ -404,6 +405,13 @@ export const LyricPreviewPanel: React.FC<LyricPreviewPanelProps> = ({
                     <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded font-medium border border-emerald-500/10 backdrop-blur-sm">
                         <Languages size={7} />
                         {t('localMusic.hasTranslation')}
+                    </span>
+                )}
+
+                {hasRomanization && (
+                    <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 bg-violet-500/10 text-violet-400 rounded font-medium border border-violet-500/10 backdrop-blur-sm">
+                        <Languages size={7} />
+                        {t('localMusic.hasRomanization')}
                     </span>
                 )}
             </div>

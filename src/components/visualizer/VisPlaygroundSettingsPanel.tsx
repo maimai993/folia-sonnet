@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CaptionsOff, Languages, Monitor, PanelTop, RotateCcw, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CaptionsOff, Monitor, PanelTop, RotateCcw, type LucideIcon } from 'lucide-react';
 import {
     type CappellaAvatarImage,
     type CappellaEmojiImage,
@@ -11,6 +11,7 @@ import {
     type MonetTuning,
     type PartitaTuning,
     type Theme,
+    type SubtitleContentMode,
     type TiltTuning,
     type DioramaTuning,
     type VisualizerMode,
@@ -78,6 +79,8 @@ interface VisPlaygroundSettingsPanelProps {
     fontScale: number;
     fontScaleOptions: PresetOption<number>[];
     onFontScaleChange: (fontScale: number) => void;
+    subtitleFontScale: number;
+    onSubtitleFontScaleChange: (fontScale: number) => void;
     fontWeight: number | null;
     fontWeightOptions: PresetOption<number>[];
     onFontWeightChange: (fontWeight: number | null) => void;
@@ -114,12 +117,17 @@ interface VisPlaygroundSettingsPanelProps {
     isLoadingMonetPortraitImage?: boolean;
     hideTranslationSubtitle: boolean;
     onToggleHideTranslationSubtitle?: (hidden: boolean) => void;
-    showSubtitleTranslation: boolean;
     onToggleShowSubtitleTranslation?: (shown: boolean) => void;
+    subtitleContentMode: SubtitleContentMode;
+    onSubtitleContentModeChange?: (mode: SubtitleContentMode) => void;
     subtitleOverlayOpacity: number;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     subtitleOverlayBackground: boolean;
     onToggleSubtitleOverlayBackground?: (enabled: boolean) => void;
+    showHarmonySubtitle: boolean;
+    onToggleShowHarmonySubtitle?: (enabled: boolean) => void;
+    harmonySubtitleBackground: boolean;
+    onToggleHarmonySubtitleBackground?: (enabled: boolean) => void;
     subtitleFontInheritsLyrics: boolean;
     onSubtitleFontInheritsLyricsChange?: (inheritsLyrics: boolean) => void;
     subtitleFontStyle: Theme['fontStyle'];
@@ -308,6 +316,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         fontScale,
         fontScaleOptions,
         onFontScaleChange,
+        subtitleFontScale,
+        onSubtitleFontScaleChange,
         fontWeight,
         fontWeightOptions,
         onFontWeightChange,
@@ -343,12 +353,17 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         isLoadingMonetPortraitImage,
         hideTranslationSubtitle,
         onToggleHideTranslationSubtitle,
-        showSubtitleTranslation,
         onToggleShowSubtitleTranslation,
+        subtitleContentMode,
+        onSubtitleContentModeChange,
         subtitleOverlayOpacity,
         onSubtitleOverlayOpacityChange,
         subtitleOverlayBackground,
         onToggleSubtitleOverlayBackground,
+        showHarmonySubtitle,
+        onToggleShowHarmonySubtitle,
+        harmonySubtitleBackground,
+        onToggleHarmonySubtitleBackground,
         subtitleFontInheritsLyrics,
         onSubtitleFontInheritsLyricsChange,
         subtitleFontStyle,
@@ -686,13 +701,17 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             icon={CaptionsOff}
                         />
 
-                        <ToggleRow
-                            label={t('options.showSubtitleTranslation')}
-                            description={t('options.showSubtitleTranslationDesc')}
-                            checked={showSubtitleTranslation}
-                            onChange={onToggleShowSubtitleTranslation}
+                        <PresetGroup
+                            label={t('options.subtitleContentMode')}
+                            value={subtitleContentMode}
+                            options={[
+                                { label: t('options.subtitleContentTranslation'), value: 'translation' },
+                                { label: t('options.subtitleContentRomanization'), value: 'romanization' },
+                                { label: t('options.subtitleContentNone'), value: 'none' },
+                            ]}
+                            onChange={onSubtitleContentModeChange ?? (mode => onToggleShowSubtitleTranslation?.(mode !== 'none'))}
+                            isDaylight={isDaylight}
                             theme={theme}
-                            icon={Languages}
                         />
 
                         <ToggleRow
@@ -712,6 +731,27 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             theme={theme}
                             icon={Monitor}
                         />
+
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm" style={{ color: theme.primaryColor }}>
+                                <span>{t('options.subtitleFontScale')}</span>
+                                <span className="font-mono opacity-70" style={{ color: theme.secondaryColor }}>
+                                    {Math.round(subtitleFontScale * 100)}%
+                                </span>
+                            </div>
+                            <input
+                                aria-label={t('options.subtitleFontScale')}
+                                type="range"
+                                min="0.85"
+                                max="1.4"
+                                step="0.05"
+                                value={subtitleFontScale}
+                                onChange={(event) => onSubtitleFontScaleChange(parseFloat(event.target.value))}
+                                onPointerDown={onSliderPointerDown}
+                                onPointerUp={onSliderCommit}
+                                className={rangeInputClass}
+                            />
+                        </div>
 
                         {!subtitleFontInheritsLyrics && (
                             <div className="space-y-4">
@@ -799,6 +839,37 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 className={rangeInputClass}
                             />
                         </div>
+                    </div>
+                )}
+
+                {activeSection === 'subtitle' && (
+                    <div className="rounded-[24px] border p-4 space-y-4" style={{ backgroundColor: controlCardBg, borderColor: colorWithAlpha(theme.secondaryColor, 0.16) }}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: theme.primaryColor }}>
+                                {t('options.harmonySubtitleSettings')}
+                            </div>
+                            <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
+                                {t('options.harmonySubtitleSettingsDesc')}
+                            </div>
+                        </div>
+
+                        <ToggleRow
+                            label={t('options.showHarmonySubtitle')}
+                            description={t('options.showHarmonySubtitleDesc')}
+                            checked={showHarmonySubtitle}
+                            onChange={onToggleShowHarmonySubtitle}
+                            theme={theme}
+                            icon={Monitor}
+                        />
+
+                        <ToggleRow
+                            label={t('options.harmonySubtitleBackground')}
+                            description={t('options.harmonySubtitleBackgroundDesc')}
+                            checked={harmonySubtitleBackground}
+                            onChange={onToggleHarmonySubtitleBackground}
+                            theme={theme}
+                            icon={PanelTop}
+                        />
                     </div>
                 )}
             </div>

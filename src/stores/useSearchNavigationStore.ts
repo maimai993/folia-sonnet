@@ -1,16 +1,18 @@
 import { create } from 'zustand';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
-import { neteaseApi } from '../services/netease';
-import type { HomeViewTab, LocalSong, UnifiedSong } from '../types';
+import type { HomeViewTab, LocalSong, SongResult, UnifiedSong } from '../types';
+import type { OnlineProviderId } from '../types/onlineMusic';
 import {
     applyLocalLibraryEntityDisplay,
     buildUnifiedLocalSong,
     type LocalLibraryDisplayCatalog,
 } from '../services/playbackAdapters';
+import { omni } from '../services/onlineMusic/omni';
+import { isLocalPlaybackSong, isNavidromePlaybackSong } from '../utils/appPlaybackGuards';
 
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEFAULT_SEARCH_LIMIT = 30;
-export type SearchSource = 'netease' | 'local' | 'navidrome';
+export type SearchSource = OnlineProviderId | 'local' | 'navidrome';
 export type SearchReturnView = 'home' | 'player';
 
 type SearchExecutorDeps = {
@@ -53,6 +55,7 @@ interface SearchNavigationState {
     setSearchScrollTop: (scrollTop: number) => void;
     restoreSearch: (payload: { query: string; sourceTab: SearchSource; returnView?: SearchReturnView; }) => void;
     hideSearchOverlay: () => void;
+    resetRuntime: (onlineProviderId?: OnlineProviderId) => void;
     submitSearch: (payload: { query?: string; sourceTab: SearchSource; deps: SearchExecutorDeps; returnView?: SearchReturnView; }) => Promise<boolean>;
     loadMoreSearchResults: (payload: { deps: SearchExecutorDeps; }) => Promise<void>;
 }
@@ -62,10 +65,22 @@ const getSearchCacheKey = (query: string, sourceTab: SearchSource) => (
 );
 
 export const resolveSearchSource = (tab: HomeViewTab | SearchSource): SearchSource => {
-    if (tab === 'local' || tab === 'navidrome' || tab === 'netease') {
+    if (tab === 'local' || tab === 'navidrome') {
         return tab;
     }
+    if (tab !== 'playlist' && tab !== 'albums' && tab !== 'radio') return tab as OnlineProviderId;
     return 'netease';
+};
+
+export const resolveCommandPaletteSearchSource = (
+    currentSong: SongResult | null,
+    searchSourceTab: SearchSource,
+    activeOnlineProviderId: OnlineProviderId,
+): SearchSource => {
+    if (currentSong && isLocalPlaybackSong(currentSong)) return 'local';
+    if (currentSong && isNavidromePlaybackSong(currentSong)) return 'navidrome';
+    if (currentSong || searchSourceTab === 'netease') return activeOnlineProviderId;
+    return searchSourceTab;
 };
 
 const mapLocalSongToUnifiedSong = (
@@ -112,12 +127,7 @@ const searchNavidromeSongs = async (query: string): Promise<SearchExecutionResul
     const response = await navidromeApi.search(config, query, 0, 0, DEFAULT_SEARCH_LIMIT);
     const results = (response.song || []).map(song => {
         const navidromeSong = navidromeApi.toNavidromeSong(config, song);
-        return {
-            ...navidromeSong,
-            ar: navidromeSong.artists,
-            al: navidromeSong.album,
-            dt: navidromeSong.duration,
-        } as UnifiedSong;
+        return navidromeSong as UnifiedSong;
     });
 
     return {
@@ -127,16 +137,14 @@ const searchNavidromeSongs = async (query: string): Promise<SearchExecutionResul
     };
 };
 
-const searchNeteaseSongs = async (query: string, limit: number, offset: number): Promise<SearchExecutionResult> => {
-    const response = await neteaseApi.cloudSearch(query, limit, offset);
-    const results = (response.result?.songs || []) as UnifiedSong[];
-    const totalCount = response.result?.songCount || 0;
-
-    return {
-        results,
-        hasMore: offset + results.length < totalCount,
-        nextOffset: offset + results.length,
-    };
+const searchOnlineProviderSongs = async (
+    providerId: OnlineProviderId,
+    query: string,
+    limit: number,
+    offset: number,
+): Promise<SearchExecutionResult> => {
+    const page = await omni.searchProviderSongs(providerId, query, { limit, offset });
+    return { results: page.items, hasMore: page.hasMore, nextOffset: page.nextOffset };
 };
 
 const executeSearch = async (
@@ -154,7 +162,7 @@ const executeSearch = async (
         return searchNavidromeSongs(query);
     }
 
-    return searchNeteaseSongs(query, limit, offset);
+    return searchOnlineProviderSongs(sourceTab, query, limit, offset);
 };
 
 const getInitialHomeViewTab = (): HomeViewTab => {
@@ -220,6 +228,20 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
         };
     }),
     hideSearchOverlay: () => set({ isSearchOpen: false, searchReturnView: 'home' }),
+    resetRuntime: (onlineProviderId) => set(state => ({
+        searchQuery: '',
+        searchSourceTab: onlineProviderId ?? state.searchSourceTab,
+        searchResults: null,
+        searchReturnView: 'home',
+        isSearchOpen: false,
+        isSearching: false,
+        isLoadingMore: false,
+        searchError: null,
+        requestId: state.requestId + 1,
+        offset: 0,
+        hasMore: false,
+        scrollTop: 0,
+    })),
     submitSearch: async ({ query, sourceTab, deps, returnView = 'home' }) => {
         const trimmedQuery = (query ?? get().searchQuery).trim();
         if (!trimmedQuery) {

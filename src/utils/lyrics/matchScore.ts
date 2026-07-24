@@ -1,5 +1,6 @@
 import { SongResult } from '../../types';
 import { normalizeLyricMatchDurationMs } from './duration';
+import { createProviderSongMetadata } from '../songMetadata';
 
 import * as wanakana from 'wanakana';
 import * as OpenCC from 'opencc-js';
@@ -80,11 +81,11 @@ function stringSimilarity(s1: string, s2: string, normalizer: (value: string) =>
 }
 
 function getArtistText(result: SongResult): string {
-    return result.ar?.map(a => a.name).join(', ') || result.artists?.map(a => a.name).join(', ') || '';
+    return createProviderSongMetadata(result).artists.map(a => a.name).join(', ');
 }
 
 function getAlbumText(result: SongResult): string {
-    const album = result.al?.name || result.album?.name || '';
+    const album = createProviderSongMetadata(result).album?.name || '';
     return /^unknown album$/i.test(album.trim()) ? '' : album;
 }
 
@@ -159,7 +160,7 @@ export function calculateMatchScoreDetails(
     const searchArtist = getArtistText(result);
     const searchAlbum = getAlbumText(result);
     const targetDurationMs = normalizeLyricMatchDurationMs(song.durationMs);
-    const searchDurationMs = normalizeLyricMatchDurationMs(result.dt || result.duration || 0);
+    const searchDurationMs = normalizeLyricMatchDurationMs(createProviderSongMetadata(result).durationMs);
 
     const titleSimilarity = stringSimilarity(song.title, searchTitle, normalizeTitleForMatch);
     const titleScore = titleSimilarity * SCORE_WEIGHTS.title;

@@ -11,7 +11,7 @@ import {
 } from '@/components/visualizer/backgrounds/latent/LatentBackground';
 import { resolveMonetWordColor } from '@/components/visualizer/monet/MonetLyricsRail';
 import { buildMonetDisplayTokens, resolveMonetLyricContext } from '@/components/visualizer/monet/VisualizerMonet';
-import { buildMonetVisibleLineEntries, measureMonetLineLayout } from '@/components/visualizer/monet/monetLyricsModel';
+import { buildMonetVisibleLineEntries, measureMonetLineLayout, resolveMonetSweepEdgeSoftness, resolveMonetSweepEnd } from '@/components/visualizer/monet/monetLyricsModel';
 import { colorWithAlpha, mixColors, parseColorChannels } from '@/components/visualizer/colorMix';
 import { buildWordColorRanges, prepareWordColorMatchers, resolveTokenColorMap } from '@/components/visualizer/wordColoring';
 import { resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveVisualizerBackgroundMode } from '@/stores/useSettingsUiStore';
@@ -385,6 +385,20 @@ describe('Monet tuning and lyric helpers', () => {
         expect(hiddenLayout.translationLineCount).toBe(0);
         expect(hiddenLayout.translationHeightPx).toBe(0);
         expect(hiddenLayout.visualHeightPx).toBe(hiddenLayout.textHeightPx);
+    });
+
+    it('clears the full Monet mask softness before a word becomes passed', () => {
+        const fullWidthPx = 120;
+        const edgeSoftnessPx = 36;
+        const sweepEndPx = resolveMonetSweepEnd(fullWidthPx, fullWidthPx, edgeSoftnessPx);
+
+        expect(sweepEndPx - edgeSoftnessPx).toBe(fullWidthPx);
+    });
+
+    it('keeps the Monet sweep feather narrow enough for short lyric tokens', () => {
+        expect(resolveMonetSweepEdgeSoftness(12)).toBe(6);
+        expect(resolveMonetSweepEdgeSoftness(32)).toBe(14.4);
+        expect(resolveMonetSweepEdgeSoftness(64)).toBe(16);
     });
 
     it('gates Monet keyword coloring through tuning', () => {

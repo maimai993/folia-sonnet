@@ -1,5 +1,6 @@
 import type { AmllDbPlatform, LyricProviderSource, SongResult } from '../../types';
 import { getLyricProviderLabel } from './lyricSourceLabels';
+import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 
 // src/utils/lyrics/matchResult.ts
 // Normalizes provider-specific song search results for lyric and metadata matching flows.
@@ -12,30 +13,27 @@ export const getLyricMatchSourceLabel = (
 ): string => getLyricProviderLabel(source, platform);
 
 export const getMatchResultArtists = (result: SongResult | null | undefined): string => {
-    if (!result) return '';
-    const neteaseArtists = result.ar?.map(artist => artist.name).filter(Boolean).join(', ');
-    const unifiedArtists = result.artists?.map(artist => artist.name).filter(Boolean).join(', ');
-    return neteaseArtists || unifiedArtists || '';
+    return result ? getProviderSongMetadata(result).artists.map(artist => artist.name).filter(Boolean).join(', ') : '';
 };
 
 export const getMatchResultArtistEntities = (result: SongResult | null | undefined) => (
-    result?.ar || result?.artists || []
+    result ? getProviderSongMetadata(result).artists : []
 );
 
 export const getMatchResultAlbumName = (result: SongResult | null | undefined): string => (
-    result?.al?.name || result?.album?.name || ''
+    result ? getProviderSongMetadata(result).album?.name || '' : ''
 );
 
 export const getMatchResultAlbumId = (result: SongResult | null | undefined): number | string | undefined => (
-    result?.al?.id ?? result?.album?.id
+    result ? getProviderSongMetadata(result).album?.id : undefined
 );
 
 export const getMatchResultCoverUrl = (
     result: SongResult | null | undefined,
     source: LyricMatchSource,
 ): string | null => {
-    if (!result || source === 'kugou') return null;
-    const coverUrl = result.al?.picUrl || result.album?.picUrl;
+    if (!result) return null;
+    const coverUrl = getProviderSongMetadata(result, source === 'amll' ? undefined : source).coverUrl;
     return coverUrl ? coverUrl.replace('http:', 'https:') : null;
 };
 

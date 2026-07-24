@@ -1,4 +1,5 @@
 import { LyricData } from '../../types';
+import type { ChorusRange } from '../../types/onlineMusic';
 import { detectChorusLines } from '../chorusDetector';
 
 const CHORUS_EFFECTS: Array<'bars' | 'circles' | 'beams'> = ['bars', 'circles', 'beams'];
@@ -36,10 +37,7 @@ export const applyDetectedChorusEffects = (
     };
 };
 
-export interface NeteaseChorusRange {
-    startTime: number; // in seconds
-    endTime: number; // in seconds
-}
+export type NeteaseChorusRange = ChorusRange;
 
 /**
  * Apply chorus effects to lyrics using precise timestamp ranges from Netease API.

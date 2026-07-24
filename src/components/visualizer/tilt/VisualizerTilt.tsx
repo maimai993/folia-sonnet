@@ -548,11 +548,13 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
         showText = true,
         staticMode = false,
         lyricsFontScale = 1,
+        subtitleFontScale = 1,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
+        subtitleContentMode,
         tiltTuning = DEFAULT_TILT_TUNING,
     } = props;
     const { t } = useTranslation();
@@ -684,9 +686,11 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 subtitleOverlayBackground={subtitleOverlayBackground}
+                subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}
+                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

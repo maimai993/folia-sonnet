@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { appendUniqueByKey, deriveProgressiveLoadingState } from '../../../src/components/folia-grid/progressiveGrid';
-import { buildArtistGridCoords } from '../../../src/components/ArtistGridView';
+import { buildArtistGridCoords, getArtistGridAlbumCoverUrl } from '../../../src/components/ArtistGridView';
 
 // Unit coverage for progressive loading state and stable ArtistGrid album placement.
 
@@ -28,5 +28,11 @@ describe('progressiveGrid', () => {
         expect(extended.slice(0, first.length)).toEqual(first);
         expect(new Set(extended.map(coord => `${coord.cube.x}:${coord.cube.y}:${coord.cube.z}`)).size)
             .toBe(extended.length);
+    });
+
+    it('reads canonical provider collection covers before legacy album fields', () => {
+        expect(getArtistGridAlbumCoverUrl({ coverUrl: 'http://cdn.example.com/album.jpg', picUrl: 'legacy.jpg' }))
+            .toBe('https://cdn.example.com/album.jpg');
+        expect(getArtistGridAlbumCoverUrl({ picUrl: 'legacy.jpg' })).toBeUndefined();
     });
 });
