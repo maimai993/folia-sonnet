@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, DIORAMA_PARTICLE_DENSITY_MAX, DIORAMA_PARTICLE_DENSITY_MIN, DIORAMA_PARTICLE_GLOW_INTENSITY_MAX, DIORAMA_PARTICLE_GLOW_INTENSITY_MIN, DIORAMA_PARTICLE_SIZE_MAX, DIORAMA_PARTICLE_SIZE_MIN, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type DioramaTuning, type FumeTuning, type PartitaTuning, type TiltColorScheme, type TiltTuning } from '../../types';
+import { DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_PENDOLO_TUNING, DEFAULT_TILT_TUNING, DIORAMA_PARTICLE_DENSITY_MAX, DIORAMA_PARTICLE_DENSITY_MIN, DIORAMA_PARTICLE_GLOW_INTENSITY_MAX, DIORAMA_PARTICLE_GLOW_INTENSITY_MIN, DIORAMA_PARTICLE_SIZE_MAX, DIORAMA_PARTICLE_SIZE_MIN, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type DioramaTuning, type FumeTuning, type PartitaTuning, type PendoloTuning, type TiltColorScheme, type TiltTuning } from '../../types';
 import { colorWithAlpha } from './colorMix';
 import { type VisualizerSettingsPanelProps } from './definition';
 import { DioramaGeometrySettings } from './diorama/DioramaGeometrySettings';
@@ -1320,3 +1320,147 @@ export const CladdaghSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         </div>
     );
 };
+
+export const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
+    t,
+    rangeInputClass,
+    pendoloTuning,
+    onPendoloTuningChange,
+    onSliderPointerDown,
+    onSliderCommit,
+}) => {
+    const resolvedTuning = pendoloTuning ?? DEFAULT_PENDOLO_TUNING;
+
+    return (
+        <div className="space-y-4">
+            {/* Wheel Arc Radius */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.pendoloArcRadius') || '轮盘半径'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {Math.round(resolvedTuning.arcRadius * 100)}%
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0.25"
+                    max="0.80"
+                    step="0.01"
+                    value={resolvedTuning.arcRadius}
+                    onChange={(e) => onPendoloTuningChange?.({ arcRadius: parseFloat(e.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+
+            {/* Arc Angle Spread */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.pendoloArcAngleDeg') || '弧度角度'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {Math.round(resolvedTuning.arcAngleDeg)}°
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="40"
+                    max="160"
+                    step="5"
+                    value={resolvedTuning.arcAngleDeg}
+                    onChange={(e) => onPendoloTuningChange?.({ arcAngleDeg: parseFloat(e.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+
+            {/* Escapement Tick Snappiness */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.pendoloTickSnappiness') || '擒纵咬合力度'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {resolvedTuning.tickSnappiness.toFixed(1)}x
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.1"
+                    value={resolvedTuning.tickSnappiness}
+                    onChange={(e) => onPendoloTuningChange?.({ tickSnappiness: parseFloat(e.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+
+            {/* Pendulum Audio Oscillation */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.pendoloOscillation') || '摆轮律动强度'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {resolvedTuning.pendulumOscillation.toFixed(1)}x
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="0.0"
+                    max="2.0"
+                    step="0.1"
+                    value={resolvedTuning.pendulumOscillation}
+                    onChange={(e) => onPendoloTuningChange?.({ pendulumOscillation: parseFloat(e.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+
+            {/* Active Scale */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.pendoloActiveScale') || '聚焦句缩放'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {resolvedTuning.activeScale.toFixed(2)}x
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="1.00"
+                    max="1.60"
+                    step="0.05"
+                    value={resolvedTuning.activeScale}
+                    onChange={(e) => onPendoloTuningChange?.({ activeScale: parseFloat(e.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+
+            {/* Show Gear Decor */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.pendoloShowGearDecor') || '机械齿轮饰线'}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                    {(['none', 'subtle', 'full'] as const).map((mode) => (
+                        <button
+                            key={mode}
+                            type="button"
+                            onClick={() => onPendoloTuningChange?.({ showGearDecor: mode })}
+                            className={`py-1.5 px-3 rounded-lg text-xs font-medium border transition-colors ${
+                                resolvedTuning.showGearDecor === mode
+                                    ? 'bg-blue-500/20 border-blue-500 text-blue-400'
+                                    : 'border-white/10 text-white/70 hover:bg-white/5'
+                            }`}
+                        >
+                            {mode === 'none' ? '无' : mode === 'subtle' ? '精简' : '完整'}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+

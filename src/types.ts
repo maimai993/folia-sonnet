@@ -113,7 +113,7 @@ export interface DualTheme {
 
 export type ThemeMode = 'default' | 'ai' | 'custom';
 
-export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet';
+export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet' | 'pendolo';
 export type VisualizerMode = BuiltinVisualizerMode | (string & {});
 export type VisualizerFrameRate = 'off' | 120 | 90 | 60;
 
@@ -491,6 +491,28 @@ export const DEFAULT_TILT_TUNING: TiltTuning = {
   splitProbability: 0.75,
   tiltStyleProbability: 0.35,
   colorScheme: 'default',
+};
+
+export interface PendoloTuning {
+  arcRadius: number;
+  arcAngleDeg: number;
+  wheelCenterX: number;
+  wheelCenterY: number;
+  tickSnappiness: number;
+  pendulumOscillation: number;
+  activeScale: number;
+  showGearDecor: 'none' | 'subtle' | 'full';
+}
+
+export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
+  arcRadius: 0.45,
+  arcAngleDeg: 95,
+  wheelCenterX: -0.15,
+  wheelCenterY: 0.50,
+  tickSnappiness: 1.0,
+  pendulumOscillation: 1.0,
+  activeScale: 1.25,
+  showGearDecor: 'subtle',
 };
 
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other

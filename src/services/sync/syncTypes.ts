@@ -56,6 +56,7 @@ export type SyncedVisualSettings = {
     nomandBackgroundTuning?: unknown;
     latentBackgroundTuning?: unknown;
     monetTuning?: unknown;
+    pendoloTuning?: unknown;
     urlBackgroundList?: unknown[];
     urlBackgroundSelectedId?: string | null;
     homeLayoutStyle?: 'carousel' | 'grid';

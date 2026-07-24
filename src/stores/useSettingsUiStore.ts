@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type React from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_LATENT_BACKGROUND_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_NOMAND_BACKGROUND_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, DIORAMA_PARTICLE_DENSITY_MAX, DIORAMA_PARTICLE_DENSITY_MIN, DIORAMA_PARTICLE_GLOW_INTENSITY_MAX, DIORAMA_PARTICLE_GLOW_INTENSITY_MIN, DIORAMA_PARTICLE_SIZE_MAX, DIORAMA_PARTICLE_SIZE_MIN, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type DioramaTuning, type FumeTuning, type LatentBackgroundColorSource, type LatentBackgroundDisplayMode, type LatentBackgroundTuning, type LyricProviderSource, type MonetBackgroundImage, type MonetBackgroundLayout, type MonetBackgroundSource, type MonetBackgroundTuning, type MonetBackgroundWashColorMode, type MonetPortraitImage, type MonetPortraitSource, type MonetTuning, type NomandBackgroundDitheringType, type NomandBackgroundSource, type NomandBackgroundTuning, type PartitaTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type StoredMonetBackgroundImage, type StoredMonetPortraitImage, type SubtitleContentMode, type Theme, type TiltTuning, type UrlBackgroundItem, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_LATENT_BACKGROUND_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_NOMAND_BACKGROUND_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_PENDOLO_TUNING, DEFAULT_TILT_TUNING, DIORAMA_PARTICLE_DENSITY_MAX, DIORAMA_PARTICLE_DENSITY_MIN, DIORAMA_PARTICLE_GLOW_INTENSITY_MAX, DIORAMA_PARTICLE_GLOW_INTENSITY_MIN, DIORAMA_PARTICLE_SIZE_MAX, DIORAMA_PARTICLE_SIZE_MIN, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type DioramaTuning, type FumeTuning, type LatentBackgroundColorSource, type LatentBackgroundDisplayMode, type LatentBackgroundTuning, type LyricProviderSource, type MonetBackgroundImage, type MonetBackgroundLayout, type MonetBackgroundSource, type MonetBackgroundTuning, type MonetBackgroundWashColorMode, type MonetPortraitImage, type MonetPortraitSource, type MonetTuning, type NomandBackgroundDitheringType, type NomandBackgroundSource, type NomandBackgroundTuning, type PartitaTuning, type PendoloTuning, type QueueAddBehavior, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type StoredMonetBackgroundImage, type StoredMonetPortraitImage, type SubtitleContentMode, type Theme, type TiltTuning, type UrlBackgroundItem, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerModeLabel, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { DEFAULT_VISUALIZER_BACKGROUND_MODE, hasVisualizerBackgroundMode } from '../components/visualizer/backgrounds/registry';
 import { resolveDioramaMoteCircumference, resolveDioramaMoteRadial } from '../components/visualizer/diorama/dioramaMoteField';
@@ -390,6 +390,31 @@ const readStoredCladdaghTuning = (): CladdaghTuning => {
         };
     } catch {
         return DEFAULT_CLADDAGH_TUNING;
+    }
+};
+
+const readStoredPendoloTuning = (): PendoloTuning => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_PENDOLO_TUNING;
+    }
+
+    const saved = localStorage.getItem('pendolo_tuning');
+    if (!saved) return DEFAULT_PENDOLO_TUNING;
+
+    try {
+        const parsed = JSON.parse(saved) as Partial<PendoloTuning>;
+        return {
+            arcRadius: Math.min(0.80, Math.max(0.25, parsed.arcRadius ?? DEFAULT_PENDOLO_TUNING.arcRadius)),
+            arcAngleDeg: Math.min(160, Math.max(40, parsed.arcAngleDeg ?? DEFAULT_PENDOLO_TUNING.arcAngleDeg)),
+            wheelCenterX: Math.min(0.30, Math.max(-0.40, parsed.wheelCenterX ?? DEFAULT_PENDOLO_TUNING.wheelCenterX)),
+            wheelCenterY: Math.min(0.80, Math.max(0.20, parsed.wheelCenterY ?? DEFAULT_PENDOLO_TUNING.wheelCenterY)),
+            tickSnappiness: Math.min(2.0, Math.max(0.5, parsed.tickSnappiness ?? DEFAULT_PENDOLO_TUNING.tickSnappiness)),
+            pendulumOscillation: Math.min(2.0, Math.max(0.0, parsed.pendulumOscillation ?? DEFAULT_PENDOLO_TUNING.pendulumOscillation)),
+            activeScale: Math.min(1.60, Math.max(1.00, parsed.activeScale ?? DEFAULT_PENDOLO_TUNING.activeScale)),
+            showGearDecor: parsed.showGearDecor === 'none' || parsed.showGearDecor === 'full' ? parsed.showGearDecor : 'subtle',
+        };
+    } catch {
+        return DEFAULT_PENDOLO_TUNING;
     }
 };
 
@@ -1054,6 +1079,7 @@ export type SettingsUiState = {
     nomandBackgroundTuning: NomandBackgroundTuning;
     latentBackgroundTuning: LatentBackgroundTuning;
     monetTuning: MonetTuning;
+    pendoloTuning: PendoloTuning;
     storedCappellaEmojiPack: StoredCappellaEmojiImage[];
     cappellaCustomEmojiImages: CappellaEmojiImage[];
     isLoadingCappellaCustomEmojiPack: boolean;
@@ -1188,6 +1214,8 @@ export type SettingsUiState = {
     handleResetLatentBackgroundTuning: () => void;
     handleSetMonetTuning: (patch: Partial<MonetTuning>) => void;
     handleResetMonetTuning: () => void;
+    handleSetPendoloTuning: (patch: Partial<PendoloTuning>) => void;
+    handleResetPendoloTuning: () => void;
     handleUploadMonetBackgroundImage: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     handleClearMonetBackgroundImage: () => Promise<void>;
     handleUploadMonetPortraitImage: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
@@ -1286,6 +1314,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     nomandBackgroundTuning: readStoredNomandBackgroundTuning(),
     latentBackgroundTuning: readStoredLatentBackgroundTuning(),
     monetTuning: readStoredMonetTuning(),
+    pendoloTuning: readStoredPendoloTuning(),
     storedCappellaEmojiPack: [],
     cappellaCustomEmojiImages: [],
     isLoadingCappellaCustomEmojiPack: true,
@@ -1854,6 +1883,30 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ claddaghTuning: DEFAULT_CLADDAGH_TUNING });
         notify(get, { type: 'info', text: i18n.t('notifications.claddaghReset') });
+    },
+    handleSetPendoloTuning: (patch: Partial<PendoloTuning>) => {
+        const prev = get().pendoloTuning;
+        const next: PendoloTuning = {
+            arcRadius: Math.min(0.80, Math.max(0.25, patch.arcRadius ?? prev.arcRadius)),
+            arcAngleDeg: Math.min(160, Math.max(40, patch.arcAngleDeg ?? prev.arcAngleDeg)),
+            wheelCenterX: Math.min(0.30, Math.max(-0.40, patch.wheelCenterX ?? prev.wheelCenterX)),
+            wheelCenterY: Math.min(0.80, Math.max(0.20, patch.wheelCenterY ?? prev.wheelCenterY)),
+            tickSnappiness: Math.min(2.0, Math.max(0.5, patch.tickSnappiness ?? prev.tickSnappiness)),
+            pendulumOscillation: Math.min(2.0, Math.max(0.0, patch.pendulumOscillation ?? prev.pendulumOscillation)),
+            activeScale: Math.min(1.60, Math.max(1.00, patch.activeScale ?? prev.activeScale)),
+            showGearDecor: patch.showGearDecor ?? prev.showGearDecor,
+        };
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('pendolo_tuning', JSON.stringify(next));
+        }
+        set({ pendoloTuning: next });
+    },
+    handleResetPendoloTuning: () => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('pendolo_tuning', JSON.stringify(DEFAULT_PENDOLO_TUNING));
+        }
+        set({ pendoloTuning: DEFAULT_PENDOLO_TUNING });
+        notify(get, { type: 'info', text: i18n.t('notifications.pendoloReset') });
     },
     handleSetCappellaTuning: (patch) => {
         const requestedCustomWithoutPack = patch.emojiPackSource === 'custom' && get().storedCappellaEmojiPack.length === 0;
@@ -2465,6 +2518,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     nomandBackgroundTuning: state.nomandBackgroundTuning,
     latentBackgroundTuning: state.latentBackgroundTuning,
     monetTuning: state.monetTuning,
+    pendoloTuning: state.pendoloTuning,
     cappellaCustomEmojiImages: state.cappellaCustomEmojiImages,
     isLoadingCappellaCustomEmojiPack: state.isLoadingCappellaCustomEmojiPack,
     cappellaCustomAvatarImages: state.cappellaCustomAvatarImages,
@@ -2563,6 +2617,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleResetLatentBackgroundTuning: state.handleResetLatentBackgroundTuning,
     handleSetMonetTuning: state.handleSetMonetTuning,
     handleResetMonetTuning: state.handleResetMonetTuning,
+    handleSetPendoloTuning: state.handleSetPendoloTuning,
+    handleResetPendoloTuning: state.handleResetPendoloTuning,
     handleUploadMonetBackgroundImage: state.handleUploadMonetBackgroundImage,
     handleClearMonetBackgroundImage: state.handleClearMonetBackgroundImage,
     handleUploadMonetPortraitImage: state.handleUploadMonetPortraitImage,

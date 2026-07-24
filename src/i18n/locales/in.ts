@@ -311,6 +311,7 @@ export default {
     "visualizerCappella": "Cappella",
     "visualizerTilt": "Tilt",
     "visualizerCladdagh": "Claddagh",
+    "visualizerPendolo": "Pendolo",
     "cadenzeTuning": "Penyetelan Mindscape",
     "resetVisualizerTuning": "Reset Penyetelan Animasi Lirik",
     "livePreview": "Pratinjau langsung",
