@@ -43,4 +43,4 @@ const VisualizerRenderer: React.FC<VisualizerRendererProps> = ({ mode, ...props 
     );
 };
 
-export default VisualizerRenderer;
+export default React.memo(VisualizerRenderer);

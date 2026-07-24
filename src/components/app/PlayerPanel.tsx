@@ -11,4 +11,4 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({ model }) => {
     return <UnifiedPanel {...model.panelProps} />;
 };
 
-export default PlayerPanel;
+export default React.memo(PlayerPanel);

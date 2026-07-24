@@ -8,12 +8,13 @@ export interface PendoloClockworkCanvasProps {
     centerX: number;
     centerY: number;
     baseRadius: number;
-    escapementAngleRad: number;
+    escapementAngleMotionValue: MotionValue<number>;
     audioBassMotionValue?: MotionValue<number>;
     audioBass?: number;
     primaryTextColor: string;
     accentTextColor: string;
     showGearDecor: 'none' | 'subtle' | 'full';
+    paused?: boolean;
 }
 
 /**
@@ -239,17 +240,42 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     centerX,
     centerY,
     baseRadius,
-    escapementAngleRad,
+    escapementAngleMotionValue,
     audioBassMotionValue,
     audioBass = 0.18,
     primaryTextColor,
     accentTextColor,
     showGearDecor,
+    paused = false,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const phaseRef = useRef(0);
     const smoothedBassRef = useRef(0.15);
     const lastTimestampRef = useRef<number | null>(null);
+
+    const propsRef = useRef({
+        centerX,
+        centerY,
+        baseRadius,
+        audioBass,
+        primaryTextColor,
+        accentTextColor,
+        showGearDecor,
+        paused,
+    });
+
+    useEffect(() => {
+        propsRef.current = {
+            centerX,
+            centerY,
+            baseRadius,
+            audioBass,
+            primaryTextColor,
+            accentTextColor,
+            showGearDecor,
+            paused,
+        };
+    }, [centerX, centerY, baseRadius, audioBass, primaryTextColor, accentTextColor, showGearDecor, paused]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -261,6 +287,9 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
         let animationFrameId: number;
 
         const render = (timestamp: number) => {
+            const p = propsRef.current;
+            if (p.showGearDecor === 'none') return;
+
             if (lastTimestampRef.current === null) {
                 lastTimestampRef.current = timestamp;
             }
@@ -268,70 +297,71 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             lastTimestampRef.current = timestamp;
 
             // Fetch real-time audio bass value directly from MotionValue (handling 0..255 byte scale)
-            const val = audioBassMotionValue ? audioBassMotionValue.get() : audioBass;
+            const val = audioBassMotionValue ? audioBassMotionValue.get() : p.audioBass;
             const normBass = val > 1.0 ? val / 255 : val;
             const clampedBass = Math.max(0, Math.min(1, normBass));
             smoothedBassRef.current += (clampedBass - smoothedBassRef.current) * 0.12;
             const bass = smoothedBassRef.current;
 
             // 1. Balance wheel phase accumulation & harmonic swing (Audio Bass regulator)
-            phaseRef.current += dt * (2.8 + bass * 3.5);
+            if (!p.paused) {
+                phaseRef.current += dt * (2.8 + bass * 3.5);
+            }
             const bassOscillation = Math.sin(phaseRef.current) * (0.15 + bass * 0.70);
 
             // 2. Main gear wheel angle is strictly tied to lyric line ratchet steps
             // Gears remain stationary while a line is being sung, and ratchet ONLY when lyrics switch
-            const currentGearAngle = escapementAngleRad;
+            const currentGearAngle = escapementAngleMotionValue.get();
 
             // 3. Pallet fork rocks dynamically during lyric line spring ratchet step
-            const stepDiff = Math.abs(escapementAngleRad - Math.round(escapementAngleRad));
-            const forkTrip = Math.sin((escapementAngleRad) * 16);
+            const stepDiff = Math.abs(currentGearAngle - Math.round(currentGearAngle));
+            const forkTrip = Math.sin(currentGearAngle * 16);
             const forkAngleRad = forkTrip * Math.min(0.28, stepDiff * 3.0);
 
             const width = canvas.offsetWidth;
             const height = canvas.offsetHeight;
-            const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+            const dpr = window.devicePixelRatio || 1;
 
-            if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
-                canvas.width = Math.floor(width * dpr);
-                canvas.height = Math.floor(height * dpr);
+            if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+                canvas.width = width * dpr;
+                canvas.height = height * dpr;
             }
 
             ctx.save();
             ctx.scale(dpr, dpr);
             ctx.clearRect(0, 0, width, height);
 
-            const isFull = showGearDecor === 'full';
+            const isFull = p.showGearDecor === 'full';
             const decorOpacityMultiplier = isFull ? 1.0 : 0.6;
 
-            const primaryAlpha15 = colorWithAlpha(primaryTextColor, 0.15 * decorOpacityMultiplier);
-            const primaryAlpha25 = colorWithAlpha(primaryTextColor, 0.25 * decorOpacityMultiplier);
-            const accentAlpha20 = colorWithAlpha(accentTextColor, 0.20 * decorOpacityMultiplier);
-            const accentAlpha35 = colorWithAlpha(accentTextColor, 0.35 * decorOpacityMultiplier);
-            const accentAlpha50 = colorWithAlpha(accentTextColor, 0.50 * decorOpacityMultiplier);
+            const primaryAlpha15 = colorWithAlpha(p.primaryTextColor, 0.15 * decorOpacityMultiplier);
+            const primaryAlpha25 = colorWithAlpha(p.primaryTextColor, 0.25 * decorOpacityMultiplier);
+            const accentAlpha20 = colorWithAlpha(p.accentTextColor, 0.20 * decorOpacityMultiplier);
+            const accentAlpha35 = colorWithAlpha(p.accentTextColor, 0.35 * decorOpacityMultiplier);
+            const accentAlpha50 = colorWithAlpha(p.accentTextColor, 0.50 * decorOpacityMultiplier);
 
             // 1. Technical Radial Ticks & Concentric Guide Rings
             ctx.strokeStyle = primaryAlpha15;
             ctx.lineWidth = 1;
 
-            // Concentric guide rings
-            const ringRadii = [baseRadius * 0.3, baseRadius * 0.6, baseRadius * 0.85, baseRadius * 1.15, baseRadius * 1.4];
+            const ringRadii = [p.baseRadius * 0.3, p.baseRadius * 0.6, p.baseRadius * 0.85, p.baseRadius * 1.15, p.baseRadius * 1.4];
             ringRadii.forEach((r) => {
                 ctx.beginPath();
-                ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+                ctx.arc(p.centerX, p.centerY, r, 0, Math.PI * 2);
                 ctx.stroke();
             });
 
             // Outer Technical Radial Ticks around main wheel (every 6 deg)
             const tickCount = 60;
-            const outerTickR = baseRadius * 1.15;
+            const outerTickR = p.baseRadius * 1.15;
             for (let i = 0; i < tickCount; i++) {
                 const angle = (i * Math.PI * 2) / tickCount + currentGearAngle * 0.2;
                 const isMajor = i % 5 === 0;
                 const tickLen = isMajor ? 12 : 6;
-                const x1 = centerX + outerTickR * Math.cos(angle);
-                const y1 = centerY + outerTickR * Math.sin(angle);
-                const x2 = centerX + (outerTickR + tickLen) * Math.cos(angle);
-                const y2 = centerY + (outerTickR + tickLen) * Math.sin(angle);
+                const x1 = p.centerX + outerTickR * Math.cos(angle);
+                const y1 = p.centerY + outerTickR * Math.sin(angle);
+                const x2 = p.centerX + (outerTickR + tickLen) * Math.cos(angle);
+                const y2 = p.centerY + (outerTickR + tickLen) * Math.sin(angle);
 
                 ctx.strokeStyle = isMajor ? accentAlpha35 : primaryAlpha15;
                 ctx.lineWidth = isMajor ? 1.5 : 1;
@@ -344,24 +374,24 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             // 2. Main Escapement Gear Wheel (Outer Rim)
             drawGearTeeth(
                 ctx,
-                centerX,
-                centerY,
-                baseRadius + 8,
+                p.centerX,
+                p.centerY,
+                p.baseRadius + 8,
                 36,
                 10,
                 currentGearAngle,
                 accentAlpha35,
                 1.5,
-                colorWithAlpha(accentTextColor, 0.03 * decorOpacityMultiplier),
+                colorWithAlpha(p.accentTextColor, 0.03 * decorOpacityMultiplier),
             );
 
             // Inner Escapement Spoked Ring
             drawSpokedWheel(
                 ctx,
-                centerX,
-                centerY,
-                baseRadius * 0.2,
-                baseRadius * 0.85,
+                p.centerX,
+                p.centerY,
+                p.baseRadius * 0.2,
+                p.baseRadius * 0.85,
                 6,
                 currentGearAngle,
                 primaryAlpha25,
@@ -371,9 +401,9 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             // 3. Center Hub & Sun Gear Pinion
             drawGearTeeth(
                 ctx,
-                centerX,
-                centerY,
-                baseRadius * 0.22,
+                p.centerX,
+                p.centerY,
+                p.baseRadius * 0.22,
                 12,
                 6,
                 -currentGearAngle * 2.5,
@@ -383,14 +413,14 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
 
             // 4. Orbiting Planetary Gear Set (Full mode only or subtle reduced)
             const planetCount = 3;
-            const orbitR = baseRadius * 0.52;
-            const planetR = baseRadius * 0.16;
+            const orbitR = p.baseRadius * 0.52;
+            const planetR = p.baseRadius * 0.16;
             const orbitAngleBase = currentGearAngle * 0.4;
 
-            for (let p = 0; p < planetCount; p++) {
-                const planetAngle = orbitAngleBase + (p * Math.PI * 2) / planetCount;
-                const px = centerX + orbitR * Math.cos(planetAngle);
-                const py = centerY + orbitR * Math.sin(planetAngle);
+            for (let planetIdx = 0; planetIdx < planetCount; planetIdx++) {
+                const planetAngle = orbitAngleBase + (planetIdx * Math.PI * 2) / planetCount;
+                const px = p.centerX + orbitR * Math.cos(planetAngle);
+                const py = p.centerY + orbitR * Math.sin(planetAngle);
 
                 // Planet gear body
                 drawGearTeeth(
@@ -400,7 +430,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                     planetR,
                     14,
                     5,
-                    -currentGearAngle * 3 + p * 0.5,
+                    -currentGearAngle * 3 + planetIdx * 0.5,
                     primaryAlpha25,
                     1.2,
                 );
@@ -412,43 +442,34 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 ctx.fill();
             }
 
-            // 5. Balance Wheel & Oscillating Hairspring (Upper-Left Offset Clockwork)
-            const balanceCx = centerX + baseRadius * 0.2;
-            const balanceCy = centerY - baseRadius * 0.75;
-            // Dynamic wheel radius pulse & high-contrast glow responding to audio bass kicks
-            const balanceR = baseRadius * 0.28 * (1.0 + bass * 0.18);
-            const balanceAccentColor = colorWithAlpha(accentTextColor, (0.35 + bass * 0.55) * decorOpacityMultiplier);
-
-            // Balance Wheel Rim with adjustment weights
-            drawSpokedWheel(
+            // 5. Upper-left decorative gear
+            const balanceCx = p.centerX + p.baseRadius * 0.2;
+            const balanceCy = p.centerY - p.baseRadius * 0.75;
+            const balanceR = p.baseRadius * 0.28;
+            const balanceGearAngle = phaseRef.current * 0.1;
+            drawGearTeeth(
                 ctx,
                 balanceCx,
                 balanceCy,
-                balanceR * 0.25,
                 balanceR,
-                4,
-                bassOscillation,
-                balanceAccentColor,
-                1.5 + bass * 1.0,
+                20,
+                7,
+                balanceGearAngle,
+                accentAlpha50,
+                1.4,
+                colorWithAlpha(p.accentTextColor, 0.04 * decorOpacityMultiplier),
             );
-
-            // Oscillating Hairspring (Coils tighten & expand dynamically under bass pressure)
-            drawHairspring(
-                ctx,
-                balanceCx,
-                balanceCy,
-                4,
-                balanceR * 0.7,
-                4.5 + bass * 1.5,
-                bassOscillation * 1.5,
-                balanceAccentColor,
-                1.2 + bass * 0.8,
-            );
+            // The inner ring reserves a quiet circular seat for the non-rotating icon overlay.
+            ctx.strokeStyle = primaryAlpha25;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(balanceCx, balanceCy, balanceR * 0.52, 0, Math.PI * 2);
+            ctx.stroke();
 
             // Meshing Intermediate Transmission Gear (Lower-Left Offset)
-            const transCx = centerX + baseRadius * 0.32;
-            const transCy = centerY + baseRadius * 0.78;
-            const transR = baseRadius * 0.34;
+            const transCx = p.centerX + p.baseRadius * 0.32;
+            const transCy = p.centerY + p.baseRadius * 0.78;
+            const transR = p.baseRadius * 0.34;
             drawGearTeeth(
                 ctx,
                 transCx,
@@ -475,11 +496,11 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             // 6. Swiss Lever Escapement Pallet Fork (擒纵叉与红宝石瓦)
             drawPalletFork(
                 ctx,
-                centerX,
-                centerY,
-                baseRadius + 8,
+                p.centerX,
+                p.centerY,
+                p.baseRadius + 8,
                 forkAngleRad,
-                accentTextColor,
+                p.accentTextColor,
                 decorOpacityMultiplier,
             );
 
@@ -487,17 +508,17 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             ctx.strokeStyle = accentAlpha50;
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(centerX + baseRadius * 0.8, centerY);
-            ctx.lineTo(centerX + baseRadius * 1.15, centerY);
+            ctx.moveTo(p.centerX + p.baseRadius * 0.8, p.centerY);
+            ctx.lineTo(p.centerX + p.baseRadius * 1.15, p.centerY);
             ctx.stroke();
 
             // Focal Arrowhead Indicator
-            const arrowX = centerX + baseRadius * 1.15;
+            const arrowX = p.centerX + p.baseRadius * 1.15;
             ctx.fillStyle = accentAlpha50;
             ctx.beginPath();
-            ctx.moveTo(arrowX, centerY - 4);
-            ctx.lineTo(arrowX + 8, centerY);
-            ctx.lineTo(arrowX, centerY + 4);
+            ctx.moveTo(arrowX, p.centerY - 4);
+            ctx.lineTo(arrowX + 8, p.centerY);
+            ctx.lineTo(arrowX, p.centerY + 4);
             ctx.closePath();
             ctx.fill();
 
@@ -513,7 +534,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 window.cancelAnimationFrame(animationFrameId);
             }
         };
-    }, [centerX, centerY, baseRadius, escapementAngleRad, audioBass, primaryTextColor, accentTextColor, showGearDecor]);
+    }, [showGearDecor, audioBassMotionValue, escapementAngleMotionValue]);
 
     if (showGearDecor === 'none') {
         return null;

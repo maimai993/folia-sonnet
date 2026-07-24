@@ -1,8 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { motion, useSpring, useMotionValueEvent } from 'framer-motion';
+import { motion, useSpring, useMotionValueEvent, useTransform } from 'framer-motion';
+import { Star, type LucideIcon } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import {
     DEFAULT_PENDOLO_TUNING,
-    type Line,
 } from '../../../types';
 import { colorWithAlpha } from '../colorMix';
 import { type VisualizerSharedProps } from '../definition';
@@ -11,7 +12,8 @@ import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import PendoloClockworkCanvas from './PendoloClockworkCanvas';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
-import { calculatePendoloWheelLayout, measurePendoloLineWidth } from './pendoloGeometry';
+import { buildLineGraphemeTimeline } from '../../../utils/lyrics/graphemeTiming';
+import { calculatePendoloWheelLayout } from './pendoloGeometry';
 
 // src/components/visualizer/pendolo/VisualizerPendolo.tsx
 
@@ -92,11 +94,6 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
         tickSpring.set(targetLineIndex);
     }, [targetLineIndex, tickSpring]);
 
-    const [springLineVal, setSpringLineVal] = useState(targetLineIndex);
-    useMotionValueEvent(tickSpring, 'change', (val) => {
-        setSpringLineVal(val);
-    });
-
     // Font stack & weight setup
     const fontFamily = useMemo(() => resolveThemeFontStack(theme), [theme]);
     const fontWeight = useMemo(() => resolveThemeFontWeight(theme, 400), [theme]);
@@ -110,29 +107,66 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const totalArcRad = (pendoloTuning.arcAngleDeg * Math.PI) / 180;
     const visibleWindowCount = 9;
     const angleStepRad = totalArcRad / Math.max(1, visibleWindowCount - 1);
-    const escapementAngleOffsetRad = -(springLineVal - targetLineIndex) * angleStepRad;
-
-    // Absolute gear rotation angle (ratchets smoothly with springLineVal when lyric lines switch)
-    const gearRotationAngleRad = springLineVal * angleStepRad;
-
-    // Read current bass motion value for canvas
-    const currentBass = audioBands.bass.get();
+    // Keep the ratchet interpolation out of React's render path. A line change is
+    // discrete, but the spring emits many intermediate values while settling.
+    const wheelRotationDeg = useTransform(
+        tickSpring,
+        value => -(value - targetLineIndex) * angleStepRad * (180 / Math.PI),
+    );
+    const textRotationCorrectionDeg = useTransform(wheelRotationDeg, value => -value * 0.65);
+    const gearRotationAngleRad = useTransform(tickSpring, value => value * angleStepRad);
 
     // Calculate line items for wheel
     const lineItems = useMemo(() => {
         return calculatePendoloWheelLayout(
             lines,
             targetLineIndex,
-            escapementAngleOffsetRad,
+            0,
             viewportSize.width,
             viewportSize.height,
             pendoloTuning,
         );
-    }, [lines, targetLineIndex, escapementAngleOffsetRad, viewportSize, pendoloTuning]);
+    }, [lines, targetLineIndex, viewportSize, pendoloTuning]);
 
     const primaryTextColor = theme.primaryColor || '#FFFFFF';
     const accentTextColor = theme.accentColor || '#3B82F6';
     const secondaryTextColor = theme.secondaryColor || '#9CA3AF';
+    const BalanceIcon = useMemo<LucideIcon>(() => {
+        const iconName = theme.lyricsIcons?.[0];
+        return (iconName
+            ? LucideIcons[iconName as keyof typeof LucideIcons]
+            : undefined) as LucideIcon | undefined ?? Star;
+    }, [theme.lyricsIcons]);
+    const balanceGearX = centerX + baseRadius * 0.2;
+    const balanceGearY = centerY - baseRadius * 0.75;
+
+    // Pre-calculate grapheme timings for active line
+    const activeGraphemes = useMemo(() => {
+        if (!activeLine) return [];
+        return buildLineGraphemeTimeline(activeLine);
+    }, [activeLine]);
+
+    // Equality-protected active character index state
+    // Prevents 60 FPS React re-renders; ONLY updates when active character index changes
+    const [activeCharIndex, setActiveCharIndex] = useState(-1);
+
+    useMotionValueEvent(currentTime, 'change', (latestTime) => {
+        if (activeGraphemes.length === 0) {
+            if (activeCharIndex !== -1) setActiveCharIndex(-1);
+            return;
+        }
+
+        let index = -1;
+        for (let i = 0; i < activeGraphemes.length; i++) {
+            if (latestTime >= activeGraphemes[i].startTime) {
+                index = i;
+            } else {
+                break;
+            }
+        }
+
+        setActiveCharIndex((prev) => (prev === index ? prev : index));
+    });
 
     return (
         <VisualizerShell
@@ -147,16 +181,42 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     centerX={centerX}
                     centerY={centerY}
                     baseRadius={baseRadius}
-                    escapementAngleRad={gearRotationAngleRad}
+                    escapementAngleMotionValue={gearRotationAngleRad}
                     audioBassMotionValue={audioBands.bass}
                     primaryTextColor={primaryTextColor}
                     accentTextColor={accentTextColor}
                     showGearDecor={pendoloTuning.showGearDecor}
+                    paused={props.paused}
                 />
+                {pendoloTuning.showGearDecor !== 'none' && (
+                    <div
+                        className="absolute pointer-events-none"
+                        style={{
+                            left: `${balanceGearX}px`,
+                            top: `${balanceGearY}px`,
+                            zIndex: 1,
+                            transform: 'translate(-50%, -50%)',
+                        }}
+                    >
+                        <BalanceIcon
+                            size={Math.max(14, baseRadius * 0.13)}
+                            strokeWidth={1.2}
+                            absoluteStrokeWidth
+                            color={colorWithAlpha(accentTextColor, 0.62)}
+                        />
+                    </div>
+                )}
 
                 {/* Lyric Wheel Arc Items */}
                 {showText && (
-                    <div className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 2 }}>
+                    <motion.div
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                        style={{
+                            zIndex: 2,
+                            rotate: wheelRotationDeg,
+                            transformOrigin: `${centerX}px ${centerY}px`,
+                        }}
+                    >
                         {lineItems.map((item) => {
                             const isFocal = item.isActive;
                             const displayTranslation = showSubtitleTranslation && Boolean(item.line.translation);
@@ -169,7 +229,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                     style={{
                                         left: `${item.x}px`,
                                         top: `${item.y}px`,
-                                        transform: `translate(0, -50%) rotate(${item.angleDeg * 0.35}deg) scale(${item.scale})`,
+                                        transform: 'translate(0, -50%)',
                                         transformOrigin: 'left center',
                                         opacity: item.alpha,
                                         fontFamily,
@@ -177,21 +237,79 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                     }}
                                     onClick={() => onLyricLineSeek?.(item.line.startTime)}
                                 >
-                                    {/* Main Lyric Text */}
-                                    <div
-                                        className="whitespace-nowrap transition-all duration-200"
-                                        style={{
-                                            fontSize: isFocal ? '28px' : '22px',
-                                            color: isFocal ? primaryTextColor : colorWithAlpha(primaryTextColor, 0.75),
-                                            textShadow: isFocal
-                                                ? `0 0 20px ${colorWithAlpha(accentTextColor, 0.45)}`
-                                                : 'none',
-                                            letterSpacing: isFocal ? '0.02em' : '0.01em',
-                                        }}
+                                    <motion.div
+                                        className="inline-block"
+                                        style={{ rotate: textRotationCorrectionDeg, transformOrigin: 'left center' }}
                                     >
-                                        {item.line.fullText}
-                                    </div>
+                                    {/* Main Lyric Text with Mechanical Press & Drop */}
+                                    <div
+                                        className="relative inline-block whitespace-nowrap"
+                                        style={{ transform: `rotate(${item.angleDeg * 0.35}deg) scale(${item.scale})`, transformOrigin: 'left center' }}
+                                    >
+                                        {isFocal ? (
+                                            <div
+                                                className="transition-all duration-200"
+                                                style={{
+                                                    fontSize: '28px',
+                                                    letterSpacing: '0.02em',
+                                                }}
+                                            >
+                                                {activeGraphemes.map((g, charIdx) => {
+                                                    const isActive = charIdx === activeCharIndex;
+                                                    const isUnsung = charIdx > activeCharIndex;
 
+                                                    let translateY = 0;
+                                                    let opacity = 1;
+                                                    let color = primaryTextColor;
+                                                    let glow = `0 0 10px ${colorWithAlpha(accentTextColor, 0.30)}`;
+
+                                                    if (isUnsung) {
+                                                        // Raised floating wireframe posture before being sung
+                                                        translateY = -5;
+                                                        opacity = 0.42;
+                                                        color = colorWithAlpha(primaryTextColor, 0.55);
+                                                        glow = 'none';
+                                                    } else if (isActive) {
+                                                        // Mechanical press strike - stamped down with spring pulse & glow
+                                                        translateY = 3;
+                                                        opacity = 1;
+                                                        color = primaryTextColor;
+                                                        glow = `0 0 18px ${accentTextColor}, 0 0 8px ${accentTextColor}`;
+                                                    } else {
+                                                        // Sung posture - locked in solid
+                                                        translateY = 0;
+                                                        opacity = 1;
+                                                        color = primaryTextColor;
+                                                    }
+
+                                                    return (
+                                                        <span
+                                                            key={`char-${charIdx}-${g.char}`}
+                                                            className="inline-block transition-all duration-100 ease-out"
+                                                            style={{
+                                                                transform: `translateY(${translateY}px) scale(${isActive ? 1.1 : 1})`,
+                                                                opacity,
+                                                                color,
+                                                                textShadow: glow,
+                                                            }}
+                                                        >
+                                                            {g.char === ' ' ? '\u00A0' : g.char}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div
+                                                className="transition-all duration-200"
+                                                style={{
+                                                    fontSize: '22px',
+                                                    color: colorWithAlpha(primaryTextColor, 0.75),
+                                                    letterSpacing: '0.01em',
+                                                }}
+                                            >
+                                                {item.line.fullText}
+                                            </div>
+                                        )}
                                     {/* Secondary Translation / Romanization Line */}
                                     {(displayTranslation || displayRomanization) && (
                                         <div
@@ -205,10 +323,12 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                             {displayTranslation ? item.line.translation : item.line.romanization}
                                         </div>
                                     )}
+                                    </div>
+                                    </motion.div>
                                 </div>
                             );
                         })}
-                    </div>
+                    </motion.div>
                 )}
             </div>
 
@@ -234,4 +354,4 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     );
 };
 
-export default VisualizerPendolo;
+export default React.memo(VisualizerPendolo);

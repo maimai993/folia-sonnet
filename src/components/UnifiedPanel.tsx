@@ -1063,4 +1063,4 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     );
 };
 
-export default UnifiedPanel;
+export default React.memo(UnifiedPanel);

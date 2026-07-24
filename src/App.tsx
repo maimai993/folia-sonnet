@@ -1792,6 +1792,21 @@ export default function App() {
         visualizerBackgroundMode,
     ]);
     const isSettingsModalOpen = settingsModalState.isOpen;
+    const memoizedVisualizerBackground = useMemo<VisualizerBackgroundConfig>(() => ({
+        ...visualizerBackgroundConfig,
+        transparent: currentView === 'player' && isPlayerPageTransparent && !isSettingsModalOpen,
+        common: {
+            ...visualizerBackgroundConfig.common,
+            disableGeometricBackground: disableVisualizerGeometricBackground || isSettingsSubviewOpen,
+        },
+    }), [
+        currentView,
+        disableVisualizerGeometricBackground,
+        isPlayerPageTransparent,
+        isSettingsModalOpen,
+        isSettingsSubviewOpen,
+        visualizerBackgroundConfig,
+    ]);
     const {
         obsBrowserSourceStatus,
         isObsBrowserSourceRendering,
@@ -3125,14 +3140,7 @@ export default function App() {
                         }
                         paused={playerState !== PlayerState.PLAYING}
                         visualizerOpacity={visualizerOpacity}
-                        background={{
-                            ...visualizerBackgroundConfig,
-                            transparent: currentView === 'player' && isPlayerPageTransparent && !isSettingsModalOpen,
-                            common: {
-                                ...visualizerBackgroundConfig.common,
-                                disableGeometricBackground: disableVisualizerGeometricBackground || isSettingsSubviewOpen,
-                            },
-                        }}
+                        background={memoizedVisualizerBackground}
                         lyricsFontScale={lyricsFontScale}
                         subtitleFontScale={subtitleFontScale}
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
