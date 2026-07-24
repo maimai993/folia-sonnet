@@ -7,6 +7,9 @@ import {
 import { colorWithAlpha } from '../colorMix';
 import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
+import VisualizerShell from '../VisualizerShell';
+import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
+import PendoloClockworkCanvas from './PendoloClockworkCanvas';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { calculatePendoloWheelLayout, measurePendoloLineWidth } from './pendoloGeometry';
 
@@ -17,19 +20,27 @@ import { calculatePendoloWheelLayout, measurePendoloLineWidth } from './pendoloG
  * Renders lyrics arranged in an adjustable circular arc on the left side of the screen.
  * Advance of song lines triggers a springy mechanical escapement ratchet step and subtle balance wheel oscillation.
  */
-const VisualizerPendolo: React.FC<VisualizerSharedProps> = ({
-    currentTime,
-    currentLineIndex,
-    lines,
-    theme,
-    audioBands,
-    subtitleContentMode = 'translation',
-    showSubtitleTranslation = true,
-    pendoloTuning = DEFAULT_PENDOLO_TUNING,
-    onLyricLineSeek,
-}) => {
+const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
+    const {
+        currentTime,
+        currentLineIndex,
+        lines,
+        theme,
+        audioBands,
+        audioPower,
+        showText = true,
+        subtitleTheme,
+        hideTranslationSubtitle,
+        showSubtitleTranslation = true,
+        subtitleContentMode = 'translation',
+        subtitleOverlayOpacity,
+        subtitleOverlayBackground,
+        subtitleFontScale,
+        pendoloTuning = DEFAULT_PENDOLO_TUNING,
+        onLyricLineSeek,
+    } = props;
 
-    const { activeLine } = useVisualizerRuntime({
+    const { activeLine, recentCompletedLine, nextLines } = useVisualizerRuntime({
         currentTime,
         currentLineIndex,
         lines,
@@ -51,30 +62,37 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = ({
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    const lastValidLineIndexRef = React.useRef<number>(0);
+    if (currentLineIndex >= 0 && currentLineIndex < lines.length) {
+        lastValidLineIndexRef.current = currentLineIndex;
+    }
+
+    const targetLineIndex = useMemo(() => {
+        if (lines.length === 0) return 0;
+        if (currentLineIndex >= 0 && currentLineIndex < lines.length) {
+            return currentLineIndex;
+        }
+        const currentTimeVal = currentTime.get();
+        if (lastValidLineIndexRef.current === 0 && currentTimeVal < (lines[0]?.startTime ?? 0)) {
+            return -1;
+        }
+        return lastValidLineIndexRef.current + 0.5;
+    }, [currentLineIndex, currentTime, lines]);
+
     // Escapement spring motion for line transition tick
     const springSnappiness = pendoloTuning.tickSnappiness;
-    const tickSpring = useSpring(0, {
+    const tickSpring = useSpring(targetLineIndex, {
         stiffness: 180 * springSnappiness,
         damping: 18 + 4 / Math.max(0.5, springSnappiness),
         mass: 0.8,
     });
 
-    const [audioTickOffset, setAudioTickOffset] = useState(0);
-
-    // Dynamic pendulum oscillation from audio bass band
-    useMotionValueEvent(audioBands.bass, 'change', (latest) => {
-        if (pendoloTuning.pendulumOscillation > 0) {
-            const oscillationAmount = (latest - 0.2) * 0.035 * pendoloTuning.pendulumOscillation;
-            setAudioTickOffset(Math.max(-0.05, Math.min(0.05, oscillationAmount)));
-        }
-    });
-
-    // Update target escapement spring when currentLineIndex updates
+    // Update target escapement spring when targetLineIndex updates
     useEffect(() => {
-        tickSpring.set(currentLineIndex);
-    }, [currentLineIndex, tickSpring]);
+        tickSpring.set(targetLineIndex);
+    }, [targetLineIndex, tickSpring]);
 
-    const [springLineVal, setSpringLineVal] = useState(currentLineIndex);
+    const [springLineVal, setSpringLineVal] = useState(targetLineIndex);
     useMotionValueEvent(tickSpring, 'change', (val) => {
         setSpringLineVal(val);
     });
@@ -82,10 +100,9 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = ({
     // Font stack & weight setup
     const fontFamily = useMemo(() => resolveThemeFontStack(theme), [theme]);
     const fontWeight = useMemo(() => resolveThemeFontWeight(theme, 400), [theme]);
-    const fontSpec = `${fontWeight} 24px ${fontFamily}`;
 
     // Center and radius coordinates
-    const centerX = viewportSize.width * (0.5 + pendoloTuning.wheelCenterX);
+    const centerX = viewportSize.width * pendoloTuning.wheelCenterX;
     const centerY = viewportSize.height * pendoloTuning.wheelCenterY;
     const baseRadius = Math.min(viewportSize.width, viewportSize.height) * pendoloTuning.arcRadius;
 
@@ -93,138 +110,127 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = ({
     const totalArcRad = (pendoloTuning.arcAngleDeg * Math.PI) / 180;
     const visibleWindowCount = 9;
     const angleStepRad = totalArcRad / Math.max(1, visibleWindowCount - 1);
-    const escapementAngleOffsetRad = (springLineVal - currentLineIndex) * angleStepRad + audioTickOffset;
+    const escapementAngleOffsetRad = -(springLineVal - targetLineIndex) * angleStepRad;
+
+    // Absolute gear rotation angle (ratchets smoothly with springLineVal when lyric lines switch)
+    const gearRotationAngleRad = springLineVal * angleStepRad;
+
+    // Read current bass motion value for canvas
+    const currentBass = audioBands.bass.get();
 
     // Calculate line items for wheel
     const lineItems = useMemo(() => {
         return calculatePendoloWheelLayout(
             lines,
-            currentLineIndex,
+            targetLineIndex,
             escapementAngleOffsetRad,
             viewportSize.width,
             viewportSize.height,
             pendoloTuning,
         );
-    }, [lines, currentLineIndex, escapementAngleOffsetRad, viewportSize, pendoloTuning]);
+    }, [lines, targetLineIndex, escapementAngleOffsetRad, viewportSize, pendoloTuning]);
 
     const primaryTextColor = theme.primaryColor || '#FFFFFF';
     const accentTextColor = theme.accentColor || '#3B82F6';
     const secondaryTextColor = theme.secondaryColor || '#9CA3AF';
 
     return (
-        <div className="relative w-full h-full overflow-hidden select-none pointer-events-none">
-            {/* Clockwork Gear & Escapement Scale Accents */}
-            {pendoloTuning.showGearDecor !== 'none' && (
-                <svg
-                    className="absolute inset-0 w-full h-full pointer-events-none opacity-40"
-                    style={{ zIndex: 1 }}
-                >
-                    <g transform={`translate(${centerX}, ${centerY})`}>
-                        {/* Escapement Main Rim Circle */}
-                        <circle
-                            r={baseRadius}
-                            fill="none"
-                            stroke={colorWithAlpha(accentTextColor, 0.2)}
-                            strokeWidth={pendoloTuning.showGearDecor === 'full' ? 2 : 1}
-                            strokeDasharray={pendoloTuning.showGearDecor === 'full' ? '4 6' : '1 0'}
-                        />
+        <VisualizerShell
+            theme={theme}
+            audioPower={audioPower}
+            audioBands={audioBands}
+            sharedProps={props}
+        >
+            <div className="relative w-full h-full overflow-hidden select-none pointer-events-none">
+                {/* Wireframe Dynamic Clockwork Canvas (Gears, Escapement & Hairspring) */}
+                <PendoloClockworkCanvas
+                    centerX={centerX}
+                    centerY={centerY}
+                    baseRadius={baseRadius}
+                    escapementAngleRad={gearRotationAngleRad}
+                    audioBassMotionValue={audioBands.bass}
+                    primaryTextColor={primaryTextColor}
+                    accentTextColor={accentTextColor}
+                    showGearDecor={pendoloTuning.showGearDecor}
+                />
 
-                        {/* Escapement Outer Gear Teeth Ring */}
-                        <circle
-                            r={baseRadius + 14}
-                            fill="none"
-                            stroke={colorWithAlpha(primaryTextColor, 0.12)}
-                            strokeWidth="1.5"
-                            strokeDasharray="2 12"
-                        />
+                {/* Lyric Wheel Arc Items */}
+                {showText && (
+                    <div className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 2 }}>
+                        {lineItems.map((item) => {
+                            const isFocal = item.isActive;
+                            const displayTranslation = showSubtitleTranslation && Boolean(item.line.translation);
+                            const displayRomanization = subtitleContentMode === 'romanization' && Boolean(item.line.romanization);
 
-                        {/* Pivot Center Hub Markings */}
-                        <circle
-                            r={18}
-                            fill="none"
-                            stroke={colorWithAlpha(accentTextColor, 0.3)}
-                            strokeWidth="1.5"
-                        />
-                        <circle
-                            r={4}
-                            fill={colorWithAlpha(accentTextColor, 0.4)}
-                        />
-
-                        {/* Focal Axis Indicator Line (Horizontal 0 deg) */}
-                        <line
-                            x1={baseRadius - 24}
-                            y1={0}
-                            x2={baseRadius + 32}
-                            y2={0}
-                            stroke={colorWithAlpha(accentTextColor, 0.4)}
-                            strokeWidth="2"
-                        />
-                    </g>
-                </svg>
-            )}
-
-            {/* Lyric Wheel Items */}
-            <div className="relative w-full h-full z-10">
-                {lineItems.map((item) => {
-                    const isFocal = item.isActive;
-                    const displayTranslation =
-                        showSubtitleTranslation &&
-                        subtitleContentMode === 'translation' &&
-                        item.line.translation;
-
-                    const displayRomanization =
-                        showSubtitleTranslation &&
-                        subtitleContentMode === 'romanization' &&
-                        item.line.romanization;
-
-                    return (
-                        <div
-                            key={item.line.id ?? `pendolo-line-${item.index}`}
-                            className="absolute transform -translate-y-1/2 transition-opacity duration-300 pointer-events-auto cursor-pointer"
-                            style={{
-                                left: `${item.x}px`,
-                                top: `${item.y}px`,
-                                transform: `translate(0, -50%) rotate(${item.angleDeg * 0.35}deg) scale(${item.scale})`,
-                                transformOrigin: 'left center',
-                                opacity: item.alpha,
-                                fontFamily,
-                                fontWeight,
-                            }}
-                            onClick={() => onLyricLineSeek?.(item.line.startTime)}
-                        >
-                            {/* Main Lyric Text */}
-                            <div
-                                className="whitespace-nowrap transition-colors duration-200"
-                                style={{
-                                    fontSize: isFocal ? '32px' : '20px',
-                                    color: isFocal ? primaryTextColor : colorWithAlpha(primaryTextColor, 0.75),
-                                    textShadow: isFocal
-                                        ? `0 0 20px ${colorWithAlpha(accentTextColor, 0.45)}`
-                                        : 'none',
-                                    letterSpacing: isFocal ? '0.02em' : '0.01em',
-                                }}
-                            >
-                                {item.line.fullText}
-                            </div>
-
-                            {/* Secondary Translation / Romanization Line */}
-                            {(displayTranslation || displayRomanization) && (
+                            return (
                                 <div
-                                    className="whitespace-nowrap mt-1 transition-opacity duration-200"
+                                    key={item.line.id ?? `pendolo-line-${item.index}`}
+                                    className="absolute transform -translate-y-1/2 transition-opacity duration-300 pointer-events-auto cursor-pointer"
                                     style={{
-                                        fontSize: isFocal ? '16px' : '12px',
-                                        color: isFocal ? secondaryTextColor : colorWithAlpha(secondaryTextColor, 0.6),
-                                        letterSpacing: '0.01em',
+                                        left: `${item.x}px`,
+                                        top: `${item.y}px`,
+                                        transform: `translate(0, -50%) rotate(${item.angleDeg * 0.35}deg) scale(${item.scale})`,
+                                        transformOrigin: 'left center',
+                                        opacity: item.alpha,
+                                        fontFamily,
+                                        fontWeight,
                                     }}
+                                    onClick={() => onLyricLineSeek?.(item.line.startTime)}
                                 >
-                                    {displayTranslation ? item.line.translation : item.line.romanization}
+                                    {/* Main Lyric Text */}
+                                    <div
+                                        className="whitespace-nowrap transition-all duration-200"
+                                        style={{
+                                            fontSize: isFocal ? '28px' : '22px',
+                                            color: isFocal ? primaryTextColor : colorWithAlpha(primaryTextColor, 0.75),
+                                            textShadow: isFocal
+                                                ? `0 0 20px ${colorWithAlpha(accentTextColor, 0.45)}`
+                                                : 'none',
+                                            letterSpacing: isFocal ? '0.02em' : '0.01em',
+                                        }}
+                                    >
+                                        {item.line.fullText}
+                                    </div>
+
+                                    {/* Secondary Translation / Romanization Line */}
+                                    {(displayTranslation || displayRomanization) && (
+                                        <div
+                                            className="whitespace-nowrap mt-1 transition-opacity duration-200"
+                                            style={{
+                                                fontSize: isFocal ? '16px' : '12px',
+                                                color: isFocal ? secondaryTextColor : colorWithAlpha(secondaryTextColor, 0.6),
+                                                letterSpacing: '0.01em',
+                                            }}
+                                        >
+                                            {displayTranslation ? item.line.translation : item.line.romanization}
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    );
-                })}
+                            );
+                        })}
+                    </div>
+                )}
             </div>
-        </div>
+
+            {showText && (
+                <VisualizerSubtitleOverlay
+                    showText={showText}
+                    activeLine={activeLine}
+                    recentCompletedLine={recentCompletedLine}
+                    nextLines={nextLines}
+                    theme={theme}
+                    subtitleTheme={subtitleTheme}
+                    translationFontSize="clamp(1.1rem, 2.2vw, 1.45rem)"
+                    upcomingFontSize="clamp(0.95rem, 1.8vw, 1.2rem)"
+                    subtitleOverlayOpacity={subtitleOverlayOpacity}
+                    subtitleOverlayBackground={subtitleOverlayBackground}
+                    subtitleFontScale={subtitleFontScale}
+                    hideTranslationSubtitle={hideTranslationSubtitle}
+                    showSubtitleTranslation={showSubtitleTranslation}
+                    subtitleContentMode={subtitleContentMode}
+                />
+            )}
+        </VisualizerShell>
     );
 };
 

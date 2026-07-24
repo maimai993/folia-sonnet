@@ -1333,6 +1333,27 @@ export const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
     return (
         <div className="space-y-4">
+            {/* Wheel Center X Offset */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
+                    <span>{t('options.pendoloWheelCenterX') || '轮盘水平位置 (0 = 左边缘)'}</span>
+                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                        {resolvedTuning.wheelCenterX > 0 ? '+' : ''}{Math.round(resolvedTuning.wheelCenterX * 100)}%
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="-0.20"
+                    max="0.40"
+                    step="0.01"
+                    value={resolvedTuning.wheelCenterX}
+                    onChange={(e) => onPendoloTuningChange?.({ wheelCenterX: parseFloat(e.target.value) })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                    className={rangeInputClass}
+                />
+            </div>
+
             {/* Wheel Arc Radius */}
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
@@ -1455,7 +1476,11 @@ export const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                                     : 'border-white/10 text-white/70 hover:bg-white/5'
                             }`}
                         >
-                            {mode === 'none' ? '无' : mode === 'subtle' ? '精简' : '完整'}
+                            {mode === 'none'
+                                ? (t('options.decorNone') || '无')
+                                : mode === 'subtle'
+                                ? (t('options.decorSubtle') || '精简')
+                                : (t('options.decorFull') || '完整')}
                         </button>
                     ))}
                 </div>

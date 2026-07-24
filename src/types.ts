@@ -505,9 +505,9 @@ export interface PendoloTuning {
 }
 
 export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
-  arcRadius: 0.45,
-  arcAngleDeg: 95,
-  wheelCenterX: -0.15,
+  arcRadius: 0.42,
+  arcAngleDeg: 100,
+  wheelCenterX: 0.0,
   wheelCenterY: 0.50,
   tickSnappiness: 1.0,
   pendulumOscillation: 1.0,

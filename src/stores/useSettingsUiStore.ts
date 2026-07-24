@@ -406,7 +406,7 @@ const readStoredPendoloTuning = (): PendoloTuning => {
         return {
             arcRadius: Math.min(0.80, Math.max(0.25, parsed.arcRadius ?? DEFAULT_PENDOLO_TUNING.arcRadius)),
             arcAngleDeg: Math.min(160, Math.max(40, parsed.arcAngleDeg ?? DEFAULT_PENDOLO_TUNING.arcAngleDeg)),
-            wheelCenterX: Math.min(0.30, Math.max(-0.40, parsed.wheelCenterX ?? DEFAULT_PENDOLO_TUNING.wheelCenterX)),
+            wheelCenterX: Math.min(0.50, Math.max(-0.30, parsed.wheelCenterX ?? DEFAULT_PENDOLO_TUNING.wheelCenterX)),
             wheelCenterY: Math.min(0.80, Math.max(0.20, parsed.wheelCenterY ?? DEFAULT_PENDOLO_TUNING.wheelCenterY)),
             tickSnappiness: Math.min(2.0, Math.max(0.5, parsed.tickSnappiness ?? DEFAULT_PENDOLO_TUNING.tickSnappiness)),
             pendulumOscillation: Math.min(2.0, Math.max(0.0, parsed.pendulumOscillation ?? DEFAULT_PENDOLO_TUNING.pendulumOscillation)),
@@ -1889,7 +1889,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         const next: PendoloTuning = {
             arcRadius: Math.min(0.80, Math.max(0.25, patch.arcRadius ?? prev.arcRadius)),
             arcAngleDeg: Math.min(160, Math.max(40, patch.arcAngleDeg ?? prev.arcAngleDeg)),
-            wheelCenterX: Math.min(0.30, Math.max(-0.40, patch.wheelCenterX ?? prev.wheelCenterX)),
+            wheelCenterX: Math.min(0.50, Math.max(-0.30, patch.wheelCenterX ?? prev.wheelCenterX)),
             wheelCenterY: Math.min(0.80, Math.max(0.20, patch.wheelCenterY ?? prev.wheelCenterY)),
             tickSnappiness: Math.min(2.0, Math.max(0.5, patch.tickSnappiness ?? prev.tickSnappiness)),
             pendulumOscillation: Math.min(2.0, Math.max(0.0, patch.pendulumOscillation ?? prev.pendulumOscillation)),

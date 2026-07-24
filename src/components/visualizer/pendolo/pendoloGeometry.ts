@@ -21,13 +21,13 @@ export interface PendoloLineItem {
  */
 export function calculatePendoloWheelLayout(
     lines: Line[],
-    currentLineIndex: number,
+    targetLineIndex: number,
     escapementAngleOffsetRad: number,
     viewportWidth: number,
     viewportHeight: number,
     tuning: PendoloTuning,
 ): PendoloLineItem[] {
-    const centerX = viewportWidth * (0.5 + tuning.wheelCenterX);
+    const centerX = viewportWidth * tuning.wheelCenterX;
     const centerY = viewportHeight * tuning.wheelCenterY;
     const baseRadius = Math.min(viewportWidth, viewportHeight) * tuning.arcRadius;
 
@@ -36,27 +36,32 @@ export function calculatePendoloWheelLayout(
     const visibleWindowCount = 9; // Number of lines visible across the arc window
     const angleStepRad = totalArcRad / Math.max(1, visibleWindowCount - 1);
 
-    const activeIndex = Math.max(0, Math.min(lines.length - 1, currentLineIndex));
+    const isIntegerTarget = Number.isInteger(targetLineIndex);
+    const activeIndex = isIntegerTarget && targetLineIndex >= 0 && targetLineIndex < lines.length
+        ? targetLineIndex
+        : -1;
+    const hasActive = activeIndex >= 0;
     const items: PendoloLineItem[] = [];
 
-    // Process lines within a 7-line window around current active line
-    const windowStart = Math.max(0, activeIndex - 4);
-    const windowEnd = Math.min(lines.length - 1, activeIndex + 4);
+    // Reference center for rendering window
+    const centerRef = Math.max(0, Math.min(lines.length - 1, Math.floor(targetLineIndex >= 0 ? targetLineIndex : 0)));
+    const windowStart = Math.max(0, centerRef - 4);
+    const windowEnd = Math.min(lines.length - 1, centerRef + 4);
 
     for (let i = windowStart; i <= windowEnd; i++) {
         const line = lines[i];
         if (!line) continue;
 
-        const distanceIndex = i - activeIndex;
+        const distanceIndex = i - targetLineIndex;
         // Base focal angle is 0 (horizontal to right).
-        // Past lines curve upward (positive angle), upcoming curve downward (negative angle).
-        const rawAngleRad = -distanceIndex * angleStepRad + escapementAngleOffsetRad;
+        // Upcoming lines curve downward (positive angle), past lines curve upward (negative angle).
+        const rawAngleRad = distanceIndex * angleStepRad + escapementAngleOffsetRad;
 
-        // Cartesian coordinates on screen relative to center
+        // Cartesian coordinates on screen relative to center on left edge
         const x = centerX + baseRadius * Math.cos(rawAngleRad);
         const y = centerY + baseRadius * Math.sin(rawAngleRad);
 
-        const isActive = i === activeIndex;
+        const isActive = hasActive && i === activeIndex;
         const absDistance = Math.abs(distanceIndex);
 
         // Alpha decays smoothly as lines move further from the focal position (angle = 0)

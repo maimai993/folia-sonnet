@@ -42,6 +42,7 @@ export default {
     "monetBgReset": "Penyetelan latar Monet direset",
     "latentBgReset": "Penyetelan latar Latent direset",
     "monetReset": "Penyetelan Monet direset",
+    "pendoloReset": "Penyetelan Pendolo direset",
     "uploadEmojiFirst": "Unggah dulu paket emoji kustom",
     "monetBgUpdated": "Gambar latar Monet diperbarui",
     "monetBgCleared": "Gambar latar Monet dihapus",
