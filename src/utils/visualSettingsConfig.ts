@@ -31,10 +31,16 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     harmonySubtitleBackground: store.harmonySubtitleBackground,
     lyricsFontStyle: store.lyricsFontStyle,
     lyricsFontScale: store.lyricsFontScale,
+    // The codec, the OBS overlay (obsWebAppearance -> buildVisualizerTheme) and the import path all
+    // already handle the custom font weights; this field table is the only place they were missing,
+    // so without them a copied link and the OBS overlay silently fall back to the mode's default
+    // weight. null means "use the mode default" and is carried as-is so it round-trips.
+    lyricsFontWeight: store.lyricsFontWeight,
     lyricsFontFallbackFamilies: store.lyricsFontFallbackFamilies,
     subtitleFontInheritsLyrics: store.subtitleFontInheritsLyrics,
     subtitleFontScale: store.subtitleFontScale,
     subtitleFontStyle: store.subtitleFontStyle,
+    subtitleFontWeight: store.subtitleFontWeight,
     subtitleFontFamily: store.subtitleFontFamily,
     subtitleFontFallbackFamilies: store.subtitleFontFallbackFamilies,
     // Only a system font's family name is portable; an uploaded font is a browser-local FontFace

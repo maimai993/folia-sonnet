@@ -14,6 +14,7 @@ import { buildVisualSettingsConfig } from '@/utils/visualSettingsConfig';
 import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled } from '@/services/themePreferences';
 import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
 import { extractCfgFromInput } from '@/utils/obsUrl';
+import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 
 const switchMock = vi.mocked(readStoredThemeAutoSwitchEnabled);
 const generateMock = vi.mocked(readStoredThemeAutoGenerateEnabled);
@@ -57,5 +58,26 @@ describe('buildVisualSettingsConfig', () => {
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
         expect(restored.songThemeAutoSwitchEnabled).toBe(false);
         expect(restored.songThemeAutoGenerateEnabled).toBe(false);
+    });
+
+    // The codec, the OBS overlay and the import path already handle the custom font weights; this
+    // table was the one place they were missing, so a copied link and the OBS overlay used to fall
+    // back to the mode's default weight regardless of the setting.
+    it('carries the custom font weights and round-trips them through a copied OBS URL', () => {
+        useSettingsUiStore.setState({ lyricsFontWeight: 700, subtitleFontWeight: 300 });
+        const config = buildVisualSettingsConfig();
+        expect(config).toMatchObject({ lyricsFontWeight: 700, subtitleFontWeight: 300 });
+        const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(config))));
+        expect(restored.lyricsFontWeight).toBe(700);
+        expect(restored.subtitleFontWeight).toBe(300);
+    });
+
+    // null means "use the mode default"; it has to survive the round trip so a config that overrides
+    // no weight can reset one that does, rather than being read as "no weight was carried".
+    it('round-trips a null weight as the mode default', () => {
+        useSettingsUiStore.setState({ lyricsFontWeight: null, subtitleFontWeight: null });
+        const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
+        expect(restored.lyricsFontWeight).toBeNull();
+        expect(restored.subtitleFontWeight).toBeNull();
     });
 });

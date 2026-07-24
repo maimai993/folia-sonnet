@@ -83,6 +83,26 @@ describe('buildImportPlan', () => {
             .not.toContain('subtitleContentMode');
     });
 
+    // Now that buildVisualSettingsConfig carries the font weights they round-trip, so the plan must
+    // diff them. null is a real value ("use the mode default"), not "the exporter carried none", so
+    // it is diffed too and can reset a weight rather than being dropped.
+    it('plans the custom font weights, including a reset to the mode default', () => {
+        expect(keys(plan({ lyricsFontWeight: 700 }, { lyricsFontWeight: 400 }, unpinned)))
+            .toContain('lyricsFontWeight');
+        expect(keys(plan({ subtitleFontWeight: null }, { subtitleFontWeight: 700 }, unpinned)))
+            .toContain('subtitleFontWeight');
+    });
+
+    // The weight setters clamp+round, but the codec carries the raw value, so the plan diffs against
+    // the normalized value apply will store: the row shows what actually happens and a re-import of a
+    // non-canonical weight converges instead of re-appearing forever.
+    it('normalizes an incoming weight to what apply will store', () => {
+        expect(plan({ lyricsFontWeight: 555 }, { lyricsFontWeight: null }, unpinned)
+            .changes.find(c => c.key === 'lyricsFontWeight')?.to).toBe(560);
+        expect(keys(plan({ lyricsFontWeight: 555 }, { lyricsFontWeight: 560 }, unpinned)))
+            .not.toContain('lyricsFontWeight');
+    });
+
     // Tunings are nested objects; a structural compare keeps an unchanged tuning out of the plan.
     it('compares nested tunings structurally', () => {
         const tuning = { cameraSpeed: 1, motionAmount: 1 };
