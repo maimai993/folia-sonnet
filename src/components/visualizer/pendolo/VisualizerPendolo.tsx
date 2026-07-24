@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { motion, useSpring, useMotionValueEvent, useTransform } from 'framer-motion';
+import { motion, useSpring, useTransform, type MotionValue } from 'framer-motion';
 import { Star, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import {
     DEFAULT_PENDOLO_TUNING,
+    type Line,
 } from '../../../types';
-import { colorWithAlpha } from '../colorMix';
+import { colorWithAlpha, mixColors } from '../colorMix';
 import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
@@ -13,9 +14,84 @@ import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import PendoloClockworkCanvas from './PendoloClockworkCanvas';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { buildLineGraphemeTimeline } from '../../../utils/lyrics/graphemeTiming';
+import { measureMonetGraphemeOffsets } from '../monet/monetLyricsModel';
 import { calculatePendoloWheelLayout } from './pendoloGeometry';
 
 // src/components/visualizer/pendolo/VisualizerPendolo.tsx
+
+interface PendoloActiveLyricSweepProps {
+    line: Line;
+    currentTime: MotionValue<number>;
+    fontFamily: string;
+    fontWeight: number;
+    primaryTextColor: string;
+    accentTextColor: string;
+}
+
+/** Draws a Monet-style timed text sweep without its glow treatment. */
+const PendoloActiveLyricSweep: React.FC<PendoloActiveLyricSweepProps> = ({
+    line,
+    currentTime,
+    fontFamily,
+    fontWeight,
+    primaryTextColor,
+    accentTextColor,
+}) => {
+    const text = line.fullText;
+    const fontPx = 28;
+    const fontSpec = `${fontWeight} ${fontPx}px ${fontFamily}`;
+    const graphemeTimings = useMemo(() => buildLineGraphemeTimeline(line), [line]);
+    const graphemeOffsets = useMemo(
+        () => measureMonetGraphemeOffsets(text, fontPx, fontSpec),
+        [fontPx, fontSpec, text],
+    );
+    const fillWidth = useTransform(currentTime, latest => {
+        const fullWidth = graphemeOffsets[graphemeOffsets.length - 1] ?? 0;
+        const timingCount = Math.min(graphemeTimings.length, graphemeOffsets.length - 1);
+        if (timingCount === 0 || latest <= line.startTime) return 0;
+
+        for (let index = 0; index < timingCount; index += 1) {
+            const timing = graphemeTimings[index];
+            const start = Math.max(line.startTime, timing.startTime);
+            const end = Math.max(start, timing.endTime);
+            const startWidth = graphemeOffsets[index] ?? 0;
+            const endWidth = graphemeOffsets[index + 1] ?? startWidth;
+            if (latest < start) return startWidth;
+            if (latest <= end) {
+                return startWidth + (endWidth - startWidth)
+                    * ((latest - start) / Math.max(0.001, end - start));
+            }
+        }
+
+        return fullWidth;
+    });
+    const maskImage = useTransform(fillWidth, width => {
+        const edgeSoftness = Math.min(Math.max(fontPx * 0.42, 8), 16);
+        const solidEnd = Math.max(width - edgeSoftness, 0);
+        return `linear-gradient(90deg, #000 0px, #000 ${solidEnd}px, rgba(0, 0, 0, 0.84) ${width}px, transparent ${width + edgeSoftness}px)`;
+    });
+    const fillColor = mixColors(primaryTextColor, accentTextColor, 0.32);
+
+    return (
+        <span className="relative inline-block whitespace-nowrap" style={{ fontSize: `${fontPx}px` }}>
+            <span style={{ color: colorWithAlpha(primaryTextColor, 0.52) }}>{text}</span>
+            <motion.span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 block whitespace-nowrap"
+                style={{
+                    color: fillColor,
+                    WebkitMaskImage: maskImage,
+                    maskImage,
+                    WebkitMaskRepeat: 'no-repeat',
+                    maskRepeat: 'no-repeat',
+                    textShadow: 'none',
+                }}
+            >
+                {text}
+            </motion.span>
+        </span>
+    );
+};
 
 /**
  * VisualizerPendolo: Escapement wheel & pendulum clockwork lyric visualizer.
@@ -140,34 +216,6 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const balanceGearX = centerX + baseRadius * 0.2;
     const balanceGearY = centerY - baseRadius * 0.75;
 
-    // Pre-calculate grapheme timings for active line
-    const activeGraphemes = useMemo(() => {
-        if (!activeLine) return [];
-        return buildLineGraphemeTimeline(activeLine);
-    }, [activeLine]);
-
-    // Equality-protected active character index state
-    // Prevents 60 FPS React re-renders; ONLY updates when active character index changes
-    const [activeCharIndex, setActiveCharIndex] = useState(-1);
-
-    useMotionValueEvent(currentTime, 'change', (latestTime) => {
-        if (activeGraphemes.length === 0) {
-            if (activeCharIndex !== -1) setActiveCharIndex(-1);
-            return;
-        }
-
-        let index = -1;
-        for (let i = 0; i < activeGraphemes.length; i++) {
-            if (latestTime >= activeGraphemes[i].startTime) {
-                index = i;
-            } else {
-                break;
-            }
-        }
-
-        setActiveCharIndex((prev) => (prev === index ? prev : index));
-    });
-
     return (
         <VisualizerShell
             theme={theme}
@@ -247,57 +295,14 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                         style={{ transform: `rotate(${item.angleDeg * 0.35}deg) scale(${item.scale})`, transformOrigin: 'left center' }}
                                     >
                                         {isFocal ? (
-                                            <div
-                                                className="transition-all duration-200"
-                                                style={{
-                                                    fontSize: '28px',
-                                                    letterSpacing: '0.02em',
-                                                }}
-                                            >
-                                                {activeGraphemes.map((g, charIdx) => {
-                                                    const isActive = charIdx === activeCharIndex;
-                                                    const isUnsung = charIdx > activeCharIndex;
-
-                                                    let translateY = 0;
-                                                    let opacity = 1;
-                                                    let color = primaryTextColor;
-                                                    let glow = `0 0 10px ${colorWithAlpha(accentTextColor, 0.30)}`;
-
-                                                    if (isUnsung) {
-                                                        // Raised floating wireframe posture before being sung
-                                                        translateY = -5;
-                                                        opacity = 0.42;
-                                                        color = colorWithAlpha(primaryTextColor, 0.55);
-                                                        glow = 'none';
-                                                    } else if (isActive) {
-                                                        // Mechanical press strike - stamped down with spring pulse & glow
-                                                        translateY = 3;
-                                                        opacity = 1;
-                                                        color = primaryTextColor;
-                                                        glow = `0 0 18px ${accentTextColor}, 0 0 8px ${accentTextColor}`;
-                                                    } else {
-                                                        // Sung posture - locked in solid
-                                                        translateY = 0;
-                                                        opacity = 1;
-                                                        color = primaryTextColor;
-                                                    }
-
-                                                    return (
-                                                        <span
-                                                            key={`char-${charIdx}-${g.char}`}
-                                                            className="inline-block transition-all duration-100 ease-out"
-                                                            style={{
-                                                                transform: `translateY(${translateY}px) scale(${isActive ? 1.1 : 1})`,
-                                                                opacity,
-                                                                color,
-                                                                textShadow: glow,
-                                                            }}
-                                                        >
-                                                            {g.char === ' ' ? '\u00A0' : g.char}
-                                                        </span>
-                                                    );
-                                                })}
-                                            </div>
+                                            <PendoloActiveLyricSweep
+                                                line={item.line}
+                                                currentTime={currentTime}
+                                                fontFamily={fontFamily}
+                                                fontWeight={fontWeight}
+                                                primaryTextColor={primaryTextColor}
+                                                accentTextColor={accentTextColor}
+                                            />
                                         ) : (
                                             <div
                                                 className="transition-all duration-200"

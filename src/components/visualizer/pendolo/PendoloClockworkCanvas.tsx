@@ -172,68 +172,6 @@ function drawHairspring(
 }
 
 /**
- * Draws Swiss lever escapement pallet fork with red ruby pallet jewels (擒纵叉与红宝石瓦).
- */
-function drawPalletFork(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    escapementRadius: number,
-    forkAngleRad: number,
-    accentColor: string,
-    decorOpacityMultiplier: number,
-) {
-    ctx.save();
-    // Position pallet fork at top-right rim of main escapement gear (~ -68 deg)
-    const palletR = escapementRadius + 4;
-    const palletAngle = -Math.PI * 0.38;
-    const forkCx = cx + palletR * Math.cos(palletAngle);
-    const forkCy = cy + palletR * Math.sin(palletAngle);
-
-    ctx.translate(forkCx, forkCy);
-    ctx.rotate(palletAngle + Math.PI * 0.5 + forkAngleRad);
-
-    const strokeColor = colorWithAlpha(accentColor, 0.7 * decorOpacityMultiplier);
-    const rubyColor = 'rgba(239, 68, 68, 0.9)'; // Red ruby jewel pallets
-
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1.5;
-
-    // Fork lever body & arbor
-    ctx.beginPath();
-    ctx.arc(0, 0, 3, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, -15);
-    ctx.stroke();
-
-    // Entry & Exit Pallet Arms
-    const armW = 9;
-    const armH = 6;
-    ctx.beginPath();
-    ctx.moveTo(-armW, armH);
-    ctx.lineTo(0, 0);
-    ctx.lineTo(armW, armH);
-    ctx.stroke();
-
-    // Entry Ruby Pallet Jewel (Left)
-    ctx.fillStyle = rubyColor;
-    ctx.beginPath();
-    ctx.rect(-armW - 3, armH - 2, 4, 5);
-    ctx.fill();
-
-    // Exit Ruby Pallet Jewel (Right)
-    ctx.fillStyle = rubyColor;
-    ctx.beginPath();
-    ctx.rect(armW - 1, armH - 2, 4, 5);
-    ctx.fill();
-
-    ctx.restore();
-}
-
-/**
  * PendoloClockworkCanvas: Renders dynamic wireframe clockwork gear train background.
  */
 const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
@@ -313,11 +251,6 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             // Gears remain stationary while a line is being sung, and ratchet ONLY when lyrics switch
             const currentGearAngle = escapementAngleMotionValue.get();
 
-            // 3. Pallet fork rocks dynamically during lyric line spring ratchet step
-            const stepDiff = Math.abs(currentGearAngle - Math.round(currentGearAngle));
-            const forkTrip = Math.sin(currentGearAngle * 16);
-            const forkAngleRad = forkTrip * Math.min(0.28, stepDiff * 3.0);
-
             const width = canvas.offsetWidth;
             const height = canvas.offsetHeight;
             const dpr = window.devicePixelRatio || 1;
@@ -339,6 +272,11 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             const accentAlpha20 = colorWithAlpha(p.accentTextColor, 0.20 * decorOpacityMultiplier);
             const accentAlpha35 = colorWithAlpha(p.accentTextColor, 0.35 * decorOpacityMultiplier);
             const accentAlpha50 = colorWithAlpha(p.accentTextColor, 0.50 * decorOpacityMultiplier);
+            // Keep lyric guide rings/ticks subtle; lift only the mechanical assembly above them.
+            const gearPrimaryAlpha = colorWithAlpha(p.primaryTextColor, 0.42 * decorOpacityMultiplier);
+            const gearPrimarySubtleAlpha = colorWithAlpha(p.primaryTextColor, 0.32 * decorOpacityMultiplier);
+            const gearAccentAlpha = colorWithAlpha(p.accentTextColor, 0.58 * decorOpacityMultiplier);
+            const gearAccentStrongAlpha = colorWithAlpha(p.accentTextColor, 0.72 * decorOpacityMultiplier);
 
             // 1. Technical Radial Ticks & Concentric Guide Rings
             ctx.strokeStyle = primaryAlpha15;
@@ -380,9 +318,9 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 36,
                 10,
                 currentGearAngle,
-                accentAlpha35,
-                1.5,
-                colorWithAlpha(p.accentTextColor, 0.03 * decorOpacityMultiplier),
+                gearAccentAlpha,
+                2.2,
+                colorWithAlpha(p.accentTextColor, 0.08 * decorOpacityMultiplier),
             );
 
             // Inner Escapement Spoked Ring
@@ -394,8 +332,8 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 p.baseRadius * 0.85,
                 6,
                 currentGearAngle,
-                primaryAlpha25,
-                1.2,
+                gearPrimaryAlpha,
+                1.8,
             );
 
             // 3. Center Hub & Sun Gear Pinion
@@ -407,8 +345,8 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 12,
                 6,
                 -currentGearAngle * 2.5,
-                accentAlpha50,
-                1.5,
+                gearAccentStrongAlpha,
+                2.1,
             );
 
             // 4. Orbiting Planetary Gear Set (Full mode only or subtle reduced)
@@ -431,12 +369,12 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                     14,
                     5,
                     -currentGearAngle * 3 + planetIdx * 0.5,
-                    primaryAlpha25,
-                    1.2,
+                    gearPrimaryAlpha,
+                    1.7,
                 );
 
                 // Planet axle pivot point
-                ctx.fillStyle = accentAlpha50;
+                ctx.fillStyle = gearAccentStrongAlpha;
                 ctx.beginPath();
                 ctx.arc(px, py, 3, 0, Math.PI * 2);
                 ctx.fill();
@@ -455,13 +393,13 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 20,
                 7,
                 balanceGearAngle,
-                accentAlpha50,
-                1.4,
-                colorWithAlpha(p.accentTextColor, 0.04 * decorOpacityMultiplier),
+                gearAccentStrongAlpha,
+                2.1,
+                colorWithAlpha(p.accentTextColor, 0.10 * decorOpacityMultiplier),
             );
             // The inner ring reserves a quiet circular seat for the non-rotating icon overlay.
-            ctx.strokeStyle = primaryAlpha25;
-            ctx.lineWidth = 1.2;
+            ctx.strokeStyle = gearPrimarySubtleAlpha;
+            ctx.lineWidth = 1.8;
             ctx.beginPath();
             ctx.arc(balanceCx, balanceCy, balanceR * 0.52, 0, Math.PI * 2);
             ctx.stroke();
@@ -478,8 +416,8 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 24,
                 7,
                 -currentGearAngle * 1.4,
-                primaryAlpha25,
-                1.2,
+                gearPrimaryAlpha,
+                1.8,
             );
             drawSpokedWheel(
                 ctx,
@@ -489,23 +427,12 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 transR * 0.85,
                 5,
                 -currentGearAngle * 1.4,
-                primaryAlpha15,
-                1,
+                gearPrimarySubtleAlpha,
+                1.5,
             );
 
-            // 6. Swiss Lever Escapement Pallet Fork (擒纵叉与红宝石瓦)
-            drawPalletFork(
-                ctx,
-                p.centerX,
-                p.centerY,
-                p.baseRadius + 8,
-                forkAngleRad,
-                p.accentTextColor,
-                decorOpacityMultiplier,
-            );
-
-            // 7. Escapement Focal Axis Alignment Line (Horizontal 0 deg)
-            ctx.strokeStyle = accentAlpha50;
+            // 6. Escapement Focal Axis Alignment Line (Horizontal 0 deg)
+            ctx.strokeStyle = gearAccentStrongAlpha;
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(p.centerX + p.baseRadius * 0.8, p.centerY);
@@ -514,7 +441,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
 
             // Focal Arrowhead Indicator
             const arrowX = p.centerX + p.baseRadius * 1.15;
-            ctx.fillStyle = accentAlpha50;
+            ctx.fillStyle = gearAccentStrongAlpha;
             ctx.beginPath();
             ctx.moveTo(arrowX, p.centerY - 4);
             ctx.lineTo(arrowX + 8, p.centerY);
