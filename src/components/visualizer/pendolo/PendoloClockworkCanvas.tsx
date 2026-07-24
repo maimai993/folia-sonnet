@@ -296,6 +296,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             const gearPrimarySubtleAlpha = colorWithAlpha(p.primaryTextColor, 0.32 * decorOpacityMultiplier);
             const gearAccentAlpha = colorWithAlpha(p.accentTextColor, 0.58 * decorOpacityMultiplier);
             const gearAccentStrongAlpha = colorWithAlpha(p.accentTextColor, 0.72 * decorOpacityMultiplier);
+            const planetGearAlpha = colorWithAlpha(p.primaryTextColor, 0.24 * decorOpacityMultiplier);
 
             // 1. Technical Radial Ticks & Concentric Guide Rings
             ctx.strokeStyle = primaryAlpha15;
@@ -388,7 +389,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                     14,
                     5,
                     -currentGearAngle * 3 + planetIdx * 0.5,
-                    gearPrimaryAlpha,
+                    planetGearAlpha,
                     1.7,
                 );
 
