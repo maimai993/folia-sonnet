@@ -339,8 +339,8 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 ctx.arc(p.centerX, p.centerY, coverRadius, 0, Math.PI * 2);
                 ctx.clip();
                 const isFullDecor = p.showGearDecor === 'full';
-                ctx.globalAlpha = 0.12 * (isFullDecor ? 1.0 : 0.6); // Base opacity
-                
+                ctx.globalAlpha = 0.42 * (isFullDecor ? 1.0 : 0.6); // Base opacity
+
                 // Draw square image covering the circle
                 const size = coverRadius * 2;
                 ctx.drawImage(currentCoverImg, p.centerX - coverRadius, p.centerY - coverRadius, size, size);
