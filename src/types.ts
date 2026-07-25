@@ -499,9 +499,9 @@ export interface PendoloTuning {
   wheelCenterX: number;
   wheelCenterY: number;
   tickSnappiness: number;
-  pendulumOscillation: number;
   activeScale: number;
   showGearDecor: 'none' | 'subtle' | 'full';
+  showCenterGradient?: boolean;
 }
 
 export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
@@ -509,10 +509,10 @@ export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
   arcAngleDeg: 100,
   wheelCenterX: 0.0,
   wheelCenterY: 0.50,
-  tickSnappiness: 1.0,
-  pendulumOscillation: 1.0,
+  tickSnappiness: 2.0,
   activeScale: 1.25,
   showGearDecor: 'subtle',
+  showCenterGradient: true,
 };
 
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other

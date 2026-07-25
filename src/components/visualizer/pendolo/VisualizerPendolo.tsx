@@ -7,7 +7,8 @@ import { colorWithAlpha } from '../colorMix';
 import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import PendoloClockworkCanvas from './PendoloClockworkCanvas';
-import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
+import { resolveSubtitleContentMode, resolveLyricAlternateText } from '../../../utils/lyrics/alternateText';
 import { calculatePendoloWheelLayout } from './pendoloGeometry';
 import PendoloActiveLyricSweep from './PendoloActiveLyricSweep';
 import { buildPendoloTextLayout } from './pendoloTextLayout';
@@ -17,7 +18,7 @@ import { buildPendoloTextLayout } from './pendoloTextLayout';
 /**
  * VisualizerPendolo: Escapement wheel & pendulum clockwork lyric visualizer.
  * Renders lyrics arranged in an adjustable circular arc on the left side of the screen.
- * Advance of song lines triggers a springy mechanical escapement ratchet step and subtle balance wheel oscillation.
+ * Advance of song lines triggers a springy mechanical escapement ratchet step and subtle balance wheel motion.
  */
 const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const {
@@ -32,6 +33,13 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
         subtitleContentMode = 'translation',
         pendoloTuning = DEFAULT_PENDOLO_TUNING,
         onLyricLineSeek,
+        lyricsFontScale = 1,
+        subtitleTheme,
+        subtitleOverlayOpacity,
+        subtitleOverlayBackground,
+        subtitleFontScale,
+        isPlayerChromeHidden = false,
+        hideTranslationSubtitle = false,
     } = props;
 
     const [viewportSize, setViewportSize] = useState({
@@ -117,6 +125,8 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const textRotationCorrectionDeg = useTransform(wheelRotationDeg, value => -value * 0.65);
     const gearRotationAngleRad = useTransform(tickSpring, value => value * angleStepRad);
 
+    const resolvedMode = useMemo(() => resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation), [subtitleContentMode, showSubtitleTranslation]);
+
     const lineBlockHeights = useMemo(() => {
         const measureWidth = Math.max(140, viewportSize.width * 0.38);
         return lines.map((line, index) => {
@@ -124,28 +134,31 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                 return 0;
             }
             const isFocal = index === targetLineIndex;
-            const fontPx = isFocal ? 28 : 22;
+            const fontPx = Math.round((isFocal ? 28 : 22) * lyricsFontScale);
             const mainHeight = buildPendoloTextLayout(
                 line.fullText,
                 `${fontWeight} ${fontPx}px ${fontFamily}`,
                 measureWidth,
                 Math.round(fontPx * 1.2),
             ).height;
-            const translation = showSubtitleTranslation
-                ? line.translation
-                : subtitleContentMode === 'romanization' ? line.romanization : undefined;
-            const translationHeight = translation
+
+            const translation = hideTranslationSubtitle ? null : resolveLyricAlternateText(line, resolvedMode);
+            const hasReadableText = !!translation && /[\p{L}\p{N}]/u.test(translation);
+            const translationPx = Math.round((isFocal ? 16 : 12) * (subtitleFontScale ?? 1));
+            
+            const translationHeight = hasReadableText
                 ? buildPendoloTextLayout(
                     translation,
-                    `${fontWeight} ${isFocal ? 16 : 12}px ${fontFamily}`,
+                    `${resolveThemeFontWeight(subtitleTheme ?? theme, 500)} ${translationPx}px ${resolveThemeTranslationFontStack(subtitleTheme ?? theme)}`,
                     measureWidth,
-                    Math.round((isFocal ? 16 : 12) * 1.2),
+                    Math.round(translationPx * 1.2),
                 ).height + 4
                 : 0;
+
             const scale = isFocal ? pendoloTuning.activeScale : Math.max(0.7, 1 - Math.abs(index - targetLineIndex) * 0.08);
             return (mainHeight + translationHeight) * scale;
         });
-    }, [fontFamily, fontWeight, lines, pendoloTuning.activeScale, showSubtitleTranslation, subtitleContentMode, targetLineIndex, viewportSize.width]);
+    }, [fontFamily, fontWeight, hideTranslationSubtitle, lines, lyricsFontScale, pendoloTuning.activeScale, resolvedMode, subtitleFontScale, subtitleTheme, targetLineIndex, theme, viewportSize.width]);
 
     // Calculate line items for wheel
     const lineItems = useMemo(() => {
@@ -191,7 +204,9 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     audioBassMotionValue={audioBands.bass}
                     primaryTextColor={primaryTextColor}
                     accentTextColor={accentTextColor}
+                    backgroundColor={theme.backgroundColor}
                     showGearDecor={pendoloTuning.showGearDecor}
+                    showCenterGradient={pendoloTuning.showCenterGradient ?? true}
                     paused={props.paused}
                 />
                 {pendoloTuning.showGearDecor !== 'none' && (
@@ -225,13 +240,15 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     >
                         {lineItems.map((item) => {
                             const isFocal = item.isActive;
-                            const displayTranslation = showSubtitleTranslation && Boolean(item.line.translation);
-                            const displayRomanization = subtitleContentMode === 'romanization' && Boolean(item.line.romanization);
                             const availableTextWidth = Math.max(
                                 140,
                                 Math.min(viewportSize.width * 0.46, viewportSize.width - item.x - 48),
                             );
                             const maxTextWidth = availableTextWidth / item.scale;
+                            const fontPx = Math.round((isFocal ? 28 : 22) * lyricsFontScale);
+                            const translation = hideTranslationSubtitle ? null : resolveLyricAlternateText(item.line, resolvedMode);
+                            const hasReadableText = !!translation && /[\p{L}\p{N}]/u.test(translation);
+                            const translationPx = Math.round((isFocal ? 16 : 12) * (subtitleFontScale ?? 1));
 
                             return (
                                 <div
@@ -266,12 +283,13 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                                     maxWidth={maxTextWidth}
                                                     primaryTextColor={primaryTextColor}
                                                     accentTextColor={accentTextColor}
+                                                    fontPx={fontPx}
                                                 />
                                             ) : (
                                                 <div
                                                     className="transition-all duration-200 whitespace-pre-wrap"
                                                     style={{
-                                                        fontSize: '22px',
+                                                        fontSize: `${fontPx}px`,
                                                         maxWidth: `${maxTextWidth}px`,
                                                         color: colorWithAlpha(primaryTextColor, 0.75),
                                                         letterSpacing: '0.01em',
@@ -284,25 +302,27 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                                 </div>
                                             )}
                                         </div>
-                                    {/* Secondary Translation / Romanization Line */}
-                                    {(displayTranslation || displayRomanization) && (
-                                        <div
-                                            className="whitespace-pre-wrap transition-opacity duration-200"
-                                            style={{
-                                                fontSize: isFocal ? '16px' : '12px',
-                                                maxWidth: `${maxTextWidth}px`,
-                                                color: isFocal ? secondaryTextColor : colorWithAlpha(secondaryTextColor, 0.6),
-                                                letterSpacing: '0.01em',
-                                                whiteSpace: 'pre-wrap',
-                                                overflowWrap: 'anywhere',
-                                                wordBreak: 'break-word',
-                                                transform: 'translateY(-50%)',
-                                                marginTop: isFocal ? '-0.7em' : '-0.4em',
-                                            }}
-                                        >
-                                            {displayTranslation ? item.line.translation : item.line.romanization}
-                                        </div>
-                                    )}
+                                        {/* Secondary Translation / Romanization Line */}
+                                        {hasReadableText && (
+                                            <div
+                                                className="whitespace-pre-wrap transition-opacity duration-200"
+                                                style={{
+                                                    fontFamily: resolveThemeTranslationFontStack(subtitleTheme ?? theme),
+                                                    fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 500),
+                                                    fontSize: `${translationPx}px`,
+                                                    maxWidth: `${maxTextWidth}px`,
+                                                    color: isFocal ? secondaryTextColor : colorWithAlpha(secondaryTextColor, 0.6),
+                                                    letterSpacing: '0.01em',
+                                                    whiteSpace: 'pre-wrap',
+                                                    overflowWrap: 'anywhere',
+                                                    wordBreak: 'break-word',
+                                                    transform: 'translateY(-50%)',
+                                                    marginTop: isFocal ? '-0.7em' : '-0.4em',
+                                                }}
+                                            >
+                                                {translation}
+                                            </div>
+                                        )}
                                     </div>
                                     </motion.div>
                                 </div>

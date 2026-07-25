@@ -636,8 +636,10 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             resetTiltTuning: onResetTiltTuning,
             resetDioramaTuning: onResetDioramaTuning,
             resetMonetTuning: onResetMonetTuning,
+            resetPendoloTuning: onResetPendoloTuning,
             setDraftFumeTuning,
             setDraftCladdaghTuning,
+            setDraftPendoloTuning,
         });
     };
 

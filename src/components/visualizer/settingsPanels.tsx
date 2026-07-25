@@ -20,8 +20,8 @@ interface PresetGroupProps<T> {
     value: T;
     options: PresetOption<T>[];
     onChange: (next: T) => void;
-    isDaylight: boolean;
-    theme: VisualizerSettingsPanelProps['theme'];
+    isDaylight?: boolean;
+    theme?: VisualizerSettingsPanelProps['theme'];
 }
 
 const clampPartitaStagger = (value: number) => Math.min(180, Math.max(0, value));
@@ -36,39 +36,46 @@ const PresetGroup = <T,>({
     value,
     options,
     onChange,
-    isDaylight,
+    isDaylight = false,
     theme,
-}: PresetGroupProps<T>) => (
-    <div className="space-y-2.5">
-        <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: theme.secondaryColor }}>
-            {label}
-        </div>
-        <div className="flex flex-wrap gap-2">
-            {options.map(option => {
-                const isActive = option.value === value;
+}: PresetGroupProps<T>) => {
+    const secondaryColor = theme?.secondaryColor ?? 'var(--text-secondary, #888888)';
+    const primaryColor = theme?.primaryColor ?? 'var(--text-primary, #ffffff)';
+    const accentColor = theme?.accentColor ?? '#3b82f6';
+    const backgroundColor = theme?.backgroundColor ?? '#000000';
 
-                return (
-                    <button
-                        key={String(option.value)}
-                        type="button"
-                        onClick={() => onChange(option.value)}
-                        className="px-3 py-2 rounded-full text-sm transition-all border"
-                        style={{
-                            color: theme.primaryColor,
-                            borderColor: isActive ? theme.accentColor : colorWithAlpha(theme.secondaryColor, isDaylight ? 0.18 : 0.14),
-                            backgroundColor: isActive
-                                ? colorWithAlpha(theme.accentColor, isDaylight ? 0.1 : 0.16)
-                                : colorWithAlpha(theme.backgroundColor, isDaylight ? 0.24 : 0.34),
-                            boxShadow: isActive ? `inset 0 0 0 1px ${theme.accentColor}` : 'none',
-                        }}
-                    >
-                        {option.label}
-                    </button>
-                );
-            })}
+    return (
+        <div className="space-y-2.5">
+            <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: secondaryColor }}>
+                {label}
+            </div>
+            <div className="flex flex-wrap gap-2">
+                {options.map(option => {
+                    const isActive = option.value === value;
+
+                    return (
+                        <button
+                            key={String(option.value)}
+                            type="button"
+                            onClick={() => onChange(option.value)}
+                            className="px-3 py-2 rounded-full text-sm transition-all border"
+                            style={{
+                                color: primaryColor,
+                                borderColor: isActive ? accentColor : colorWithAlpha(secondaryColor, isDaylight ? 0.18 : 0.14),
+                                backgroundColor: isActive
+                                    ? colorWithAlpha(accentColor, isDaylight ? 0.1 : 0.16)
+                                    : colorWithAlpha(backgroundColor, isDaylight ? 0.24 : 0.34),
+                                boxShadow: isActive ? `inset 0 0 0 1px ${accentColor}` : 'none',
+                            }}
+                        >
+                            {option.label}
+                        </button>
+                    );
+                })}
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
@@ -1323,6 +1330,8 @@ export const CladdaghSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
 export const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    isDaylight,
+    theme,
     rangeInputClass,
     pendoloTuning,
     onPendoloTuningChange,
@@ -1330,6 +1339,10 @@ export const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     onSliderCommit,
 }) => {
     const resolvedTuning = pendoloTuning ?? DEFAULT_PENDOLO_TUNING;
+    const centerGradientOptions: PresetOption<boolean>[] = useMemo(() => ([
+        { value: true, label: t('options.pendoloCenterGradientOn') || '开启' },
+        { value: false, label: t('options.pendoloCenterGradientOff') || '关闭' },
+    ]), [t]);
 
     return (
         <div className="space-y-4">
@@ -1417,27 +1430,6 @@ export const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 />
             </div>
 
-            {/* Pendulum Audio Oscillation */}
-            <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.pendoloOscillation') || '摆轮律动强度'}</span>
-                    <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
-                        {resolvedTuning.pendulumOscillation.toFixed(1)}x
-                    </span>
-                </div>
-                <input
-                    type="range"
-                    min="0.0"
-                    max="2.0"
-                    step="0.1"
-                    value={resolvedTuning.pendulumOscillation}
-                    onChange={(e) => onPendoloTuningChange?.({ pendulumOscillation: parseFloat(e.target.value) })}
-                    onPointerDown={onSliderPointerDown}
-                    onPointerUp={onSliderCommit}
-                    className={rangeInputClass}
-                />
-            </div>
-
             {/* Active Scale */}
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
@@ -1485,6 +1477,16 @@ export const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     ))}
                 </div>
             </div>
+
+            {/* Center Dark Gradient */}
+            <PresetGroup
+                label={t('options.pendoloShowCenterGradient') || '齿轮区域中央深色渐变'}
+                value={resolvedTuning.showCenterGradient ?? true}
+                options={centerGradientOptions}
+                onChange={(next) => onPendoloTuningChange?.({ showCenterGradient: next })}
+                isDaylight={isDaylight}
+                theme={theme}
+            />
         </div>
     );
 };

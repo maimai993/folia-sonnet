@@ -16,6 +16,7 @@ interface PendoloActiveLyricSweepProps {
     maxWidth: number;
     primaryTextColor: string;
     accentTextColor: string;
+    fontPx?: number;
 }
 
 interface PendoloSweepLineProps {
@@ -93,9 +94,9 @@ const PendoloActiveLyricSweep: React.FC<PendoloActiveLyricSweepProps> = ({
     maxWidth,
     primaryTextColor,
     accentTextColor,
+    fontPx = 28,
 }) => {
     const text = line.fullText;
-    const fontPx = 28;
     const fontSpec = `${fontWeight} ${fontPx}px ${fontFamily}`;
     const graphemeTimings = useMemo(() => buildLineGraphemeTimeline(line), [line]);
     const lineHeight = Math.round(fontPx * 1.2);

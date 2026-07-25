@@ -14,7 +14,9 @@ export interface PendoloClockworkCanvasProps {
     audioBass?: number;
     primaryTextColor: string;
     accentTextColor: string;
+    backgroundColor?: string;
     showGearDecor: 'none' | 'subtle' | 'full';
+    showCenterGradient?: boolean;
     paused?: boolean;
 }
 
@@ -185,7 +187,9 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     audioBass = 0.18,
     primaryTextColor,
     accentTextColor,
+    backgroundColor = '#000000',
     showGearDecor,
+    showCenterGradient = true,
     paused = false,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -205,7 +209,9 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
         audioBass,
         primaryTextColor,
         accentTextColor,
+        backgroundColor,
         showGearDecor,
+        showCenterGradient,
         paused,
     });
 
@@ -218,14 +224,16 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             audioBass,
             primaryTextColor,
             accentTextColor,
+            backgroundColor,
             showGearDecor,
+            showCenterGradient,
             paused,
         };
-    }, [centerX, centerY, baseRadius, lyricRingRadius, audioBass, primaryTextColor, accentTextColor, showGearDecor, paused]);
+    }, [centerX, centerY, baseRadius, lyricRingRadius, audioBass, primaryTextColor, accentTextColor, backgroundColor, showGearDecor, showCenterGradient, paused]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas || showGearDecor === 'none') return;
+        if (!canvas || (showGearDecor === 'none' && !showCenterGradient)) return;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
@@ -234,7 +242,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
 
         const render = (timestamp: number) => {
             const p = propsRef.current;
-            if (p.showGearDecor === 'none') return;
+            if (p.showGearDecor === 'none' && !p.showCenterGradient) return;
 
             if (lastTimestampRef.current === null) {
                 lastTimestampRef.current = timestamp;
@@ -282,6 +290,27 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             ctx.save();
             ctx.scale(dpr, dpr);
             ctx.clearRect(0, 0, width, height);
+
+            // 0. Optional Central Dark Radial Gradient using theme background color
+            if (p.showCenterGradient) {
+                const gradientR = p.baseRadius * 1.65;
+                const bgCol = p.backgroundColor || '#000000';
+                const grad = ctx.createRadialGradient(p.centerX, p.centerY, 0, p.centerX, p.centerY, gradientR);
+                grad.addColorStop(0, colorWithAlpha(bgCol, 0.72));
+                grad.addColorStop(0.35, colorWithAlpha(bgCol, 0.52));
+                grad.addColorStop(0.7, colorWithAlpha(bgCol, 0.20));
+                grad.addColorStop(1, colorWithAlpha(bgCol, 0));
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(p.centerX, p.centerY, gradientR, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            if (p.showGearDecor === 'none') {
+                ctx.restore();
+                animationFrameId = window.requestAnimationFrame(render);
+                return;
+            }
 
             const isFull = p.showGearDecor === 'full';
             const decorOpacityMultiplier = isFull ? 1.0 : 0.6;
@@ -514,9 +543,9 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 window.cancelAnimationFrame(animationFrameId);
             }
         };
-    }, [showGearDecor, audioBassMotionValue, escapementAngleMotionValue]);
+    }, [showGearDecor, showCenterGradient, audioBassMotionValue, escapementAngleMotionValue]);
 
-    if (showGearDecor === 'none') {
+    if (showGearDecor === 'none' && !showCenterGradient) {
         return null;
     }
 

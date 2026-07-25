@@ -409,9 +409,9 @@ const readStoredPendoloTuning = (): PendoloTuning => {
             wheelCenterX: Math.min(0.50, Math.max(-0.30, parsed.wheelCenterX ?? DEFAULT_PENDOLO_TUNING.wheelCenterX)),
             wheelCenterY: Math.min(0.80, Math.max(0.20, parsed.wheelCenterY ?? DEFAULT_PENDOLO_TUNING.wheelCenterY)),
             tickSnappiness: Math.min(2.0, Math.max(0.5, parsed.tickSnappiness ?? DEFAULT_PENDOLO_TUNING.tickSnappiness)),
-            pendulumOscillation: Math.min(2.0, Math.max(0.0, parsed.pendulumOscillation ?? DEFAULT_PENDOLO_TUNING.pendulumOscillation)),
             activeScale: Math.min(1.60, Math.max(1.00, parsed.activeScale ?? DEFAULT_PENDOLO_TUNING.activeScale)),
             showGearDecor: parsed.showGearDecor === 'none' || parsed.showGearDecor === 'full' ? parsed.showGearDecor : 'subtle',
+            showCenterGradient: parsed.showCenterGradient ?? DEFAULT_PENDOLO_TUNING.showCenterGradient,
         };
     } catch {
         return DEFAULT_PENDOLO_TUNING;
@@ -1892,9 +1892,9 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             wheelCenterX: Math.min(0.50, Math.max(-0.30, patch.wheelCenterX ?? prev.wheelCenterX)),
             wheelCenterY: Math.min(0.80, Math.max(0.20, patch.wheelCenterY ?? prev.wheelCenterY)),
             tickSnappiness: Math.min(2.0, Math.max(0.5, patch.tickSnappiness ?? prev.tickSnappiness)),
-            pendulumOscillation: Math.min(2.0, Math.max(0.0, patch.pendulumOscillation ?? prev.pendulumOscillation)),
             activeScale: Math.min(1.60, Math.max(1.00, patch.activeScale ?? prev.activeScale)),
             showGearDecor: patch.showGearDecor ?? prev.showGearDecor,
+            showCenterGradient: patch.showCenterGradient ?? prev.showCenterGradient ?? DEFAULT_PENDOLO_TUNING.showCenterGradient,
         };
         if (typeof window !== 'undefined') {
             localStorage.setItem('pendolo_tuning', JSON.stringify(next));
