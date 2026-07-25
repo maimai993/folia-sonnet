@@ -38,13 +38,15 @@ Folia是一个以全屏沉浸式歌词播放为核心的在线音乐播放器，
 
 ## 展示
 
+![visualizer](./img/visualizer.png)
+
 ### 演示视频
 
 https://github.com/user-attachments/assets/fd27f4f0-64b9-4c57-8c3b-10df767f934b
 
 https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
 
-### 主题预览
+### 部分主题预览
 
 <table>
   <tr>
@@ -77,6 +79,18 @@ https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
     </td>
     <td width="50%">
       <img src="./img/preview-tilt.png" alt="Tilt 主题预览" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>群唱</strong></td>
+    <td align="center"><strong>倾诉</strong></td>
+  </tr>
+    <tr>
+    <td width="50%">
+      <img src="./img/preview-diorama.png" alt="镜台 主题预览" />
+    </td>
+    <td width="50%">
+      <img src="./img/preview-pendolo.png" alt="时计 主题预览" />
     </td>
   </tr>
   <tr>
