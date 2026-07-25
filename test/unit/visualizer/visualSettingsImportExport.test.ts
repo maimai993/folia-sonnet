@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compressConfig, decompressConfig } from '@/components/modal/settings/AppearanceSettingsSubview';
+import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
 
 // test/unit/visualizer/visualSettingsImportExport.test.ts
 // Verifies visual settings configuration compression, base64 encoding, and decompression/restoration.

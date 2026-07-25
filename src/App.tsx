@@ -82,6 +82,7 @@ import { clampMediaVolume } from './utils/appPlaybackHelpers';
 import { getOnlineProviderIdForSong, isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './utils/appPlaybackGuards';
 import { readLyricOffset, writeLyricOffset } from './utils/lyrics/lyricOffsetMemory';
 import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
+import { BASE_DUAL_THEME, DAYLIGHT_THEME, DEFAULT_THEME } from './services/baseThemes';
 import { initializeSyncCoordinator } from './services/sync/syncCoordinator';
 import { applyLocalLibraryEntityDisplay } from './services/playbackAdapters';
 import { clearPrefetchRuntime } from './services/prefetchService';
@@ -95,29 +96,6 @@ const ONLINE_AUDIO_URL_REFRESH_BUFFER_MS = 60 * 1000;
 const HOME_PROVIDER_REFRESH_COOLDOWN_MS = 5_000;
 const PLAYER_CHROME_HIDDEN_STORAGE_KEY = 'player_chrome_hidden';
 const LOCAL_TAIL_DECODE_ERROR_TOLERANCE_SEC = 3;
-// Default Theme
-// 午夜墨染
-const DEFAULT_THEME: Theme = {
-    name: "Midnight Default",
-    backgroundColor: "#09090b", // zinc-950
-    primaryColor: "#f4f4f5", // zinc-100
-    accentColor: "#f4f4f5", // zinc-100
-    secondaryColor: "#71717a", // zinc-500
-    fontStyle: "sans",
-    animationIntensity: "normal"
-};
-
-// 日光素白
-const DAYLIGHT_THEME: Theme = {
-    name: "Daylight Default",
-    backgroundColor: "#f5f5f4", // stone-100 (Pearl White-ish)
-    primaryColor: "#1c1917", // stone-900
-    accentColor: "#ea580c", // orange-600
-    secondaryColor: "#44403c", // stone-700
-    fontStyle: "sans",
-    animationIntensity: "normal"
-};
-
 
 export default function App() {
     const { t } = useTranslation();
@@ -2048,10 +2026,7 @@ export default function App() {
         if (bgMode === 'ai') {
             return aiTheme ?? FALLBACK_AI_DUAL_THEME;
         }
-        return {
-            light: DAYLIGHT_THEME,
-            dark: DEFAULT_THEME,
-        };
+        return BASE_DUAL_THEME;
     }, [bgMode, customTheme, aiTheme]);
 
     const devDebugSnapshot = useMemo(() => (

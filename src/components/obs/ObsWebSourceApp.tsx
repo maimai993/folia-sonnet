@@ -8,6 +8,8 @@ import { buildBuiltinDualTheme } from '../../hooks/themeControllerState';
 import { extractColors } from '../../utils/colorExtractor';
 import type { WebLyricSource } from '../../types/webLyricSource';
 import type { ObsWebAppearance } from '../../utils/obsWebAppearance';
+import { useObsAiTheme } from '../../hooks/useObsAiTheme';
+import type { ObsAiConfig } from '../../services/gemini';
 
 // src/components/obs/ObsWebSourceApp.tsx
 // Source-neutral browser OBS overlay shell: consumes an injected WebLyricSource
@@ -28,9 +30,12 @@ const pickBuiltinTheme = (coverColors: string[], isDaylight: boolean): Theme => 
 interface ObsWebSourceAppProps {
     source: WebLyricSource;
     appearance: ObsWebAppearance;
+    // Dynamic AI mode: when set, the overlay regenerates an AI theme per song (overrides cfg/cover);
+    // null/undefined keeps the cfg-or-cover behavior unchanged.
+    obsAiConfig?: ObsAiConfig | null;
 }
 
-const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance }) => {
+const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, obsAiConfig }) => {
     const { state, getCurrentTimeSec } = source;
     const { isDaylight, transparent } = appearance;
 
@@ -54,6 +59,9 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance })
     const treble = useMotionValue(0);
     const spectrum = useMotionValue(EMPTY_SPECTRUM);
     const audioBands = useMemo(() => ({ bass, lowMid, mid, vocal, treble, spectrum }), [bass, lowMid, mid, spectrum, treble, vocal]);
+
+    // Dynamic AI overlay: a per-song regenerated DualTheme (null unless/until generated; overrides cfg/cover below).
+    const aiDualTheme = useObsAiTheme({ enabled: !!obsAiConfig, aiConfig: obsAiConfig ?? null, state });
 
     useEffect(() => {
         document.body.style.backgroundColor = 'transparent';
@@ -110,7 +118,13 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance })
     // appearance); otherwise derive from cover colors whenever the cover changes.
     const coverUrl = state.track?.coverUrl || null;
     const cfgTheme = appearance.theme;
+    // Priority: per-song AI theme (Dynamic AI) > cfg theme (static burn-in) > cover-derived builtin.
+    const aiTheme = aiDualTheme ? (isDaylight ? aiDualTheme.light : aiDualTheme.dark) : null;
     useEffect(() => {
+        if (aiTheme) {
+            setTheme(aiTheme);
+            return;
+        }
         if (cfgTheme) {
             setTheme(cfgTheme);
             return;
@@ -124,7 +138,7 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance })
             .then((colors) => { if (!cancelled) setTheme(pickBuiltinTheme(colors, isDaylight)); })
             .catch(() => { if (!cancelled) setTheme(pickBuiltinTheme([], isDaylight)); });
         return () => { cancelled = true; };
-    }, [coverUrl, isDaylight, cfgTheme]);
+    }, [coverUrl, isDaylight, cfgTheme, aiTheme]);
 
     // Clock + current line index: extrapolated by source.getCurrentTimeSec.
     useEffect(() => {

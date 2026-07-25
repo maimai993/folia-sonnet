@@ -38,6 +38,33 @@ const baseState: ThemePreferenceSwitchState = {
     songThemeAutoGenerateEnabled: true,
 };
 
+// Config import applies both song-theme flags back to back. The resolvers only compose correctly
+// when the second one starts from the first one's result; feeding both the same starting state
+// makes the later write discard the earlier one, which is how an imported auto-switch value gets
+// silently dropped. useThemeController therefore keeps the switch state in a ref rather than
+// reading render-scoped state between the two calls.
+describe('song theme preference resolvers, applied back to back', () => {
+    const off: ThemePreferenceSwitchState = {
+        isCustomThemePreferred: false,
+        songThemeAutoSwitchEnabled: false,
+        songThemeAutoGenerateEnabled: false,
+    };
+
+    it('keeps both imported values when the state is threaded through', () => {
+        const afterSwitch = resolveSongThemeAutoSwitchChange(off, true);
+        const afterGenerate = resolveSongThemeAutoGenerateChange(afterSwitch, false);
+        expect(afterGenerate.songThemeAutoSwitchEnabled).toBe(true);
+        expect(afterGenerate.songThemeAutoGenerateEnabled).toBe(false);
+    });
+
+    it('loses the first value when both resolve from the same snapshot', () => {
+        const afterSwitch = resolveSongThemeAutoSwitchChange(off, true);
+        const fromStaleSnapshot = resolveSongThemeAutoGenerateChange(off, false);
+        expect(afterSwitch.songThemeAutoSwitchEnabled).toBe(true);
+        expect(fromStaleSnapshot.songThemeAutoSwitchEnabled).toBe(false);
+    });
+});
+
 describe('themePreferences', () => {
     afterEach(() => {
         delete (globalThis as { window?: unknown; }).window;

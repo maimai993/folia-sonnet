@@ -3,12 +3,6 @@ import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check, Chevron
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import {
-    DEFAULT_CLADDAGH_TUNING,
-    DEFAULT_DIORAMA_TUNING,
-    DEFAULT_LATENT_BACKGROUND_TUNING,
-    DEFAULT_MONET_BACKGROUND_TUNING,
-    DEFAULT_MONET_TUNING,
-    DEFAULT_NOMAND_BACKGROUND_TUNING,
     type DualTheme,
     type Theme,
     type ThemeMode,
@@ -16,8 +10,14 @@ import {
 } from '../../../types';
 import { applyVisualizerTuningsToSettings } from '../../visualizer/tuningRegistry';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
-import { sanitizeUrlBackgroundItem } from '../../../utils/urlBackground';
-import { buildObsSourceUrl, extractCfgFromInput } from '../../../utils/obsUrl';
+import { mergeUrlBackgroundList } from '../../../utils/urlBackground';
+import { compressConfig, decompressConfig, readSavedCustomTheme } from '../../../utils/appearanceCodec';
+import { ACTIVATE_CUSTOM_THEME_KEY, buildImportPlan, THEME_DARK_KEY, THEME_LIGHT_KEY, type ImportPlan } from '../../../utils/appearanceImportPlan';
+import { isFontFamilyAvailable } from '../../../utils/fontAvailability';
+import ImportConfirmDialog from './ImportConfirmDialog';
+import { extractCfgFromInput } from '../../../utils/obsUrl';
+import { buildCurrentObsUrl } from '../../../utils/currentObsUrl';
+import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
 import { resolveWebObsTarget, selectWebObsSource } from '../../../utils/webObsTarget';
 import { buildVisualSettingsConfig, hasCustomObsFont } from '../../../utils/visualSettingsConfig';
 
@@ -53,474 +53,6 @@ type AppearanceSettingsSubviewProps = {
     onChangeGrid3dCardStyle: (style: 'image' | 'card') => void;
     aiTheme?: DualTheme | null;
     customTheme?: DualTheme | null;
-};
-
-// ==========================================
-// Mappers and Compression Helpers
-// ==========================================
-
-export const compressTheme = (t: Theme): any => ({
-    n: t.name,
-    bg: t.backgroundColor,
-    pc: t.primaryColor,
-    ac: t.accentColor,
-    sc: t.secondaryColor,
-    tfs: t.fontStyle,
-    tff: t.fontFamily,
-    ai: t.animationIntensity,
-    wc: t.wordColors,
-    li: t.lyricsIcons,
-    pv: t.provider,
-    tds: t.description,
-});
-
-export const decompressTheme = (o: any): Theme => ({
-    name: o.n || 'Imported Theme',
-    backgroundColor: o.bg || '#000000',
-    primaryColor: o.pc || '#ffffff',
-    accentColor: o.ac || '#ffffff',
-    secondaryColor: o.sc || '#888888',
-    fontStyle: o.tfs || 'sans',
-    fontFamily: o.tff,
-    animationIntensity: o.ai || 'normal',
-    wordColors: o.wc || [],
-    lyricsIcons: o.li || [],
-    provider: o.pv,
-    description: o.tds || '',
-});
-
-const compressClassic = (t: any): any => ({
-    ewr: t.enableWordRotation,
-    bfm: t.breathingFloatMultiplier,
-    ull: t.useLegacyLayout,
-    cws: t.wordSpacing,
-});
-const decompressClassic = (o: any): any => ({
-    enableWordRotation: o.ewr !== undefined ? o.ewr : true,
-    breathingFloatMultiplier: o.bfm !== undefined ? o.bfm : 1,
-    useLegacyLayout: o.ull,
-    wordSpacing: o.cws,
-});
-
-const compressCadenza = (t: any): any => ({
-    cfs: t.fontScale,
-    wr: t.widthRatio,
-    ma: t.motionAmount,
-    gi: t.glowIntensity,
-    bi: t.beamIntensity,
-});
-const decompressCadenza = (o: any): any => ({
-    fontScale: o.cfs !== undefined ? o.cfs : 1.12,
-    widthRatio: o.wr !== undefined ? o.wr : 0.72,
-    motionAmount: o.ma !== undefined ? o.ma : 1,
-    glowIntensity: o.gi !== undefined ? o.gi : 1,
-    beamIntensity: o.bi !== undefined ? o.bi : 0,
-});
-
-const compressPartita = (t: any): any => ({
-    sgl: t.showGuideLines,
-    usl: t.useSemanticLayout,
-    smi: t.staggerMin,
-    sma: t.staggerMax,
-});
-const decompressPartita = (o: any): any => ({
-    showGuideLines: o.sgl !== undefined ? o.sgl : true,
-    useSemanticLayout: o.usl !== undefined ? o.usl : true,
-    staggerMin: o.smi !== undefined ? o.smi : 20,
-    staggerMax: o.sma !== undefined ? o.sma : 100,
-});
-
-const compressFume = (t: any): any => ({
-    hps: t.hidePrintSymbols,
-    dgb: t.disableGeometricBackground,
-    boo: t.backgroundObjectOpacity,
-    thr: t.textHoldRatio,
-    ctm: t.cameraTrackingMode,
-    csp: t.cameraSpeed,
-    gi: t.glowIntensity,
-    hs: t.heroScale,
-});
-const decompressFume = (o: any): any => ({
-    hidePrintSymbols: o.hps !== undefined ? o.hps : false,
-    disableGeometricBackground: o.dgb !== undefined ? o.dgb : true,
-    backgroundObjectOpacity: o.boo !== undefined ? o.boo : 0.5,
-    textHoldRatio: o.thr !== undefined ? o.thr : 1,
-    cameraTrackingMode: o.ctm || 'smooth',
-    cameraSpeed: o.csp !== undefined ? o.csp : 1,
-    glowIntensity: o.gi !== undefined ? o.gi : 1,
-    heroScale: o.hs !== undefined ? o.hs : 1,
-});
-
-const compressCladdagh = (t: any): any => ({
-    fsr: t.focusScaleRatio,
-    rs: t.radiusScale,
-    etd: t.ellipseTiltDeg,
-});
-const decompressCladdagh = (o: any): any => ({
-    focusScaleRatio: o.fsr !== undefined ? o.fsr : DEFAULT_CLADDAGH_TUNING.focusScaleRatio,
-    radiusScale: o.rs !== undefined ? o.rs : DEFAULT_CLADDAGH_TUNING.radiusScale,
-    ellipseTiltDeg: o.etd !== undefined ? o.etd : DEFAULT_CLADDAGH_TUNING.ellipseTiltDeg,
-});
-
-const compressCappella = (t: any): any => ({
-    sem: t.showEmoMessages,
-    eps: t.emojiPackSource,
-    as: t.avatarSource,
-});
-const decompressCappella = (o: any): any => ({
-    showEmoMessages: o.sem !== undefined ? o.sem : true,
-    emojiPackSource: o.eps || 'builtin',
-    avatarSource: o.as || 'cover',
-});
-
-const compressTilt = (t: any): any => ({
-    sp: t.splitProbability,
-    tsp: t.tiltStyleProbability,
-    tcs: t.colorScheme,
-});
-const decompressTilt = (o: any): any => ({
-    splitProbability: o.sp !== undefined ? o.sp : 0.75,
-    tiltStyleProbability: o.tsp !== undefined ? o.tsp : 0.35,
-    colorScheme: o.tcs || 'default',
-});
-
-const compressDiorama = (t: any): any => ({
-    cs: t.cameraSpeed,
-    ma: t.motionAmount,
-    ar: t.audioReactivity,
-    gv: t.geometryVisibility ? {
-        e: t.geometryVisibility.enabled,
-        m: t.geometryVisibility.mode,
-        s: t.geometryVisibility.strands,
-        b: t.geometryVisibility.blobs,
-        r: t.geometryVisibility.ribbons,
-        o: t.geometryVisibility.rings,
-    } : undefined,
-    pd: t.particleDensity,
-        psz: t.particleScale,
-    pge: t.particleGlowEnabled,
-    pgi: t.particleGlowIntensity,
-    spa: t.showParticles,
-    bpc: t.backgroundParticleCircumference,
-    bpr: t.backgroundParticleRadial,
-    ge: t.glowEnabled,
-    gi: t.glowIntensity,
-    se: t.soulEnabled,
-    si: t.soulIntensity,
-    sae: t.soulActiveEnabled,
-    gre: t.gradientEnabled,
-    gri: t.gradientIntensity,
-    kce: t.keywordColoringEnabled,
-});
-const decompressDiorama = (o: any): any => ({
-    cameraSpeed: o.cs !== undefined ? o.cs : DEFAULT_DIORAMA_TUNING.cameraSpeed,
-    motionAmount: o.ma !== undefined ? o.ma : DEFAULT_DIORAMA_TUNING.motionAmount,
-    audioReactivity: o.ar !== undefined ? o.ar : DEFAULT_DIORAMA_TUNING.audioReactivity,
-    geometryVisibility: {
-        enabled: o.gv?.e !== undefined ? o.gv.e : DEFAULT_DIORAMA_TUNING.geometryVisibility.enabled,
-        mode: o.gv?.m !== undefined ? o.gv.m : DEFAULT_DIORAMA_TUNING.geometryVisibility.mode,
-        strands: o.gv?.s !== undefined ? o.gv.s : DEFAULT_DIORAMA_TUNING.geometryVisibility.strands,
-        blobs: o.gv?.b !== undefined ? o.gv.b : DEFAULT_DIORAMA_TUNING.geometryVisibility.blobs,
-        ribbons: o.gv?.r !== undefined ? o.gv.r : DEFAULT_DIORAMA_TUNING.geometryVisibility.ribbons,
-        rings: o.gv?.o !== undefined ? o.gv.o : DEFAULT_DIORAMA_TUNING.geometryVisibility.rings,
-    },
-    particleDensity: o.pd !== undefined ? o.pd : DEFAULT_DIORAMA_TUNING.particleDensity,
-        particleScale: o.psz !== undefined ? o.psz : DEFAULT_DIORAMA_TUNING.particleScale,
-    particleGlowEnabled: o.pge !== undefined ? o.pge : DEFAULT_DIORAMA_TUNING.particleGlowEnabled,
-    particleGlowIntensity: o.pgi !== undefined ? o.pgi : DEFAULT_DIORAMA_TUNING.particleGlowIntensity,
-    showParticles: o.spa !== undefined ? o.spa : DEFAULT_DIORAMA_TUNING.showParticles,
-    backgroundParticleCircumference: o.bpc !== undefined ? o.bpc : DEFAULT_DIORAMA_TUNING.backgroundParticleCircumference,
-    backgroundParticleRadial: o.bpr !== undefined ? o.bpr : DEFAULT_DIORAMA_TUNING.backgroundParticleRadial,
-    glowEnabled: o.ge !== undefined ? o.ge : DEFAULT_DIORAMA_TUNING.glowEnabled,
-    glowIntensity: o.gi !== undefined ? o.gi : DEFAULT_DIORAMA_TUNING.glowIntensity,
-    soulEnabled: o.se !== undefined ? o.se : DEFAULT_DIORAMA_TUNING.soulEnabled,
-    soulIntensity: o.si !== undefined ? o.si : DEFAULT_DIORAMA_TUNING.soulIntensity,
-    soulActiveEnabled: o.sae !== undefined ? o.sae : DEFAULT_DIORAMA_TUNING.soulActiveEnabled,
-    gradientEnabled: o.gre !== undefined ? o.gre : DEFAULT_DIORAMA_TUNING.gradientEnabled,
-    gradientIntensity: o.gri !== undefined ? o.gri : DEFAULT_DIORAMA_TUNING.gradientIntensity,
-    keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_DIORAMA_TUNING.keywordColoringEnabled,
-});
-
-const compressMonetBackground = (t: any): any => ({
-    mbs: t.backgroundSource,
-    mbl: t.backgroundLayout,
-    mbb: t.backgroundBlurPx,
-    mbo: t.backgroundOverlayOpacity,
-    mbg: t.backgroundGrayscale,
-    mbsat: t.backgroundSaturation,
-    mbw: t.backgroundWash,
-    mbh: t.backgroundHalfPaneOffsetX,
-    mbwcm: t.backgroundWashColorMode,
-    mbwcc: t.backgroundWashCustomColor,
-});
-const decompressMonetBackground = (o: any): any => ({
-    backgroundSource: o.mbs || DEFAULT_MONET_BACKGROUND_TUNING.backgroundSource,
-    backgroundLayout: o.mbl || DEFAULT_MONET_BACKGROUND_TUNING.backgroundLayout,
-    backgroundBlurPx: o.mbb !== undefined ? o.mbb : DEFAULT_MONET_BACKGROUND_TUNING.backgroundBlurPx,
-    backgroundOverlayOpacity: o.mbo !== undefined ? o.mbo : DEFAULT_MONET_BACKGROUND_TUNING.backgroundOverlayOpacity,
-    backgroundGrayscale: o.mbg !== undefined ? o.mbg : DEFAULT_MONET_BACKGROUND_TUNING.backgroundGrayscale,
-    backgroundSaturation: o.mbsat !== undefined ? o.mbsat : DEFAULT_MONET_BACKGROUND_TUNING.backgroundSaturation,
-    backgroundWash: o.mbw !== undefined ? o.mbw : DEFAULT_MONET_BACKGROUND_TUNING.backgroundWash,
-    backgroundHalfPaneOffsetX: o.mbh !== undefined ? o.mbh : DEFAULT_MONET_BACKGROUND_TUNING.backgroundHalfPaneOffsetX,
-    backgroundWashColorMode: o.mbwcm || DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashColorMode,
-    backgroundWashCustomColor: o.mbwcc || DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashCustomColor,
-});
-
-const compressNomandBackground = (t: any): any => ({
-    is: t.imageSource,
-    dt: t.ditheringType,
-    s: t.size,
-    cs: t.colorSteps,
-    oc: t.originalColors,
-    i: t.inverted,
-    oe: t.overlayEnabled,
-    oo: t.overlayOpacity,
-});
-const decompressNomandBackground = (o: any): any => ({
-    imageSource: o.is || DEFAULT_NOMAND_BACKGROUND_TUNING.imageSource,
-    ditheringType: o.dt === '2x2' || o.dt === '4x4' || o.dt === '8x8'
-        ? o.dt
-        : DEFAULT_NOMAND_BACKGROUND_TUNING.ditheringType,
-    size: o.s !== undefined ? o.s : DEFAULT_NOMAND_BACKGROUND_TUNING.size,
-    colorSteps: o.cs !== undefined ? o.cs : DEFAULT_NOMAND_BACKGROUND_TUNING.colorSteps,
-    originalColors: o.oc !== undefined ? o.oc : DEFAULT_NOMAND_BACKGROUND_TUNING.originalColors,
-    inverted: o.i !== undefined ? o.i : DEFAULT_NOMAND_BACKGROUND_TUNING.inverted,
-    overlayEnabled: o.oe !== undefined ? o.oe : DEFAULT_NOMAND_BACKGROUND_TUNING.overlayEnabled,
-    overlayOpacity: o.oo !== undefined ? o.oo : DEFAULT_NOMAND_BACKGROUND_TUNING.overlayOpacity,
-});
-
-const compressLatentBackground = (t: any): any => ({
-    dm: t.displayMode,
-    cs: t.colorSource,
-    dopv: t.dynamicOnlyInPlayer,
-    ebr: t.enhancedBeatResponse,
-    ds: t.ditheringSpeed,
-    das: t.ditheringAudioSpeed,
-    dz: t.ditheringSize,
-    dop: t.ditheringOpacity,
-    ms: t.meshSpeed,
-    mas: t.meshAudioSpeed,
-    md: t.meshDistortion,
-    mw: t.meshSwirl,
-    oe: t.overlayEnabled,
-    oo: t.overlayOpacity,
-});
-const decompressLatentBackground = (o: any): any => ({
-    displayMode: o.dm || DEFAULT_LATENT_BACKGROUND_TUNING.displayMode,
-    colorSource: o.cs || DEFAULT_LATENT_BACKGROUND_TUNING.colorSource,
-    dynamicOnlyInPlayer: o.dopv !== undefined
-        ? o.dopv
-        : DEFAULT_LATENT_BACKGROUND_TUNING.dynamicOnlyInPlayer,
-    enhancedBeatResponse: o.ebr !== undefined
-        ? o.ebr
-        : DEFAULT_LATENT_BACKGROUND_TUNING.enhancedBeatResponse,
-    ditheringSpeed: o.ds !== undefined ? o.ds : DEFAULT_LATENT_BACKGROUND_TUNING.ditheringSpeed,
-    ditheringAudioSpeed: o.das !== undefined ? o.das : DEFAULT_LATENT_BACKGROUND_TUNING.ditheringAudioSpeed,
-    ditheringSize: o.dz !== undefined ? o.dz : DEFAULT_LATENT_BACKGROUND_TUNING.ditheringSize,
-    ditheringOpacity: o.dop !== undefined ? o.dop : DEFAULT_LATENT_BACKGROUND_TUNING.ditheringOpacity,
-    meshSpeed: o.ms !== undefined ? o.ms : DEFAULT_LATENT_BACKGROUND_TUNING.meshSpeed,
-    meshAudioSpeed: o.mas !== undefined ? o.mas : DEFAULT_LATENT_BACKGROUND_TUNING.meshAudioSpeed,
-    meshDistortion: o.md !== undefined ? o.md : DEFAULT_LATENT_BACKGROUND_TUNING.meshDistortion,
-    meshSwirl: o.mw !== undefined ? o.mw : DEFAULT_LATENT_BACKGROUND_TUNING.meshSwirl,
-    overlayEnabled: o.oe !== undefined ? o.oe : DEFAULT_LATENT_BACKGROUND_TUNING.overlayEnabled,
-    overlayOpacity: o.oo !== undefined ? o.oo : DEFAULT_LATENT_BACKGROUND_TUNING.overlayOpacity,
-});
-
-const compressMonet = (t: any): any => ({
-    kce: t.keywordColoringEnabled,
-    msd: t.showDescription,
-    mas: t.audioStyle,
-    mfs: t.fontScale,
-    mps: t.portraitSource,
-    pox: t.portraitOffsetX,
-    mpy: t.portraitStyle,
-    mpdh: t.showPortraitDragHanger,
-});
-const decompressMonet = (o: any): any => ({
-    keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_MONET_TUNING.keywordColoringEnabled,
-    showDescription: o.msd !== undefined ? o.msd : DEFAULT_MONET_TUNING.showDescription,
-    audioStyle: o.mas || DEFAULT_MONET_TUNING.audioStyle,
-    fontScale: o.mfs !== undefined ? o.mfs : DEFAULT_MONET_TUNING.fontScale,
-    portraitSource: o.mps || DEFAULT_MONET_TUNING.portraitSource,
-    portraitOffsetX: o.pox !== undefined ? o.pox : DEFAULT_MONET_TUNING.portraitOffsetX,
-    portraitStyle: o.mpy || DEFAULT_MONET_TUNING.portraitStyle,
-    showPortraitDragHanger: o.mpdh !== undefined ? o.mpdh : DEFAULT_MONET_TUNING.showPortraitDragHanger,
-});
-
-export const compressConfig = (config: any): string => {
-    const minified: any = {};
-    if (config.theme) {
-        minified.t = {
-            l: compressTheme(config.theme.light),
-            d: compressTheme(config.theme.dark),
-        };
-    }
-    if (config.visualizerMode) minified.vm = config.visualizerMode;
-    if (config.randomVisualizerModePerSong !== undefined) minified.rvms = config.randomVisualizerModePerSong;
-    if (config.visualizerBackgroundMode) minified.vbm = config.visualizerBackgroundMode;
-    if (config.backgroundOpacity !== undefined) minified.bo = config.backgroundOpacity;
-    if (config.visualizerOpacity !== undefined) minified.vo = config.visualizerOpacity;
-    if (config.hidePlayerTranslationSubtitle !== undefined) minified.hpts = config.hidePlayerTranslationSubtitle;
-    if (config.showSubtitleTranslation !== undefined) minified.sst = config.showSubtitleTranslation;
-    if (config.subtitleContentMode !== undefined) minified.scm = config.subtitleContentMode;
-    if (config.subtitleOverlayBackground !== undefined) minified.sob = config.subtitleOverlayBackground;
-    if (config.showHarmonySubtitle !== undefined) minified.shs = config.showHarmonySubtitle;
-    if (config.harmonySubtitleBackground !== undefined) minified.hsb = config.harmonySubtitleBackground;
-    if (config.lyricsFontStyle) minified.lfs = config.lyricsFontStyle;
-    if (config.lyricsFontScale !== undefined) minified.lfn = config.lyricsFontScale;
-    if (config.lyricsFontWeight !== undefined) minified.lfw = config.lyricsFontWeight;
-    if (config.lyricsFontFallbackFamilies?.length) minified.lff = config.lyricsFontFallbackFamilies;
-    if (config.lyricsCustomFontFamily) minified.lcf = config.lyricsCustomFontFamily;
-    if (config.subtitleFontInheritsLyrics !== undefined) minified.sfi = config.subtitleFontInheritsLyrics;
-    if (config.subtitleFontScale !== undefined) minified.sfsz = config.subtitleFontScale;
-    if (config.subtitleFontStyle) minified.sfs = config.subtitleFontStyle;
-    if (config.subtitleFontWeight !== undefined) minified.sfw = config.subtitleFontWeight;
-    if (config.subtitleFontFamily) minified.sff = config.subtitleFontFamily;
-    if (config.subtitleFontFallbackFamilies?.length) minified.sfff = config.subtitleFontFallbackFamilies;
-
-    if (config.visualizerTunings) minified.vt = config.visualizerTunings;
-    if (config.classicTuning) minified.ct = compressClassic(config.classicTuning);
-    if (config.cadenzaTuning) minified.cat = compressCadenza(config.cadenzaTuning);
-    if (config.partitaTuning) minified.pt = compressPartita(config.partitaTuning);
-    if (config.fumeTuning) minified.ft = compressFume(config.fumeTuning);
-    if (config.claddaghTuning) minified.clt = compressCladdagh(config.claddaghTuning);
-    if (config.cappellaTuning) minified.cpt = compressCappella(config.cappellaTuning);
-    if (config.tiltTuning) minified.tt = compressTilt(config.tiltTuning);
-    if (config.dioramaTuning) minified.dot = compressDiorama(config.dioramaTuning);
-    if (config.monetBackgroundTuning) minified.mbt = compressMonetBackground(config.monetBackgroundTuning);
-    if (config.nomandBackgroundTuning) minified.nbt = compressNomandBackground(config.nomandBackgroundTuning);
-    if (config.latentBackgroundTuning) minified.lbt = compressLatentBackground(config.latentBackgroundTuning);
-    if (config.monetTuning) minified.mt = compressMonet(config.monetTuning);
-    if (config.urlBackgroundList) minified.ubl = config.urlBackgroundList;
-    if (config.urlBackgroundSelectedId) minified.ubid = config.urlBackgroundSelectedId;
-    if (config.songThemeAutoSwitchEnabled !== undefined) minified.stas = config.songThemeAutoSwitchEnabled;
-    if (config.songThemeAutoGenerateEnabled !== undefined) minified.stag = config.songThemeAutoGenerateEnabled;
-
-    const jsonStr = JSON.stringify(minified);
-    const bytes = new TextEncoder().encode(jsonStr);
-    const binaryString = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
-    const base64 = btoa(binaryString);
-    return `folia-theme://${base64}`;
-};
-
-/**
- * Decodes and restores a configuration object from either raw JSON or a compressed base64 string starting with 'folia-theme://'.
- */
-export const decompressConfig = (str: string): any => {
-    let parsed: any = null;
-    const trimmed = str.trim();
-    if (trimmed.startsWith('folia-theme://')) {
-        const base64 = trimmed.slice('folia-theme://'.length);
-        const binaryString = atob(base64);
-        const bytes = Uint8Array.from(binaryString, char => char.charCodeAt(0));
-        const jsonStr = new TextDecoder().decode(bytes);
-        parsed = JSON.parse(jsonStr);
-    } else {
-        parsed = JSON.parse(trimmed);
-    }
-
-    if (!parsed || typeof parsed !== 'object') {
-        throw new Error('Invalid format');
-    }
-
-    const isMinified = parsed.t !== undefined
-        || parsed.vm !== undefined
-        || parsed.rvms !== undefined
-        || parsed.ct !== undefined
-        || parsed.cat !== undefined
-        || parsed.dot !== undefined
-        || parsed.nbt !== undefined
-        || parsed.lbt !== undefined
-        || parsed.hpts !== undefined
-        || parsed.sst !== undefined
-        || parsed.sob !== undefined
-        || parsed.shs !== undefined
-        || parsed.hsb !== undefined
-        || parsed.lfw !== undefined
-        || parsed.sfw !== undefined
-        || parsed.lff !== undefined
-        || parsed.sfi !== undefined;
-    if (isMinified) {
-        const decompressed: any = {};
-        if (parsed.t) {
-            decompressed.theme = {
-                light: decompressTheme(parsed.t.l),
-                dark: decompressTheme(parsed.t.d),
-            };
-        }
-        if (parsed.vm) decompressed.visualizerMode = parsed.vm;
-        if (parsed.rvms !== undefined) decompressed.randomVisualizerModePerSong = parsed.rvms;
-        if (parsed.vbm) decompressed.visualizerBackgroundMode = parsed.vbm;
-        if (parsed.bo !== undefined) decompressed.backgroundOpacity = parsed.bo;
-        if (parsed.vo !== undefined) decompressed.visualizerOpacity = parsed.vo;
-        if (parsed.hpts !== undefined) decompressed.hidePlayerTranslationSubtitle = parsed.hpts;
-        if (parsed.sst !== undefined) decompressed.showSubtitleTranslation = parsed.sst;
-        if (parsed.scm !== undefined) decompressed.subtitleContentMode = parsed.scm;
-        if (parsed.sob !== undefined) decompressed.subtitleOverlayBackground = parsed.sob;
-        if (parsed.shs !== undefined) decompressed.showHarmonySubtitle = parsed.shs;
-        if (parsed.hsb !== undefined) decompressed.harmonySubtitleBackground = parsed.hsb;
-        if (parsed.lfs) decompressed.lyricsFontStyle = parsed.lfs;
-        if (parsed.lfn !== undefined) decompressed.lyricsFontScale = parsed.lfn;
-        if (parsed.lfw !== undefined) decompressed.lyricsFontWeight = parsed.lfw;
-        if (parsed.lff) decompressed.lyricsFontFallbackFamilies = parsed.lff;
-        if (parsed.lcf) decompressed.lyricsCustomFontFamily = parsed.lcf;
-        if (parsed.sfi !== undefined) decompressed.subtitleFontInheritsLyrics = parsed.sfi;
-        if (parsed.sfsz !== undefined) decompressed.subtitleFontScale = parsed.sfsz;
-        if (parsed.sfs) decompressed.subtitleFontStyle = parsed.sfs;
-        if (parsed.sfw !== undefined) decompressed.subtitleFontWeight = parsed.sfw;
-        if (parsed.sff) decompressed.subtitleFontFamily = parsed.sff;
-        if (parsed.sfff) decompressed.subtitleFontFallbackFamilies = parsed.sfff;
-
-        if (parsed.ct) decompressed.classicTuning = decompressClassic(parsed.ct);
-        if (parsed.vt) decompressed.visualizerTunings = parsed.vt;
-        if (parsed.cat) decompressed.cadenzaTuning = decompressCadenza(parsed.cat);
-        if (parsed.pt) decompressed.partitaTuning = decompressPartita(parsed.pt);
-        if (parsed.ft) decompressed.fumeTuning = decompressFume(parsed.ft);
-        if (parsed.clt) decompressed.claddaghTuning = decompressCladdagh(parsed.clt);
-        if (parsed.cpt) decompressed.cappellaTuning = decompressCappella(parsed.cpt);
-        if (parsed.tt) decompressed.tiltTuning = decompressTilt(parsed.tt);
-        if (parsed.dot) decompressed.dioramaTuning = decompressDiorama(parsed.dot);
-        if (parsed.mbt) decompressed.monetBackgroundTuning = decompressMonetBackground(parsed.mbt);
-        if (parsed.nbt) decompressed.nomandBackgroundTuning = decompressNomandBackground(parsed.nbt);
-        if (parsed.lbt) decompressed.latentBackgroundTuning = decompressLatentBackground(parsed.lbt);
-        if (parsed.mt) decompressed.monetTuning = decompressMonet(parsed.mt);
-        if (parsed.ubl) decompressed.urlBackgroundList = parsed.ubl;
-        if (parsed.ubid) decompressed.urlBackgroundSelectedId = parsed.ubid;
-        if (parsed.stas !== undefined) decompressed.songThemeAutoSwitchEnabled = parsed.stas;
-        if (parsed.stag !== undefined) decompressed.songThemeAutoGenerateEnabled = parsed.stag;
-
-        return decompressed;
-    } else {
-        const validKeys = [
-            'theme', 'visualizerMode', 'randomVisualizerModePerSong', 'visualizerBackgroundMode', 'backgroundOpacity',
-            'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation', 'subtitleContentMode',
-            'subtitleOverlayBackground',
-            'showHarmonySubtitle', 'harmonySubtitleBackground',
-            'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontWeight', 'lyricsFontFallbackFamilies',
-            'subtitleFontInheritsLyrics', 'subtitleFontScale', 'subtitleFontStyle', 'subtitleFontWeight', 'subtitleFontFamily',
-            'subtitleFontFallbackFamilies', 'visualizerTunings', 'classicTuning',
-            'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'claddaghTuning', 'cappellaTuning',
-            'tiltTuning', 'dioramaTuning', 'monetBackgroundTuning', 'nomandBackgroundTuning', 'latentBackgroundTuning', 'monetTuning',
-            'urlBackgroundList', 'urlBackgroundSelectedId',
-            'songThemeAutoSwitchEnabled', 'songThemeAutoGenerateEnabled',
-        ];
-        const hasValidKey = validKeys.some(k => parsed[k] !== undefined);
-        if (!hasValidKey) {
-            throw new Error('Invalid visual settings configuration');
-        }
-        return parsed;
-    }
-};
-
-export const readSavedCustomTheme = (): DualTheme | undefined => {
-    if (typeof window === 'undefined') return undefined;
-    const saved = localStorage.getItem('custom_dual_theme');
-    if (!saved) return undefined;
-    try {
-        return JSON.parse(saved) as DualTheme;
-    } catch {
-        return undefined;
-    }
 };
 
 // ==========================================
@@ -564,22 +96,31 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     const webObsSource = useSettingsUiStore(selectWebObsSource);
     const [importText, setImportText] = useState('');
     const [copiedType, setCopiedType] = useState<'none' | 'shortcode' | 'json' | 'obsurl'>('none');
+    // Parsed config held back until the user confirms which groups to take.
+    const [pendingImport, setPendingImport] = useState<{ config: any; plan: ImportPlan; } | null>(null);
 
     const [exportThemeType, setExportThemeType] = useState<'custom' | 'ai' | 'none'>(() => {
         if (bgMode === 'ai' && aiTheme) return 'ai';
         if (customTheme) return 'custom';
         return 'none';
     });
+    // A deliberate pick (clicking a theme button) freezes the auto-follow below; without it the
+    // effect keeps overwriting the user's choice on any theme change.
+    const exportThemePickedRef = React.useRef(false);
+    const pickExportThemeType = (value: 'custom' | 'ai' | 'none') => {
+        exportThemePickedRef.current = true;
+        setExportThemeType(value);
+    };
 
+    // Until the user picks, track whichever theme is available (AI-preferred); after a pick, repair
+    // only -- demote to 'none' when the picked option's theme disappears, but never override a
+    // deliberate choice. bgMode is not a dependency -- the buttons are gated on the themes themselves.
     React.useEffect(() => {
-        if (bgMode === 'ai' && aiTheme) {
-            setExportThemeType('ai');
-        } else if (customTheme) {
-            setExportThemeType('custom');
-        } else {
-            setExportThemeType('none');
-        }
-    }, [aiTheme, customTheme, bgMode]);
+        setExportThemeType(prev => {
+            if (!exportThemePickedRef.current) return aiTheme ? 'ai' : customTheme ? 'custom' : 'none';
+            return (prev === 'ai' && !aiTheme) || (prev === 'custom' && !customTheme) ? 'none' : prev;
+        });
+    }, [aiTheme, customTheme]);
 
     // Access ZUSTAND settings store directly for setters & configurations
     const store = useSettingsUiStore(useShallow(state => ({
@@ -724,12 +265,10 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     const handleCopyObsUrl = async () => {
         const target = resolveWebObsTarget();
         if (!target) return;
-        const code = compressConfig(buildCurrentConfig());
-        // daylight + transparent baked into extra (before cfg); PlayerCap host/params come from the resolved target.
-        const extra: Record<string, string> = {};
-        if (isDaylight) extra.daylight = '1';
-        extra.transparent = transparentPlayerBackground ? '1' : '0';
-        const url = buildObsSourceUrl(target.source, code, target.host, { ...extra, ...target.extra });
+        // Same builder as the stage header's button, so both produce an identical link. The theme
+        // follows the OBS theme mode and the applied theme -- not the export toggle below, which
+        // governs the config code only. PlayerCap host/params come from the resolved target.
+        const url = await buildCurrentObsUrl(target.source, target.host, target.extra);
         try {
             await navigator.clipboard.writeText(url);
             setCopiedType('obsurl');
@@ -738,173 +277,206 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 ? { type: 'info', text: t('options.obsUrlCustomFontHint') }
                 : { type: 'success', text: t('status.copied') });
         } catch (err) {
+            // The URL is built asynchronously, so a browser that requires the write to stay inside the
+            // click's own task can reject here. Say so instead of leaving the button looking inert.
             console.error('Failed to copy OBS URL:', err);
+            store.statusSetter?.({ type: 'error', text: t('status.copyFailed') });
         }
     };
 
+    // Parse and diff only. Applying waits for the confirmation, because a config can change settings
+    // it never mentions -- unpinning a custom theme, discarding an uploaded font.
     const handleImportConfig = () => {
         if (!importText.trim()) return;
         try {
             // Import accepts a bare shortcode/JSON or a full OBS URL (extracting its cfg param), so a look can be re-tuned from someone's link.
             const config = decompressConfig(extractCfgFromInput(importText));
+            const uiStore = useSettingsUiStore.getState();
+            const customFont = uiStore.lyricsCustomFont;
+            const plan = buildImportPlan({
+                incoming: config,
+                current: { ...buildVisualSettingsConfig(), theme: customTheme ?? null },
+                switches: { isCustomThemePreferred, songThemeAutoSwitchEnabled, songThemeAutoGenerateEnabled },
+                customFontSource: customFont?.source ?? null,
+                customFontLabel: customFont?.label ?? customFont?.family ?? null,
+                incomingFontAvailable: config.lyricsCustomFontFamily
+                    ? isFontFamilyAvailable(String(config.lyricsCustomFontFamily))
+                    : undefined,
+                isCustomThemeActive: bgMode === 'custom',
+                // A config names an uploaded image or emoji pack by source, but never carries it.
+                assets: {
+                    hasCappellaEmojiPack: uiStore.storedCappellaEmojiPack.length > 0,
+                    hasMonetBackgroundImage: Boolean(uiStore.storedMonetBackgroundImage),
+                    hasMonetPortraitImage: Boolean(uiStore.storedMonetPortraitImage),
+                },
+            });
 
-            // 1. Restore Theme
-            if (config.theme) {
-                onSaveCustomTheme(config.theme);
+            // Shown even when nothing differs. Skipping straight to a toast reads as the dialog
+            // having failed to appear, and "your settings already match this" is worth seeing.
+            setPendingImport({ config, plan });
+        } catch (err) {
+            console.error('Import settings failed:', err);
+            store.statusSetter?.({ type: 'error', text: t('options.importFailed') });
+        }
+    };
+
+    // `keys` are the plan's change keys, which are the config field names apart from the two theme
+    // sides. Anything not picked is left exactly as it is.
+    const applyImportedConfig = (config: any, keys: string[]) => {
+        const has = (key: string) => keys.includes(key);
+        try {
+            // 1. Restore Theme, per side: taking someone's night colours must not drag their day
+            // ones along, so the side that was not picked keeps whatever is saved now.
+            const savesTheme = Boolean(config.theme) && (has(THEME_LIGHT_KEY) || has(THEME_DARK_KEY));
+            if (savesTheme) {
+                const base = customTheme ?? config.theme;
+                // Saving already switches the mode to custom (see saveCustomDualTheme), which is why
+                // the plan links the activate row to the side rows instead of offering it separately.
+                onSaveCustomTheme({
+                    light: has(THEME_LIGHT_KEY) ? config.theme.light : base.light,
+                    dark: has(THEME_DARK_KEY) ? config.theme.dark : base.dark,
+                });
+            } else if (has(ACTIVATE_CUSTOM_THEME_KEY)) {
+                // Nothing to save -- the incoming theme is the one already stored, so this row is
+                // the whole of what the user asked for.
                 onApplyCustomTheme();
             }
 
             // 2. Restore Visualizer Setup
-            if (config.visualizerMode) {
+            if (has('visualizerMode') && config.visualizerMode) {
                 store.handleSetVisualizerMode(config.visualizerMode);
             }
-            if (config.randomVisualizerModePerSong !== undefined) {
+            if (has('randomVisualizerModePerSong')) {
                 store.handleToggleRandomVisualizerModePerSong(Boolean(config.randomVisualizerModePerSong));
             }
-            if (config.visualizerBackgroundMode) {
-                store.handleSetVisualizerBackgroundMode(config.visualizerBackgroundMode);
-            }
-            if (config.backgroundOpacity !== undefined) {
-                store.handleSetBackgroundOpacity(config.backgroundOpacity);
-            }
-            if (config.visualizerOpacity !== undefined) {
+            if (has('visualizerOpacity')) {
                 store.handleSetVisualizerOpacity(config.visualizerOpacity);
             }
-            if (config.hidePlayerTranslationSubtitle !== undefined) {
+            if (has('hidePlayerTranslationSubtitle')) {
                 store.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
             }
-            if (config.showSubtitleTranslation !== undefined) {
+            if (has('showSubtitleTranslation')) {
                 store.handleToggleShowSubtitleTranslation(Boolean(config.showSubtitleTranslation));
             }
-            if (
-                config.subtitleContentMode === 'translation'
-                || config.subtitleContentMode === 'romanization'
-                || config.subtitleContentMode === 'none'
-            ) {
+            if (has('subtitleContentMode')
+                && (config.subtitleContentMode === 'translation'
+                    || config.subtitleContentMode === 'romanization'
+                    || config.subtitleContentMode === 'none')) {
                 store.handleSetSubtitleContentMode(config.subtitleContentMode);
             }
-            if (config.subtitleOverlayBackground !== undefined) {
+            if (has('subtitleOverlayBackground')) {
                 store.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
             }
-            if (config.showHarmonySubtitle !== undefined) {
+            if (has('showHarmonySubtitle')) {
                 store.handleToggleShowHarmonySubtitle(Boolean(config.showHarmonySubtitle));
             }
-            if (config.harmonySubtitleBackground !== undefined) {
+            if (has('harmonySubtitleBackground')) {
                 store.handleToggleHarmonySubtitleBackground(Boolean(config.harmonySubtitleBackground));
             }
-            if (config.lyricsFontStyle) {
+
+            if (has('visualizerBackgroundMode') && config.visualizerBackgroundMode) {
+                store.handleSetVisualizerBackgroundMode(config.visualizerBackgroundMode);
+            }
+            if (has('backgroundOpacity')) {
+                store.handleSetBackgroundOpacity(config.backgroundOpacity);
+            }
+
+            if (has('lyricsFontStyle') && config.lyricsFontStyle) {
                 store.handleSetLyricsFontStyle(config.lyricsFontStyle);
             }
-            if (config.lyricsFontScale !== undefined) {
+            if (has('lyricsFontScale')) {
                 store.handleSetLyricsFontScale(config.lyricsFontScale);
             }
-            if (config.lyricsFontWeight !== undefined) {
+            if (has('lyricsFontWeight')) {
                 store.handleSetLyricsFontWeight(config.lyricsFontWeight);
             }
-            if (config.lyricsFontFallbackFamilies) {
+            if (has('lyricsFontFallbackFamilies') && config.lyricsFontFallbackFamilies) {
                 store.handleSetLyricsFontFallbackFamilies(config.lyricsFontFallbackFamilies);
             }
-            if (config.subtitleFontInheritsLyrics !== undefined) {
+            // Only a system family is portable. Setting one evicts an uploaded font and deletes
+            // its stored file, which is why the confirmation calls that out separately.
+            if (has('lyricsCustomFontFamily') && config.lyricsCustomFontFamily) {
+                const family = String(config.lyricsCustomFontFamily);
+                useSettingsUiStore.getState().handleSetLyricsCustomFont({ source: 'system', family, label: family });
+            }
+            if (has('subtitleFontInheritsLyrics')) {
                 store.handleSetSubtitleFontInheritsLyrics(Boolean(config.subtitleFontInheritsLyrics));
             }
-            if (config.subtitleFontScale !== undefined) {
+            if (has('subtitleFontScale')) {
                 store.handleSetSubtitleFontScale(config.subtitleFontScale);
             }
-            if (config.subtitleFontStyle) {
+            if (has('subtitleFontStyle') && config.subtitleFontStyle) {
                 store.handleSetSubtitleFontStyle(config.subtitleFontStyle);
             }
-            if (config.subtitleFontWeight !== undefined) {
+            if (has('subtitleFontWeight')) {
                 store.handleSetSubtitleFontWeight(config.subtitleFontWeight);
             }
-            if (config.subtitleFontFamily !== undefined) {
+            if (has('subtitleFontFamily')) {
                 store.handleSetSubtitleFontFamily(config.subtitleFontFamily);
             }
-            if (config.subtitleFontFallbackFamilies) {
+            if (has('subtitleFontFallbackFamilies') && config.subtitleFontFallbackFamilies) {
                 store.handleSetSubtitleFontFallbackFamilies(config.subtitleFontFallbackFamilies);
             }
 
-            // Tunings
-            if (config.visualizerTunings) {
+            // Tunings. The bundle wins over the individual ones, which is why the plan never offers
+            // both -- picking the bundle is picking every renderer at once.
+            if (has('visualizerTunings') && config.visualizerTunings) {
                 applyVisualizerTuningsToSettings(store as unknown as Record<string, unknown>, config.visualizerTunings);
             }
-            if (!config.visualizerTunings && config.classicTuning) {
-                store.handleSetClassicTuning(config.classicTuning);
+            if (!config.visualizerTunings) {
+                if (has('classicTuning') && config.classicTuning) store.handleSetClassicTuning(config.classicTuning);
+                if (has('cadenzaTuning') && config.cadenzaTuning) store.handleSetCadenzaTuning(config.cadenzaTuning);
+                if (has('partitaTuning') && config.partitaTuning) store.handleSetPartitaTuning(config.partitaTuning);
+                if (has('fumeTuning') && config.fumeTuning) store.handleSetFumeTuning(config.fumeTuning);
+                if (has('claddaghTuning') && config.claddaghTuning) store.handleSetCladdaghTuning(config.claddaghTuning);
+                if (has('cappellaTuning') && config.cappellaTuning) store.handleSetCappellaTuning(config.cappellaTuning);
+                if (has('tiltTuning') && config.tiltTuning) store.handleSetTiltTuning(config.tiltTuning);
+                if (has('dioramaTuning') && config.dioramaTuning) store.handleSetDioramaTuning(config.dioramaTuning);
+                if (has('monetTuning') && config.monetTuning) store.handleSetMonetTuning(config.monetTuning);
             }
-            if (!config.visualizerTunings && config.cadenzaTuning) {
-                store.handleSetCadenzaTuning(config.cadenzaTuning);
-            }
-            if (!config.visualizerTunings && config.partitaTuning) {
-                store.handleSetPartitaTuning(config.partitaTuning);
-            }
-            if (!config.visualizerTunings && config.fumeTuning) {
-                store.handleSetFumeTuning(config.fumeTuning);
-            }
-            if (!config.visualizerTunings && config.claddaghTuning) {
-                store.handleSetCladdaghTuning(config.claddaghTuning);
-            }
-            if (!config.visualizerTunings && config.cappellaTuning) {
-                store.handleSetCappellaTuning(config.cappellaTuning);
-            }
-            if (!config.visualizerTunings && config.tiltTuning) {
-                store.handleSetTiltTuning(config.tiltTuning);
-            }
-            if (!config.visualizerTunings && config.dioramaTuning) {
-                store.handleSetDioramaTuning(config.dioramaTuning);
-            }
-            if (config.monetBackgroundTuning) {
+
+            if (has('monetBackgroundTuning') && config.monetBackgroundTuning) {
                 store.handleSetMonetBackgroundTuning(config.monetBackgroundTuning);
             }
-            if (config.nomandBackgroundTuning) {
+            if (has('nomandBackgroundTuning') && config.nomandBackgroundTuning) {
                 store.handleSetNomandBackgroundTuning(config.nomandBackgroundTuning);
             }
-            if (config.latentBackgroundTuning) {
+            if (has('latentBackgroundTuning') && config.latentBackgroundTuning) {
                 store.handleSetLatentBackgroundTuning(config.latentBackgroundTuning);
             }
-            if (!config.visualizerTunings && config.monetTuning) {
-                store.handleSetMonetTuning(config.monetTuning);
-            }
+
             let mergedUrlList: UrlBackgroundItem[] | undefined;
 
-            if (config.urlBackgroundList && Array.isArray(config.urlBackgroundList)) {
-                // Batch merge: compute the final list once, then apply with a single
-                // store update to avoid sequential localStorage writes per item.
-                const existingMap = new Map(store.urlBackgroundList.map(i => [i.id, { ...i }]));
-                for (const item of config.urlBackgroundList) {
-                    const sanitized = sanitizeUrlBackgroundItem(item);
-                    if (!sanitized) {
-                        continue;
-                    }
-
-                    const existing = existingMap.get(sanitized.id);
-                    existingMap.set(sanitized.id, {
-                        ...(existing ?? { id: sanitized.id }),
-                        url: sanitized.url,
-                        note: sanitized.note,
-                    });
-                }
-                mergedUrlList = Array.from(existingMap.values());
+            if (has('urlBackgroundList') && Array.isArray(config.urlBackgroundList)) {
+                // Batch merge: compute the final list once, then apply with a single store update to
+                // avoid sequential localStorage writes per item. The plan diffs against this same
+                // helper, so the row's count is the count that gets stored.
+                mergedUrlList = mergeUrlBackgroundList(store.urlBackgroundList, config.urlBackgroundList);
                 store.handleSetUrlBackgroundList(mergedUrlList);
             }
             // Validate that the imported selectedId still exists in the final list
             // to avoid a dangling reference that renders UrlBackgroundLayer blank.
-            if (config.urlBackgroundSelectedId) {
+            if (has('urlBackgroundSelectedId') && config.urlBackgroundSelectedId) {
                 const list = mergedUrlList ?? store.urlBackgroundList;
                 if (list.some(i => i.id === config.urlBackgroundSelectedId)) {
                     store.handleSetUrlBackgroundSelectedId(config.urlBackgroundSelectedId);
                 }
             }
-            if (config.songThemeAutoSwitchEnabled !== undefined) {
+
+            if (has('songThemeAutoSwitchEnabled')) {
                 onToggleSongThemeAutoSwitch(Boolean(config.songThemeAutoSwitchEnabled));
             }
-            if (config.songThemeAutoGenerateEnabled !== undefined) {
+            if (has('songThemeAutoGenerateEnabled')) {
                 onToggleSongThemeAutoGenerate(Boolean(config.songThemeAutoGenerateEnabled));
             }
 
             store.statusSetter?.({ type: 'success', text: t('options.importSuccess') });
             setImportText('');
+            setPendingImport(null);
         } catch (err) {
             console.error('Import settings failed:', err);
             store.statusSetter?.({ type: 'error', text: t('options.importFailed') });
+            setPendingImport(null);
         }
     };
 
@@ -1160,7 +732,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             {aiTheme && (
                                 <button
                                     type="button"
-                                    onClick={() => setExportThemeType('ai')}
+                                    onClick={() => pickExportThemeType('ai')}
                                     className="px-2.5 py-1.5 rounded-lg text-xs border transition-all flex items-center gap-1.5"
                                     style={getAccentOptionStyle(exportThemeType === 'ai')}
                                 >
@@ -1171,7 +743,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             {customTheme && (
                                 <button
                                     type="button"
-                                    onClick={() => setExportThemeType('custom')}
+                                    onClick={() => pickExportThemeType('custom')}
                                     className="px-2.5 py-1.5 rounded-lg text-xs border transition-all flex items-center gap-1.5"
                                     style={getAccentOptionStyle(exportThemeType === 'custom')}
                                 >
@@ -1181,7 +753,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             )}
                             <button
                                 type="button"
-                                onClick={() => setExportThemeType('none')}
+                                onClick={() => pickExportThemeType('none')}
                                 className="px-2.5 py-1.5 rounded-lg text-xs border transition-all flex items-center gap-1.5"
                                 style={getAccentOptionStyle(exportThemeType === 'none')}
                             >
@@ -1219,16 +791,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             <span>{copiedType === 'json' ? (t('status.copied')) : t('options.copyJson')}</span>
                         </button>
                         {!isElectron && (
-                            <button
-                                type="button"
-                                onClick={handleCopyObsUrl}
+                            <ObsCopyUrlButton
+                                onCopy={handleCopyObsUrl}
+                                copied={copiedType === 'obsurl'}
                                 disabled={webObsSource === null}
-                                className="px-3 py-2 bg-white/10 hover:bg-white/15 active:bg-white/5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                                style={{ color: 'var(--text-primary)' }}
-                            >
-                                {copiedType === 'obsurl' ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
-                                <span>{copiedType === 'obsurl' ? (t('status.copied')) : t('options.copyObsUrl')}</span>
-                            </button>
+                            />
                         )}
                         <div className="flex-1 min-w-[20px]" />
                         <button
@@ -1244,6 +811,16 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                     </div>
                 </div>
             </section>
+
+            <ImportConfirmDialog
+                isOpen={pendingImport !== null}
+                plan={pendingImport?.plan ?? null}
+                isDaylight={isDaylight}
+                onCancel={() => setPendingImport(null)}
+                onConfirm={(keys) => {
+                    if (pendingImport) applyImportedConfig(pendingImport.config, keys);
+                }}
+            />
         </div>
     );
 };

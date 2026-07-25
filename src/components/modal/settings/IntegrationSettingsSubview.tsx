@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, AlertCircle, Check, Copy, Loader2, Server, Trash2 } from 'lucide-react';
+import { Activity, AlertCircle, Check, Loader2, Server, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { NowPlayingConnectionStatus, StageSource, StageStatus, Theme } from '../../../types';
@@ -9,6 +9,7 @@ import type { PlayerCapConnectionStatus } from '../../../types/playerCap';
 import { CustomSelect } from '../../shared/CustomSelect';
 import { buildCurrentObsUrl } from '../../../utils/currentObsUrl';
 import { resolveWebObsTarget } from '../../../utils/webObsTarget';
+import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
 import { hasCustomObsFont } from '../../../utils/visualSettingsConfig';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 
@@ -577,16 +578,12 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                 <section>
                     <h3 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center justify-between gap-2" style={{ color: 'var(--text-secondary)' }}>
                         <span className="flex items-center gap-2 opacity-50"><Server size={14} /> {t('options.stageMode')}</span>
-                        <button
-                            type="button"
-                            onClick={() => void handleCopyObsUrl()}
+                        <ObsCopyUrlButton
+                            onCopy={handleCopyObsUrl}
+                            copied={obsUrlCopied}
                             disabled={!webStageEnabled}
-                            className="normal-case text-xs font-medium flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                            style={{ color: obsUrlCopied ? '#86efac' : 'var(--text-primary)' }}
-                        >
-                            {obsUrlCopied ? <Check size={13} /> : <Copy size={13} />}
-                            {obsUrlCopied ? t('status.copied') : t('options.copyObsUrl')}
-                        </button>
+                            buttonClassName="px-2.5 py-1"
+                        />
                     </h3>
                     <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                         <div className="flex items-center justify-between gap-4">

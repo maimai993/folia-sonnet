@@ -188,13 +188,17 @@ export function useThemeController({
         currentSongHasLocalAiTheme,
     }), [aiTheme, bgMode, customTheme, daylightTheme, defaultTheme, isDaylight, legacyTheme, currentSongHasLocalAiTheme]);
 
-    const getPreferenceSwitchState = (): ThemePreferenceSwitchState => ({
-        isCustomThemePreferred,
-        songThemeAutoSwitchEnabled,
-        songThemeAutoGenerateEnabled,
-    });
+    // The three switches are mutually constrained by the resolvers, so they are only ever written
+    // together through applyPreferenceSwitchState -- which lets a ref mirror them exactly. Reading the
+    // render-scoped state instead would make two resolver calls in one handler (config import applies
+    // both song-theme flags back to back) both start from the pre-import snapshot, so the second
+    // write would silently discard the first.
+    const preferenceSwitchRef = useRef<ThemePreferenceSwitchState>(initialThemePreferenceState);
+
+    const getPreferenceSwitchState = (): ThemePreferenceSwitchState => preferenceSwitchRef.current;
 
     const applyPreferenceSwitchState = (state: ThemePreferenceSwitchState) => {
+        preferenceSwitchRef.current = state;
         setIsCustomThemePreferred(state.isCustomThemePreferred);
         setSongThemeAutoSwitchEnabled(state.songThemeAutoSwitchEnabled);
         setSongThemeAutoGenerateEnabled(state.songThemeAutoGenerateEnabled);

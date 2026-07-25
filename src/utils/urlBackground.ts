@@ -45,6 +45,34 @@ export const sanitizeUrlBackgroundItem = (value: unknown): UrlBackgroundItem | n
     return { id, url, note };
 };
 
+// An imported list is merged into the current one by id rather than replacing it, so a shared config
+// adds backgrounds without taking away the ones already saved here. Both the import plan and the
+// import itself call this, so what the confirmation promises is what gets stored.
+export const mergeUrlBackgroundList = (
+    current: UrlBackgroundItem[],
+    incoming: unknown,
+): UrlBackgroundItem[] => {
+    const merged = new Map(current.map(item => [item.id, { ...item }]));
+
+    if (Array.isArray(incoming)) {
+        for (const raw of incoming) {
+            const sanitized = sanitizeUrlBackgroundItem(raw);
+            if (!sanitized) {
+                continue;
+            }
+
+            const existing = merged.get(sanitized.id);
+            merged.set(sanitized.id, {
+                ...(existing ?? { id: sanitized.id }),
+                url: sanitized.url,
+                note: sanitized.note,
+            });
+        }
+    }
+
+    return Array.from(merged.values());
+};
+
 export const sanitizeUrlBackgroundList = (items: unknown): UrlBackgroundItem[] => {
     if (!Array.isArray(items)) {
         return [];
