@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
 import { motion, useTransform, type MotionValue } from 'framer-motion';
-import { type Line } from '../../../types';
+import { type Line, type Theme } from '../../../types';
 import { colorWithAlpha, mixColors } from '../colorMix';
-import { buildLineGraphemeTimeline } from '../../../utils/lyrics/graphemeTiming';
+import { buildLineGraphemeTimeline, splitLyricGraphemes } from '../../../utils/lyrics/graphemeTiming';
 import { measureMonetGraphemeOffsets } from '../monet/monetLyricsModel';
 import { buildPendoloTextLayout, type PendoloWrappedTextLine } from './pendoloTextLayout';
+import { prepareWordColorMatchers, buildWordColorRangesFromMatchers, resolveTokenColorMap, type WordColorToken } from '../wordColoring';
 
 // src/components/visualizer/pendolo/PendoloActiveLyricSweep.tsx
 
@@ -17,6 +18,7 @@ interface PendoloActiveLyricSweepProps {
     primaryTextColor: string;
     accentTextColor: string;
     fontPx?: number;
+    wordColors?: Theme['wordColors'];
 }
 
 interface PendoloSweepLineProps {
@@ -29,6 +31,7 @@ interface PendoloSweepLineProps {
     lineEndTime: number;
     primaryTextColor: string;
     fillColor: string;
+    tokenColors: Map<string, string>;
 }
 
 const PendoloSweepLine: React.FC<PendoloSweepLineProps> = ({
@@ -41,6 +44,7 @@ const PendoloSweepLine: React.FC<PendoloSweepLineProps> = ({
     lineEndTime,
     primaryTextColor,
     fillColor,
+    tokenColors,
 }) => {
     const graphemeOffsets = useMemo(
         () => measureMonetGraphemeOffsets(layoutLine.text, fontPx, fontSpec),
@@ -77,9 +81,13 @@ const PendoloSweepLine: React.FC<PendoloSweepLineProps> = ({
             <motion.span
                 aria-hidden
                 className="pointer-events-none absolute inset-0 block whitespace-pre"
-                style={{ color: fillColor, opacity: fillOpacity, WebkitMaskImage: maskImage, maskImage, textShadow: 'none' }}
+                style={{ opacity: fillOpacity, WebkitMaskImage: maskImage, maskImage, textShadow: 'none' }}
             >
-                {layoutLine.text}
+                {splitLyricGraphemes(layoutLine.text).map((char, localIdx) => {
+                    const globalIdx = layoutLine.graphemeStart + localIdx;
+                    const charColor = tokenColors.get(String(globalIdx)) || fillColor;
+                    return <span key={globalIdx} style={{ color: charColor }}>{char}</span>;
+                })}
             </motion.span>
         </span>
     );
@@ -95,10 +103,34 @@ const PendoloActiveLyricSweep: React.FC<PendoloActiveLyricSweepProps> = ({
     primaryTextColor,
     accentTextColor,
     fontPx = 28,
+    wordColors,
 }) => {
     const text = line.fullText;
     const fontSpec = `${fontWeight} ${fontPx}px ${fontFamily}`;
     const graphemeTimings = useMemo(() => buildLineGraphemeTimeline(line), [line]);
+    const matchers = useMemo(() => prepareWordColorMatchers(wordColors ?? [], true), [wordColors]);
+    const wordColorRanges = useMemo(
+        () => buildWordColorRangesFromMatchers(text, matchers),
+        [text, matchers],
+    );
+    const charTokens: WordColorToken[] = useMemo(() => {
+        let cursor = 0;
+        return splitLyricGraphemes(text).map((char, index) => {
+            const startOffset = cursor;
+            cursor += char.length;
+            return {
+                key: String(index),
+                timed: true,
+                startOffset,
+                endOffset: cursor,
+            };
+        });
+    }, [text]);
+    const tokenColors = useMemo(
+        () => resolveTokenColorMap(charTokens, wordColorRanges),
+        [charTokens, wordColorRanges],
+    );
+
     const lineHeight = Math.round(fontPx * 1.2);
     const textLayout = useMemo(
         () => buildPendoloTextLayout(text, fontSpec, maxWidth, lineHeight),
@@ -125,6 +157,7 @@ const PendoloActiveLyricSweep: React.FC<PendoloActiveLyricSweepProps> = ({
                     lineEndTime={line.endTime}
                     primaryTextColor={primaryTextColor}
                     fillColor={fillColor}
+                    tokenColors={tokenColors}
                 />
             ))}
         </span>

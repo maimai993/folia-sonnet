@@ -284,6 +284,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                                     primaryTextColor={primaryTextColor}
                                                     accentTextColor={accentTextColor}
                                                     fontPx={fontPx}
+                                                    wordColors={theme.wordColors}
                                                 />
                                             ) : (
                                                 <div
