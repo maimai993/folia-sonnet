@@ -315,8 +315,10 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             const isFull = p.showGearDecor === 'full';
             const decorOpacityMultiplier = isFull ? 1.0 : 0.6;
 
+            const primaryAlpha10 = colorWithAlpha(p.primaryTextColor, 0.10 * decorOpacityMultiplier);
             const primaryAlpha15 = colorWithAlpha(p.primaryTextColor, 0.15 * decorOpacityMultiplier);
             const primaryAlpha25 = colorWithAlpha(p.primaryTextColor, 0.25 * decorOpacityMultiplier);
+            const accentAlpha12 = colorWithAlpha(p.accentTextColor, 0.12 * decorOpacityMultiplier);
             const accentAlpha20 = colorWithAlpha(p.accentTextColor, 0.20 * decorOpacityMultiplier);
             const accentAlpha35 = colorWithAlpha(p.accentTextColor, 0.35 * decorOpacityMultiplier);
             const accentAlpha50 = colorWithAlpha(p.accentTextColor, 0.50 * decorOpacityMultiplier);
@@ -326,6 +328,8 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             const gearAccentAlpha = colorWithAlpha(p.accentTextColor, 0.58 * decorOpacityMultiplier);
             const gearAccentStrongAlpha = colorWithAlpha(p.accentTextColor, 0.72 * decorOpacityMultiplier);
             const planetGearAlpha = colorWithAlpha(p.primaryTextColor, 0.24 * decorOpacityMultiplier);
+            const jewelFillColor = colorWithAlpha(p.accentTextColor, 0.28 * decorOpacityMultiplier);
+            const jewelStrokeColor = colorWithAlpha(p.accentTextColor, 0.65 * decorOpacityMultiplier);
 
             // 1. Technical Radial Ticks & Concentric Guide Rings
             ctx.strokeStyle = primaryAlpha15;
@@ -385,6 +389,50 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 1.8,
             );
 
+            // Beveled double-ring on main gear rim for depth
+            ctx.strokeStyle = colorWithAlpha(p.primaryTextColor, 0.18 * decorOpacityMultiplier);
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.arc(p.centerX, p.centerY, p.baseRadius * 0.88, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(p.centerX, p.centerY, p.baseRadius * 0.92, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Guilloche radial engraving inside main gear
+            ctx.save();
+            ctx.translate(p.centerX, p.centerY);
+            ctx.rotate(currentGearAngle);
+            const guillocheRayCount = 48;
+            const guillocheInnerR = p.baseRadius * 0.62;
+            const guillocheOuterR = p.baseRadius * 0.83;
+            for (let i = 0; i < guillocheRayCount; i++) {
+                const a = (i * Math.PI * 2) / guillocheRayCount;
+                // Alternating short/long rays for texture
+                const innerOffset = i % 2 === 0 ? guillocheInnerR : guillocheInnerR + (guillocheOuterR - guillocheInnerR) * 0.3;
+                ctx.strokeStyle = i % 2 === 0 ? primaryAlpha10 : colorWithAlpha(p.primaryTextColor, 0.07 * decorOpacityMultiplier);
+                ctx.lineWidth = 0.7;
+                ctx.beginPath();
+                ctx.moveTo(innerOffset * Math.cos(a), innerOffset * Math.sin(a));
+                ctx.lineTo(guillocheOuterR * Math.cos(a), guillocheOuterR * Math.sin(a));
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // Rivet circles along outer gear rim (wireframe style)
+            const rivetCount = 12;
+            const rivetR = p.baseRadius * 0.96;
+            for (let i = 0; i < rivetCount; i++) {
+                const a = (i * Math.PI * 2) / rivetCount + currentGearAngle;
+                const rx = p.centerX + rivetR * Math.cos(a);
+                const ry = p.centerY + rivetR * Math.sin(a);
+                ctx.strokeStyle = colorWithAlpha(p.primaryTextColor, 0.25 * decorOpacityMultiplier);
+                ctx.lineWidth = 0.8;
+                ctx.beginPath();
+                ctx.arc(rx, ry, 2.2, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
             // 3. Center Hub & Sun Gear Pinion
             drawGearTeeth(
                 ctx,
@@ -397,6 +445,18 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 gearAccentStrongAlpha,
                 2.1,
             );
+
+            // Center jewel bearing (wireframe double-ring)
+            ctx.strokeStyle = jewelStrokeColor;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(p.centerX, p.centerY, 4.5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = jewelFillColor;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.arc(p.centerX, p.centerY, 2.5, 0, Math.PI * 2);
+            ctx.stroke();
 
             // 4. Orbiting Planetary Gear Set (Full mode only or subtle reduced)
             const planetCount = 3;
@@ -422,11 +482,17 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                     1.7,
                 );
 
-                // Planet axle pivot point
-                ctx.fillStyle = gearAccentStrongAlpha;
+                // Planet jewel bearing pivot (wireframe double-ring)
+                ctx.strokeStyle = jewelStrokeColor;
+                ctx.lineWidth = 1;
                 ctx.beginPath();
-                ctx.arc(px, py, 3, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.strokeStyle = jewelFillColor;
+                ctx.lineWidth = 0.7;
+                ctx.beginPath();
+                ctx.arc(px, py, 1.8, 0, Math.PI * 2);
+                ctx.stroke();
             }
 
             // 5. Upper-left decorative gear
@@ -451,6 +517,31 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             ctx.lineWidth = 1.8;
             ctx.beginPath();
             ctx.arc(balanceCx, balanceCy, balanceR * 0.52, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Hairspring spiral at balance wheel
+            drawHairspring(
+                ctx,
+                balanceCx,
+                balanceCy,
+                balanceR * 0.56,
+                balanceR * 0.88,
+                3.5,
+                bassOscillation * 0.6 + balanceGearAngle * 0.3,
+                colorWithAlpha(p.accentTextColor, 0.30 * decorOpacityMultiplier),
+                0.8,
+            );
+
+            // Balance wheel jewel bearing (wireframe double-ring)
+            ctx.strokeStyle = jewelStrokeColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(balanceCx, balanceCy, 3.5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = jewelFillColor;
+            ctx.lineWidth = 0.7;
+            ctx.beginPath();
+            ctx.arc(balanceCx, balanceCy, 1.8, 0, Math.PI * 2);
             ctx.stroke();
 
             // Meshing Intermediate Transmission Gear (Lower-Left Offset)
@@ -479,6 +570,40 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 gearPrimarySubtleAlpha,
                 1.5,
             );
+
+            // Geneva stripes on transmission gear face (parallel lines clipped to gear circle)
+            ctx.save();
+            ctx.translate(transCx, transCy);
+            ctx.rotate(-currentGearAngle * 1.4);
+            // Clip to the gear's inner area
+            ctx.beginPath();
+            ctx.arc(0, 0, transR * 0.80, 0, Math.PI * 2);
+            ctx.clip();
+            const genevaStripeCount = 9;
+            const genevaSpan = transR * 1.6;
+            const genevaStep = genevaSpan / (genevaStripeCount + 1);
+            for (let i = 1; i <= genevaStripeCount; i++) {
+                const yOff = -genevaSpan * 0.5 + i * genevaStep;
+                ctx.strokeStyle = i % 2 === 0 ? primaryAlpha10 : colorWithAlpha(p.primaryTextColor, 0.06 * decorOpacityMultiplier);
+                ctx.lineWidth = 0.7;
+                ctx.beginPath();
+                ctx.moveTo(-transR, yOff);
+                ctx.lineTo(transR, yOff);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // Transmission gear jewel bearing (wireframe double-ring)
+            ctx.strokeStyle = jewelStrokeColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(transCx, transCy, 3.5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = jewelFillColor;
+            ctx.lineWidth = 0.7;
+            ctx.beginPath();
+            ctx.arc(transCx, transCy, 1.8, 0, Math.PI * 2);
+            ctx.stroke();
 
             // Seconds gear: advances one tooth at a time on each active playback second.
             const secondGearTeeth = 15;
@@ -509,6 +634,50 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 gearPrimarySubtleAlpha,
                 1.3,
             );
+            // Seconds gear jewel bearing (wireframe double-ring)
+            ctx.strokeStyle = jewelStrokeColor;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.arc(secondGearCx, secondGearCy, 2.8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = jewelFillColor;
+            ctx.lineWidth = 0.6;
+            ctx.beginPath();
+            ctx.arc(secondGearCx, secondGearCy, 1.5, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Tiny idler pinion gear between transmission and seconds gear
+            const idlerCx = (transCx + secondGearCx) * 0.5 + p.baseRadius * 0.04;
+            const idlerCy = (transCy + secondGearCy) * 0.5 - p.baseRadius * 0.02;
+            const idlerR = p.baseRadius * 0.08;
+            drawGearTeeth(
+                ctx,
+                idlerCx,
+                idlerCy,
+                idlerR,
+                10,
+                3.5,
+                currentGearAngle * 2.2,
+                colorWithAlpha(p.primaryTextColor, 0.28 * decorOpacityMultiplier),
+                1.3,
+            );
+            // Idler inner ring
+            ctx.strokeStyle = colorWithAlpha(p.primaryTextColor, 0.18 * decorOpacityMultiplier);
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.arc(idlerCx, idlerCy, idlerR * 0.45, 0, Math.PI * 2);
+            ctx.stroke();
+            // Idler jewel bearing (wireframe double-ring)
+            ctx.strokeStyle = jewelStrokeColor;
+            ctx.lineWidth = 0.7;
+            ctx.beginPath();
+            ctx.arc(idlerCx, idlerCy, 2.2, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = jewelFillColor;
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.arc(idlerCx, idlerCy, 1.2, 0, Math.PI * 2);
+            ctx.stroke();
 
             // 6. Escapement Focal Axis Alignment Line (Horizontal 0 deg)
             const focalAxisEndRadius = Math.min(
