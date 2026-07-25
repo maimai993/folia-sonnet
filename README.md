@@ -94,8 +94,8 @@ https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
     </td>
   </tr>
   <tr>
-    <td align="center"><strong>群唱</strong></td>
-    <td align="center"><strong>倾诉</strong></td>
+    <td align="center"><strong>镜台</strong></td>
+    <td align="center"><strong>时计</strong></td>
   </tr>
 </table>
 
