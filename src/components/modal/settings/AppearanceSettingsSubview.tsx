@@ -159,6 +159,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         nomandBackgroundTuning: state.nomandBackgroundTuning,
         latentBackgroundTuning: state.latentBackgroundTuning,
         monetTuning: state.monetTuning,
+        pendoloTuning: state.pendoloTuning,
         urlBackgroundList: state.urlBackgroundList,
         urlBackgroundSelectedId: state.urlBackgroundSelectedId,
 
@@ -195,6 +196,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleSetNomandBackgroundTuning: state.handleSetNomandBackgroundTuning,
         handleSetLatentBackgroundTuning: state.handleSetLatentBackgroundTuning,
         handleSetMonetTuning: state.handleSetMonetTuning,
+        handleSetPendoloTuning: state.handleSetPendoloTuning,
         handleAddUrlBackgroundItem: state.handleAddUrlBackgroundItem,
         handleUpdateUrlBackgroundItem: state.handleUpdateUrlBackgroundItem,
         handleSetUrlBackgroundList: state.handleSetUrlBackgroundList,

@@ -493,6 +493,30 @@ export const DEFAULT_TILT_TUNING: TiltTuning = {
   colorScheme: 'default',
 };
 
+export interface PendoloTuning {
+  arcRadius: number;
+  arcAngleDeg: number;
+  wheelCenterX: number;
+  wheelCenterY: number;
+  tickSnappiness: number;
+  activeScale: number;
+  showGearDecor: 'none' | 'subtle' | 'full';
+  showCenterGradient?: boolean;
+  showCoverOnWatchFace?: boolean;
+}
+
+export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
+  arcRadius: 0.42,
+  arcAngleDeg: 100,
+  wheelCenterX: 0.0,
+  wheelCenterY: 0.50,
+  tickSnappiness: 2.0,
+  activeScale: 1.25,
+  showGearDecor: 'subtle',
+  showCenterGradient: true,
+  showCoverOnWatchFace: false,
+};
+
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other
 // visualizer it follows theme.animationIntensity (the player-panel intensity chip / AI themes), so
 // the theme system stays the single source of truth. The tuning only carries diorama-specific knobs.

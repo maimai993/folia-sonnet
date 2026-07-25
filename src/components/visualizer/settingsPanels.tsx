@@ -7,22 +7,12 @@ import { DioramaBackgroundParticleSettings } from './diorama/DioramaBackgroundPa
 import { DioramaEffectSettings } from './diorama/DioramaEffectSettings';
 import { DioramaSettingsToggle } from './diorama/DioramaSettingsToggle';
 import { resolveDioramaMoteCircumference, resolveDioramaMoteRadial } from './diorama/dioramaMoteField';
+import VisualizerPresetGroup, { type VisualizerPresetOption } from './VisualizerPresetGroup';
 
 // src/components/visualizer/settingsPanels.tsx
 // Mode-owned preview settings panels used by discoverable visualizer entries.
-interface PresetOption<T> {
-    label: string;
-    value: T;
-}
-
-interface PresetGroupProps<T> {
-    label: string;
-    value: T;
-    options: PresetOption<T>[];
-    onChange: (next: T) => void;
-    isDaylight: boolean;
-    theme: VisualizerSettingsPanelProps['theme'];
-}
+type PresetOption<T> = VisualizerPresetOption<T>;
+const PresetGroup = VisualizerPresetGroup;
 
 const clampPartitaStagger = (value: number) => Math.min(180, Math.max(0, value));
 const clampClassicBreathingFloatMultiplier = (value: number) => Math.min(2, Math.max(0, value));
@@ -30,45 +20,6 @@ const clampClassicWordSpacing = (value: number) => Math.min(2, Math.max(0, value
 const clampCladdaghFocusScaleRatio = (val: number) => Math.min(1.5, Math.max(0.0, val));
 const clampCladdaghRadiusScale = (val: number) => Math.min(1.5, Math.max(0.5, val));
 const clampCladdaghEllipseTiltDeg = (val: number) => Math.min(60, Math.max(0, val));
-
-const PresetGroup = <T,>({
-    label,
-    value,
-    options,
-    onChange,
-    isDaylight,
-    theme,
-}: PresetGroupProps<T>) => (
-    <div className="space-y-2.5">
-        <div className="text-xs font-medium uppercase tracking-[0.24em] opacity-45" style={{ color: theme.secondaryColor }}>
-            {label}
-        </div>
-        <div className="flex flex-wrap gap-2">
-            {options.map(option => {
-                const isActive = option.value === value;
-
-                return (
-                    <button
-                        key={String(option.value)}
-                        type="button"
-                        onClick={() => onChange(option.value)}
-                        className="px-3 py-2 rounded-full text-sm transition-all border"
-                        style={{
-                            color: theme.primaryColor,
-                            borderColor: isActive ? theme.accentColor : colorWithAlpha(theme.secondaryColor, isDaylight ? 0.18 : 0.14),
-                            backgroundColor: isActive
-                                ? colorWithAlpha(theme.accentColor, isDaylight ? 0.1 : 0.16)
-                                : colorWithAlpha(theme.backgroundColor, isDaylight ? 0.24 : 0.34),
-                            boxShadow: isActive ? `inset 0 0 0 1px ${theme.accentColor}` : 'none',
-                        }}
-                    >
-                        {option.label}
-                    </button>
-                );
-            })}
-        </div>
-    </div>
-);
 
 export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
@@ -176,7 +127,6 @@ export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         </div>
     );
 };
-
 export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
     isDaylight,
@@ -293,7 +243,6 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         </div>
     );
 };
-
 const resolveFumeCameraTrackingMode = (value: FumeTuning['cameraTrackingMode'] | undefined): FumeTuning['cameraTrackingMode'] => (
     value === 'stepped' || value === 'smooth'
         ? value
@@ -476,7 +425,6 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         </div>
     );
 };
-
 const resolveCappellaTuning = (
     tuning: CappellaTuning | undefined,
     hasCustomEmojiPack: boolean,

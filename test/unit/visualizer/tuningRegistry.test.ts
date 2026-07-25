@@ -18,6 +18,7 @@ describe('visualizer tuning registry', () => {
             'fume',
             'monet',
             'partita',
+            'pendolo',
             'tilt',
         ]);
     });

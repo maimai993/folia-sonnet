@@ -10,6 +10,7 @@ import {
     type MonetPortraitImage,
     type MonetTuning,
     type PartitaTuning,
+    type PendoloTuning,
     type Theme,
     type SubtitleContentMode,
     type TiltTuning,
@@ -94,6 +95,8 @@ interface VisPlaygroundSettingsPanelProps {
     onFumeTuningChange?: (patch: Partial<FumeTuning>) => void;
     claddaghTuning: CladdaghTuning;
     onCladdaghTuningChange?: (patch: Partial<CladdaghTuning>) => void;
+    pendoloTuning?: PendoloTuning;
+    onPendoloTuningChange?: (patch: Partial<PendoloTuning>) => void;
     cappellaTuning: CappellaTuning;
     cappellaCustomEmojiImages: CappellaEmojiImage[];
     onCappellaTuningChange?: (patch: Partial<CappellaTuning>) => void;
@@ -347,6 +350,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onDioramaTuningChange,
         monetTuning,
         onMonetTuningChange,
+        pendoloTuning,
+        onPendoloTuningChange,
         monetPortraitImage,
         onUploadMonetPortraitImage,
         onClearMonetPortraitImage,
@@ -664,6 +669,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             onDioramaTuningChange,
                             monetTuning,
                             onMonetTuningChange,
+                            pendoloTuning,
+                            onPendoloTuningChange,
                             monetPortraitImage,
                             onUploadMonetPortraitImage,
                             onClearMonetPortraitImage,

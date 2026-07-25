@@ -7,6 +7,7 @@ import type {
     FumeTuning,
     MonetTuning,
     PartitaTuning,
+    PendoloTuning,
     TiltTuning,
     VisualizerMode,
 } from '../../types';
@@ -24,6 +25,7 @@ export interface VisualizerTuningMap {
     tilt: TiltTuning;
     diorama: DioramaTuning;
     monet: MonetTuning;
+    pendolo: PendoloTuning;
 }
 
 export type VisualizerTuningMode = keyof VisualizerTuningMap;
