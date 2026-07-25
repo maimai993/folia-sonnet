@@ -270,7 +270,11 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                     >
                                     <div
                                         className="relative inline-block"
-                                        style={{ transform: `rotate(${item.angleDeg * 0.35}deg) scale(${item.scale})`, transformOrigin: 'left center' }}
+                                        style={{ 
+                                            transform: `rotate(${item.angleDeg * 0.35}deg) scale(${item.scale})`, 
+                                            transformOrigin: 'left center',
+                                            isolation: 'isolate',
+                                        }}
                                     >
                                         <div style={{ transform: 'translateY(-50%)' }}>
                                             <div>

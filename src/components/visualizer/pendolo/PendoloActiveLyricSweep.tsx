@@ -81,7 +81,18 @@ const PendoloSweepLine: React.FC<PendoloSweepLineProps> = ({
             <motion.span
                 aria-hidden
                 className="pointer-events-none absolute inset-0 block whitespace-pre"
-                style={{ opacity: fillOpacity, WebkitMaskImage: maskImage, maskImage, textShadow: 'none' }}
+                style={{ 
+                    opacity: fillOpacity, 
+                    WebkitMaskImage: maskImage, 
+                    maskImage, 
+                    WebkitMaskSize: '100% 100%',
+                    maskSize: '100% 100%',
+                    WebkitMaskRepeat: 'no-repeat',
+                    maskRepeat: 'no-repeat',
+                    textShadow: 'none',
+                    WebkitTransform: 'translateZ(0)',
+                    transform: 'translateZ(0)'
+                }}
             >
                 {splitLyricGraphemes(layoutLine.text).map((char, localIdx) => {
                     const globalIdx = layoutLine.graphemeStart + localIdx;
