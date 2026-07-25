@@ -364,6 +364,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                             zIndex: 2,
                             rotate: wheelRotationDeg,
                             transformOrigin: `${centerX}px ${centerY}px`,
+                            WebkitTransform: 'translateZ(0)',
                         }}
                     >
                         {lineItems.map((item) => {
@@ -395,12 +396,12 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                 >
                                     <motion.div
                                         className="inline-block"
-                                        style={{ rotate: textRotationCorrectionDeg, transformOrigin: 'left center' }}
+                                        style={{ rotate: textRotationCorrectionDeg, transformOrigin: 'left center', WebkitTransform: 'translateZ(0)' }}
                                     >
                                     <div
                                         className="relative inline-block"
                                         style={{ 
-                                            transform: `rotate(${item.angleDeg * 0.35}deg) scale(${item.scale})`, 
+                                            transform: `rotate(${item.angleDeg * 0.35}deg) scale(${item.scale}) translateZ(0)`, 
                                             transformOrigin: 'left center',
                                             isolation: 'isolate',
                                         }}
