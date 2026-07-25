@@ -433,6 +433,9 @@ const readStoredPendoloTuning = (): PendoloTuning => {
             showCoverOnWatchFace: typeof parsed.showCoverOnWatchFace === 'boolean'
                 ? parsed.showCoverOnWatchFace
                 : DEFAULT_PENDOLO_TUNING.showCoverOnWatchFace,
+            enableLineGlow: typeof parsed.enableLineGlow === 'boolean'
+                ? parsed.enableLineGlow
+                : DEFAULT_PENDOLO_TUNING.enableLineGlow,
         };
     } catch {
         return DEFAULT_PENDOLO_TUNING;
@@ -1927,6 +1930,9 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             showCoverOnWatchFace: typeof patch.showCoverOnWatchFace === 'boolean'
                 ? patch.showCoverOnWatchFace
                 : prev.showCoverOnWatchFace ?? DEFAULT_PENDOLO_TUNING.showCoverOnWatchFace,
+            enableLineGlow: typeof patch.enableLineGlow === 'boolean'
+                ? patch.enableLineGlow
+                : prev.enableLineGlow ?? DEFAULT_PENDOLO_TUNING.enableLineGlow,
         };
         if (typeof window !== 'undefined') {
             localStorage.setItem('pendolo_tuning', JSON.stringify(next));

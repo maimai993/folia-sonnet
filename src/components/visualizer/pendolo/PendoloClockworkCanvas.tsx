@@ -19,6 +19,7 @@ export interface PendoloClockworkCanvasProps {
     showCenterGradient?: boolean;
     showCover?: boolean;
     coverUrl?: string | null;
+    enableLineGlow?: boolean;
     paused?: boolean;
 }
 
@@ -194,6 +195,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     showCenterGradient = true,
     showCover = false,
     coverUrl = null,
+    enableLineGlow = false,
     paused = false,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -770,7 +772,12 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
         <canvas
             ref={canvasRef}
             className="absolute inset-0 w-full h-full pointer-events-none"
-            style={{ zIndex: 1 }}
+            style={{
+                zIndex: 1,
+                filter: enableLineGlow
+                    ? `drop-shadow(0 0 4px ${colorWithAlpha(accentTextColor, 0.65)}) drop-shadow(0 0 12px ${colorWithAlpha(accentTextColor, 0.3)})`
+                    : undefined,
+            }}
         />
     );
 };

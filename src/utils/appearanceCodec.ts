@@ -5,6 +5,7 @@ import {
     DEFAULT_MONET_BACKGROUND_TUNING,
     DEFAULT_MONET_TUNING,
     DEFAULT_NOMAND_BACKGROUND_TUNING,
+    DEFAULT_PENDOLO_TUNING,
     type DualTheme,
     type Theme,
 } from '../types';
@@ -303,6 +304,19 @@ const decompressMonet = (o: any): any => ({
     showPortraitDragHanger: o.mpdh !== undefined ? o.mpdh : DEFAULT_MONET_TUNING.showPortraitDragHanger,
 });
 
+const compressPendolo = (t: any): any => ({
+    sgd: t.showGearDecor,
+    scg: t.showCenterGradient,
+    sco: t.showCoverOnWatchFace,
+    elg: t.enableLineGlow,
+});
+const decompressPendolo = (o: any): any => ({
+    showGearDecor: o.sgd || DEFAULT_PENDOLO_TUNING.showGearDecor,
+    showCenterGradient: o.scg !== undefined ? o.scg : DEFAULT_PENDOLO_TUNING.showCenterGradient,
+    showCoverOnWatchFace: o.sco !== undefined ? o.sco : DEFAULT_PENDOLO_TUNING.showCoverOnWatchFace,
+    enableLineGlow: o.elg !== undefined ? o.elg : DEFAULT_PENDOLO_TUNING.enableLineGlow,
+});
+
 export const compressConfig = (config: any): string => {
     const minified: any = {};
     if (config.theme) {
@@ -347,6 +361,7 @@ export const compressConfig = (config: any): string => {
     if (config.nomandBackgroundTuning) minified.nbt = compressNomandBackground(config.nomandBackgroundTuning);
     if (config.latentBackgroundTuning) minified.lbt = compressLatentBackground(config.latentBackgroundTuning);
     if (config.monetTuning) minified.mt = compressMonet(config.monetTuning);
+    if (config.pendoloTuning) minified.pdt = compressPendolo(config.pendoloTuning);
     if (config.urlBackgroundList) minified.ubl = config.urlBackgroundList;
     if (config.urlBackgroundSelectedId) minified.ubid = config.urlBackgroundSelectedId;
     if (config.songThemeAutoSwitchEnabled !== undefined) minified.stas = config.songThemeAutoSwitchEnabled;
@@ -395,7 +410,8 @@ export const decompressConfig = (str: string): any => {
         || parsed.lfw !== undefined
         || parsed.sfw !== undefined
         || parsed.lff !== undefined
-        || parsed.sfi !== undefined;
+        || parsed.sfi !== undefined
+        || parsed.pdt !== undefined;
     if (isMinified) {
         const decompressed: any = {};
         if (parsed.t) {
@@ -440,6 +456,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.nbt) decompressed.nomandBackgroundTuning = decompressNomandBackground(parsed.nbt);
         if (parsed.lbt) decompressed.latentBackgroundTuning = decompressLatentBackground(parsed.lbt);
         if (parsed.mt) decompressed.monetTuning = decompressMonet(parsed.mt);
+        if (parsed.pdt) decompressed.pendoloTuning = decompressPendolo(parsed.pdt);
         if (parsed.ubl) decompressed.urlBackgroundList = parsed.ubl;
         if (parsed.ubid) decompressed.urlBackgroundSelectedId = parsed.ubid;
         if (parsed.stas !== undefined) decompressed.songThemeAutoSwitchEnabled = parsed.stas;
@@ -457,6 +474,7 @@ export const decompressConfig = (str: string): any => {
             'subtitleFontFallbackFamilies', 'visualizerTunings', 'classicTuning',
             'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'claddaghTuning', 'cappellaTuning',
             'tiltTuning', 'dioramaTuning', 'monetBackgroundTuning', 'nomandBackgroundTuning', 'latentBackgroundTuning', 'monetTuning',
+            'pendoloTuning',
             'urlBackgroundList', 'urlBackgroundSelectedId',
             'songThemeAutoSwitchEnabled', 'songThemeAutoGenerateEnabled',
         ];

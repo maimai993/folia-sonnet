@@ -404,6 +404,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     showCenterGradient={pendoloTuning.showCenterGradient ?? true}
                     showCover={pendoloTuning.showCoverOnWatchFace ?? false}
                     coverUrl={props.coverUrl}
+                    enableLineGlow={pendoloTuning.enableLineGlow ?? false}
                     paused={props.paused}
                 />
                 {pendoloTuning.showGearDecor !== 'none' && (

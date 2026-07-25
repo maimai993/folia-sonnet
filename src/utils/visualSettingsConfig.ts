@@ -59,6 +59,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     nomandBackgroundTuning: store.nomandBackgroundTuning,
     latentBackgroundTuning: store.latentBackgroundTuning,
     monetTuning: store.monetTuning,
+    pendoloTuning: store.pendoloTuning,
     urlBackgroundList: store.urlBackgroundList,
     urlBackgroundSelectedId: store.urlBackgroundSelectedId,
   };

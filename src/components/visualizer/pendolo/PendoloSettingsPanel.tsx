@@ -24,9 +24,13 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         { value: true, label: t('options.pendoloCoverOnWatchFaceOn') || '显示' },
         { value: false, label: t('options.pendoloCoverOnWatchFaceOff') || '隐藏' },
     ]), [t]);
+    const lineGlowOptions: VisualizerPresetOption<boolean>[] = useMemo(() => ([
+        { value: true, label: t('options.pendoloLineGlowOn') || '开启' },
+        { value: false, label: t('options.pendoloLineGlowOff') || '关闭' },
+    ]), [t]);
     const gearDecorOptions: VisualizerPresetOption<PendoloTuning['showGearDecor']>[] = useMemo(() => ([
         { value: 'none', label: t('options.decorNone') || '无' },
-        { value: 'subtle', label: t('options.decorSubtle') || '精简' },
+        { value: 'subtle', label: t('options.decorSubtle') || '半透明' },
         { value: 'full', label: t('options.decorFull') || '完整' },
     ]), [t]);
 
@@ -153,6 +157,14 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 value={resolvedTuning.showCoverOnWatchFace ?? false}
                 options={coverOnWatchFaceOptions}
                 onChange={(next) => onPendoloTuningChange?.({ showCoverOnWatchFace: next })}
+                isDaylight={isDaylight}
+                theme={theme}
+            />
+            <VisualizerPresetGroup
+                label={t('options.pendoloEnableLineGlow') || '线条发光效果'}
+                value={resolvedTuning.enableLineGlow ?? false}
+                options={lineGlowOptions}
+                onChange={(next) => onPendoloTuningChange?.({ enableLineGlow: next })}
                 isDaylight={isDaylight}
                 theme={theme}
             />
