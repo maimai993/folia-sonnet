@@ -412,6 +412,7 @@ const readStoredPendoloTuning = (): PendoloTuning => {
             activeScale: Math.min(1.60, Math.max(1.00, parsed.activeScale ?? DEFAULT_PENDOLO_TUNING.activeScale)),
             showGearDecor: parsed.showGearDecor === 'none' || parsed.showGearDecor === 'full' ? parsed.showGearDecor : 'subtle',
             showCenterGradient: parsed.showCenterGradient ?? DEFAULT_PENDOLO_TUNING.showCenterGradient,
+            showCoverOnWatchFace: parsed.showCoverOnWatchFace ?? DEFAULT_PENDOLO_TUNING.showCoverOnWatchFace,
         };
     } catch {
         return DEFAULT_PENDOLO_TUNING;
@@ -1895,6 +1896,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             activeScale: Math.min(1.60, Math.max(1.00, patch.activeScale ?? prev.activeScale)),
             showGearDecor: patch.showGearDecor ?? prev.showGearDecor,
             showCenterGradient: patch.showCenterGradient ?? prev.showCenterGradient ?? DEFAULT_PENDOLO_TUNING.showCenterGradient,
+            showCoverOnWatchFace: patch.showCoverOnWatchFace ?? prev.showCoverOnWatchFace ?? DEFAULT_PENDOLO_TUNING.showCoverOnWatchFace,
         };
         if (typeof window !== 'undefined') {
             localStorage.setItem('pendolo_tuning', JSON.stringify(next));

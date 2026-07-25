@@ -334,6 +334,8 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     backgroundColor={theme.backgroundColor}
                     showGearDecor={pendoloTuning.showGearDecor}
                     showCenterGradient={pendoloTuning.showCenterGradient ?? true}
+                    showCover={pendoloTuning.showCoverOnWatchFace ?? false}
+                    coverUrl={props.coverUrl}
                     paused={props.paused}
                 />
                 {pendoloTuning.showGearDecor !== 'none' && (

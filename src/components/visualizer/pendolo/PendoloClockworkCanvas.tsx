@@ -17,6 +17,8 @@ export interface PendoloClockworkCanvasProps {
     backgroundColor?: string;
     showGearDecor: 'none' | 'subtle' | 'full';
     showCenterGradient?: boolean;
+    showCover?: boolean;
+    coverUrl?: string | null;
     paused?: boolean;
 }
 
@@ -190,6 +192,8 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     backgroundColor = '#000000',
     showGearDecor,
     showCenterGradient = true,
+    showCover = false,
+    coverUrl = null,
     paused = false,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -200,6 +204,24 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     const secondGearStepRef = useRef(0);
     const secondGearAngleRef = useRef(0);
     const secondGearVelocityRef = useRef(0);
+
+    const coverImageRef = useRef<HTMLImageElement | null>(null);
+
+    useEffect(() => {
+        if (!showCover || !coverUrl) {
+            coverImageRef.current = null;
+            return;
+        }
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = coverUrl;
+        img.onload = () => {
+            coverImageRef.current = img;
+        };
+        img.onerror = () => {
+            coverImageRef.current = null;
+        };
+    }, [coverUrl, showCover]);
 
     const propsRef = useRef({
         centerX,
@@ -212,6 +234,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
         backgroundColor,
         showGearDecor,
         showCenterGradient,
+        showCover,
         paused,
     });
 
@@ -227,9 +250,10 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             backgroundColor,
             showGearDecor,
             showCenterGradient,
+            showCover,
             paused,
         };
-    }, [centerX, centerY, baseRadius, lyricRingRadius, audioBass, primaryTextColor, accentTextColor, backgroundColor, showGearDecor, showCenterGradient, paused]);
+    }, [centerX, centerY, baseRadius, lyricRingRadius, audioBass, primaryTextColor, accentTextColor, backgroundColor, showGearDecor, showCenterGradient, showCover, paused]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -242,7 +266,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
 
         const render = (timestamp: number) => {
             const p = propsRef.current;
-            if (p.showGearDecor === 'none' && !p.showCenterGradient) return;
+            if (p.showGearDecor === 'none' && !p.showCenterGradient && !p.showCover) return;
 
             if (lastTimestampRef.current === null) {
                 lastTimestampRef.current = timestamp;
@@ -304,6 +328,23 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 ctx.beginPath();
                 ctx.arc(p.centerX, p.centerY, gradientR, 0, Math.PI * 2);
                 ctx.fill();
+            }
+
+            // 0.5 Cover Image on Watch Face
+            const currentCoverImg = coverImageRef.current;
+            if (p.showCover && currentCoverImg) {
+                const coverRadius = p.baseRadius * 0.88; // Keep it within the inner watch face rim
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(p.centerX, p.centerY, coverRadius, 0, Math.PI * 2);
+                ctx.clip();
+                const isFullDecor = p.showGearDecor === 'full';
+                ctx.globalAlpha = 0.12 * (isFullDecor ? 1.0 : 0.6); // Base opacity
+                
+                // Draw square image covering the circle
+                const size = coverRadius * 2;
+                ctx.drawImage(currentCoverImg, p.centerX - coverRadius, p.centerY - coverRadius, size, size);
+                ctx.restore();
             }
 
             if (p.showGearDecor === 'none') {
@@ -712,9 +753,9 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 window.cancelAnimationFrame(animationFrameId);
             }
         };
-    }, [showGearDecor, showCenterGradient, audioBassMotionValue, escapementAngleMotionValue]);
+    }, [showGearDecor, showCenterGradient, showCover, audioBassMotionValue, escapementAngleMotionValue]);
 
-    if (showGearDecor === 'none' && !showCenterGradient) {
+    if (showGearDecor === 'none' && !showCenterGradient && !showCover) {
         return null;
     }
 

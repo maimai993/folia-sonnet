@@ -344,7 +344,31 @@ const decompressMonet = (o: any): any => ({
     portraitSource: o.mps || DEFAULT_MONET_TUNING.portraitSource,
     portraitOffsetX: o.pox !== undefined ? o.pox : DEFAULT_MONET_TUNING.portraitOffsetX,
     portraitStyle: o.mpy || DEFAULT_MONET_TUNING.portraitStyle,
+    portraitStyle: o.mpy || DEFAULT_MONET_TUNING.portraitStyle,
     showPortraitDragHanger: o.mpdh !== undefined ? o.mpdh : DEFAULT_MONET_TUNING.showPortraitDragHanger,
+});
+
+const compressPendolo = (t: any): any => ({
+    ar: t.arcRadius,
+    aad: t.arcAngleDeg,
+    wcx: t.wheelCenterX,
+    wcy: t.wheelCenterY,
+    ts: t.tickSnappiness,
+    as: t.activeScale,
+    sgd: t.showGearDecor,
+    scg: t.showCenterGradient,
+    scw: t.showCoverOnWatchFace,
+});
+const decompressPendolo = (o: any): any => ({
+    arcRadius: o.ar !== undefined ? o.ar : DEFAULT_PENDOLO_TUNING.arcRadius,
+    arcAngleDeg: o.aad !== undefined ? o.aad : DEFAULT_PENDOLO_TUNING.arcAngleDeg,
+    wheelCenterX: o.wcx !== undefined ? o.wcx : DEFAULT_PENDOLO_TUNING.wheelCenterX,
+    wheelCenterY: o.wcy !== undefined ? o.wcy : DEFAULT_PENDOLO_TUNING.wheelCenterY,
+    tickSnappiness: o.ts !== undefined ? o.ts : DEFAULT_PENDOLO_TUNING.tickSnappiness,
+    activeScale: o.as !== undefined ? o.as : DEFAULT_PENDOLO_TUNING.activeScale,
+    showGearDecor: o.sgd || DEFAULT_PENDOLO_TUNING.showGearDecor,
+    showCenterGradient: o.scg !== undefined ? o.scg : DEFAULT_PENDOLO_TUNING.showCenterGradient,
+    showCoverOnWatchFace: o.scw !== undefined ? o.scw : DEFAULT_PENDOLO_TUNING.showCoverOnWatchFace,
 });
 
 export const compressConfig = (config: any): string => {
@@ -391,6 +415,7 @@ export const compressConfig = (config: any): string => {
     if (config.nomandBackgroundTuning) minified.nbt = compressNomandBackground(config.nomandBackgroundTuning);
     if (config.latentBackgroundTuning) minified.lbt = compressLatentBackground(config.latentBackgroundTuning);
     if (config.monetTuning) minified.mt = compressMonet(config.monetTuning);
+    if (config.pendoloTuning) minified.pdt = compressPendolo(config.pendoloTuning);
     if (config.urlBackgroundList) minified.ubl = config.urlBackgroundList;
     if (config.urlBackgroundSelectedId) minified.ubid = config.urlBackgroundSelectedId;
     if (config.songThemeAutoSwitchEnabled !== undefined) minified.stas = config.songThemeAutoSwitchEnabled;
@@ -484,6 +509,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.nbt) decompressed.nomandBackgroundTuning = decompressNomandBackground(parsed.nbt);
         if (parsed.lbt) decompressed.latentBackgroundTuning = decompressLatentBackground(parsed.lbt);
         if (parsed.mt) decompressed.monetTuning = decompressMonet(parsed.mt);
+        if (parsed.pdt) decompressed.pendoloTuning = decompressPendolo(parsed.pdt);
         if (parsed.ubl) decompressed.urlBackgroundList = parsed.ubl;
         if (parsed.ubid) decompressed.urlBackgroundSelectedId = parsed.ubid;
         if (parsed.stas !== undefined) decompressed.songThemeAutoSwitchEnabled = parsed.stas;

@@ -502,6 +502,7 @@ export interface PendoloTuning {
   activeScale: number;
   showGearDecor: 'none' | 'subtle' | 'full';
   showCenterGradient?: boolean;
+  showCoverOnWatchFace?: boolean;
 }
 
 export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
@@ -513,6 +514,7 @@ export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
   activeScale: 1.25,
   showGearDecor: 'subtle',
   showCenterGradient: true,
+  showCoverOnWatchFace: false,
 };
 
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other

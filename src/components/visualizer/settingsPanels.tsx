@@ -1343,6 +1343,10 @@ export const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         { value: true, label: t('options.pendoloCenterGradientOn') || '开启' },
         { value: false, label: t('options.pendoloCenterGradientOff') || '关闭' },
     ]), [t]);
+    const coverOnWatchFaceOptions: PresetOption<boolean>[] = useMemo(() => ([
+        { value: true, label: t('options.pendoloCoverOnWatchFaceOn') || '显示' },
+        { value: false, label: t('options.pendoloCoverOnWatchFaceOff') || '隐藏' },
+    ]), [t]);
 
     return (
         <div className="space-y-4">
@@ -1484,6 +1488,16 @@ export const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 value={resolvedTuning.showCenterGradient ?? true}
                 options={centerGradientOptions}
                 onChange={(next) => onPendoloTuningChange?.({ showCenterGradient: next })}
+                isDaylight={isDaylight}
+                theme={theme}
+            />
+
+            {/* Show Cover on Watch Face */}
+            <PresetGroup
+                label={t('options.pendoloShowCoverOnWatchFace') || '表盘显示专辑封面'}
+                value={resolvedTuning.showCoverOnWatchFace ?? false}
+                options={coverOnWatchFaceOptions}
+                onChange={(next) => onPendoloTuningChange?.({ showCoverOnWatchFace: next })}
                 isDaylight={isDaylight}
                 theme={theme}
             />
