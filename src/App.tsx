@@ -3156,7 +3156,7 @@ export default function App() {
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                         monetPortraitImage={monetPortraitImage}
-                        onLyricLineSeek={visualizerMode === 'monet' ? handleMonetLyricLineSeek : undefined}
+                        onLyricLineSeek={['monet', 'pendolo'].includes(visualizerMode) ? handleMonetLyricLineSeek : undefined}
                         onBack={navigateBackFromPlayer}
                         alwaysShowBackButton={alwaysShowPlayerBackButton}
                     />

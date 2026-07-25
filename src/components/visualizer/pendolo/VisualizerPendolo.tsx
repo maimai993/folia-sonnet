@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
 import { Star, type LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -12,6 +12,21 @@ import { resolveSubtitleContentMode, resolveLyricAlternateText } from '../../../
 import { calculatePendoloWheelLayout } from './pendoloGeometry';
 import PendoloActiveLyricSweep from './PendoloActiveLyricSweep';
 import { buildPendoloTextLayout } from './pendoloTextLayout';
+
+const PENDOLO_SCROLL_IDLE_RESET_MS = 2500;
+const PENDOLO_SCROLL_STEP_PX = 90;
+const PENDOLO_TOUCH_STEP_PX = 60;
+const PENDOLO_SCROLL_EVENT_OPTIONS = { passive: false } as const;
+
+const getScrollDirection = (delta: number) => {
+    if (Math.abs(delta) < 1) return 0;
+    return delta > 0 ? 1 : -1;
+};
+
+const clampScrollSteps = (steps: number) => {
+    if (Math.abs(steps) > 5) return steps > 0 ? 5 : -5;
+    return steps;
+};
 
 // src/components/visualizer/pendolo/VisualizerPendolo.tsx
 
@@ -76,17 +91,125 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
         lastValidLineIndexRef.current = currentLineIndex;
     }
 
+    const wheelRailRef = useRef<HTMLDivElement | null>(null);
+    const [manualScrollAnchorIndex, setManualScrollAnchorIndex] = useState<number | null>(null);
+    const manualScrollResetRef = useRef<number | null>(null);
+    const wheelAccumulatorRef = useRef(0);
+    const wheelDirectionRef = useRef(0);
+    const touchLastYRef = useRef<number | null>(null);
+    const touchAccumulatorRef = useRef(0);
+    const touchDirectionRef = useRef(0);
+
+    const getFallbackAnchorIndex = useCallback(() => {
+        if (manualScrollAnchorIndex !== null) return manualScrollAnchorIndex;
+        if (currentLineIndex >= 0 && currentLineIndex < lines.length) return currentLineIndex;
+        const currentTimeVal = currentTime.get();
+        if (lastValidLineIndexRef.current === 0 && currentTimeVal < (lines[0]?.startTime ?? 0)) return -1;
+        return lastValidLineIndexRef.current + 0.5;
+    }, [currentLineIndex, currentTime, lines, manualScrollAnchorIndex]);
+
     const targetLineIndex = useMemo(() => {
         if (lines.length === 0) return 0;
-        if (currentLineIndex >= 0 && currentLineIndex < lines.length) {
-            return currentLineIndex;
+        return getFallbackAnchorIndex();
+    }, [getFallbackAnchorIndex, lines.length]);
+
+    const scheduleManualScrollReset = useCallback(() => {
+        if (manualScrollResetRef.current !== null) {
+            window.clearTimeout(manualScrollResetRef.current);
         }
-        const currentTimeVal = currentTime.get();
-        if (lastValidLineIndexRef.current === 0 && currentTimeVal < (lines[0]?.startTime ?? 0)) {
-            return -1;
+        manualScrollResetRef.current = window.setTimeout(() => {
+            setManualScrollAnchorIndex(null);
+            wheelAccumulatorRef.current = 0;
+            wheelDirectionRef.current = 0;
+            touchAccumulatorRef.current = 0;
+            touchDirectionRef.current = 0;
+            manualScrollResetRef.current = null;
+        }, PENDOLO_SCROLL_IDLE_RESET_MS);
+    }, []);
+
+    const moveManualScrollAnchor = useCallback((steps: number) => {
+        if (lines.length === 0) return;
+        setManualScrollAnchorIndex(current => {
+            const baseIndex = current ?? getFallbackAnchorIndex();
+            return Math.max(0, Math.min(lines.length - 1, Math.round(baseIndex + steps)));
+        });
+        scheduleManualScrollReset();
+    }, [getFallbackAnchorIndex, lines.length, scheduleManualScrollReset]);
+
+    const handleRailWheel = useCallback((event: WheelEvent) => {
+        if (lines.length === 0) return;
+        if (event.cancelable) event.preventDefault();
+        event.stopPropagation();
+        const direction = getScrollDirection(event.deltaY);
+        if (direction !== 0 && wheelDirectionRef.current !== 0 && direction !== wheelDirectionRef.current) {
+            wheelAccumulatorRef.current = 0;
         }
-        return lastValidLineIndexRef.current + 0.5;
-    }, [currentLineIndex, currentTime, lines]);
+        wheelDirectionRef.current = direction || wheelDirectionRef.current;
+        wheelAccumulatorRef.current += event.deltaY;
+        const steps = clampScrollSteps(Math.trunc(wheelAccumulatorRef.current / PENDOLO_SCROLL_STEP_PX));
+        if (steps !== 0) {
+            wheelAccumulatorRef.current = 0;
+            moveManualScrollAnchor(steps);
+        } else {
+            scheduleManualScrollReset();
+        }
+    }, [lines.length, moveManualScrollAnchor, scheduleManualScrollReset]);
+
+    const handleRailTouchStart = useCallback((event: TouchEvent) => {
+        if (lines.length === 0) return;
+        event.stopPropagation();
+        touchLastYRef.current = event.touches[0]?.clientY ?? null;
+        touchAccumulatorRef.current = 0;
+        touchDirectionRef.current = 0;
+        setManualScrollAnchorIndex(getFallbackAnchorIndex());
+        scheduleManualScrollReset();
+    }, [getFallbackAnchorIndex, lines.length, scheduleManualScrollReset]);
+
+    const handleRailTouchMove = useCallback((event: TouchEvent) => {
+        if (lines.length === 0 || touchLastYRef.current === null) return;
+        event.stopPropagation();
+        const nextY = event.touches[0]?.clientY;
+        if (typeof nextY !== 'number') return;
+        const deltaY = touchLastYRef.current - nextY;
+        touchLastYRef.current = nextY;
+        const direction = getScrollDirection(deltaY);
+        if (direction !== 0 && touchDirectionRef.current !== 0 && direction !== touchDirectionRef.current) {
+            touchAccumulatorRef.current = 0;
+        }
+        touchDirectionRef.current = direction || touchDirectionRef.current;
+        touchAccumulatorRef.current += deltaY;
+        const steps = clampScrollSteps(Math.trunc(touchAccumulatorRef.current / PENDOLO_TOUCH_STEP_PX));
+        if (steps !== 0) {
+            touchAccumulatorRef.current = 0;
+            moveManualScrollAnchor(steps);
+        } else {
+            scheduleManualScrollReset();
+        }
+    }, [lines.length, moveManualScrollAnchor, scheduleManualScrollReset]);
+
+    const handleRailTouchEnd = useCallback(() => {
+        touchLastYRef.current = null;
+        touchDirectionRef.current = 0;
+        touchAccumulatorRef.current = 0;
+        scheduleManualScrollReset();
+    }, [scheduleManualScrollReset]);
+
+    useEffect(() => {
+        const rail = wheelRailRef.current;
+        if (!rail) return undefined;
+        rail.addEventListener('wheel', handleRailWheel, PENDOLO_SCROLL_EVENT_OPTIONS);
+        rail.addEventListener('touchstart', handleRailTouchStart, PENDOLO_SCROLL_EVENT_OPTIONS);
+        rail.addEventListener('touchmove', handleRailTouchMove, PENDOLO_SCROLL_EVENT_OPTIONS);
+        rail.addEventListener('touchend', handleRailTouchEnd, PENDOLO_SCROLL_EVENT_OPTIONS);
+        rail.addEventListener('touchcancel', handleRailTouchEnd, PENDOLO_SCROLL_EVENT_OPTIONS);
+        return () => {
+            rail.removeEventListener('wheel', handleRailWheel, PENDOLO_SCROLL_EVENT_OPTIONS);
+            rail.removeEventListener('touchstart', handleRailTouchStart, PENDOLO_SCROLL_EVENT_OPTIONS);
+            rail.removeEventListener('touchmove', handleRailTouchMove, PENDOLO_SCROLL_EVENT_OPTIONS);
+            rail.removeEventListener('touchend', handleRailTouchEnd, PENDOLO_SCROLL_EVENT_OPTIONS);
+            rail.removeEventListener('touchcancel', handleRailTouchEnd, PENDOLO_SCROLL_EVENT_OPTIONS);
+        };
+    }, [handleRailTouchEnd, handleRailTouchMove, handleRailTouchStart, handleRailWheel]);
 
     // Escapement spring motion for line transition tick
     const springSnappiness = pendoloTuning.tickSnappiness;
@@ -235,7 +358,8 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                 {/* Lyric Wheel Arc Items */}
                 {showText && (
                     <motion.div
-                        className="absolute inset-0 w-full h-full pointer-events-none"
+                        ref={wheelRailRef}
+                        className="absolute inset-0 w-full h-full pointer-events-auto"
                         style={{
                             zIndex: 2,
                             rotate: wheelRotationDeg,
@@ -253,7 +377,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                             return (
                                 <div
                                     key={item.line.id ?? `pendolo-line-${item.index}`}
-                                    className="absolute transition-opacity duration-300 pointer-events-auto cursor-pointer"
+                                    className={`absolute transition-opacity duration-300 pointer-events-auto ${onLyricLineSeek ? 'cursor-pointer hover:opacity-100' : ''}`}
                                     style={{
                                         left: `${item.x}px`,
                                         top: `${item.y}px`,
@@ -262,7 +386,12 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                         fontFamily,
                                         fontWeight,
                                     }}
-                                    onClick={() => onLyricLineSeek?.(item.line.startTime)}
+                                    onClick={(e) => {
+                                        if (onLyricLineSeek) {
+                                            e.stopPropagation();
+                                            onLyricLineSeek(item.line.startTime);
+                                        }
+                                    }}
                                 >
                                     <motion.div
                                         className="inline-block"
