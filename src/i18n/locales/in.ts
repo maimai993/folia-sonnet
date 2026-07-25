@@ -545,13 +545,13 @@ export default {
     "enableUpdateCheckDesc": "Periksa rilis GitHub melalui proxy sistem saat aplikasi desktop dimulai.",
     "enableAutoUpdate": "Aktifkan Pembaruan Otomatis",
     "enableAutoUpdateDesc": "Unduh pembaruan otomatis setelah versi baru ditemukan.",
-      "updateChannel": "Saluran Pembaruan",
-      "updateChannelDesc": "Pilih jalur rilis yang diikuti aplikasi desktop ini.",
-      "updateChannelRealeco": "Realeco · Stabil",
-      "updateChannelLimo": "Limo · Nightly",
-      "updateChannelCielo": "Cielo · Canary",
-      "updateChannelInternal": "Internal",
-      "updateUnsupportedSystem": "Pembaruan otomatis tidak tersedia pada sistem saat ini.",
+    "updateChannel": "Saluran Pembaruan",
+    "updateChannelDesc": "Pilih jalur rilis yang diikuti aplikasi desktop ini.",
+    "updateChannelRealeco": "Realeco · Stabil",
+    "updateChannelLimo": "Limo · Nightly",
+    "updateChannelCielo": "Cielo · Canary",
+    "updateChannelInternal": "Internal",
+    "updateUnsupportedSystem": "Pembaruan otomatis tidak tersedia pada sistem saat ini.",
     "updateUnsupportedChannel": "Pembaruan otomatis tidak tersedia untuk build internal ini.",
     "autoUpdateGithubNotice": "Pembaruan otomatis butuh akses ke GitHub; jika jaringan tidak stabil, aktifkan proxy sistem.",
     "openReleasePage": "Buka Halaman Rilis",
@@ -1070,88 +1070,19 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
-    "v0_5_27": {
-      "intro": "Berikut adalah fitur dan peningkatan baru di versi 0.5.27.",
-      "diorama": {
-        "title": "Mode Lirik 3D Diorama",
-        "description": "Lirik menjadi teks 3D di dalam ruang saat kamera terbang dari baris ke baris, lengkap dengan cahaya karaoke, partikel, dan visual yang mengikuti tema."
+    "v0_6_3": {
+      "intro": "Berikut adalah fitur dan peningkatan baru pada versi terbaru.",
+      "pendoloTheme": {
+        "title": "Visual Baru: Tema Jam Pendolo",
+        "description": "Memperkenalkan tema Pendolo baru dengan efek gigi mekanik yang dinamis, tipografi lirik melingkar, dan lirik yang dapat diklik untuk melompat."
       },
-      "lyricOffsetMemory": {
-        "title": "Offset Linimasa Tersimpan",
-        "description": "Penyesuaian linimasa lirik disimpan untuk setiap lagu dan dipulihkan otomatis saat lagu diputar kembali."
+      "obsDynamicAi": {
+        "title": "Tema AI Dinamis OBS",
+        "description": "Overlay AI Dinamis OBS kini dapat secara otomatis membuat ulang tema berbasis AI yang sesuai dengan lagu saat ini setelah berganti lagu."
       },
-      "posterWallSearch": {
-        "title": "Pencarian dan Gestur Dinding Poster",
-        "description": "Halaman dinding poster kini mendukung pencarian daftar, pengetikan langsung, dan gestur untuk membuka pencarian dengan cepat."
-      }
-    },
-    "v0_6_0": {
-      "intro": "Berikut adalah fitur dan peningkatan baru di versi 0.6.0.",
-      "localLibraryV2": {
-        "title": "Perpustakaan Lokal 2.0",
-        "description": "Perpustakaan musik lokal kini menggunakan alur dinding poster progresif untuk folder, album, artis, dan playlist, dengan impor, pemindaian ulang, serta cache sampul yang lebih baik."
-      },
-      "entityEditing": {
-        "title": "Edit Entitas Artis dan Album",
-        "description": "Ubah nama tampilan, cari dan gabungkan entitas duplikat, atau pindahkan lagu terpilih ke entitas artis dan album baru maupun yang sudah ada."
-      },
-      "unifiedSearch": {
-        "title": "Pencarian dan Navigasi Terpadu",
-        "description": "Ruang kerja pencarian mencakup NetEase, lokal, Navidrome, dan antrean saat ini, sementara riwayat navigasi, tampilan peta, dan tautan detail membuat penelusuran lebih lancar."
-      },
-      "metadataMatching": {
-        "title": "Pencocokan Metadata yang Lebih Cerdas",
-        "description": "Lagu lokal kini mendukung pencocokan berbantuan durasi, pengaturan metadata dan sampul secara massal, pencocokan online manual, serta pemulihan informasi lokal asli."
-      },
-      "dailyRecommendations": {
-        "title": "Rekomendasi Harian dan Edit Playlist",
-        "description": "Rekomendasi harian NetEase dapat dijelajahi, dikelola, dan dimasukkan ke antrean secara langsung, dengan umpan balik yang lebih halus saat mengedit playlist."
-      },
-      "visualizerBackgrounds": {
-        "title": "Sistem Latar Visualizer Baru",
-        "description": "Latar Latent dan Nomand menambahkan mode statis, latar keterbacaan subtitle, sumber warna yang dapat diatur, respons ketukan, serta pengaturan dan perintah latar yang terpadu."
-      },
-      "dioramaRework": {
-        "title": "Pembaruan Partikel Diorama",
-        "description": "Diorama kini memiliki mode awan titik dan koridor berbasis riak, lebih banyak bentuk partikel, pewarnaan kata kunci, serta kontrol kepadatan dan cahaya."
-      }
-    },
-    "v0_6_1": {
-      "intro": "Berikut adalah fitur dan peningkatan baru di versi 0.6.1.",
-      "settingsRework": {
-        "title": "Desain Ulang Halaman Pengaturan",
-        "description": "Halaman pengaturan yang dirancang ulang sepenuhnya agar lebih terstruktur dan mudah digunakan."
-      },
-      "autoHideChrome": {
-        "title": "Sembunyikan Elemen Otomatis",
-        "description": "Opsi untuk mengatur apakah bilah judul dan tombol kembali halaman pemutar disembunyikan secara otomatis saat tidak aktif."
-      },
-      "voiceInputPause": {
-        "title": "Jeda Otomatis Penginputan Suara",
-        "description": "Menjeda pemutaran secara otomatis saat menggunakan penginputan suara Windows, tersedia di Pengaturan Laboratorium."
-      },
-      "obsStaticLink": {
-        "title": "Berbagi Tautan Statis OBS",
-        "description": "Versi web kini mendukung pembuatan dan pengiriman tautan statis OBS untuk integrasi streaming."
-      }
-    },
-    "v0_6_2": {
-      "intro": "Berikut adalah fitur dan peningkatan baru di versi 0.6.2.",
-      "multiProvider": {
-        "title": "Multi-Penyedia & Sinkronisasi Akun",
-        "description": "Memperkenalkan arsitektur multi-penyedia baru dengan dukungan KuGou Music (login, sinkronisasi VIP, playlist/album/radio, audio KRM), serta beralih akun dengan cepat."
-      },
-      "harmonyLyrics": {
-        "title": "Subjudul Harmoni & TTML",
-        "description": "Mendukung format TTML dan linimasa lirik tumpang tindih, perenderan subjudul harmoni khusus, serta tampilan lirik 3-jalur (teks asli/terjemahan/romanisasi)."
-      },
-      "playerCap": {
-        "title": "PlayerCap & Integrasi OBS",
-        "description": "Menambahkan sumber streaming tahap ketiga PlayerCap dan kontrol pemutaran dengan integrasi OBS Shell serta berbagi tautan URL streaming web."
-      },
-      "typographyAndCustomization": {
-        "title": "Tipografi & Peningkatan Perpustakaan",
-        "description": "Pengaturan ketebalan font kustom & skala subjudul, pengurutan folder lokal yang ditingkatkan, penyegaran pustaka, memori jalur, serta penyesuaian penyembunyian tampilan/playlist."
+      "playerCapEnhance": {
+        "title": "Lapisan Data PlayerCap & Sinkronisasi",
+        "description": "Merombak lapisan data PlayerCap untuk mengoptimalkan sinkronisasi tema dan propogasi pengaturan dengan klien Web untuk pengalaman kontrol yang lebih baik."
       }
     }
   },
@@ -1462,7 +1393,7 @@ export default {
     "back": "Kembali",
     "preparing": "Menyiapkan",
     "noLyrics": "Tidak Ada Lirik"
-,
+    ,
     "previous": "Sebelumnya",
     "next": "Selanjutnya",
     "play": "Putar",

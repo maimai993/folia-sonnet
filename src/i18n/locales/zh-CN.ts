@@ -1204,88 +1204,19 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
-    "v0_5_27": {
-      "intro": "以下是 0.5.27 版本的新功能与改进",
-      "diorama": {
-        "title": "Diorama「镜台」3D 歌词模式",
-        "description": "歌词化作空间中的 3D 文字，镜头沿路径逐句飞行，并支持跟唱辉光、粒子与主题联动。"
+    "v0_6_3": {
+      "intro": "以下是最新版本的新功能与改进",
+      "pendoloTheme": {
+        "title": "全新视觉：Pendolo 钟表主题",
+        "description": "新增具有机械齿轮动态效果的 Pendolo 主题，支持圆周文本排版与点击歌词跳转。"
       },
-      "lyricOffsetMemory": {
-        "title": "时间轴偏移保存",
-        "description": "手动调整的歌词时间轴偏移会按歌曲保存，再次播放同一首歌时自动恢复。"
+      "obsDynamicAi": {
+        "title": "OBS 动态 AI 主题",
+        "description": "OBS 动态 AI 挂件现在支持在切歌时自动重新生成契合当前歌曲风格的 AI 主题。"
       },
-      "posterWallSearch": {
-        "title": "海报墙搜索与手势",
-        "description": "各海报墙页面现在支持列表搜索，也可以直接输入文字或使用搜索手势快速打开搜索。"
-      }
-    },
-    "v0_6_0": {
-      "intro": "以下是 0.6.0 版本的新功能与改进",
-      "localLibraryV2": {
-        "title": "本地曲库 2.0",
-        "description": "本地音乐库全面更新，支持多文件夹、专辑与艺术家跳转、元数据整理和在线匹配。"
-      },
-      "entityEditing": {
-        "title": "艺术家与专辑实体编辑",
-        "description": "可以修改展示名称、搜索并合并重复实体，或选择歌曲拆分到新的或已有的艺术家与专辑。"
-      },
-      "unifiedSearch": {
-        "title": "统一搜索与队列",
-        "description": "搜索功能支持网易云、本地库、Navidrome多来源; 支持构建混合了在线歌曲与本地歌曲的播放队列。"
-      },
-      "metadataMatching": {
-        "title": "海报墙增强",
-        "description": "海报墙现在支持基于搜索来筛选歌曲并加入队列，优化了卡片加载动画"
-      },
-      "dailyRecommendations": {
-        "title": "每日推荐",
-        "description": "现在可以浏览网易云日推歌曲。"
-      },
-      "visualizerBackgrounds": {
-        "title": "全新可视化背景系统",
-        "description": "新增隐现与漫游背景，支持静态模式、字幕可读性背景、颜色来源和节拍响应，并统一了背景设置与命令。"
-      },
-      "dioramaRework": {
-        "title": "镜台点云重构",
-        "description": "镜台加入涟漪驱动的点云与长廊双模式、更多粒子形态、关键字着色和可调的粒子密度与辉光。"
-      }
-    },
-    "v0_6_1": {
-      "intro": "以下是 0.6.1 版本的新功能与改进",
-      "settingsRework": {
-        "title": "设置页面重构",
-        "description": "全新重构的设置页面，结构更清晰、分类更合理，提供更舒适易用的配置体验。"
-      },
-      "autoHideChrome": {
-        "title": "界面元素自动隐藏",
-        "description": "可自由调整是否在静止时自动隐藏顶部标题栏与播放页返回按键。"
-      },
-      "voiceInputPause": {
-        "title": "语音输入自动暂停",
-        "description": "Windows 环境下支持在触发系统语音输入时自动暂停播放，可在实验室设置中开启。"
-      },
-      "obsStaticLink": {
-        "title": "OBS 静态链接分享",
-        "description": "Web 版本支持导出与分享 OBS 静态串流链接，方便推流工具直接引用。"
-      }
-    },
-    "v0_6_2": {
-      "intro": "以下是 0.6.2 版本的新功能与改进",
-      "multiProvider": {
-        "title": "多音源与账号同步",
-        "description": "引入全新多音源底层架构，支持酷狗音乐源（账号登录、歌单/专辑/电台同步等），支持多平台独立登录与账户切换。"
-      },
-      "harmonyLyrics": {
-        "title": "和声字幕",
-        "description": "支持 TTML 格式的重叠时间轴歌词，引入和声字幕独立渲染，并支持底部字幕的翻译/罗马音切换显示。"
-      },
-      "playerCap": {
-        "title": "PlayerCap 播控与 OBS 推流",
-        "description": "新增 PlayerCap 播控与推流控制，支持 OBS Shell 串列以及 Web 端一键复制串流 URL，实现无缝跨端播控。"
-      },
-      "typographyAndCustomization": {
-        "title": "排版字重与本地库增强",
-        "description": "支持自定义字体字重与字幕缩放倍率，增强本地歌曲文件夹排序策略、手动刷新与路径记忆，并支持隐藏首页特定视图与指定歌单。"
+      "playerCapEnhance": {
+        "title": "PlayerCap 数据层与同步增强",
+        "description": "重构 PlayerCap 的数据链路，优化与 Web 端的主题同步及设置项透传，保障一致的播控体验。"
       }
     }
   },

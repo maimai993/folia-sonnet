@@ -609,13 +609,13 @@ export default {
     "enableUpdateCheckDesc": "Check GitHub releases through the system proxy when the desktop app starts.",
     "enableAutoUpdate": "Enable Auto Update",
     "enableAutoUpdateDesc": "Automatically download updates after a new version is found.",
-      "updateChannel": "Update Channel",
-      "updateChannelDesc": "Choose which release lane this desktop app follows.",
-      "updateChannelRealeco": "Realeco · Stable",
-      "updateChannelLimo": "Limo · Nightly",
-      "updateChannelCielo": "Cielo · Canary",
-      "updateChannelInternal": "Internal",
-      "updateUnsupportedSystem": "Automatic updates are unavailable on the current system.",
+    "updateChannel": "Update Channel",
+    "updateChannelDesc": "Choose which release lane this desktop app follows.",
+    "updateChannelRealeco": "Realeco · Stable",
+    "updateChannelLimo": "Limo · Nightly",
+    "updateChannelCielo": "Cielo · Canary",
+    "updateChannelInternal": "Internal",
+    "updateUnsupportedSystem": "Automatic updates are unavailable on the current system.",
     "updateUnsupportedChannel": "Automatic updates are unavailable for this internal build.",
     "autoUpdateGithubNotice": "Auto update needs access to GitHub; if the network is unstable, keep a system proxy enabled.",
     "openReleasePage": "Open Release Page",
@@ -1203,88 +1203,19 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
-    "v0_5_27": {
-      "intro": "Here are the new features and improvements in version 0.5.27.",
-      "diorama": {
-        "title": "Diorama 3D Lyrics Mode",
-        "description": "Lyrics become 3D text in space as the camera flies from line to line, with sing-along glow, particles, and theme-aware visuals."
+    "v0_6_3": {
+      "intro": "Here are the new features and improvements in the latest version.",
+      "pendoloTheme": {
+        "title": "New Visualizer: Pendolo Clockwork",
+        "description": "Introduces a new Pendolo visualizer with dynamic mechanical gears, radial lyric typography, and clickable lyrics jumping."
       },
-      "lyricOffsetMemory": {
-        "title": "Saved Timeline Offsets",
-        "description": "Manual lyric timeline adjustments are saved per song and restored automatically the next time it plays."
+      "obsDynamicAi": {
+        "title": "OBS Dynamic AI Theme",
+        "description": "The OBS Dynamic AI overlay now automatically regenerates an AI-driven theme that fits the current song upon track switching."
       },
-      "posterWallSearch": {
-        "title": "Poster-Wall Search and Gestures",
-        "description": "Poster-wall pages now support list search, direct typing, and a search gesture for quickly opening search."
-      }
-    },
-    "v0_6_0": {
-      "intro": "Here are the new features and improvements in version 0.6.0.",
-      "localLibraryV2": {
-        "title": "Local Library 2.0",
-        "description": "The local music library now uses a progressive poster-wall workflow for folders, albums, artists, and playlists, with stronger import, rescan, and cover-cache handling."
-      },
-      "entityEditing": {
-        "title": "Artist and Album Entity Editing",
-        "description": "Rename displayed identities, search and merge duplicates, or move selected songs into new or existing artist and album entities."
-      },
-      "unifiedSearch": {
-        "title": "Unified Search and Navigation",
-        "description": "The search workspace covers NetEase, local, Navidrome, and the current queue, while navigation history, map view, and detail links make browsing more continuous."
-      },
-      "metadataMatching": {
-        "title": "Smarter Metadata Matching",
-        "description": "Local songs now have duration-assisted matching, batch metadata and cover organization, manual online matching, and reliable recovery of original local information."
-      },
-      "dailyRecommendations": {
-        "title": "Daily Recommendations and Playlist Editing",
-        "description": "NetEase daily recommendations can be browsed, managed, and queued directly, and playlist editing now has smoother interaction feedback."
-      },
-      "visualizerBackgrounds": {
-        "title": "New Visualizer Background System",
-        "description": "Latent and Nomand backgrounds add static mode, subtitle readability overlays, configurable color sources, beat response, and unified background settings and commands."
-      },
-      "dioramaRework": {
-        "title": "Diorama Particle Rework",
-        "description": "Diorama now offers ripple-driven point-cloud and corridor modes, more particle shapes, keyword coloring, and controls for density and glow."
-      }
-    },
-    "v0_6_1": {
-      "intro": "Here are the new features and improvements in version 0.6.1.",
-      "settingsRework": {
-        "title": "Redesigned Settings Page",
-        "description": "A completely redesigned settings interface with cleaner structure, logical grouping, and improved usability."
-      },
-      "autoHideChrome": {
-        "title": "Auto-Hide Controls",
-        "description": "Optionally toggle auto-hiding for the top titlebar and player return button when idle."
-      },
-      "voiceInputPause": {
-        "title": "Voice Input Auto-Pause",
-        "description": "Automatically pause playback when using Windows voice typing, available in Lab Settings."
-      },
-      "obsStaticLink": {
-        "title": "OBS Static Link Sharing",
-        "description": "Web version now supports generating and sharing static OBS overlay links for streaming setups."
-      }
-    },
-    "v0_6_2": {
-      "intro": "Here are the new features and improvements in version 0.6.2.",
-      "multiProvider": {
-        "title": "Multi-Provider & Account Sync",
-        "description": "Introduces a redesigned multi-provider architecture with KuGou Music support (login, VIP sync, playlists/albums/radios, KRM audio), multi-platform login, and seamless account switching."
-      },
-      "harmonyLyrics": {
-        "title": "Harmony Subtitles & TTML",
-        "description": "Supports TTML format and overlapping lyrics timeline, introduces dedicated harmony subtitle rendering, and supports 3-track LRC with romanization and translation."
-      },
-      "playerCap": {
-        "title": "PlayerCap & OBS Integration",
-        "description": "Adds PlayerCap third-stage streaming source and playback control with OBS Shell wiring and Web one-click stream URL sharing."
-      },
-      "typographyAndCustomization": {
-        "title": "Typography & Library Enhancements",
-        "description": "Custom font weight & subtitle scaling adjustments, enhanced local folder sorting, library refreshing, path memory, and customizable view/playlist hiding."
+      "playerCapEnhance": {
+        "title": "PlayerCap Data Layer & Sync",
+        "description": "Refactored the PlayerCap data layer to improve theme synchronization and settings propagation with the Web client for a seamless playback experience."
       }
     }
   },
