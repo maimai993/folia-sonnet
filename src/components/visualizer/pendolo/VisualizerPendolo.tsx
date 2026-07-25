@@ -258,7 +258,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const lineBlockHeights = useMemo(() => {
         const measureWidth = availableTextWidth / pendoloTuning.activeScale;
         return lines.map((line, index) => {
-            if (Math.abs(index - targetLineIndex) > 8) {
+            if (Math.abs(index - targetLineIndex) > 10) {
                 return 0;
             }
             // Always pre-allocate space for the focal state to prevent overlapping when scaled up

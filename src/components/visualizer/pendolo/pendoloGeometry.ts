@@ -47,8 +47,9 @@ export function calculatePendoloWheelLayout(
 
     // Reference center for rendering window
     const centerRef = Math.max(0, Math.min(lines.length - 1, Math.floor(targetLineIndex >= 0 ? targetLineIndex : 0)));
-    const windowStart = Math.max(0, centerRef - 4);
-    const windowEnd = Math.min(lines.length - 1, centerRef + 4);
+    // Wide enough index window; actual visibility is angle-gated at ±90° (right semicircle only)
+    const windowStart = Math.max(0, centerRef - 8);
+    const windowEnd = Math.min(lines.length - 1, centerRef + 8);
     const visualAngles = new Map<number, number>();
 
     if (Number.isInteger(targetLineIndex) && targetLineIndex >= windowStart && targetLineIndex <= windowEnd) {
@@ -76,6 +77,9 @@ export function calculatePendoloWheelLayout(
         // Base focal angle is 0 (horizontal to right).
         // Upcoming lines curve downward (positive angle), past lines curve upward (negative angle).
         const rawAngleRad = (visualAngles.get(i) ?? distanceIndex * angleStepRad) + escapementAngleOffsetRad;
+
+        // Only render lines on the right semicircle (±90° from focal axis)
+        if (Math.abs(rawAngleRad) >= Math.PI / 2) continue;
 
         // Cartesian coordinates on screen relative to center on left edge
         const x = centerX + baseRadius * Math.cos(rawAngleRad);
