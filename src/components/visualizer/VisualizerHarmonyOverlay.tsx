@@ -201,7 +201,7 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
     }, [currentTime, updateSnapshot]);
 
     useMotionValueEvent(currentTime, 'change', updateSnapshot);
-    const harmonyTopPx = isPlayerChromeHidden ? 28 : 76;
+    const harmonyTopPx = 76;
 
     return (
         <AnimatePresence>
