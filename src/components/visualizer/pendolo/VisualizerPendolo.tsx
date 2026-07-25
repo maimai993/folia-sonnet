@@ -18,6 +18,10 @@ const PENDOLO_SCROLL_STEP_PX = 90;
 const PENDOLO_TOUCH_STEP_PX = 60;
 const PENDOLO_SCROLL_EVENT_OPTIONS = { passive: false } as const;
 
+const READY_GRACE_MS = 3000;
+const INSTRUMENTAL_COMMIT_SECONDS = 2;
+const INSTRUMENTAL_SECONDS_PER_FRAME = 5;
+
 const getScrollDirection = (delta: number) => {
     if (Math.abs(delta) < 1) return 0;
     return delta > 0 ? 1 : -1;
@@ -108,10 +112,64 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
         return lastValidLineIndexRef.current + 0.5;
     }, [currentLineIndex, currentTime, lines, manualScrollAnchorIndex]);
 
+    const [isInstrumental, setIsInstrumental] = useState(false);
+    const lyricsSig = lines.length === 0 ? '' : `${lines.length}|${lines[0]?.fullText ?? ''}`;
+    const seedRef = useRef(props.seed);
+
+    useEffect(() => {
+        if (lyricsSig !== '') {
+            setIsInstrumental(false);
+            seedRef.current = props.seed;
+            return undefined;
+        }
+        if (props.seed !== seedRef.current) {
+            setIsInstrumental(false);
+            seedRef.current = props.seed;
+        }
+
+        let raf = 0;
+        let sawReset = false;
+        const startWall = performance.now();
+        const watch = () => {
+            const t = currentTime.get();
+            const capped = performance.now() - startWall >= READY_GRACE_MS;
+            if (!sawReset && t < 1) sawReset = true;
+            if ((sawReset && t >= INSTRUMENTAL_COMMIT_SECONDS) || capped) {
+                setIsInstrumental(true);
+                return;
+            }
+            raf = requestAnimationFrame(watch);
+        };
+        raf = requestAnimationFrame(watch);
+        return () => cancelAnimationFrame(raf);
+    }, [props.seed, lyricsSig, currentTime]);
+
+    const [instrumentalIndex, setInstrumentalIndex] = useState(0);
+    const instrumentalIndexRef = useRef(0);
+    
+    useEffect(() => {
+        if (!isInstrumental) return undefined;
+        
+        let raf = 0;
+        const tick = () => {
+            const t = currentTime.get();
+            const idx = Math.floor(t / INSTRUMENTAL_SECONDS_PER_FRAME);
+            if (idx !== instrumentalIndexRef.current) {
+                instrumentalIndexRef.current = idx;
+                setInstrumentalIndex(idx);
+            }
+            raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [isInstrumental, currentTime]);
+
     const targetLineIndex = useMemo(() => {
-        if (lines.length === 0) return 0;
+        if (lines.length === 0) {
+            return isInstrumental ? instrumentalIndex : 0;
+        }
         return getFallbackAnchorIndex();
-    }, [getFallbackAnchorIndex, lines.length]);
+    }, [getFallbackAnchorIndex, lines.length, isInstrumental, instrumentalIndex]);
 
     const scheduleManualScrollReset = useCallback(() => {
         if (manualScrollResetRef.current !== null) {
