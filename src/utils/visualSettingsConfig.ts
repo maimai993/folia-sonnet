@@ -1,6 +1,7 @@
 import { collectVisualizerTunings } from '../components/visualizer/tuningRegistry';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled } from '../services/themePreferences';
+import type { CappellaAvatarImage, CappellaEmojiImage, CappellaTuning, MonetBackgroundImage, MonetBackgroundTuning, MonetPortraitImage, MonetTuning, NomandBackgroundTuning } from '../types';
 
 // src/utils/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
@@ -76,4 +77,53 @@ export function hasCustomObsFont(): boolean {
     || (store.lyricsFontFallbackFamilies?.length ?? 0) > 0
     || Boolean(store.subtitleFontFamily)
     || (store.subtitleFontFallbackFamilies?.length ?? 0) > 0;
+}
+
+// The subset of settings that decide whether an uploaded image asset is in play. Kept structural
+// (not the whole store type) so both the store snapshot and a reactive selector can feed it.
+export interface UploadedObsAssetInputs {
+  monetBackgroundTuning: MonetBackgroundTuning;
+  nomandBackgroundTuning: NomandBackgroundTuning;
+  monetTuning: MonetTuning;
+  monetBackgroundImage: MonetBackgroundImage | null;
+  monetPortraitImage: MonetPortraitImage | null;
+  cappellaTuning: CappellaTuning;
+  cappellaCustomEmojiImages: CappellaEmojiImage[];
+  cappellaCustomAvatarImages: CappellaAvatarImage[];
+}
+
+// Whether the current settings rely on an uploaded image asset that the copied cfg URL cannot carry
+// (an IndexedDB blob has no shareable URL). These ride the separate OBS Custom CSS payload instead,
+// so this predicate both gates the "copy CSS" affordance and reshapes the copy hint. Only flag an
+// asset when its custom source is actually selected and populated, so an unpicked toggle never warns.
+// The uploaded background is shared by the Monet and Nomand modes, hence both source checks.
+export function computeHasUploadedObsAsset(inputs: UploadedObsAssetInputs): boolean {
+  const usesUploadedBackground = inputs.monetBackgroundTuning.backgroundSource === 'uploaded-global'
+    || inputs.nomandBackgroundTuning.imageSource === 'uploaded-global';
+  const usesCustomPortrait = inputs.monetTuning.portraitSource === 'custom';
+  const usesCustomEmojis = inputs.cappellaTuning.emojiPackSource === 'custom'
+    && inputs.cappellaCustomEmojiImages.length > 0;
+  const usesCustomAvatars = inputs.cappellaTuning.avatarSource === 'custom'
+    && inputs.cappellaCustomAvatarImages.length > 0;
+  return (usesUploadedBackground && Boolean(inputs.monetBackgroundImage))
+    || (usesCustomPortrait && Boolean(inputs.monetPortraitImage))
+    || usesCustomEmojis
+    || usesCustomAvatars;
+}
+
+export function hasUploadedObsAsset(): boolean {
+  return computeHasUploadedObsAsset(useSettingsUiStore.getState());
+}
+
+// Single source of truth for the OBS copy toast: an uploaded image is the more surprising loss
+// (silent fall-back to the song cover), so it takes precedence over the font hint; neither in play
+// means a plain success. Returns i18n keys, not text, so it stays free of any component's t().
+export function resolveObsCopyHintKey(): { type: 'info' | 'success'; key: string; } {
+  if (hasUploadedObsAsset()) {
+    return { type: 'info', key: 'options.obsUrlUploadedAssetHint' };
+  }
+  if (hasCustomObsFont()) {
+    return { type: 'info', key: 'options.obsUrlCustomFontHint' };
+  }
+  return { type: 'success', key: 'status.copied' };
 }

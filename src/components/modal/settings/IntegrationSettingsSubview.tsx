@@ -10,7 +10,8 @@ import { CustomSelect } from '../../shared/CustomSelect';
 import { buildCurrentObsUrl } from '../../../utils/currentObsUrl';
 import { resolveWebObsTarget } from '../../../utils/webObsTarget';
 import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
-import { hasCustomObsFont } from '../../../utils/visualSettingsConfig';
+import { ObsCopyCssButton } from '../../shared/ObsCopyCssButton';
+import { resolveObsCopyHintKey } from '../../../utils/visualSettingsConfig';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import type { LyricApiStatus } from '../../../types/lyricApi';
 
@@ -237,8 +238,11 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         await onCopyText(await buildCurrentObsUrl(target.source, target.host, target.extra));
         setObsUrlCopied(true);
         window.setTimeout(() => setObsUrlCopied(false), 1600);
-        if (hasCustomObsFont()) {
-            useSettingsUiStore.getState().statusSetter?.({ type: 'info', text: t('options.obsUrlCustomFontHint') });
+        // Only surface a warning toast here; the copy itself is already acknowledged by the button
+        // state, so a plain "copied" success would be redundant.
+        const hint = resolveObsCopyHintKey();
+        if (hint.type === 'info') {
+            useSettingsUiStore.getState().statusSetter?.({ type: 'info', text: t(hint.key) });
         }
     };
 
@@ -653,12 +657,18 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                 <section>
                     <h3 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center justify-between gap-2" style={{ color: 'var(--text-secondary)' }}>
                         <span className="flex items-center gap-2 opacity-50"><Server size={14} /> {t('options.stageMode')}</span>
-                        <ObsCopyUrlButton
-                            onCopy={handleCopyObsUrl}
-                            copied={obsUrlCopied}
-                            disabled={!webStageEnabled}
-                            buttonClassName="px-2.5 py-1"
-                        />
+                        <span className="flex items-center gap-2">
+                            <ObsCopyCssButton
+                                disabled={!webStageEnabled}
+                                buttonClassName="px-2.5 py-1"
+                            />
+                            <ObsCopyUrlButton
+                                onCopy={handleCopyObsUrl}
+                                copied={obsUrlCopied}
+                                disabled={!webStageEnabled}
+                                buttonClassName="px-2.5 py-1"
+                            />
+                        </span>
                     </h3>
                     <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                         <div className="flex items-center justify-between gap-4">
