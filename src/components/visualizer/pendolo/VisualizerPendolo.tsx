@@ -12,6 +12,7 @@ import { resolveSubtitleContentMode, resolveLyricAlternateText } from '../../../
 import { calculatePendoloWheelLayout } from './pendoloGeometry';
 import PendoloActiveLyricSweep from './PendoloActiveLyricSweep';
 import { buildPendoloTextLayout } from './pendoloTextLayout';
+import { resolvePendoloChorusPresentation, resolvePendoloMotionProfile } from './pendoloMotionProfile';
 
 const PENDOLO_SCROLL_IDLE_RESET_MS = 2500;
 const PENDOLO_SCROLL_STEP_PX = 90;
@@ -103,6 +104,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const touchLastYRef = useRef<number | null>(null);
     const touchAccumulatorRef = useRef(0);
     const touchDirectionRef = useRef(0);
+    const pendingSeekIndexRef = useRef<number | null>(null);
 
     const getFallbackAnchorIndex = useCallback(() => {
         if (manualScrollAnchorIndex !== null) return manualScrollAnchorIndex;
@@ -191,6 +193,12 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
         }
     }, []);
 
+    useEffect(() => {
+        if (pendingSeekIndexRef.current !== currentLineIndex) return;
+        pendingSeekIndexRef.current = null;
+        setManualScrollAnchorIndex(null);
+    }, [currentLineIndex]);
+
     const moveManualScrollAnchor = useCallback((steps: number) => {
         if (lines.length === 0) return;
         setManualScrollAnchorIndex(current => {
@@ -199,6 +207,27 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
         });
         scheduleManualScrollReset();
     }, [getFallbackAnchorIndex, lines.length, scheduleManualScrollReset]);
+
+    const handleLineSeek = useCallback((lineIndex: number, startTime: number) => {
+        if (!onLyricLineSeek) return;
+        if (manualScrollResetRef.current !== null) {
+            window.clearTimeout(manualScrollResetRef.current);
+            manualScrollResetRef.current = null;
+        }
+        if (lineIndex === currentLineIndex) {
+            pendingSeekIndexRef.current = null;
+            setManualScrollAnchorIndex(null);
+            onLyricLineSeek(startTime);
+            return;
+        }
+        pendingSeekIndexRef.current = lineIndex;
+        setManualScrollAnchorIndex(lineIndex);
+        wheelAccumulatorRef.current = 0;
+        wheelDirectionRef.current = 0;
+        touchAccumulatorRef.current = 0;
+        touchDirectionRef.current = 0;
+        onLyricLineSeek(startTime);
+    }, [currentLineIndex, onLyricLineSeek]);
 
     const handleRailWheel = useCallback((event: WheelEvent) => {
         if (lines.length === 0) return;
@@ -281,9 +310,13 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
 
     // Escapement spring motion for line transition tick
     const springSnappiness = pendoloTuning.tickSnappiness;
+    const motionProfile = useMemo(
+        () => resolvePendoloMotionProfile(theme.animationIntensity),
+        [theme.animationIntensity],
+    );
     const tickSpring = useSpring(targetLineIndex, {
-        stiffness: 180 * springSnappiness,
-        damping: 18 + 4 / Math.max(0.5, springSnappiness),
+        stiffness: 180 * springSnappiness * motionProfile.escapementSpringMultiplier,
+        damping: (18 + 4 / Math.max(0.5, springSnappiness)) * motionProfile.escapementDampingMultiplier,
         mass: 0.8,
     });
 
@@ -406,6 +439,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     coverUrl={props.coverUrl}
                     enableLineGlow={pendoloTuning.enableLineGlow ?? false}
                     paused={props.paused}
+                    motionProfile={motionProfile}
                 />
                 {pendoloTuning.showGearDecor !== 'none' && (
                     <div
@@ -440,6 +474,12 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     >
                         {lineItems.map((item) => {
                             const isFocal = item.isActive;
+                            const showChorusMarker = manualScrollAnchorIndex !== null && item.line.isChorus;
+                            const chorusPresentation = resolvePendoloChorusPresentation(
+                                item.line.isChorus,
+                                isFocal && item.index === currentLineIndex,
+                                motionProfile,
+                            );
                             const maxTextWidth = availableTextWidth / item.scale;
                             const fontPx = Math.round((isFocal ? 28 : 22) * lyricsFontScale);
                             const translation = hideTranslationSubtitle ? null : resolveLyricAlternateText(item.line, resolvedMode);
@@ -459,10 +499,8 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                         fontWeight,
                                     }}
                                     onClick={(e) => {
-                                        if (onLyricLineSeek) {
-                                            e.stopPropagation();
-                                            onLyricLineSeek(item.line.startTime);
-                                        }
+                                        e.stopPropagation();
+                                        handleLineSeek(item.index, item.line.startTime);
                                     }}
                                 >
                                     <motion.div
@@ -477,7 +515,41 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                             isolation: 'isolate',
                                         }}
                                     >
-                                        <div style={{ transform: 'translateY(-50%)' }}>
+                                    <motion.div
+                                        initial={false}
+                                        animate={{ scale: chorusPresentation.haloScale }}
+                                        transition={{ duration: chorusPresentation.transitionDuration, ease: 'easeOut' }}
+                                        style={{ transformOrigin: 'left center' }}
+                                    >
+                                        {chorusPresentation.isActive && (
+                                            <motion.div
+                                                aria-hidden
+                                                className="absolute pointer-events-none -z-10 rounded-2xl"
+                                                initial={{ opacity: 0, scale: 0.96 }}
+                                                animate={{ opacity: chorusPresentation.haloOpacity, scale: 1 }}
+                                                transition={{ duration: chorusPresentation.transitionDuration, ease: 'easeOut' }}
+                                                style={{
+                                                    inset: '-0.7em -1.1em',
+                                                    background: `radial-gradient(circle at 42% 50%, ${colorWithAlpha(accentTextColor, 0.14 * chorusPresentation.haloOpacity)} 0%, ${colorWithAlpha(accentTextColor, 0.035 * chorusPresentation.haloOpacity)} 55%, transparent 82%)`,
+                                                    filter: `blur(${Math.round(10 * motionProfile.chorusGlowMultiplier)}px)`,
+                                                }}
+                                            />
+                                        )}
+                                    <div style={{ transform: 'translateY(-50%)' }}>
+                                            {showChorusMarker && (
+                                                <span
+                                                    aria-hidden
+                                                    className="absolute pointer-events-none rounded-full"
+                                                    style={{
+                                                        width: '0.42em',
+                                                        height: '0.42em',
+                                                        left: '-0.95em',
+                                                        top: '0.52em',
+                                                        backgroundColor: accentTextColor,
+                                                        boxShadow: `0 0 7px ${colorWithAlpha(accentTextColor, 0.58)}`,
+                                                    }}
+                                                />
+                                            )}
                                             <div>
                                                 {isFocal ? (
                                                     <PendoloActiveLyricSweep
@@ -490,6 +562,9 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                                         accentTextColor={accentTextColor}
                                                         fontPx={fontPx}
                                                         wordColors={theme.wordColors}
+                                                        isChorus={chorusPresentation.isActive}
+                                                        accentMix={chorusPresentation.accentMix}
+                                                        chorusGlowMultiplier={chorusPresentation.glowMultiplier}
                                                     />
                                                 ) : (
                                                     <div
@@ -529,6 +604,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                                 </div>
                                             )}
                                         </div>
+                                    </motion.div>
                                     </div>
                                     </motion.div>
                                 </div>
