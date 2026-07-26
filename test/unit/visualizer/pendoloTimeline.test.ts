@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Line } from '@/types';
-import { resolvePendoloFallbackAnchorIndex } from '@/components/visualizer/pendolo/pendoloTimeline';
+import { resolvePendoloFallbackAnchorIndex, resolvePendoloRotatingLineOpacity } from '@/components/visualizer/pendolo/pendoloTimeline';
 
 // test/unit/visualizer/pendoloTimeline.test.ts
 
@@ -20,6 +20,14 @@ describe('Pendolo timeline anchor', () => {
 
     it('advances beyond the final lyric after seeking past its end', () => {
         expect(resolvePendoloFallbackAnchorIndex(lines, -1, 1, true, 10.1)).toBe(2);
+    });
+
+    it('keeps full-distance rotations hidden until the lyric reaches the visible arc', () => {
+        expect(resolvePendoloRotatingLineOpacity(0, 360, 0.8)).toBe(0);
+        expect(resolvePendoloRotatingLineOpacity(0, 110, 0.8)).toBe(0);
+        expect(resolvePendoloRotatingLineOpacity(0, 96, 0.8)).toBeCloseTo(0.4);
+        expect(resolvePendoloRotatingLineOpacity(0, 82, 0.8)).toBe(0.8);
+        expect(resolvePendoloRotatingLineOpacity(0, 0, 0.8)).toBe(0.8);
     });
 
 });

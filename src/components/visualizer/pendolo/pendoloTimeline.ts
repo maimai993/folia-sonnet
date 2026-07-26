@@ -26,3 +26,18 @@ export const resolvePendoloFallbackAnchorIndex = (
 
     return lastValidLineIndex + 0.5;
 };
+
+const PENDOLO_VISIBLE_ARC_DEG = 110;
+const PENDOLO_EDGE_FADE_DEG = 28;
+
+/** Fades a lyric in only when its unwrapped wheel angle reaches the visible right-hand arc. */
+export const resolvePendoloRotatingLineOpacity = (
+    baseAngleDeg: number,
+    wheelRotationDeg: number,
+    baseOpacity: number,
+) => {
+    const visibleAngleDeg = Math.abs(baseAngleDeg + wheelRotationDeg);
+    if (visibleAngleDeg >= PENDOLO_VISIBLE_ARC_DEG) return 0;
+    const edgeProgress = Math.min(1, (PENDOLO_VISIBLE_ARC_DEG - visibleAngleDeg) / PENDOLO_EDGE_FADE_DEG);
+    return baseOpacity * edgeProgress;
+};

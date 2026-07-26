@@ -14,6 +14,7 @@ import PendoloActiveLyricSweep from './PendoloActiveLyricSweep';
 import { buildPendoloTextLayout } from './pendoloTextLayout';
 import { resolvePendoloChorusPresentation, resolvePendoloMotionProfile } from './pendoloMotionProfile';
 import { resolvePendoloFallbackAnchorIndex } from './pendoloTimeline';
+import PendoloRotatingLine from './PendoloRotatingLine';
 
 const PENDOLO_SCROLL_IDLE_RESET_MS = 2500;
 const PENDOLO_SCROLL_STEP_PX = 90;
@@ -493,17 +494,16 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                             const translationPx = Math.round((isFocal ? 16 : 12) * (subtitleFontScale ?? 1));
 
                             return (
-                                <div
+                                <PendoloRotatingLine
                                     key={item.line.id ?? `pendolo-line-${item.index}`}
-                                    className={`absolute transition-opacity duration-300 pointer-events-auto ${onLyricLineSeek ? 'cursor-pointer hover:opacity-100' : ''}`}
-                                    style={{
-                                        left: `${item.x}px`,
-                                        top: `${item.y}px`,
-                                        transformOrigin: 'left center',
-                                        opacity: item.alpha,
-                                        fontFamily,
-                                        fontWeight,
-                                    }}
+                                    wheelRotationDeg={wheelRotationDeg}
+                                    baseAngleDeg={item.angleDeg}
+                                    baseOpacity={item.alpha}
+                                    left={item.x}
+                                    top={item.y}
+                                    fontFamily={fontFamily}
+                                    fontWeight={fontWeight}
+                                    canSeek={Boolean(onLyricLineSeek)}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleLineSeek(item.index, item.line.startTime);
@@ -613,7 +613,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                     </motion.div>
                                     </div>
                                     </motion.div>
-                                </div>
+                                </PendoloRotatingLine>
                             );
                         })}
                     </motion.div>
