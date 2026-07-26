@@ -13,6 +13,7 @@ import { calculatePendoloWheelLayout } from './pendoloGeometry';
 import PendoloActiveLyricSweep from './PendoloActiveLyricSweep';
 import { buildPendoloTextLayout } from './pendoloTextLayout';
 import { resolvePendoloChorusPresentation, resolvePendoloMotionProfile } from './pendoloMotionProfile';
+import { resolvePendoloFallbackAnchorIndex } from './pendoloTimeline';
 
 const PENDOLO_SCROLL_IDLE_RESET_MS = 2500;
 const PENDOLO_SCROLL_STEP_PX = 90;
@@ -92,8 +93,10 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     }, []);
 
     const lastValidLineIndexRef = React.useRef<number>(0);
+    const hasObservedLineRef = useRef(false);
     if (currentLineIndex >= 0 && currentLineIndex < lines.length) {
         lastValidLineIndexRef.current = currentLineIndex;
+        hasObservedLineRef.current = true;
     }
 
     const wheelRailRef = useRef<HTMLDivElement | null>(null);
@@ -108,10 +111,13 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
 
     const getFallbackAnchorIndex = useCallback(() => {
         if (manualScrollAnchorIndex !== null) return manualScrollAnchorIndex;
-        if (currentLineIndex >= 0 && currentLineIndex < lines.length) return currentLineIndex;
-        const currentTimeVal = currentTime.get();
-        if (lastValidLineIndexRef.current === 0 && currentTimeVal < (lines[0]?.startTime ?? 0)) return -1;
-        return lastValidLineIndexRef.current + 0.5;
+        return resolvePendoloFallbackAnchorIndex(
+            lines,
+            currentLineIndex,
+            lastValidLineIndexRef.current,
+            hasObservedLineRef.current,
+            currentTime.get(),
+        );
     }, [currentLineIndex, currentTime, lines, manualScrollAnchorIndex]);
 
     const [isInstrumental, setIsInstrumental] = useState(false);
