@@ -78,6 +78,13 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         }
         const val = Number(e.currentTarget.value);
         updateUI(val, false, false, true);
+        // iOS Safari bug: 点击的时候触发 pointerup 事件会早于 input 事件，导致点击失效
+        // chromium：pointerdown → input → pointerup
+        // iOS Safari：pointerdown → pointerup → input （why?）
+        // 这里补偿一次 onSeek 进行适配
+        if (!isDraggingRef.current) {
+            onSeek(val);
+        }
     };
 
     const handleSeekStart = (e: React.PointerEvent<HTMLInputElement>) => {
