@@ -4,7 +4,7 @@ import type { CommandPaletteCommand } from './types';
 // Persists the small MRU list used by the command palette landing state.
 
 const RECENT_COMMANDS_STORAGE_KEY = 'command_palette_recent_functional_v1';
-export const MAX_RECENT_COMMANDS = 5;
+export const MAX_RECENT_COMMANDS = 10;
 
 const parseRecentCommandIds = (value: string | null) => {
     if (!value) {
@@ -43,8 +43,12 @@ const writeRecentCommandIds = (commandIds: string[]) => {
 export const isRecordableRecentCommand = (
     command: CommandPaletteCommand,
     registeredCommands: CommandPaletteCommand[]
-) => !command.requiresInput
-    && registeredCommands.some(registered => registered.id === command.id && !registered.requiresInput);
+) => registeredCommands.some(registered => registered.id === command.id);
+
+export const resolveRecentCommandToRecord = (
+    executedCommand: CommandPaletteCommand,
+    activeCommand: CommandPaletteCommand | null,
+) => activeCommand ?? executedCommand;
 
 export const recordRecentCommandId = (commandId: string, currentCommandIds: string[]) => {
     const nextCommandIds = [

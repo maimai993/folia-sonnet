@@ -11,6 +11,7 @@ import type {
 } from './types';
 import type { SearchSource } from '../../stores/useSearchNavigationStore';
 import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
+import { ListMusic, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward } from 'lucide-react';
 
 // src/components/command-palette/commandRegistry.ts
 // Defines command palette entries and the lightweight matching used for autocomplete.
@@ -114,6 +115,7 @@ const createSearchCommand = (
     title,
     description,
     keywords,
+    icon: Search,
     placeholder: `${keywords[0]} ${description}`,
     requiresInput: true,
     getPreview: (input, context) => buildSearchPreview(
@@ -131,6 +133,7 @@ const createQueueSearchCommand = (): CommandPaletteCommand => ({
     title: 'Queue',
     description: 'Search the current play queue',
     keywords: ['queue', '播放队列', '队列搜索', 'duilie', 'duiliesousuo', 'dl', 'dlss'],
+    icon: ListMusic,
     placeholder: 'queue song name / artist / index',
     requiresInput: true,
     getPreview: (input, context) => {
@@ -203,13 +206,15 @@ const createPanelCommand = (
     tab: PanelTab,
     title: string,
     description: string,
-    keywords: string[]
+    keywords: string[],
+    icon?: CommandPaletteCommand['icon'],
 ): CommandPaletteCommand => ({
     id: `panel-${tab}`,
     group: 'panel',
     title,
     description,
     keywords,
+    icon,
     execute: (_input, context) => {
         context.setPanelTab(tab);
         context.setIsPanelOpen(true);
@@ -336,7 +341,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
 
     createPanelCommand('cover', 'Panel: cover', 'Open the cover panel tab', ['panel cover', 'cover panel', '封面', 'fengmian', 'fm']),
     createPanelCommand('controls', 'Panel: controls', 'Open the controls panel tab', ['panel controls', 'controls panel', '控制', 'kongzhi', 'kz']),
-    createPanelCommand('queue', 'Panel: queue', 'Open the queue panel tab', ['panel queue', 'queue panel', '队列', 'duilie', 'dl']),
+    createPanelCommand('queue', 'Panel: queue', 'Open the queue panel tab', ['panel queue', 'queue panel', '队列', 'duilie', 'dl'], ListMusic),
     createPanelCommand('account', 'Panel: account', 'Open the account panel tab', ['panel account', 'account panel', '账号', '账户', 'zhanghao', 'zhanghu', 'zh']),
     createPanelCommand('local', 'Panel: local', 'Open the local panel tab', ['panel local', 'local panel', '本地面板', 'bendimianban', 'bdmb']),
     createPanelCommand('navi', 'Panel: Navidrome', 'Open the Navidrome panel tab', ['panel navi', 'panel navidrome', 'navi panel', 'navidrome 面板', '服务器面板', 'fuwuqimianban', 'fwqmb']),
@@ -348,6 +353,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         title: 'Play',
         description: 'Start playback when paused',
         keywords: ['play', '播放', 'bofang', 'bf'],
+        icon: Play,
         execute: (_input, context) => {
             if (context.playerState !== PlayerState.PLAYING) {
                 context.togglePlay();
@@ -361,6 +367,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         title: 'Pause',
         description: 'Pause current playback',
         keywords: ['pause', '暂停', 'zanting', 'zt'],
+        icon: Pause,
         execute: (_input, context) => {
             if (context.playerState === PlayerState.PLAYING) {
                 context.togglePlay();
@@ -374,6 +381,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         title: 'Next track',
         description: 'Play the next track',
         keywords: ['next', '下一首', 'xiayishou', 'xys'],
+        icon: SkipForward,
         execute: (_input, context) => {
             context.handleNextTrack();
             return true;
@@ -385,6 +393,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         title: 'Previous track',
         description: 'Play the previous track',
         keywords: ['prev', 'previous', '上一首', 'shangyishou', 'sys'],
+        icon: SkipBack,
         execute: (_input, context) => {
             context.handlePrevTrack();
             return true;
@@ -396,6 +405,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         title: 'Toggle loop',
         description: 'Change loop mode',
         keywords: ['loop', '循环', 'xunhuan', 'xh'],
+        icon: Repeat,
         execute: (_input, context) => {
             context.toggleLoop();
             return true;
@@ -407,6 +417,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         title: 'Shuffle queue',
         description: 'Shuffle current play queue',
         keywords: ['shuffle queue', 'shuffle', '打乱', '打乱队列', 'daluan', 'daluanduilie', 'dl'],
+        icon: Shuffle,
         execute: (_input, context) => {
             context.shuffleQueue();
             return true;
@@ -849,7 +860,7 @@ export const getCommandPaletteMatches = (
     if (!normalizedQuery) {
         const recentCommands = recentCommandIds
             .map(commandId => filteredCommands.find(command => command.id === commandId))
-            .filter((command): command is CommandPaletteCommand => command !== undefined && !command.requiresInput);
+            .filter((command): command is CommandPaletteCommand => command !== undefined);
         const recentCommandIdSet = new Set(recentCommands.map(command => command.id));
         const defaultCommands = filteredCommands.filter(command => !recentCommandIdSet.has(command.id));
 

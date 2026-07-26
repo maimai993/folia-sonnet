@@ -3192,6 +3192,7 @@ export default function App() {
                 isExecuting={commandPalette.isExecuting}
                 isOpen={commandPalette.isOpen}
                 matches={commandPalette.matches}
+                pinnedCommands={commandPalette.pinnedCommands}
                 query={commandPalette.query}
                 theme={theme}
                 onActiveCommandChange={commandPalette.setActiveCommand}
@@ -3205,6 +3206,7 @@ export default function App() {
                 onCompositionStart={() => commandPalette.setIsComposing(true)}
                 onExecuteActive={commandPalette.executeActive}
                 onExecuteMatch={commandPalette.executeMatch}
+                onExecutePinnedCommand={commandPalette.executePinnedCommand}
                 onQueryChange={commandPalette.setQuery}
             />
 

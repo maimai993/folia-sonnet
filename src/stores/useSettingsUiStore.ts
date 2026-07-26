@@ -18,6 +18,12 @@ import { applyAppLanguagePreference, readStoredAppLanguagePreference, type AppLa
 import { normalizeFontFamilyStack, normalizeFontWeight } from '../utils/fontStacks';
 import i18n from '../i18n/config';
 import type { AudioQualityPreference } from '../types/onlineMusic';
+import {
+    normalizePinnedCommandIds,
+    readPinnedCommandIds,
+    writePinnedCommandIds,
+    type PinnedCommandIds,
+} from '../components/command-palette/pinnedCommandPreferences';
 
 // src/stores/useSettingsUiStore.ts
 // Shared settings state and actions used by App, Home, and SettingsModal.
@@ -1150,6 +1156,7 @@ export type SettingsUiState = {
     showHomeTabRadio: boolean;
     showHomeTabAlbums: boolean;
     showHomeTabLocal: boolean;
+    pinnedCommandIds: PinnedCommandIds;
     isSubSettingsViewOpen: boolean;
     settingsModalState: SettingsModalState;
     lastSeenGuideVersion: string | null;
@@ -1284,6 +1291,7 @@ export type SettingsUiState = {
     handleToggleHomeTabRadio: (show: boolean) => void;
     handleToggleHomeTabAlbums: (show: boolean) => void;
     handleToggleHomeTabLocal: (show: boolean) => void;
+    setPinnedCommandId: (slotIndex: number, commandId: string | null) => void;
 };
 
 const notify = (get: () => SettingsUiState, message: StatusMessage) => {
@@ -1386,6 +1394,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     showHomeTabRadio: getStoredBoolean('show_home_tab_radio', true),
     showHomeTabAlbums: getStoredBoolean('show_home_tab_albums', true),
     showHomeTabLocal: getStoredBoolean('show_home_tab_local', true),
+    pinnedCommandIds: readPinnedCommandIds(),
     isSubSettingsViewOpen: false,
     settingsModalState: {
         isOpen: false,
@@ -2503,6 +2512,19 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleHomeTabLocal: (show) => {
         set({ showHomeTabLocal: show });
         if (typeof window !== 'undefined') localStorage.setItem('show_home_tab_local', show.toString());
+    },
+    setPinnedCommandId: (slotIndex, commandId) => {
+        if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= 3) {
+            return;
+        }
+        const current = get().pinnedCommandIds;
+        const next = normalizePinnedCommandIds(
+            current.map((currentCommandId, index) => (
+                index === slotIndex ? commandId : currentCommandId
+            )),
+        );
+        writePinnedCommandIds(next);
+        set({ pinnedCommandIds: next });
     },
 }));
 

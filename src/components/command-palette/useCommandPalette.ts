@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getAvailableCommandPaletteCommands, getCommandPaletteMatches, getQueueSongMatches, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
-import { isRecordableRecentCommand, readRecentCommandIds, recordRecentCommandId } from './recentCommands';
+import { isRecordableRecentCommand, readRecentCommandIds, recordRecentCommandId, resolveRecentCommandToRecord } from './recentCommands';
 import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch } from './types';
+import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { resolvePinnedCommandSlots } from './pinnedCommandPreferences';
 
 // src/components/command-palette/useCommandPalette.ts
 // Manages palette state, keyboard opening, and selected autocomplete item.
@@ -37,7 +39,12 @@ export const useCommandPalette = ({
     const [activeCommand, setActiveCommand] = useState<CommandPaletteCommand | null>(null);
     const [isExecuting, setIsExecuting] = useState(false);
     const [recentCommandIds, setRecentCommandIds] = useState<string[]>(() => readRecentCommandIds());
+    const pinnedCommandIds = useSettingsUiStore(state => state.pinnedCommandIds);
     const availableCommands = useMemo(() => getAvailableCommandPaletteCommands(context), [context]);
+    const pinnedCommands = useMemo(
+        () => resolvePinnedCommandSlots(pinnedCommandIds, availableCommands),
+        [availableCommands, pinnedCommandIds],
+    );
 
     const matches = useMemo(() => {
         let list: CommandPaletteMatch[];
@@ -101,6 +108,12 @@ export const useCommandPalette = ({
         setIsExecuting(false);
     }, []);
 
+    const recordExecutedCommand = useCallback((command: CommandPaletteCommand) => {
+        if (isRecordableRecentCommand(command, COMMAND_PALETTE_COMMANDS)) {
+            setRecentCommandIds(currentCommandIds => recordRecentCommandId(command.id, currentCommandIds));
+        }
+    }, []);
+
     const executeMatch = useCallback(async (index: number) => {
         if (isExecuting) {
             return false;
@@ -130,18 +143,41 @@ export const useCommandPalette = ({
         try {
             const didExecute = await match.command.execute(input, context);
             if (didExecute) {
-                if (isRecordableRecentCommand(match.command, COMMAND_PALETTE_COMMANDS)) {
-                    setRecentCommandIds(currentCommandIds => recordRecentCommandId(match.command.id, currentCommandIds));
-                }
+                recordExecutedCommand(resolveRecentCommandToRecord(match.command, activeCommand));
                 close();
             }
             return didExecute;
         } finally {
             setIsExecuting(false);
         }
-    }, [close, context, activeCommand, matches, isExecuting]);
+    }, [close, context, activeCommand, matches, isExecuting, recordExecutedCommand]);
 
     const executeActive = useCallback(() => executeMatch(activeIndex), [activeIndex, executeMatch]);
+
+    const executePinnedCommand = useCallback(async (command: CommandPaletteCommand) => {
+        if (isExecuting) {
+            return false;
+        }
+        if (command.requiresInput) {
+            setActiveCommand(command);
+            setQuery('');
+            setMatchQuery('');
+            setActiveIndex(0);
+            return false;
+        }
+
+        setIsExecuting(true);
+        try {
+            const didExecute = await command.execute('', context);
+            if (didExecute) {
+                recordExecutedCommand(command);
+                close();
+            }
+            return didExecute;
+        } finally {
+            setIsExecuting(false);
+        }
+    }, [close, context, isExecuting, recordExecutedCommand]);
 
     useEffect(() => {
         setActiveIndex(0);
@@ -225,10 +261,12 @@ export const useCommandPalette = ({
         isComposing,
         matches,
         open,
+        pinnedCommands,
         query,
         setActiveIndex,
         setIsComposing,
         setMatchQuery,
         setQuery,
+        executePinnedCommand,
     };
 };

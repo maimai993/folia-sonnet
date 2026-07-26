@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../types';
 import type { CommandPaletteMatch, CommandPaletteCommand } from './types';
 import { getCommandDescription, getCommandTitle } from './commandText';
+import PinnedCommandRow from './PinnedCommandRow';
 
 // src/components/command-palette/CommandPalette.tsx
 // Full-screen command input overlay with autocomplete and keyboard execution.
@@ -19,6 +20,7 @@ type CommandPaletteProps = {
     isExecuting: boolean;
     isOpen: boolean;
     matches: CommandPaletteMatch[];
+    pinnedCommands: Array<CommandPaletteCommand | null>;
     query: string;
     theme: Theme;
     onActiveCommandChange: (command: CommandPaletteCommand | null) => void;
@@ -28,6 +30,7 @@ type CommandPaletteProps = {
     onCompositionStart: () => void;
     onExecuteActive: () => Promise<boolean>;
     onExecuteMatch: (index: number) => Promise<boolean>;
+    onExecutePinnedCommand: (command: CommandPaletteCommand) => Promise<boolean>;
     onQueryChange: (query: string) => void;
 };
 
@@ -58,6 +61,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     isExecuting,
     isOpen,
     matches,
+    pinnedCommands,
     query,
     theme,
     onActiveCommandChange,
@@ -67,6 +71,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     onCompositionStart,
     onExecuteActive,
     onExecuteMatch,
+    onExecutePinnedCommand,
     onQueryChange,
 }) => {
     const { t } = useTranslation();
@@ -175,11 +180,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                     onMouseDown={onClose}
                 >
                     <motion.div
-                        className={`w-full max-w-2xl overflow-hidden rounded-3xl border shadow-2xl ${panelBg}`}
-                        style={{
-                            borderColor: isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)',
-                            color: 'var(--text-primary)',
-                        }}
+                        className="w-full max-w-2xl"
                         initial={{ opacity: 0, y: 18, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 18, scale: 0.98 }}
@@ -194,6 +195,14 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                         }}
                         onMouseDown={(event) => event.stopPropagation()}
                     >
+                        <div
+                            className={`overflow-hidden rounded-3xl border shadow-2xl ${panelBg}`}
+                            data-testid="command-palette-panel"
+                            style={{
+                                borderColor: isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)',
+                                color: 'var(--text-primary)',
+                            }}
+                        >
                         <div className="flex items-center gap-3 border-b px-4 py-3" style={{ borderColor: isDaylight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.10)' }}>
                             {isExecuting ? (
                                 <Loader2 size={18} className="animate-spin opacity-60 text-zinc-400" />
@@ -294,6 +303,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                         const groupLabel = t(groupLabelKey[command.group] || 'commandPalette.groupOther') || command.group;
                                         const title = getCommandTitle(command, t);
                                         const description = getCommandDescription(command, t);
+                                        const Icon = command.icon ?? Command;
                                         return (
                                             <button
                                                 key={command.id}
@@ -306,6 +316,15 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                                 }}
                                                 className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors ${itemIdleBg}`}
                                             >
+                                                <div
+                                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border"
+                                                    style={{
+                                                        borderColor: isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)',
+                                                        color: theme.accentColor,
+                                                    }}
+                                                >
+                                                    <Icon size={16} />
+                                                </div>
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-2">
                                                         <span className="truncate text-sm font-medium">{title}</span>
@@ -329,6 +348,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                     const title = getCommandTitle(match.command, t);
                                     const displayDescription = match.previewText || getCommandDescription(match.command, t);
                                     const commandHint = match.command.keywords[0] ?? match.command.id;
+                                    const Icon = match.command.icon ?? Command;
                                     return (
                                         <button
                                             key={match.command.id}
@@ -354,7 +374,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                                     color: theme.accentColor,
                                                 }}
                                             >
-                                                <Command size={16} />
+                                                <Icon size={16} />
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2">
@@ -384,6 +404,18 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                 })
                             )}
                         </div>
+                        </div>
+                        <PinnedCommandRow
+                            commands={pinnedCommands}
+                            isDaylight={isDaylight}
+                            isExecuting={isExecuting}
+                            theme={theme}
+                            onExecute={(command) => {
+                                void onExecutePinnedCommand(command).then(() => {
+                                    window.requestAnimationFrame(() => inputRef.current?.focus());
+                                });
+                            }}
+                        />
                     </motion.div>
                 </motion.div>
             )}

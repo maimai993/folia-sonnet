@@ -379,6 +379,24 @@ describe('command palette registry', () => {
         expect(getCommandPaletteMatches('')).toHaveLength(10);
     });
 
+    it('allows recent input commands to fill the ten-command landing list', () => {
+        const recentIds = [
+            'queue',
+            'search-current',
+            'playback-prev',
+            'playback-next',
+            'playback-pause',
+            'playback-play',
+            'playback-loop',
+            'playback-shuffle',
+            'panel-queue',
+            'settings-general',
+        ];
+
+        expect(getCommandPaletteMatches('', createContext(), recentIds).map(match => match.command.id))
+            .toEqual(recentIds);
+    });
+
     it('matches and executes background and visualizer monet switching commands', () => {
         const context = createContext();
 
