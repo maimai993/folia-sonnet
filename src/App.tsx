@@ -1561,6 +1561,7 @@ export default function App() {
         handleNextTrack,
         handlePrevTrack,
         handleToggleLoopMode,
+        navigateBackFromPlayer,
         pausePlayback,
         resumePlayback,
         syncStageLyricsClock,
@@ -3064,7 +3065,11 @@ export default function App() {
                     transition={{ duration: 0.25, ease: 'easeInOut' }}
                 >
                     {currentView === 'home' || currentView === 'player' ? (
-                        <Home model={homeModel} isHomeFullyHidden={isHomeFullyHidden} />
+                        <Home
+                            model={homeModel}
+                            isHomeFullyHidden={isHomeFullyHidden}
+                            isInteractive={shouldShowHomeSurface}
+                        />
                     ) : null}
                 </motion.div>
             </div>

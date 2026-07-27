@@ -37,6 +37,7 @@ interface LocalGrid3DViewProps {
     theme: Theme;
     isDaylight: boolean;
     hasFloatingPlayer?: boolean;
+    isInteractive?: boolean;
 }
 
 export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
@@ -62,6 +63,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     theme,
     isDaylight,
     hasFloatingPlayer = false,
+    isInteractive = true,
 }) => {
     const { t } = useTranslation();
     const catalog = useLocalLibraryCatalog(localSongs);
@@ -272,6 +274,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             emptyMessage={activeSection.emptyMessage}
             theme={theme}
             isDaylight={isDaylight}
+            isInteractive={isInteractive}
             hasFloatingPlayer={hasFloatingPlayer}
             playlistVisibilityScope="local"
         />

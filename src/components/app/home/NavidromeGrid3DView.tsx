@@ -28,6 +28,7 @@ interface NavidromeGrid3DViewProps {
     theme: Theme;
     isDaylight: boolean;
     hasFloatingPlayer?: boolean;
+    isInteractive?: boolean;
 }
 
 const RANDOM_PLAYLIST_ID = '__navi_random__';
@@ -46,6 +47,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
     theme,
     isDaylight,
     hasFloatingPlayer = false,
+    isInteractive = true,
 }) => {
     const { t } = useTranslation();
     const [localAlbumIndex, setLocalAlbumIndex] = useDebouncedFocusSync(focusedAlbumIndex, setFocusedAlbumIndex);
@@ -288,6 +290,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
             emptyMessage={emptyMessage}
             theme={theme}
             isDaylight={isDaylight}
+            isInteractive={isInteractive}
             hasFloatingPlayer={hasFloatingPlayer}
             playlistVisibilityScope="navidrome"
         />

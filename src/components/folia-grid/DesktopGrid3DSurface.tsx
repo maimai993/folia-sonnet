@@ -266,6 +266,12 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                             setShowGridMap(false);
                             onFocusedIndexChange(index);
                         }}
+                        onActivateCollection={(collection, index) => {
+                            setShowGridMap(false);
+                            onFocusedIndexChange(index);
+                            onSelect(collection, index);
+                        }}
+                        isInteractive={isInteractive}
                         theme={theme}
                         isDaylight={isDaylight}
                         isPlaylistHidden={(item) => hiddenPlaylistIds.has(String(item.id))}

@@ -90,6 +90,7 @@ interface Grid3DProps {
     stageEnabled?: boolean;
     stageIsActive?: boolean;
     onOpenStagePlayer?: () => void;
+    isInteractive?: boolean;
 }
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
@@ -120,6 +121,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         stageIsActive = false,
         onOpenStagePlayer,
         onlineProviderPlatform,
+        isInteractive = true,
     } = props;
 
     const { t } = useTranslation();
@@ -707,6 +709,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         emptyMessage={t('home.loadingLibrary')}
                         theme={theme}
                         isDaylight={isDaylight}
+                        isInteractive={isInteractive}
                         hasFloatingPlayer={Boolean(currentTrack)}
                         playlistVisibilityScope={`online:${activeProviderId}`}
                     />
@@ -733,6 +736,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             isScanInProgress={Boolean(scanProgress?.active)}
                             theme={theme}
                             isDaylight={isDaylight}
+                            isInteractive={isInteractive}
                             hasFloatingPlayer={Boolean(currentTrack)}
                             onOpenGridView={onOpenGridView}
                         />
@@ -742,6 +746,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         <NavidromeGrid3DView
                             theme={theme}
                             isDaylight={isDaylight}
+                            isInteractive={isInteractive}
                             focusedAlbumIndex={navidromeFocusedAlbumIndex}
                             setFocusedAlbumIndex={setNavidromeFocusedAlbumIndex ?? (() => { })}
                             externalSelection={pendingNavidromeSelection}

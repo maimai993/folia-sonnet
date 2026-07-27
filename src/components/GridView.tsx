@@ -104,6 +104,7 @@ interface GridViewProps {
     localSongs?: LocalSong[];
     sourceActions?: GridViewSourceActions;
     onStatusMessage?: (message: StatusMessage) => void;
+    isInteractive?: boolean;
 }
 
 type StoredGridViewNavigationState = {
@@ -535,6 +536,7 @@ export const GridView: React.FC<GridViewProps> = ({
     localSongs,
     sourceActions,
     onStatusMessage,
+    isInteractive = true,
 }) => {
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
@@ -1667,6 +1669,8 @@ export const GridView: React.FC<GridViewProps> = ({
     }, [deferredSearchQuery, gridItems.length]);
 
     useEffect(() => {
+        if (!isInteractive) return;
+
         const handleSearchTyping = (event: KeyboardEvent) => {
             const target = event.target;
             if (
@@ -1706,7 +1710,7 @@ export const GridView: React.FC<GridViewProps> = ({
 
         window.addEventListener('keydown', handleSearchTyping);
         return () => window.removeEventListener('keydown', handleSearchTyping);
-    }, [onBack, showCutInPanel, showSearchPanel, showSidePanel]);
+    }, [isInteractive, onBack, showCutInPanel, showSearchPanel, showSidePanel]);
 
     useEffect(() => {
         updateRenderedIndexesForViewport(dragX.get(), dragY.get(), true);
@@ -1936,8 +1940,38 @@ export const GridView: React.FC<GridViewProps> = ({
 
     // Setup arrow keyboard navigation
     useEffect(() => {
+        if (!isInteractive) return;
+
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+            const target = e.target;
+            if (
+                target instanceof HTMLElement
+                && (target.isContentEditable || Boolean(target.closest('button, input, select, textarea, a[href]')))
+            ) return;
+
+            if (e.key === 'Enter') {
+                if (
+                    e.repeat
+                    || isEditMode
+                    || showSearchPanel
+                    || showSidePanel
+                    || showCutInPanel
+                    || isPlaylistPickerOpen
+                    || isCreatePlaylistOpen
+                ) return;
+
+                const focusedItem = gridItems[focusedIndex];
+                if (!focusedItem) return;
+                if (mode === 'tracks' && onSelectTrack && focusedItem.rawTrack) {
+                    e.preventDefault();
+                    persistNavigationState(focusedIndex);
+                    onSelectTrack(focusedItem.rawTrack, displayTracks);
+                } else if (mode === 'collection' && onSelectCollection) {
+                    e.preventDefault();
+                    onSelectCollection(focusedItem.rawCollection || focusedItem);
+                }
+                return;
+            }
 
             if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
                 e.preventDefault();
@@ -1976,7 +2010,23 @@ export const GridView: React.FC<GridViewProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [focusedIndex, baseCoords, gridItems.length]);
+    }, [
+        baseCoords,
+        displayTracks,
+        focusedIndex,
+        gridItems,
+        isCreatePlaylistOpen,
+        isEditMode,
+        isInteractive,
+        isPlaylistPickerOpen,
+        mode,
+        onSelectCollection,
+        onSelectTrack,
+        persistNavigationState,
+        showCutInPanel,
+        showSearchPanel,
+        showSidePanel,
+    ]);
 
     const progressiveLoading = deriveProgressiveLoadingState(
         gridItems.length,

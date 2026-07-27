@@ -502,11 +502,19 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         if (!isInteractive) return;
 
         const handleKeyDown = (event: KeyboardEvent) => {
+            const target = event.target;
             if (
-                event.target instanceof HTMLInputElement ||
-                event.target instanceof HTMLTextAreaElement ||
-                (event.target instanceof HTMLElement && event.target.isContentEditable)
+                target instanceof HTMLElement
+                && (target.isContentEditable || Boolean(target.closest('button, input, select, textarea, a[href]')))
             ) {
+                return;
+            }
+
+            if (event.key === 'Enter') {
+                if (event.repeat || items.length === 0) return;
+                event.preventDefault();
+                const focusedItem = items[safeFocusedIndex];
+                if (focusedItem) onSelect(focusedItem, safeFocusedIndex);
                 return;
             }
 
@@ -523,7 +531,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isInteractive, safeFocusedIndex, scrollToIndex]);
+    }, [isInteractive, items, onSelect, safeFocusedIndex, scrollToIndex]);
 
     useEffect(() => {
         const container = scrollContainerRef.current;

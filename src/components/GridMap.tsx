@@ -34,8 +34,10 @@ interface GridMapProps {
     initialFocusedIndex?: number;
     onBack: () => void;
     onSelectCollection: (collection: any, index: number) => void;
+    onActivateCollection?: (collection: any, index: number) => void;
     theme: Theme;
     isDaylight: boolean;
+    isInteractive?: boolean;
     isPlaylistHidden?: (item: GridMapItem) => boolean;
     onTogglePlaylistHidden?: (item: GridMapItem) => void;
 }
@@ -193,8 +195,10 @@ export const GridMap: React.FC<GridMapProps> = ({
     initialFocusedIndex = 0,
     onBack,
     onSelectCollection,
+    onActivateCollection,
     theme,
     isDaylight,
+    isInteractive = true,
     isPlaylistHidden = () => false,
     onTogglePlaylistHidden,
 }) => {
@@ -226,6 +230,10 @@ export const GridMap: React.FC<GridMapProps> = ({
         const sourceIndex = resolveGridMapSourceIndex(items, item, displayIndex);
         onSelectCollection(item.rawCollection || item, sourceIndex);
     }, [items, onSelectCollection]);
+    const activateDisplayedItem = useCallback((item: GridMapItem, displayIndex: number) => {
+        const sourceIndex = resolveGridMapSourceIndex(items, item, displayIndex);
+        (onActivateCollection || onSelectCollection)(item.rawCollection || item, sourceIndex);
+    }, [items, onActivateCollection, onSelectCollection]);
 
     useEffect(() => {
         if (!showSearchPanel) return;
@@ -237,6 +245,8 @@ export const GridMap: React.FC<GridMapProps> = ({
     }, [draftSearchQuery.length, showSearchPanel]);
 
     useEffect(() => {
+        if (!isInteractive) return;
+
         const handleSearchTyping = (event: KeyboardEvent) => {
             if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
                 if (event.key === 'Escape' && showSearchPanel) {
@@ -261,7 +271,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 
         window.addEventListener('keydown', handleSearchTyping);
         return () => window.removeEventListener('keydown', handleSearchTyping);
-    }, [showSearchPanel]);
+    }, [isInteractive, showSearchPanel]);
 
     const visibleItems = useMemo(() => {
         if (isPlaylistEditMode && showHiddenPlaylistsOnly) {
@@ -708,8 +718,30 @@ export const GridMap: React.FC<GridMapProps> = ({
     }, [dragX, dragY, baseCoords, layoutConfig, clipRadius, updateRenderedIndexesForViewport]);
 
     useEffect(() => {
+        if (!isInteractive) return;
+
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+            const target = e.target;
+            if (
+                target instanceof HTMLElement
+                && (target.isContentEditable || Boolean(target.closest('button, input, select, textarea, a[href]')))
+            ) return;
+
+            if (e.key === 'Enter') {
+                if (
+                    e.repeat
+                    || showSearchPanel
+                    || showSidePanel
+                    || showCutInPanel
+                    || isPlaylistEditMode
+                ) return;
+
+                const focusedItem = displayItems[focusedIndex];
+                if (!focusedItem) return;
+                e.preventDefault();
+                activateDisplayedItem(focusedItem, focusedIndex);
+                return;
+            }
 
             if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
                 e.preventDefault();
@@ -748,7 +780,17 @@ export const GridMap: React.FC<GridMapProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [focusedIndex, baseCoords, displayItems.length]);
+    }, [
+        baseCoords,
+        activateDisplayedItem,
+        displayItems,
+        focusedIndex,
+        isInteractive,
+        isPlaylistEditMode,
+        showCutInPanel,
+        showSearchPanel,
+        showSidePanel,
+    ]);
 
     return (
         <motion.div

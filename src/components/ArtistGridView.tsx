@@ -45,6 +45,7 @@ interface ArtistGridViewProps {
     isDaylight: boolean;
     localSongs?: LocalSong[];
     onEditEntity?: (entityId: string) => void;
+    isInteractive?: boolean;
 }
 
 interface GridItem {
@@ -199,6 +200,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     isDaylight,
     localSongs = [],
     onEditEntity,
+    isInteractive = true,
 }) => {
     const { t } = useTranslation();
     const localLibraryCatalog = useLocalLibraryCatalog(localSongs);
@@ -582,6 +584,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     }, [showSearchPanel]);
 
     useEffect(() => {
+        if (!isInteractive) return;
+
         const handleSearchTyping = (event: KeyboardEvent) => {
             const target = event.target;
             if (
@@ -617,7 +621,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
         window.addEventListener('keydown', handleSearchTyping);
         return () => window.removeEventListener('keydown', handleSearchTyping);
-    }, [onBack, showCutInPanel, showSearchPanel, showSidePanel]);
+    }, [isInteractive, onBack, showCutInPanel, showSearchPanel, showSidePanel]);
 
     const filteredAlbums = useMemo(() => {
         const query = deferredSearchQuery.trim().toLowerCase();
@@ -961,8 +965,33 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
     // Setup arrow keyboard navigation
     useEffect(() => {
+        if (!isInteractive) return;
+
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+            const target = e.target;
+            if (
+                target instanceof HTMLElement
+                && (target.isContentEditable || Boolean(target.closest('button, input, select, textarea, a[href]')))
+            ) return;
+
+            if (e.key === 'Enter') {
+                if (e.repeat || showSearchPanel || showSidePanel || showCutInPanel || showFullBio) return;
+
+                const focusedItem = gridItems[focusedIndex];
+                if (!focusedItem) return;
+                if (focusedIndex === 1) {
+                    e.preventDefault();
+                    setShowFullBio(true);
+                } else if (focusedItem.rawTrack && onSelectTrack) {
+                    e.preventDefault();
+                    onSelectTrack(focusedItem.rawTrack, topSongs);
+                } else if (focusedItem.rawCollection && onSelectAlbum) {
+                    e.preventDefault();
+                    persistNavigationState(focusedIndex);
+                    onSelectAlbum(focusedItem.rawCollection.id, focusedItem.rawCollection);
+                }
+                return;
+            }
 
             if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
                 e.preventDefault();
@@ -1001,7 +1030,20 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [focusedIndex, baseCoords, gridItems.length]);
+    }, [
+        baseCoords,
+        focusedIndex,
+        gridItems,
+        isInteractive,
+        onSelectAlbum,
+        onSelectTrack,
+        persistNavigationState,
+        showCutInPanel,
+        showFullBio,
+        showSearchPanel,
+        showSidePanel,
+        topSongs,
+    ]);
 
     const renderedCards = useMemo(() => {
         return renderedIndexes.map((idx) => {

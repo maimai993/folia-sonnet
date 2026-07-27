@@ -38,7 +38,11 @@ type GridViewOverlayHostProps = {
     onOpenCollection: (collection: GridViewCollectionDescriptor) => void;
     onPushCollection: (collection: GridViewCollectionDescriptor) => void;
     onBackCollection: () => void;
-    children: (openGridView: (collection: GridViewCollectionDescriptor) => void) => React.ReactNode;
+    isInteractive?: boolean;
+    children: (
+        openGridView: (collection: GridViewCollectionDescriptor) => void,
+        isHomeGridInteractive: boolean,
+    ) => React.ReactNode;
 };
 
 type LocalTrackCoverObjectUrlEntry = {
@@ -131,6 +135,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     onOpenCollection,
     onPushCollection,
     onBackCollection,
+    isInteractive = true,
     children,
 }) => {
     const { t } = useTranslation();
@@ -702,7 +707,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                     pointerEvents: selectedCollection ? 'none' : 'auto',
                 }}
             >
-                {children(openGridView)}
+                {children(openGridView, isInteractive && !selectedCollection)}
             </div>
             <AnimatePresence initial={false}>
                 {selectedCollection && (
@@ -734,6 +739,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             isDaylight={isDaylight}
                             localSongs={surfaceProps.localSongs}
                             onEditEntity={(entityId) => setEditingEntityId(entityId)}
+                            isInteractive={isInteractive}
                         />
                     ) : (
                         <GridView
@@ -758,6 +764,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             sourceActions={sourceActions}
                             theme={surfaceProps.theme}
                             isDaylight={isDaylight}
+                            isInteractive={isInteractive}
                         />
                     )
                 )}
