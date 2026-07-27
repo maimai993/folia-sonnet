@@ -134,7 +134,7 @@ const createQueueSearchCommand = (): CommandPaletteCommand => ({
     description: 'Search the current play queue',
     keywords: ['queue', '播放队列', '队列搜索', 'duilie', 'duiliesousuo', 'dl', 'dlss'],
     icon: ListMusic,
-    placeholder: 'queue song name / artist / index',
+    placeholder: '输入歌曲名 / 艺术家 / 索引',
     requiresInput: true,
     getPreview: (input, context) => {
         const trimmedInput = input.trim();
@@ -803,7 +803,7 @@ export const getQueueSongMatches = (query: string, context: CommandPaletteContex
     const normalizedQuery = normalize(query);
 
     if (!normalizedQuery) {
-        return context.playQueue.slice(0, MAX_COMMAND_MATCHES).map((song, index) => ({
+        return context.playQueue.map((song, index) => ({
             command: createQueueSongCommand(song, index, context),
             score: 100 - index,
             input: '',
@@ -828,8 +828,7 @@ export const getQueueSongMatches = (query: string, context: CommandPaletteContex
             };
         })
         .filter((match): match is CommandPaletteMatch => Boolean(match))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, MAX_COMMAND_MATCHES);
+        .sort((a, b) => b.score - a.score);
 };
 
 const createQueueSongCommand = (
@@ -843,6 +842,8 @@ const createQueueSongCommand = (
     description: buildQueueSongDescription(song, index, context),
     textSource: 'runtime',
     keywords: [`#${index + 1}`],
+    queueIndex: index,
+    queueSong: song,
     execute: async (_input, commandContext) => {
         await commandContext.playSong(song, commandContext.playQueue);
         return true;

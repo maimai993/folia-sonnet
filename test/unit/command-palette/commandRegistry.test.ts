@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PlayerState } from '../../../src/types';
-import { COMMAND_PALETTE_COMMANDS, getCommandPaletteMatches } from '../../../src/components/command-palette/commandRegistry';
+import { PlayerState, type SongResult } from '../../../src/types';
+import { COMMAND_PALETTE_COMMANDS, getCommandPaletteMatches, getQueueSongMatches } from '../../../src/components/command-palette/commandRegistry';
 import type { CommandPaletteContext } from '../../../src/components/command-palette/types';
 
 const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandPaletteContext => ({
@@ -169,6 +169,26 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('search-current');
         expect(match.input).toBe('');
         expect(match.command.getPreview?.(match.input, context)).toBeNull();
+    });
+
+    it('keeps the complete queue available for virtualization and preserves queue search', () => {
+        const playQueue = Array.from({ length: 24 }, (_, index): SongResult => ({
+            id: index + 1,
+            name: index === 17 ? 'Needle Song' : `Queue Song ${index + 1}`,
+            artists: [{ id: index + 1, name: `Artist ${index + 1}` }],
+            album: { id: index + 1, name: `Album ${index + 1}` },
+            durationMs: 180_000,
+        }));
+        const context = createContext({ playQueue });
+
+        const fullQueue = getQueueSongMatches('', context);
+        const filteredQueue = getQueueSongMatches('needle', context);
+
+        expect(fullQueue).toHaveLength(playQueue.length);
+        expect(fullQueue[17].command.queueIndex).toBe(17);
+        expect(fullQueue[17].command.queueSong).toBe(playQueue[17]);
+        expect(filteredQueue).toHaveLength(1);
+        expect(filteredQueue[0].command.queueIndex).toBe(17);
     });
 
     it('matches commands by Chinese keyword and pinyin', () => {

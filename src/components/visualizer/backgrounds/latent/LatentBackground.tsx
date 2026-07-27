@@ -273,7 +273,7 @@ const LatentBackground: React.FC<LatentBackgroundProps> = ({
                         distortion={tuning.meshDistortion}
                         swirl={tuning.meshSwirl}
                         grainMixer={0}
-                        grainOverlay={0}
+                        grainOverlay={0.01}
                         speed={staticMode
                             ? 0
                             : resolveLatentShaderSpeed(tuning.meshSpeed, tuning.meshAudioSpeed, 0, paused)}

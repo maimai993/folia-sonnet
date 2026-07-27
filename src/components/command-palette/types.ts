@@ -25,6 +25,8 @@ export type CommandPaletteCommand = {
     placeholder?: string;
     requiresInput?: boolean;
     getPreview?: (input: string, context: CommandPaletteContext) => string | null;
+    queueIndex?: number;
+    queueSong?: SongResult;
     execute: (input: string, context: CommandPaletteContext) => Promise<boolean> | boolean;
 };
 

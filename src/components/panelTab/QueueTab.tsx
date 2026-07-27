@@ -98,6 +98,9 @@ const QueueRow = ({
                         aria-label={label}
                         onClick={(event) => {
                             event.stopPropagation();
+                            if (event.detail > 0) {
+                                event.currentTarget.blur();
+                            }
                             action(index);
                         }}
                         className={`rounded-md p-1.5 transition-colors ${isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'}`}

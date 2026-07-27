@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, CircleHelp, Command, CornerDownLeft, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Theme } from '../../types';
+import type { SongResult, Theme } from '../../types';
 import type { CommandPaletteMatch, CommandPaletteCommand } from './types';
 import { getCommandDescription, getCommandTitle } from './commandText';
 import PinnedCommandRow from './PinnedCommandRow';
+import CommandPaletteQueueList from './CommandPaletteQueueList';
 
 // src/components/command-palette/CommandPalette.tsx
 // Full-screen command input overlay with autocomplete and keyboard execution.
@@ -15,6 +16,7 @@ type CommandPaletteProps = {
     activePreview: string | null;
     activeCommand: CommandPaletteCommand | null;
     availableCommands: CommandPaletteCommand[];
+    currentSong: SongResult | null;
     isDaylight: boolean;
     isComposing: boolean;
     isExecuting: boolean;
@@ -31,7 +33,10 @@ type CommandPaletteProps = {
     onExecuteActive: () => Promise<boolean>;
     onExecuteMatch: (index: number) => Promise<boolean>;
     onExecutePinnedCommand: (command: CommandPaletteCommand) => Promise<boolean>;
+    onMoveSongToEnd: (index: number) => void;
+    onMoveSongToNext: (index: number) => void;
     onQueryChange: (query: string) => void;
+    onRemoveSong: (index: number) => void;
 };
 
 const groupLabelKey: Record<string, string> = {
@@ -56,6 +61,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     activePreview,
     activeCommand,
     availableCommands,
+    currentSong,
     isDaylight,
     isComposing,
     isExecuting,
@@ -72,7 +78,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     onExecuteActive,
     onExecuteMatch,
     onExecutePinnedCommand,
+    onMoveSongToEnd,
+    onMoveSongToNext,
     onQueryChange,
+    onRemoveSong,
 }) => {
     const { t } = useTranslation();
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -283,7 +292,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                         {/* Removed activePreview top panel, it is now shown inline in the list items description */}
 
                         <div
-                            className="max-h-[50vh] overflow-y-auto p-2"
+                            className="h-[min(496px,50vh)] overflow-y-auto p-2"
                             onTouchStart={() => inputRef.current?.blur()}
                         >
                             {isShowingAllCommands ? (
@@ -338,10 +347,24 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                     })}
                                 </div>
                             ) : matches.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center opacity-50">
+                                <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center opacity-50">
                                     <Command size={26} />
                                     <div className="text-sm">{t('commandPalette.empty') || 'No matching command'}</div>
                                 </div>
+                            ) : activeCommand?.id === 'queue' ? (
+                                <CommandPaletteQueueList
+                                    activeIndex={activeIndex}
+                                    currentSong={currentSong}
+                                    isDaylight={isDaylight}
+                                    isExecuting={isExecuting}
+                                    matches={matches}
+                                    query={query}
+                                    onActiveIndexChange={onActiveIndexChange}
+                                    onExecuteMatch={onExecuteMatch}
+                                    onMoveSongToEnd={onMoveSongToEnd}
+                                    onMoveSongToNext={onMoveSongToNext}
+                                    onRemoveSong={onRemoveSong}
+                                />
                             ) : (
                                 matches.map((match, index) => {
                                     const isActive = index === activeIndex;

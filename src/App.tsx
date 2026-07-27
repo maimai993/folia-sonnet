@@ -3197,6 +3197,7 @@ export default function App() {
                 isExecuting={commandPalette.isExecuting}
                 isOpen={commandPalette.isOpen}
                 matches={commandPalette.matches}
+                currentSong={currentSong}
                 pinnedCommands={commandPalette.pinnedCommands}
                 query={commandPalette.query}
                 theme={theme}
@@ -3212,7 +3213,10 @@ export default function App() {
                 onExecuteActive={commandPalette.executeActive}
                 onExecuteMatch={commandPalette.executeMatch}
                 onExecutePinnedCommand={commandPalette.executePinnedCommand}
+                onMoveSongToEnd={moveQueueSongToEnd}
+                onMoveSongToNext={moveQueueSongToNext}
                 onQueryChange={commandPalette.setQuery}
+                onRemoveSong={removeQueueSong}
             />
 
             <AppDialogs model={appDialogsModel} />
