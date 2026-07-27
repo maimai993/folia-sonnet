@@ -1,6 +1,7 @@
 import { type Line, type VisualizerMode } from '../../types';
 import { getLineRenderEndTime } from '../../utils/lyrics/renderHints';
 import placeholderCoverUrl from '../../../assets/placeholder_cover.jpg';
+import placeholderCover2Url from '../../../assets/placeholder_cover-2.jpg';
 import { getVisualizerPreviewStartOffset } from './registry';
 
 const createCharacterWords = (text: string, startTime: number, endTime: number) => {
@@ -29,7 +30,7 @@ const createTokenWords = (tokens: string[], startTime: number, endTime: number) 
     }));
 };
 
-export const VIS_PLAYGROUND_PREVIEW_LINES: Line[] = [
+const DEFAULT_PREVIEW_PLACEHOLDER_LINES: Line[] = [
     {
         startTime: 0.7,
         endTime: 3.6,
@@ -96,8 +97,79 @@ export const VIS_PLAYGROUND_PREVIEW_LINES: Line[] = [
     },
 ];
 
-export const VIS_PLAYGROUND_PREVIEW_LOOP_DURATION = 14.4;
-export const VIS_PLAYGROUND_PREVIEW_COVER_URL = placeholderCoverUrl;
+const WILD_SESAME_PREVIEW_PLACEHOLDER_LINES: Line[] = [
+    {
+        startTime: 0,
+        endTime: 3.1,
+        fullText: 'You and the others who think',
+        translation: '你和那些自以为如此的人',
+        romanization: 'You and the others who think',
+        words: createTokenWords(['You', 'and', 'the', 'others', 'who', 'think'], 0, 3.1),
+    },
+    {
+        startTime: 3.6,
+        endTime: 6.9,
+        fullText: '真実のために生きていると思う人たち、',
+        translation: '那些自以为为真理而活的人，',
+        romanization: 'Shinjitsu no tame ni ikite iru to omou hitotachi,',
+        words: createCharacterWords('真実のために生きていると思う人たち、', 3.6, 6.9),
+        backgroundVocal: {
+            text: 'Soon this will all feel like a distant dream.',
+            startTime: 4.2,
+            endTime: 6.6,
+            words: createTokenWords(['Soon', 'this', 'will', 'all', 'feel', 'like', 'a', 'distant', 'dream.'], 4.2, 6.6),
+            translation: '很快，这一切都会像一场遥远的梦。',
+            romanization: 'Soon this will all feel like a distant dream.',
+        },
+    },
+    {
+        startTime: 7.4,
+        endTime: 10.3,
+        fullText: 'et, par extension, qui aiment',
+        translation: '并因此爱上一切……',
+        romanization: 'et, par extension, ki em',
+        words: createTokenWords(['et,', 'par', 'extension,', 'qui', 'aiment'], 7.4, 10.3),
+    },
+    {
+        startTime: 10.8,
+        endTime: 13.6,
+        fullText: '一切冰冷的事物。',
+        translation: 'all that is cold.',
+        romanization: 'Yīqiè bīnglěng de shìwù.',
+        words: createCharacterWords('一切冰冷的事物。', 10.8, 13.6),
+    },
+];
+
+export type PreviewPlaceholderId = 'default' | 'reserved';
+
+export interface PreviewPlaceholder {
+    id: PreviewPlaceholderId;
+    title: string;
+    lines: Line[];
+    loopDuration: number;
+    coverUrl: string;
+}
+
+export const VIS_PLAYGROUND_PREVIEW_PLACEHOLDERS: Record<PreviewPlaceholderId, PreviewPlaceholder> = {
+    default: {
+        id: 'default',
+        title: '神文之诗',
+        lines: DEFAULT_PREVIEW_PLACEHOLDER_LINES,
+        loopDuration: 14.4,
+        coverUrl: placeholderCoverUrl,
+    },
+    reserved: {
+        id: 'reserved',
+        title: '野芝麻',
+        lines: WILD_SESAME_PREVIEW_PLACEHOLDER_LINES,
+        loopDuration: 13.6,
+        coverUrl: placeholderCover2Url,
+    },
+};
+
+export const VIS_PLAYGROUND_PREVIEW_LINES = VIS_PLAYGROUND_PREVIEW_PLACEHOLDERS.default.lines;
+export const VIS_PLAYGROUND_PREVIEW_LOOP_DURATION = VIS_PLAYGROUND_PREVIEW_PLACEHOLDERS.default.loopDuration;
+export const VIS_PLAYGROUND_PREVIEW_COVER_URL = VIS_PLAYGROUND_PREVIEW_PLACEHOLDERS.default.coverUrl;
 
 export const getPreviewPlaceholderStartOffset = (mode: VisualizerMode, loopDuration: number) =>
     getVisualizerPreviewStartOffset(mode, loopDuration);

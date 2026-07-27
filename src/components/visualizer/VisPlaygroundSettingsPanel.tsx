@@ -22,6 +22,7 @@ import { colorWithAlpha } from './colorMix';
 import FontFallbackStackControl from './FontFallbackStackControl';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel, type VisualizerRegistryEntry } from './registry';
 import { type VisPlaygroundEditSection } from './VisPlaygroundPreviewHotspots';
+import { type PreviewPlaceholderId } from './PreviewPlaceholder';
 import type { VisualizerBackgroundActions, VisualizerBackgroundConfig } from './backgrounds/definition';
 import {
     DEFAULT_VISUALIZER_BACKGROUND_MODE,
@@ -72,6 +73,9 @@ interface VisPlaygroundSettingsPanelProps {
     onVisualizerOpacityChange?: (opacity: number) => void;
     backgroundConfig?: VisualizerBackgroundConfig;
     backgroundActions?: VisualizerBackgroundActions;
+    previewPlaceholderId: PreviewPlaceholderId;
+    previewPlaceholderOptions: PresetOption<PreviewPlaceholderId>[];
+    onPreviewPlaceholderChange: (id: PreviewPlaceholderId) => void;
     fontStyleValue: Theme['fontStyle'] | 'custom';
     builtinFontOptions: PresetOption<Theme['fontStyle']>[];
     fontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[];
@@ -311,6 +315,9 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onVisualizerOpacityChange,
         backgroundConfig,
         backgroundActions,
+        previewPlaceholderId,
+        previewPlaceholderOptions,
+        onPreviewPlaceholderChange,
         fontStyleValue,
         builtinFontOptions,
         fontStyleOptions,
@@ -441,10 +448,22 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             </div>
                             <ResetSectionButton
                                 label={t('ui.default')}
-                                onClick={onResetCommonSettings}
+                                onClick={() => {
+                                    onPreviewPlaceholderChange('default');
+                                    onResetCommonSettings?.();
+                                }}
                                 theme={theme}
                             />
                         </div>
+
+                        <PresetGroup
+                            label={t('options.previewText')}
+                            value={previewPlaceholderId}
+                            options={previewPlaceholderOptions}
+                            onChange={onPreviewPlaceholderChange}
+                            isDaylight={isDaylight}
+                            theme={theme}
+                        />
 
                         <PresetGroup
                             label={t('options.fontFamily')}

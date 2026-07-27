@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, useMotionValueEvent } from 'framer-motion';
-import { ChevronLeft, Loader2, Search, Sparkles, Upload, X } from 'lucide-react';
+import { ChevronLeft, Loader2, Pause, Play, Search, Sparkles, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { List, useListRef } from 'react-window';
 import VisualizerRenderer from './VisualizerRenderer';
@@ -44,14 +44,14 @@ import FontFallbackStackControl from './FontFallbackStackControl';
 import {
     findPreviewPlaceholderLineIndex,
     getPreviewPlaceholderStartOffset,
-    VIS_PLAYGROUND_PREVIEW_COVER_URL,
-    VIS_PLAYGROUND_PREVIEW_LINES,
-    VIS_PLAYGROUND_PREVIEW_LOOP_DURATION,
+    VIS_PLAYGROUND_PREVIEW_PLACEHOLDERS,
+    type PreviewPlaceholderId,
 } from './PreviewPlaceholder';
 import { getVisualizerModeLabel, getVisualizerRegistryEntry, getVisualizerScopedSeed } from './registry';
 import VisPlaygroundPreviewHotspots, { type VisPlaygroundEditSection } from './VisPlaygroundPreviewHotspots';
 import VisPlaygroundSettingsPanel from './VisPlaygroundSettingsPanel';
 import type { VisualizerBackgroundActions, VisualizerBackgroundConfig } from './backgrounds/definition';
+import { useVisPlaygroundPreviewPlayback } from './useVisPlaygroundPreviewPlayback';
 
 interface VisPlaygroundProps {
     theme?: Theme;
@@ -379,7 +379,10 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const vocal = useMotionValue(0.2);
     const treble = useMotionValue(0.1);
     const spectrum = useMotionValue(new Uint8Array(64));
-    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, 0));
+    const [previewPlaceholderId, setPreviewPlaceholderId] = useState<PreviewPlaceholderId>('default');
+    const previewPlaceholder = VIS_PLAYGROUND_PREVIEW_PLACEHOLDERS[previewPlaceholderId];
+    const [isPreviewPaused, setIsPreviewPaused] = useState(false);
+    const [currentLineIndex, setCurrentLineIndex] = useState(() => findPreviewPlaceholderLineIndex(previewPlaceholder.lines, 0));
     const [fontPickerTarget, setFontPickerTarget] = useState<'lyrics' | 'subtitle' | 'none'>('none');
     const isFontPickerOpen = fontPickerTarget !== 'none';
     const setIsFontPickerOpen = (open: boolean) => setFontPickerTarget(open ? 'lyrics' : 'none');
@@ -562,47 +565,28 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     useEffect(() => { setDraftPendoloTuning(pendoloTuning); }, [pendoloTuning]);
     useEffect(() => { setActiveEditSection(initialEditSection); }, [initialEditSection]);
 
+    useVisPlaygroundPreviewPlayback({
+        audioPower,
+        bass,
+        lowMid,
+        mid,
+        vocal,
+        treble,
+        spectrum,
+        currentTime,
+        visualizerMode,
+        loopDuration: previewPlaceholder.loopDuration,
+        playbackKey: previewPlaceholderId,
+        isPaused: isPreviewPaused,
+    });
+
     useEffect(() => {
-        let frameId = 0;
-        const startedAt = performance.now();
-        const previewOffset = getPreviewPlaceholderStartOffset(visualizerMode, VIS_PLAYGROUND_PREVIEW_LOOP_DURATION);
-
-        const tick = (now: number) => {
-            const elapsed = (previewOffset + (now - startedAt) / 1000) % VIS_PLAYGROUND_PREVIEW_LOOP_DURATION;
-            currentTime.set(elapsed);
-
-            const wave = (offset: number, speed: number, floor: number, amplitude: number) =>
-                floor + (Math.sin(now * speed + offset) * 0.5 + 0.5) * amplitude;
-
-            audioPower.set(wave(0.2, 0.0024, 0.16, 0.18));
-            bass.set(wave(0.9, 0.0032, 0.14, 0.2));
-            lowMid.set(wave(1.7, 0.0028, 0.12, 0.16));
-            mid.set(wave(2.6, 0.0023, 0.1, 0.14));
-            vocal.set(wave(3.4, 0.0038, 0.16, 0.22));
-            treble.set(wave(4.2, 0.0046, 0.08, 0.14));
-
-            const nextSpectrum = new Uint8Array(64);
-            for (let index = 0; index < nextSpectrum.length; index += 1) {
-                const normalizedIndex = index / Math.max(1, nextSpectrum.length - 1);
-                const lowShape = Math.exp(-normalizedIndex * 2.4);
-                const harmonic =
-                    Math.sin(now * 0.0027 + normalizedIndex * Math.PI * 3.4) * 0.18 +
-                    Math.sin(now * 0.0052 + normalizedIndex * Math.PI * 11.5) * 0.08;
-                const shimmer = Math.sin(now * 0.0018 + normalizedIndex * Math.PI * 1.2) * 0.12;
-                const amplitude = Math.max(0, Math.min(1, lowShape * 0.8 + 0.08 + harmonic + shimmer));
-                nextSpectrum[index] = Math.round(amplitude * 255);
-            }
-            spectrum.set(nextSpectrum);
-
-            frameId = window.requestAnimationFrame(tick);
-        };
-
-        frameId = window.requestAnimationFrame(tick);
-        return () => window.cancelAnimationFrame(frameId);
-    }, [audioPower, bass, currentTime, lowMid, mid, spectrum, treble, visualizerMode, vocal]);
+        const offset = getPreviewPlaceholderStartOffset(visualizerMode, previewPlaceholder.loopDuration);
+        setCurrentLineIndex(findPreviewPlaceholderLineIndex(previewPlaceholder.lines, offset));
+    }, [previewPlaceholder, visualizerMode]);
 
     useMotionValueEvent(currentTime, 'change', latest => {
-        const nextIndex = findPreviewPlaceholderLineIndex(VIS_PLAYGROUND_PREVIEW_LINES, latest);
+        const nextIndex = findPreviewPlaceholderLineIndex(previewPlaceholder.lines, latest);
         setCurrentLineIndex(prev => (prev === nextIndex ? prev : nextIndex));
     });
 
@@ -1103,18 +1087,18 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 mode={visualizerMode}
                                 currentTime={currentTime}
                                 currentLineIndex={currentLineIndex}
-                                lines={VIS_PLAYGROUND_PREVIEW_LINES}
+                                lines={previewPlaceholder.lines}
                                 theme={previewTheme}
                                 subtitleTheme={previewSubtitleTheme}
                                 isDaylight={isDaylight}
                                 audioPower={audioPower}
                                 audioBands={audioBands}
-                                songTitle="Cappella Preview"
+                                songTitle={previewPlaceholder.title}
                                 showText
                                 staticMode={staticMode}
                                 isPreviewMode
                                 visualizerOpacity={draftVisualizerOpacity}
-                                coverUrl={VIS_PLAYGROUND_PREVIEW_COVER_URL}
+                                coverUrl={previewPlaceholder.coverUrl}
                                 background={draftBackgroundConfig}
                                 lyricsFontScale={normalizedFontScale}
                                 subtitleFontScale={normalizedSubtitleFontScale}
@@ -1139,6 +1123,18 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                             theme={previewTheme}
                             labels={hotspotLabels}
                         />
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                setIsPreviewPaused(previous => !previous);
+                            }}
+                            aria-label={t(isPreviewPaused ? 'options.resumePreview' : 'options.pausePreview')}
+                            title={t(isPreviewPaused ? 'options.resumePreview' : 'options.pausePreview')}
+                            className="absolute bottom-4 right-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg backdrop-blur-md transition-colors hover:bg-black/65 focus:outline-none focus:ring-2 focus:ring-white/70"
+                        >
+                            {isPreviewPaused ? <Play size={17} fill="currentColor" /> : <Pause size={17} fill="currentColor" />}
+                        </button>
                     </div>
 
                     <VisPlaygroundSettingsPanel
@@ -1155,6 +1151,12 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         rangeInputClass={rangeInputClass}
                         backgroundConfig={draftBackgroundConfig}
                         backgroundActions={draftBackgroundActions}
+                        previewPlaceholderId={previewPlaceholderId}
+                        previewPlaceholderOptions={[
+                            { value: 'default', label: t('options.previewTextDefault') },
+                            { value: 'reserved', label: t('options.previewTextReserved') },
+                        ]}
+                        onPreviewPlaceholderChange={setPreviewPlaceholderId}
                         visualizerOpacity={draftVisualizerOpacity}
                         onVisualizerOpacityChange={handleVisualizerOpacityDraft}
                         fontStyleValue={customFontFamily ? 'custom' : fontStyle}
