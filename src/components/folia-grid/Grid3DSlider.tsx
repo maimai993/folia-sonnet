@@ -49,6 +49,34 @@ export const getGrid3DSliderSummaryText = (
     return summary && summary !== getGrid3DSliderSecondaryText(item) ? summary : '';
 };
 
+const DISCRETE_WHEEL_PIXEL_THRESHOLD = 40;
+const DISCRETE_WHEEL_DISTANCE_MULTIPLIER = 3;
+
+export interface Grid3DWheelInput {
+    delta: number;
+    isDiscreteMouseWheel: boolean;
+}
+
+// Normalizes browser wheel units while keeping high-frequency trackpad input on the direct-scroll path.
+export const resolveGrid3DWheelInput = (
+    deltaX: number,
+    deltaY: number,
+    deltaMode: number,
+    pageSize: number,
+): Grid3DWheelInput => {
+    const rawDelta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
+    const unitScale = deltaMode === 1
+        ? 32
+        : deltaMode === 2
+            ? Math.max(pageSize, 1)
+            : 1;
+
+    return {
+        delta: rawDelta * unitScale,
+        isDiscreteMouseWheel: deltaMode !== 0 || Math.abs(rawDelta) >= DISCRETE_WHEEL_PIXEL_THRESHOLD,
+    };
+};
+
 const clampFocusedIndex = (index: number, itemCount: number) => {
     if (itemCount <= 0 || !Number.isFinite(index)) {
         return 0;
@@ -80,10 +108,14 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     const programmaticTargetLeftRef = useRef<number | null>(null);
     const programmaticScrollTimeoutRef = useRef<any>(null);
     const lastKeyboardNavTimeRef = useRef(0);
-    const slidingTimeoutRef = useRef<any>(null);
     const wheelIdleTimerRef = useRef<any>(null);
     const momentumVelocityRef = useRef(0);
     const momentumRafRef = useRef<number | null>(null);
+    const wheelSmoothingRafRef = useRef<number | null>(null);
+    const wheelSmoothingTargetRef = useRef<number | null>(null);
+    const wheelSmoothingLastTimeRef = useRef(0);
+    const cardCentersRef = useRef<number[]>([]);
+    const scrollViewportWidthRef = useRef<number | null>(null);
     const isDraggingRef = useRef(false);
     const startXRef = useRef(0);
     const scrollLeftRef = useRef(0);
@@ -91,7 +123,6 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     const lastDragScrollRef = useRef(0);
     const lastDragTimeRef = useRef(0);
 
-    const [isSliding, setIsSliding] = useState(false);
     const [containerSize, setContainerSize] = useState(() => {
         if (typeof window === 'undefined') {
             return { width: 0, height: 0 };
@@ -188,23 +219,12 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     const currentLimit = Math.max(visibleLimit, safeFocusedIndex + 1);
     const slicedItems = items.slice(0, currentLimit);
 
-    const handleSliding = useCallback(() => {
-        if (!isInteractive) return;
-
-        setIsSliding(true);
-        if (slidingTimeoutRef.current) clearTimeout(slidingTimeoutRef.current);
-        slidingTimeoutRef.current = setTimeout(() => {
-            setIsSliding(false);
-        }, 300);
-    }, [isInteractive]);
-
     const updateCardTransforms = useCallback(() => {
         const container = scrollContainerRef.current;
         if (!container) return undefined;
         const flexWrapper = container.firstElementChild;
         if (!flexWrapper) return undefined;
 
-        const containerCenter = container.scrollLeft + container.clientWidth / 2;
         const maxDist = 600;
         const isImage = grid3dCardStyle === 'image';
         const peakScale = isImage ? 1.25 : 1.2;
@@ -214,9 +234,23 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         let closestIndex = 0;
         let minPixelDist = Infinity;
 
+        if (
+            cardCentersRef.current.length !== cards.length
+            || scrollViewportWidthRef.current === null
+        ) {
+            const nextCenters = new Array<number>(cards.length);
+            scrollViewportWidthRef.current = container.clientWidth;
+            for (let i = 0; i < cards.length; i++) {
+                const el = cards[i] as HTMLElement;
+                nextCenters[i] = el.offsetLeft + el.offsetWidth / 2;
+            }
+            cardCentersRef.current = nextCenters;
+        }
+
+        const containerCenter = container.scrollLeft + (scrollViewportWidthRef.current ?? 0) / 2;
         for (let i = 0; i < cards.length; i++) {
             const el = cards[i] as HTMLElement;
-            const cardCenter = el.offsetLeft + el.offsetWidth / 2;
+            const cardCenter = cardCentersRef.current[i];
             const pixelDist = Math.abs(cardCenter - containerCenter);
             const tValue = Math.min(pixelDist / maxDist, 1);
 
@@ -255,6 +289,59 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         }
         momentumVelocityRef.current = 0;
     }, []);
+
+    const stopWheelSmoothing = useCallback(() => {
+        if (wheelSmoothingRafRef.current !== null) {
+            cancelAnimationFrame(wheelSmoothingRafRef.current);
+            wheelSmoothingRafRef.current = null;
+        }
+        wheelSmoothingTargetRef.current = null;
+        wheelSmoothingLastTimeRef.current = 0;
+    }, []);
+
+    // Coalesces low-frequency mouse-wheel notches into one compositor-friendly scroll update per frame.
+    const smoothDiscreteWheelBy = useCallback((delta: number) => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+        const currentTarget = wheelSmoothingTargetRef.current ?? container.scrollLeft;
+        wheelSmoothingTargetRef.current = Math.max(
+            0,
+            Math.min(maxScrollLeft, currentTarget + delta * DISCRETE_WHEEL_DISTANCE_MULTIPLIER),
+        );
+
+        if (wheelSmoothingRafRef.current !== null) return;
+
+        const tick = (now: number) => {
+            const activeContainer = scrollContainerRef.current;
+            const target = wheelSmoothingTargetRef.current;
+            if (!activeContainer || target === null) {
+                stopWheelSmoothing();
+                return;
+            }
+
+            const elapsed = wheelSmoothingLastTimeRef.current === 0
+                ? 16.67
+                : Math.min(now - wheelSmoothingLastTimeRef.current, 32);
+            wheelSmoothingLastTimeRef.current = now;
+            const progress = 1 - Math.pow(0.78, elapsed / 16.67);
+            const remaining = target - activeContainer.scrollLeft;
+
+            if (Math.abs(remaining) < 0.5) {
+                activeContainer.scrollLeft = target;
+                wheelSmoothingRafRef.current = null;
+                wheelSmoothingTargetRef.current = null;
+                wheelSmoothingLastTimeRef.current = 0;
+                return;
+            }
+
+            activeContainer.scrollLeft += remaining * progress;
+            wheelSmoothingRafRef.current = requestAnimationFrame(tick);
+        };
+
+        wheelSmoothingRafRef.current = requestAnimationFrame(tick);
+    }, [stopWheelSmoothing]);
 
     const startMomentum = useCallback(() => {
         const container = scrollContainerRef.current;
@@ -338,7 +425,6 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
             return;
         }
 
-        handleSliding();
         const container = scrollContainerRef.current;
         if (!container) return;
 
@@ -371,11 +457,12 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         if (hasMore && container.scrollWidth - (container.scrollLeft + container.clientWidth) < scrollThreshold) {
             setVisibleLimit(prev => Math.min(items.length, prev + 30));
         }
-    }, [handleSliding, isInteractive, reportFocusedIndex, updateCardTransforms, visibleLimit, items.length]);
+    }, [isInteractive, reportFocusedIndex, updateCardTransforms, visibleLimit, items.length]);
 
     const handleMouseDown = (event: React.MouseEvent) => {
         if (!isInteractive || !scrollContainerRef.current || event.button !== 0) return;
 
+        stopWheelSmoothing();
         stopMomentum();
         isDraggingRef.current = true;
         startXRef.current = event.pageX - scrollContainerRef.current.offsetLeft;
@@ -403,7 +490,6 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         }
         lastDragScrollRef.current = nowScroll;
         lastDragTimeRef.current = now;
-        handleSliding();
     };
 
     const handleMouseUpOrLeave = () => {
@@ -445,15 +531,26 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
 
         const handleWheelEvent = (event: WheelEvent) => {
             event.preventDefault();
-            handleSliding();
 
-            if (momentumRafRef.current !== null) {
-                cancelAnimationFrame(momentumRafRef.current);
-                momentumRafRef.current = null;
+            stopMomentum();
+            const wheelInput = resolveGrid3DWheelInput(
+                event.deltaX,
+                event.deltaY,
+                event.deltaMode,
+                container.clientWidth,
+            );
+
+            if (wheelInput.isDiscreteMouseWheel) {
+                if (wheelIdleTimerRef.current) {
+                    clearTimeout(wheelIdleTimerRef.current);
+                    wheelIdleTimerRef.current = null;
+                }
+                smoothDiscreteWheelBy(wheelInput.delta);
+                return;
             }
 
-            const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-            const scaled = delta * 0.6;
+            stopWheelSmoothing();
+            const scaled = wheelInput.delta * 0.6;
             container.scrollLeft += scaled;
             momentumVelocityRef.current = scaled;
 
@@ -468,28 +565,29 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
             container.removeEventListener('wheel', handleWheelEvent);
             if (wheelIdleTimerRef.current) clearTimeout(wheelIdleTimerRef.current);
         };
-    }, [handleSliding, isInteractive, startMomentum]);
+    }, [isInteractive, smoothDiscreteWheelBy, startMomentum, stopMomentum, stopWheelSmoothing]);
 
     useEffect(() => {
-        requestAnimationFrame(() => updateCardTransforms());
-    }, [isLoading, itemsSignature, updateCardTransforms]);
+        cardCentersRef.current = [];
+        scrollViewportWidthRef.current = null;
+        const frameId = requestAnimationFrame(() => updateCardTransforms());
+        return () => cancelAnimationFrame(frameId);
+    }, [containerSize, isLoading, itemsSignature, slicedItems.length, updateCardTransforms]);
 
     useEffect(() => {
         return () => {
-            if (slidingTimeoutRef.current) clearTimeout(slidingTimeoutRef.current);
             if (programmaticScrollTimeoutRef.current) clearTimeout(programmaticScrollTimeoutRef.current);
             if (wheelIdleTimerRef.current) clearTimeout(wheelIdleTimerRef.current);
+            stopWheelSmoothing();
             stopMomentum();
         };
-    }, [stopMomentum]);
+    }, [stopMomentum, stopWheelSmoothing]);
 
     return (
         <div ref={containerRef} className="w-full flex-1 flex flex-col justify-center relative min-h-0 select-none">
             <div
                 ref={scrollContainerRef}
                 onScroll={handleScroll}
-                onTouchStart={handleSliding}
-                onTouchMove={handleSliding}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUpOrLeave}

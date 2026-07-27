@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     getGrid3DSliderSecondaryText,
     getGrid3DSliderSummaryText,
+    resolveGrid3DWheelInput,
 } from '../../../src/components/folia-grid/Grid3DSlider';
 
 // test/unit/gridView/grid3DSlider.test.ts
@@ -36,5 +37,32 @@ describe('getGrid3DSliderSecondaryText', () => {
             description: '歌手',
             summary: '专辑简介',
         })).toBe('专辑简介');
+    });
+});
+
+describe('resolveGrid3DWheelInput', () => {
+    it('keeps small pixel deltas on the trackpad path', () => {
+        expect(resolveGrid3DWheelInput(2.5, 12.25, 0, 1200)).toEqual({
+            delta: 12.25,
+            isDiscreteMouseWheel: false,
+        });
+    });
+
+    it('recognizes and normalizes discrete mouse-wheel input', () => {
+        expect(resolveGrid3DWheelInput(0, 100, 0, 1200)).toEqual({
+            delta: 100,
+            isDiscreteMouseWheel: true,
+        });
+        expect(resolveGrid3DWheelInput(0, 3, 1, 1200)).toEqual({
+            delta: 96,
+            isDiscreteMouseWheel: true,
+        });
+    });
+
+    it('uses the dominant axis without changing trackpad direction', () => {
+        expect(resolveGrid3DWheelInput(-18, 7, 0, 1200)).toEqual({
+            delta: -18,
+            isDiscreteMouseWheel: false,
+        });
     });
 });
