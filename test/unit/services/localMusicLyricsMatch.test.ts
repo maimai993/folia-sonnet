@@ -8,6 +8,12 @@ import { getLocalLibraryCatalogSnapshot } from '@/services/localLibraryEntityRep
 
 // test/unit/services/localMusicLyricsMatch.test.ts
 
+const lyricSettings = vi.hoisted(() => ({
+    autoUseBestLyric: true,
+    preferredAlternativeLyricSource: 'amll',
+    localLyricsPriority: 'local' as 'local' | 'online',
+}));
+
 vi.mock('@/utils/lyrics/autoMatchBestLyric', () => ({ autoMatchBestLyric: vi.fn() }));
 vi.mock('@/services/localLibraryCatalogService', () => ({ applyMatchedMetadata: vi.fn() }));
 vi.mock('@/services/localLibraryEntityRepository', () => ({
@@ -22,10 +28,7 @@ vi.mock('@/services/netease', () => ({
 }));
 vi.mock('@/stores/useSettingsUiStore', () => ({
     useSettingsUiStore: {
-        getState: () => ({
-            autoUseBestLyric: true,
-            preferredAlternativeLyricSource: 'amll',
-        }),
+        getState: () => lyricSettings,
     },
 }));
 
@@ -49,6 +52,7 @@ const song = (): LocalSong => ({
 describe('localMusicService lyric matching', () => {
     beforeEach(() => {
         vi.resetAllMocks();
+        lyricSettings.localLyricsPriority = 'local';
         vi.mocked(applyMatchedMetadata).mockResolvedValue(undefined);
         vi.mocked(getLocalLibraryCatalogSnapshot).mockResolvedValue({ entities: [], assignments: [] });
     });
@@ -85,5 +89,34 @@ describe('localMusicService lyric matching', () => {
                 matchedLyricsSongId: 987,
             }),
         }));
+    });
+
+    it('fetches and uses an online match when online lyrics are preferred over local lyrics', async () => {
+        lyricSettings.localLyricsPriority = 'online';
+        const lyrics = { lines: [], isWordByWord: true };
+        vi.mocked(autoMatchBestLyric).mockResolvedValue({
+            lyrics,
+            source: 'netease',
+            id: 987,
+            song: {
+                id: 987,
+                name: 'Correct title',
+                artists: [{ id: 1, name: 'Correct artist' }],
+                album: { id: 2, name: 'Correct album' },
+                durationMs: 200000,
+            },
+        });
+        const localSong = {
+            ...song(),
+            hasLocalLyrics: true,
+            localLyricsContent: '[00:00.00]Local lyrics',
+        };
+
+        await expect(matchLyrics(localSong)).resolves.toBe(lyrics);
+
+        expect(autoMatchBestLyric).toHaveBeenCalledWith('Correct title', 'Correct artist', 200000, expect.objectContaining({
+            preferredSource: 'amll',
+        }));
+        expect(localSong.matchedLyrics).toBe(lyrics);
     });
 });

@@ -1312,8 +1312,7 @@ function isTitleMatch(localTitle: string, searchTitle: string): boolean {
     return false;
 }
 
-// Match lyrics for a local song using search API
-// If the song has local lyrics, this function will only fetch cover/metadata and skip online lyrics
+// Match lyrics for a local song using search API, respecting the configured local/online priority.
 export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
     if (song.matchedIsPureMusic && !shouldRefreshLocalSongLyricsFromMetadata(song)) {
         return null;
@@ -1330,12 +1329,13 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
             (song.hasLocalLyrics && song.localLyricsContent)
             || (song.hasEmbeddedLyrics && song.embeddedLyricsContent)
         );
+        const settings = useSettingsUiStore.getState();
+        const onlineFirst = settings.localLyricsPriority === 'online';
 
         console.log(`[LocalMusic] Searching lyrics for: "${searchQuery}"`);
 
         // A selected GridView metadata identity is authoritative and must not be replaced by lyric fallback metadata.
-        if (!hasLocalOrEmbeddedLyrics) {
-            const settings = useSettingsUiStore.getState();
+        if (!hasLocalOrEmbeddedLyrics || onlineFirst) {
             const shouldUseBestLyric = settings.autoUseBestLyric;
             if (shouldUseBestLyric || matchContext.metadataCandidate) {
                 const bestMatch = await autoMatchBestLyric(
@@ -1424,8 +1424,8 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
         const matchedMetadata = getProviderSongMetadata(matchedSong, 'netease');
         console.log(`[LocalMusic] Found exact title match: ${matchedSong.name} by ${matchedMetadata.artists.map(artist => artist.name).join(', ')}`);
 
-        // Check if we should skip lyrics fetching (local or embedded lyrics take priority)
-        if ((song.hasLocalLyrics && song.localLyricsContent) || (song.hasEmbeddedLyrics && song.embeddedLyricsContent)) {
+        // Preserve local and embedded lyrics when the configured priority keeps them first.
+        if (!onlineFirst && ((song.hasLocalLyrics && song.localLyricsContent) || (song.hasEmbeddedLyrics && song.embeddedLyricsContent))) {
             console.log(`[LocalMusic] Local/embedded lyrics exist, skipping online lyrics fetch. Only fetching cover/metadata.`);
 
             // Only update metadata and cover, preserve local lyrics

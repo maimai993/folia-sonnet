@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Monitor, PlayCircle, RefreshCw, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { QueueAddBehavior, Theme } from '../../../types';
+import type { LocalLyricsPriority, QueueAddBehavior, Theme } from '../../../types';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { CustomSelect } from '../../shared/CustomSelect';
 import { LYRIC_MATCH_SOURCES } from '../../../utils/lyrics/lyricMatchSources';
@@ -46,17 +46,21 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
         audioOutputDeviceId,
         autoUseBestLyric,
         preferredAlternativeLyricSource,
+        localLyricsPriority,
         queueAddBehavior,
         onToggleAutoUseBestLyric,
         onPreferredAlternativeLyricSourceChange,
+        onLocalLyricsPriorityChange,
         onQueueAddBehaviorChange,
     } = useSettingsUiStore(useShallow(state => ({
         audioOutputDeviceId: state.audioOutputDeviceId,
         autoUseBestLyric: state.autoUseBestLyric,
         preferredAlternativeLyricSource: state.preferredAlternativeLyricSource,
+        localLyricsPriority: state.localLyricsPriority,
         queueAddBehavior: state.queueAddBehavior,
         onToggleAutoUseBestLyric: state.handleToggleAutoUseBestLyric,
         onPreferredAlternativeLyricSourceChange: state.handleSetPreferredAlternativeLyricSource,
+        onLocalLyricsPriorityChange: state.handleSetLocalLyricsPriority,
         onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
     })));
     const [audioOutputDevices, setAudioOutputDevices] = useState<AudioOutputDeviceOption[]>([]);
@@ -215,6 +219,40 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                                 </button>
                             );
                         })}
+                    </div>
+                    <div className="p-4 space-y-3 border-t" style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.06))' }}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.localLyricsPriority')}
+                            </div>
+                            <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.localLyricsPriorityDesc')}
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {([
+                                { value: 'local', label: t('options.localLyricsPriorityLocal'), desc: t('options.localLyricsPriorityLocalDesc') },
+                                { value: 'online', label: t('options.localLyricsPriorityOnline'), desc: t('options.localLyricsPriorityOnlineDesc') },
+                            ] as Array<{ value: LocalLyricsPriority; label: string; desc: string }>).map((option) => {
+                                const selected = localLyricsPriority === option.value;
+                                return (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => onLocalLyricsPriorityChange(option.value)}
+                                        className="rounded-xl border px-3 py-3 text-left transition-colors"
+                                        style={getAccentOptionStyle(selected)}
+                                    >
+                                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                            {option.label}
+                                        </div>
+                                        <div className="mt-1 text-[11px] opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                            {option.desc}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </section>

@@ -416,9 +416,9 @@ export function useLibraryPlaybackController({
     const handleLocalSongMatch = useCallback(async (localSong: LocalSong): Promise<{ updatedLocalSong: LocalSong; matchedSongResult: SongResult | null; }> => {
         let updatedLocalSong = localSong;
         let matchedSongResult: SongResult | null = null;
+        const onlineFirst = useSettingsUiStore.getState().localLyricsPriority === 'online';
         const needsLyricsMatch = (
-            !localSong.hasLocalLyrics
-            && !localSong.hasEmbeddedLyrics
+            (onlineFirst || (!localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics))
             && (!localSong.matchedLyrics && !localSong.matchedIsPureMusic
                 || shouldRefreshLocalSongLyricsFromMetadata(localSong))
         );
@@ -460,7 +460,10 @@ export function useLibraryPlaybackController({
         } else if (source === 'local' && localData.localLyricsContent) {
             nextLyrics = await parseLocalSongLyrics(localData);
         } else if (!source) {
-            if (localData.hasLocalLyrics && localData.localLyricsContent) {
+            const onlineFirst = useSettingsUiStore.getState().localLyricsPriority === 'online';
+            if (onlineFirst && localData.matchedLyrics) {
+                nextLyrics = localData.matchedLyrics;
+            } else if (localData.hasLocalLyrics && localData.localLyricsContent) {
                 nextLyrics = await parseLocalSongLyrics(localData);
             } else if (localData.hasEmbeddedLyrics && localData.embeddedLyricsContent) {
                 nextLyrics = await LyricParserFactory.parse({ type: 'embedded', textContent: localData.embeddedLyricsContent, translationContent: localData.embeddedTranslationLyricsContent });
@@ -498,6 +501,10 @@ export function useLibraryPlaybackController({
                 return parseLocalSongLyrics(localData);
             }
             if (!source) {
+                const onlineFirst = useSettingsUiStore.getState().localLyricsPriority === 'online';
+                if (onlineFirst && localData.matchedLyrics) {
+                    return localData.matchedLyrics;
+                }
                 if (localData.hasLocalLyrics && localData.localLyricsContent) {
                     return parseLocalSongLyrics(localData);
                 }
@@ -567,9 +574,9 @@ export function useLibraryPlaybackController({
         const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
         Object.assign(localSong, preparedLocalSong);
 
+        const onlineFirst = useSettingsUiStore.getState().localLyricsPriority === 'online';
         const needsLyricsMatch = (
-            !localSong.hasLocalLyrics
-            && !localSong.hasEmbeddedLyrics
+            (onlineFirst || (!localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics))
             && (!localSong.matchedLyrics && !localSong.matchedIsPureMusic
                 || shouldRefreshLocalSongLyricsFromMetadata(localSong))
         );

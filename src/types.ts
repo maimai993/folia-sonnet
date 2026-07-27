@@ -935,6 +935,8 @@ export interface SearchResponse {
 
 // Local Music Types
 
+export type LocalLyricsPriority = 'local' | 'online';
+
 export interface LocalSong {
   id: string; // UUID for local file
   fileName: string;
@@ -975,7 +977,7 @@ export interface LocalSong {
   matchedLyricsProviderPlatform?: AmllDbPlatform;
 
   // User preferences for online data override (set via LyricMatchModal)
-  lyricsSource?: 'local' | 'embedded' | 'online';  // Explicit lyrics source selection; undefined = default priority (local > embedded > online)
+  lyricsSource?: 'local' | 'embedded' | 'online';  // Explicit lyrics source selection; undefined = the configured automatic priority
   useOnlineCover?: boolean;     // Prefer online cover over embedded cover
 
   // Local Lyrics (.lrc / .vtt / .ttml / .qrc / .yrc / .krc files)

@@ -101,6 +101,16 @@ describe('command palette registry', () => {
         expect(context.openSettings).toHaveBeenCalledWith('options', 'integration');
     });
 
+    it('opens the local lyrics priority setting from the command palette', () => {
+        const context = createContext();
+        const [match] = getCommandPaletteMatches('在线优先');
+
+        expect(match.command.id).toBe('settings-local-lyrics-priority');
+        match.command.execute(match.input, context);
+
+        expect(context.openSettings).toHaveBeenCalledWith('options', 'playback');
+    });
+
     it('matches sync server settings and manual sync commands', () => {
         expect(getCommandPaletteMatches('sync server')[0].command.id).toBe('settings-r2-sync');
         expect(getCommandPaletteMatches('立即同步')[0].command.id).toBe('sync-now');
