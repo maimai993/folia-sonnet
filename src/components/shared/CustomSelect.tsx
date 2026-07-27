@@ -130,6 +130,9 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
     const selectedOption = options.find((opt) => opt.value === value);
     const accentColor = theme?.accentColor || (isDaylight ? '#44403c' : '#f4f4f5');
+    // The menu is portaled to document.body, so it cannot inherit the app container's theme variables.
+    const textColor = theme?.primaryColor || (isDaylight ? '#1c1917' : '#f4f4f5');
+    const borderColor = isDaylight ? 'rgba(28, 25, 23, 0.14)' : 'rgba(244, 244, 245, 0.14)';
 
     return (
         <div ref={containerRef} className="relative w-full">
@@ -169,6 +172,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                             ariaLabel={ariaLabel}
                             isDaylight={isDaylight}
                             accentColor={accentColor}
+                            textColor={textColor}
+                            borderColor={borderColor}
                             onSelect={(nextValue) => {
                                 onChange(nextValue);
                                 setIsOpen(false);

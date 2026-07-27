@@ -1070,6 +1070,25 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
+    "v0_6_5": {
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.5.",
+      "lyricPreview": {
+        "title": "Pratinjau Animasi Lirik yang Ditingkatkan",
+        "description": "Pengaturan gaya animasi lirik kini memiliki kontrol jeda untuk pratinjau dan satu set lirik placeholder baru."
+      },
+      "responseSmoothness": {
+        "title": "Respons yang Lebih Lancar",
+        "description": "Respons beberapa komponen dioptimalkan agar interaksi dan pembaruan dinamis terasa lebih lancar."
+      },
+      "commandPaletteV2": {
+        "title": "Palet Perintah v2",
+        "description": "Sematkan fitur yang sering digunakan di pengaturan Tampilan dan gunakan memori perintah yang diperluas."
+      },
+      "commandPaletteQueue": {
+        "title": "Antrean Pemutaran di Palet Perintah",
+        "description": "Kelola antrean pemutaran langsung di Palet Perintah dengan perintah Antrean."
+      }
+    },
     "v0_6_3": {
       "intro": "Berikut adalah fitur dan peningkatan baru pada versi terbaru.",
       "pendoloTheme": {

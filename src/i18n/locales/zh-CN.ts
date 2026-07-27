@@ -1221,6 +1221,25 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
+    "v0_6_5": {
+      "intro": "以下是 0.6.5 的新功能与改进",
+      "lyricPreview": {
+        "title": "歌词动画预览改进",
+        "description": "歌词动画样式设置新增预览窗口暂停功能，并提供一套全新的占位符歌词。"
+      },
+      "responseSmoothness": {
+        "title": "响应流畅度优化",
+        "description": "优化多个组件的响应表现，让界面交互与动态更新更加流畅。"
+      },
+      "commandPaletteV2": {
+        "title": "命令面板 v2",
+        "description": "可在界面设置中固定常用功能，并扩展命令记忆能力。"
+      },
+      "commandPaletteQueue": {
+        "title": "命令面板播放队列",
+        "description": "可直接在命令面板中使用“队列”命令管理播放队列。"
+      }
+    },
     "v0_6_3": {
       "intro": "以下是最新版本的新功能与改进",
       "pendoloTheme": {

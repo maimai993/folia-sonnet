@@ -1220,6 +1220,25 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
+    "v0_6_5": {
+      "intro": "Here are the new features and improvements in version 0.6.5.",
+      "lyricPreview": {
+        "title": "Improved Lyric Animation Preview",
+        "description": "Lyric animation style settings now include a pause control for the preview and a new set of placeholder lyrics."
+      },
+      "responseSmoothness": {
+        "title": "Smoother Responsiveness",
+        "description": "Improved responsiveness across multiple components for smoother interactions and dynamic updates."
+      },
+      "commandPaletteV2": {
+        "title": "Command Palette v2",
+        "description": "Pin frequently used features in Appearance settings and benefit from expanded command memory."
+      },
+      "commandPaletteQueue": {
+        "title": "Playback Queue in Command Palette",
+        "description": "Manage the playback queue directly in the Command Palette with the Queue command."
+      }
+    },
     "v0_6_3": {
       "intro": "Here are the new features and improvements in the latest version.",
       "pendoloTheme": {

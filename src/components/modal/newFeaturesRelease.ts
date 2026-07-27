@@ -1,4 +1,4 @@
-import { Clock, Sparkles, Share2, Smartphone } from 'lucide-react';
+import { Command, ListMusic, Pause, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // src/components/modal/newFeaturesRelease.ts
@@ -17,11 +17,11 @@ type NewFeaturesRelease = {
 
 // Defines the current release's cards; their localized text lives under i18nKey in every locale.
 export const NEW_FEATURES_RELEASE: NewFeaturesRelease = {
-    i18nKey: 'releaseNotes.v0_6_3',
+    i18nKey: 'releaseNotes.v0_6_5',
     features: [
-        { id: 'pendoloTheme', icon: Clock, daylightIconClassName: 'text-amber-600', darkIconClassName: 'text-amber-400' },
-        { id: 'obsDynamicAi', icon: Sparkles, daylightIconClassName: 'text-indigo-500', darkIconClassName: 'text-indigo-400' },
-        { id: 'playerCapEnhance', icon: Share2, daylightIconClassName: 'text-emerald-500', darkIconClassName: 'text-emerald-400' },
-        { id: 'safariIosFix', icon: Smartphone, daylightIconClassName: 'text-rose-500', darkIconClassName: 'text-rose-400' },
+        { id: 'lyricPreview', icon: Pause, daylightIconClassName: 'text-sky-600', darkIconClassName: 'text-sky-400' },
+        { id: 'responseSmoothness', icon: Sparkles, daylightIconClassName: 'text-indigo-500', darkIconClassName: 'text-indigo-400' },
+        { id: 'commandPaletteV2', icon: Command, daylightIconClassName: 'text-amber-600', darkIconClassName: 'text-amber-400' },
+        { id: 'commandPaletteQueue', icon: ListMusic, daylightIconClassName: 'text-emerald-600', darkIconClassName: 'text-emerald-400' },
     ],
 };

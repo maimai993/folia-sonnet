@@ -27,6 +27,8 @@ interface CustomSelectMenuProps {
     ariaLabel?: string;
     isDaylight: boolean;
     accentColor: string;
+    textColor: string;
+    borderColor: string;
     onSelect: (value: string) => void;
 }
 
@@ -38,6 +40,8 @@ export const CustomSelectMenu: React.FC<CustomSelectMenuProps> = ({
     ariaLabel,
     isDaylight,
     accentColor,
+    textColor,
+    borderColor,
     onSelect,
 }) => (
     <motion.div
@@ -65,7 +69,8 @@ export const CustomSelectMenu: React.FC<CustomSelectMenuProps> = ({
             width: position.width,
             maxHeight: position.maxHeight,
             backgroundColor: isDaylight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(24, 24, 27, 0.96)',
-            borderColor: 'var(--border-color)',
+            borderColor,
+            color: textColor,
         }}
     >
         <div className="p-1.5 space-y-0.5">
@@ -80,7 +85,7 @@ export const CustomSelectMenu: React.FC<CustomSelectMenuProps> = ({
                         onClick={() => onSelect(option.value)}
                         className="w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-lg transition-colors text-left cursor-pointer"
                         style={{
-                            color: 'var(--text-primary)',
+                            color: textColor,
                             backgroundColor: isSelected
                                 ? (isDaylight ? `${accentColor}12` : `${accentColor}18`)
                                 : 'transparent',
