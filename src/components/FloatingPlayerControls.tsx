@@ -276,7 +276,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
             {/* Mobile Layout - base grid positions apply below the sm breakpoint */}
             {/* Row 1: Centered Title */}
             <div
-                className="col-span-3 row-start-1 min-w-0 truncate px-2 text-center text-sm font-bold sm:col-start-2 sm:col-span-1"
+                className="col-span-3 row-start-1 min-w-0 truncate px-2 text-center text-sm font-bold select-none sm:col-start-2 sm:col-span-1"
                 style={{ color: primaryColor }}
             >
                 {currentSong?.name || noTrackText}

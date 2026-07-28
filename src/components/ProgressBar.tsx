@@ -110,7 +110,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     };
 
     return (
-        <div className="flex items-center gap-3 w-full">
+        <div className="flex items-center gap-3 w-full select-none">
             <span
                 ref={timeRef}
                 className="text-[10px] font-mono font-medium opacity-60 w-8 text-right"
