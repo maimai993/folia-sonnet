@@ -58,7 +58,7 @@ const CommandPaletteQueueRow = ({
     const hoverClass = isDaylight ? 'hover:bg-black/[0.05]' : 'hover:bg-white/[0.06]';
 
     return (
-        <div style={style} {...ariaAttributes} className="px-2 py-0.5">
+        <div style={style} {...ariaAttributes} className="px-1 py-0.5">
             <div
                 className={`group/queue-row relative h-full rounded-2xl ${
                     isSelected ? selectedClass : hoverClass
@@ -72,14 +72,14 @@ const CommandPaletteQueueRow = ({
                         onActiveIndexChange(index);
                         void onExecuteMatch(index);
                     }}
-                    className="flex h-full w-full items-center gap-3 rounded-2xl px-3 pr-[7.5rem] text-left"
+                    className="flex h-full w-full items-center gap-1.5 rounded-2xl px-2 pr-[7.5rem] text-left"
                 >
                     <span
                         className={`h-7 w-1 shrink-0 rounded-full ${
                             isPlaying ? (isDaylight ? 'bg-zinc-700' : 'bg-white') : 'bg-transparent'
                         }`}
                     />
-                    <span className="w-8 shrink-0 text-right font-mono text-[10px] tabular-nums opacity-40">
+                    <span className="w-6 shrink-0 text-right font-mono text-[10px] tabular-nums opacity-40">
                         #{queueIndex + 1}
                     </span>
                     <span className="min-w-0 flex-1">
