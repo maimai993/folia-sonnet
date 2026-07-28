@@ -133,9 +133,9 @@ export async function searchQQLyrics(keyword: string, page = 1, pageSize = 20): 
         album: {
           id: Number(info.album?.id || 0),
           name: info.album?.name || 'Unknown Album',
-          picUrl,
+          coverUrl: picUrl,
         },
-        duration: (info.interval || 0) * 1000,
+        durationMs: (info.interval || 0) * 1000,
         qqMid: info.mid,
       };
     });

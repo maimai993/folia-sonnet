@@ -44,10 +44,22 @@ describe('onlineMetadataSearchService', () => {
             { id: 1, name: 'Completely Unrelated Melody', dt: 200000, ar: [{ name: 'Someone Else' }] },
         ] } });
         vi.mocked(searchQQLyrics).mockResolvedValue([
-            { id: 9, qqMid: 'qq-mid', name: 'Target Song', durationMs: 200000, artists: [{ id: 7, name: 'Target Artist' }], album: { id: 8, name: 'Target Album' } },
+            {
+                id: 9,
+                qqMid: 'qq-mid',
+                name: 'Target Song',
+                durationMs: 200000,
+                artists: [{ id: 7, name: 'Target Artist' }],
+                album: { id: 8, name: 'Target Album', coverUrl: 'https://example.test/qq-cover.jpg' },
+            },
         ]);
         const candidate = await findAutomaticOnlineMetadataCandidate(song);
-        expect(candidate).toMatchObject({ source: 'qq', songId: 'qq-mid', titleMatched: true });
+        expect(candidate).toMatchObject({
+            source: 'qq',
+            songId: 'qq-mid',
+            titleMatched: true,
+            coverUrl: 'https://example.test/qq-cover.jpg',
+        });
     });
 
     it('falls back to provider-backed KuGou when NetEase and QQ have no title-compatible candidate', async () => {

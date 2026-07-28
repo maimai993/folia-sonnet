@@ -65,4 +65,35 @@ describe('QQ lyric provider', () => {
         const searchRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
         expect(searchRequestBody.request.method).toBe('DoSearchForQQMusicLite');
     });
+
+    it('normalizes QQ search covers and duration for metadata matching', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+            code: 0,
+            request: {
+                code: 0,
+                data: {
+                    body: {
+                        item_song: [{
+                            id: 42,
+                            mid: 'song-mid',
+                            title: 'Test song',
+                            interval: 60,
+                            singer: [{ id: 1, name: 'Artist' }],
+                            album: { id: 2, mid: 'album-mid', name: 'Album' },
+                        }],
+                    },
+                },
+            },
+        })));
+        vi.stubGlobal('fetch', fetchMock);
+
+        const [result] = await searchQQLyrics('Test song');
+
+        expect(result).toMatchObject({
+            durationMs: 60_000,
+            album: {
+                coverUrl: 'https://y.gtimg.cn/music/photo_new/T002R300x300M000album-mid.jpg?max_age=2592000',
+            },
+        });
+    });
 });
