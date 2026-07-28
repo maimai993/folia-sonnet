@@ -17,6 +17,7 @@ cp .env.example .env
 FOLIA_IMAGE_NAMESPACE=镜像发布者的_Docker_Hub_用户名
 SYNC_TOKEN=至少八位的随机字符串
 ```
+Folia 官方仓库的 Docker Hub 镜像命名空间为 `papersman`，可直接使用官方镜像。自建镜像请在 `.env` 中指定自己的命名空间。
 
 按需填写 Gemini 或 OpenAI 兼容服务配置，然后启动：
 
