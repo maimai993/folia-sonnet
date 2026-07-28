@@ -51,6 +51,9 @@ export const getGrid3DSliderSummaryText = (
 
 const DISCRETE_WHEEL_PIXEL_THRESHOLD = 40;
 const DISCRETE_WHEEL_DISTANCE_MULTIPLIER = 3;
+const WHEEL_SMOOTHING_SETTLE_DISTANCE = 0.5;
+const WHEEL_SMOOTHING_MIN_PROGRESS = 0.01;
+const WHEEL_SMOOTHING_MAX_DURATION_MS = 800;
 
 export interface Grid3DWheelInput {
     delta: number;
@@ -114,6 +117,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     const wheelSmoothingRafRef = useRef<number | null>(null);
     const wheelSmoothingTargetRef = useRef<number | null>(null);
     const wheelSmoothingLastTimeRef = useRef(0);
+    const wheelSmoothingStartedAtRef = useRef(0);
     const cardCentersRef = useRef<number[]>([]);
     const scrollViewportWidthRef = useRef<number | null>(null);
     const isDraggingRef = useRef(false);
@@ -297,6 +301,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         }
         wheelSmoothingTargetRef.current = null;
         wheelSmoothingLastTimeRef.current = 0;
+        wheelSmoothingStartedAtRef.current = 0;
     }, []);
 
     // Coalesces low-frequency mouse-wheel notches into one compositor-friendly scroll update per frame.
@@ -310,6 +315,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
             0,
             Math.min(maxScrollLeft, currentTarget + delta * DISCRETE_WHEEL_DISTANCE_MULTIPLIER),
         );
+        wheelSmoothingStartedAtRef.current = performance.now();
 
         if (wheelSmoothingRafRef.current !== null) return;
 
@@ -326,17 +332,35 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                 : Math.min(now - wheelSmoothingLastTimeRef.current, 32);
             wheelSmoothingLastTimeRef.current = now;
             const progress = 1 - Math.pow(0.78, elapsed / 16.67);
-            const remaining = target - activeContainer.scrollLeft;
+            const liveMaxScrollLeft = Math.max(
+                0,
+                activeContainer.scrollWidth - activeContainer.clientWidth,
+            );
+            const boundedTarget = Math.max(0, Math.min(liveMaxScrollLeft, target));
+            wheelSmoothingTargetRef.current = boundedTarget;
+            const beforeScrollLeft = activeContainer.scrollLeft;
+            const remaining = boundedTarget - beforeScrollLeft;
+            const totalElapsed = wheelSmoothingStartedAtRef.current > 0
+                ? now - wheelSmoothingStartedAtRef.current
+                : 0;
 
-            if (Math.abs(remaining) < 0.5) {
-                activeContainer.scrollLeft = target;
-                wheelSmoothingRafRef.current = null;
-                wheelSmoothingTargetRef.current = null;
-                wheelSmoothingLastTimeRef.current = 0;
+            if (
+                Math.abs(remaining) <= WHEEL_SMOOTHING_SETTLE_DISTANCE
+                || totalElapsed >= WHEEL_SMOOTHING_MAX_DURATION_MS
+            ) {
+                activeContainer.scrollLeft = boundedTarget;
+                stopWheelSmoothing();
                 return;
             }
 
             activeContainer.scrollLeft += remaining * progress;
+            const actualProgress = Math.abs(activeContainer.scrollLeft - beforeScrollLeft);
+            if (actualProgress < WHEEL_SMOOTHING_MIN_PROGRESS) {
+                activeContainer.scrollLeft = boundedTarget;
+                stopWheelSmoothing();
+                return;
+            }
+
             wheelSmoothingRafRef.current = requestAnimationFrame(tick);
         };
 
@@ -369,6 +393,15 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         momentumRafRef.current = requestAnimationFrame(tick);
     }, []);
 
+    const stopKineticScroll = useCallback(() => {
+        if (wheelIdleTimerRef.current) {
+            clearTimeout(wheelIdleTimerRef.current);
+            wheelIdleTimerRef.current = null;
+        }
+        stopWheelSmoothing();
+        stopMomentum();
+    }, [stopMomentum, stopWheelSmoothing]);
+
     const centerIndex = useCallback((index: number, behavior: ScrollBehavior = 'smooth') => {
         if (index < 0 || index >= items.length) return;
         const container = scrollContainerRef.current;
@@ -394,9 +427,10 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
 
     const scrollToIndex = useCallback((index: number) => {
         if (!isInteractive) return;
+        stopKineticScroll();
         reportFocusedIndex(index);
         centerIndex(index);
-    }, [centerIndex, isInteractive, reportFocusedIndex]);
+    }, [centerIndex, isInteractive, reportFocusedIndex, stopKineticScroll]);
 
     useEffect(() => {
         if (items.length === 0) return;
@@ -595,12 +629,14 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         <div ref={containerRef} className="w-full flex-1 flex flex-col justify-center relative min-h-0 select-none">
             <div
                 ref={scrollContainerRef}
+                data-grid3d-slider
+                tabIndex={-1}
                 onScroll={handleScroll}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUpOrLeave}
                 onMouseLeave={handleMouseUpOrLeave}
-                className={`w-full flex items-center overflow-x-auto overflow-y-hidden py-24 custom-scrollbar ${
+                className={`w-full flex items-center overflow-x-auto overflow-y-hidden py-24 custom-scrollbar focus:outline-none ${
                     isInteractive ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
                 }`}
                 style={{ scrollbarWidth: 'none' }}
