@@ -4,26 +4,49 @@
 
 ## 快速启动
 
-要求 Docker Engine 24+ 与 Docker Compose v2。复制环境变量模板：
+要求 Docker Engine 24+ 与 Docker Compose v2。部署不需要下载源码；新建一个空目录，只下载 Compose 和环境变量模板：
 
 ```bash
-cd deploy/docker
-cp .env.example .env
+mkdir folia-docker
+cd folia-docker
+
+curl -fL \
+  https://raw.githubusercontent.com/chthollyphile/folia-major/main/deploy/docker/compose.yaml \
+  -o compose.yaml
+curl -fL \
+  https://raw.githubusercontent.com/chthollyphile/folia-major/main/deploy/docker/.env.example \
+  -o .env
 ```
 
-至少填写：
+也可以在浏览器中下载这两个文件并放入同一目录。最终目录只需要：
+
+```text
+folia-docker/
+├── compose.yaml
+└── .env
+```
+
+生成 Sync Token：
+
+```bash
+openssl rand -hex 32
+```
+
+编辑 `.env`，把输出填入 `SYNC_TOKEN`。模板默认使用 `papersman` 官方镜像；自建镜像只需修改 `FOLIA_IMAGE_NAMESPACE`。AI 配置可留空，不影响音乐播放。确认至少包含：
 
 ```env
-FOLIA_IMAGE_NAMESPACE=镜像发布者的_Docker_Hub_用户名
-SYNC_TOKEN=至少八位的随机字符串
+FOLIA_IMAGE_NAMESPACE=papersman
+SYNC_TOKEN=粘贴至少八位的随机字符串
 ```
-Folia 官方仓库的 Docker Hub 镜像命名空间为 `papersman`，可直接使用官方镜像。自建镜像请在 `.env` 中指定自己的命名空间。
 
-按需填写 Gemini 或 OpenAI 兼容服务配置，然后启动：
+未填写 `FOLIA_STACK_VERSION` 和 `FOLIA_SYNC_VERSION` 时，Compose 自动使用 `latest`。
+
+验证配置并启动：
 
 ```bash
+docker compose config
 docker compose pull
-docker compose up -d
+docker compose up -d --wait
 docker compose ps
 ```
 
@@ -38,7 +61,7 @@ docker compose ps
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `FOLIA_IMAGE_NAMESPACE` | 无 | Docker Hub 镜像命名空间，必填 |
+| `FOLIA_IMAGE_NAMESPACE` | 模板为 `papersman` | Docker Hub 镜像命名空间，缺失时拒绝启动 |
 | `FOLIA_STACK_VERSION` | `latest` | 四个 Web 堆栈镜像的统一版本 |
 | `FOLIA_SYNC_VERSION` | `latest` | Sync Server 独立版本 |
 | `FOLIA_HTTP_BIND` / `FOLIA_HTTP_PORT` | `0.0.0.0` / `18080` | Web 网关监听 |
@@ -101,7 +124,7 @@ docker compose pull
 docker compose up -d
 ```
 
-回滚时把 `FOLIA_STACK_VERSION` 或 `FOLIA_SYNC_VERSION` 改为先前的 `A.B.C` 标签，再重复以上命令。生产部署应固定版本，不要依赖 `latest`。
+模板默认使用 `latest`，但 Docker 不会自动拉取更新，仍需执行上述 `pull` 命令。回滚时在 `.env` 中加入 `FOLIA_STACK_VERSION` 或 `FOLIA_SYNC_VERSION`，将其设为先前的 `A.B.C` 标签，再重复以上命令。需要严格复现部署时也可以显式固定版本。
 
 数据库位于 `FOLIA_SYNC_DATA_DIR`。备份前可停止 Sync Server：
 
