@@ -781,7 +781,7 @@ export default {
     "resumePreview": "继续预览",
     "subtitleOverlayOpacity": "字幕透明度",
     "subtitleOverlayBackground": "字幕背景",
-    "subtitleOverlayBackgroundDesc": "为底部字幕添加主题自适应的半透明背景，提高复杂画面中的可读性。",
+    "subtitleOverlayBackgroundDesc": "为底部字幕添加主题自适应的柔和扩散光晕，提高复杂画面中的可读性。",
     "showHarmonySubtitle": "显示和声字幕",
     "showHarmonySubtitleDesc": "显示或隐藏顶部的和声歌词层。",
     "harmonySubtitleBackground": "和声字幕背景",

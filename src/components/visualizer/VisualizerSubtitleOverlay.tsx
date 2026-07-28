@@ -94,12 +94,11 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
     const resolvedOpacity = subtitleOverlayOpacity ?? opacity;
     const scaleFontSize = (fontSize: string) => fontSize.replace(/(-?\d*\.?\d+)(rem|vw|px)/g, (_match, value, unit) => `${(Number(value) * subtitleFontScale).toFixed(3)}${unit}`);
     const contentClassName = subtitleOverlayBackground
-        ? 'inline-block rounded px-1.5 py-0.5'
+        ? 'relative isolate inline-block px-1.5 py-0.5'
         : 'inline-block';
-    const contentStyle = subtitleOverlayBackground
+    const subtitleGlowStyle = subtitleOverlayBackground
         ? {
-            backgroundColor: colorWithAlpha(theme.backgroundColor, 0.8),
-            boxShadow: `0 0 20px 5px ${colorWithAlpha(theme.backgroundColor, 0.8)}`,
+            background: `radial-gradient(ellipse 115% 130% at center, ${colorWithAlpha(theme.backgroundColor, 0.96)} 0%, ${colorWithAlpha(theme.backgroundColor, 0.78)} 62%, transparent 100%)`,
         }
         : undefined;
     const textShadow = `0 1px 2px ${colorWithAlpha(theme.backgroundColor, 0.24)}`;
@@ -123,7 +122,14 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                     className="absolute left-0 right-0 text-center space-y-2 px-4 z-20 pointer-events-none"
                 >
                     {subtitleText ? (
-                        <div className={contentClassName} style={contentStyle}>
+                        <div className={contentClassName}>
+                            {subtitleOverlayBackground && (
+                                <div
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute -inset-x-10 -inset-y-6 -z-10 blur-2xl"
+                                    style={subtitleGlowStyle}
+                                />
+                            )}
                             <motion.div
                                 key={`trans-${activeLine?.startTime || recentCompletedLine?.startTime}`}
                                 initial={{ opacity: 0, y: 10 }}
@@ -143,7 +149,14 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                             </motion.div>
                         </div>
                     ) : activeLine && upcomingLines.length > 0 ? (
-                        <div className={`${contentClassName} space-y-2`} style={contentStyle}>
+                        <div className={`${contentClassName} space-y-2`}>
+                            {subtitleOverlayBackground && (
+                                <div
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute -inset-x-10 -inset-y-6 -z-10 blur-2xl"
+                                    style={subtitleGlowStyle}
+                                />
+                            )}
                             {upcomingLines.map((line, index) => (
                                 <p
                                     key={index}

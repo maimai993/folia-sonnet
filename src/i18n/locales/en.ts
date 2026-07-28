@@ -778,7 +778,7 @@ export default {
     "resumePreview": "Resume preview",
     "subtitleOverlayOpacity": "Subtitle Opacity",
     "subtitleOverlayBackground": "Subtitle Background",
-    "subtitleOverlayBackgroundDesc": "Add a theme-aware translucent background to improve readability over busy visuals.",
+    "subtitleOverlayBackgroundDesc": "Add a theme-aware, soft diffused halo to improve readability over busy visuals.",
     "showHarmonySubtitle": "Show Harmony Subtitles",
     "showHarmonySubtitleDesc": "Show or hide the top harmony lyric overlay.",
     "harmonySubtitleBackground": "Harmony Subtitle Background",

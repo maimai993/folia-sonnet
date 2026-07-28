@@ -708,7 +708,7 @@ export default {
     "previewSubtitleSettingsDesc": "Sesuaikan lapisan subtitle bawah, teks terjemahan, dan overlay baris berikutnya.",
     "subtitleOverlayOpacity": "Opasitas Subtitle",
     "subtitleOverlayBackground": "Latar Subtitle",
-    "subtitleOverlayBackgroundDesc": "Tambahkan latar transparan yang mengikuti tema agar subtitle lebih mudah dibaca.",
+    "subtitleOverlayBackgroundDesc": "Tambahkan halo lembut yang mengikuti tema agar subtitle lebih mudah dibaca.",
     "showSubtitleTranslation": "Tampilkan Terjemahan",
     "showSubtitleTranslationDesc": "Mengontrol teks terjemahan di Monet dan overlay subtitle bawah.",
     "subtitleContentMode": "Konten Subtitle",
