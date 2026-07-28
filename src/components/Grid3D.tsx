@@ -809,6 +809,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             void initLogin(provider.providerId);
                         }
                     }}
+                    onLogout={provider => {
+                        void onlineProviderPlatform.logoutProvider(provider.providerId);
+                    }}
                 />
             )}
 

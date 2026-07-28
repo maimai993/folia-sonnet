@@ -837,6 +837,7 @@ export default function App() {
 
     const {
         refresh: refreshKugouLibrary,
+        logout: logoutKugouLibrary,
         checkLoginStatus: checkKugouLoginStatus,
     } = useKugouLibrary();
     const [isProviderSyncing, setIsProviderSyncing] = useState(false);
@@ -844,6 +845,10 @@ export default function App() {
         netease: refreshUserData,
         kugou: refreshKugouLibrary,
     }), [refreshKugouLibrary, refreshUserData]);
+    const onlineProviderLogouts = useMemo(() => ({
+        netease: handleLogout,
+        kugou: logoutKugouLibrary,
+    }), [handleLogout, logoutKugouLibrary]);
     const [providerSwitchPending, setProviderSwitchPending] = useState<{
         nextProviderId: OnlineProviderId;
         resolve: (confirmed: boolean) => void;
@@ -900,7 +905,7 @@ export default function App() {
             onClose: handleCancelProviderSwitch,
         };
     }, [handleCancelProviderSwitch, handleConfirmProviderSwitch, isDaylight, providerSwitchPending, t]);
-    const onlineProviderPlatform = useOnlineProviderPlatform(onlineProviderRefreshers, prepareOnlineProviderSwitch);
+    const onlineProviderPlatform = useOnlineProviderPlatform(onlineProviderRefreshers, prepareOnlineProviderSwitch, onlineProviderLogouts);
     const handleActiveProviderSyncData = useCallback(async () => {
         const providerId = onlineProviderPlatform.activeProviderId;
         if (providerId === 'netease') {

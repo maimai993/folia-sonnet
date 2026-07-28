@@ -12,6 +12,7 @@ export type OnlineProviderPlatformState = {
     activeProvider: ProviderAccountSummary | undefined;
     switchProvider: (providerId: OnlineProviderId) => Promise<boolean>;
     refreshProvider: (providerId: OnlineProviderId) => Promise<unknown>;
+    logoutProvider: (providerId: OnlineProviderId) => Promise<void>;
     completeLogin: (providerId: OnlineProviderId) => Promise<boolean>;
 };
 
@@ -62,6 +63,7 @@ export const switchOnlineProviderTransaction = async ({
 export const useOnlineProviderPlatform = (
     refreshers: Partial<Record<OnlineProviderId, () => Promise<unknown>>>,
     prepareSwitch?: (currentProviderId: OnlineProviderId, nextProviderId: OnlineProviderId) => Promise<boolean>,
+    logouts: Partial<Record<OnlineProviderId, () => Promise<void>>> = {},
 ): OnlineProviderPlatformState => {
     const { accounts, activeProviderId, setActiveProviderId } = useOnlineProviderAccountStore(useShallow(state => ({
         accounts: state.accounts,
@@ -73,6 +75,9 @@ export const useOnlineProviderPlatform = (
     const refreshProvider = useCallback(async (providerId: OnlineProviderId) => {
         return await refreshers[providerId]?.();
     }, [refreshers]);
+    const logoutProvider = useCallback(async (providerId: OnlineProviderId) => {
+        await logouts[providerId]?.();
+    }, [logouts]);
     const switchProvider = useCallback((providerId: OnlineProviderId) => switchOnlineProviderTransaction({
         currentProviderId: activeProviderId,
         nextProviderId: providerId,
@@ -93,5 +98,5 @@ export const useOnlineProviderPlatform = (
     }), [activeProviderId, prepareSwitch, refreshers, setActiveProviderId]);
 
     const activeProvider = providers.find(provider => provider.providerId === activeProviderId) || providers[0];
-    return { providers, activeProviderId, activeProvider, switchProvider, refreshProvider, completeLogin };
+    return { providers, activeProviderId, activeProvider, switchProvider, refreshProvider, logoutProvider, completeLogin };
 };
