@@ -740,6 +740,7 @@ export default {
     "regenerateObsBrowserSourceToken": "Regenerate Token",
     "obsBrowserSourceClients": "Clients",
     "visualSettings": "Visual Settings",
+    "daylightMode": "Light / Dark Mode",
     "lyricsRenderer": "Lyrics Animation",
     "lyricsRendererDesc": "Choose the lyrics animation mode used on the playback page.",
     "lyricsAnimationAdjust": "Lyrics Animation Adjust",

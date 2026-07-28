@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Monitor, PlayCircle, Loader2, Server, Check, AlertCircle, FlaskConical, ChevronLeft, ChevronRight, RefreshCw, Download, ExternalLink, Sparkles, Palette, CircleHelp, Languages } from 'lucide-react';
+import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Monitor, PlayCircle, Loader2, Server, Check, AlertCircle, FlaskConical, ChevronLeft, ChevronRight, RefreshCw, Download, ExternalLink, Sparkles, Palette, CircleHelp, Languages, Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
 import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type TiltTuning, type StoredCustomLyricsFont, type VisualizerMode } from '../../types';
@@ -151,6 +151,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         visualizerOpacity,
         visualizerBackgroundMode,
         isDaylight,
+        setDaylightPreference: onSetDaylightPreference,
         visualizerMode,
         grid3dCardStyle,
         classicTuning,
@@ -1447,24 +1448,40 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pl-1 md:pl-2 pr-2 md:pr-4 relative pb-4">
                                     <div className="mb-4 md:mb-6 border-b border-white/10 pb-3 md:pb-4">
-                                        <h2 className="text-lg md:text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                            {activeSettingsSection === 'appearance' && (t('options.visualSettings') || "Visual Settings")}
-                                            {activeSettingsSection === 'general' && (t('options.generalSettings') || "General Settings")}
-                                            {activeSettingsSection === 'playback' && (t('options.playbackSettings') || "Playback Settings")}
-                                            {activeSettingsSection === 'integration' && (t('options.integrationSettings') || "Integration Settings")}
-                                            {activeSettingsSection === 'storage' && (t('options.storageSettings') || "Storage Settings")}
-                                            {activeSettingsSection === 'desktop' && (t('options.desktopSettings') || "Desktop Settings")}
-                                            {activeSettingsSection === 'lab' && (t('options.labSettings') || "Lab Settings")}
-                                        </h2>
-                                        <p className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                            {activeSettingsSection === 'appearance' && (t('options.visualSettingsPanelDesc') || "Customize the look and feel of Folia.")}
-                                            {activeSettingsSection === 'general' && (t('options.generalSettingsDesc') || "Basic application preferences.")}
-                                            {activeSettingsSection === 'playback' && (t('options.playbackSettingsPanelDesc') || "Audio output and playback behavior.")}
-                                            {activeSettingsSection === 'integration' && (t('options.integrationSettingsDesc') || "Connect with external services.")}
-                                            {activeSettingsSection === 'storage' && (t('options.storageSettingsPanelDesc') || "Manage cache and local data.")}
-                                            {activeSettingsSection === 'desktop' && (t('options.desktopSettingsPanelDesc') || "System integration and updates.")}
-                                            {activeSettingsSection === 'lab' && (t('options.labSettingsDesc') || "Experimental features.")}
-                                        </p>
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <h2 className="text-lg md:text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                                    {activeSettingsSection === 'appearance' && (t('options.visualSettings') || "Visual Settings")}
+                                                    {activeSettingsSection === 'general' && (t('options.generalSettings') || "General Settings")}
+                                                    {activeSettingsSection === 'playback' && (t('options.playbackSettings') || "Playback Settings")}
+                                                    {activeSettingsSection === 'integration' && (t('options.integrationSettings') || "Integration Settings")}
+                                                    {activeSettingsSection === 'storage' && (t('options.storageSettings') || "Storage Settings")}
+                                                    {activeSettingsSection === 'desktop' && (t('options.desktopSettings') || "Desktop Settings")}
+                                                    {activeSettingsSection === 'lab' && (t('options.labSettings') || "Lab Settings")}
+                                                </h2>
+                                                <p className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
+                                                    {activeSettingsSection === 'appearance' && (t('options.visualSettingsPanelDesc') || "Customize the look and feel of Folia.")}
+                                                    {activeSettingsSection === 'general' && (t('options.generalSettingsDesc') || "Basic application preferences.")}
+                                                    {activeSettingsSection === 'playback' && (t('options.playbackSettingsPanelDesc') || "Audio output and playback behavior.")}
+                                                    {activeSettingsSection === 'integration' && (t('options.integrationSettingsDesc') || "Connect with external services.")}
+                                                    {activeSettingsSection === 'storage' && (t('options.storageSettingsPanelDesc') || "Manage cache and local data.")}
+                                                    {activeSettingsSection === 'desktop' && (t('options.desktopSettingsPanelDesc') || "System integration and updates.")}
+                                                    {activeSettingsSection === 'lab' && (t('options.labSettingsDesc') || "Experimental features.")}
+                                                </p>
+                                            </div>
+                                            {activeSettingsSection === 'appearance' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onSetDaylightPreference(!isDaylight)}
+                                                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${utilityGhostButtonClass} ${isDaylight ? 'text-amber-500' : 'text-blue-300'}`}
+                                                    title={t('options.daylightMode')}
+                                                    aria-label={t('options.daylightMode')}
+                                                    aria-pressed={isDaylight}
+                                                >
+                                                    {isDaylight ? <Sun size={17} /> : <Moon size={17} />}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="space-y-8">
                                         {activeSettingsSection === 'appearance' && (

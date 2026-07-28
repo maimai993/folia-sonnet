@@ -743,6 +743,7 @@ export default {
     "regenerateObsBrowserSourceToken": "重新生成 Token",
     "obsBrowserSourceClients": "连接数",
     "visualSettings": "视觉设置",
+    "daylightMode": "明暗模式",
     "lyricsRenderer": "歌词动画",
     "lyricsRendererDesc": "选择播放页使用的歌词动画模式。",
     "lyricsAnimationAdjust": "歌词动画样式",
