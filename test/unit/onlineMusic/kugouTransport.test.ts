@@ -104,6 +104,58 @@ describe('KuGou Web transport', () => {
         expect(requestUrl.searchParams.get('hash')).toBe('HASH');
     });
 
+    it('requires token, userid, and dfid before using authenticated search', async () => {
+        vi.stubGlobal('window', undefined);
+        const { hasKugouAuthenticatedSearchSession } = await import('@/services/onlineMusic/kugouTransport');
+
+        storage.set('online_provider:kugou:dfid', 'device');
+        expect(hasKugouAuthenticatedSearchSession()).toBe(false);
+
+        storage.set('online_provider:kugou:token', 'token');
+        storage.set('online_provider:kugou:userid', '9');
+        expect(hasKugouAuthenticatedSearchSession()).toBe(true);
+    });
+
+    it('builds the anonymous signed search request without provider cookies', async () => {
+        vi.stubGlobal('window', undefined);
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({
+            error_code: 0,
+            data: { lists: [] },
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestKugouAnonymousSearch } = await import('@/services/onlineMusic/kugouTransport');
+
+        await requestKugouAnonymousSearch('爱河', 1, 50);
+
+        const proxyUrl = new URL(String(fetchMock.mock.calls[0][0]), 'http://localhost');
+        const targetUrl = new URL(proxyUrl.searchParams.get('url') || '');
+        expect(targetUrl.hostname).toBe('complexsearch.kugou.com');
+        expect(targetUrl.pathname).toBe('/v2/search/song');
+        expect(targetUrl.searchParams.get('keyword')).toBe('爱河');
+        expect(targetUrl.searchParams.get('pagesize')).toBe('50');
+        expect(targetUrl.searchParams.get('token')).toBe('');
+        expect(targetUrl.searchParams.get('signature')).toMatch(/^[a-f0-9]{32}$/);
+        expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: 'omit' });
+    });
+
+    it('uses the same anonymous signed search directly in Electron', async () => {
+        const kugouRequest = vi.fn();
+        vi.stubGlobal('window', { electron: { kugouRequest } });
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({
+            error_code: 0,
+            data: { lists: [] },
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestKugouAnonymousSearch } = await import('@/services/onlineMusic/kugouTransport');
+
+        await requestKugouAnonymousSearch('爱河', 1, 50);
+
+        const targetUrl = new URL(String(fetchMock.mock.calls[0][0]));
+        expect(targetUrl.hostname).toBe('complexsearch.kugou.com');
+        expect(targetUrl.searchParams.get('signature')).toMatch(/^[a-f0-9]{32}$/);
+        expect(kugouRequest).not.toHaveBeenCalled();
+    });
+
     it('does not fall back to Web after an Electron IPC failure', async () => {
         const ipcError = new Error('ipc failed');
         const kugouRequest = vi.fn().mockRejectedValue(ipcError);

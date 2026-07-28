@@ -13,10 +13,19 @@ import type {
 } from '../../types/onlineMusic';
 import { parseLyricsByFormat } from '../../utils/lyrics/parserCore';
 import { isPureMusicLyricText } from '../../utils/lyrics/pureMusic';
+import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
 import { createProviderSongMetadata } from '../../utils/songMetadata';
-import { normalizeSongTitleForLyricSearch } from '../../utils/lyrics/searchQuery';
+import {
+    buildKugouLyricSearchQuery,
+    normalizeSongTitleForLyricSearch,
+} from '../../utils/lyrics/searchQuery';
 import { removeProviderSessionValue, readProviderSessionValue } from './providerStorage';
-import { getKugouTransportAvailability, requestKugou } from './kugouTransport';
+import {
+    getKugouTransportAvailability,
+    hasKugouAuthenticatedSearchSession,
+    requestKugouAnonymousSearch,
+    requestKugou,
+} from './kugouTransport';
 
 // src/services/onlineMusic/kugouProvider.ts
 
@@ -562,7 +571,7 @@ const canAddToKugouPlaylist = (playlist: ProviderCollection): boolean => {
 };
 
 // Advances mixed user-library pagination with the raw response count, not the filtered item count.
-const userCollectionPageOf = <T>(
+const pageOfWithRawItemCount = <T>(
     items: T[],
     response: any,
     limit: number,
@@ -586,6 +595,20 @@ const pageOf = <T>(items: T[], raw: any, limit: number, offset: number): Provide
     const data = dataOf(raw);
     const total = Number(data?.total ?? raw?.total ?? data?.total_count ?? raw?.total_count ?? data?.count ?? items.length);
     return { items, total, hasMore: offset + items.length < total || items.length === limit, nextOffset: offset + items.length };
+};
+
+// Keeps one result per provider-aware playback identity while preserving search ranking order.
+const normalizeKugouSearchSongs = (rawItems: any[]): UnifiedSong[] => {
+    const seenSongKeys = new Set<string>();
+    return rawItems
+        .map(normalizeKugouSong)
+        .filter(song => {
+            if (!song.id) return false;
+            const songKey = getPlaybackSongKey(song);
+            if (seenSongKeys.has(songKey)) return false;
+            seenSongKeys.add(songKey);
+            return true;
+        });
 };
 
 const qualityValue = (quality: AudioQualityPreference): string => ({
@@ -800,8 +823,30 @@ export const kugouProvider: OnlineMusicProvider = {
     search: {
         async searchSongs(query, limit, offset) {
             const page = Math.floor(offset / limit) + 1;
+            if (!hasKugouAuthenticatedSearchSession()) {
+                const response = await requestKugouAnonymousSearch(
+                    buildKugouLyricSearchQuery(query),
+                    page,
+                    limit,
+                );
+                const rawItems = listOf(response);
+                return pageOfWithRawItemCount(
+                    normalizeKugouSearchSongs(rawItems),
+                    response,
+                    limit,
+                    offset,
+                    rawItems.length,
+                );
+            }
             const response = await requestKugou('search', { keywords: query, keyword: query, type: 'song', page, pagesize: limit });
-            return pageOf(listOf(response).map(normalizeKugouSong).filter(song => song.id), response, limit, offset);
+            const rawItems = listOf(response);
+            return pageOfWithRawItemCount(
+                normalizeKugouSearchSongs(rawItems),
+                response,
+                limit,
+                offset,
+                rawItems.length,
+            );
         },
     },
     playback: {
@@ -971,7 +1016,7 @@ export const kugouProvider: OnlineMusicProvider = {
                 const fallbackCover = await getKugouPlaylistFallbackCover(raw).catch(() => undefined);
                 return fallbackCover ? { ...collection, coverUrl: fallbackCover } : collection;
             }));
-            return userCollectionPageOf(items, response, requestLimit, offset, rawItems.length);
+            return pageOfWithRawItemCount(items, response, requestLimit, offset, rawItems.length);
         },
         async getUserAlbums(userId, limit, offset) {
             const requestLimit = Math.min(Math.max(1, limit), KUGOU_MAX_PAGE_SIZE);
@@ -981,7 +1026,7 @@ export const kugouProvider: OnlineMusicProvider = {
                 .filter(item => getKugouUserCollectionType(item) === 'album')
                 .map(item => normalizeCollection(item, 'album'))
                 .filter(collection => collection.id !== '');
-            return userCollectionPageOf(items, response, requestLimit, offset, rawItems.length);
+            return pageOfWithRawItemCount(items, response, requestLimit, offset, rawItems.length);
         },
         async getLikedSongIds(userId) {
             const playlist = await getKugouLikedPlaylist(userId);

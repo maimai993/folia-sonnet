@@ -1,3 +1,4 @@
+import md5 from 'blueimp-md5';
 import { OnlineProviderError } from '../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './providerStorage';
 
@@ -86,6 +87,82 @@ const getWebSessionCookie = (): string => {
     if (token) values.set('token', token);
     if (userId) values.set('userid', userId);
     return Array.from(values, ([key, value]) => `${key}=${value}`).join(';');
+};
+
+export const hasKugouAuthenticatedSearchSession = (): boolean => {
+    const cookie = getWebSessionCookie();
+    return ['token', 'userid', 'dfid'].every(key => (
+        new RegExp(`(?:^|;)\\s*${key}=[^;]+`, 'i').test(cookie)
+    ));
+};
+
+// Reproduces KuGou's anonymous Android search signature used before account-backed provider search.
+export const requestKugouAnonymousSearch = async (
+    keyword: string,
+    page: number,
+    pagesize: number,
+): Promise<any> => {
+    const clientTimeMs = Date.now();
+    const clientTimeSec = Math.floor(clientTimeMs / 1000);
+    const mid = md5(String(clientTimeMs));
+    const params: Record<string, string | number> = {
+        sorttype: '0',
+        keyword,
+        pagesize,
+        page,
+        userid: '0',
+        appid: '3116',
+        token: '',
+        clienttime: clientTimeSec,
+        iscorrection: '1',
+        uuid: '-',
+        mid,
+        dfid: '-',
+        clientver: '11070',
+        platform: 'AndroidFilter',
+    };
+    const signatureSource = Object.keys(params)
+        .sort()
+        .map(key => `${key}=${params[key]}`)
+        .join('');
+    params.signature = md5(
+        `LnT6xpN3khm36zse0QzvmgTZ3waWdRSA${signatureSource}LnT6xpN3khm36zse0QzvmgTZ3waWdRSA`,
+    );
+
+    const targetUrl = new URL('http://complexsearch.kugou.com/v2/search/song');
+    Object.entries(params).forEach(([key, value]) => targetUrl.searchParams.set(key, String(value)));
+    const requestUrl = typeof window !== 'undefined' && window.electron
+        ? targetUrl.toString()
+        : `/api/lyric-proxy?url=${encodeURIComponent(targetUrl.toString())}`;
+    const response = await fetch(requestUrl, {
+        method: 'GET',
+        credentials: 'omit',
+        headers: {
+            'User-Agent': 'Android14-1070-11070-201-0-SearchSong-wifi',
+            'KG-Rec': '1',
+            'KG-RC': '1',
+            'KG-CLIENTTIMEMS': String(clientTimeMs),
+            mid,
+            'x-router': 'complexsearch.kugou.com',
+        },
+    });
+    if (!response.ok) {
+        throw new OnlineProviderError(
+            'network',
+            `KuGou anonymous search failed: ${response.status}`,
+            'kugou',
+        );
+    }
+    const body = await response.json();
+    const errorCode = Number(body?.error_code);
+    if (Number.isFinite(errorCode) && errorCode !== 0 && errorCode !== 200) {
+        throw new OnlineProviderError(
+            'network',
+            `KuGou anonymous search failed: ${errorCode}`,
+            'kugou',
+        );
+    }
+    return body;
 };
 
 const clearWebDeviceIdentity = (): void => {

@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // test/unit/onlineMusic/kugouProvider.test.ts
 
 const requestMock = vi.hoisted(() => vi.fn());
+const anonymousSearchMock = vi.hoisted(() => vi.fn());
+const transportState = vi.hoisted(() => ({ hasAuthenticatedSearchSession: true }));
 
 vi.mock('@/services/onlineMusic/kugouTransport', () => ({
     getKugouTransportAvailability: () => ({ configured: false, reason: 'not-configured' }),
+    hasKugouAuthenticatedSearchSession: () => transportState.hasAuthenticatedSearchSession,
+    requestKugouAnonymousSearch: anonymousSearchMock,
     requestKugou: requestMock,
 }));
 
@@ -22,7 +26,70 @@ import {
 import { resolveSongCatalogRef } from '@/services/onlineMusic/catalogRefs';
 
 describe('kugouProvider', () => {
-    beforeEach(() => requestMock.mockReset());
+    beforeEach(() => {
+        requestMock.mockReset();
+        anonymousSearchMock.mockReset();
+        transportState.hasAuthenticatedSearchSession = true;
+    });
+
+    it('uses anonymous signed search when no authenticated KuGou session exists', async () => {
+        transportState.hasAuthenticatedSearchSession = false;
+        anonymousSearchMock.mockResolvedValue({
+            data: {
+                lists: [
+                    {
+                        FileHash: 'anonymous-hash',
+                        SongName: '爱河',
+                        Singers: [{ id: 7, name: '神马乐团' }],
+                        Duration: 226,
+                    },
+                    {
+                        FileHash: 'anonymous-hash',
+                        SongName: '爱河（重复结果）',
+                        Singers: [{ id: 7, name: '神马乐团' }],
+                        Duration: 226,
+                    },
+                ],
+            },
+        });
+
+        const page = await kugouProvider.search!.searchSongs('爱河', 50, 0);
+
+        expect(anonymousSearchMock).toHaveBeenCalledWith('爱河', 1, 50);
+        expect(requestMock).not.toHaveBeenCalled();
+        expect(page.items[0]).toMatchObject({
+            id: 'ANONYMOUS-HASH',
+            name: '爱河',
+            durationMs: 226_000,
+        });
+        expect(page.items).toHaveLength(1);
+        expect(page.nextOffset).toBe(2);
+    });
+
+    it('keeps authenticated searches on the provider transport', async () => {
+        requestMock.mockResolvedValue({
+            data: {
+                lists: [{
+                    FileHash: 'authenticated-hash',
+                    SongName: '爱河',
+                    Singers: [{ id: 7, name: '神马乐团' }],
+                    Duration: 226,
+                }],
+            },
+        });
+
+        const page = await kugouProvider.search!.searchSongs('爱河', 50, 0);
+
+        expect(requestMock).toHaveBeenCalledWith('search', {
+            keywords: '爱河',
+            keyword: '爱河',
+            type: 'song',
+            page: 1,
+            pagesize: 50,
+        });
+        expect(anonymousSearchMock).not.toHaveBeenCalled();
+        expect(page.items[0]?.id).toBe('AUTHENTICATED-HASH');
+    });
 
     it('normalizes Hash identity and keeps only stable provider data', () => {
         const song = normalizeKugouSong({
