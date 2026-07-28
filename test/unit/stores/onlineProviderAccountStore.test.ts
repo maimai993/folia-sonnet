@@ -35,12 +35,23 @@ describe('online provider account store', () => {
         const { useOnlineProviderAccountStore } = await import('@/stores/useOnlineProviderAccountStore');
         const store = useOnlineProviderAccountStore.getState();
         store.updateAccount('netease', { status: 'authenticated', user: { id: 1, nickname: 'Netease' } });
-        store.updateAccount('kugou', { status: 'authenticated', user: { id: 2, nickname: 'Kugou' } });
-        store.clearAccount('kugou');
+        store.updateAccount('kugou', {
+            status: 'authenticated',
+            user: { id: 2, nickname: 'Kugou' },
+            collections: [{ providerId: 'kugou', id: 'liked', name: 'Liked', type: 'playlist' }],
+            likedSongIds: ['song-1'],
+        });
+        store.clearAccount('kugou', 'auth-required');
 
         const state = useOnlineProviderAccountStore.getState();
         expect(state.accounts.netease.user?.nickname).toBe('Netease');
-        expect(state.accounts.kugou).toMatchObject({ status: 'anonymous', user: null });
+        expect(state.accounts.kugou).toMatchObject({
+            status: 'anonymous',
+            user: null,
+            collections: [],
+            likedSongIds: [],
+            error: 'auth-required',
+        });
         expect(state.activeProviderId).toBe('kugou');
     });
 

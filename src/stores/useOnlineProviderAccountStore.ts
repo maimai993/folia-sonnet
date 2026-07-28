@@ -19,7 +19,7 @@ type OnlineProviderAccountStore = {
     activeProviderId: OnlineProviderId;
     setActiveProviderId: (providerId: OnlineProviderId) => void;
     updateAccount: (providerId: OnlineProviderId, patch: Partial<OnlineProviderAccountState>) => void;
-    clearAccount: (providerId: OnlineProviderId) => void;
+    clearAccount: (providerId: OnlineProviderId, error?: string) => void;
 };
 
 const ACTIVE_PROVIDER_KEY = 'active_online_provider_id';
@@ -111,7 +111,7 @@ export const useOnlineProviderAccountStore = create<OnlineProviderAccountStore>(
             },
         };
     }),
-    clearAccount: providerId => set(state => ({
+    clearAccount: (providerId, error) => set(state => ({
         accounts: {
             ...state.accounts,
             [providerId]: {
@@ -119,6 +119,7 @@ export const useOnlineProviderAccountStore = create<OnlineProviderAccountStore>(
                 status: 'anonymous',
                 hydration: 'ready',
                 freshness: 'fresh',
+                error,
             },
         },
     })),

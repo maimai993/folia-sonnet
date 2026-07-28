@@ -170,6 +170,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             ...(cloudPlaylist ? [cloudPlaylist] : []),
         ]
         : []);
+    const activeProviderNeedsRelogin = activeProviderSummary?.error === 'auth-required';
 
     const [focusedIndex, setFocusedIndex] = useState(0);
     const gridRootRef = useRef<HTMLDivElement>(null);
@@ -296,7 +297,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         setFavoriteAlbums([]);
         setRadioItems([]);
         setFocusedIndex(0);
-    }, [activeProviderId]);
+    }, [activeProviderId, activeUser?.id]);
 
     const fetchFavoriteAlbums = async () => {
         setLoadingAlbums(true);
@@ -690,8 +691,12 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         providers={onlineProviderPlatform?.providers || omni.getProviderSummaries()}
                         activeProviderId={activeProviderId}
                         isDaylight={isDaylight}
-                        title={t('home.guestTitle')}
-                        prompt={t('home.guestPrompt')}
+                        title={activeProviderNeedsRelogin ? t('status.loginExpired') : t('home.guestTitle')}
+                        prompt={activeProviderNeedsRelogin
+                            ? t('home.guestPromptProvider', {
+                                provider: activeProviderSummary?.shortName || activeProviderSummary?.displayName || activeProviderId,
+                            })
+                            : t('home.guestPrompt')}
                         getActionLabel={provider => provider.status === 'authenticated'
                             ? t('home.switchToProvider', { provider: provider.shortName || provider.displayName })
                             : t('home.connectProviderAccount', { provider: provider.shortName || provider.displayName })}
