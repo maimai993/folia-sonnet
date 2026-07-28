@@ -65,6 +65,8 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: "3000"
+      FOLIA_FORWARD_CLIENT_IP: ${FOLIA_FORWARD_CLIENT_IP:-false}
+      ENABLE_GENERAL_UNBLOCK: ${ENABLE_GENERAL_UNBLOCK:-false}
     expose:
       - "3000"
     tmpfs:
@@ -88,6 +90,7 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: "3000"
+      FOLIA_FORWARD_CLIENT_IP: ${FOLIA_FORWARD_CLIENT_IP:-false}
     expose:
       - "3000"
     tmpfs:

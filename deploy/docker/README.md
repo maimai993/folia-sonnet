@@ -42,6 +42,8 @@ docker compose ps
 | `FOLIA_SYNC_VERSION` | `latest` | Sync Server 独立版本 |
 | `FOLIA_HTTP_BIND` / `FOLIA_HTTP_PORT` | `0.0.0.0` / `18080` | Web 网关监听 |
 | `FOLIA_AI_PROVIDER` | `google` | `google`、`gemini` 或 `openai` |
+| `FOLIA_FORWARD_CLIENT_IP` | `false` | 是否把浏览器 IP 转发给音乐平台；保持 `false` 可避免 LAN/Docker 地址出现在登录地点 |
+| `ENABLE_GENERAL_UNBLOCK` | `false` | 网易云 API 通用解锁开关；默认关闭 |
 | `FOLIA_SYNC_BIND` / `FOLIA_SYNC_PORT` | `0.0.0.0` / `13000` | Sync Server 监听 |
 | `FOLIA_SYNC_DATA_DIR` | `./data/sync` | SQLite 持久化目录 |
 | `SYNC_TOKEN` | 无 | Sync 客户端 Bearer Token，至少八位，必填 |
@@ -52,6 +54,8 @@ AI 密钥只传给 backend 容器，不会写入前端静态文件。修改 `FOL
 ```bash
 docker compose up -d --force-recreate gateway
 ```
+
+网易云和酷狗镜像默认不把浏览器或 Docker 私网地址写入上游请求，音乐平台会根据连接本身识别 NAS 的公网出口。只有兼容旧部署行为时才应设置 `FOLIA_FORWARD_CLIENT_IP=true`；这可能使登录记录显示为“局域网”或“未知”。
 
 ## HTTPS 与浏览器安全上下文
 
