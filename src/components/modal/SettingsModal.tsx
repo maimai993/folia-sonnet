@@ -24,8 +24,12 @@ import type { LyricData } from '../../types';
 import { selectSettingsUiSnapshot, type SettingsSubviewId, type VisualizerSettingsSection, useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { useShallow } from 'zustand/react/shallow';
 import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
+import { getWebAiProvider } from '../../services/runtimeConfig';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
+const VERSION_INFO = __DOCKER_STACK_VERSION__
+    ? `${__APP_VERSION_LABEL__} v${__APP_VERSION__} · Stack ${__DOCKER_STACK_VERSION__} · ${__COMMIT_HASH__}`
+    : `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`;
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -375,7 +379,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [cacheDirectoryIsDefault, setCacheDirectoryIsDefault] = useState(true);
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
     const [stageActionStatus, setStageActionStatus] = useState<'idle' | 'regenerating'>('idle');
-    const configuredAiProvider = isElectron ? electronSettings.AI_PROVIDER : import.meta.env.VITE_AI_PROVIDER;
+    const configuredAiProvider = isElectron ? electronSettings.AI_PROVIDER : getWebAiProvider();
     const aiServiceLabel = configuredAiProvider === 'openai' ? 'OpenAI Compatible' : 'Google Gemini';
     const showQuarkDownload = electronSettings.UPDATE_CHANNEL === 'realeco';
     useEffect(() => {
@@ -458,10 +462,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleCopyVersionInfo = async () => {
-        const versionInfo = `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`;
-
         try {
-            await copyText(versionInfo);
+            await copyText(VERSION_INFO);
             setVersionCopied(true);
             window.setTimeout(() => setVersionCopied(false), 1800);
         } catch (error) {
@@ -1314,7 +1316,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         >
                                             {versionCopied
                                                 ? t('status.copied')
-                                                : `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`}
+                                                : VERSION_INFO}
                                         </button>
 
                                         {/* 第二行：发现新版本与操作按钮 */}

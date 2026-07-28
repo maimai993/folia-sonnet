@@ -148,9 +148,9 @@ case $deploy_choice in
         
         echo -e "${CYAN}[*] 正在构建并启动 Docker 容器...${RESET}"
         if docker compose version &> /dev/null; then
-            docker compose up -d --build
+            docker compose -f ../deploy/docker/compose.sync.yaml up -d --build
         elif docker-compose --version &> /dev/null; then
-            docker-compose up -d --build
+            docker-compose -f ../deploy/docker/compose.sync.yaml up -d --build
         else
             echo -e "${RED}[!] 未检测到 docker compose 或 docker-compose 插件。${RESET}"
             exit 1

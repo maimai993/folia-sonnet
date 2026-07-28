@@ -140,8 +140,6 @@ GEMINI_API_KEY=your_google_gemini_api_key
 
 Web 版要使用酷狗时，需要自行部署 [KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi) 并填写 `VITE_KUGOU_API_BASE`。该变量没有默认公共实例；开发调试时可在 `.env.local` 中临时指向调试服务。Electron 版在主进程中直接调用内置的 KuGouMusicApi Node 模块，不会再启动一个酷狗 HTTP 服务。
 
-开发调试示例（不要作为默认生产配置提交）：`VITE_KUGOU_API_BASE=https://ku-gou-music-api-kohl-two.vercel.app`
-
 Electron 的酷狗登录与账号刷新日志位于 `%APPDATA%\Folia\logs\kugou-provider.log`。日志只记录请求阶段、状态、字段名和错误摘要，token、Cookie、userid、dfid 会被脱敏。
 
 OpenAI 兼容接口示例：

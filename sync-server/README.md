@@ -215,11 +215,11 @@ npm run deploy:cf -- --config wrangler.local.toml
 
 ## 方案二：Docker 部署
 
-仓库已提供 `Dockerfile` 和 `docker-compose.yml`，当前推荐从仓库内的 `sync-server` 目录直接构建镜像；数据库会持久化到 `./data`。
+Docker 资产已统一迁移到仓库的 `deploy/docker` 目录。完整 Web 堆栈与 HTTPS 说明见 [`deploy/docker/README.md`](../deploy/docker/README.md)；这里只保留 Sync Server 单独构建方式。
 
 ### 1. 准备配置
 
-进入仓库目录并创建 `.env`：
+进入 Sync Server 目录并创建 `.env`：
 
 ```bash
 cd sync-server
@@ -236,12 +236,13 @@ SYNC_TOKEN="你的_SYNC_TOKEN"
 DASHBOARD_TOKEN="你的_DASHBOARD_TOKEN"
 ```
 
-### 2. 启动服务
+### 2. 从仓库根目录启动服务
 
 ```bash
-docker compose up -d --build
+cd ..
+docker compose -f deploy/docker/compose.sync.yaml up -d --build
 ```
-启动后，服务监听容器内的 `3000` 端口，并映射到宿主机的 `13000` 端口；数据库文件会持久化保存在 `sync-server/data/folia-sync.db`。
+启动后，服务监听容器内的 `3000` 端口，并映射到宿主机的 `13000` 端口；数据库文件持久化在 `sync-server/data/folia-sync.db`。
 
 ---
 

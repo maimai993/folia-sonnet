@@ -44,6 +44,8 @@ test-results/.dev-credentials
 .codex-remote-attachments
 test/manual/lyric-output/*
 test/manual/lyric-audit-output/*    
+deploy/docker/.env
+deploy/docker/data/
 .agents/
 skills-lock.json
 TODO.MD

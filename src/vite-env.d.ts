@@ -6,6 +6,13 @@ declare global {
   const __APP_VERSION__: string;
   const __APP_VERSION_LABEL__: string;
   const __APP_RELEASE_CHANNEL__: string;
+  const __DOCKER_STACK_VERSION__: string;
+
+  interface Window {
+    __FOLIA_RUNTIME_CONFIG__?: {
+      aiProvider?: 'gemini' | 'openai';
+    };
+  }
 
   interface ElectronCacheDirectoryResult {
     path: string;

@@ -239,10 +239,10 @@ function Deploy-Docker {
     Write-Step "正在构建并启动 Docker 容器..."
     & docker compose version 1>$null 2>$null
     if ($LASTEXITCODE -eq 0) {
-        Invoke-Tool -FilePath 'docker' -ArgumentList @('compose', 'up', '-d', '--build')
+        Invoke-Tool -FilePath 'docker' -ArgumentList @('compose', '-f', '../deploy/docker/compose.sync.yaml', 'up', '-d', '--build')
     }
     elseif (Test-CommandExists 'docker-compose') {
-        Invoke-Tool -FilePath 'docker-compose' -ArgumentList @('up', '-d', '--build')
+        Invoke-Tool -FilePath 'docker-compose' -ArgumentList @('-f', '../deploy/docker/compose.sync.yaml', 'up', '-d', '--build')
     }
     else {
         throw "未检测到 docker compose 或 docker-compose。"

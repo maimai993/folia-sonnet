@@ -1,6 +1,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { loadEnv, type ConfigEnv, type UserConfig, type ViteDevServer } from 'vite';
+import { type ConfigEnv, type UserConfig, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'child_process';
@@ -136,9 +136,7 @@ function devLyricProxyPlugin() {
   };
 }
 
-export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfig> {
-  const env = loadEnv(mode, '.', '');
-
+export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig> {
   let commitHash = '';
   if (process.env.VERCEL_GIT_COMMIT_SHA) {
     commitHash = process.env.VERCEL_GIT_COMMIT_SHA.substring(0, 7);
@@ -164,7 +162,8 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
   }
 
   let commitSuffix = '';
-  if (commitHash && commitHash !== 'unknown, probably dev version') {
+  const canResolveCommitName = /^[0-9a-f]{7,40}$/i.test(commitHash) && !/^0+$/.test(commitHash);
+  if (canResolveCommitName) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 2000);
@@ -183,9 +182,13 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
       // Ignore errors during fetch to prevent build failure
     }
   }
+  if (process.env.REQUIRE_COMMIT_NAME === 'true' && canResolveCommitName && !commitSuffix) {
+    throw new Error(`Could not resolve the commit name for ${commitHash}`);
+  }
 
   const appVersionLabel = process.env.APP_VERSION_LABEL?.trim() || 'Realeco';
   const appReleaseChannel = process.env.APP_RELEASE_CHANNEL?.trim().toLowerCase() || 'realeco';
+  const dockerStackVersion = process.env.DOCKER_STACK_VERSION?.trim() || '';
 
   return {
     base: process.env.ELECTRON === 'true' ? './' : '/',
@@ -222,7 +225,9 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
           enabled: true
         },
         workbox: {
-          maximumFileSizeToCacheInBytes: 5000000
+          maximumFileSizeToCacheInBytes: 5000000,
+          // Docker serves this file dynamically; it must never be pinned in the PWA precache.
+          globIgnores: ['**/runtime-config.js']
         },
         manifest: {
           name: 'Folia Music',
@@ -243,13 +248,12 @@ export default async function viteConfig({ mode }: ConfigEnv): Promise<UserConfi
       })
     ],
     define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       '__COMMIT_HASH__': JSON.stringify(commitHash + commitSuffix),
       '__GIT_BRANCH__': JSON.stringify(gitBranch),
       '__APP_VERSION__': JSON.stringify(JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version),
       '__APP_VERSION_LABEL__': JSON.stringify(appVersionLabel),
-      '__APP_RELEASE_CHANNEL__': JSON.stringify(appReleaseChannel)
+      '__APP_RELEASE_CHANNEL__': JSON.stringify(appReleaseChannel),
+      '__DOCKER_STACK_VERSION__': JSON.stringify(dockerStackVersion)
     },
     resolve: {
       alias: {

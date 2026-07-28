@@ -1,6 +1,7 @@
 import { DualTheme } from "../types";
 import { applyStoredAnimationIntensityToDualTheme } from "./themePreferences";
 import { sanitizeDualTheme } from "./themeSanitizer";
+import { getWebAiProvider } from "./runtimeConfig";
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) {
@@ -26,7 +27,7 @@ export const generateThemeFromLyrics = async (
       return sanitizeDualTheme(dualTheme);
     }
 
-    const provider = import.meta.env.VITE_AI_PROVIDER;
+    const provider = getWebAiProvider();
     const endpoint = provider === 'openai' ? '/api/generate-theme_openai' : '/api/generate-theme';
 
     const response = await fetch(endpoint, {
@@ -52,7 +53,7 @@ export const generateThemeFromLyrics = async (
 
 // The AI connection the web OBS overlay (Dynamic AI mode) generates a theme with. The overlay runs
 // in a separate browser context, so it takes an explicit provider instead of reading anything from
-// the app; the provider is fixed at build time (VITE_AI_PROVIDER) and selects the generate endpoint.
+// the app; the provider is selected by Docker runtime config or the Vite build fallback.
 export interface ObsAiConfig {
   provider: 'gemini' | 'openai';
 }
