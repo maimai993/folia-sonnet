@@ -173,7 +173,7 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
     showSubtitleTranslation = true,
     subtitleContentMode,
     showHarmonySubtitle = true,
-    harmonySubtitleBackground = false,
+    harmonySubtitleBackground = true,
     subtitleFontScale = 1,
 }) => {
     const backgroundVocals = useMemo(() => getLyricsBackgroundVocals(lines), [lines]);

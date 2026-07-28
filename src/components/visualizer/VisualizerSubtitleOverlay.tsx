@@ -73,7 +73,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
     subtitleFontScale = 1,
     opacity = 0.6,
     subtitleOverlayOpacity,
-    subtitleOverlayBackground = false,
+    subtitleOverlayBackground = true,
     isPlayerChromeHidden = false,
     hideTranslationSubtitle = false,
     showSubtitleTranslation = true,

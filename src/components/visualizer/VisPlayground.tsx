@@ -287,9 +287,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     showSubtitleTranslation = true,
     subtitleContentMode,
     subtitleOverlayOpacity = 0.6,
-    subtitleOverlayBackground = false,
+    subtitleOverlayBackground = true,
     showHarmonySubtitle = true,
-    harmonySubtitleBackground = false,
+    harmonySubtitleBackground = true,
     classicTuning = DEFAULT_CLASSIC_TUNING,
     cadenzaTuning = DEFAULT_CADENZA_TUNING,
     partitaTuning = DEFAULT_PARTITA_TUNING,
@@ -960,9 +960,9 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         } else {
             onToggleShowSubtitleTranslation?.(true);
         }
-        onToggleSubtitleOverlayBackground?.(false);
+        onToggleSubtitleOverlayBackground?.(true);
         onToggleShowHarmonySubtitle?.(true);
-        onToggleHarmonySubtitleBackground?.(false);
+        onToggleHarmonySubtitleBackground?.(true);
         onSubtitleOverlayOpacityChange?.(0.6);
         onSubtitleFontScaleChange?.(1);
         onSubtitleFontInheritsLyricsChange?.(true);
