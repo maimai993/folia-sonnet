@@ -715,7 +715,7 @@ export default {
     "showHarmonySubtitle": "Tampilkan Subtitle Harmoni",
     "showHarmonySubtitleDesc": "Tampilkan atau sembunyikan overlay lirik harmoni di bagian atas.",
     "harmonySubtitleBackground": "Latar Subtitle Harmoni",
-    "harmonySubtitleBackgroundDesc": "Tambahkan latar tetap dengan opasitas 50% di belakang subtitle harmoni.",
+    "harmonySubtitleBackgroundDesc": "Tambahkan halo lembut yang menyebar di belakang subtitle harmoni.",
     "classicSettings": "Penyetelan Classic",
     "classicSettingsDesc": "Kontrol rotasi per-kata dan rentang float breathing seluruh baris.",
     "classicWordRotation": "Rotasi Per-kata",
@@ -1071,7 +1071,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_5": {
-      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.5.",
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.6.",
       "lyricPreview": {
         "title": "Pratinjau Animasi Lirik yang Ditingkatkan",
         "description": "Pengaturan gaya animasi lirik kini memiliki kontrol jeda untuk pratinjau dan satu set lirik placeholder baru."

@@ -782,7 +782,7 @@ export default {
     "showHarmonySubtitle": "Show Harmony Subtitles",
     "showHarmonySubtitleDesc": "Show or hide the top harmony lyric overlay.",
     "harmonySubtitleBackground": "Harmony Subtitle Background",
-    "harmonySubtitleBackgroundDesc": "Add a fixed 50% opaque background behind harmony subtitles.",
+    "harmonySubtitleBackgroundDesc": "Add a soft, diffused halo behind harmony subtitles.",
     "harmonySubtitleSettings": "Harmony Subtitles",
     "harmonySubtitleSettingsDesc": "Controls for the top harmony lyric overlay.",
     "showSubtitleTranslation": "Show Translation",
@@ -1222,7 +1222,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_5": {
-      "intro": "Here are the new features and improvements in version 0.6.5.",
+      "intro": "Here are the new features and improvements in version 0.6.6.",
       "lyricPreview": {
         "title": "Improved Lyric Animation Preview",
         "description": "Lyric animation style settings now include a pause control for the preview and a new set of placeholder lyrics."

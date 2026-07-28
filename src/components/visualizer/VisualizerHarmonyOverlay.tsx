@@ -219,9 +219,17 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
                     style={{ top: harmonyTopPx }}
                 >
                     <div
-                        className={`flex max-w-full flex-col items-center gap-1.5 ${harmonySubtitleBackground ? 'rounded-2xl px-4 py-2' : ''}`}
-                        style={harmonySubtitleBackground ? { backgroundColor: colorWithAlpha(theme.backgroundColor, 0.45) } : undefined}
+                        className={`relative isolate flex max-w-full flex-col items-center gap-1.5 ${harmonySubtitleBackground ? 'px-4 py-2' : ''}`}
                     >
+                    {harmonySubtitleBackground && (
+                        <div
+                            aria-hidden="true"
+                            className="pointer-events-none absolute -inset-x-10 -inset-y-6 -z-10 blur-2xl"
+                            style={{
+                                background: `radial-gradient(ellipse at center, ${colorWithAlpha(theme.backgroundColor, 0.7)} 0%, ${colorWithAlpha(theme.backgroundColor, 0.42)} 48%, transparent 78%)`,
+                            }}
+                        />
+                    )}
                     {snapshot.lines.map(entry => {
                         const alternateText = hideTranslationSubtitle
                             ? null

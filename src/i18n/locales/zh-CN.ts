@@ -785,7 +785,7 @@ export default {
     "showHarmonySubtitle": "显示和声字幕",
     "showHarmonySubtitleDesc": "显示或隐藏顶部的和声歌词层。",
     "harmonySubtitleBackground": "和声字幕背景",
-    "harmonySubtitleBackgroundDesc": "为和声字幕添加固定 50% 透明度的背景。",
+    "harmonySubtitleBackgroundDesc": "为和声字幕添加柔和扩散的光晕背景。",
     "harmonySubtitleSettings": "和声字幕",
     "harmonySubtitleSettingsDesc": "调整顶部和声歌词层的显示方式。",
     "showSubtitleTranslation": "显示翻译",
@@ -1223,7 +1223,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_5": {
-      "intro": "以下是 0.6.5 的新功能与改进",
+      "intro": "以下是 0.6.6 的新功能与改进",
       "lyricPreview": {
         "title": "歌词动画预览改进",
         "description": "歌词动画样式设置新增预览窗口暂停功能，并提供一套全新的占位符歌词。"

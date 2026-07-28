@@ -220,6 +220,26 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                             );
                         })}
                     </div>
+                </div>
+            </section>
+
+            <section>
+                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+                    <Settings2 size={14} /> {t('options.lyrics')}
+                </h3>
+                <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
+                    <div className="p-4 flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                <Settings2 size={14} />
+                                {t('options.autoUseBestLyric')}
+                            </div>
+                            <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.autoUseBestLyricDesc')}
+                            </div>
+                        </div>
+                        {renderToggle(autoUseBestLyric, () => onToggleAutoUseBestLyric(!autoUseBestLyric))}
+                    </div>
                     <div className="p-4 space-y-3 border-t" style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.06))' }}>
                         <div className="space-y-1">
                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -253,26 +273,6 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                                 );
                             })}
                         </div>
-                    </div>
-                </div>
-            </section>
-
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Settings2 size={14} /> {t('options.lyrics')}
-                </h3>
-                <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
-                    <div className="p-4 flex items-center justify-between gap-4">
-                        <div className="space-y-1">
-                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                <Settings2 size={14} />
-                                {t('options.autoUseBestLyric')}
-                            </div>
-                            <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.autoUseBestLyricDesc')}
-                            </div>
-                        </div>
-                        {renderToggle(autoUseBestLyric, () => onToggleAutoUseBestLyric(!autoUseBestLyric))}
                     </div>
                     <div className="p-4 space-y-3 border-t" style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.06))' }}>
                             <div className="space-y-1">
