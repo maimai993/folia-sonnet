@@ -96,9 +96,13 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
     const contentClassName = subtitleOverlayBackground
         ? 'relative isolate inline-block px-1.5 py-0.5'
         : 'inline-block';
+    // iOS Safari may drop a filtered negative layer when a nearby WebKit mask is recomposited.
     const subtitleGlowStyle = subtitleOverlayBackground
         ? {
             background: `radial-gradient(ellipse 115% 130% at center, ${colorWithAlpha(theme.backgroundColor, 0.96)} 0%, ${colorWithAlpha(theme.backgroundColor, 0.78)} 62%, transparent 100%)`,
+            transform: 'translateZ(0)',
+            WebkitTransform: 'translateZ(0)',
+            WebkitBackfaceVisibility: 'hidden' as const,
         }
         : undefined;
     const textShadow = `0 1px 2px ${colorWithAlpha(theme.backgroundColor, 0.24)}`;
@@ -126,7 +130,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                             {subtitleOverlayBackground && (
                                 <div
                                     aria-hidden="true"
-                                    className="pointer-events-none absolute -inset-x-10 -inset-y-6 -z-10 blur-2xl"
+                                    className="pointer-events-none absolute -inset-x-10 -inset-y-6 z-0 blur-2xl"
                                     style={subtitleGlowStyle}
                                 />
                             )}
@@ -136,7 +140,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0 }}
                                 data-font-debug-target="visualizer-translation"
-                                className="max-w-4xl mx-auto"
+                                className="relative z-10 max-w-4xl mx-auto"
                                 style={{
                                     color: theme.secondaryColor,
                                     fontSize: scaleFontSize(translationFontSize),
@@ -153,24 +157,26 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                             {subtitleOverlayBackground && (
                                 <div
                                     aria-hidden="true"
-                                    className="pointer-events-none absolute -inset-x-10 -inset-y-6 -z-10 blur-2xl"
+                                    className="pointer-events-none absolute -inset-x-10 -inset-y-6 z-0 blur-2xl"
                                     style={subtitleGlowStyle}
                                 />
                             )}
-                            {upcomingLines.map((line, index) => (
-                                <p
-                                    key={index}
-                                    className="truncate max-w-2xl mx-auto transition-all duration-500 blur-[1px]"
-                                    style={{
-                                        color: theme.secondaryColor,
-                                        fontSize: scaleFontSize(upcomingFontSize),
-                                        fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 400),
-                                        textShadow,
-                                    }}
-                                >
-                                    {line.fullText}
-                                </p>
-                            ))}
+                            <div className="relative z-10 space-y-2">
+                                {upcomingLines.map((line, index) => (
+                                    <p
+                                        key={index}
+                                        className="truncate max-w-2xl mx-auto transition-all duration-500 blur-[1px]"
+                                        style={{
+                                            color: theme.secondaryColor,
+                                            fontSize: scaleFontSize(upcomingFontSize),
+                                            fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 400),
+                                            textShadow,
+                                        }}
+                                    >
+                                        {line.fullText}
+                                    </p>
+                                ))}
+                            </div>
                         </div>
                     ) : null}
                 </motion.div>
