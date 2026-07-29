@@ -1475,7 +1475,7 @@ export default {
     "songs": "Songs",
     "recents": "Recently Played",
     "allAlbums": "All",
-    "recentlyAdded": "New",
+    "recentlyAdded": "Recently Added",
     "noAlbumsFound": "No albums found",
     "noPlaylistsFound": "No playlists found",
     "noArtistsFound": "No artists found",

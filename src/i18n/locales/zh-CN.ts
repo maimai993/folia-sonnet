@@ -1476,7 +1476,7 @@ export default {
     "songs": "歌曲",
     "recents": "最近播放",
     "allAlbums": "全部",
-    "recentlyAdded": "最新",
+    "recentlyAdded": "最近加入",
     "noAlbumsFound": "未找到专辑",
     "noPlaylistsFound": "未找到歌单",
     "noArtistsFound": "未找到艺术家",
