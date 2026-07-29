@@ -1222,7 +1222,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_5": {
-      "intro": "Here are the new features and improvements in version 0.6.6.",
+      "intro": "Here are the new features and improvements in version 0.6.7.",
       "lyricPreview": {
         "title": "Improved Lyric Animation Preview",
         "description": "Lyric animation style settings now include a pause control for the preview and a new set of placeholder lyrics."
