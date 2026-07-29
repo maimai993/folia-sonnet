@@ -464,6 +464,26 @@ const normalizeKugouVipType = (raw: any): number => {
     return businessVips.some((entry: any) => Number(valueOf(entry, 'is_vip', 'vip_type') || 0) > 0) ? 1 : 0;
 };
 
+// Formats the claim date in KuGou's China-based calendar instead of the device's local timezone.
+const getKugouReceiveDay = (date = new Date()): string => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+    const value = (type: Intl.DateTimeFormatPartTypes) => parts.find(part => part.type === type)?.value || '';
+    return `${value('year')}-${value('month')}-${value('day')}`;
+};
+
+const isSuccessfulKugouVipMutation = (raw: any): boolean => {
+    const data = dataOf(raw);
+    const errCode = Number(valueOf(raw, 'errcode', 'error_code') ?? valueOf(data, 'errcode', 'error_code') ?? 0);
+    const rawStatus = valueOf(raw, 'status') ?? valueOf(data, 'status');
+    const status = rawStatus === undefined ? 1 : Number(rawStatus);
+    return errCode === 0 && status === 1;
+};
+
 const ensureKugouYouthVip = async (userId?: string): Promise<boolean> => {
     try {
         const token = readProviderSessionValue('kugou', 'token');
@@ -483,7 +503,28 @@ const ensureKugouYouthVip = async (userId?: string): Promise<boolean> => {
         const isUnionVip = normalizeKugouVipType(unionResponse) > 0;
         if (!isUnionVip) {
             console.info('[KugouProvider] youth-union-vip:not-vip, requesting youth_day_vip');
-            await requestKugou('youth_day_vip', params);
+            const claimResponse = await requestKugou('youth_day_vip', {
+                ...params,
+                receive_day: getKugouReceiveDay(),
+            });
+            if (!isSuccessfulKugouVipMutation(claimResponse)) {
+                console.warn('[KugouProvider] youth-day-vip:api-error', {
+                    status: valueOf(claimResponse, 'status') ?? valueOf(dataOf(claimResponse), 'status'),
+                    errCode: valueOf(claimResponse, 'errcode', 'error_code')
+                        ?? valueOf(dataOf(claimResponse), 'errcode', 'error_code'),
+                });
+                return false;
+            }
+
+            const upgradeResponse = await requestKugou('youth_day_vip_upgrade', params);
+            if (!isSuccessfulKugouVipMutation(upgradeResponse)) {
+                console.warn('[KugouProvider] youth-day-vip-upgrade:api-error', {
+                    status: valueOf(upgradeResponse, 'status') ?? valueOf(dataOf(upgradeResponse), 'status'),
+                    errCode: valueOf(upgradeResponse, 'errcode', 'error_code')
+                        ?? valueOf(dataOf(upgradeResponse), 'errcode', 'error_code'),
+                });
+                return false;
+            }
             return true;
         }
         console.info('[KugouProvider] youth-union-vip:already-vip, skipping youth_day_vip');

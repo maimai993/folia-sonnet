@@ -14,6 +14,7 @@ const OPERATION_MODULES = {
   user_vip_detail: ['user_vip_detail'],
   youth_union_vip: ['youth_union_vip'],
   youth_day_vip: ['youth_day_vip'],
+  youth_day_vip_upgrade: ['youth_day_vip_upgrade'],
   user_playlist: ['user_playlist'],
   user_cloud: ['user_cloud'],
   user_cloud_url: ['user_cloud_url'],

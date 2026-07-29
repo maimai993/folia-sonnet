@@ -27,6 +27,7 @@ import { resolveSongCatalogRef } from '@/services/onlineMusic/catalogRefs';
 
 describe('kugouProvider', () => {
     beforeEach(() => {
+        vi.useRealTimers();
         requestMock.mockReset();
         anonymousSearchMock.mockReset();
         transportState.hasAuthenticatedSearchSession = true;
@@ -293,7 +294,9 @@ describe('kugouProvider', () => {
         expect(requestMock).toHaveBeenNthCalledWith(3, 'user_vip_detail', { userid: '123' });
     });
 
-    it('claims daily VIP via youth_day_vip when youth_union_vip is not VIP', async () => {
+    it('claims and upgrades daily VIP with the current China calendar date', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-07-29T16:30:00Z'));
         requestMock
             .mockResolvedValueOnce({
                 data: { userid: '123', nickname: 'Kugou User', vip_type: 0 },
@@ -305,14 +308,42 @@ describe('kugouProvider', () => {
                 data: { status: 1, msg: 'success' },
             })
             .mockResolvedValueOnce({
-                data: { is_vip: 0, vip_type: 0 },
+                status: 1, error_code: 0, data: { recharge_hours: 24 },
+            })
+            .mockResolvedValueOnce({
+                data: { is_vip: 0, vip_type: 0, busi_vip: [{ is_vip: 1, busi_type: 'concept' }] },
             });
 
         await expect(kugouProvider.auth?.getLoginStatus()).resolves.toMatchObject({
             id: '123', nickname: 'Kugou User', vipType: 1,
         });
         expect(requestMock).toHaveBeenNthCalledWith(2, 'youth_union_vip', expect.objectContaining({ userid: '123' }));
-        expect(requestMock).toHaveBeenNthCalledWith(3, 'youth_day_vip', expect.objectContaining({ userid: '123' }));
+        expect(requestMock).toHaveBeenNthCalledWith(3, 'youth_day_vip', expect.objectContaining({
+            userid: '123', receive_day: '2026-07-30',
+        }));
+        expect(requestMock).toHaveBeenNthCalledWith(4, 'youth_day_vip_upgrade', expect.objectContaining({ userid: '123' }));
+        expect(requestMock).toHaveBeenNthCalledWith(5, 'user_vip_detail', { userid: '123' });
+    });
+
+    it('does not upgrade or report daily VIP when the claim response fails', async () => {
+        requestMock
+            .mockResolvedValueOnce({
+                data: { userid: '123', nickname: 'Kugou User', vip_type: 0 },
+            })
+            .mockResolvedValueOnce({
+                data: { is_vip: 0 },
+            })
+            .mockResolvedValueOnce({
+                status: 0, error_code: 500, error_msg: 'claim failed',
+            })
+            .mockResolvedValueOnce({
+                data: { is_vip: 0, vip_type: 0 },
+            });
+
+        await expect(kugouProvider.auth?.getLoginStatus()).resolves.toMatchObject({
+            id: '123', nickname: 'Kugou User', vipType: 0,
+        });
+        expect(requestMock).not.toHaveBeenCalledWith('youth_day_vip_upgrade', expect.anything());
         expect(requestMock).toHaveBeenNthCalledWith(4, 'user_vip_detail', { userid: '123' });
     });
 
