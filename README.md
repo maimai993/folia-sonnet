@@ -188,6 +188,8 @@ Folia 会读取音频文件元数据、同目录歌词和封面，并可通过�
 - [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC)
 - [NeteaseCloudMusicApiEnhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced)
 - [chenglou/pretext](https://github.com/chenglou/pretext)
+- [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)
+- [paper-design/shaders](https://github.com/paper-design/shaders)
 
 本项目接入了 [Apple Music-like Lyrics TTML 逐词歌词库](https://github.com/amll-dev/amll-ttml-db) 以提供高质量的歌词文件，感谢此歌词库的作者和贡献者们。
 
