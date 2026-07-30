@@ -10,7 +10,7 @@ import type { ThemeCacheSongKey } from '../../../services/themeCache';
 import type { LyricData, LocalSong, SongResult, StatusMessage } from '../../../types';
 import type { NavidromeSong } from '../../../types/navidrome';
 import { hydrateNavidromeLyricPayload, resolvePreferredNavidromeLyrics } from '../../../utils/appNavidromeLyrics';
-import { hasRenderableLyrics, toSafeRemoteUrl } from '../../../utils/appPlaybackHelpers';
+import { hasRenderableLyrics, toSafePlaybackUrl } from '../../../utils/appPlaybackHelpers';
 import {
     isLocalPlaybackSong,
     isNavidromePlaybackSong,
@@ -242,7 +242,7 @@ export const restorePlaybackSourceForSong = async (
     }
     if (!restoredCachedAudio) {
         const audioSource = await omni.getAudioSource(song, audioQuality);
-        const url = toSafeRemoteUrl(audioSource?.url);
+        const url = toSafePlaybackUrl(audioSource?.url);
         if (url) {
             currentOnlineAudioUrlFetchedAtRef.current = Date.now();
             setAudioSrc(url);

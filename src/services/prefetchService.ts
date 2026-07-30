@@ -16,7 +16,7 @@ import { getPlaybackSourceRef } from '../utils/appPlaybackGuards';
 import { omni } from './onlineMusic/omni';
 import { getSongResourceCacheKey } from './onlineMusic/resourceKeys';
 import { getSongCacheWithLegacyMigration, hasCachedSongAudio } from './onlineMusic/resourceCache';
-import { toSafeRemoteUrl } from '../utils/appPlaybackHelpers';
+import { toSafePlaybackUrl } from '../utils/appPlaybackHelpers';
 import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 
 // Prefetch configuration
@@ -74,7 +74,7 @@ export const getPrefetchedData = (song: SongResult, requiredQuality?: AudioQuali
     if (!cached) return null;
 
     if (cached.audioUrl && cached.audioUrl !== 'CACHED_IN_DB') {
-        cached.audioUrl = toSafeRemoteUrl(cached.audioUrl) ?? null;
+        cached.audioUrl = toSafePlaybackUrl(cached.audioUrl) ?? null;
     }
 
     // Check if URL is expired
@@ -122,7 +122,7 @@ const prefetchSong = async (
     // Check if already prefetched with valid URL
     const existing = prefetchCache.get(songKey);
     if (existing?.audioUrl && existing.audioUrl !== 'CACHED_IN_DB') {
-        existing.audioUrl = toSafeRemoteUrl(existing.audioUrl) ?? null;
+        existing.audioUrl = toSafePlaybackUrl(existing.audioUrl) ?? null;
     }
     const currentSettings = useSettingsUiStore.getState();
     const lyricPreferenceMatches = !currentSettings.autoUseBestLyric
@@ -157,7 +157,7 @@ const prefetchSong = async (
                 data.audioUrlFetchedAt = Date.now();
             } else if (!signal.aborted) {
                 const audioSource = await omni.getAudioSource(song, audioQuality);
-                const url = toSafeRemoteUrl(audioSource?.url) ?? null;
+                const url = toSafePlaybackUrl(audioSource?.url) ?? null;
                 if (url) {
                     data.audioUrl = url;
                     data.audioUrlFetchedAt = Date.now();

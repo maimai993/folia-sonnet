@@ -91,6 +91,32 @@ export const toSafeRemoteUrl = (url: string | null | undefined): string | null |
     return normalizedUrl;
 };
 
+// Keeps KuGou's original HTTP media URL only in Electron; Web/PWA retains HTTPS normalization.
+export const toSafePlaybackUrl = (
+    url: string | null | undefined,
+    isElectron = typeof window !== 'undefined' && Boolean(window.electron)
+): string | null | undefined => {
+    if (!url || !isElectron) {
+        return toSafeRemoteUrl(url);
+    }
+
+    const normalizedUrl = url.split(/,\s*(?=https?:\/\/)/i)[0]?.trim() || url;
+    try {
+        const parsedUrl = new URL(normalizedUrl);
+        if (
+            parsedUrl.protocol === 'http:' &&
+            parsedUrl.hostname.startsWith('fs.') &&
+            parsedUrl.hostname.endsWith('.kugou.com')
+        ) {
+            return normalizedUrl;
+        }
+    } catch {
+        return normalizedUrl;
+    }
+
+    return toSafeRemoteUrl(normalizedUrl);
+};
+
 export const resolveDebugSongSource = (song: SongResult | null): 'none' | 'local' | 'navidrome' | 'online' => {
     if (isStagePlaybackSong(song)) {
         return 'online';

@@ -11,7 +11,7 @@ import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 import { omni } from './onlineMusic/omni';
 import { getSongResourceCacheKey } from './onlineMusic/resourceKeys';
 import { getCachedSongAudioBlob, getSongCacheWithLegacyMigration } from './onlineMusic/resourceCache';
-import { toSafeRemoteUrl } from '../utils/appPlaybackHelpers';
+import { toSafePlaybackUrl } from '../utils/appPlaybackHelpers';
 import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 
 export async function loadOnlineSongAudioSource(
@@ -40,7 +40,7 @@ export async function loadOnlineSongAudioSource(
         console.warn('[OnlinePlayback] Provider audio source is temporarily unavailable', error);
         return { kind: 'unavailable' };
     }
-    const url = toSafeRemoteUrl(source?.url);
+    const url = toSafePlaybackUrl(source?.url);
     if (!url) {
         return { kind: 'unavailable' };
     }
