@@ -1070,6 +1070,21 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
+    "v0_6_8": {
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.8.",
+      "navidromeRecent": {
+        "title": "Musik Terbaru di Navidrome",
+        "description": "Halaman Baru Ditambahkan dan Baru Diputar memudahkan Anda melanjutkan musik atau menemukan tambahan terbaru di pustaka."
+      },
+      "cappellaSafeArea": {
+        "title": "Tata Letak Lirik Cappella",
+        "description": "Area aman di bawah lirik kini menyesuaikan tinggi baris sebenarnya untuk mengurangi tumpang tindih pada berbagai ukuran font dan tata letak."
+      },
+      "kugouPlayback": {
+        "title": "Kompatibilitas Pemutaran Kugou",
+        "description": "Penanganan URL media Kugou di aplikasi desktop ditingkatkan untuk memperbaiki kegagalan pemutaran pada beberapa lagu."
+      }
+    },
     "v0_6_5": {
       "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.7.",
       "lyricPreview": {

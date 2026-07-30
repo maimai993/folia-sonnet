@@ -1222,6 +1222,21 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
+    "v0_6_8": {
+      "intro": "以下是 0.6.8 的新功能与改进",
+      "navidromeRecent": {
+        "title": "Navidrome 最近音乐",
+        "description": "新增“最近加入”和“最近播放”子页，更方便地继续聆听或发现音乐库中的新内容。"
+      },
+      "cappellaSafeArea": {
+        "title": "Cappella 字幕布局优化",
+        "description": "字幕下方安全区现在会随实际行高动态调整，减少不同字号与歌词排版下的遮挡。"
+      },
+      "kugouPlayback": {
+        "title": "酷狗播放兼容性",
+        "description": "桌面端改进酷狗媒体地址处理，修复部分歌曲可能无法播放的问题。"
+      }
+    },
     "v0_6_5": {
       "intro": "以下是 0.6.7 的新功能与改进",
       "lyricPreview": {
