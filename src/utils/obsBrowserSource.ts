@@ -6,12 +6,77 @@ import type {
     MonetPortraitImage,
 } from '../types';
 import type { ObsBrowserSourceClock } from '../types/obsBrowserSource';
+import type { ObsBrowserSourceConfig } from '../types/obsBrowserSource';
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
 
 // src/utils/obsBrowserSource.ts
 // Pure helpers for the OBS browser source timing and compact audio payloads.
 
 export const OBS_SPECTRUM_BIN_LIMIT = 256;
+
+const canonicalizeObsConfigValue = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+        return value.map(canonicalizeObsConfigValue);
+    }
+
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(
+            Object.entries(value)
+                .filter(([, entryValue]) => entryValue !== undefined)
+                .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+                .map(([key, entryValue]) => [key, canonicalizeObsConfigValue(entryValue)]),
+        );
+    }
+
+    return value;
+};
+
+// Builds a deterministic identity for visual configuration while ignoring transport metadata.
+export const buildObsBrowserSourceConfigSignature = (config: ObsBrowserSourceConfig) => {
+    const { updatedAt: _updatedAt, ...semanticConfig } = config;
+    return JSON.stringify(canonicalizeObsConfigValue(semanticConfig));
+};
+
+export interface ObsBrowserSourceConfigPublication {
+    config: ObsBrowserSourceConfig;
+    signature: string;
+}
+
+// Prevents equivalent or already in-flight visual configurations from being published repeatedly.
+export class ObsBrowserSourceConfigPublicationTracker {
+    private lastPublishedSignature: string | null = null;
+    private pendingSignature: string | null = null;
+
+    prepare(enabled: boolean, config: ObsBrowserSourceConfig): ObsBrowserSourceConfigPublication | null {
+        if (!enabled) {
+            this.reset();
+            return null;
+        }
+
+        const signature = buildObsBrowserSourceConfigSignature(config);
+        if (signature === this.lastPublishedSignature || signature === this.pendingSignature) {
+            return null;
+        }
+
+        this.pendingSignature = signature;
+        return { config, signature };
+    }
+
+    markPublished(signature: string) {
+        if (this.pendingSignature !== signature) return;
+        this.pendingSignature = null;
+        this.lastPublishedSignature = signature;
+    }
+
+    markFailed(signature: string) {
+        if (this.pendingSignature === signature) this.pendingSignature = null;
+    }
+
+    reset() {
+        this.lastPublishedSignature = null;
+        this.pendingSignature = null;
+    }
+}
 
 // Keeps pre-background-registry OBS pages responsive until their browser source is refreshed.
 export const buildLegacyObsBrowserSourceBackgroundConfig = (

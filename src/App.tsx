@@ -1811,6 +1811,10 @@ export default function App() {
         useCoverColorBg,
         visualizerBackgroundMode,
     ]);
+    const obsBrowserSourceBackground = useMemo<VisualizerBackgroundConfig>(() => ({
+        ...visualizerBackgroundConfig,
+        transparent: isPlayerPageTransparent,
+    }), [isPlayerPageTransparent, visualizerBackgroundConfig]);
     const isSettingsModalOpen = settingsModalState.isOpen;
     const {
         obsBrowserSourceStatus,
@@ -1832,10 +1836,7 @@ export default function App() {
         isDaylight,
         visualizerMode,
         visualizerTunings,
-        background: {
-            ...visualizerBackgroundConfig,
-            transparent: isPlayerPageTransparent,
-        },
+        background: obsBrowserSourceBackground,
         lyricsFontScale,
         subtitleFontScale,
         visualizerOpacity,

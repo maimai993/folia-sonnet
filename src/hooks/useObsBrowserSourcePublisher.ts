@@ -32,6 +32,7 @@ import type {
 } from '../types/obsBrowserSource';
 import {
     buildLegacyObsBrowserSourceBackgroundConfig,
+    ObsBrowserSourceConfigPublicationTracker,
     downsampleObsSpectrum,
     isObsBrowserSourceBlobCoverUrl,
     resolveObsBrowserSourceClockTime,
@@ -140,6 +141,7 @@ export const useObsBrowserSourcePublisher = ({
     const isExternallyRendering = status.enabled && status.clientCount > 0;
     const lastPublishedClockRef = useRef<ObsBrowserSourceClock | null>(null);
     const lastClockPublishMsRef = useRef(0);
+    const configPublicationTrackerRef = useRef(new ObsBrowserSourceConfigPublicationTracker());
 
     const refreshStatus = useCallback(async () => {
         if (!isElectronWindow || !window.electron?.getObsBrowserSourceStatus) {
@@ -308,13 +310,24 @@ export const useObsBrowserSourcePublisher = ({
     }, [buildClock]);
 
     useEffect(() => {
-        if (!status.enabled || !window.electron?.publishObsBrowserSourceConfig) {
+        const tracker = configPublicationTrackerRef.current;
+        const publishConfig = window.electron?.publishObsBrowserSourceConfig;
+        if (!status.enabled || !publishConfig) {
+            tracker.reset();
             return;
         }
 
-        void window.electron.publishObsBrowserSourceConfig(config).catch(error => {
-            console.warn('[OBS] Failed to publish browser source config', error);
-        });
+        const publication = tracker.prepare(true, config);
+        if (!publication) {
+            return;
+        }
+
+        void publishConfig(publication.config)
+            .then(() => tracker.markPublished(publication.signature))
+            .catch(error => {
+                tracker.markFailed(publication.signature);
+                console.warn('[OBS] Failed to publish browser source config', error);
+            });
     }, [config, status.enabled]);
 
     useEffect(() => {

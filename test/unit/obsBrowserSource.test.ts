@@ -1,15 +1,83 @@
 import { describe, expect, it } from 'vitest';
-import { PlayerState } from '../../src/types';
+import { DEFAULT_SONNET_TUNING, PlayerState } from '../../src/types';
 import {
+    buildObsBrowserSourceConfigSignature,
     buildLegacyObsBrowserSourceBackgroundConfig,
     downsampleObsSpectrum,
+    ObsBrowserSourceConfigPublicationTracker,
     resolveObsBrowserSourceClockTime,
     resolveObsBrowserSourceCoverUrl,
     resolveObsBrowserSourceImageAsset,
     resolveObsBrowserSourceImageAssets,
 } from '../../src/utils/obsBrowserSource';
+import type { ObsBrowserSourceConfig } from '../../src/types/obsBrowserSource';
+import { DEFAULT_THEME } from '../../src/services/baseThemes';
+
+const buildObsConfig = (overrides: Partial<ObsBrowserSourceConfig> = {}): ObsBrowserSourceConfig => ({
+    activePlaybackContext: 'main',
+    stageSource: null,
+    hasTrack: true,
+    song: { id: 1, name: 'Song' },
+    songArtist: 'Artist',
+    songAlbum: 'Album',
+    coverUrl: null,
+    lyrics: {
+        lines: [{ fullText: 'Line', startTime: 0, endTime: 1, words: [] }],
+    },
+    theme: DEFAULT_THEME,
+    isDaylight: false,
+    visualizerMode: 'sonnet',
+    background: { mode: 'common', transparent: true },
+    lyricsFontScale: 1,
+    visualizerOpacity: 1,
+    subtitleOverlayOpacity: 1,
+    staticMode: false,
+    hideTranslationSubtitle: false,
+    seed: 'song-1',
+    updatedAt: 1,
+    ...overrides,
+});
 
 describe('obsBrowserSource utilities', () => {
+    it('signs visual configuration semantically instead of by timestamp or object identity', () => {
+        const first = buildObsConfig();
+        const sameContent = buildObsConfig({
+            background: { transparent: true, mode: 'common' },
+            updatedAt: 2,
+        });
+
+        expect(buildObsBrowserSourceConfigSignature(sameContent))
+            .toBe(buildObsBrowserSourceConfigSignature(first));
+    });
+
+    it('changes the OBS configuration signature for visual and playback-content changes', () => {
+        const baseSignature = buildObsBrowserSourceConfigSignature(buildObsConfig());
+        const variants = [
+            buildObsConfig({ song: { id: 2, name: 'Other song' } }),
+            buildObsConfig({ lyrics: { lines: [{ fullText: 'Other line', startTime: 0, endTime: 1, words: [] }] } }),
+            buildObsConfig({ theme: { ...DEFAULT_THEME, primaryColor: '#ff0000' } }),
+            buildObsConfig({ visualizerTunings: { sonnet: { ...DEFAULT_SONNET_TUNING, cameraIntensity: 0.5 } } }),
+            buildObsConfig({ background: { mode: 'common', transparent: false } }),
+        ];
+
+        variants.forEach(config => {
+            expect(buildObsBrowserSourceConfigSignature(config)).not.toBe(baseSignature);
+        });
+    });
+
+    it('deduplicates pending and published configs and republishes after re-enabling OBS', () => {
+        const tracker = new ObsBrowserSourceConfigPublicationTracker();
+        const config = buildObsConfig();
+        const first = tracker.prepare(true, config);
+
+        expect(first).not.toBeNull();
+        expect(tracker.prepare(true, { ...config, updatedAt: 2 })).toBeNull();
+        tracker.markPublished(first!.signature);
+        expect(tracker.prepare(true, { ...config, updatedAt: 3 })).toBeNull();
+        expect(tracker.prepare(false, config)).toBeNull();
+        expect(tracker.prepare(true, { ...config, updatedAt: 4 })).not.toBeNull();
+    });
+
     it('keeps the pre-registry OBS background protocol in sync with nested config', () => {
         const customImage = {
             id: 'background',
