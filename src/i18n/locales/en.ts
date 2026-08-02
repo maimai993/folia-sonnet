@@ -1258,7 +1258,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_9": {
-      "intro": "Here are the new features and improvements in version 0.6.9.",
+      "intro": "Here are the new features and improvements in version 0.6.10.",
       "sonnetVisualizer": {
         "title": "Sonnet Lyric Visualizer",
         "description": "A new Japanese-style lyric PV mode combines kinetic typography, camera motion, scene transitions, and configurable visual layers."
