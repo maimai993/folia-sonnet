@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
+import { DEFAULT_SONNET_TUNING } from '@/types';
 
 // test/unit/visualizer/visualSettingsImportExport.test.ts
 // Verifies visual settings configuration compression, base64 encoding, and decompression/restoration.
@@ -169,6 +170,11 @@ describe('Visual Settings Import and Export', () => {
             portraitOffsetX: -120,
             portraitStyle: 'square' as const,
         },
+        sonnetTuning: {
+            ...DEFAULT_SONNET_TUNING,
+            enableTransitions: true,
+            outerFrameMode: 'frame' as const,
+        },
         songThemeAutoSwitchEnabled: true,
         songThemeAutoGenerateEnabled: true,
     };
@@ -211,6 +217,8 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.latentBackgroundTuning).toEqual(sampleConfig.latentBackgroundTuning);
         expect(decoded.monetTuning?.portraitOffsetX).toBe(-120);
         expect(decoded.monetTuning?.portraitStyle).toBe('square');
+        expect(decoded.sonnetTuning?.enableTransitions).toBe(true);
+        expect(decoded.sonnetTuning?.outerFrameMode).toBe('frame');
         expect(decoded.songThemeAutoSwitchEnabled).toBe(true);
         expect(decoded.songThemeAutoGenerateEnabled).toBe(true);
 
@@ -260,6 +268,22 @@ describe('Visual Settings Import and Export', () => {
 
         expect(decoded.lyricsFontWeight).toBeNull();
         expect(decoded.subtitleFontWeight).toBeNull();
+    });
+
+    it('round-trips Sonnet tuning through the renderer tuning bundle', () => {
+        const sonnet = {
+            cameraIntensity: 1.25,
+            typographyMotion: 0.8,
+            mgDensity: 1.6,
+            textureResolution: 4,
+        };
+        const decoded = decompressConfig(compressConfig({
+            visualizerMode: 'sonnet',
+            visualizerTunings: { sonnet },
+        }));
+
+        expect(decoded.visualizerMode).toBe('sonnet');
+        expect(decoded.visualizerTunings?.sonnet).toEqual(sonnet);
     });
 
     it('migrates the removed Nomand random dithering option to 8x8', () => {

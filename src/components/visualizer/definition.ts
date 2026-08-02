@@ -15,6 +15,7 @@ import {
     type MonetTuning,
     type PartitaTuning,
     type PendoloTuning,
+    type SonnetTuning,
     type SubtitleContentMode,
     type Theme,
     type TiltTuning,
@@ -25,7 +26,7 @@ import type { VisualizerBackgroundConfig } from './backgrounds/definition';
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
-export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo';
+export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet';
 
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
@@ -58,7 +59,9 @@ export interface VisualizerSharedProps {
     subtitleContentMode?: SubtitleContentMode;
     paused?: boolean;
     onBack?: () => void;
+    isPanelOpen?: boolean;
     alwaysShowBackButton?: boolean;
+    onPlayerPanelGuideHotspotChange?: (isActive: boolean) => void;
     onLyricLineSeek?: (lyricTimeSec: number) => void;
     isPreviewMode?: boolean;
     visualizerTunings?: VisualizerTuningBundle;
@@ -78,6 +81,8 @@ export interface VisualizerSharedProps {
     onMonetTuningChange?: (patch: Partial<MonetTuning>) => void;
     pendoloTuning?: PendoloTuning;
     onPendoloTuningChange?: (patch: Partial<PendoloTuning>) => void;
+    sonnetTuning?: SonnetTuning;
+    onSonnetTuningChange?: (patch: Partial<SonnetTuning>) => void;
 }
 
 export interface VisualizerSettingsPanelProps {
@@ -119,6 +124,8 @@ export interface VisualizerSettingsPanelProps {
     isLoadingMonetPortraitImage?: boolean;
     pendoloTuning?: PendoloTuning;
     onPendoloTuningChange?: (patch: Partial<PendoloTuning>) => void;
+    sonnetTuning?: SonnetTuning;
+    onSonnetTuningChange?: (patch: Partial<SonnetTuning>) => void;
     /** Mark slider drag start so onChange only updates draft. */
     onSliderPointerDown?: () => void;
     /** Commit draft values to persistent store on slider release. */
@@ -135,9 +142,11 @@ export interface VisualizerSettingsResetProps {
     resetDioramaTuning?: () => void;
     resetMonetTuning?: () => void;
     resetPendoloTuning?: () => void;
+    resetSonnetTuning?: () => void;
     setDraftFumeTuning?: (tuning: FumeTuning) => void;
     setDraftCladdaghTuning?: (tuning: CladdaghTuning) => void;
     setDraftPendoloTuning?: (tuning: PendoloTuning) => void;
+    setDraftSonnetTuning?: (tuning: SonnetTuning) => void;
 }
 
 export interface VisualizerRegistryEntry {

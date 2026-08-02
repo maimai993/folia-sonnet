@@ -122,6 +122,7 @@ export default function App() {
     // UI State
     const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
+    const [isPlayerPanelGuideHotspotActive, setIsPlayerPanelGuideHotspotActive] = useState(false);
     useElectronNeteaseApiStatus(setStatusMsg, t);
 
     // Auto-close the player panel when leaving the player view
@@ -315,6 +316,8 @@ export default function App() {
         isDaylight,
         visualizerMode,
         randomVisualizerModePerSong,
+        sonnetPerformanceWarningOpen,
+        sonnetPerformanceWarningDontShowAgain,
         classicTuning,
         cadenzaTuning,
         partitaTuning,
@@ -328,6 +331,7 @@ export default function App() {
         latentBackgroundTuning,
         monetTuning,
         pendoloTuning,
+        sonnetTuning,
         cappellaCustomEmojiImages,
         isLoadingCappellaCustomEmojiPack,
         cappellaCustomAvatarImages,
@@ -381,6 +385,9 @@ export default function App() {
         handleSetBackgroundOpacity,
         setDaylightPreference,
         handleSetVisualizerMode,
+        handleSetSonnetPerformanceWarningDontShowAgain,
+        handleConfirmSonnetPerformanceWarning,
+        handleCancelSonnetPerformanceWarning,
         handleToggleRandomVisualizerModePerSong,
         handleSetVisualizerBackgroundMode,
         handleSetMonetBackgroundTuning,
@@ -429,7 +436,8 @@ export default function App() {
         diorama: dioramaTuning,
         monet: monetTuning,
         pendolo: pendoloTuning,
-    }), [cadenzaTuning, cappellaTuning, classicTuning, claddaghTuning, dioramaTuning, fumeTuning, monetTuning, partitaTuning, pendoloTuning, tiltTuning]);
+        sonnet: sonnetTuning,
+    }), [cadenzaTuning, cappellaTuning, classicTuning, claddaghTuning, dioramaTuning, fumeTuning, monetTuning, partitaTuning, pendoloTuning, sonnetTuning, tiltTuning]);
 
     const showPlayerChromeVisibilityModeStatus = useCallback((mode: PlayerChromeVisibilityMode) => {
         setStatusMsg({
@@ -671,9 +679,13 @@ export default function App() {
         lastAudioRecoverySourceRef,
         currentOnlineAudioUrlFetchedAtRef,
         setAudioSrc,
+        setCurrentSong,
+        setPlayQueue,
+        persistLastPlaybackCache,
+        playQueue,
         onlineAudioUrlTtlMs: ONLINE_AUDIO_URL_TTL_MS,
         onlineAudioUrlRefreshBufferMs: ONLINE_AUDIO_URL_REFRESH_BUFFER_MS,
-    }), [audioQuality, audioSrc, audioRef, blobUrlRef, currentOnlineAudioUrlFetchedAtRef, currentSong, currentSongRef, lastAudioRecoverySourceRef, onlinePlaybackRecoveryRef, pendingResumeTimeRef, setAudioSrc, shouldAutoPlay]);
+    }), [audioQuality, audioSrc, audioRef, blobUrlRef, currentOnlineAudioUrlFetchedAtRef, currentSong, currentSongRef, lastAudioRecoverySourceRef, onlinePlaybackRecoveryRef, pendingResumeTimeRef, persistLastPlaybackCache, playQueue, setAudioSrc, setCurrentSong, setPlayQueue, shouldAutoPlay]);
 
     const getCoverUrl = useMemo(
         () => createCoverUrlResolver(cachedCoverUrl, currentSong),
@@ -798,6 +810,12 @@ export default function App() {
             setIsPanelOpen(false);
         }
     }, [currentView, isPanelOpen]);
+
+    useEffect(() => {
+        if (isPanelOpen) {
+            setIsPlayerPanelGuideHotspotActive(previous => previous ? false : previous);
+        }
+    }, [isPanelOpen]);
 
     const {
         isSearchOpen,
@@ -1904,6 +1922,7 @@ export default function App() {
         submitSearch,
         togglePlay,
         toggleLoop,
+        onReplayGainModeChange: handleChangeReplayGainMode,
         handleNextTrack,
         handlePrevTrack,
         shuffleQueue,
@@ -1992,6 +2011,7 @@ export default function App() {
         toggleMainWindowAlwaysOnTop,
         toggleLoop,
         togglePlay,
+        handleChangeReplayGainMode,
         transparentPlayerBackground,
         toggleTransparentModeWithHandoff,
         toggleDaylightMode,
@@ -2473,6 +2493,7 @@ export default function App() {
         handleSetVolume,
         handleToggleMute,
         showOpenPanelCloseButton,
+        isPanelGuideHotspotActive: isPlayerPanelGuideHotspotActive,
         hideToggleButton: isPlayerChromeHidden || shouldHidePlayerRightPanelButton,
         activePlaybackContext,
         isNowPlayingControlDisabled,
@@ -2656,6 +2677,7 @@ export default function App() {
         isMuted,
         isNowPlayingControlDisabled,
         isPanelOpen,
+        isPlayerPanelGuideHotspotActive,
         isActiveProviderSyncing,
         likedSongIds,
         onlineProviderPlatform.providers,
@@ -2794,6 +2816,8 @@ export default function App() {
         obsBrowserSourceStatus,
         refreshObsBrowserSourceStatus,
         onAudioOutputDeviceChange: handleAudioOutputDeviceChange,
+        replayGainMode,
+        onReplayGainModeChange: handleChangeReplayGainMode,
         onToggleTransparentPlayerBackground: toggleTransparentModeWithHandoff,
     }), [
         activePlaybackContext,
@@ -2802,6 +2826,7 @@ export default function App() {
         closeSettings,
         currentSong?.name,
         handleAudioOutputDeviceChange,
+        handleChangeReplayGainMode,
         handleSaveLyricFilterPattern,
         handleToggleNavidromeEnabled,
         leaveStagePlayback,
@@ -2812,6 +2837,7 @@ export default function App() {
         playerCapPlayers,
         obsBrowserSourceStatus,
         refreshObsBrowserSourceStatus,
+        replayGainMode,
         settingsModalState,
         stageSource,
         stageStatus,
@@ -2838,6 +2864,11 @@ export default function App() {
         handleUnavailableReplacementConfirm,
         settingsDialog,
         providerSwitchConfirmDialog,
+        sonnetPerformanceWarningOpen,
+        sonnetPerformanceWarningDontShowAgain,
+        handleSetSonnetPerformanceWarningDontShowAgain,
+        handleConfirmSonnetPerformanceWarning,
+        handleCancelSonnetPerformanceWarning,
     }), [
         currentSong,
         handleLyricMatchComplete,
@@ -2848,6 +2879,11 @@ export default function App() {
         localSongs,
         pendingUnavailableReplacement,
         providerSwitchConfirmDialog,
+        sonnetPerformanceWarningOpen,
+        sonnetPerformanceWarningDontShowAgain,
+        handleSetSonnetPerformanceWarningDontShowAgain,
+        handleConfirmSonnetPerformanceWarning,
+        handleCancelSonnetPerformanceWarning,
         setPendingUnavailableReplacement,
         setShowLyricMatchModal,
         setShowNaviLyricMatchModal,
@@ -3153,7 +3189,9 @@ export default function App() {
                         monetPortraitImage={monetPortraitImage}
                         onLyricLineSeek={['monet', 'pendolo'].includes(visualizerMode) ? handleMonetLyricLineSeek : undefined}
                         onBack={navigateBackFromPlayer}
-                        alwaysShowBackButton={alwaysShowPlayerBackButton}
+                        isPanelOpen={isPanelOpen}
+                        alwaysShowBackButton={alwaysShowPlayerBackButton || isPanelOpen}
+                        onPlayerPanelGuideHotspotChange={setIsPlayerPanelGuideHotspotActive}
                     />
                 )}
             </div>

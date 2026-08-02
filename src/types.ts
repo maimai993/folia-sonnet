@@ -519,6 +519,38 @@ export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
   enableLineGlow: false,
 };
 
+export type SonnetOuterFrameMode = 'none' | 'frame' | 'full';
+
+export interface SonnetTuning {
+  cameraIntensity: number;
+  typographyMotion: number;
+  mgDensity: number;
+  showOnlyText: boolean;
+  showGuide: boolean;
+  showBackgroundMg: boolean;
+  showFixedGeo: boolean;
+  showGiantDecorativeText: boolean;
+  showBackgroundDecor: boolean;
+  enableTransitions: boolean;
+  outerFrameMode: SonnetOuterFrameMode;
+  textureResolution: number;
+}
+
+export const DEFAULT_SONNET_TUNING: SonnetTuning = {
+  cameraIntensity: 1,
+  typographyMotion: 1,
+  mgDensity: 1,
+  showOnlyText: false,
+  showGuide: true,
+  showBackgroundMg: true,
+  showFixedGeo: true,
+  showGiantDecorativeText: true,
+  showBackgroundDecor: true,
+  enableTransitions: true,
+  outerFrameMode: 'full',
+  textureResolution: 1.5,
+};
+
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other
 // visualizer it follows theme.animationIntensity (the player-panel intensity chip / AI themes), so
 // the theme system stays the single source of truth. The tuning only carries diorama-specific knobs.
@@ -889,6 +921,15 @@ export interface NoCopyrightRecommendation {
 export type LyricProviderSource = 'netease' | 'qq' | 'kugou' | 'amll';
 export type AmllDbPlatform = 'ncm' | 'qq';
 
+export interface ReplayGainInfo {
+  /** ReplayGain gain values in decibels. */
+  trackGain?: number;
+  albumGain?: number;
+  /** ReplayGain peak values as positive linear ratios. */
+  trackPeak?: number;
+  albumPeak?: number;
+}
+
 export interface SongResult {
   id: MediaId;
   name: string;
@@ -908,6 +949,7 @@ export interface SongResult {
   onlineLyricsState?: OnlineLyricsState;
   matchedLyricsSource?: LyricProviderSource;
   matchedLyricsProviderPlatform?: AmllDbPlatform;
+  replayGain?: ReplayGainInfo;
   qqMid?: string;
   kgHash?: string;
   amllDbPlatform?: AmllDbPlatform;
