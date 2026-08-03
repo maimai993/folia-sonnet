@@ -19,14 +19,18 @@ export { buildSonnetSemanticSegments } from './sonnetSemantic';
 
 // src/components/visualizer/sonnet/sonnetProgram.ts
 // Compiles unified lyrics into a seek-safe, deterministic PV timeline.
-const SHOT_KINDS: SonnetShotKind[] = [
+export const SONNET_SHOT_KINDS: readonly SonnetShotKind[] = [
     'editorial-column',
     'type-impact',
     'fragment-collage',
     'tracking-ribbon',
     'mask-reveal',
+    'poster-blocks',
     'quiet-tableau',
 ];
+// Optional layout-debug override; null keeps every registered template in the random pool.
+export const SONNET_DEBUG_SHOT_KIND: SonnetShotKind | null = null;
+const resolveSonnetDebugShotKind = (): SonnetShotKind | null => SONNET_DEBUG_SHOT_KIND;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const median = (values: number[]) => {
@@ -94,7 +98,7 @@ const classifyParagraph = (lines: SonnetCompiledLine[], index: number, total: nu
     return 'verse';
 };
 
-const chooseWithoutRepeat = <T extends string>(choices: T[], seed: string, previous: T | null): T => {
+const chooseWithoutRepeat = <T extends string>(choices: readonly T[], seed: string, previous: T | null): T => {
     const start = hashSonnetSeed(seed) % choices.length;
     for (let offset = 0; offset < choices.length; offset += 1) {
         const candidate = choices[(start + offset) % choices.length];
@@ -150,10 +154,14 @@ const buildShots = (
     let lastKind = previousKind;
     return groupShotLines(lines).map((group, shotIndex) => {
         const signature = group.map(item => item.line.fullText).join('|');
-        let shotKind = chooseWithoutRepeat(SHOT_KINDS, `${seed}:${paragraphIndex}:${shotIndex}:${signature}`, lastKind);
+        const debugShotKind = resolveSonnetDebugShotKind();
+        let shotKind: SonnetShotKind = debugShotKind
+            ?? chooseWithoutRepeat(SONNET_SHOT_KINDS, `${seed}:${paragraphIndex}:${shotIndex}:${signature}`, lastKind);
         const wordCount = group.reduce((sum, item) => sum + item.segments.filter(s => s.isWordLike).length, 0);
-        if (kind === 'breath' && shotIndex === 0 && wordCount <= 2) shotKind = 'quiet-tableau';
-        if (kind === 'chorus' && shotKind === 'quiet-tableau') shotKind = 'type-impact';
+        if (debugShotKind === null) {
+            if (kind === 'breath' && shotIndex === 0 && wordCount <= 2) shotKind = 'quiet-tableau';
+            if (kind === 'chorus' && shotKind === 'quiet-tableau') shotKind = 'type-impact';
+        }
         lastKind = shotKind;
         const random = hashSonnetSeed(`${seed}:${paragraphIndex}:${shotIndex}:camera`);
         return {

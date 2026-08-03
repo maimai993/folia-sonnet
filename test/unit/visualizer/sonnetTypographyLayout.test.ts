@@ -243,4 +243,30 @@ describe('Sonnet typography layout', () => {
         expect(word.rotation).toBeCloseTo(Math.PI / 2);
         expect(Math.abs(layout[0].y - word.y)).toBeLessThan(300);
     });
+
+    it('builds poster blocks from measured text while retaining semantic hierarchy', () => {
+        const words = [
+            segment('沿着'), segment('漫长'), segment('叙事'), segment('半主视觉'),
+            segment('继续'), segment('抵达'), segment('最终的英雄文字'), segment('之后'),
+        ];
+        const layout = resolveSonnetTypographyLayout({
+            lines: [words],
+            shotKind: 'poster-blocks',
+            paragraphKind: 'verse',
+            width: 1280,
+            height: 720,
+            baseFontSize: 40,
+            fontFamily: 'sans-serif',
+            fontWeight: 700,
+        });
+        const hero = layout.find(item => item.role === 'hero')!;
+        const semiHero = layout.find(item => item.role === 'semi-hero')!;
+        const supports = layout.filter(item => item.role === 'support');
+
+        expect(layout).toHaveLength(words.length);
+        expect(layout.every(item => item.layoutDirection === 'horizontal' && item.rotation === 0)).toBe(true);
+        expect(layout.every(item => Number.isFinite(item.x) && Number.isFinite(item.y))).toBe(true);
+        expect(hero.fontScale).toBeGreaterThan(semiHero.fontScale);
+        expect(semiHero.fontScale).toBeGreaterThan(Math.max(...supports.map(item => item.fontScale)));
+    });
 });

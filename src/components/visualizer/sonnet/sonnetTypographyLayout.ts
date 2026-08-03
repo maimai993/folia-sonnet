@@ -11,6 +11,8 @@ import {
     scoreSonnetHeroSegment,
     type SonnetSegmentRole,
 } from './sonnetTypographyRoles';
+import { layoutSonnetPosterBlocks } from './sonnetPosterBlocksLayout';
+import { hashSonnetSeed } from './sonnetRandom';
 
 export {
     findSonnetHeroSegmentIndex,
@@ -111,6 +113,7 @@ export const resolveSonnetTypographyLayout = ({
 
     // Deterministic pseudo-randomness for layout variations
     const layoutVariantSeed = segments.reduce((acc, seg) => acc + (seg.text.trim().length || 1), 0) + segments.length;
+    const posterLayoutSeed = hashSonnetSeed(segments.map(segment => segment.text).join('\u241f'));
     let editorialVariant = layoutVariantSeed % 5; // Expanded to 5 variants (0-4, including Logo Badge)
     const ribbonVariant = layoutVariantSeed % 3;
     const tableauVariant = layoutVariantSeed % 4; // Expanded to 4 variants (0-3, including horizontal cards)
@@ -180,6 +183,10 @@ export const resolveSonnetTypographyLayout = ({
                 supportFontScale = 1.6;
                 vertical = isEmphasized;
                 break;
+            case 'poster-blocks':
+                heroFontScale = 4.4;
+                supportFontScale = 1.15;
+                break;
             case 'quiet-tableau':
             default:
                 heroFontScale = 3.0;
@@ -243,11 +250,22 @@ export const resolveSonnetTypographyLayout = ({
             measuredHeight *= fitScale;
         }
 
+        const posterVerticalDisplayText = shotKind === 'poster-blocks' && CJK_TEXT.test(segment.text)
+            ? verticalText(segment)
+            : undefined;
+        const posterVerticalMeasuredWidth = posterVerticalDisplayText ? targetFontSize * 1.1 : undefined;
+        const posterVerticalMeasuredHeight = posterVerticalDisplayText
+            ? targetFontSize * 1.1 * posterVerticalDisplayText.split('\n').length
+            : undefined;
+
         return {
             index,
             isHero,
             isSemiHero,
             displayText,
+            verticalDisplayText: posterVerticalDisplayText,
+            verticalMeasuredWidth: posterVerticalMeasuredWidth,
+            verticalMeasuredHeight: posterVerticalMeasuredHeight,
             fontScale,
             vertical,
             layoutDirection: 'horizontal' as 'horizontal' | 'vertical',
@@ -285,7 +303,9 @@ export const resolveSonnetTypographyLayout = ({
         }
 
         // Implement diverse layout strategies based on shotKind
-        if (shotKind === 'quiet-tableau') {
+        if (shotKind === 'poster-blocks') {
+            layoutSonnetPosterBlocks(boxes, width, height, baseFontSize, posterLayoutSeed);
+        } else if (shotKind === 'quiet-tableau') {
             if (tableauVariant === 0) {
                 boxes.forEach(box => { box.layoutDirection = 'vertical'; });
                 // 1a. Strict Vertical Stack (Centered)
@@ -664,7 +684,7 @@ export const resolveSonnetTypographyLayout = ({
         heroBox.enterY = height * 0.15;
 
         const decorations: typeof boxes = [];
-        if (shotKind !== 'quiet-tableau') {
+        if (shotKind !== 'quiet-tableau' && shotKind !== 'poster-blocks') {
             const allHeroes = boxes.filter(b => b.isHero);
             allHeroes.forEach((hBox, idx) => {
                 decorations.push({

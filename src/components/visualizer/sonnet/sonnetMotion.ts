@@ -169,7 +169,7 @@ export const resolveSonnetFocusWeights = (
 
 export const resolveShotPathProgress = (kind: SonnetShotKind, progress: number) => {
     const linear = clamp01(progress);
-    if (kind === 'tracking-ribbon' || kind === 'fragment-collage' || kind === 'quiet-tableau') {
+    if (kind === 'tracking-ribbon' || kind === 'fragment-collage' || kind === 'quiet-tableau' || kind === 'poster-blocks') {
         return easeSonnetInOut(linear);
     }
     if (linear < 0.2) return easeSonnetExpoOut(linear / 0.2) * 0.3;
@@ -214,6 +214,12 @@ export const resolveShotMotionFrame = (
             y: 0.1 - eased * 0.135,
             scale: 0.96 + eased * 0.12,
             rotation: -0.006 + eased * 0.009,
+        },
+        'poster-blocks': {
+            x: -0.012 + eased * 0.024,
+            y: 0.008 - eased * 0.016,
+            scale: 0.99 + eased * 0.025,
+            rotation: -0.0015 + eased * 0.003,
         },
         'quiet-tableau': {
             x: -0.022 + eased * 0.04,

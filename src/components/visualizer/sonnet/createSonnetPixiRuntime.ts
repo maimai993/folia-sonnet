@@ -363,7 +363,9 @@ export class SonnetPixiRuntime {
         const shake = resolveTimelineShake(time, shakeIntensity);
 
         let trackSegments = view.segments.filter(s => s.role !== 'decoration' && s.glyphs.length > 0);
-        if (trackSegments.length === 0) trackSegments = view.segments.filter(s => s.glyphs.length > 0);
+        if (trackSegments.length === 0) {
+            trackSegments = view.segments.filter(s => s.glyphs.length > 0);
+        }
 
         let currentFocusX = view.basePivotX;
         let currentFocusY = view.basePivotY;

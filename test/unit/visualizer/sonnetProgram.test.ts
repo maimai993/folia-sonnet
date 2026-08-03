@@ -5,6 +5,8 @@ import {
     compileSonnetProgram,
     findSonnetParagraphIndexAtTime,
     resolveSonnetParagraphGapThreshold,
+    SONNET_DEBUG_SHOT_KIND,
+    SONNET_SHOT_KINDS,
 } from '@/components/visualizer/sonnet/sonnetProgram';
 
 // test/unit/visualizer/sonnetProgram.test.ts
@@ -18,6 +20,15 @@ const line = (
 ): Line => ({ fullText, startTime, endTime, words, ...extra });
 
 describe('Sonnet program compiler', () => {
+    it('registers poster blocks once in the uniform shot template pool', () => {
+        expect(SONNET_SHOT_KINDS).toContain('poster-blocks');
+        expect(new Set(SONNET_SHOT_KINDS).size).toBe(SONNET_SHOT_KINDS.length);
+    });
+
+    it('keeps the temporary layout-debug override disabled', () => {
+        expect(SONNET_DEBUG_SHOT_KIND).toBeNull();
+    });
+
     it('preserves CJK, whitespace, punctuation, and parser timing', () => {
         const source = line('世界， 再见！', 1, 4, [
             { text: '世界', startTime: 1, endTime: 2 },
@@ -87,7 +98,11 @@ describe('Sonnet program compiler', () => {
 
         expect(first).toEqual(second);
         expect(first.paragraphs.some(paragraph => paragraph.kind === 'chorus')).toBe(true);
-        shotKinds.slice(1).forEach((kind, index) => expect(kind).not.toBe(shotKinds[index]));
+        if (SONNET_DEBUG_SHOT_KIND === null) {
+            shotKinds.slice(1).forEach((kind, index) => expect(kind).not.toBe(shotKinds[index]));
+        } else {
+            expect(new Set(shotKinds)).toEqual(new Set([SONNET_DEBUG_SHOT_KIND]));
+        }
         expect(findSonnetParagraphIndexAtTime(first, first.paragraphs.at(-1)!.startTime)).toBe(first.paragraphs.length - 1);
     });
 

@@ -242,15 +242,21 @@ export const buildSonnetScene = (
             shotContainer.mask = mask;
         }
         
-        // Ensure camera always focuses precisely on the hero word, regardless of how large or skewed the layout is
+        // Poster blocks start centered before runtime tracking; other templates start on the hero word.
         const heroPlacement = placements.find(p => p.role === 'hero');
-        const focusX = heroPlacement ? heroPlacement.x : (bounds.x + bounds.width / 2);
-        const focusY = heroPlacement ? heroPlacement.y : (bounds.y + bounds.height / 2);
+        const focusX = shot.kind === 'poster-blocks'
+            ? 0
+            : heroPlacement ? heroPlacement.x : (bounds.x + bounds.width / 2);
+        const focusY = shot.kind === 'poster-blocks'
+            ? 0
+            : heroPlacement ? heroPlacement.y : (bounds.y + bounds.height / 2);
         
         shotContainer.pivot.set(focusX, focusY);
         shotContainer.position.set(
-            width * (0.5 + shot.camera.x),
-            height * (0.48 + shot.camera.y + (shotIndex % 2 ? 0.025 : -0.025)),
+            width * (shot.kind === 'poster-blocks' ? 0.5 : 0.5 + shot.camera.x),
+            height * (shot.kind === 'poster-blocks'
+                ? 0.5
+                : 0.48 + shot.camera.y + (shotIndex % 2 ? 0.025 : -0.025)),
         );
         container.addChild(shotContainer);
         return {
