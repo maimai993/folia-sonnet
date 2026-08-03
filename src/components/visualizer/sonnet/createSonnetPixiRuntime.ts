@@ -8,6 +8,7 @@ import {
     easeSonnetInOut,
     resolveSegmentProgress,
     resolveSonnetFocusWeights,
+    resolveSonnetSmoothedCameraFocus,
     resolveShotMotionFrame,
     resolveShotProgress,
     resolveTimelineShake,
@@ -399,28 +400,34 @@ export class SonnetPixiRuntime {
                 return applyFactor(first.baseX, first.baseY);
             };
 
+            const focusRanges = trackSegments.map(segment => ({
+                startTime: segment.glyphs[0]?.startTime ?? view.shot.startTime,
+                endTime: segment.glyphs.at(-1)?.startTime ?? view.shot.endTime,
+            }));
+            const resolveFocusAtTime = (focusTime: number) => {
+                let focusX = 0;
+                let focusY = 0;
+                const focusWeights = resolveSonnetFocusWeights(focusRanges, focusTime);
+                for (let i = 0; i < trackSegments.length; i++) {
+                    const seg = trackSegments[i];
+                    if (seg.glyphs.length === 0) continue;
+                    const weight = focusWeights[i] ?? 0;
+                    const pos = getSegmentFocus(seg, focusTime);
+                    focusX += pos.x * weight;
+                    focusY += pos.y * weight;
+                }
+                return { x: focusX, y: focusY };
+            };
             const focusTime = Math.max(view.shot.startTime, Math.min(time, view.shot.endTime));
-            let focusX = 0;
-            let focusY = 0;
-            const focusWeights = resolveSonnetFocusWeights(
-                trackSegments.map(segment => ({
-                    startTime: segment.glyphs[0]?.startTime ?? view.shot.startTime,
-                    endTime: segment.glyphs.at(-1)?.startTime ?? view.shot.endTime,
-                })),
+            const smoothedFocus = resolveSonnetSmoothedCameraFocus(
                 focusTime,
+                view.shot.startTime,
+                view.shot.endTime,
+                resolveFocusAtTime,
             );
 
-            for (let i = 0; i < trackSegments.length; i++) {
-                const seg = trackSegments[i];
-                if (seg.glyphs.length === 0) continue;
-                const weight = focusWeights[i] ?? 0;
-                const pos = getSegmentFocus(seg, focusTime);
-                focusX += pos.x * weight;
-                focusY += pos.y * weight;
-            }
-
-            currentFocusX = focusX;
-            currentFocusY = focusY;
+            currentFocusX = smoothedFocus.x;
+            currentFocusY = smoothedFocus.y;
         }
 
         view.container.pivot.set(

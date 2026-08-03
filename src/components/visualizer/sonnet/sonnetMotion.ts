@@ -94,6 +94,55 @@ export interface SonnetFocusTimeRange {
     endTime: number;
 }
 
+export interface SonnetCameraFocusPoint {
+    x: number;
+    y: number;
+}
+
+const SONNET_CAMERA_SMOOTHING_SAMPLES = [
+    { offset: -1, weight: 1 },
+    { offset: -0.5, weight: 4 },
+    { offset: 0, weight: 6 },
+    { offset: 0.5, weight: 4 },
+    { offset: 1, weight: 1 },
+] as const;
+
+// Applies deterministic edge-preserving temporal smoothing without tying camera motion to frame rate.
+export const resolveSonnetSmoothedCameraFocus = (
+    time: number,
+    startTime: number,
+    endTime: number,
+    sampleFocus: (sampleTime: number) => SonnetCameraFocusPoint,
+    smoothingWindow = 0.12,
+    maxBlendDistance = 96,
+): SonnetCameraFocusPoint => {
+    const safeStart = Math.min(startTime, endTime);
+    const safeEnd = Math.max(startTime, endTime);
+    const radius = Math.max(0, smoothingWindow);
+    if (radius === 0 || safeStart === safeEnd) {
+        return sampleFocus(Math.min(safeEnd, Math.max(safeStart, time)));
+    }
+
+    const samples = SONNET_CAMERA_SMOOTHING_SAMPLES.map(({ offset, weight }) => {
+        const sampleTime = Math.min(safeEnd, Math.max(safeStart, time + offset * radius));
+        return { point: sampleFocus(sampleTime), weight };
+    });
+    const center = samples[2].point;
+    const maxDistanceSquared = Math.max(0, maxBlendDistance) ** 2;
+    let x = 0;
+    let y = 0;
+    let totalWeight = 0;
+    samples.forEach(({ point, weight }) => {
+        const distanceSquared = (point.x - center.x) ** 2 + (point.y - center.y) ** 2;
+        // Preserve intentional composition jumps instead of averaging two distant focal points.
+        if (distanceSquared > maxDistanceSquared) return;
+        x += point.x * weight;
+        y += point.y * weight;
+        totalWeight += weight;
+    });
+    return { x: x / totalWeight, y: y / totalWeight };
+};
+
 // Produces stable normalized focus weights, including silent gaps and the tail after the final glyph.
 export const resolveSonnetFocusWeights = (
     ranges: SonnetFocusTimeRange[],

@@ -3,6 +3,7 @@ import {
     resolveCubicBezier,
     resolveSegmentProgress,
     resolveSonnetFocusWeights,
+    resolveSonnetSmoothedCameraFocus,
     resolveSonnetSegmentDepth,
     resolveSonnetSegmentNormalOffset,
     resolveShotMotionFrame,
@@ -62,6 +63,31 @@ describe('Sonnet shot motion', () => {
         expect(middleGap[1]).toBeCloseTo(0.5, 5);
         expect(finalTail.reduce((sum, weight) => sum + weight, 0)).toBeCloseTo(1, 10);
         expect(finalTail[1]).toBeGreaterThan(0.999);
+    });
+
+    it('smooths camera focus over a deterministic bounded time window', () => {
+        const sampledTimes: number[] = [];
+        const resolveFocus = (time: number) => {
+            sampledTimes.push(time);
+            return { x: time * time, y: time };
+        };
+        const first = resolveSonnetSmoothedCameraFocus(1, 0, 2, resolveFocus, 0.2);
+        const second = resolveSonnetSmoothedCameraFocus(1, 0, 2, resolveFocus, 0.2);
+
+        expect(first).toEqual(second);
+        expect(first.x).toBeGreaterThan(1);
+        expect(first.y).toBeCloseTo(1, 10);
+        expect(sampledTimes.slice(0, 5)).toEqual([0.8, 0.9, 1, 1.1, 1.2]);
+        expect(resolveSonnetSmoothedCameraFocus(0, 0, 2, resolveFocus, 0.2).x).toBeGreaterThanOrEqual(0);
+    });
+
+    it('does not blend distant camera compositions through their midpoint', () => {
+        const resolveFocus = (time: number) => (
+            time < 1 ? { x: -300, y: 0 } : { x: 300, y: 0 }
+        );
+
+        expect(resolveSonnetSmoothedCameraFocus(0.99, 0, 2, resolveFocus)).toEqual({ x: -300, y: 0 });
+        expect(resolveSonnetSmoothedCameraFocus(1, 0, 2, resolveFocus)).toEqual({ x: 300, y: 0 });
     });
 
     it('keeps primary lyric segments on one depth plane while decorations retain depth', () => {
