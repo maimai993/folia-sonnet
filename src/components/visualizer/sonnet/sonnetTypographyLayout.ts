@@ -105,9 +105,10 @@ export const resolveSonnetTypographyLayout = ({
 
     // Deterministic pseudo-randomness for layout variations
     const layoutVariantSeed = segments.reduce((acc, seg) => acc + (seg.text.trim().length || 1), 0) + segments.length;
-    let editorialVariant = layoutVariantSeed % 4; // Expanded to 4 variants
+    let editorialVariant = layoutVariantSeed % 5; // Expanded to 5 variants (0-4, including Logo Badge)
     const ribbonVariant = layoutVariantSeed % 3;
-    const tableauVariant = layoutVariantSeed % 2;
+    const tableauVariant = layoutVariantSeed % 4; // Expanded to 4 variants (0-3, including horizontal cards)
+    const collageVariant = layoutVariantSeed % 3; // Expanded to 3 ring/spiral collage variants
 
     let secondaryHeroIndex = -1;
     if (editorialVariant === 3 && segments.length > 2) {
@@ -126,6 +127,8 @@ export const resolveSonnetTypographyLayout = ({
         if (secondaryHeroIndex === -1) editorialVariant = 0;
     } else if (editorialVariant === 3) {
         editorialVariant = 0;
+    } else if (editorialVariant === 4 && segments.length < 2) {
+        editorialVariant = 2; // Fallback to Magazine Header if sentence is too short for Logo Badge
     }
 
     // 1. Assign styles and measure boxes
@@ -140,6 +143,10 @@ export const resolveSonnetTypographyLayout = ({
                 if (editorialVariant === 3) {
                     fontScale = isHero ? 3.8 : 1.3;
                     vertical = false;
+                } else if (editorialVariant === 4) {
+                    // Logo Badge: Hero giant vertical pillar on the left/right, support text multiline horizontal block on the other side
+                    fontScale = isHero ? 4.2 : 1.25;
+                    vertical = isHero;
                 } else {
                     fontScale = isHero ? (editorialVariant === 2 ? 3.2 : 4.0) : 1.2;
                     vertical = isHero && editorialVariant !== 2;
@@ -149,7 +156,7 @@ export const resolveSonnetTypographyLayout = ({
                 fontScale = isHero ? 5.5 : 1.5;
                 break;
             case 'fragment-collage':
-                fontScale = isHero ? 3.0 : 1.3;
+                fontScale = isHero ? 3.2 : 1.35;
                 vertical = (index % 4) === 0;
                 break;
             case 'tracking-ribbon':
@@ -161,7 +168,8 @@ export const resolveSonnetTypographyLayout = ({
                 break;
             case 'quiet-tableau':
             default:
-                fontScale = isHero ? 3.0 : 1.1;
+                fontScale = isHero ? 3.0 : 1.15;
+                vertical = isHero && (tableauVariant === 0 || tableauVariant === 1);
                 break;
         }
 
@@ -222,12 +230,13 @@ export const resolveSonnetTypographyLayout = ({
         if (shotKind === 'editorial-column') {
             if (editorialVariant === 0) heroBox.x = -width * 0.15;
             else if (editorialVariant === 1) heroBox.x = width * 0.15;
-            else heroBox.x = 0; // Variant 2 (centered horizontal)
+            else if (editorialVariant === 4) heroBox.x = -width * 0.20; // Logo Badge: Hero pillar on left
+            else heroBox.x = 0; // Variant 2 (centered horizontal), Variant 3
 
             heroBox.y = (editorialVariant === 2) ? -height * 0.25 : 0;
         } else if (shotKind === 'quiet-tableau') {
             heroBox.x = 0;
-            heroBox.y = -height * 0.1;
+            heroBox.y = (tableauVariant === 2 || tableauVariant === 3) ? 0 : -height * 0.1;
         } else {
             heroBox.x = 0;
             heroBox.y = 0;
@@ -235,8 +244,8 @@ export const resolveSonnetTypographyLayout = ({
 
         // Implement diverse layout strategies based on shotKind
         if (shotKind === 'quiet-tableau') {
-            boxes.forEach(box => { box.layoutDirection = 'vertical'; });
             if (tableauVariant === 0) {
+                boxes.forEach(box => { box.layoutDirection = 'vertical'; });
                 // 1a. Strict Vertical Stack (Centered)
                 let currentY = heroBox.y - heroBox.measuredHeight / 2 - verticalStackGap;
                 for (let i = heroIndex - 1; i >= 0; i--) {
@@ -254,7 +263,8 @@ export const resolveSonnetTypographyLayout = ({
                     currentY += box.measuredHeight + verticalStackGap;
                     box.enterX = 0; box.enterY = -20;
                 }
-            } else {
+            } else if (tableauVariant === 1) {
+                boxes.forEach(box => { box.layoutDirection = 'vertical'; });
                 // 1b. Flush-Left Vertical Stack (Modern Poster)
                 let currentY = heroBox.y - heroBox.measuredHeight / 2 - verticalStackGap;
                 for (let i = heroIndex - 1; i >= 0; i--) {
@@ -271,6 +281,46 @@ export const resolveSonnetTypographyLayout = ({
                     box.y = currentY + box.measuredHeight / 2;
                     currentY += box.measuredHeight + verticalStackGap;
                     box.enterX = -20; box.enterY = 0;
+                }
+            } else if (tableauVariant === 2) {
+                boxes.forEach(box => { box.layoutDirection = 'horizontal'; });
+                // 1c. Centered Horizontal Multi-line Card
+                let currentY = heroBox.y - heroBox.measuredHeight / 2 - verticalStackGap;
+                for (let i = heroIndex - 1; i >= 0; i--) {
+                    const box = boxes[i];
+                    box.x = heroBox.x;
+                    box.y = currentY - box.measuredHeight / 2;
+                    currentY -= box.measuredHeight + verticalStackGap;
+                    box.enterX = 0; box.enterY = 20;
+                }
+                currentY = heroBox.y + heroBox.measuredHeight / 2 + verticalStackGap;
+                for (let i = heroIndex + 1; i < boxes.length; i++) {
+                    const box = boxes[i];
+                    box.x = heroBox.x;
+                    box.y = currentY + box.measuredHeight / 2;
+                    currentY += box.measuredHeight + verticalStackGap;
+                    box.enterX = 0; box.enterY = -20;
+                }
+            } else {
+                boxes.forEach(box => { box.layoutDirection = 'horizontal'; });
+                // 1d. Staggered Floating Horizontal Rows (Zigzag horizontal card)
+                let currentY = heroBox.y - heroBox.measuredHeight / 2 - verticalStackGap;
+                for (let i = heroIndex - 1; i >= 0; i--) {
+                    const box = boxes[i];
+                    const offsetX = ((i % 2 === 0) ? 1 : -1) * 35;
+                    box.x = heroBox.x + offsetX;
+                    box.y = currentY - box.measuredHeight / 2;
+                    currentY -= box.measuredHeight + verticalStackGap;
+                    box.enterX = offsetX > 0 ? 30 : -30; box.enterY = 0;
+                }
+                currentY = heroBox.y + heroBox.measuredHeight / 2 + verticalStackGap;
+                for (let i = heroIndex + 1; i < boxes.length; i++) {
+                    const box = boxes[i];
+                    const offsetX = ((i % 2 === 0) ? 1 : -1) * 35;
+                    box.x = heroBox.x + offsetX;
+                    box.y = currentY + box.measuredHeight / 2;
+                    currentY += box.measuredHeight + verticalStackGap;
+                    box.enterX = offsetX > 0 ? 30 : -30; box.enterY = 0;
                 }
             }
         } else if (shotKind === 'tracking-ribbon') {
@@ -425,18 +475,89 @@ export const resolveSonnetTypographyLayout = ({
                 const offsetAmount = Math.max(line1Width, line2Width) * 0.12;
                 for (let i = 0; i <= firstHero; i++) boxes[i].x -= offsetAmount;
                 for (let i = firstHero + 1; i < boxes.length; i++) boxes[i].x += offsetAmount;
+            } else if (editorialVariant === 4) {
+                // 3e. Logo Badge Layout: Hero Giant Vertical Pillar + Multiline Support Text Block
+                boxes.forEach((box, i) => {
+                    box.layoutDirection = i === heroIndex ? 'vertical' : 'horizontal';
+                });
+
+                // If hero is at the end of the sentence, place Hero Pillar on Right and Support block on Left to preserve natural left-to-right reading order
+                const heroOnRight = heroIndex === boxes.length - 1;
+                heroBox.x = heroOnRight ? width * 0.20 : -width * 0.20;
+
+                const startX = heroOnRight
+                    ? heroBox.x - heroBox.measuredWidth / 2 - 35
+                    : heroBox.x + heroBox.measuredWidth / 2 + 35;
+                const startY = heroBox.y - heroBox.measuredHeight / 2 + 10;
+                let currentX = startX;
+                let currentY = startY;
+                const maxRowWidth = width * 0.38;
+
+                for (let i = 0; i < boxes.length; i++) {
+                    if (i === heroIndex) continue;
+                    const box = boxes[i];
+                    
+                    if (heroOnRight) {
+                        // Packing right-to-left block for heroOnRight
+                        if (currentX < startX && (startX - currentX + box.measuredWidth) > maxRowWidth) {
+                            currentX = startX;
+                            currentY += baseFontSize * 1.5 + 10;
+                        }
+                        box.x = currentX - box.measuredWidth / 2;
+                        box.y = currentY + box.measuredHeight / 2;
+                        currentX -= box.measuredWidth + 18;
+                        box.enterX = -25;
+                        box.enterY = 0;
+                    } else {
+                        // Packing left-to-right block
+                        if (currentX > startX && (currentX + box.measuredWidth - startX) > maxRowWidth) {
+                            currentX = startX;
+                            currentY += baseFontSize * 1.5 + 10;
+                        }
+                        box.x = currentX + box.measuredWidth / 2;
+                        box.y = currentY + box.measuredHeight / 2;
+                        currentX += box.measuredWidth + 18;
+                        box.enterX = 25;
+                        box.enterY = 0;
+                    }
+                }
             }
         } else if (shotKind === 'fragment-collage') {
-            // 4. Fragment Collage: Scattered, overlapping, chaotic positioning
+            // 4. Fragment Collage: Dynamic polar orbit ring positioning with overlap protection
+            const count = Math.max(1, boxes.length - 1);
+            let supportIndex = 0;
+
             for (let i = 0; i < boxes.length; i++) {
                 if (i === heroIndex) continue;
                 const box = boxes[i];
-                const angle = (i / boxes.length) * Math.PI * 2 + Math.PI / 4 + (Math.random() * 0.5);
-                // Base radius on the hero box size to ensure they orbit OUTSIDE the hero word
                 const baseRadius = Math.max(heroBox.measuredWidth, heroBox.measuredHeight) / 2;
-                const radius = baseRadius + 40 + Math.random() * 120;
+                
+                let radius = baseRadius + 45;
+                // Distribute strictly clockwise in timeline order
+                let angle = (supportIndex / count) * Math.PI * 2 + Math.PI / 4;
+
+                if (collageVariant === 1) {
+                    // Spiral Orbit (Archimedean spiral out with proportional spacing)
+                    radius += 35 + (supportIndex / count) * 150;
+                    angle += (supportIndex * 0.18);
+                } else if (collageVariant === 2) {
+                    // Double Ring Orbit (Staggered Phase Angle to prevent overlapping)
+                    const isOuter = supportIndex % 2 === 1;
+                    const ringIndex = Math.floor(supportIndex / 2);
+                    const ringCount = Math.max(1, Math.ceil(count / 2));
+                    // Interleave inner and outer ring angles by half a phase step
+                    const basePhase = (ringIndex / ringCount) * Math.PI * 2;
+                    angle = isOuter ? basePhase + Math.PI / ringCount + Math.PI / 4 : basePhase + Math.PI / 4;
+                    radius += isOuter ? 140 : 50;
+                } else {
+                    // Classic Ring Orbit with dynamic radial offsets
+                    radius += 45 + ((supportIndex * 23) % 90);
+                }
+
+                supportIndex += 1;
+
                 box.x = heroBox.x + Math.cos(angle) * (radius + box.measuredWidth / 2);
-                box.y = heroBox.y + Math.sin(angle) * (radius * 0.6 + box.measuredHeight / 2);
+                box.y = heroBox.y + Math.sin(angle) * (radius * 0.65 + box.measuredHeight / 2);
                 box.rotation = 0;
                 box.layoutDirection = Math.abs(Math.cos(angle)) >= Math.abs(Math.sin(angle))
                     ? 'vertical'

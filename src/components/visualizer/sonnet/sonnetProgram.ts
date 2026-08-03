@@ -151,9 +151,9 @@ const buildShots = (
     return groupShotLines(lines).map((group, shotIndex) => {
         const signature = group.map(item => item.line.fullText).join('|');
         let shotKind = chooseWithoutRepeat(SHOT_KINDS, `${seed}:${paragraphIndex}:${shotIndex}:${signature}`, lastKind);
-        if (kind === 'breath' && shotIndex === 0) shotKind = 'quiet-tableau';
+        const wordCount = group.reduce((sum, item) => sum + item.segments.filter(s => s.isWordLike).length, 0);
+        if (kind === 'breath' && shotIndex === 0 && wordCount <= 2) shotKind = 'quiet-tableau';
         if (kind === 'chorus' && shotKind === 'quiet-tableau') shotKind = 'type-impact';
-        if ((kind === 'verse' || kind === 'breath') && shotKind === 'type-impact') shotKind = 'editorial-column';
         lastKind = shotKind;
         const random = hashSonnetSeed(`${seed}:${paragraphIndex}:${shotIndex}:camera`);
         return {
