@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SonnetSemanticSegment } from '@/components/visualizer/sonnet/types';
 import {
     findSonnetHeroSegmentIndex,
+    isSonnetLayoutSegment,
     resolveSonnetTypographyLayout,
 } from '@/components/visualizer/sonnet/sonnetTypographyLayout';
 
@@ -44,10 +45,11 @@ describe('Sonnet typography layout', () => {
         });
         const hero = layout.find(item => item.role === 'hero')!;
         const supports = layout.filter(item => item.role === 'support');
+        const textPlacements = layout.filter(item => item.role !== 'decoration');
 
         expect(hero.displayText).toBe('あ\nな\nた\nへ');
         expect(supports.every(item => item.fontScale < hero.fontScale)).toBe(true);
-        expect(layout.map(item => item.timingPhase)).toEqual([0, 0.5, 1]);
+        expect(textPlacements.map(item => item.timingPhase)).toEqual([0, 0.5, 1]);
         expect(supports[0].x).toBeLessThan(supports[1].x);
     });
 
@@ -73,7 +75,8 @@ describe('Sonnet typography layout', () => {
             fontWeight: 700,
         });
 
-        expect(impact.map(item => item.role)).toEqual(quiet.map(item => item.role));
+        expect(impact.filter(item => item.role !== 'decoration').map(item => item.role))
+            .toEqual(quiet.map(item => item.role));
         expect(impact.find(item => item.role === 'hero')!.fontScale)
             .toBeGreaterThan(quiet.find(item => item.role === 'hero')!.fontScale);
     });
@@ -96,8 +99,9 @@ describe('Sonnet typography layout', () => {
         });
 
         expect(findSonnetHeroSegmentIndex(timed)).toBe(1);
-        expect(layout.map(item => item.timingPhase)).toEqual([0, 0.5, 1]);
-        expect(layout[0].x).toBeLessThan(layout[2].x);
+        const textPlacements = layout.filter(item => item.role !== 'decoration');
+        expect(textPlacements.map(item => item.timingPhase)).toEqual([0, 0.5, 1]);
+        expect(textPlacements.map(item => item.segmentIndex)).toEqual([0, 1, 2]);
     });
 
     it('tracks the segment flow direction independently from glyph writing direction', () => {
@@ -138,5 +142,29 @@ describe('Sonnet typography layout', () => {
         const supports = layout.filter(item => item.role === 'support');
 
         expect(supports.every(item => Math.abs(item.y - hero.y) >= 122.4)).toBe(true);
+    });
+
+    it('excludes whitespace-only semantic segments from scene layout', () => {
+        expect(['a', ' ', 'bit'].map(text => segment(text, text !== ' ')).filter(isSonnetLayoutSegment)
+            .map(item => item.text)).toEqual(['a', 'bit']);
+    });
+
+    it('measures a vertical non-CJK word as a rotated horizontal block', () => {
+        const words = [segment('a'), segment('café'), segment('c')];
+        const layout = resolveSonnetTypographyLayout({
+            lines: [words],
+            shotKind: 'quiet-tableau',
+            paragraphKind: 'breath',
+            width: 1280,
+            height: 720,
+            baseFontSize: 40,
+            fontFamily: 'sans-serif',
+            fontWeight: 700,
+        }).filter(item => item.role !== 'decoration');
+        const word = layout.find(item => item.segmentIndex === 1)!;
+
+        expect(word.vertical).toBe(false);
+        expect(word.rotation).toBeCloseTo(Math.PI / 2);
+        expect(Math.abs(layout[0].y - word.y)).toBeLessThan(300);
     });
 });

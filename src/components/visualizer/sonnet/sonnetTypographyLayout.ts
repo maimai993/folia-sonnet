@@ -39,6 +39,18 @@ const visibleLength = (segment: SonnetSemanticSegment) => (
     segment.graphemes.filter(item => item.char.trim().length > 0).length
 );
 
+export const isSonnetLayoutSegment = (segment: SonnetSemanticSegment) => (
+    segment.text.trim().length > 0
+);
+
+const CJK_TEXT = /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/u;
+
+const shouldRotateNonCjkSegment = (segment: SonnetSemanticSegment, vertical: boolean) => (
+    vertical
+    && segment.graphemes.filter(item => item.char.trim().length > 0).length > 1
+    && !CJK_TEXT.test(segment.text)
+);
+
 export const findSonnetHeroSegmentIndex = (
     segments: SonnetSemanticSegment[],
 ) => {
@@ -173,20 +185,40 @@ export const resolveSonnetTypographyLayout = ({
                 break;
         }
 
+        // Non-CJK words use horizontal glyph advances and rotate as a block in vertical compositions.
+        // Resolve that writing mode before measuring so packing uses the rendered bounds.
+        const rotatesNonCjkSegment = shouldRotateNonCjkSegment(segment, vertical);
+        if (rotatesNonCjkSegment) {
+            vertical = false;
+            rotation += Math.PI / 2;
+        }
+
         // To prevent massive text from overflowing 82% of screen width, we calculate a fitScale
-        let displayText = vertical ? verticalText(segment) : segment.text;
+        const displayText = vertical ? verticalText(segment) : segment.text;
         const renderWeight = isHero ? '900' : '700';
 
         let targetFontSize = baseFontSize * fontScale;
-        let fontSpec = `${renderWeight} ${targetFontSize}px ${fontFamily}`;
+        const fontSpec = `${renderWeight} ${targetFontSize}px ${fontFamily}`;
 
-        let measuredWidth = vertical
-            ? targetFontSize * 1.1
+        const horizontalAdvance = rotatesNonCjkSegment
+            ? segment.graphemes.reduce((sum, item) => (
+                item.char.trim().length > 0
+                    ? sum + Math.max(targetFontSize * 0.2, measureText(item.char, fontSpec, targetFontSize))
+                    : sum
+            ), 0)
             : measureText(displayText, fontSpec, targetFontSize);
 
-        let measuredHeight = vertical
-            ? targetFontSize * 1.1 * (displayText.split('\n').length)
-            : targetFontSize * 1.2;
+        let measuredWidth = rotatesNonCjkSegment
+            ? targetFontSize * 1.2
+            : vertical
+                ? targetFontSize * 1.1
+                : horizontalAdvance;
+
+        let measuredHeight = rotatesNonCjkSegment
+            ? horizontalAdvance
+            : vertical
+                ? targetFontSize * 1.1 * (displayText.split('\n').length)
+                : targetFontSize * 1.2;
 
         // Safe downscale if it exceeds screen bounds
         const maxW = width * 0.82;

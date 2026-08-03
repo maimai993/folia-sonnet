@@ -9,6 +9,7 @@ import {
     resolveSonnetPostProcessProfile,
 } from './sonnetPostProcess';
 import {
+    isSonnetLayoutSegment,
     resolveSonnetTypographyLayout,
 } from './sonnetTypographyLayout';
 import {
@@ -154,7 +155,7 @@ export const buildSonnetScene = (
             .map(lineIndex => paragraph.lines.find(item => item.sourceIndex === lineIndex))
             .filter(Boolean) as SonnetParagraph['lines'];
         const linesSegments = compiledLines
-            .map(line => line.segments.filter(segment => segment.text.length > 0))
+            .map(line => line.segments.filter(isSonnetLayoutSegment))
             .filter(segs => segs.length > 0);
         const segments = linesSegments.flat();
         const wordCount = Math.max(1, segments.filter(segment => segment.isWordLike).length);

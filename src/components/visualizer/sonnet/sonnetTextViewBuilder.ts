@@ -87,15 +87,7 @@ export const buildSonnetTextView = (
 ): SegmentView => {
     const { Text, TextStyle } = pixi;
     const { segment, placement: originalPlacement } = options;
-    const isAscii = /^[\x00-\x7F]*$/.test(segment.text.trim());
     const placement = { ...originalPlacement };
-    
-    // In vertical layout, pure English (ASCII) words should not be stacked vertically letter-by-letter.
-    // Instead, they should be laid out horizontally, and the entire word block rotated 90 degrees clockwise.
-    if (placement.vertical && isAscii && segment.text.length > 1) {
-        placement.vertical = false;
-        placement.rotation += Math.PI / 2;
-    }
 
     const fontSize = options.baseFontSize * placement.fontScale;
     const normalOffsetSeed = hashSonnetSeed([
