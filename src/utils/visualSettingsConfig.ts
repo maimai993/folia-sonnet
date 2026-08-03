@@ -18,6 +18,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
   return {
     songThemeAutoSwitchEnabled,
     songThemeAutoGenerateEnabled,
+    followSystemTheme: store.followSystemTheme,
     visualizerMode: store.visualizerMode,
     randomVisualizerModePerSong: store.randomVisualizerModePerSong,
     visualizerBackgroundMode: store.visualizerBackgroundMode,

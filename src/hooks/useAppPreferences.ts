@@ -12,6 +12,7 @@ import {
     resolveStoredCappellaTuning,
     resolveStoredCustomLyricsFont,
     resolveVisualizerBackgroundMode,
+    readSystemThemeIsDaylight,
     selectSettingsUiSnapshot,
     useSettingsUiStore,
 } from '../stores/useSettingsUiStore';
@@ -52,6 +53,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
     const monetBackgroundTuning = useSettingsUiStore(state => state.monetBackgroundTuning);
     const monetTuning = useSettingsUiStore(state => state.monetTuning);
     const isDaylight = useSettingsUiStore(state => state.isDaylight);
+    const setDaylightPreferenceFromSystem = useSettingsUiStore(state => state.setDaylightPreferenceFromSystem);
 
     useEffect(() => {
         setStatusSetter(setStatusMsg);
@@ -72,6 +74,35 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
             root.style.setProperty('--scrollbar-thumb-hover', '#52525b');
         }
     }, [isDaylight]);
+
+    // Keep the persisted daylight value in sync with OS changes only while auto-follow is enabled.
+    useEffect(() => {
+        if (!preferences.followSystemTheme || typeof window.matchMedia !== 'function') {
+            return;
+        }
+
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+        const syncWithSystemTheme = (isLight: boolean) => {
+            setDaylightPreferenceFromSystem(isLight);
+        };
+
+        const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+            syncWithSystemTheme(event.matches);
+        };
+
+        const initialSystemTheme = readSystemThemeIsDaylight();
+        if (initialSystemTheme !== null) {
+            syncWithSystemTheme(initialSystemTheme);
+        }
+
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', handleSystemThemeChange);
+            return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
+        }
+
+        mediaQuery.addListener(handleSystemThemeChange);
+        return () => mediaQuery.removeListener(handleSystemThemeChange);
+    }, [preferences.followSystemTheme, setDaylightPreferenceFromSystem]);
 
     useEffect(() => {
         if (!window.electron?.getWindowTransparentMode) {

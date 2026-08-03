@@ -7,6 +7,7 @@ import { applyVisualizerTuningsToSettings, collectVisualizerTunings } from '../.
 // Maps the settings store to the syncable visual settings JSON document.
 
 export const buildSyncedVisualSettings = (state: SettingsUiState): SyncedVisualSettings => ({
+    followSystemTheme: state.followSystemTheme,
     visualizerMode: state.visualizerMode,
     randomVisualizerModePerSong: state.randomVisualizerModePerSong,
     visualizerBackgroundMode: state.visualizerBackgroundMode,
@@ -63,6 +64,7 @@ export const applySyncedVisualSettings = (
     state: SettingsUiState,
     settings: SyncedVisualSettings,
 ) => {
+    if (settings.followSystemTheme !== undefined) state.setFollowSystemTheme(Boolean(settings.followSystemTheme));
     if (settings.visualizerMode !== undefined) state.handleSetVisualizerMode(settings.visualizerMode);
     if (settings.randomVisualizerModePerSong !== undefined) state.handleToggleRandomVisualizerModePerSong(Boolean(settings.randomVisualizerModePerSong));
     if (settings.visualizerBackgroundMode === null) {

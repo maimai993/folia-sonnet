@@ -18,6 +18,7 @@ describe('sync schema parsing', () => {
             schemaVersion: 1,
             updatedAt: '2026-07-08T00:00:00.000Z',
             data: {
+                followSystemTheme: true,
                 visualizerMode: 'classic',
                 visualizerBackgroundMode: 'bad',
                 backgroundOpacity: Number.NaN,
@@ -41,6 +42,7 @@ describe('sync schema parsing', () => {
         });
 
         expect(record?.data).toEqual({
+            followSystemTheme: true,
             visualizerMode: 'classic',
             visualizerOpacity: 0.7,
             showSubtitleTranslation: true,

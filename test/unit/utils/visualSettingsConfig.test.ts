@@ -28,6 +28,21 @@ describe('buildVisualSettingsConfig', () => {
     beforeEach(() => {
         switchMock.mockReset().mockReturnValue(true);
         generateMock.mockReset().mockReturnValue(false);
+        useSettingsUiStore.setState({ followSystemTheme: false, isDaylight: false });
+    });
+
+    it('carries the system theme preference and keeps manual daylight changes authoritative', () => {
+        useSettingsUiStore.setState({ followSystemTheme: true, isDaylight: false });
+        expect(buildVisualSettingsConfig().followSystemTheme).toBe(true);
+
+        const restored = decompressConfig(compressConfig(buildVisualSettingsConfig()));
+        expect(restored.followSystemTheme).toBe(true);
+
+        useSettingsUiStore.getState().setDaylightPreference(true);
+        expect(useSettingsUiStore.getState()).toMatchObject({
+            followSystemTheme: false,
+            isDaylight: true,
+        });
     });
 
     it('carries the song-theme automation flags', () => {

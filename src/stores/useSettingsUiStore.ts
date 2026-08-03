@@ -55,6 +55,7 @@ export const SHOW_HARMONY_SUBTITLE_STORAGE_KEY = 'show_harmony_subtitle';
 export const HARMONY_SUBTITLE_BACKGROUND_STORAGE_KEY = 'harmony_subtitle_background';
 export const SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY = 'show_subtitle_translation';
 export const SUBTITLE_CONTENT_MODE_STORAGE_KEY = 'subtitle_content_mode';
+export const FOLLOW_SYSTEM_THEME_STORAGE_KEY = 'follow_system_theme';
 const LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'lyrics_font_fallback_families';
 const LYRICS_FONT_WEIGHT_STORAGE_KEY = 'lyrics_font_weight';
 const SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY = 'subtitle_font_inherits_lyrics';
@@ -79,6 +80,14 @@ const setStoredBoolean = (key: string, value: boolean) => {
     if (typeof window !== 'undefined') {
         localStorage.setItem(key, String(value));
     }
+};
+
+export const readSystemThemeIsDaylight = (): boolean | null => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        return null;
+    }
+
+    return window.matchMedia('(prefers-color-scheme: light)').matches;
 };
 
 export const readStoredSubtitleContentMode = (): SubtitleContentMode => {
@@ -1150,6 +1159,7 @@ export type SettingsUiState = {
     urlBackgroundSelectedId: string | null;
     visualizerFrameRate: VisualizerFrameRate;
     isDaylight: boolean;
+    followSystemTheme: boolean;
     visualizerMode: VisualizerMode;
     randomVisualizerModePerSong: boolean;
     sonnetPerformanceWarningOpen: boolean;
@@ -1282,6 +1292,8 @@ export type SettingsUiState = {
     handleSetUrlBackgroundList: (items: UrlBackgroundItem[]) => void;
     handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
     setDaylightPreference: (isDaylight: boolean) => void;
+    setDaylightPreferenceFromSystem: (isDaylight: boolean) => void;
+    setFollowSystemTheme: (enabled: boolean) => void;
     handleSetVisualizerMode: (mode: VisualizerMode, options?: { notify?: boolean; skipSonnetWarning?: boolean }) => void;
     handleSetSonnetPerformanceWarningDontShowAgain: (enabled: boolean) => void;
     handleConfirmSonnetPerformanceWarning: () => void;
@@ -1364,6 +1376,12 @@ const notify = (get: () => SettingsUiState, message: StatusMessage) => {
     get().statusSetter?.(message);
 };
 
+const initialFollowSystemTheme = getStoredBoolean(FOLLOW_SYSTEM_THEME_STORAGE_KEY, false);
+const initialStoredDaylight = getStoredBoolean('default_theme_daylight', false);
+const initialDaylight = initialFollowSystemTheme
+    ? (readSystemThemeIsDaylight() ?? initialStoredDaylight)
+    : initialStoredDaylight;
+
 export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     statusSetter: null,
     audioQuality: readStoredAudioQuality(),
@@ -1401,7 +1419,8 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     urlBackgroundList: readStoredUrlBackgroundList(),
     urlBackgroundSelectedId: readStoredUrlBackgroundSelectedId(),
     visualizerFrameRate: readStoredVisualizerFrameRate(),
-    isDaylight: getStoredBoolean('default_theme_daylight', false),
+    followSystemTheme: initialFollowSystemTheme,
+    isDaylight: initialDaylight,
     visualizerMode: readStoredVisualizerMode(),
     randomVisualizerModePerSong: getStoredBoolean('random_visualizer_mode_per_song', false),
     sonnetPerformanceWarningOpen: false,
@@ -1860,9 +1879,40 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         setGlobalVisualizerFrameRate(frameRate);
         set({ visualizerFrameRate: frameRate });
     },
-    setDaylightPreference: (enabled) => {
+    // System updates are kept separate from the manual setter so a user click can disable auto-follow.
+    setDaylightPreferenceFromSystem: (enabled) => {
+        if (!get().followSystemTheme) {
+            return;
+        }
+
         setStoredBoolean('default_theme_daylight', enabled);
         set({ isDaylight: enabled });
+        if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
+            void window.electron.setNativeTheme('system');
+        }
+    },
+    setFollowSystemTheme: (enabled) => {
+        setStoredBoolean(FOLLOW_SYSTEM_THEME_STORAGE_KEY, enabled);
+        set({ followSystemTheme: enabled });
+
+        if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
+            void window.electron.setNativeTheme(enabled ? 'system' : (get().isDaylight ? 'light' : 'dark'));
+        }
+
+        if (enabled) {
+            const systemThemeIsDaylight = readSystemThemeIsDaylight();
+            if (systemThemeIsDaylight !== null) {
+                get().setDaylightPreferenceFromSystem(systemThemeIsDaylight);
+            }
+        }
+    },
+    setDaylightPreference: (enabled) => {
+        const wasFollowingSystem = get().followSystemTheme;
+        if (wasFollowingSystem) {
+            setStoredBoolean(FOLLOW_SYSTEM_THEME_STORAGE_KEY, false);
+        }
+        setStoredBoolean('default_theme_daylight', enabled);
+        set({ isDaylight: enabled, ...(wasFollowingSystem ? { followSystemTheme: false } : {}) });
         if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
             void window.electron.setNativeTheme(enabled ? 'light' : 'dark');
         }
@@ -2717,6 +2767,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     urlBackgroundSelectedId: state.urlBackgroundSelectedId,
     visualizerFrameRate: state.visualizerFrameRate,
     isDaylight: state.isDaylight,
+    followSystemTheme: state.followSystemTheme,
     lastSeenGuideVersion: state.lastSeenGuideVersion,
     isUserGuideModalOpen: state.isUserGuideModalOpen,
     visualizerMode: state.visualizerMode,
@@ -2812,6 +2863,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetUrlBackgroundList: state.handleSetUrlBackgroundList,
     handleSetVisualizerFrameRate: state.handleSetVisualizerFrameRate,
     setDaylightPreference: state.setDaylightPreference,
+    setDaylightPreferenceFromSystem: state.setDaylightPreferenceFromSystem,
+    setFollowSystemTheme: state.setFollowSystemTheme,
     setLastSeenGuideVersion: state.setLastSeenGuideVersion,
     setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     handleSetVisualizerMode: state.handleSetVisualizerMode,
@@ -2881,5 +2934,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
 });
 
 if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
-    void window.electron.setNativeTheme(useSettingsUiStore.getState().isDaylight ? 'light' : 'dark');
+    const initialSettings = useSettingsUiStore.getState();
+    void window.electron.setNativeTheme(
+        initialSettings.followSystemTheme ? 'system' : (initialSettings.isDaylight ? 'light' : 'dark'),
+    );
 }

@@ -155,7 +155,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         visualizerOpacity,
         visualizerBackgroundMode,
         isDaylight,
+        followSystemTheme,
         setDaylightPreference: onSetDaylightPreference,
+        setFollowSystemTheme: onSetFollowSystemTheme,
         visualizerMode,
         grid3dCardStyle,
         classicTuning,
@@ -1498,11 +1500,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 hasCustomTheme={hasCustomTheme}
                                                 isCustomThemePreferred={isCustomThemePreferred}
                                                 isDaylight={isDaylight}
+                                                followSystemTheme={followSystemTheme}
                                                 onApplyCustomTheme={onApplyCustomTheme}
                                                 onApplyDefaultTheme={onApplyDefaultTheme}
                                                 onOpenThemePark={() => setShowThemePark(true)}
                                                 onOpenVisPlayground={() => setShowVisPlayground(true)}
                                                 onToggleSongThemeAutoGenerate={onToggleSongThemeAutoGenerate}
+                                                onToggleFollowSystemTheme={onSetFollowSystemTheme}
                                                 onToggleCustomThemePreferred={onToggleCustomThemePreferred}
                                                 onToggleSongThemeAutoSwitch={onToggleSongThemeAutoSwitch}
                                                 onToggleTransparentPlayerBackground={resolvedToggleTransparentPlayerBackground}

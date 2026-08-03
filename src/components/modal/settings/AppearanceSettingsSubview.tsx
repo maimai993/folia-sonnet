@@ -30,11 +30,13 @@ type AppearanceSettingsSubviewProps = {
     hasCustomTheme: boolean;
     isCustomThemePreferred: boolean;
     isDaylight: boolean;
+    followSystemTheme: boolean;
     onApplyCustomTheme: () => void;
     onApplyDefaultTheme: () => void;
     onOpenThemePark: () => void;
     onOpenVisPlayground: () => void;
     onToggleSongThemeAutoGenerate: (enabled: boolean) => void;
+    onToggleFollowSystemTheme: (enabled: boolean) => void;
     onToggleCustomThemePreferred: (enabled: boolean) => void;
     onToggleSongThemeAutoSwitch: (enabled: boolean) => void;
     onToggleTransparentPlayerBackground: (enabled: boolean) => void;
@@ -65,11 +67,13 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     hasCustomTheme,
     isCustomThemePreferred,
     isDaylight,
+    followSystemTheme,
     onApplyCustomTheme,
     onApplyDefaultTheme,
     onOpenThemePark,
     onOpenVisPlayground,
     onToggleSongThemeAutoGenerate,
+    onToggleFollowSystemTheme,
     onToggleCustomThemePreferred,
     onToggleSongThemeAutoSwitch,
     onToggleTransparentPlayerBackground,
@@ -163,6 +167,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         sonnetTuning: state.sonnetTuning,
         urlBackgroundList: state.urlBackgroundList,
         urlBackgroundSelectedId: state.urlBackgroundSelectedId,
+        handleToggleFollowSystemTheme: state.setFollowSystemTheme,
 
         handleSetVisualizerMode: state.handleSetVisualizerMode,
         handleToggleRandomVisualizerModePerSong: state.handleToggleRandomVisualizerModePerSong,
@@ -475,6 +480,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             if (has('songThemeAutoGenerateEnabled')) {
                 onToggleSongThemeAutoGenerate(Boolean(config.songThemeAutoGenerateEnabled));
             }
+            if (has('followSystemTheme')) {
+                store.handleToggleFollowSystemTheme(Boolean(config.followSystemTheme));
+            }
 
             store.statusSetter?.({ type: 'success', text: t('options.importSuccess') });
             setImportText('');
@@ -536,6 +544,25 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         >
                             <div className="w-6 h-6 rounded-full" style={{ background: hasCustomTheme ? `linear-gradient(135deg, ${themeParkInitialTheme.light.accentColor}, ${themeParkInitialTheme.dark.accentColor})` : 'rgba(114,119,134,0.4)' }} />
                             <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{t('options.customTheme') || 'Custom'}</span>
+                        </button>
+                    </div>
+                    <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.followSystemTheme')}
+                            </div>
+                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.followSystemThemeDesc')}
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => onToggleFollowSystemTheme(!followSystemTheme)}
+                            aria-pressed={followSystemTheme}
+                            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!followSystemTheme ? toggleOffBackgroundClass : ''}`}
+                            style={{ backgroundColor: followSystemTheme ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                        >
+                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${followSystemTheme ? 'translate-x-6' : 'translate-x-0'}`} />
                         </button>
                     </div>
                     <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>

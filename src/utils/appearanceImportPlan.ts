@@ -114,6 +114,7 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
 
     songThemeAutoSwitchEnabled: 'songTheme',
     songThemeAutoGenerateEnabled: 'songTheme',
+    followSystemTheme: 'theme',
 };
 
 // Fields the import applies only when the incoming value is truthy, so an incoming null means "the

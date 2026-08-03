@@ -37,6 +37,16 @@ describe('buildImportPlan', () => {
         expect(keys(p)).toEqual(['visualizerMode']);
     });
 
+    it('plans the system theme preference as a theme setting', () => {
+        const p = plan({ followSystemTheme: true }, { followSystemTheme: false }, unpinned);
+        expect(p.changes).toContainEqual(expect.objectContaining({
+            key: 'followSystemTheme',
+            group: 'theme',
+            from: false,
+            to: true,
+        }));
+    });
+
     it('sorts changes into the group they are presented under', () => {
         const p = plan({
             theme: { light: { name: 'X' }, dark: { name: 'Y' } },

@@ -753,6 +753,8 @@ export default {
     "obsBrowserSourceClients": "连接数",
     "visualSettings": "视觉设置",
     "daylightMode": "明暗模式",
+    "followSystemTheme": "跟随系统明暗",
+    "followSystemThemeDesc": "根据系统设置自动切换亮色 / 暗色主题；手动切换明暗模式后将关闭此选项。",
     "lyricsRenderer": "歌词动画",
     "lyricsRendererDesc": "选择播放页使用的歌词动画模式。",
     "lyricsAnimationAdjust": "歌词动画样式",

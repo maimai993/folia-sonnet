@@ -750,6 +750,8 @@ export default {
     "obsBrowserSourceClients": "Clients",
     "visualSettings": "Visual Settings",
     "daylightMode": "Light / Dark Mode",
+    "followSystemTheme": "Follow System Theme",
+    "followSystemThemeDesc": "Automatically switch between light and dark themes with the system. Manual theme switching turns this off.",
     "lyricsRenderer": "Lyrics Animation",
     "lyricsRendererDesc": "Choose the lyrics animation mode used on the playback page.",
     "lyricsAnimationAdjust": "Lyrics Animation Adjust",

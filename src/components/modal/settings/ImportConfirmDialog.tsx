@@ -42,6 +42,7 @@ const FIELD_LABEL_KEYS: Record<string, string> = {
     [THEME_LIGHT_KEY]: 'options.importFieldThemeLight',
     [THEME_DARK_KEY]: 'options.importFieldThemeDark',
     [ACTIVATE_CUSTOM_THEME_KEY]: 'options.importFieldActivateCustomTheme',
+    followSystemTheme: 'options.followSystemTheme',
     visualizerMode: 'options.visualizerMode',
     visualizerOpacity: 'options.visualizerOpacity',
     hidePlayerTranslationSubtitle: 'options.hidePlayerTranslationSubtitle',

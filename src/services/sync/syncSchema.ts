@@ -43,6 +43,7 @@ const isVisualizerBackgroundMode = (value: unknown): value is NonNullable<Synced
 const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisualSettings => {
     const settings: SyncedVisualSettings = {};
 
+    if (typeof value.followSystemTheme === 'boolean') settings.followSystemTheme = value.followSystemTheme;
     if (typeof value.visualizerMode === 'string' && value.visualizerMode.trim()) settings.visualizerMode = value.visualizerMode;
     if (value.visualizerBackgroundMode === null) settings.visualizerBackgroundMode = null;
     else if (isVisualizerBackgroundMode(value.visualizerBackgroundMode)) settings.visualizerBackgroundMode = value.visualizerBackgroundMode;

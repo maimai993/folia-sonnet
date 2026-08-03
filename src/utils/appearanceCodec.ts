@@ -397,6 +397,7 @@ export const compressConfig = (config: any): string => {
     if (config.urlBackgroundSelectedId) minified.ubid = config.urlBackgroundSelectedId;
     if (config.songThemeAutoSwitchEnabled !== undefined) minified.stas = config.songThemeAutoSwitchEnabled;
     if (config.songThemeAutoGenerateEnabled !== undefined) minified.stag = config.songThemeAutoGenerateEnabled;
+    if (config.followSystemTheme !== undefined) minified.fst = config.followSystemTheme;
 
     const jsonStr = JSON.stringify(minified);
     const bytes = new TextEncoder().encode(jsonStr);
@@ -443,7 +444,8 @@ export const decompressConfig = (str: string): any => {
         || parsed.lff !== undefined
         || parsed.sfi !== undefined
         || parsed.pdt !== undefined
-        || parsed.snt !== undefined;
+        || parsed.snt !== undefined
+        || parsed.fst !== undefined;
     if (isMinified) {
         const decompressed: any = {};
         if (parsed.t) {
@@ -494,6 +496,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.ubid) decompressed.urlBackgroundSelectedId = parsed.ubid;
         if (parsed.stas !== undefined) decompressed.songThemeAutoSwitchEnabled = parsed.stas;
         if (parsed.stag !== undefined) decompressed.songThemeAutoGenerateEnabled = parsed.stag;
+        if (parsed.fst !== undefined) decompressed.followSystemTheme = parsed.fst;
 
         return decompressed;
     } else {
@@ -509,7 +512,7 @@ export const decompressConfig = (str: string): any => {
             'tiltTuning', 'dioramaTuning', 'monetBackgroundTuning', 'nomandBackgroundTuning', 'latentBackgroundTuning', 'monetTuning',
             'pendoloTuning', 'sonnetTuning',
             'urlBackgroundList', 'urlBackgroundSelectedId',
-            'songThemeAutoSwitchEnabled', 'songThemeAutoGenerateEnabled',
+            'songThemeAutoSwitchEnabled', 'songThemeAutoGenerateEnabled', 'followSystemTheme',
         ];
         const hasValidKey = validKeys.some(k => parsed[k] !== undefined);
         if (!hasValidKey) {
