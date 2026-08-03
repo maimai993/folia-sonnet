@@ -8,9 +8,10 @@ import { buildSonnetStaffView } from './sonnetStaffView';
 import { buildSonnetTextFixedGeo } from './sonnetTextFixedGeo';
 import { createSonnetGuide, type SonnetGuideView } from './sonnetGuides';
 import type { SonnetSemanticSegment } from './types';
-import type {
-    SonnetSegmentRole,
-    SonnetTypographyPlacement,
+import {
+    isSonnetEmphasisRole,
+    type SonnetSegmentRole,
+    type SonnetTypographyPlacement,
 } from './sonnetTypographyLayout';
 
 // src/components/visualizer/sonnet/sonnetTextViewBuilder.ts
@@ -114,10 +115,10 @@ export const buildSonnetTextView = (
     // The glow and decoration edges use keyword colors, or accent colors for support text
     const glowColor = isKeyword
         ? isKeyword.color
-        : (placement.role === 'hero' ? options.theme.primaryColor : options.theme.accentColor);
+        : (isSonnetEmphasisRole(placement.role) ? options.theme.primaryColor : options.theme.accentColor);
 
     const isDecoration = placement.role === 'decoration';
-    const renderWeight = placement.role === 'hero' ? '900' : isDecoration ? '300' : '700';
+    const renderWeight = isSonnetEmphasisRole(placement.role) ? '900' : isDecoration ? '300' : '700';
     const fontSpec = `${renderWeight} ${fontSize}px ${options.fontFamily}`;
 
     // Parallax depth assignment
@@ -207,7 +208,7 @@ export const buildSonnetTextView = (
         let caOffsetValue: number | undefined;
 
         if (!isDecoration) {
-            const isHero = placement.role === 'hero';
+            const isHero = isSonnetEmphasisRole(placement.role);
             const offset = fontSize * (isHero ? 0.025 : 0.010);
             caOffsetValue = offset;
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { SonnetSemanticSegment } from '@/components/visualizer/sonnet/types';
 import {
     findSonnetHeroSegmentIndex,
+    findSonnetSemiHeroSegmentIndex,
+    isSonnetEmphasisRole,
     isSonnetLayoutSegment,
     resolveSonnetTypographyLayout,
 } from '@/components/visualizer/sonnet/sonnetTypographyLayout';
@@ -30,6 +32,80 @@ describe('Sonnet typography layout', () => {
         expect(findSonnetHeroSegmentIndex(segments)).toBe(2);
         expect(findSonnetHeroSegmentIndex(segments))
             .toBe(findSonnetHeroSegmentIndex(segments));
+    });
+
+    it('adds one smaller semi-hero when a long leading block precedes the hero', () => {
+        const longSentence = [
+            segment('在'),
+            segment('漫长'),
+            segment('句子'),
+            segment('前部重点'),
+            segment('仍然'),
+            segment('不断'),
+            segment('延伸'),
+            segment('最终的核心词语'),
+        ];
+        const heroIndex = findSonnetHeroSegmentIndex(longSentence);
+        const semiHeroIndex = findSonnetSemiHeroSegmentIndex(longSentence, heroIndex);
+        const layout = resolveSonnetTypographyLayout({
+            lines: [longSentence],
+            shotKind: 'type-impact',
+            paragraphKind: 'chorus',
+            width: 1280,
+            height: 720,
+            baseFontSize: 40,
+            fontFamily: 'sans-serif',
+            fontWeight: 700,
+        }).filter(item => item.role !== 'decoration');
+        const hero = layout.find(item => item.role === 'hero')!;
+        const semiHero = layout.find(item => item.role === 'semi-hero')!;
+        const supports = layout.filter(item => item.role === 'support');
+
+        expect(heroIndex).toBe(7);
+        expect(semiHeroIndex).toBe(3);
+        expect(semiHero.segmentIndex).toBe(semiHeroIndex);
+        expect(semiHero.fontScale).toBeLessThan(hero.fontScale);
+        expect(semiHero.fontScale).toBeGreaterThan(Math.max(...supports.map(item => item.fontScale)));
+        expect(isSonnetEmphasisRole(semiHero.role)).toBe(true);
+    });
+
+    it('does not add a semi-hero for a short leading block', () => {
+        const shortSentence = [
+            segment('一'), segment('二'), segment('三'), segment('四'), segment('五'), segment('核心词语'),
+        ];
+        const heroIndex = findSonnetHeroSegmentIndex(shortSentence);
+        expect(findSonnetSemiHeroSegmentIndex(shortSentence, heroIndex)).toBe(-1);
+        expect(resolveSonnetTypographyLayout({
+            lines: [shortSentence],
+            shotKind: 'type-impact',
+            paragraphKind: 'chorus',
+            width: 1280,
+            height: 720,
+            baseFontSize: 40,
+            fontFamily: 'sans-serif',
+            fontWeight: 700,
+        }).some(item => item.role === 'semi-hero')).toBe(false);
+    });
+
+    it('keeps semi-hero selection local to each long line in a grouped shot', () => {
+        const longLine = [
+            segment('很'), segment('长'), segment('的'), segment('前部重点'),
+            segment('还'), segment('在'), segment('继续'), segment('最终核心词语'),
+        ];
+        const layout = resolveSonnetTypographyLayout({
+            lines: [longLine, [segment('下一句'), segment('核心')]],
+            shotKind: 'fragment-collage',
+            paragraphKind: 'verse',
+            width: 1280,
+            height: 720,
+            baseFontSize: 40,
+            fontFamily: 'sans-serif',
+            fontWeight: 700,
+        }).filter(item => item.role !== 'decoration');
+
+        expect(layout.filter(item => item.role === 'semi-hero')).toHaveLength(1);
+        expect(layout.find(item => item.role === 'semi-hero')!.segmentIndex).toBe(3);
+        expect(layout.filter(item => item.role === 'hero')).toHaveLength(2);
     });
 
     it('stacks the hero by grapheme and keeps support text small', () => {

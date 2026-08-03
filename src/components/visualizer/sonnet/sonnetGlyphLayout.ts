@@ -1,5 +1,5 @@
 import type { SonnetSemanticSegment } from './types';
-import type { SonnetTypographyPlacement } from './sonnetTypographyLayout';
+import { isSonnetEmphasisRole, type SonnetTypographyPlacement } from './sonnetTypographyLayout';
 import type { GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 
 // src/components/visualizer/sonnet/sonnetGlyphLayout.ts
@@ -67,7 +67,7 @@ export const buildSonnetGlyphLayout = (
             baseY: placement.y + localX * sine + localY * cosine,
             enterX: placement.enterX + (placement.vertical ? stagger * fontSize * 0.28 : 0),
             enterY: placement.enterY + (placement.vertical ? 0 : stagger * fontSize * 0.24),
-            entryRotation: stagger * (placement.role === 'hero' ? 0.055 : 0.035),
+            entryRotation: stagger * (isSonnetEmphasisRole(placement.role) ? 0.055 : 0.035),
             startTime,
             settleTime: Math.max(startTime, settleTime),
         };

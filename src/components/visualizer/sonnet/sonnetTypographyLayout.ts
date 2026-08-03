@@ -4,11 +4,23 @@ import type {
     SonnetSemanticSegment,
     SonnetShotKind,
 } from './types';
+import {
+    findSonnetHeroSegmentIndex,
+    findSonnetSemiHeroSegmentIndex,
+    getSonnetVisibleSegmentLength,
+    scoreSonnetHeroSegment,
+    type SonnetSegmentRole,
+} from './sonnetTypographyRoles';
+
+export {
+    findSonnetHeroSegmentIndex,
+    findSonnetSemiHeroSegmentIndex,
+    isSonnetEmphasisRole,
+} from './sonnetTypographyRoles';
+export type { SonnetSegmentRole } from './sonnetTypographyRoles';
 
 // src/components/visualizer/sonnet/sonnetTypographyLayout.ts
 // PV-style kinetic typography layouts based on exact box measurements
-export type SonnetSegmentRole = 'hero' | 'support' | 'decoration';
-
 export interface SonnetTypographyPlacement {
     segmentIndex: number;
     displayText: string;
@@ -35,10 +47,6 @@ interface SonnetTypographyLayoutOptions {
     fontWeight: number;
 }
 
-const visibleLength = (segment: SonnetSemanticSegment) => (
-    segment.graphemes.filter(item => item.char.trim().length > 0).length
-);
-
 export const isSonnetLayoutSegment = (segment: SonnetSemanticSegment) => (
     segment.text.trim().length > 0
 );
@@ -50,24 +58,6 @@ const shouldRotateNonCjkSegment = (segment: SonnetSemanticSegment, vertical: boo
     && segment.graphemes.filter(item => item.char.trim().length > 0).length > 1
     && !CJK_TEXT.test(segment.text)
 );
-
-export const findSonnetHeroSegmentIndex = (
-    segments: SonnetSemanticSegment[],
-) => {
-    let bestIndex = segments.findIndex(segment => segment.isWordLike);
-    let bestScore = -Infinity;
-    segments.forEach((segment, index) => {
-        if (!segment.isWordLike || visibleLength(segment) === 0) return;
-        const lengthScore = Math.min(visibleLength(segment), 8) * 14;
-        const durationScore = Math.min(2.5, Math.max(0, segment.endTime - segment.startTime)) * 18;
-        const score = lengthScore + durationScore;
-        if (score > bestScore) {
-            bestScore = score;
-            bestIndex = index;
-        }
-    });
-    return Math.max(0, bestIndex);
-};
 
 const verticalText = (segment: SonnetSemanticSegment) => (
     (segment.graphemes.length ? segment.graphemes.map(item => item.char) : Array.from(segment.text))
@@ -96,11 +86,15 @@ export const resolveSonnetTypographyLayout = ({
     const segments = lines.flat();
     
     let offset = 0;
-    const heroIndices = lines.map(lineSegs => {
+    const heroIndices: number[] = [];
+    const semiHeroIndices: number[] = [];
+    lines.forEach(lineSegs => {
         const localHero = findSonnetHeroSegmentIndex(lineSegs);
         const globalHero = offset + localHero;
+        const localSemiHero = findSonnetSemiHeroSegmentIndex(lineSegs, localHero);
+        heroIndices.push(globalHero);
+        if (localSemiHero >= 0) semiHeroIndices.push(offset + localSemiHero);
         offset += lineSegs.length;
-        return globalHero;
     });
 
     const heroIndex = findSonnetHeroSegmentIndex(segments);
@@ -126,11 +120,9 @@ export const resolveSonnetTypographyLayout = ({
     if (editorialVariant === 3 && segments.length > 2) {
         let bestScore = -Infinity;
         segments.forEach((segment, index) => {
-            if (index === heroIndex || !segment.isWordLike || visibleLength(segment) === 0) return;
-            const lengthScore = Math.min(visibleLength(segment), 8) * 14;
-            const durationScore = Math.min(2.5, Math.max(0, segment.endTime - segment.startTime)) * 18;
+            if (index === heroIndex || !segment.isWordLike || getSonnetVisibleSegmentLength(segment) === 0) return;
             const distanceBonus = Math.abs(index - heroIndex) > 1 ? 50 : 0; 
-            const score = lengthScore + durationScore + distanceBonus;
+            const score = scoreSonnetHeroSegment(segment) + distanceBonus;
             if (score > bestScore) {
                 bestScore = score;
                 secondaryHeroIndex = index;
@@ -146,44 +138,61 @@ export const resolveSonnetTypographyLayout = ({
     // 1. Assign styles and measure boxes
     const boxes = segments.map((segment, index) => {
         const isHero = heroIndices.includes(index) || (index === secondaryHeroIndex && shotKind === 'editorial-column' && editorialVariant === 3);
-        let fontScale = 1.0;
+        const isSemiHero = semiHeroIndices.includes(index) && !isHero;
+        const isEmphasized = isHero || isSemiHero;
+        let heroFontScale = 1.0;
+        let supportFontScale = 1.0;
         let vertical = false;
         let rotation = 0;
 
         switch (shotKind) {
             case 'editorial-column':
                 if (editorialVariant === 3) {
-                    fontScale = isHero ? 3.8 : 1.3;
+                    heroFontScale = 3.8;
+                    supportFontScale = 1.3;
                     vertical = false;
                 } else if (editorialVariant === 4) {
                     // Logo Badge: Hero giant vertical pillar on the left/right, support text multiline horizontal block on the other side
-                    fontScale = isHero ? 4.2 : 1.25;
-                    vertical = isHero;
+                    heroFontScale = 4.2;
+                    supportFontScale = 1.25;
+                    vertical = isEmphasized;
                 } else {
-                    fontScale = isHero ? (editorialVariant === 2 ? 3.2 : 4.0) : 1.2;
-                    vertical = isHero && editorialVariant !== 2;
+                    heroFontScale = editorialVariant === 2 ? 3.2 : 4.0;
+                    supportFontScale = 1.2;
+                    vertical = isEmphasized && editorialVariant !== 2;
                 }
                 break;
             case 'type-impact':
-                fontScale = isHero ? 5.5 : 1.5;
+                heroFontScale = 5.5;
+                supportFontScale = 1.5;
                 break;
             case 'fragment-collage':
-                fontScale = isHero ? 3.2 : 1.35;
-                vertical = (index % 4) === 0;
+                heroFontScale = 3.2;
+                supportFontScale = 1.35;
+                vertical = isSemiHero || (index % 4) === 0;
                 break;
             case 'tracking-ribbon':
-                fontScale = isHero ? 3.5 : 1.5;
+                heroFontScale = 3.5;
+                supportFontScale = 1.5;
                 break;
             case 'mask-reveal':
-                fontScale = isHero ? 4.5 : 1.6;
-                vertical = isHero;
+                heroFontScale = 4.5;
+                supportFontScale = 1.6;
+                vertical = isEmphasized;
                 break;
             case 'quiet-tableau':
             default:
-                fontScale = isHero ? 3.0 : 1.15;
-                vertical = isHero && (tableauVariant === 0 || tableauVariant === 1);
+                heroFontScale = 3.0;
+                supportFontScale = 1.15;
+                vertical = isEmphasized && (tableauVariant === 0 || tableauVariant === 1);
                 break;
         }
+
+        let fontScale = isHero
+            ? heroFontScale
+            : isSemiHero
+                ? Math.max(supportFontScale * 1.35, heroFontScale * 0.72)
+                : supportFontScale;
 
         // Non-CJK words use horizontal glyph advances and rotate as a block in vertical compositions.
         // Resolve that writing mode before measuring so packing uses the rendered bounds.
@@ -195,7 +204,7 @@ export const resolveSonnetTypographyLayout = ({
 
         // To prevent massive text from overflowing 82% of screen width, we calculate a fitScale
         const displayText = vertical ? verticalText(segment) : segment.text;
-        const renderWeight = isHero ? '900' : '700';
+        const renderWeight = isEmphasized ? '900' : '700';
 
         let targetFontSize = baseFontSize * fontScale;
         const fontSpec = `${renderWeight} ${targetFontSize}px ${fontFamily}`;
@@ -237,6 +246,7 @@ export const resolveSonnetTypographyLayout = ({
         return {
             index,
             isHero,
+            isSemiHero,
             displayText,
             fontScale,
             vertical,
@@ -693,7 +703,7 @@ export const resolveSonnetTypographyLayout = ({
     return boxes.map(box => ({
         segmentIndex: box.index,
         displayText: box.displayText,
-        role: box.role || (box.isHero ? 'hero' : 'support'),
+        role: box.role || (box.isHero ? 'hero' : box.isSemiHero ? 'semi-hero' : 'support'),
         fontScale: box.fontScale,
         x: box.x,
         y: box.y,

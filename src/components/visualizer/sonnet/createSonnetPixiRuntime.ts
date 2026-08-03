@@ -20,6 +20,7 @@ import {
     resolveSonnetShotTransitionFrame,
 } from './sonnetTransitions';
 import { buildSonnetScene, type SceneView, type ShotView } from './sonnetSceneBuilder';
+import { isSonnetEmphasisRole } from './sonnetTypographyLayout';
 import { getSonnetTexturePool } from './sonnetTexturePool';
 import {
     destroySonnetContainerChildren,
@@ -498,7 +499,7 @@ export class SonnetPixiRuntime {
                 const offset = (1 - glyphProgress) * motion;
                 const coreAlpha = waiting ? 0 : 0.16 + glyphProgress * 0.84;
                 const haloAlpha = waiting ? 0 : 1 - glyphProgress * 0.28;
-                const scale = segmentView.role === 'hero' && view.shot.kind === 'type-impact'
+                const scale = isSonnetEmphasisRole(segmentView.role) && view.shot.kind === 'type-impact'
                     ? 0.52 + glyphProgress * 0.48
                     : 0.86 + glyphProgress * 0.14;
                 const x = glyph.baseX + glyph.enterX * offset;
