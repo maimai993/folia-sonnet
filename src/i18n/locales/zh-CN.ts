@@ -1259,7 +1259,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_9": {
-      "intro": "以下是 0.6.10 的新功能与改进",
+      "intro": "以下是 0.6.11 的新功能与改进",
       "sonnetVisualizer": {
         "title": "全新视觉：商籁",
         "description": "新增日式文字 PV 歌词可视化模式，结合动态排版、镜头运动与场景转场，并支持调整可见图层和渲染质量。"

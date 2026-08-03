@@ -1071,7 +1071,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_9": {
-      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.10.",
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.11.",
       "sonnetVisualizer": {
         "title": "Visualizer Lirik Sonnet",
         "description": "Mode PV lirik bergaya Jepang baru memadukan tipografi kinetik, gerakan kamera, transisi adegan, dan lapisan visual yang dapat dikonfigurasi."
