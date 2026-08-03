@@ -1,4 +1,5 @@
 import { drawThemedSonnetShotMg } from './sonnetThemedShotMg';
+import { resolveSonnetShotMgBleed } from './sonnetShotMgViewport';
 
 // src/components/visualizer/sonnet/sonnetAdditionalShotMg.ts
 // Extends Sonnet's deterministic MG library with lightweight, theme-colored poster motifs.
@@ -28,6 +29,8 @@ export interface AdditionalSonnetMgOptions {
     target: SonnetMgTarget;
     variant: number;
     radius: number;
+    width: number;
+    height: number;
     seed: number;
     primary: number;
     secondary: number;
@@ -79,8 +82,9 @@ const drawRadialWave = ({ target, radius, seed, primary, secondary }: Additional
     target.circle(0, 0, radius * 0.72).stroke({ color: primary, width: 2, alpha: 0.12 });
 };
 
-const drawTransitBlueprint = ({ target, radius, seed, primary, secondary }: AdditionalSonnetMgOptions) => {
+const drawTransitBlueprint = ({ target, radius, width, height, seed, primary, secondary }: AdditionalSonnetMgOptions) => {
     const direction = seed % 2 === 0 ? 1 : -1;
+    const bleed = resolveSonnetShotMgBleed(width, height, radius);
     const routes = [
         [[-0.72, -0.38], [-0.38, -0.38], [-0.38, 0.08], [0.08, 0.08], [0.08, 0.52], [0.68, 0.52]],
         [[-0.62, 0.58], [-0.62, 0.24], [-0.14, 0.24], [-0.14, -0.52], [0.5, -0.52], [0.5, -0.2], [0.74, -0.2]],
@@ -88,12 +92,15 @@ const drawTransitBlueprint = ({ target, radius, seed, primary, secondary }: Addi
     ] as const;
 
     routes.forEach((route, routeIndex) => {
-        route.forEach(([x, y], pointIndex) => {
+        const first = route[0];
+        const last = route[route.length - 1];
+        target.moveTo(-bleed.x * direction, first[1] * radius);
+        route.forEach(([x, y]) => {
             const px = x * radius * direction;
             const py = y * radius;
-            if (pointIndex === 0) target.moveTo(px, py);
-            else target.lineTo(px, py);
+            target.lineTo(px, py);
         });
+        target.lineTo(bleed.x * direction, last[1] * radius);
         target.stroke({
             color: routeIndex === 1 ? secondary : primary,
             width: routeIndex === 0 ? 5 : 2,
@@ -140,34 +147,38 @@ const drawChronograph = ({ target, radius, seed, primary, secondary }: Additiona
     target.circle(0, 0, radius * 0.055).fill({ color: primary, alpha: 0.85 });
 };
 
-const drawFoldedRibbons = ({ target, radius, seed, primary, secondary }: AdditionalSonnetMgOptions) => {
+const drawFoldedRibbons = ({ target, radius, width, height, seed, primary, secondary }: AdditionalSonnetMgOptions) => {
     const direction = seed % 2 === 0 ? 1 : -1;
+    const bleed = resolveSonnetShotMgBleed(width, height, radius);
     for (let band = 0; band < 5; band += 1) {
         const y = (-0.5 + band * 0.25) * radius;
         const offset = (band % 2 === 0 ? 1 : -1) * direction;
-        target.moveTo(-radius * 0.82, y)
+        target.moveTo(-bleed.x, y)
             .bezierCurveTo(
                 -radius * 0.38, y - radius * 0.28 * offset,
                 radius * 0.18, y + radius * 0.28 * offset,
-                radius * 0.82, y,
+                bleed.x, y,
             )
             .stroke({ color: band % 2 === 0 ? primary : secondary, width: band === 2 ? 12 : 5, alpha: 0.24 + band * 0.08 });
-        target.moveTo(-radius * 0.82, y + radius * 0.055)
+        target.moveTo(-bleed.x, y + radius * 0.055)
             .bezierCurveTo(
                 -radius * 0.38, y - radius * 0.28 * offset + radius * 0.055,
                 radius * 0.18, y + radius * 0.28 * offset + radius * 0.055,
-                radius * 0.82, y + radius * 0.055,
+                bleed.x, y + radius * 0.055,
             )
             .stroke({ color: primary, width: 1, alpha: 0.3 });
     }
-    target.rect(-radius * 0.34, -radius * 0.7, radius * 0.68, radius * 1.4)
-        .stroke({ color: primary, width: 2, alpha: 0.2 });
+    target.moveTo(-radius * 0.34, -bleed.y).lineTo(-radius * 0.34, -radius * 0.18)
+        .stroke({ color: primary, width: 2, alpha: 0.18 });
+    target.moveTo(radius * 0.34, radius * 0.18).lineTo(radius * 0.34, bleed.y)
+        .stroke({ color: primary, width: 2, alpha: 0.18 });
 };
 
-const drawHalftonePoster = ({ target, radius, seed, primary, secondary }: AdditionalSonnetMgOptions) => {
-    const columns = 9;
-    const rows = 9;
+const drawHalftonePoster = ({ target, radius, width, height, seed, primary, secondary }: AdditionalSonnetMgOptions) => {
     const spacing = radius * 0.17;
+    const bleed = resolveSonnetShotMgBleed(width, height, radius);
+    const columns = Math.ceil((bleed.x * 2) / spacing) + 2;
+    const rows = Math.ceil((bleed.y * 2) / spacing) + 2;
     for (let row = 0; row < rows; row += 1) {
         for (let column = 0; column < columns; column += 1) {
             const x = (column - (columns - 1) / 2) * spacing;
@@ -181,11 +192,10 @@ const drawHalftonePoster = ({ target, radius, seed, primary, secondary }: Additi
             });
         }
     }
-    target.rect(-radius * 0.78, -radius * 0.78, radius * 1.56, radius * 1.56)
-        .stroke({ color: primary, width: 5, alpha: 0.52 });
-    target.moveTo(-radius * 0.78, -radius * 0.58)
-        .lineTo(radius * 0.78, -radius * 0.58)
-        .stroke({ color: secondary, width: 2, alpha: 0.58 });
+    target.moveTo(-bleed.x, -bleed.y * 0.72).lineTo(bleed.x, -bleed.y * 0.72)
+        .stroke({ color: secondary, width: 2, alpha: 0.28 });
+    target.moveTo(-bleed.x * 0.58, -bleed.y).lineTo(-bleed.x * 0.58, bleed.y)
+        .stroke({ color: primary, width: 1, alpha: 0.2 });
 };
 
 // Dispatches only the extra range so the original Sonnet shot builder stays focused on composition.

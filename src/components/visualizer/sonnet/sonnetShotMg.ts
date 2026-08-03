@@ -17,6 +17,7 @@ import {
 } from './sonnetIcons';
 import { drawAdditionalSonnetShotMg } from './sonnetAdditionalShotMg';
 import { SONNET_THEMED_GEO_VARIANT_START } from './sonnetThemedShotMg';
+import { resolveSonnetShotMgBleed } from './sonnetShotMgViewport';
 
 // src/components/visualizer/sonnet/sonnetShotMg.ts
 // Builds PV style high-density semantic decorative elements (HUD, Geometric Chaos, Particles)
@@ -527,14 +528,15 @@ export const buildSonnetShotMg = (
             geo!.circle(Math.cos(Math.PI/4) * radius * 0.7, Math.sin(Math.PI/4) * radius * 0.7, 8).fill({ color: primary, alpha: 0.6 });
         } else if (geoVariant === 6) {
             // Variant 6: Abstract Wireframe Mountains (Cyberpunk grid landscape)
-            const w = radius * 1.5;
+            const bleed = resolveSonnetShotMgBleed(width, height, radius);
+            const w = bleed.x * 1.08;
             const h = radius * 0.8;
             const baseY = radius * 0.2;
             
             // Draw a sun/moon in background
             geo!.circle(0, baseY - h * 0.6, radius * 0.3).stroke({ color: primary, width: 2, alpha: 0.4 });
             for (let i = 0; i < 5; i++) {
-                geo!.moveTo(-radius * 0.4, baseY - h * 0.6 + i * 15).lineTo(radius * 0.4, baseY - h * 0.6 + i * 15).stroke({ color: primary, width: 1, alpha: 0.3 });
+                geo!.moveTo(-bleed.x, baseY - h * 0.6 + i * 15).lineTo(bleed.x, baseY - h * 0.6 + i * 15).stroke({ color: primary, width: 1, alpha: 0.3 });
             }
             
             // Draw mountain peaks (layered polygons)
@@ -563,7 +565,7 @@ export const buildSonnetShotMg = (
             
             // Perspective lines
             for (let i = -4; i <= 4; i++) {
-                geo!.moveTo(i * radius * 0.2, baseY).lineTo(i * radius * 0.6, baseY + radius * 0.6).stroke({ color: primary, width: 1, alpha: 0.3 });
+                geo!.moveTo(i * radius * 0.2, baseY).lineTo(i * bleed.x * 0.32, bleed.y).stroke({ color: primary, width: 1, alpha: 0.3 });
             }
         } else if (geoVariant === 7) {
             // Variant 7: Radar / Concentric Target
@@ -878,6 +880,8 @@ export const buildSonnetShotMg = (
                 target: geo,
                 variant: geoVariant,
                 radius,
+                width,
+                height,
                 seed,
                 primary,
                 secondary,

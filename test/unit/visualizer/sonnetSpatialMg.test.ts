@@ -11,6 +11,7 @@ import {
     SONNET_THEMED_GEO_VARIANT_START,
     SONNET_THEMED_GEO_VARIANTS,
 } from '@/components/visualizer/sonnet/sonnetThemedShotMg';
+import { drawAdditionalSonnetShotMg } from '@/components/visualizer/sonnet/sonnetAdditionalShotMg';
 
 // test/unit/visualizer/sonnetSpatialMg.test.ts
 // Locks the expanded geometric recipes into Sonnet's existing single MG scene collection.
@@ -67,12 +68,44 @@ describe('Sonnet spatial MG variants', () => {
                 target,
                 variant: SONNET_THEMED_GEO_VARIANT_START + index,
                 radius: 600,
+                width: 1200,
+                height: 600,
                 seed: index + 31,
                 primary: 0xffffff,
                 secondary: 0x88ccff,
             })).toBe(true);
             expect(strokes).toBeGreaterThan(0);
             expect(fills).toBeGreaterThan(0);
+        }
+    });
+
+    it('overscans variants with exposed rectangular or landscape edges', () => {
+        const width = 1200;
+        const height = 600;
+        for (const variant of [20, 22, 23, 30, 31, 32, 33, 34, 35]) {
+            const xs: number[] = [];
+            const target = {
+                moveTo: (x: number) => { xs.push(x); return target; },
+                lineTo: (x: number) => { xs.push(x); return target; },
+                quadraticCurveTo: (cx: number, _cy: number, tx: number) => { xs.push(cx, tx); return target; },
+                bezierCurveTo: (c1x: number, _c1y: number, c2x: number, _c2y: number, tx: number) => { xs.push(c1x, c2x, tx); return target; },
+                arc: (cx: number) => { xs.push(cx); return target; },
+                circle: (x: number) => { xs.push(x); return target; },
+                rect: (x: number, _y: number, rectWidth: number) => { xs.push(x, x + rectWidth); return target; },
+                stroke: () => target,
+                fill: () => target,
+            };
+            expect(drawAdditionalSonnetShotMg({
+                target,
+                variant,
+                radius: 600,
+                width,
+                height,
+                seed: variant + 17,
+                primary: 0xffffff,
+                secondary: 0x88ccff,
+            })).toBe(true);
+            expect(Math.max(...xs.map(Math.abs))).toBeGreaterThan(width / 2);
         }
     });
 });
