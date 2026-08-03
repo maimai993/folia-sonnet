@@ -1,9 +1,11 @@
+import { drawThemedSonnetShotMg } from './sonnetThemedShotMg';
+
 // src/components/visualizer/sonnet/sonnetAdditionalShotMg.ts
 // Extends Sonnet's deterministic MG library with lightweight, theme-colored poster motifs.
 export const SONNET_ADDITIONAL_GEO_VARIANT_START = 18;
 export const SONNET_ADDITIONAL_GEO_VARIANT_COUNT = 6;
 
-interface SonnetMgTarget {
+export interface SonnetMgTarget {
     moveTo: (x: number, y: number) => SonnetMgTarget;
     lineTo: (x: number, y: number) => SonnetMgTarget;
     quadraticCurveTo: (cx: number, cy: number, tx: number, ty: number) => SonnetMgTarget;
@@ -22,7 +24,7 @@ interface SonnetMgTarget {
     fill: (options: { color: number; alpha: number }) => SonnetMgTarget;
 }
 
-interface AdditionalSonnetMgOptions {
+export interface AdditionalSonnetMgOptions {
     target: SonnetMgTarget;
     variant: number;
     radius: number;
@@ -208,6 +210,6 @@ export const drawAdditionalSonnetShotMg = (options: AdditionalSonnetMgOptions) =
             drawHalftonePoster(options);
             return true;
         default:
-            return false;
+            return drawThemedSonnetShotMg(options);
     }
 };

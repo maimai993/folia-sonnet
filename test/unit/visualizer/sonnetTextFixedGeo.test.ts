@@ -24,4 +24,18 @@ describe('Sonnet text fixed geometry', () => {
         );
         expect(variants).toEqual(new Set(['orb-hatch', 'music-steps', 'bent-lines']));
     });
+
+    it('distributes hollow geometry across the two frames and two new wireframe designs', () => {
+        const variants = new Set(
+            Array.from({ length: 400 }, (_, seed) => resolveSonnetTextFixedGeoPlan(seed, false))
+                .filter(plan => plan.category === 'hollow')
+                .map(plan => plan.variant),
+        );
+        expect(variants).toEqual(new Set([
+            'straight-frame',
+            'rotated-frame',
+            'orbit-crosshair',
+            'split-arches',
+        ]));
+    });
 });

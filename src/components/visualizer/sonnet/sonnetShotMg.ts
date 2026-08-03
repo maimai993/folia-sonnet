@@ -5,7 +5,9 @@ import {
     drawSonnetSolidCuboid,
     drawSonnetTrapezoidPrism,
     drawSonnetTriangularPrism,
+    resolveSonnetHudRotationQuarterTurns,
     resolveSonnetGeoVariant,
+    resolveSonnetMoleculeVariant,
 } from './sonnetSpatialMgGeometry';
 import {
     buildSonnetIconParticleIndices,
@@ -14,6 +16,7 @@ import {
     resolveSonnetIconEntryPhase,
 } from './sonnetIcons';
 import { drawAdditionalSonnetShotMg } from './sonnetAdditionalShotMg';
+import { SONNET_THEMED_GEO_VARIANT_START } from './sonnetThemedShotMg';
 
 // src/components/visualizer/sonnet/sonnetShotMg.ts
 // Builds PV style high-density semantic decorative elements (HUD, Geometric Chaos, Particles)
@@ -352,7 +355,7 @@ export const buildSonnetShotMg = (
             }
         } else if (geoVariant === 3) {
             // Variant 3: Organic Molecules
-            const molVariant = seed % 3;
+            const molVariant = resolveSonnetMoleculeVariant(seed);
             
             if (molVariant === 0) {
                 // Sub-variant 0: Benzene Cluster
@@ -884,12 +887,14 @@ export const buildSonnetShotMg = (
         // Randomized Geometric Composition moved to sonnetTextViewBuilder so they accompany text
         
         // Selectively apply deterministic rotation based on variant compatibility
-        if (![6, 8, 9, 14, 15, 16, 17, 20, 22, 23].includes(geoVariant)) {
+        const keepsUpright = [6, 8, 9, 14, 15, 16, 17, 20, 22, 23].includes(geoVariant)
+            || geoVariant >= SONNET_THEMED_GEO_VARIANT_START;
+        if (!keepsUpright) {
             // Arbitrary rotation
             geo!.rotation = ((seed * 13) % 360) * (Math.PI / 180);
         } else if (geoVariant === 8) {
             // HUD frames rotate in 90-degree increments
-            geo!.rotation = (seed % 4) * (Math.PI / 2);
+            geo!.rotation = resolveSonnetHudRotationQuarterTurns(seed) * (Math.PI / 2);
         }
         
         container.addChild(geo!.display);
