@@ -7,6 +7,7 @@ import type {
 import {
     findSonnetHeroSegmentIndex,
     findSonnetSemiHeroSegmentIndex,
+    findSonnetSemiHeroSegmentIndices,
     getSonnetVisibleSegmentLength,
     scoreSonnetHeroSegment,
     type SonnetSegmentRole,
@@ -17,6 +18,7 @@ import { hashSonnetSeed } from './sonnetRandom';
 export {
     findSonnetHeroSegmentIndex,
     findSonnetSemiHeroSegmentIndex,
+    findSonnetSemiHeroSegmentIndices,
     isSonnetEmphasisRole,
 } from './sonnetTypographyRoles';
 export type { SonnetSegmentRole } from './sonnetTypographyRoles';
@@ -93,9 +95,9 @@ export const resolveSonnetTypographyLayout = ({
     lines.forEach(lineSegs => {
         const localHero = findSonnetHeroSegmentIndex(lineSegs);
         const globalHero = offset + localHero;
-        const localSemiHero = findSonnetSemiHeroSegmentIndex(lineSegs, localHero);
+        const localSemiHeroes = findSonnetSemiHeroSegmentIndices(lineSegs, localHero);
         heroIndices.push(globalHero);
-        if (localSemiHero >= 0) semiHeroIndices.push(offset + localSemiHero);
+        localSemiHeroes.forEach(localSemiHero => semiHeroIndices.push(offset + localSemiHero));
         offset += lineSegs.length;
     });
 
@@ -250,13 +252,31 @@ export const resolveSonnetTypographyLayout = ({
             measuredHeight *= fitScale;
         }
 
-        const posterVerticalDisplayText = shotKind === 'poster-blocks' && CJK_TEXT.test(segment.text)
-            ? verticalText(segment)
-            : undefined;
-        const posterVerticalMeasuredWidth = posterVerticalDisplayText ? targetFontSize * 1.1 : undefined;
-        const posterVerticalMeasuredHeight = posterVerticalDisplayText
-            ? targetFontSize * 1.1 * posterVerticalDisplayText.split('\n').length
-            : undefined;
+        // Poster blocks may flip CJK segments into vertical columns. Measure that
+        // orientation per grapheme so packing uses the same bounds the glyph
+        // renderer produces: glyphs advance fontSize * 0.9 down the column and
+        // stay centered on the column axis.
+        let posterVerticalDisplayText: string | undefined;
+        let posterVerticalMeasuredWidth: number | undefined;
+        let posterVerticalMeasuredHeight: number | undefined;
+        let posterVerticalFontScale: number | undefined;
+        if (shotKind === 'poster-blocks' && CJK_TEXT.test(segment.text)) {
+            const columnChars = segment.graphemes.length
+                ? segment.graphemes.map(item => item.char)
+                : Array.from(segment.text);
+            const glyphAdvances = columnChars
+                .filter(char => char.trim().length > 0)
+                .map(char => Math.max(targetFontSize * 0.2, measureText(char, fontSpec, targetFontSize)));
+            let columnWidth = glyphAdvances.length ? Math.max(...glyphAdvances) : targetFontSize;
+            let columnHeight = Math.max(1, columnChars.length) * targetFontSize * 0.9;
+            const verticalFit = Math.min(1, maxW / columnWidth, maxH / columnHeight);
+            columnWidth *= verticalFit;
+            columnHeight *= verticalFit;
+            posterVerticalDisplayText = verticalText(segment);
+            posterVerticalMeasuredWidth = columnWidth;
+            posterVerticalMeasuredHeight = columnHeight;
+            posterVerticalFontScale = fontScale * verticalFit;
+        }
 
         return {
             index,
@@ -266,6 +286,7 @@ export const resolveSonnetTypographyLayout = ({
             verticalDisplayText: posterVerticalDisplayText,
             verticalMeasuredWidth: posterVerticalMeasuredWidth,
             verticalMeasuredHeight: posterVerticalMeasuredHeight,
+            verticalFontScale: posterVerticalFontScale,
             fontScale,
             vertical,
             layoutDirection: 'horizontal' as 'horizontal' | 'vertical',

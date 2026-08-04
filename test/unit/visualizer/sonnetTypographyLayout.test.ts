@@ -3,10 +3,15 @@ import type { SonnetSemanticSegment } from '@/components/visualizer/sonnet/types
 import {
     findSonnetHeroSegmentIndex,
     findSonnetSemiHeroSegmentIndex,
+    findSonnetSemiHeroSegmentIndices,
     isSonnetEmphasisRole,
     isSonnetLayoutSegment,
     resolveSonnetTypographyLayout,
 } from '@/components/visualizer/sonnet/sonnetTypographyLayout';
+import {
+    layoutSonnetPosterBlocks,
+    type SonnetPosterBlockBox,
+} from '@/components/visualizer/sonnet/sonnetPosterBlocksLayout';
 
 // test/unit/visualizer/sonnetTypographyLayout.test.ts
 // Locks the semantic hero/support hierarchy and true stacked Japanese typography.
@@ -268,5 +273,141 @@ describe('Sonnet typography layout', () => {
         expect(layout.every(item => Number.isFinite(item.x) && Number.isFinite(item.y))).toBe(true);
         expect(hero.fontScale).toBeGreaterThan(semiHero.fontScale);
         expect(semiHero.fontScale).toBeGreaterThan(Math.max(...supports.map(item => item.fontScale)));
+        // Supports never grow beyond their role size; global fitting only shrinks.
+        expect(supports.every(item => item.fontScale <= 1.15 + 1e-6)).toBe(true);
+    });
+
+    it('picks a semi-hero after the hero when the hero leans early', () => {
+        const words = [
+            segment('核心词语'), segment('接着'), segment('继续'),
+            segment('次要重点'), segment('还有'), segment('尾巴'),
+        ];
+        const heroIndex = findSonnetHeroSegmentIndex(words);
+        expect(heroIndex).toBe(0);
+        expect(findSonnetSemiHeroSegmentIndices(words, heroIndex)).toEqual([3]);
+    });
+
+    it('picks two semi-heroes on both sides of the hero in long lines', () => {
+        const words = [
+            segment('引子'), segment('主旋律'), segment('铺陈'), segment('展开'), segment('推进'),
+            segment('英雄核心'), segment('过渡'), segment('余韵'), segment('副重点'), segment('收尾'),
+        ];
+        const heroIndex = findSonnetHeroSegmentIndex(words);
+        expect(heroIndex).toBe(5);
+        expect(findSonnetSemiHeroSegmentIndices(words, heroIndex)).toEqual([1, 8]);
+    });
+
+    it('never promotes particles or single glyphs to semi-hero', () => {
+        const particles = [segment('あ'), segment('い'), segment('う'), segment('核心')];
+        const heroIndex = findSonnetHeroSegmentIndex(particles);
+        expect(findSonnetSemiHeroSegmentIndices(particles, heroIndex)).toEqual([]);
+    });
+});
+
+describe('Sonnet poster blocks zone flow', () => {
+    const posterBox = (partial: Partial<SonnetPosterBlockBox>): SonnetPosterBlockBox => ({
+        isHero: false,
+        isSemiHero: false,
+        displayText: '詞',
+        fontScale: 1.15,
+        measuredWidth: 60,
+        measuredHeight: 46,
+        x: 0,
+        y: 0,
+        rotation: 0,
+        vertical: false,
+        layoutDirection: 'horizontal',
+        enterX: 0,
+        enterY: 0,
+        ...partial,
+    });
+
+    const verticalDims = {
+        verticalDisplayText: '詞',
+        verticalMeasuredWidth: 46,
+        verticalMeasuredHeight: 60,
+        verticalFontScale: 1.15,
+    };
+
+    const buildBoxes = () => [
+        posterBox({ displayText: '旅' }),
+        posterBox({ displayText: 'は' }),
+        posterBox({ displayText: '英雄', isHero: true, fontScale: 4.4, measuredWidth: 400, measuredHeight: 150 }),
+        posterBox({ displayText: '副題', isSemiHero: true, fontScale: 3.2, measuredWidth: 200, measuredHeight: 100 }),
+        posterBox({ displayText: '続く' }),
+        posterBox({ displayText: '言葉' }),
+        posterBox({ displayText: '粒々' }),
+        posterBox({ displayText: '終わり' }),
+    ];
+
+    const rectOf = (box: SonnetPosterBlockBox) => ({
+        left: box.x - box.measuredWidth / 2,
+        right: box.x + box.measuredWidth / 2,
+        top: box.y - box.measuredHeight / 2,
+        bottom: box.y + box.measuredHeight / 2,
+    });
+
+    it('keeps horizontal zones spread out with gaps and strict reading order', () => {
+        const boxes = buildBoxes();
+        const { gap } = layoutSonnetPosterBlocks(boxes, 1280, 720, 40, 2);
+        const rects = boxes.map(rectOf);
+
+        boxes.forEach(box => {
+            expect(box.layoutDirection).toBe('horizontal');
+            expect(box.vertical).toBe(false);
+        });
+        const hero = boxes.find(box => box.isHero)!;
+        const semi = boxes.find(box => box.isSemiHero)!;
+        const supports = boxes.filter(box => !box.isHero && !box.isSemiHero);
+        expect(hero.fontScale).toBeGreaterThan(semi.fontScale);
+        expect(semi.fontScale).toBeGreaterThan(Math.max(...supports.map(box => box.fontScale)));
+        expect(supports.every(box => box.fontScale <= 1.15 + 1e-6)).toBe(true);
+
+        for (let i = 0; i < rects.length; i++) {
+            for (let j = i + 1; j < rects.length; j++) {
+                const dx = Math.max(rects[i].left - rects[j].right, rects[j].left - rects[i].right);
+                const dy = Math.max(rects[i].top - rects[j].bottom, rects[j].top - rects[i].bottom);
+                expect(Math.max(dx, dy)).toBeGreaterThanOrEqual(gap * 0.98);
+            }
+        }
+        // Reading order: earlier segments sit on an earlier line, or further left on the same line.
+        for (let i = 0; i < rects.length - 1; i++) {
+            const sameLine = Math.abs(rects[i].top - rects[i + 1].top) <= 1;
+            if (sameLine) expect(rects[i].left).toBeLessThanOrEqual(rects[i + 1].left + 1);
+            else expect(rects[i].top).toBeLessThanOrEqual(rects[i + 1].top + 1);
+        }
+    });
+
+    it('flows vertical columns right-to-left while preserving reading order', () => {
+        const boxes = buildBoxes().map(box => ({ ...box, ...verticalDims }));
+        layoutSonnetPosterBlocks(boxes, 1280, 720, 40, 3);
+
+        boxes.forEach(box => {
+            expect(box.layoutDirection).toBe('vertical');
+            expect(box.vertical).toBe(true);
+        });
+        const rects = boxes.map(rectOf);
+        for (let i = 0; i < rects.length; i++) {
+            for (let j = i + 1; j < rects.length; j++) {
+                const dx = Math.max(rects[i].left - rects[j].right, rects[j].left - rects[i].right);
+                const dy = Math.max(rects[i].top - rects[j].bottom, rects[j].top - rects[i].bottom);
+                expect(Math.max(dx, dy)).toBeGreaterThan(0);
+            }
+        }
+        // Japanese vertical reading order: earlier columns sit further right,
+        // earlier segments within a column sit higher.
+        for (let i = 0; i < rects.length - 1; i++) {
+            const sameColumn = Math.abs(rects[i].right - rects[i + 1].right) <= 1;
+            if (sameColumn) expect(rects[i].top).toBeLessThanOrEqual(rects[i + 1].top + 1);
+            else expect(rects[i].right).toBeGreaterThanOrEqual(rects[i + 1].right - 1);
+        }
+    });
+
+    it('centers a lone hero zone when the shot has no supports', () => {
+        const boxes = [
+            posterBox({ displayText: '英雄', isHero: true, fontScale: 4.4, measuredWidth: 400, measuredHeight: 150 }),
+        ];
+        layoutSonnetPosterBlocks(boxes, 1280, 720, 40, 2);
+        expect(Math.abs(boxes[0].x)).toBeLessThan(1);
     });
 });

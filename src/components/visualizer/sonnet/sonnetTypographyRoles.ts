@@ -34,29 +34,69 @@ export const findSonnetHeroSegmentIndex = (
     return Math.max(0, bestIndex);
 };
 
-export const findSonnetSemiHeroSegmentIndex = (
+// Semi-hero constraints: emphasis words need spacing, real words beat particles,
+// and only long enough lines earn secondary accents at all.
+const SEMI_HERO_MIN_GAP = 2;
+const SEMI_HERO_MIN_VISIBLE_LENGTH = 2;
+const SEMI_HERO_MIN_LINE_WORDS = 4;
+const SEMI_HERO_SCORE_RATIO = 0.35;
+const SEMI_HERO_MULTI_WORD_COUNT = 9;
+
+// Picks secondary emphasis words on the side opposite the hero's lean so the
+// composition stays balanced; long lines earn a second accent on the other side.
+export const findSonnetSemiHeroSegmentIndices = (
     segments: SonnetSemanticSegment[],
     heroIndex: number,
 ) => {
-    const beforeHero = segments
+    const hero = segments[heroIndex];
+    if (!hero) return [];
+    const wordLikeCount = segments.filter(segment => (
+        segment.isWordLike && getSonnetVisibleSegmentLength(segment) > 0
+    )).length;
+    if (wordLikeCount < SEMI_HERO_MIN_LINE_WORDS) return [];
+
+    const threshold = scoreSonnetHeroSegment(hero) * SEMI_HERO_SCORE_RATIO;
+    const candidates = segments
         .map((segment, index) => ({ segment, index }))
         .filter(({ segment, index }) => (
-            index < heroIndex
+            index !== heroIndex
             && segment.isWordLike
-            && getSonnetVisibleSegmentLength(segment) > 0
+            && getSonnetVisibleSegmentLength(segment) >= SEMI_HERO_MIN_VISIBLE_LENGTH
+            && Math.abs(index - heroIndex) >= SEMI_HERO_MIN_GAP
+            && scoreSonnetHeroSegment(segment) >= threshold
         ));
-    if (beforeHero.length < 6) return -1;
+    if (candidates.length === 0) return [];
 
-    // Keep the secondary emphasis in the earlier block instead of crowding the main hero.
-    const candidates = beforeHero.slice(0, -2);
-    let bestIndex = -1;
-    let bestScore = -Infinity;
-    candidates.forEach(({ segment, index }) => {
-        const score = scoreSonnetHeroSegment(segment);
-        if (score > bestScore) {
-            bestScore = score;
-            bestIndex = index;
-        }
-    });
-    return bestIndex;
+    const bestOf = (list: typeof candidates) => list.reduce<typeof candidates[number] | null>(
+        (best, item) => (
+            !best || scoreSonnetHeroSegment(item.segment) > scoreSonnetHeroSegment(best.segment)
+                ? item
+                : best
+        ),
+        null,
+    );
+
+    const heroLeansEarly = heroIndex <= (segments.length - 1) / 2;
+    const primarySide = candidates.filter(({ index }) => (
+        heroLeansEarly ? index > heroIndex : index < heroIndex
+    ));
+    const secondarySide = candidates.filter(({ index }) => (
+        heroLeansEarly ? index < heroIndex : index > heroIndex
+    ));
+
+    const picks: number[] = [];
+    const primary = bestOf(primarySide) ?? bestOf(secondarySide);
+    if (primary) picks.push(primary.index);
+    if (wordLikeCount >= SEMI_HERO_MULTI_WORD_COUNT && primary) {
+        const secondary = bestOf(secondarySide.filter(({ index }) => (
+            Math.abs(index - primary.index) >= SEMI_HERO_MIN_GAP
+        )));
+        if (secondary) picks.push(secondary.index);
+    }
+    return picks.sort((first, second) => first - second);
 };
+
+export const findSonnetSemiHeroSegmentIndex = (
+    segments: SonnetSemanticSegment[],
+    heroIndex: number,
+) => findSonnetSemiHeroSegmentIndices(segments, heroIndex)[0] ?? -1;

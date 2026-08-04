@@ -1,7 +1,7 @@
-import { hashSonnetSeed } from './sonnetRandom';
-
 // src/components/visualizer/sonnet/sonnetPosterBlocksLayout.ts
-// Anchors emphasis first, then fills the remaining measured rectangles in reading order.
+// PV-style zone flow: emphasis words (hero / semi-hero) own fixed zones, and the
+// remaining supports fill the space between zones in strict reading order, so the
+// composition looks chaotic in size but never folds the reader's eye back.
 export interface SonnetPosterBlockBox {
     isHero: boolean;
     isSemiHero: boolean;
@@ -9,6 +9,7 @@ export interface SonnetPosterBlockBox {
     verticalDisplayText?: string;
     verticalMeasuredWidth?: number;
     verticalMeasuredHeight?: number;
+    verticalFontScale?: number;
     fontScale: number;
     measuredWidth: number;
     measuredHeight: number;
@@ -28,175 +29,233 @@ export interface SonnetPosterBlocksPlan<T extends SonnetPosterBlockBox> {
     gap: number;
 }
 
-interface Rect {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
+type FlowOrientation = 'horizontal' | 'vertical';
+
+interface FlowItem<T extends SonnetPosterBlockBox> {
+    kind: 'zone' | 'group';
+    zone?: T;
+    group?: T[];
 }
 
-interface PlannedPlacement<T> extends Rect {
+interface FlowRect {
+    u: number;
+    v: number;
+    uSize: number;
+    vSize: number;
+}
+
+interface FlowPlacement<T extends SonnetPosterBlockBox> {
     box: T;
+    rect: FlowRect;
     scale: number;
     vertical: boolean;
 }
 
+// A zone followed by a support group reserves the flow-start side of the lines it
+// spans, so following supports wrap beside it while keeping scan order.
+interface ZoneFloat {
+    extent: number;
+    vBottom: number;
+}
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const rectRight = (rect: Rect) => rect.x + rect.width;
-const rectBottom = (rect: Rect) => rect.y + rect.height;
 
-const intersects = (first: Rect, second: Rect) => (
-    first.x < rectRight(second)
-    && rectRight(first) > second.x
-    && first.y < rectBottom(second)
-    && rectBottom(first) > second.y
-);
-
-const contains = (outer: Rect, inner: Rect) => (
-    inner.x >= outer.x
-    && inner.y >= outer.y
-    && rectRight(inner) <= rectRight(outer)
-    && rectBottom(inner) <= rectBottom(outer)
-);
-
-// MaxRects-style splitting keeps every remaining region disjoint from placed typography.
-const subtractPlacement = (freeRects: Rect[], placed: Rect, gap: number) => {
-    const padded = {
-        x: placed.x - gap,
-        y: placed.y - gap,
-        width: placed.width + gap * 2,
-        height: placed.height + gap * 2,
-    };
-    const split: Rect[] = [];
-    freeRects.forEach(rect => {
-        if (!intersects(rect, padded)) {
-            split.push(rect);
-            return;
-        }
-        if (padded.x > rect.x) split.push({ ...rect, width: padded.x - rect.x });
-        if (rectRight(padded) < rectRight(rect)) {
-            split.push({ ...rect, x: rectRight(padded), width: rectRight(rect) - rectRight(padded) });
-        }
-        if (padded.y > rect.y) split.push({ ...rect, height: padded.y - rect.y });
-        if (rectBottom(padded) < rectBottom(rect)) {
-            split.push({ ...rect, y: rectBottom(padded), height: rectBottom(rect) - rectBottom(padded) });
+// Splits the reading sequence into emphasis zones and runs of supports.
+const partitionFlowItems = <T extends SonnetPosterBlockBox>(boxes: T[]): FlowItem<T>[] => {
+    const items: FlowItem<T>[] = [];
+    let group: T[] = [];
+    boxes.forEach(box => {
+        if (box.isHero || box.isSemiHero) {
+            if (group.length > 0) items.push({ kind: 'group', group });
+            group = [];
+            items.push({ kind: 'zone', zone: box });
+        } else {
+            group.push(box);
         }
     });
-    return split
-        .filter(rect => rect.width > gap && rect.height > gap)
-        .filter((rect, index, all) => !all.some((other, otherIndex) => otherIndex !== index && contains(other, rect)));
+    if (group.length > 0) items.push({ kind: 'group', group });
+    return items;
 };
 
-const candidateNoise = (seed: number, boxIndex: number, rect: Rect) => (
-    hashSonnetSeed(`${seed}:${boxIndex}:${Math.round(rect.x)}:${Math.round(rect.y)}`) / 0xffffffff
-);
+interface FlowSpace {
+    orientation: FlowOrientation;
+    u: number;
+    v: number;
+}
 
-const findPlacement = <T extends SonnetPosterBlockBox>(
-    box: T,
-    boxIndex: number,
-    freeRects: Rect[],
-    canvas: Rect,
-    seed: number,
-    scaleLimit: number,
-    minimumScale: number,
-): PlannedPlacement<T> | null => {
-    let best: { placement: PlannedPlacement<T>; score: number } | null = null;
-    for (const rect of freeRects) {
-        const orientations = [{ width: box.measuredWidth, height: box.measuredHeight, vertical: false }];
-        if (box.verticalMeasuredWidth && box.verticalMeasuredHeight) {
-            orientations.push({
-                width: box.verticalMeasuredWidth,
-                height: box.verticalMeasuredHeight,
-                vertical: true,
-            });
-        }
-        for (const orientation of orientations) {
-            const scale = Math.min(scaleLimit, rect.width / orientation.width, rect.height / orientation.height);
-            if (scale < minimumScale) continue;
-            const width = orientation.width * scale;
-            const height = orientation.height * scale;
-            const readingOrder = (rect.y - canvas.y) * (canvas.width + 1) + (rect.x - canvas.x);
-            const unusedRatio = (rect.width * rect.height - width * height) / Math.max(1, canvas.width * canvas.height);
-            const orientationPenalty = orientation.vertical ? 0.04 : 0;
-            const score = readingOrder + unusedRatio * 0.5 + orientationPenalty
-                + candidateNoise(seed, boxIndex, rect) * 0.1;
-            const placement = {
-                box,
-                scale,
-                x: rect.x,
-                y: rect.y,
-                width,
-                height,
-                vertical: orientation.vertical,
-            };
-            if (!best || score < best.score) best = { placement, score };
-        }
-    }
-    return best?.placement ?? null;
-};
-
-const tryLayout = <T extends SonnetPosterBlockBox>(
-    boxes: T[],
-    canvas: Rect,
-    gap: number,
-    seed: number,
-    scaleLimit: number,
+// Maps a flow-space rect to screen coordinates. In the vertical variant columns
+// progress right-to-left, matching traditional Japanese typesetting.
+const flowToScreen = (
+    space: FlowSpace,
+    rect: FlowRect,
+    canvas: { x: number; y: number; width: number; height: number },
 ) => {
-    const primaryHero = boxes.filter(box => box.isHero)
-        .sort((first, second) => second.measuredWidth * second.measuredHeight - first.measuredWidth * first.measuredHeight)[0]
-        ?? boxes[0];
-    const heroScale = Math.min(
-        scaleLimit,
-        canvas.width * 0.58 / primaryHero.measuredWidth,
-        canvas.height * 0.46 / primaryHero.measuredHeight,
-    );
-    const heroWidth = primaryHero.measuredWidth * heroScale;
-    const heroHeight = primaryHero.measuredHeight * heroScale;
-    const heroOnRight = (seed & 1) === 0;
-    const hero: PlannedPlacement<T> = {
-        box: primaryHero,
-        scale: heroScale,
-        x: heroOnRight ? rectRight(canvas) - heroWidth : canvas.x,
-        y: canvas.y,
-        width: heroWidth,
-        height: heroHeight,
-        vertical: false,
+    if (space.orientation === 'horizontal') {
+        return {
+            x: canvas.x + rect.u,
+            y: canvas.y + rect.v,
+            width: rect.uSize,
+            height: rect.vSize,
+        };
+    }
+    return {
+        x: canvas.x + canvas.width - rect.v - rect.vSize,
+        y: canvas.y + rect.u,
+        width: rect.vSize,
+        height: rect.uSize,
     };
-    const placements = [hero];
-    let freeRects = subtractPlacement([canvas], hero, gap);
-    const anchors = boxes.filter(box => box !== primaryHero && (box.isHero || box.isSemiHero));
-    const supports = boxes.filter(box => box !== primaryHero && !box.isHero && !box.isSemiHero);
-    const minimumScale = Math.max(0.16, scaleLimit * 0.56);
+};
 
-    for (const box of anchors) {
-        const placement = findPlacement(
-            box,
-            boxes.indexOf(box),
-            freeRects,
-            canvas,
-            seed,
-            scaleLimit * 0.96,
-            minimumScale,
+interface FlowAttempt<T extends SonnetPosterBlockBox> {
+    placements: FlowPlacement<T>[];
+    vTotal: number;
+}
+
+// Lays out the whole shot once at a given global scale; returns null when the
+// stack overflows the canvas so the caller can retry smaller.
+const attemptFlowLayout = <T extends SonnetPosterBlockBox>(
+    boxes: T[],
+    space: FlowSpace,
+    globalScale: number,
+    chipGap: number,
+    lineGap: number,
+    seed: number,
+): FlowAttempt<T> | null => {
+    const items = partitionFlowItems(boxes);
+    const placements: FlowPlacement<T>[] = [];
+    const floats: ZoneFloat[] = [];
+    let vCursor = 0;
+    let ownBandOnEndSide = ((seed >> 1) & 1) === 1;
+
+    // Screen dims at the current scale, choosing the vertical column orientation
+    // only when the shot is vertical and precise column measurements exist.
+    const measure = (box: T) => {
+        const useVertical = space.orientation === 'vertical'
+            && typeof box.verticalMeasuredWidth === 'number'
+            && typeof box.verticalMeasuredHeight === 'number'
+            && typeof box.verticalFontScale === 'number';
+        const baseScale = useVertical ? box.verticalFontScale! : box.fontScale;
+        const width = (useVertical ? box.verticalMeasuredWidth! : box.measuredWidth) * globalScale;
+        const height = (useVertical ? box.verticalMeasuredHeight! : box.measuredHeight) * globalScale;
+        return { useVertical, baseScale, width, height };
+    };
+    const toFlowSize = (width: number, height: number) => (
+        space.orientation === 'horizontal'
+            ? { uSize: width, vSize: height }
+            : { uSize: height, vSize: width }
+    );
+
+    const pruneFloats = () => {
+        for (let index = floats.length - 1; index >= 0; index--) {
+            if (floats[index].vBottom <= vCursor) floats.splice(index, 1);
+        }
+    };
+
+    items.forEach((item, itemIndex) => {
+        pruneFloats();
+        if (item.kind === 'group') {
+            const reservedU = floats.reduce((sum, entry) => sum + entry.extent, 0);
+            const capacity = Math.max(chipGap * 2, space.u - reservedU);
+            const uStart = reservedU;
+            const chips = item.group!.map(box => {
+                const dims = measure(box);
+                const flow = toFlowSize(dims.width, dims.height);
+                return { box, dims, uSize: flow.uSize, vSize: flow.vSize, shrink: 1 };
+            });
+
+            // Greedy wrap in reading order, then justify each line so supports
+            // spread across the band instead of clustering on one side.
+            let line: typeof chips = [];
+            let lineUsedU = 0;
+            const flushLine = () => {
+                if (line.length === 0) return;
+                const lineV = Math.max(...line.map(chip => chip.vSize * chip.shrink));
+                const leftover = capacity - lineUsedU;
+                const spread = line.length > 1 && leftover > 0
+                    ? Math.min(leftover / (line.length - 1), chipGap * 2.5)
+                    : 0;
+                let uCursor = uStart;
+                line.forEach(chip => {
+                    const finalScale = chip.dims.baseScale * globalScale * chip.shrink;
+                    placements.push({
+                        box: chip.box,
+                        rect: {
+                            u: uCursor,
+                            v: vCursor,
+                            uSize: chip.uSize * chip.shrink,
+                            vSize: chip.vSize * chip.shrink,
+                        },
+                        scale: finalScale,
+                        vertical: chip.dims.useVertical,
+                    });
+                    uCursor += chip.uSize * chip.shrink + chipGap + spread;
+                });
+                vCursor += lineV + lineGap;
+                pruneFloats();
+                line = [];
+                lineUsedU = 0;
+            };
+
+            chips.forEach(chip => {
+                const needed = lineUsedU + (line.length > 0 ? chipGap : 0) + chip.uSize;
+                if (needed > capacity && line.length > 0) flushLine();
+                if (chip.uSize > capacity) {
+                    // A lone oversized chip shrinks into the band instead of wrapping.
+                    chip.shrink = Math.max(0.5, capacity / chip.uSize);
+                    lineUsedU = 0;
+                    line.push(chip);
+                    flushLine();
+                    return;
+                }
+                lineUsedU += (line.length > 0 ? chipGap : 0) + chip.uSize;
+                line.push(chip);
+            });
+            flushLine();
+            return;
+        }
+
+        // Zone placement: never overlap a previous zone's float span.
+        const zone = item.zone!;
+        vCursor = Math.max(vCursor, ...floats.map(entry => entry.vBottom), 0);
+        floats.length = 0;
+
+        const dims = measure(zone);
+        const flow = toFlowSize(dims.width, dims.height);
+        const followedByGroup = items[itemIndex + 1]?.kind === 'group';
+        const zoneShrink = Math.min(
+            1,
+            (space.u * (followedByGroup ? 0.62 : 0.9)) / flow.uSize,
+            (space.v * 0.66) / flow.vSize,
         );
-        if (!placement) return null;
-        placements.push(placement);
-        freeRects = subtractPlacement(freeRects, placement, gap);
-    }
-    for (const box of supports) {
-        const placement = findPlacement(
-            box,
-            boxes.indexOf(box),
-            freeRects,
-            canvas,
-            seed,
-            scaleLimit * 1.08,
-            minimumScale,
-        );
-        if (!placement) return null;
-        placements.push(placement);
-        freeRects = subtractPlacement(freeRects, placement, gap);
-    }
-    return placements;
+        const uSize = flow.uSize * zoneShrink;
+        const vSize = flow.vSize * zoneShrink;
+        const onlyZone = items.length === 1;
+        const u = onlyZone
+            ? (space.u - uSize) / 2
+            : followedByGroup
+                ? 0
+                : ownBandOnEndSide
+                    ? space.u - uSize
+                    : 0;
+        placements.push({
+            box: zone,
+            rect: { u, v: vCursor, uSize, vSize },
+            scale: dims.baseScale * globalScale * zoneShrink,
+            vertical: dims.useVertical,
+        });
+        if (followedByGroup) {
+            floats.push({ extent: uSize + chipGap, vBottom: vCursor + vSize + lineGap });
+        } else {
+            vCursor += vSize + lineGap;
+            ownBandOnEndSide = !ownBandOnEndSide;
+        }
+    });
+
+    const vTotal = placements.reduce((max, placement) => (
+        Math.max(max, placement.rect.v + placement.rect.vSize)
+    ), 0);
+    if (vTotal > space.v) return null;
+    return { placements, vTotal };
 };
 
 export const layoutSonnetPosterBlocks = <T extends SonnetPosterBlockBox>(
@@ -207,33 +266,51 @@ export const layoutSonnetPosterBlocks = <T extends SonnetPosterBlockBox>(
     seed = 0,
 ): SonnetPosterBlocksPlan<T> => {
     if (boxes.length === 0) return { placements: [], width: 0, height: 0, gap: 0 };
-    const gap = clamp(baseFontSize * 0.08, 2, 8);
+    const gap = clamp(baseFontSize * 0.35, 16, 40);
+    const chipGap = gap;
+    const lineGap = gap * 1.15;
     const canvas = {
         x: -width * 0.39,
         y: -height * 0.36,
         width: width * 0.78,
         height: height * 0.72,
     };
-    let planned: PlannedPlacement<T>[] | null = null;
-    for (const scaleLimit of [1.12, 1, 0.88, 0.76, 0.64, 0.52, 0.42, 0.34, 0.28]) {
-        planned = tryLayout(boxes, canvas, gap, seed, scaleLimit);
-        if (planned) break;
-    }
-    if (!planned) planned = tryLayout(boxes, canvas, 0, seed, 0.5) ?? [];
+    const orientation: FlowOrientation = (seed % 2 === 0) ? 'horizontal' : 'vertical';
+    const space: FlowSpace = { orientation, u: canvas.width, v: canvas.height };
 
-    planned.forEach(placement => {
+    // Supports are never upscaled beyond their role size; global retries only shrink.
+    let attempt: FlowAttempt<T> | null = null;
+    for (const globalScale of [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52]) {
+        attempt = attemptFlowLayout(boxes, space, globalScale, chipGap, lineGap, seed);
+        if (attempt) break;
+    }
+    if (!attempt) {
+        attempt = attemptFlowLayout(boxes, space, 0.45, chipGap, lineGap, seed)
+            ?? attemptFlowLayout(boxes, space, 0.45, 0, 0, seed)
+            ?? { placements: [], vTotal: 0 };
+    }
+
+    const vShift = Math.max(0, (space.v - attempt.vTotal) / 2);
+    attempt.placements.forEach(placement => {
         const { box } = placement;
-        box.fontScale *= placement.scale;
-        box.measuredWidth = placement.width;
-        box.measuredHeight = placement.height;
-        if (placement.vertical && box.verticalDisplayText) box.displayText = box.verticalDisplayText;
-        box.x = placement.x + placement.width / 2;
-        box.y = placement.y + placement.height / 2;
+        const rect = { ...placement.rect, v: placement.rect.v + vShift };
+        const screen = flowToScreen(space, rect, canvas);
+        box.fontScale = placement.scale;
+        box.measuredWidth = screen.width;
+        box.measuredHeight = screen.height;
+        box.x = screen.x + screen.width / 2;
+        box.y = screen.y + screen.height / 2;
         box.rotation = 0;
         box.vertical = placement.vertical;
-        box.layoutDirection = placement.vertical ? 'vertical' : 'horizontal';
-        box.enterX = (placement.x < 0 ? -1 : 1) * Math.min(28, baseFontSize * 0.45);
-        box.enterY = Math.min(18, baseFontSize * 0.25);
+        if (placement.vertical && box.verticalDisplayText) box.displayText = box.verticalDisplayText;
+        box.layoutDirection = orientation === 'vertical' ? 'vertical' : 'horizontal';
+        if (orientation === 'horizontal') {
+            box.enterX = (screen.x + screen.width / 2 < 0 ? -1 : 1) * Math.min(28, baseFontSize * 0.45);
+            box.enterY = Math.min(18, baseFontSize * 0.25);
+        } else {
+            box.enterX = Math.min(18, baseFontSize * 0.25);
+            box.enterY = (screen.y + screen.height / 2 < 0 ? -1 : 1) * Math.min(28, baseFontSize * 0.45);
+        }
     });
     return { placements: boxes, width: canvas.width, height: canvas.height, gap };
 };
