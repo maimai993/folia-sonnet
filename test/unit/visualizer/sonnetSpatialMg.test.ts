@@ -12,12 +12,18 @@ import {
     SONNET_THEMED_GEO_VARIANTS,
 } from '@/components/visualizer/sonnet/sonnetThemedShotMg';
 import { drawAdditionalSonnetShotMg } from '@/components/visualizer/sonnet/sonnetAdditionalShotMg';
+import {
+    drawOpenSonnetShotMg,
+    SONNET_OPEN_GEO_VARIANT_COUNT,
+    SONNET_OPEN_GEO_VARIANT_START,
+    SONNET_OPEN_GEO_VARIANTS,
+} from '@/components/visualizer/sonnet/sonnetOpenFrameShotMg';
 
 // test/unit/visualizer/sonnetSpatialMg.test.ts
 // Locks the expanded geometric recipes into Sonnet's existing single MG scene collection.
 describe('Sonnet spatial MG variants', () => {
     it('extends the original collection without a second layer family', () => {
-        expect(SONNET_GEO_VARIANT_COUNT).toBe(36);
+        expect(SONNET_GEO_VARIANT_COUNT).toBe(48);
         expect(Array.from({ length: 24 }, (_, seed) => resolveSonnetGeoVariant(seed)))
             .toEqual(Array.from({ length: 24 }, (_, seed) => seed));
     });
@@ -45,7 +51,15 @@ describe('Sonnet spatial MG variants', () => {
         expect(SONNET_THEMED_GEO_VARIANT_START).toBe(24);
         expect(SONNET_THEMED_GEO_VARIANT_COUNT).toBe(12);
         expect(SONNET_THEMED_GEO_VARIANTS).toHaveLength(12);
-        expect(SONNET_THEMED_GEO_VARIANT_START + SONNET_THEMED_GEO_VARIANT_COUNT)
+        expect(SONNET_OPEN_GEO_VARIANT_START)
+            .toBe(SONNET_THEMED_GEO_VARIANT_START + SONNET_THEMED_GEO_VARIANT_COUNT);
+    });
+
+    it('reserves twelve open-frame variants after the themed collection', () => {
+        expect(SONNET_OPEN_GEO_VARIANT_START).toBe(36);
+        expect(SONNET_OPEN_GEO_VARIANT_COUNT).toBe(12);
+        expect(SONNET_OPEN_GEO_VARIANTS).toHaveLength(12);
+        expect(SONNET_OPEN_GEO_VARIANT_START + SONNET_OPEN_GEO_VARIANT_COUNT)
             .toBe(SONNET_GEO_VARIANT_COUNT);
     });
 
@@ -74,6 +88,38 @@ describe('Sonnet spatial MG variants', () => {
                 primary: 0xffffff,
                 secondary: 0x88ccff,
             })).toBe(true);
+            expect(strokes).toBeGreaterThan(0);
+            expect(fills).toBeGreaterThan(0);
+        }
+    });
+
+    it('builds every open-frame background from both wireframe and filled paths', () => {
+        for (let index = 0; index < SONNET_OPEN_GEO_VARIANT_COUNT; index += 1) {
+            let strokes = 0;
+            let fills = 0;
+            const target = {
+                moveTo: () => target,
+                lineTo: () => target,
+                quadraticCurveTo: () => target,
+                bezierCurveTo: () => target,
+                arc: () => target,
+                circle: () => target,
+                rect: () => target,
+                stroke: () => { strokes += 1; return target; },
+                fill: () => { fills += 1; return target; },
+            };
+            const options = {
+                target,
+                variant: SONNET_OPEN_GEO_VARIANT_START + index,
+                radius: 600,
+                width: 1200,
+                height: 600,
+                seed: index + 31,
+                primary: 0xffffff,
+                secondary: 0x88ccff,
+            };
+            expect(drawOpenSonnetShotMg(options)).toBe(true);
+            expect(drawAdditionalSonnetShotMg(options)).toBe(true);
             expect(strokes).toBeGreaterThan(0);
             expect(fills).toBeGreaterThan(0);
         }
