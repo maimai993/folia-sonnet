@@ -36,6 +36,10 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
         subtitleContentMode,
+        subtitleTheme,
+        subtitleFontScale,
+        subtitleOverlayOpacity,
+        subtitleOverlayBackground,
         sonnetTuning = DEFAULT_SONNET_TUNING,
     } = props;
     const { t } = useTranslation();
@@ -227,8 +231,12 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
                 recentCompletedLine={creditsRecentCompletedLine}
                 nextLines={nextLines}
                 theme={theme}
+                subtitleTheme={subtitleTheme}
                 translationFontSize={`clamp(${1.05 * lyricsFontScale}rem, ${2.2 * lyricsFontScale}vw, ${1.25 * lyricsFontScale}rem)`}
                 upcomingFontSize={`clamp(${0.9 * lyricsFontScale}rem, ${1.8 * lyricsFontScale}vw, ${1.05 * lyricsFontScale}rem)`}
+                subtitleFontScale={subtitleFontScale}
+                subtitleOverlayOpacity={subtitleOverlayOpacity}
+                subtitleOverlayBackground={subtitleOverlayBackground}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}
