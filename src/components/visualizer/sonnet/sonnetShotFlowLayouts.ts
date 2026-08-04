@@ -69,7 +69,10 @@ export const placeWithGlobalFit = <T extends SonnetFlowLayoutBox>(
 };
 
 // Quiet tableau: one calm stack, earlier words above the hero and later words
-// below it, so the column reads top-to-bottom in exact timeline order.
+// below it, so the column reads top-to-bottom in exact timeline order. When a
+// run outgrows the safe height it wraps into side columns instead of shrinking:
+// earlier words continue in columns marching right, later words in columns
+// marching left — columns always read right-to-left in timeline order.
 export const layoutQuietTableau = <T extends SonnetFlowLayoutBox>(
     ctx: SonnetFlowLayoutContext<T>,
     variant: number,
@@ -78,27 +81,43 @@ export const layoutQuietTableau = <T extends SonnetFlowLayoutBox>(
     const heroBox = boxes[heroIndex];
     const horizontalCard = variant === 2 || variant === 3;
     boxes.forEach(box => { box.layoutDirection = horizontalCard ? 'horizontal' : 'vertical'; });
+    const safeHalfH = height * 0.46;
     placeWithGlobalFit(ctx, () => {
         heroBox.x = 0;
         heroBox.y = horizontalCard ? 0 : -height * 0.1;
+        const stagger = variant === 3 ? 70 : 0;
+        const columnStep = Math.max(...boxes.map(box => box.measuredWidth)) + stackGap + stagger;
+        const xFor = (box: T, index: number) => {
+            if (variant === 1) return heroBox.x - heroBox.measuredWidth / 2 + box.measuredWidth / 2;
+            if (variant === 3) return heroBox.x + ((index % 2 === 0) ? 1 : -1) * 35;
+            return heroBox.x;
+        };
+        // Before run: upward from the hero; overflow wraps into columns to the right.
+        let column = 0;
         let currentY = heroBox.y - heroBox.measuredHeight / 2 - stackGap;
         for (let i = heroIndex - 1; i >= 0; i--) {
             const box = boxes[i];
-            if (variant === 1) box.x = heroBox.x - heroBox.measuredWidth / 2 + box.measuredWidth / 2;
-            else if (variant === 3) box.x = heroBox.x + ((i % 2 === 0) ? 1 : -1) * 35;
-            else box.x = heroBox.x;
+            if (currentY - box.measuredHeight < -safeHalfH) {
+                column += 1;
+                currentY = safeHalfH;
+            }
+            box.x = xFor(box, i) + column * columnStep;
             box.y = currentY - box.measuredHeight / 2;
             currentY -= box.measuredHeight + stackGap;
             if (variant === 1) { box.enterX = 20; box.enterY = 0; }
             else if (variant === 3) { box.enterX = box.x > heroBox.x ? 30 : -30; box.enterY = 0; }
             else { box.enterX = 0; box.enterY = 20; }
         }
+        // After run: downward from the hero; overflow wraps into columns to the left.
+        column = 0;
         currentY = heroBox.y + heroBox.measuredHeight / 2 + stackGap;
         for (let i = heroIndex + 1; i < boxes.length; i++) {
             const box = boxes[i];
-            if (variant === 1) box.x = heroBox.x - heroBox.measuredWidth / 2 + box.measuredWidth / 2;
-            else if (variant === 3) box.x = heroBox.x + ((i % 2 === 0) ? 1 : -1) * 35;
-            else box.x = heroBox.x;
+            if (currentY + box.measuredHeight > safeHalfH) {
+                column += 1;
+                currentY = -safeHalfH;
+            }
+            box.x = xFor(box, i) - column * columnStep;
             box.y = currentY + box.measuredHeight / 2;
             currentY += box.measuredHeight + stackGap;
             if (variant === 1) { box.enterX = -20; box.enterY = 0; }
@@ -184,15 +203,37 @@ export const layoutEditorialColumn = <T extends SonnetFlowLayoutBox>(
         });
     } else if (variant === 1) {
         boxes.forEach(box => { box.layoutDirection = 'vertical'; });
-        // Single flush-right magazine rail: every word, hero included, sits in the
-        // column at its timeline slot, reading top-to-bottom.
+        // Flush-right magazine rail reading top-to-bottom in timeline order. When
+        // one rail outgrows the safe height it continues in rails marching left
+        // (columns read right-to-left) instead of shrinking.
         placeWithGlobalFit(ctx, () => {
             const rightEdge = width * 0.28;
+            const safeHalfH = height * 0.46;
+            const railStep = Math.max(...boxes.map(box => box.measuredWidth)) + stackGap;
             const totalHeight = boxes.reduce((sum, box) => sum + box.measuredHeight, 0)
                 + stackGap * (boxes.length - 1);
-            let currentY = -totalHeight / 2;
+            // Prefer the single centered rail as long as it could fit at the
+            // ladder's minimum scale; only genuinely long shots wrap.
+            const fitsSingleRail = boxes.reduce((sum, box) => sum + box.measuredHeight, 0) * 0.52
+                + stackGap * (boxes.length - 1) <= safeHalfH * 2;
+            if (fitsSingleRail) {
+                let currentY = -totalHeight / 2;
+                boxes.forEach(box => {
+                    box.x = rightEdge - box.measuredWidth / 2;
+                    box.y = currentY + box.measuredHeight / 2;
+                    currentY += box.measuredHeight + stackGap;
+                    box.enterX = 20; box.enterY = 0;
+                });
+                return;
+            }
+            let rail = 0;
+            let currentY = -safeHalfH;
             boxes.forEach(box => {
-                box.x = rightEdge - box.measuredWidth / 2;
+                if (currentY + box.measuredHeight > safeHalfH) {
+                    rail += 1;
+                    currentY = -safeHalfH;
+                }
+                box.x = (rightEdge - rail * railStep) - box.measuredWidth / 2;
                 box.y = currentY + box.measuredHeight / 2;
                 currentY += box.measuredHeight + stackGap;
                 box.enterX = 20; box.enterY = 0;

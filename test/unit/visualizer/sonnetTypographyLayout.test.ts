@@ -13,6 +13,12 @@ import {
     layoutSonnetPosterBlocks,
     type SonnetPosterBlockBox,
 } from '@/components/visualizer/sonnet/sonnetPosterBlocksLayout';
+import {
+    layoutEditorialColumn,
+    layoutQuietTableau,
+    resolveSonnetFlowGaps,
+    type SonnetFlowLayoutBox,
+} from '@/components/visualizer/sonnet/sonnetShotFlowLayouts';
 
 // test/unit/visualizer/sonnetTypographyLayout.test.ts
 // Locks the semantic hero/support hierarchy and true stacked Japanese typography.
@@ -722,13 +728,104 @@ describe('Sonnet long multi-line shot layouts', () => {
     it('keeps poster-blocks placements inside the poster canvas', () => {
         const layout = layoutFor('poster-blocks');
         layout.forEach(item => {
-            expect(Math.abs(item.x)).toBeLessThanOrEqual(WIDTH * 0.39 + 1);
-            expect(Math.abs(item.y)).toBeLessThanOrEqual(HEIGHT * 0.36 + 1);
+            expect(Math.abs(item.x)).toBeLessThanOrEqual(WIDTH * 0.42 + 1);
+            expect(Math.abs(item.y)).toBeLessThanOrEqual(HEIGHT * 0.40 + 1);
         });
         const heroes = layout.filter(item => item.role === 'hero');
         const supports = layout.filter(item => item.role === 'support');
         expect(heroes.length).toBeGreaterThan(0);
         expect(Math.min(...heroes.map(item => item.fontScale)))
             .toBeGreaterThan(Math.max(...supports.map(item => item.fontScale)));
+    });
+});
+
+// Long stacks must wrap into side columns instead of shrinking — the "text too
+// small" fix for quiet-tableau and the editorial single-rail variant.
+describe('Sonnet stack column wrapping', () => {
+    const WIDTH = 1280;
+    const HEIGHT = 720;
+
+    const flowBox = (index: number, measuredWidth: number, measuredHeight: number, isHero = false): SonnetFlowLayoutBox => ({
+        index,
+        isHero,
+        isSemiHero: false,
+        displayText: `w${index}`,
+        fontScale: 1,
+        measuredWidth,
+        measuredHeight,
+        vertical: false,
+        layoutDirection: 'horizontal',
+        rotation: 0,
+        x: 0,
+        y: 0,
+        enterX: 0,
+        enterY: 0,
+    });
+
+    const expectInSafeArea = (boxes: SonnetFlowLayoutBox[]) => {
+        boxes.forEach(box => {
+            expect(Math.abs(box.x) + box.measuredWidth / 2).toBeLessThanOrEqual(WIDTH * 0.48 + 1);
+            expect(Math.abs(box.y) + box.measuredHeight / 2).toBeLessThanOrEqual(HEIGHT * 0.46 + 1);
+        });
+    };
+
+    const expectNoBoxOverlap = (boxes: SonnetFlowLayoutBox[]) => {
+        for (let i = 0; i < boxes.length; i++) {
+            for (let j = i + 1; j < boxes.length; j++) {
+                const a = boxes[i];
+                const b = boxes[j];
+                const dx = Math.abs(a.x - b.x) - (a.measuredWidth + b.measuredWidth) / 2;
+                const dy = Math.abs(a.y - b.y) - (a.measuredHeight + b.measuredHeight) / 2;
+                expect(dx >= 0 || dy >= 0, `boxes ${i} and ${j} overlap`).toBe(true);
+            }
+        }
+    };
+
+    it('wraps the quiet tableau stack into side columns without shrinking', () => {
+        const boxes = Array.from({ length: 15 }, (_, index) => flowBox(index, 80, 120, index === 7));
+        layoutQuietTableau(
+            { boxes, heroIndex: 7, width: WIDTH, height: HEIGHT, ...resolveSonnetFlowGaps(40) },
+            0,
+        );
+
+        // First rung fits, so nothing was scaled down.
+        expect(boxes.every(box => box.fontScale === 1)).toBe(true);
+        // The tall stack actually wrapped into more than one column.
+        const distinctColumns = new Set(boxes.slice(0, 7).map(box => Math.round(box.x)));
+        expect(distinctColumns.size).toBeGreaterThan(1);
+        expectInSafeArea(boxes);
+        expectNoBoxOverlap(boxes);
+
+        // Reading order: before-hero columns march rightward, and each column
+        // reads top-to-bottom in ascending segment index.
+        const before = boxes.slice(0, 7);
+        const columns = [...new Set(before.map(box => Math.round(box.x)))].sort((a, b) => b - a);
+        const scanOrder = columns.flatMap(columnX => before
+            .filter(box => Math.round(box.x) === columnX)
+            .sort((a, b) => a.y - b.y)
+            .map(box => box.index));
+        expect(scanOrder).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    });
+
+    it('wraps the editorial single rail into leftward rails without shrinking', () => {
+        const boxes = Array.from({ length: 12 }, (_, index) => flowBox(index, 90, 120, index === 5));
+        layoutEditorialColumn(
+            { boxes, heroIndex: 5, width: WIDTH, height: HEIGHT, ...resolveSonnetFlowGaps(40) },
+            1,
+            -1,
+        );
+
+        expect(boxes.every(box => box.fontScale === 1)).toBe(true);
+        const railXs = [...new Set(boxes.map(box => Math.round(box.x)))].sort((a, b) => b - a);
+        expect(railXs.length).toBeGreaterThan(1);
+        expectInSafeArea(boxes);
+        expectNoBoxOverlap(boxes);
+
+        // Rails read right-to-left; every rail reads top-to-bottom in ascending index.
+        const scanOrder = railXs.flatMap(railX => boxes
+            .filter(box => Math.round(box.x) === railX)
+            .sort((a, b) => a.y - b.y)
+            .map(box => box.index));
+        expect(scanOrder).toEqual(boxes.map(box => box.index));
     });
 });

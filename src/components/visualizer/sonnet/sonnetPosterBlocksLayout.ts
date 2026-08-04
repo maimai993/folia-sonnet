@@ -270,11 +270,13 @@ export const layoutSonnetPosterBlocks = <T extends SonnetPosterBlockBox>(
     const gap = clamp(baseFontSize * 0.35, 16, 40);
     const chipGap = gap;
     const lineGap = gap * 1.15;
+    // Canvas stays inside the stage even at the poster camera's max zoom (~1.18),
+    // but is large enough that fallback compositions keep a readable font size.
     const canvas = {
-        x: -width * 0.39,
-        y: -height * 0.36,
-        width: width * 0.78,
-        height: height * 0.72,
+        x: -width * 0.42,
+        y: -height * 0.40,
+        width: width * 0.84,
+        height: height * 0.80,
     };
     const orientation: FlowOrientation = (seed % 2 === 0) ? 'horizontal' : 'vertical';
     // Flow u is the reading direction (screen x for rows, screen y for columns),
