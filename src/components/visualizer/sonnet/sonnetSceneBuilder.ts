@@ -17,6 +17,7 @@ import {
     type SegmentView,
 } from './sonnetTextViewBuilder';
 import { createSonnetGlitchEffect, type SonnetGlitchEffect } from './sonnetGlitchFilter';
+import { buildSonnetMeasuredBoundsDebug } from './sonnetDebug';
 
 // src/components/visualizer/sonnet/sonnetSceneBuilder.ts
 // Builds one bounded paragraph scene; playback-time mutation remains in the runtime controller.
@@ -241,6 +242,8 @@ export const buildSonnetScene = (
             shotContainer.addChild(mask);
             shotContainer.mask = mask;
         }
+        // Debug overlay stays above the text and never feeds the bounds/mask math.
+        shotContainer.addChild(buildSonnetMeasuredBoundsDebug(pixi, placements));
         
         // Poster blocks start centered before runtime tracking; other templates start on the hero word.
         const heroPlacement = placements.find(p => p.role === 'hero');
