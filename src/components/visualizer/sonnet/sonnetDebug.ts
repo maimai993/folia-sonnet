@@ -1,4 +1,14 @@
 import type { SonnetTypographyPlacement } from './sonnetTypographyLayout';
+import type { SonnetParagraphKind, SonnetShot, SonnetShotKind } from './types';
+import {
+    SONNET_THEMED_GEO_VARIANT_START,
+    SONNET_THEMED_GEO_VARIANTS,
+} from './sonnetThemedShotMg';
+import {
+    SONNET_OPEN_GEO_VARIANT_START,
+    SONNET_OPEN_GEO_VARIANTS,
+} from './sonnetOpenFrameShotMg';
+import { SONNET_ADDITIONAL_GEO_VARIANT_START } from './sonnetAdditionalShotMg';
 
 // src/components/visualizer/sonnet/sonnetDebug.ts
 // Debug-only overlays for visual verification during layout development.
@@ -43,3 +53,106 @@ export const buildSonnetMeasuredBoundsDebug = (
     });
     return layer;
 };
+
+// --- Dev overlay state channel -------------------------------------------------
+// The Pixi scene builder snapshots every shot's layout at build time and the
+// runtime publishes the active one each frame; DevDebugOverlay's Sonnet tab
+// reads this mutable store during render (dev tooling only, no reactivity).
+
+export interface SonnetDebugSegmentSnapshot {
+    text: string;
+    role: SonnetTypographyPlacement['role'];
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fontScale: number;
+    vertical: boolean;
+}
+
+export interface SonnetDebugShotInfo {
+    programSeed: string;
+    paragraphId: string;
+    paragraphKind: SonnetParagraphKind;
+    shotId: string;
+    shotKind: SonnetShotKind;
+    shotIndex: number;
+    shotCount: number;
+    lineIndices: number[];
+    startTime: number;
+    endTime: number;
+    camera: SonnetShot['camera'];
+    baseFontSize: number;
+    wordCount: number;
+    geoVariant: number | null;
+    geoVariantLabel: string | null;
+    segments: SonnetDebugSegmentSnapshot[];
+}
+
+export const sonnetDebugState: {
+    activeShot: SonnetDebugShotInfo | null;
+    paragraphIndex: number;
+} = {
+    activeShot: null,
+    paragraphIndex: -1,
+};
+
+// Human-readable label for a geo MG variant; only the themed/open ranges carry
+// real names, the core/additional ranges stay numeric.
+export const resolveSonnetGeoVariantLabel = (variant: number) => {
+    if (variant >= SONNET_OPEN_GEO_VARIANT_START) {
+        const name = SONNET_OPEN_GEO_VARIANTS[variant - SONNET_OPEN_GEO_VARIANT_START];
+        return name ? `open #${variant} ${name}` : `open #${variant}`;
+    }
+    if (variant >= SONNET_THEMED_GEO_VARIANT_START) {
+        const name = SONNET_THEMED_GEO_VARIANTS[variant - SONNET_THEMED_GEO_VARIANT_START];
+        return name ? `themed #${variant} ${name}` : `themed #${variant}`;
+    }
+    if (variant >= SONNET_ADDITIONAL_GEO_VARIANT_START) {
+        return `additional #${variant}`;
+    }
+    return `core #${variant}`;
+};
+
+// Builds the static per-shot snapshot consumed by the debug tab.
+export const createSonnetShotDebugInfo = (options: {
+    programSeed: string;
+    paragraphId: string;
+    paragraphKind: SonnetParagraphKind;
+    shot: SonnetShot;
+    shotIndex: number;
+    shotCount: number;
+    baseFontSize: number;
+    wordCount: number;
+    geoVariant: number | null;
+    placements: SonnetTypographyPlacement[];
+    segmentTexts: string[];
+}): SonnetDebugShotInfo => ({
+    programSeed: options.programSeed,
+    paragraphId: options.paragraphId,
+    paragraphKind: options.paragraphKind,
+    shotId: options.shot.id,
+    shotKind: options.shot.kind,
+    shotIndex: options.shotIndex,
+    shotCount: options.shotCount,
+    lineIndices: [...options.shot.lineIndices],
+    startTime: options.shot.startTime,
+    endTime: options.shot.endTime,
+    camera: { ...options.shot.camera },
+    baseFontSize: options.baseFontSize,
+    wordCount: options.wordCount,
+    geoVariant: options.geoVariant,
+    geoVariantLabel: options.geoVariant === null
+        ? null
+        : resolveSonnetGeoVariantLabel(options.geoVariant),
+    segments: options.placements.map(placement => ({
+        text: options.segmentTexts[placement.segmentIndex] ?? placement.displayText,
+        role: placement.role,
+        x: placement.x,
+        y: placement.y,
+        width: placement.measuredWidth,
+        height: placement.measuredHeight,
+        fontScale: placement.fontScale,
+        vertical: placement.vertical,
+    })),
+});

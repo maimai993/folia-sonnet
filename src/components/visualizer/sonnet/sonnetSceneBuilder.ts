@@ -17,7 +17,12 @@ import {
     type SegmentView,
 } from './sonnetTextViewBuilder';
 import { createSonnetGlitchEffect, type SonnetGlitchEffect } from './sonnetGlitchFilter';
-import { buildSonnetMeasuredBoundsDebug } from './sonnetDebug';
+import {
+    buildSonnetMeasuredBoundsDebug,
+    createSonnetShotDebugInfo,
+    type SonnetDebugShotInfo,
+} from './sonnetDebug';
+import { resolveSonnetGeoVariant } from './sonnetSpatialMgGeometry';
 
 // src/components/visualizer/sonnet/sonnetSceneBuilder.ts
 // Builds one bounded paragraph scene; playback-time mutation remains in the runtime controller.
@@ -27,6 +32,7 @@ export interface ShotView {
     shot: SonnetShot;
     container: import('pixi.js').Container;
     segments: SegmentView[];
+    debugInfo: SonnetDebugShotInfo;
     baseX: number;
     baseY: number;
     basePivotX: number;
@@ -244,6 +250,20 @@ export const buildSonnetScene = (
         }
         // Debug overlay stays above the text and never feeds the bounds/mask math.
         shotContainer.addChild(buildSonnetMeasuredBoundsDebug(pixi, placements));
+        const usesGeoMg = shot.kind === 'type-impact' || shot.kind === 'fragment-collage';
+        const debugInfo = createSonnetShotDebugInfo({
+            programSeed: options.programSeed,
+            paragraphId: paragraph.id,
+            paragraphKind: paragraph.kind,
+            shot,
+            shotIndex,
+            shotCount: paragraph.shots.length,
+            baseFontSize: fontSize,
+            wordCount,
+            geoVariant: usesGeoMg ? resolveSonnetGeoVariant(sceneSeed + shotIndex * 97) : null,
+            placements,
+            segmentTexts: segments.map(segment => segment.text),
+        });
         
         // Poster blocks start centered before runtime tracking; other templates start on the hero word.
         const heroPlacement = placements.find(p => p.role === 'hero');
@@ -266,6 +286,7 @@ export const buildSonnetScene = (
             shot,
             container: shotContainer,
             segments: views,
+            debugInfo,
             baseX: shotContainer.x,
             baseY: shotContainer.y,
             basePivotX: focusX,

@@ -373,20 +373,31 @@ export const layoutFragmentCollage = <T extends SonnetFlowLayoutBox>(
             supportIndex += 1;
             let candidate = angle;
             let rect: PlacedRect = { left: 0, right: 0, top: 0, bottom: 0 };
-            for (let attempt = 0; attempt < 400; attempt++) {
-                rect = {
-                    left: Math.cos(candidate) * radius - box.measuredWidth / 2,
-                    right: Math.cos(candidate) * radius + box.measuredWidth / 2,
-                    top: Math.sin(candidate) * radius * squash - box.measuredHeight / 2,
-                    bottom: Math.sin(candidate) * radius * squash + box.measuredHeight / 2,
-                };
-                if (placed.every(entry => rectSeparation(entry, rect) >= flowGap)) break;
-                candidate += 0.07;
+            // Sweep the ring for a free slot; when a full sweep finds none, step
+            // the radius outward and sweep again so crowded shots never drop a
+            // box onto an occupied spot.
+            let resolvedRadius = radius;
+            let placedClear = false;
+            for (let ring = 0; ring < 14 && !placedClear; ring += 1) {
+                for (let attempt = 0; attempt < 400; attempt++) {
+                    rect = {
+                        left: Math.cos(candidate) * resolvedRadius - box.measuredWidth / 2,
+                        right: Math.cos(candidate) * resolvedRadius + box.measuredWidth / 2,
+                        top: Math.sin(candidate) * resolvedRadius * squash - box.measuredHeight / 2,
+                        bottom: Math.sin(candidate) * resolvedRadius * squash + box.measuredHeight / 2,
+                    };
+                    if (placed.every(entry => rectSeparation(entry, rect) >= flowGap)) {
+                        placedClear = true;
+                        break;
+                    }
+                    candidate += 0.07;
+                }
+                if (!placedClear) resolvedRadius += (36 + ring * 12) * globalScale;
             }
             angle = candidate + 0.02;
             placed.push(rect);
-            box.x = heroBox.x + Math.cos(candidate) * radius;
-            box.y = heroBox.y + Math.sin(candidate) * radius * squash;
+            box.x = heroBox.x + Math.cos(candidate) * resolvedRadius;
+            box.y = heroBox.y + Math.sin(candidate) * resolvedRadius * squash;
             box.rotation = 0;
             box.layoutDirection = Math.abs(Math.cos(candidate)) >= Math.abs(Math.sin(candidate))
                 ? 'vertical'

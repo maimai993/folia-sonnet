@@ -32,6 +32,7 @@ import {
     hasSonnetCreditsMetadata,
     resolveSonnetCreditsFrame,
 } from './sonnetCredits';
+import { sonnetDebugState } from './sonnetDebug';
 
 // src/components/visualizer/sonnet/createSonnetPixiRuntime.ts
 // Owns Pixi lifecycle and mutates bounded scene views directly from absolute playback time.
@@ -572,7 +573,11 @@ export class SonnetPixiRuntime {
     }
 
     private renderFrame = () => {
-        if (this.destroyed || this.options.program.paragraphs.length === 0) return;
+        if (this.destroyed || this.options.program.paragraphs.length === 0) {
+            sonnetDebugState.activeShot = null;
+            sonnetDebugState.paragraphIndex = -1;
+            return;
+        }
         const time = this.options.currentTime.get();
         const paragraphIndex = findSonnetParagraphIndexAtTime(this.options.program, time);
         if (paragraphIndex !== this.activeParagraphIndex) {
@@ -661,6 +666,9 @@ export class SonnetPixiRuntime {
                 if (previousShot) unloadSonnetDisplayTree(previousShot.container);
                 scene.activeShotIndex = visibleShotIndex;
             }
+            // Publish the active shot so the dev overlay's Sonnet tab can inspect it.
+            sonnetDebugState.activeShot = scene.shots[visibleShotIndex]?.debugInfo ?? null;
+            sonnetDebugState.paragraphIndex = index;
 
             const isFinalScene = index === this.options.program.paragraphs.length - 1;
             const lyricAlpha = isFinalScene && hasCredits ? creditsFrame.lyricAlpha : 1;
@@ -717,6 +725,8 @@ export class SonnetPixiRuntime {
     destroy() {
         if (this.destroyed) return;
         this.destroyed = true;
+        sonnetDebugState.activeShot = null;
+        sonnetDebugState.paragraphIndex = -1;
         this.resizeObserver?.disconnect();
         this.resizeObserver = null;
         this.app.stop();

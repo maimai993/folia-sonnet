@@ -666,3 +666,69 @@ describe('Sonnet shot-kind flow layouts', () => {
         expectHierarchy(layout);
     });
 });
+
+// Regression for the reported pile-up: a long two-line English shot ("And the
+// face of the human cannonball / That I need to, I want to") used to overflow
+// poster-blocks at every global scale and fall through to an empty placement
+// list, leaving every segment stacked at the origin.
+describe('Sonnet long multi-line shot layouts', () => {
+    const WIDTH = 1280;
+    const HEIGHT = 720;
+
+    // Intl.Segmenter word granularity: words and whitespace are separate segments.
+    const tokenize = (line: string) => (line.match(/\S+|\s+/g) ?? [])
+        .map(part => segment(part, part.trim().length > 0));
+    const lines = [
+        tokenize('And the face of the human cannonball'),
+        tokenize('That I need to, I want to'),
+    ];
+    const SHOT_KINDS: SonnetShotKind[] = [
+        'editorial-column', 'type-impact', 'fragment-collage',
+        'tracking-ribbon', 'mask-reveal', 'quiet-tableau', 'poster-blocks',
+    ];
+
+    const layoutFor = (shotKind: SonnetShotKind) => resolveSonnetTypographyLayout({
+        lines,
+        shotKind,
+        paragraphKind: 'verse',
+        width: WIDTH,
+        height: HEIGHT,
+        baseFontSize: 48,
+        fontFamily: 'sans-serif',
+        fontWeight: 700,
+    }).filter(item => item.role !== 'decoration');
+
+    it('never overlaps or piles segments at the origin in any shot kind', () => {
+        SHOT_KINDS.forEach(shotKind => {
+            const layout = layoutFor(shotKind);
+            const atOrigin = layout.filter(item => Math.abs(item.x) < 1 && Math.abs(item.y) < 1);
+            // At most one box (e.g. a centered hero) may sit exactly at the origin.
+            expect(atOrigin.length, `${shotKind} piles segments at the origin`).toBeLessThanOrEqual(1);
+            for (let i = 0; i < layout.length; i++) {
+                for (let j = i + 1; j < layout.length; j++) {
+                    const a = layout[i];
+                    const b = layout[j];
+                    const dx = Math.abs(a.x - b.x) - (a.measuredWidth + b.measuredWidth) / 2;
+                    const dy = Math.abs(a.y - b.y) - (a.measuredHeight + b.measuredHeight) / 2;
+                    expect(
+                        dx >= -0.5 || dy >= -0.5,
+                        `${shotKind} overlaps "${a.displayText}" with "${b.displayText}"`,
+                    ).toBe(true);
+                }
+            }
+        });
+    });
+
+    it('keeps poster-blocks placements inside the poster canvas', () => {
+        const layout = layoutFor('poster-blocks');
+        layout.forEach(item => {
+            expect(Math.abs(item.x)).toBeLessThanOrEqual(WIDTH * 0.39 + 1);
+            expect(Math.abs(item.y)).toBeLessThanOrEqual(HEIGHT * 0.36 + 1);
+        });
+        const heroes = layout.filter(item => item.role === 'hero');
+        const supports = layout.filter(item => item.role === 'support');
+        expect(heroes.length).toBeGreaterThan(0);
+        expect(Math.min(...heroes.map(item => item.fontScale)))
+            .toBeGreaterThan(Math.max(...supports.map(item => item.fontScale)));
+    });
+});

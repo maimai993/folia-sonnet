@@ -111,8 +111,10 @@ interface FlowAttempt<T extends SonnetPosterBlockBox> {
     vTotal: number;
 }
 
-// Lays out the whole shot once at a given global scale; returns null when the
-// stack overflows the canvas so the caller can retry smaller.
+// Lays out the whole shot once at a given global scale. Always returns the
+// attempt (even when the stack overflows the canvas) so the caller can pick the
+// first fitting scale or emergency-fit the last one — boxes must never be left
+// unplaced at the origin.
 const attemptFlowLayout = <T extends SonnetPosterBlockBox>(
     boxes: T[],
     space: FlowSpace,
@@ -120,7 +122,7 @@ const attemptFlowLayout = <T extends SonnetPosterBlockBox>(
     chipGap: number,
     lineGap: number,
     seed: number,
-): FlowAttempt<T> | null => {
+): FlowAttempt<T> => {
     const items = partitionFlowItems(boxes);
     const placements: FlowPlacement<T>[] = [];
     const floats: ZoneFloat[] = [];
@@ -254,7 +256,6 @@ const attemptFlowLayout = <T extends SonnetPosterBlockBox>(
     const vTotal = placements.reduce((max, placement) => (
         Math.max(max, placement.rect.v + placement.rect.vSize)
     ), 0);
-    if (vTotal > space.v) return null;
     return { placements, vTotal };
 };
 
@@ -276,18 +277,30 @@ export const layoutSonnetPosterBlocks = <T extends SonnetPosterBlockBox>(
         height: height * 0.72,
     };
     const orientation: FlowOrientation = (seed % 2 === 0) ? 'horizontal' : 'vertical';
-    const space: FlowSpace = { orientation, u: canvas.width, v: canvas.height };
+    // Flow u is the reading direction (screen x for rows, screen y for columns),
+    // flow v the stacking direction — swap the capacities for the vertical variant.
+    const space: FlowSpace = orientation === 'horizontal'
+        ? { orientation, u: canvas.width, v: canvas.height }
+        : { orientation, u: canvas.height, v: canvas.width };
 
     // Supports are never upscaled beyond their role size; global retries only shrink.
-    let attempt: FlowAttempt<T> | null = null;
-    for (const globalScale of [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52]) {
+    let attempt = attemptFlowLayout(boxes, space, 1, chipGap, lineGap, seed);
+    for (const globalScale of [0.92, 0.84, 0.76, 0.68, 0.6, 0.52]) {
+        if (attempt.vTotal <= space.v + 0.5) break;
         attempt = attemptFlowLayout(boxes, space, globalScale, chipGap, lineGap, seed);
-        if (attempt) break;
     }
-    if (!attempt) {
-        attempt = attemptFlowLayout(boxes, space, 0.45, chipGap, lineGap, seed)
-            ?? attemptFlowLayout(boxes, space, 0.45, 0, 0, seed)
-            ?? { placements: [], vTotal: 0 };
+    // Emergency uniform fit: even when every ladder rung overflows, shrink the
+    // whole composition into the canvas instead of leaving boxes at the origin.
+    if (attempt.vTotal > space.v) {
+        const fitScale = space.v / attempt.vTotal;
+        attempt.placements.forEach(placement => {
+            placement.rect.u *= fitScale;
+            placement.rect.v *= fitScale;
+            placement.rect.uSize *= fitScale;
+            placement.rect.vSize *= fitScale;
+            placement.scale *= fitScale;
+        });
+        attempt.vTotal = space.v;
     }
 
     const vShift = Math.max(0, (space.v - attempt.vTotal) / 2);
