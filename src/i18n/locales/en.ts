@@ -1259,19 +1259,15 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
-    "v0_6_9": {
-      "intro": "Here are the new features and improvements in version 0.6.11.",
-      "sonnetVisualizer": {
-        "title": "Sonnet Lyric Visualizer",
-        "description": "A new Japanese-style lyric PV mode combines kinetic typography, camera motion, scene transitions, and configurable visual layers."
+    "v0_6_12": {
+      "intro": "Here are the new features and improvements in version 0.6.12.",
+      "sonnetLayout": {
+        "title": "Rebuilt Sonnet Layout Engine",
+        "description": "The Sonnet visualizer's layout engine has been rebuilt for more polished, balanced, and stable lyric typography."
       },
-      "replayGain": {
-        "title": "ReplayGain Loudness Balancing",
-        "description": "Apply track or album ReplayGain metadata to supported playback sources, with controls in the player, settings, and command palette."
-      },
-      "panelNavigationHint": {
-        "title": "Clearer Panel Navigation",
-        "description": "When the player panel is expanded, the back button now shows to make returning to the previous view easier."
+      "followSystemTheme": {
+        "title": "Follow System Appearance",
+        "description": "Enable this option in Settings to automatically switch between light and dark themes with your system."
       }
     },
     "v0_6_8": {

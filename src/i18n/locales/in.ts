@@ -1070,19 +1070,15 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
-    "v0_6_9": {
-      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.11.",
-      "sonnetVisualizer": {
-        "title": "Visualizer Lirik Sonnet",
-        "description": "Mode PV lirik bergaya Jepang baru memadukan tipografi kinetik, gerakan kamera, transisi adegan, dan lapisan visual yang dapat dikonfigurasi."
+    "v0_6_12": {
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.12.",
+      "sonnetLayout": {
+        "title": "Mesin Tata Letak Sonnet Baru",
+        "description": "Mesin tata letak visualizer Sonnet telah dibangun ulang untuk tipografi lirik yang lebih indah, seimbang, dan stabil."
       },
-      "replayGain": {
-        "title": "Penyeimbangan Loudness ReplayGain",
-        "description": "Terapkan metadata ReplayGain track atau album pada sumber pemutaran yang didukung, dengan kontrol di pemutar, pengaturan, dan palet perintah."
-      },
-      "panelNavigationHint": {
-        "title": "Navigasi Panel yang Lebih Jelas",
-        "description": "Saat panel pemutar diperluas, tombol kembali kini menampilkan petunjuk geser singkat agar kembali ke tampilan sebelumnya lebih mudah."
+      "followSystemTheme": {
+        "title": "Ikuti Tampilan Sistem",
+        "description": "Aktifkan opsi ini di Pengaturan untuk beralih otomatis antara tema terang dan gelap mengikuti sistem."
       }
     },
     "v0_6_8": {
