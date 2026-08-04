@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { SonnetSemanticSegment } from '@/components/visualizer/sonnet/types';
+import type { SonnetSemanticSegment, SonnetShotKind } from '@/components/visualizer/sonnet/types';
+import type { SonnetTypographyPlacement } from '@/components/visualizer/sonnet/sonnetTypographyLayout';
 import {
     findSonnetHeroSegmentIndex,
     findSonnetSemiHeroSegmentIndex,
@@ -409,5 +410,259 @@ describe('Sonnet poster blocks zone flow', () => {
         ];
         layoutSonnetPosterBlocks(boxes, 1280, 720, 40, 2);
         expect(Math.abs(boxes[0].x)).toBeLessThan(1);
+    });
+});
+
+
+describe('Sonnet shot-kind flow layouts', () => {
+    const WIDTH = 1280;
+    const HEIGHT = 720;
+    const BASE_FONT_SIZE = 40;
+    // Same constants as resolveSonnetFlowGaps(40).
+    const FLOW_GAP = 16;
+    const STACK_GAP = 24;
+
+    const layoutOf = (words: string[], shotKind: SonnetShotKind) => resolveSonnetTypographyLayout({
+        lines: [words.map(text => segment(text))],
+        shotKind,
+        paragraphKind: 'verse',
+        width: WIDTH,
+        height: HEIGHT,
+        baseFontSize: BASE_FONT_SIZE,
+        fontFamily: 'sans-serif',
+        fontWeight: 700,
+    }).filter(item => item.role !== 'decoration');
+
+    const byIndex = (layout: SonnetTypographyPlacement[]) => (
+        new Map(layout.map(item => [item.segmentIndex, item]))
+    );
+
+    const rectOf = (item: SonnetTypographyPlacement) => ({
+        left: item.x - item.measuredWidth / 2,
+        right: item.x + item.measuredWidth / 2,
+        top: item.y - item.measuredHeight / 2,
+        bottom: item.y + item.measuredHeight / 2,
+    });
+
+    // Negative when the rects overlap, otherwise the distance between them.
+    const separation = (first: SonnetTypographyPlacement, second: SonnetTypographyPlacement) => {
+        const a = rectOf(first);
+        const b = rectOf(second);
+        return Math.max(
+            Math.max(a.left - b.right, b.left - a.right),
+            Math.max(a.top - b.bottom, b.top - a.bottom),
+        );
+    };
+
+    const expectNoOverlap = (layout: SonnetTypographyPlacement[], minGap: number) => {
+        for (let i = 0; i < layout.length; i++) {
+            for (let j = i + 1; j < layout.length; j++) {
+                expect(separation(layout[i], layout[j])).toBeGreaterThanOrEqual(minGap);
+            }
+        }
+    };
+
+    const expectHierarchy = (layout: SonnetTypographyPlacement[]) => {
+        const heroes = layout.filter(item => item.role === 'hero');
+        const semiHeroes = layout.filter(item => item.role === 'semi-hero');
+        const supports = layout.filter(item => item.role === 'support');
+        if (semiHeroes.length > 0) {
+            expect(Math.min(...heroes.map(item => item.fontScale)))
+                .toBeGreaterThan(Math.max(...semiHeroes.map(item => item.fontScale)));
+            expect(Math.min(...semiHeroes.map(item => item.fontScale)))
+                .toBeGreaterThan(Math.max(...supports.map(item => item.fontScale)));
+        } else if (supports.length > 0) {
+            expect(Math.min(...heroes.map(item => item.fontScale)))
+                .toBeGreaterThan(Math.max(...supports.map(item => item.fontScale)));
+        }
+    };
+
+    it('reads editorial side columns right-to-left in timeline order (variant 0)', () => {
+        const layout = layoutOf(['春', 'の', '風', 'が', '吹', 'いて', '英雄核心', '走'], 'editorial-column');
+        const items = byIndex(layout);
+        const hero = items.get(6)!;
+
+        // Earlier words occupy the column right of the pillar, later words the left one.
+        for (let i = 0; i < 6; i++) expect(items.get(i)!.x).toBeGreaterThan(hero.x);
+        expect(items.get(7)!.x).toBeLessThan(hero.x);
+        // Inside a column, later indices sit lower (top-to-bottom reading).
+        for (let i = 0; i < 5; i++) expect(items.get(i)!.y).toBeLessThan(items.get(i + 1)!.y);
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+        expectHierarchy(layout);
+    });
+
+    it('aligns the magazine rail flush-right in exact index order (variant 1)', () => {
+        const layout = layoutOf(['明かり', 'に', 'あなたへ'], 'editorial-column');
+        const items = byIndex(layout);
+
+        const rightEdges = layout.map(item => rectOf(item).right);
+        rightEdges.forEach(edge => expect(edge).toBeCloseTo(rightEdges[0], 6));
+        expect(items.get(0)!.y).toBeLessThan(items.get(1)!.y);
+        expect(items.get(1)!.y).toBeLessThan(items.get(2)!.y);
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+    });
+
+    it('puts a kicker row above the header and paired rows below it (variant 2)', () => {
+        const layout = layoutOf(
+            ['導', 'き', 'の', '詞', 'を', '英雄主詞', '置く', '音', '声'],
+            'editorial-column',
+        );
+        const items = byIndex(layout);
+        const hero = items.get(5)!;
+        const heroRect = rectOf(hero);
+
+        // Kicker: earlier words sit above the hero, left-to-right in index order.
+        for (let i = 0; i < 5; i++) {
+            expect(rectOf(items.get(i)!).bottom).toBeLessThanOrEqual(heroRect.top + 1e-6);
+            if (i > 0) expect(items.get(i)!.x).toBeGreaterThan(items.get(i - 1)!.x);
+        }
+        // Later words pair up row-by-row below the hero.
+        for (let i = 6; i < 9; i++) {
+            expect(rectOf(items.get(i)!).top).toBeGreaterThanOrEqual(heroRect.bottom - 1e-6);
+        }
+        expect(rectOf(items.get(6)!).top).toBeCloseTo(rectOf(items.get(7)!).top, 6);
+        expect(items.get(6)!.x).toBeLessThan(items.get(7)!.x);
+        expect(rectOf(items.get(8)!).top)
+            .toBeGreaterThanOrEqual(rectOf(items.get(6)!).bottom + STACK_GAP * 0.9);
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+        expectHierarchy(layout);
+    });
+
+    it('spaces double hero lines by their real heights (variant 3)', () => {
+        const layout = layoutOf(['音', 'が', '英雄一', '重', 'ね', '英雄二', '響'], 'editorial-column');
+        const items = byIndex(layout);
+        expect(layout.filter(item => item.role === 'hero')).toHaveLength(2);
+
+        const line1 = [0, 1, 2].map(index => items.get(index)!);
+        const line2 = [3, 4, 5, 6].map(index => items.get(index)!);
+        line1.forEach(item => expect(item.y).toBe(line1[0].y));
+        line2.forEach(item => expect(item.y).toBe(line2[0].y));
+        expect(line1[0].y).toBeLessThan(line2[0].y);
+        const line1Bottom = Math.max(...line1.map(item => rectOf(item).bottom));
+        const line2Top = Math.min(...line2.map(item => rectOf(item).top));
+        expect(line2Top - line1Bottom).toBeGreaterThanOrEqual(STACK_GAP * 0.9);
+        for (let i = 1; i < line1.length; i++) expect(line1[i].x).toBeGreaterThan(line1[i - 1].x);
+        for (let i = 1; i < line2.length; i++) expect(line2[i].x).toBeGreaterThan(line2[i - 1].x);
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+    });
+
+    it('floats the logo badge pillar inside a zone flow (variant 4)', () => {
+        const layout = layoutOf(
+            ['そ', 'の', '風', 'が', '英雄主詞', 'を', '戴', 'く'],
+            'editorial-column',
+        );
+        const items = byIndex(layout);
+        const hero = items.get(4)!;
+        const heroRect = rectOf(hero);
+        expect(hero.layoutDirection).toBe('vertical');
+
+        // Earlier words take rows fully above the pillar.
+        for (let i = 0; i < 4; i++) {
+            expect(rectOf(items.get(i)!).bottom).toBeLessThanOrEqual(heroRect.top + 1e-6);
+        }
+        // Later words wrap beside the pillar without touching it.
+        for (let i = 5; i < 8; i++) {
+            expect(rectOf(items.get(i)!).left).toBeGreaterThanOrEqual(heroRect.right + FLOW_GAP * 0.9);
+        }
+        // Supports scan in timeline order: later rows lower, same row further right.
+        const supports = [0, 1, 2, 3, 5, 6, 7].map(index => items.get(index)!);
+        for (let i = 1; i < supports.length; i++) {
+            const sameRow = Math.abs(rectOf(supports[i]).top - rectOf(supports[i - 1]).top) <= 1;
+            if (sameRow) expect(supports[i].x).toBeGreaterThan(supports[i - 1].x);
+            else expect(supports[i].y).toBeGreaterThan(supports[i - 1].y);
+        }
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+    });
+
+    it('keeps the tracking ribbon on one baseline in strict reading order', () => {
+        const layout = layoutOf(['駆', 'け', '抜', 'け', '英雄主詞', 'る', '風', '音'], 'tracking-ribbon');
+        const items = byIndex(layout);
+
+        const bottoms = layout.map(item => rectOf(item).bottom);
+        bottoms.forEach(bottom => expect(bottom).toBeCloseTo(bottoms[0], 6));
+        for (let i = 1; i < layout.length; i++) {
+            expect(items.get(i)!.x).toBeGreaterThan(items.get(i - 1)!.x);
+            expect(rectOf(items.get(i)!).left - rectOf(items.get(i - 1)!).right)
+                .toBeGreaterThanOrEqual(FLOW_GAP * 0.9);
+        }
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+    });
+
+    it('orbits collage fragments clockwise in timeline order without overlap', () => {
+        const layout = layoutOf(['星', 'が', '巡', 'る', '英雄主詞', '夜', '音'], 'fragment-collage');
+        const items = byIndex(layout);
+        const hero = items.get(4)!;
+        expect(Math.abs(hero.x)).toBeLessThan(1);
+        expect(Math.abs(hero.y)).toBeLessThan(1);
+
+        // Unwrapped orbit angles grow strictly with the segment index.
+        const supportOrder = [0, 1, 2, 3, 5, 6].map(index => items.get(index)!);
+        let previousAngle = Math.atan2(supportOrder[0].y, supportOrder[0].x);
+        for (let i = 1; i < supportOrder.length; i++) {
+            let angle = Math.atan2(supportOrder[i].y, supportOrder[i].x);
+            while (angle <= previousAngle) angle += Math.PI * 2;
+            expect(angle).toBeGreaterThan(previousAngle);
+            previousAngle = angle;
+        }
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+    });
+
+    it('keeps the cross bands in scan order equal to timeline order', () => {
+        const words = ['愛', 'を', '懐', 'い', 'て', '理想', 'を', '号', 'ん', 'だ'];
+        const layout = layoutOf(words, 'type-impact');
+        const items = byIndex(layout);
+        const hero = items.get(5)!;
+        const heroRect = rectOf(hero);
+
+        // Top column reads downward, left/right rows read left-to-right,
+        // bottom column reads downward — all ascending in segment index.
+        expect(items.get(0)!.y).toBeLessThan(items.get(1)!.y);
+        expect(rectOf(items.get(1)!).bottom).toBeLessThanOrEqual(heroRect.top + 1e-6);
+        expect(items.get(2)!.x).toBeLessThan(items.get(3)!.x);
+        expect(items.get(3)!.x).toBeLessThan(items.get(4)!.x);
+        expect(rectOf(items.get(4)!).right).toBeLessThanOrEqual(heroRect.left + 1e-6);
+        expect(items.get(6)!.x).toBeLessThan(items.get(7)!.x);
+        expect(rectOf(items.get(6)!).left).toBeGreaterThanOrEqual(heroRect.right - 1e-6);
+        expect(items.get(8)!.y).toBeLessThan(items.get(9)!.y);
+        expect(rectOf(items.get(8)!).top).toBeGreaterThanOrEqual(heroRect.bottom - 1e-6);
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+    });
+
+    it('measures the mask-reveal hero column exactly like the glyph renderer', () => {
+        const layout = layoutOf(['光', 'の', '英雄主詞', 'へ'], 'mask-reveal');
+        const hero = layout.find(item => item.role === 'hero')!;
+
+        expect(hero.vertical).toBe(true);
+        const renderFontSize = BASE_FONT_SIZE * hero.fontScale;
+        // Vertical glyphs advance fontSize * 0.9 down the column (sonnetGlyphLayout).
+        expect(hero.measuredHeight).toBeCloseTo(4 * renderFontSize * 0.9, 0);
+    });
+
+    it('fits long shots with one global scale while keeping the hierarchy', () => {
+        const words = [
+            'あ', 'い', 'う', 'え', 'お', 'か', '英雄主詞句',
+            'き', 'く', 'け', 'こ', '副重点', 'さ', 'し',
+        ];
+        const layout = layoutOf(words, 'type-impact');
+
+        layout.forEach(item => {
+            expect(Math.abs(item.x) + item.measuredWidth / 2).toBeLessThanOrEqual(WIDTH * 0.48 + 1);
+            expect(Math.abs(item.y) + item.measuredHeight / 2).toBeLessThanOrEqual(HEIGHT * 0.46 + 1);
+        });
+        expectHierarchy(layout);
+        // Supports only shrink under the global retry, never upscale.
+        expect(layout.filter(item => item.role === 'support')
+            .every(item => item.fontScale <= 1.5 + 1e-6)).toBe(true);
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+    });
+
+    it('keeps the quiet tableau stack monotone and separated', () => {
+        const layout = layoutOf(['傷', '付け', '合う'], 'quiet-tableau');
+        const items = byIndex(layout);
+
+        expect(items.get(0)!.y).toBeLessThan(items.get(1)!.y);
+        expect(items.get(1)!.y).toBeLessThan(items.get(2)!.y);
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+        expectHierarchy(layout);
     });
 });

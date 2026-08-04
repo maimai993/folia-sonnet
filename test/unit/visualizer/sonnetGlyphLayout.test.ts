@@ -28,6 +28,8 @@ const placement: SonnetTypographyPlacement = {
     displayText: 'あ\nな\nた',
     role: 'hero',
     fontScale: 1,
+    measuredWidth: 60,
+    measuredHeight: 162,
     x: 120,
     y: 80,
     rotation: 0,
