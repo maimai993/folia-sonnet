@@ -377,8 +377,9 @@ export class SonnetPixiRuntime {
                 const last = seg.glyphs[seg.glyphs.length - 1];
                 
                 // Dampen the tracking distance to prevent the camera from advancing too fast
-                // and pushing settled text off the screen edge.
-                const trackingFactor = 0.35; 
+                // and pushing settled text off the screen edge. Raised alongside the closer
+                // base zoom so the current word stays near the middle of the frame.
+                const trackingFactor = 0.5;
                 const segCenterX = (first.baseX + last.baseX) / 2;
                 const segCenterY = (first.baseY + last.baseY) / 2;
                 const applyFactor = (exactX: number, exactY: number) => ({
@@ -495,6 +496,18 @@ export class SonnetPixiRuntime {
                     const eased = easeSonnetInOut(guideProgress);
                     guide.container.alpha = Math.sin(eased * Math.PI) * guide.maxAlpha;
                     guide.container.scale.set(0.76 + eased * 0.24);
+                }
+            }
+
+            // Decorative open frames share the 文字浮标 (showFixedGeo) toggle.
+            const frameDecor = segmentView.frameDecor;
+            if (frameDecor) {
+                const frameVisible = this.options.tuning.showFixedGeo && !this.options.tuning.showOnlyText;
+                frameDecor.container.visible = frameVisible;
+                if (frameVisible) {
+                    frameDecor.update(clamp01(
+                        (time - frameDecor.startTime) / Math.max(0.001, frameDecor.endTime - frameDecor.startTime),
+                    ));
                 }
             }
 

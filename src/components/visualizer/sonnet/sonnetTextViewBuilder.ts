@@ -7,6 +7,7 @@ import { hashSonnetSeed } from './sonnetRandom';
 import { buildSonnetStaffView } from './sonnetStaffView';
 import { buildSonnetTextFixedGeo } from './sonnetTextFixedGeo';
 import { createSonnetGuide, type SonnetGuideView } from './sonnetGuides';
+import { buildSonnetFrameDecor, resolveSonnetFrameDecorSpec, type SonnetFrameDecorView } from './sonnetFrameDecor';
 import type { SonnetSemanticSegment } from './types';
 import {
     isSonnetEmphasisRole,
@@ -51,6 +52,7 @@ export interface SegmentView {
     vertical: boolean;
     timingPhase: number;
     guide: SonnetGuideView;
+    frameDecor?: SonnetFrameDecorView | null;
     glyphs: GlyphView[];
 }
 
@@ -253,15 +255,19 @@ export const buildSonnetTextView = (
     });
 
 
-    // Randomized background geometry accompanying specific text segments
+    // Randomized background geometry accompanying specific text segments.
+    // Kept rarer than before and mutually exclusive with the frame decor so the
+    // two outline-style layers never stack on the same segment.
     const isChorusParagraph = options.paragraphKind === 'chorus';
     const textSeed = segment.text.split('').reduce((a, b) => a + b.charCodeAt(0), 0) + options.segmentIndex * 13;
     const isChorusEffect = isChorusParagraph || ((textSeed % 100) < 35);
-    const shapeThreshold = isChorusEffect ? 40 : 25; // Higher chance in chorus effect
+    const shapeThreshold = isChorusEffect ? 26 : 15; // Higher chance in chorus effect
+    const hasFrameDecor = resolveSonnetFrameDecorSpec(segment).applied;
     const shouldAddBgShape = options.showFixedGeo
         && (textSeed % 100) < shapeThreshold
         && !isDecoration
         && segment.isWordLike
+        && !hasFrameDecor
         && glyphs.length > 0;
 
     if (shouldAddBgShape) {
@@ -311,6 +317,20 @@ export const buildSonnetTextView = (
     if (!isDecoration) {
         options.guideLayer.addChild(guide.container);
     }
+
+    // Decorative open frame (30% of segments), kept behind the glyphs.
+    const frameDecor = buildSonnetFrameDecor(pixi, {
+        segment,
+        placement,
+        theme: options.theme,
+        fontSize,
+        shotStartTime: options.shotStartTime,
+        shotEndTime: options.shotEndTime,
+        firstGlyphStartTime: glyphs.find(glyph => glyph.isTextGlyph !== false)?.startTime
+            ?? segment.startTime,
+    });
+    if (frameDecor) options.textLayer.addChildAt(frameDecor.container, 0);
+
     return {
         segmentIndex: options.segmentIndex,
         displayText: segment.text,
@@ -324,6 +344,7 @@ export const buildSonnetTextView = (
         vertical: placement.vertical,
         timingPhase: placement.timingPhase,
         guide,
+        frameDecor,
         glyphs,
     };
 };

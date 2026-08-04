@@ -164,6 +164,11 @@ const buildShots = (
         }
         lastKind = shotKind;
         const random = hashSonnetSeed(`${seed}:${paragraphIndex}:${shotIndex}:camera`);
+        const zoomRandom = ((random >>> 16) & 255) / 255;
+        // Medium close-up bias: framing should feel intimate with the current word;
+        // only composition-first layouts (poster zones, calm tableau) stay wider.
+        const zoomBase = shotKind === 'poster-blocks' ? 1.02 : shotKind === 'quiet-tableau' ? 1.12 : 1.22;
+        const zoomSpan = shotKind === 'poster-blocks' ? 0.16 : shotKind === 'quiet-tableau' ? 0.2 : 0.26;
         return {
             id: `p${paragraphIndex}-s${shotIndex}`,
             kind: shotKind,
@@ -174,7 +179,7 @@ const buildShots = (
             camera: {
                 x: ((random & 255) / 255 - 0.5) * 0.18,
                 y: (((random >>> 8) & 255) / 255 - 0.5) * 0.14,
-                zoom: 0.92 + ((random >>> 16) & 255) / 255 * 0.2,
+                zoom: zoomBase + zoomRandom * zoomSpan,
                 rotation: (((random >>> 24) & 255) / 255 - 0.5) * 0.08,
             },
         };
