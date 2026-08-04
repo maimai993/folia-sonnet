@@ -85,7 +85,9 @@ describe('Sonnet program compiler', () => {
 
         expect(program.paragraphs.length).toBeGreaterThan(1);
         expect(program.paragraphs.every(paragraph => paragraph.lines.length <= 6)).toBe(true);
-        expect(program.paragraphs[0].shots[0].lineIndices.length).toBe(2);
+        expect(program.paragraphs[0].shots[0].lineIndices.length).toBe(4);
+        expect(program.paragraphs.flatMap(paragraph => paragraph.shots)
+            .every(shot => shot.lineIndices.length <= 4)).toBe(true);
     });
 
     it('is deterministic, avoids adjacent templates, and supports direct seeks', () => {

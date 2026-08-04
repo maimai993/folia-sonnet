@@ -1,3 +1,4 @@
+import type { Theme } from '../../../types';
 import type { SonnetShot, SonnetShotKind } from './types';
 import type { SonnetSegmentRole } from './sonnetTypographyLayout';
 
@@ -36,6 +37,10 @@ export const resolveCubicBezier = (
 
 export const easeSonnetInOut = (value: number) => resolveCubicBezier(0.65, 0, 0.35, 1, value);
 export const easeSonnetEnter = (value: number) => resolveCubicBezier(0.22, 1, 0.36, 1, value);
+
+export const resolveSonnetAnimationScale = (theme: Theme) => (
+    theme.animationIntensity === 'calm' ? 0.65 : theme.animationIntensity === 'chaotic' ? 1.35 : 1
+);
 
 // 高张力 PV 风格缓动
 export const easeSonnetExpoOut = (value: number) => (

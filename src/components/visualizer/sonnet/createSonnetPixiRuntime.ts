@@ -7,6 +7,7 @@ import {
     clamp01,
     easeSonnetInOut,
     resolveSegmentProgress,
+    resolveSonnetAnimationScale,
     resolveSonnetFocusWeights,
     resolveSonnetSmoothedCameraFocus,
     resolveShotMotionFrame,
@@ -60,10 +61,6 @@ export interface SonnetRuntimeOptions {
     songAlbum?: string | null;
     signal?: AbortSignal;
 }
-
-const animationScale = (theme: Theme) => (
-    theme.animationIntensity === 'calm' ? 0.65 : theme.animationIntensity === 'chaotic' ? 1.35 : 1
-);
 
 export class SonnetPixiRuntime {
     private readonly sceneCache = new Map<number, SceneView>();
@@ -336,8 +333,8 @@ export class SonnetPixiRuntime {
 
     private updateShot(view: ShotView, time: number, width: number, height: number, shakeIntensity: number) {
         const progress = resolveShotProgress(view.shot, time);
-        const motion = this.options.tuning.typographyMotion * animationScale(this.options.theme);
-        const camera = this.options.tuning.cameraIntensity * animationScale(this.options.theme);
+        const motion = this.options.tuning.typographyMotion * resolveSonnetAnimationScale(this.options.theme);
+        const camera = this.options.tuning.cameraIntensity * resolveSonnetAnimationScale(this.options.theme);
         const cameraFrame = resolveShotMotionFrame(view.shot.kind, progress);
 
         // Add a slow continuous pan during the time gap to prevent the scene from looking frozen

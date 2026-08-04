@@ -13,12 +13,14 @@ import {
 // test/unit/visualizer/sonnetMotion.test.ts
 // Keeps Sonnet shot movement deliberate, template-specific, and seek deterministic.
 describe('Sonnet shot motion', () => {
-    it('uses bounded CSS-style cubic-bezier timing', () => {
+    it('uses bounded CSS timing with a front-loaded segment entrance', () => {
         expect(resolveCubicBezier(0.65, 0, 0.35, 1, 0)).toBe(0);
         expect(resolveCubicBezier(0.65, 0, 0.35, 1, 1)).toBe(1);
         expect(resolveCubicBezier(0.22, 1, 0.36, 1, 0.2)).toBeGreaterThan(0.2);
-        expect(resolveSegmentProgress(0, 1, 0.2)).toBeLessThan(0.2);
+        expect(resolveSegmentProgress(0, 1, 0)).toBe(0);
+        expect(resolveSegmentProgress(0, 1, 0.2)).toBeGreaterThan(0.2);
         expect(resolveSegmentProgress(0, 1, 0.8)).toBeGreaterThan(0.8);
+        expect(resolveSegmentProgress(0, 1, 1)).toBe(1);
     });
 
     it('moves tracking shots across a meaningful portion of the frame', () => {

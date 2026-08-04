@@ -47,9 +47,7 @@ export const buildSonnetGlyphLayout = (
         placement.vertical ? fontSize * 0.9 : Math.max(fontSize * 0.2, measureGlyph(item.char))
     ));
     const totalAdvance = advances.reduce((sum, advance) => sum + advance, 0);
-    const shotDuration = Math.max(0.001, motionWindow.endTime - motionWindow.startTime);
     const motionDuration = resolveSonnetGlyphMotionDuration(motionWindow);
-    const startSpan = Math.max(0, shotDuration - motionDuration);
     let cursor = -totalAdvance / 2;
     return graphemes.map((grapheme, index) => {
         const advance = advances[index];

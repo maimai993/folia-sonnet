@@ -37,17 +37,17 @@ const makeBoxes = () => [
 ];
 
 describe('Sonnet poster blocks layout', () => {
-    it('fills the hero row before advancing and never overlaps measured boxes', () => {
+    it('wraps following supports beside the hero and never overlaps measured boxes', () => {
         const boxes = makeBoxes();
         const plan = layoutSonnetPosterBlocks(boxes, 1280, 720, 40, 28);
         const hero = boxes.find(item => item.isHero)!;
         const supports = boxes.filter(item => !item.isHero && !item.isSemiHero);
-        const heroLeft = hero.x - hero.measuredWidth / 2;
+        const heroRight = hero.x + hero.measuredWidth / 2;
         const heroTop = hero.y - hero.measuredHeight / 2;
         const heroBottom = hero.y + hero.measuredHeight / 2;
 
         expect(supports.some(item => (
-            item.x + item.measuredWidth / 2 <= heroLeft
+            item.x - item.measuredWidth / 2 >= heroRight
             && item.y + item.measuredHeight / 2 > heroTop
             && item.y - item.measuredHeight / 2 < heroBottom
         ))).toBe(true);

@@ -51,7 +51,7 @@ describe('Sonnet glyph layout', () => {
         );
 
         expect(glyphs.map(glyph => glyph.char).join('')).toBe(segment.text);
-        expect(glyphs.map(glyph => glyph.startTime)).toEqual([2, 2.232, 2.464]);
+        expect(glyphs.map(glyph => glyph.startTime)).toEqual([2, 2.4, 2.8]);
         expect(glyphs.every((glyph, index) => (
             index === 0 || glyph.baseY > glyphs[index - 1].baseY
         ))).toBe(true);

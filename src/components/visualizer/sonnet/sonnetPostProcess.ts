@@ -1,4 +1,5 @@
 import type { SonnetTuning, Theme } from '../../../types';
+import { resolveSonnetAnimationScale } from './sonnetMotion';
 
 // src/components/visualizer/sonnet/sonnetPostProcess.ts
 // Builds PV style Post Processing (Noise, Color shifts, high contrast)
@@ -18,9 +19,10 @@ export const resolveSonnetPostProcessProfile = (
     staticMode: boolean,
 ): SonnetPostProcessProfile => {
     if (staticMode) return { glowStrength: 0, glowAlpha: 0, noise: 0, contrast: 1, glitchIntensity: 0 };
+    const motion = tuning.typographyMotion * resolveSonnetAnimationScale(theme);
     return {
-        glowStrength: (2.8 + tuning.typographyMotion * 1.8),
-        glowAlpha: Math.min(0.62, (0.28 + tuning.typographyMotion * 0.12)),
+        glowStrength: 2.8 + motion * 1.8,
+        glowAlpha: Math.min(0.62, 0.28 + motion * 0.12),
         noise: 0, // Removed noise per user request
         contrast: 1.2, // High contrast
         glitchIntensity: 1, // Used during transitions
