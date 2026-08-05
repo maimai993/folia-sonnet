@@ -8,6 +8,8 @@ import {
     easeSonnetInOut,
     resolveSegmentProgress,
     resolveSonnetAnimationScale,
+    resolveSonnetBreathWeight,
+    resolveSonnetCameraBreath,
     resolveSonnetFocusWeights,
     resolveSonnetSmoothedCameraFocus,
     resolveShotMotionFrame,
@@ -364,6 +366,21 @@ export class SonnetPixiRuntime {
         let trackSegments = view.segments.filter(s => s.role !== 'decoration' && s.trackingGlyphs.length > 0);
         if (trackSegments.length === 0) {
             trackSegments = view.segments.filter(s => s.trackingGlyphs.length > 0);
+        }
+
+        // Layer a deterministic breathing float once the lyric reveal completes, so the
+        // frame never goes fully static while the shot holds or drifts through a gap.
+        const revealDoneTime = trackSegments.length > 0
+            ? Math.max(...trackSegments.map(segment => segment.trackingGlyphs.at(-1)?.startTime ?? view.shot.endTime))
+            : view.shot.endTime;
+        const breathWeight = resolveSonnetBreathWeight(time, revealDoneTime);
+        if (breathWeight > 0) {
+            const breathPhase = (hashSonnetSeed(view.shot.id) % 1024) / 1024 * Math.PI * 2;
+            const breath = resolveSonnetCameraBreath(time, breathPhase);
+            cameraFrame.x += breath.x * breathWeight;
+            cameraFrame.y += breath.y * breathWeight;
+            cameraFrame.scale += breath.scale * breathWeight;
+            cameraFrame.rotation += breath.rotation * breathWeight;
         }
 
         let currentFocusX = view.basePivotX;

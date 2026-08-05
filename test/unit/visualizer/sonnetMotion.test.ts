@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+    SONNET_CAMERA_BREATH_MAX_OFFSET,
+    SONNET_CAMERA_BREATH_MAX_ROTATION,
+    SONNET_CAMERA_BREATH_MAX_SCALE,
     resolveCubicBezier,
     resolveSegmentProgress,
+    resolveSonnetBreathWeight,
+    resolveSonnetCameraBreath,
     resolveSonnetFocusWeights,
     resolveSonnetSmoothedCameraFocus,
     resolveSonnetSegmentDepth,
@@ -9,6 +14,17 @@ import {
     resolveShotMotionFrame,
     resolveShotPathProgress,
 } from '@/components/visualizer/sonnet/sonnetMotion';
+import type { SonnetShotKind } from '@/components/visualizer/sonnet/types';
+
+const ALL_SHOT_KINDS: SonnetShotKind[] = [
+    'editorial-column',
+    'type-impact',
+    'fragment-collage',
+    'tracking-ribbon',
+    'mask-reveal',
+    'poster-blocks',
+    'quiet-tableau',
+];
 
 // test/unit/visualizer/sonnetMotion.test.ts
 // Keeps Sonnet shot movement deliberate, template-specific, and seek deterministic.
@@ -46,11 +62,54 @@ describe('Sonnet shot motion', () => {
             .toEqual(resolveShotMotionFrame('fragment-collage', 0.43));
     });
 
-    it('holds editorial composition between its entrance and exit beats', () => {
-        expect(resolveShotPathProgress('editorial-column', 0.3)).toBe(0.3);
-        expect(resolveShotPathProgress('editorial-column', 0.65)).toBe(0.3);
-        expect(resolveShotPathProgress('tracking-ribbon', 0.65))
-            .toBeGreaterThan(resolveShotPathProgress('tracking-ribbon', 0.3));
+    it('keeps every shot path drifting without a dead plateau', () => {
+        ALL_SHOT_KINDS.forEach(kind => {
+            expect(resolveShotPathProgress(kind, 0)).toBe(0);
+            let previous = 0;
+            for (let step = 1; step <= 40; step += 1) {
+                const next = resolveShotPathProgress(kind, step / 40);
+                expect(next).toBeGreaterThan(previous);
+                previous = next;
+            }
+            expect(previous).toBe(1);
+        });
+    });
+
+    it('front-loads the entrance and slows down for the shot handoff', () => {
+        const entranceDelta = resolveShotPathProgress('editorial-column', 0.09)
+            - resolveShotPathProgress('editorial-column', 0);
+        const midDelta = resolveShotPathProgress('editorial-column', 0.5)
+            - resolveShotPathProgress('editorial-column', 0.41);
+        const tailDelta = resolveShotPathProgress('editorial-column', 1)
+            - resolveShotPathProgress('editorial-column', 0.99);
+
+        expect(entranceDelta).toBeGreaterThan(midDelta);
+        expect(midDelta).toBeGreaterThan(tailDelta);
+        expect(tailDelta).toBeGreaterThan(0);
+    });
+
+    it('keeps camera breath deterministic and within visibility-safe caps', () => {
+        for (const phase of [0, 1.3, 4.2]) {
+            for (let step = 0; step <= 100; step += 1) {
+                const time = step * 0.37;
+                const breath = resolveSonnetCameraBreath(time, phase);
+                expect(breath).toEqual(resolveSonnetCameraBreath(time, phase));
+                expect(Math.abs(breath.x)).toBeLessThanOrEqual(SONNET_CAMERA_BREATH_MAX_OFFSET + 1e-9);
+                expect(Math.abs(breath.y)).toBeLessThanOrEqual(SONNET_CAMERA_BREATH_MAX_OFFSET + 1e-9);
+                expect(Math.abs(breath.scale)).toBeLessThanOrEqual(SONNET_CAMERA_BREATH_MAX_SCALE + 1e-9);
+                expect(Math.abs(breath.rotation)).toBeLessThanOrEqual(SONNET_CAMERA_BREATH_MAX_ROTATION + 1e-9);
+            }
+        }
+    });
+
+    it('ramps the breath weight in only after the lyric reveal completes', () => {
+        expect(resolveSonnetBreathWeight(5, 8)).toBe(0);
+        expect(resolveSonnetBreathWeight(8, 8)).toBe(0);
+        const midRamp = resolveSonnetBreathWeight(8.6, 8);
+        expect(midRamp).toBeGreaterThan(0);
+        expect(midRamp).toBeLessThan(1);
+        expect(resolveSonnetBreathWeight(9.2, 8)).toBe(1);
+        expect(resolveSonnetBreathWeight(30, 8)).toBe(1);
     });
 
     it('keeps camera focus normalized through lyric gaps and after the final glyph', () => {
