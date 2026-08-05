@@ -97,6 +97,22 @@ export interface SonnetFrameDecorOptions {
     firstGlyphStartTime: number;
 }
 
+// Restores the local text dimensions before the frame container applies its rotation.
+export const resolveSonnetFrameLocalDimensions = (
+    placement: Pick<SonnetTypographyPlacement, 'measuredWidth' | 'measuredHeight' | 'rotation'>,
+) => {
+    const quarterTurns = Math.round(placement.rotation / (Math.PI / 2));
+    const snappedRotation = quarterTurns * (Math.PI / 2);
+    const isOddQuarterTurn = (
+        Math.abs(placement.rotation - snappedRotation) < 1e-6
+        && Math.abs(quarterTurns % 2) === 1
+    );
+
+    return isOddQuarterTurn
+        ? { width: placement.measuredHeight, height: placement.measuredWidth }
+        : { width: placement.measuredWidth, height: placement.measuredHeight };
+};
+
 // Builds the frame layer for one segment, or null when the segment draws no frame.
 export const buildSonnetFrameDecor = (
     pixi: PixiModule,
@@ -108,9 +124,10 @@ export const buildSonnetFrameDecor = (
 
     const { placement, fontSize } = options;
     const pad = clamp(fontSize * 0.22, 8, 20);
+    const frameDimensions = resolveSonnetFrameLocalDimensions(placement);
     const geometry: FrameGeometry = {
-        halfW: placement.measuredWidth / 2 + pad,
-        halfH: placement.measuredHeight / 2 + pad,
+        halfW: frameDimensions.width / 2 + pad,
+        halfH: frameDimensions.height / 2 + pad,
         cornerGap: 0,
         pad,
     };

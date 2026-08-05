@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SonnetSemanticSegment } from '@/components/visualizer/sonnet/types';
 import {
     resolveSonnetFrameDecorSpec,
+    resolveSonnetFrameLocalDimensions,
     SONNET_FRAME_DECOR_PROBABILITY,
     SONNET_FRAME_DECOR_VARIANTS,
 } from '@/components/visualizer/sonnet/sonnetFrameDecor';
@@ -25,6 +26,20 @@ const segment = (text: string, index: number): SonnetSemanticSegment => ({
 });
 
 describe('Sonnet frame decor assignment', () => {
+    it('swaps screen bounds back to local dimensions for quarter-turned text', () => {
+        expect(resolveSonnetFrameLocalDimensions({
+            measuredWidth: 48,
+            measuredHeight: 240,
+            rotation: Math.PI / 2,
+        })).toEqual({ width: 240, height: 48 });
+
+        expect(resolveSonnetFrameLocalDimensions({
+            measuredWidth: 240,
+            measuredHeight: 48,
+            rotation: 0,
+        })).toEqual({ width: 240, height: 48 });
+    });
+
     it('is deterministic for the same segment', () => {
         const target = segment('明かり', 3);
         expect(resolveSonnetFrameDecorSpec(target))
