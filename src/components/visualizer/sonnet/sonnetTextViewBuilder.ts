@@ -6,6 +6,7 @@ import { resolveSonnetSegmentDepth, resolveSonnetSegmentNormalOffset } from './s
 import { hashSonnetSeed } from './sonnetRandom';
 import { buildSonnetStaffView } from './sonnetStaffView';
 import { buildSonnetTextFixedGeo } from './sonnetTextFixedGeo';
+import { resolveSonnetCameraTrackingGlyphs } from './sonnetCameraTracking';
 import { createSonnetGuide, type SonnetGuideView } from './sonnetGuides';
 import { buildSonnetFrameDecor, resolveSonnetFrameDecorSpec, type SonnetFrameDecorView } from './sonnetFrameDecor';
 import type { SonnetSemanticSegment } from './types';
@@ -54,6 +55,7 @@ export interface SegmentView {
     guide: SonnetGuideView;
     frameDecor?: SonnetFrameDecorView | null;
     glyphs: GlyphView[];
+    trackingGlyphs: GlyphView[];
 }
 
 interface SonnetTextViewOptions {
@@ -182,6 +184,7 @@ export const buildSonnetTextView = (
             timingPhase: placement.timingPhase,
             guide,
             glyphs: [staffView],
+            trackingGlyphs: [staffView],
         };
     }
 
@@ -346,5 +349,6 @@ export const buildSonnetTextView = (
         guide,
         frameDecor,
         glyphs,
+        trackingGlyphs: resolveSonnetCameraTrackingGlyphs(glyphs),
     };
 };

@@ -34,6 +34,7 @@ import {
     resolveSonnetCreditsFrame,
 } from './sonnetCredits';
 import { sonnetDebugState } from './sonnetDebug';
+import { resolveSonnetSegmentCameraFocus } from './sonnetCameraTracking';
 
 // src/components/visualizer/sonnet/createSonnetPixiRuntime.ts
 // Owns Pixi lifecycle and mutates bounded scene views directly from absolute playback time.
@@ -360,50 +361,18 @@ export class SonnetPixiRuntime {
 
         const shake = resolveTimelineShake(time, shakeIntensity);
 
-        let trackSegments = view.segments.filter(s => s.role !== 'decoration' && s.glyphs.length > 0);
+        let trackSegments = view.segments.filter(s => s.role !== 'decoration' && s.trackingGlyphs.length > 0);
         if (trackSegments.length === 0) {
-            trackSegments = view.segments.filter(s => s.glyphs.length > 0);
+            trackSegments = view.segments.filter(s => s.trackingGlyphs.length > 0);
         }
 
         let currentFocusX = view.basePivotX;
         let currentFocusY = view.basePivotY;
 
         if (trackSegments.length > 0) {
-            const getSegmentFocus = (seg: typeof view.segments[0], t: number) => {
-                if (seg.glyphs.length === 0) return { x: 0, y: 0 };
-                const first = seg.glyphs[0];
-                const last = seg.glyphs[seg.glyphs.length - 1];
-                
-                // Dampen the tracking distance to prevent the camera from advancing too fast
-                // and pushing settled text off the screen edge. Raised alongside the closer
-                // base zoom so the current word stays near the middle of the frame.
-                const trackingFactor = 0.5;
-                const segCenterX = (first.baseX + last.baseX) / 2;
-                const segCenterY = (first.baseY + last.baseY) / 2;
-                const applyFactor = (exactX: number, exactY: number) => ({
-                    x: segCenterX + (exactX - segCenterX) * trackingFactor,
-                    y: segCenterY + (exactY - segCenterY) * trackingFactor
-                });
-
-                if (t <= first.startTime) return applyFactor(first.baseX, first.baseY);
-                if (t >= last.startTime) return applyFactor(last.baseX, last.baseY);
-                
-                for (let i = 0; i < seg.glyphs.length - 1; i++) {
-                    if (t >= seg.glyphs[i].startTime && t <= seg.glyphs[i+1].startTime) {
-                        const g1 = seg.glyphs[i];
-                        const g2 = seg.glyphs[i+1];
-                        const p = (t - g1.startTime) / Math.max(0.001, g2.startTime - g1.startTime);
-                        const exactX = g1.baseX + (g2.baseX - g1.baseX) * p;
-                        const exactY = g1.baseY + (g2.baseY - g1.baseY) * p;
-                        return applyFactor(exactX, exactY);
-                    }
-                }
-                return applyFactor(first.baseX, first.baseY);
-            };
-
             const focusRanges = trackSegments.map(segment => ({
-                startTime: segment.glyphs[0]?.startTime ?? view.shot.startTime,
-                endTime: segment.glyphs.at(-1)?.startTime ?? view.shot.endTime,
+                startTime: segment.trackingGlyphs[0]?.startTime ?? view.shot.startTime,
+                endTime: segment.trackingGlyphs.at(-1)?.startTime ?? view.shot.endTime,
             }));
             const resolveFocusAtTime = (focusTime: number) => {
                 let focusX = 0;
@@ -411,9 +380,9 @@ export class SonnetPixiRuntime {
                 const focusWeights = resolveSonnetFocusWeights(focusRanges, focusTime);
                 for (let i = 0; i < trackSegments.length; i++) {
                     const seg = trackSegments[i];
-                    if (seg.glyphs.length === 0) continue;
+                    if (seg.trackingGlyphs.length === 0) continue;
                     const weight = focusWeights[i] ?? 0;
-                    const pos = getSegmentFocus(seg, focusTime);
+                    const pos = resolveSonnetSegmentCameraFocus(seg.trackingGlyphs, focusTime);
                     focusX += pos.x * weight;
                     focusY += pos.y * weight;
                 }
