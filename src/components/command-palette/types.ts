@@ -96,6 +96,8 @@ export type CommandPaletteContext = {
     voiceInputPauseEnabled: boolean;
     voiceInputPauseSupported: boolean;
     toggleVoiceInputPause: () => void;
+    preventDisplaySleepDuringPlayback: boolean;
+    togglePreventDisplaySleepDuringPlayback: () => void;
     setAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void> | void;
     runAutoMatchBestLyric: () => Promise<boolean>;
     setIsUserGuideModalOpen: (isOpen: boolean) => void;

@@ -51,6 +51,7 @@ import { useKugouLibrary } from './hooks/useKugouLibrary';
 import { useOnlineProviderPlatform } from './hooks/useOnlineProviderPlatform';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useElectronPlaybackBridge } from './hooks/useElectronPlaybackBridge';
+import { useElectronDisplaySleepBlocker } from './hooks/useElectronDisplaySleepBlocker';
 import { useElectronNeteaseApiStatus } from './hooks/useElectronNeteaseApiStatus';
 import { useElectronVideoExportController } from './hooks/useElectronVideoExportController';
 import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
@@ -381,6 +382,8 @@ export default function App() {
         handleToggleOpenPlayerOnLaunch,
         voiceInputPauseEnabled,
         handleToggleVoiceInputPause,
+        preventDisplaySleepDuringPlayback,
+        handleTogglePreventDisplaySleepDuringPlayback,
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
@@ -424,6 +427,11 @@ export default function App() {
         handleToggleMute,
         handleToggleLoopMode,
     } = appPreferences;
+
+    useElectronDisplaySleepBlocker(
+        preventDisplaySleepDuringPlayback,
+        playerState === PlayerState.PLAYING,
+    );
 
     const visualizerTunings = useMemo(() => ({
         classic: classicTuning,
@@ -1971,6 +1979,10 @@ export default function App() {
         toggleVoiceInputPause: () => {
             handleToggleVoiceInputPause(!voiceInputPauseEnabled);
         },
+        preventDisplaySleepDuringPlayback,
+        togglePreventDisplaySleepDuringPlayback: () => {
+            handleTogglePreventDisplaySleepDuringPlayback(!preventDisplaySleepDuringPlayback);
+        },
         setAppLanguagePreference: handleSetAppLanguagePreference,
         runAutoMatchBestLyric: handleAutoMatchBestLyricForCurrentSong,
         setIsUserGuideModalOpen,
@@ -2018,6 +2030,8 @@ export default function App() {
         toggleDaylightMode,
         voiceInputPauseEnabled,
         handleToggleVoiceInputPause,
+        preventDisplaySleepDuringPlayback,
+        handleTogglePreventDisplaySleepDuringPlayback,
 
         subtitleContentMode,
         subtitleOverlayBackground,

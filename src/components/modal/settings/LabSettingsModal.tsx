@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronLeft, ChevronRight, Cpu, GamepadDirectional, Mic, Monitor, PlayCircle, RotateCcw, Settings2 } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Cpu, GamepadDirectional, Mic, Monitor, Moon, PlayCircle, RotateCcw, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme, VisualizerFrameRate } from '../../../types';
@@ -69,6 +69,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onVisualizerFrameRateChange,
         enablePlayerPageNativeBlur,
         onTogglePlayerPageNativeBlur,
+        preventDisplaySleepDuringPlayback,
+        onTogglePreventDisplaySleepDuringPlayback,
     } = useSettingsUiStore(useShallow(state => ({
         disableHomeDynamicBackground: state.disableHomeDynamicBackground,
         hidePlayerProgressBar: state.hidePlayerProgressBar,
@@ -94,6 +96,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onToggleStaticMode: state.handleToggleStaticMode,
         onVisualizerFrameRateChange: state.handleSetVisualizerFrameRate,
         onTogglePlayerPageNativeBlur: state.handleTogglePlayerPageNativeBlur,
+        preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
+        onTogglePreventDisplaySleepDuringPlayback: state.handleTogglePreventDisplaySleepDuringPlayback,
     })));
     const borderColor = isDaylight ? 'border-zinc-300/70' : 'border-white/10';
     const overlayBackground = isDaylight ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.5)';
@@ -116,6 +120,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     const selectedVisualizerFrameRate = isVisualizerFrameRateLimiterEnabled ? visualizerFrameRate : 120;
     const selectedVisualizerFrameRateIndex = VISUALIZER_FRAME_RATE_OPTIONS.indexOf(selectedVisualizerFrameRate);
     const isLinux = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('linux');
+    const isElectron = typeof window !== 'undefined' && Boolean(window.electron);
 
     const handleNativeBlurToggle = () => {
         if (enablePlayerPageNativeBlur) {
@@ -351,6 +356,21 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     </div>
                                     {renderToggle(alwaysShowMainWindowTitlebar, () => onToggleAlwaysShowMainWindowTitlebar(!alwaysShowMainWindowTitlebar))}
                                 </div>
+
+                                {isElectron && (
+                                    <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                                        <div className="space-y-1">
+                                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                                <Moon size={14} />
+                                                {t('options.preventDisplaySleepDuringPlayback')}
+                                            </div>
+                                            <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                                {t('options.preventDisplaySleepDuringPlaybackDesc')}
+                                            </div>
+                                        </div>
+                                        {renderToggle(preventDisplaySleepDuringPlayback, () => onTogglePreventDisplaySleepDuringPlayback(!preventDisplaySleepDuringPlayback))}
+                                    </div>
+                                )}
 
                                 {!isLinux && (
                                     <div className={`flex items-center justify-between p-4 rounded-xl border transition-colors hover:bg-white/8 ${settingsCardInteractiveClass}`} onClick={handleNativeBlurToggle}>

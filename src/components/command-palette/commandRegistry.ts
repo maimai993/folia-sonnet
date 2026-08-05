@@ -319,6 +319,17 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
             return true;
         },
     },
+    {
+        id: 'desktop-toggle-prevent-display-sleep',
+        group: 'settings',
+        title: 'Prevent display sleep during playback',
+        description: 'Toggle keeping the display awake while music is playing',
+        keywords: ['prevent display sleep', 'keep display awake', 'keep screen on', '播放时阻止休眠', '保持屏幕唤醒', '屏幕常亮', 'bofangshizuzhixiumian', 'baochipingmuhuanxing', 'pingmuchangliang', 'bfzzxm', 'pmcl'],
+        execute: (_input, context) => {
+            context.togglePreventDisplaySleepDuringPlayback();
+            return true;
+        },
+    },
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室', 'shiyan', 'shiyanshi', 'sy', 'sys'], 'options', 'lab'),
     createSettingsCommand('settings-visualizer', 'Visualizer settings', 'Open lyrics animation workbench', ['visualizer settings', 'visualizer workbench', '可视化', '歌词动画', 'keshihua', 'gecidonghua', 'ksh', 'gcdh', 'donghua'], 'options', 'visualizer'),
     createSettingsCommand('settings-theme-park', 'Color', 'Open theme editor', ['color', 'theme park', 'theme', '配色', '主题', '主题公园', 'peise', 'zhuti', 'zhutigongyuan', 'ps', 'zt', 'ztgy'], 'options', 'themePark'),
