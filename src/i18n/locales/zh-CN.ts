@@ -1261,7 +1261,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_12": {
-      "intro": "以下是 0.6.12 的新功能与改进",
+      "intro": "以下是 0.6.13 的新功能与改进",
       "sonnetLayout": {
         "title": "商籁排版引擎重构",
         "description": "重构商籁 / Sonnet 模式的排版引擎，带来更加美观、合理且稳定的文字布局效果。"

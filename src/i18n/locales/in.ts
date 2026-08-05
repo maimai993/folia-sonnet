@@ -1071,7 +1071,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_12": {
-      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.12.",
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.13.",
       "sonnetLayout": {
         "title": "Mesin Tata Letak Sonnet Baru",
         "description": "Mesin tata letak visualizer Sonnet telah dibangun ulang untuk tipografi lirik yang lebih indah, seimbang, dan stabil."
