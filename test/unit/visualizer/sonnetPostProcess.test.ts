@@ -15,6 +15,7 @@ describe('Sonnet post-process profile', () => {
         expect(profile.glowStrength).toBeGreaterThan(3);
         expect(profile.glowAlpha).toBeLessThanOrEqual(0.62);
         expect(profile.noise).toBe(0);
+        expect(profile.contrast).toBe(0);
         expect(profile.printEffects).toEqual({ rgbShift: 0, halftone: 0, vignette: 0 });
     });
 
@@ -24,7 +25,7 @@ describe('Sonnet post-process profile', () => {
                 glowStrength: 0,
                 glowAlpha: 0,
                 noise: 0,
-                contrast: 1,
+                contrast: 0,
                 glitchIntensity: 0,
                 printEffects: { rgbShift: 0, halftone: 0, vignette: 0 },
             });
@@ -51,6 +52,7 @@ describe('Sonnet post-process profile', () => {
         expect(partial.printEffects.halftone).toBe(0);
         expect(partial.printEffects.vignette).toBe(DEFAULT_SONNET_TUNING.postProcessVignette);
         expect(enabled.noise).toBeGreaterThan(0);
+        expect(enabled.contrast).toBe(DEFAULT_SONNET_TUNING.postProcessContrast * 0.5);
     });
 
     it('scales with theme animation intensity without exceeding caps', () => {

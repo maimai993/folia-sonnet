@@ -30,14 +30,14 @@ export const resolveSonnetPostProcessProfile = (
     tuning: SonnetTuning,
     staticMode: boolean,
 ): SonnetPostProcessProfile => {
-    if (staticMode) return { glowStrength: 0, glowAlpha: 0, noise: 0, contrast: 1, glitchIntensity: 0, printEffects: NO_PRINT_EFFECTS };
+    if (staticMode) return { glowStrength: 0, glowAlpha: 0, noise: 0, contrast: 0, glitchIntensity: 0, printEffects: NO_PRINT_EFFECTS };
     const motion = tuning.typographyMotion * resolveSonnetAnimationScale(theme);
     const postEnabled = tuning.postProcessEnabled;
     return {
         glowStrength: 2.8 + motion * 1.8,
         glowAlpha: Math.min(0.62, 0.28 + motion * 0.12),
         noise: postEnabled ? tuning.postProcessGrain * 0.35 : 0, // Opt-in film grain, capped subtle so text stays crisp
-        contrast: postEnabled ? 1 + tuning.postProcessContrast * 0.5 : 1, // Opt-in; default off because a ColorMatrix on the scene container aliases thin background strokes
+        contrast: postEnabled ? tuning.postProcessContrast * 0.5 : 0, // Pixi contrast is an additive amount: 0 is neutral and 0.5 produces a 1.5x matrix multiplier
         glitchIntensity: 1, // Used during transitions
         // Fixed print-style passes ride the master opt-in toggle, each scaled by its own 0..1 slider.
         printEffects: postEnabled
@@ -89,9 +89,9 @@ export const applySonnetScenePostProcess = (
         filters.push(noise);
     }
 
-    // ColorMatrix contrast stays opt-in (profile.contrast === 1 by default) because
+    // ColorMatrix contrast stays opt-in (profile.contrast === 0 by default) because
     // it aliases thin background strokes — the user enables it via tuning.
-    if (profile.contrast !== 1) {
+    if (profile.contrast > 0) {
         const colorMatrix = new pixi.ColorMatrixFilter();
         colorMatrix.contrast(profile.contrast, false);
         colorMatrix.antialias = 'on';

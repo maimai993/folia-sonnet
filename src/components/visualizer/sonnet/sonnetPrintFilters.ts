@@ -35,10 +35,13 @@ uniform float uAmount;
 
 void main(void) {
     vec2 offset = vec2(0.9063, 0.4226) * uAmount * 3.0 * uInputSize.zw;
-    float red = texture(uTexture, clamp(vTextureCoord + offset, uInputClamp.xy, uInputClamp.zw)).r;
+    vec4 redSample = texture(uTexture, clamp(vTextureCoord + offset, uInputClamp.xy, uInputClamp.zw));
     vec4 center = texture(uTexture, vTextureCoord);
-    float blue = texture(uTexture, clamp(vTextureCoord - offset, uInputClamp.xy, uInputClamp.zw)).b;
-    finalColor = vec4(red, center.g, blue, center.a);
+    vec4 blueSample = texture(uTexture, clamp(vTextureCoord - offset, uInputClamp.xy, uInputClamp.zw));
+    float red = redSample.a > 0.0 ? redSample.r / redSample.a : 0.0;
+    float green = center.a > 0.0 ? center.g / center.a : 0.0;
+    float blue = blueSample.a > 0.0 ? blueSample.b / blueSample.a : 0.0;
+    finalColor = vec4(vec3(red, green, blue) * center.a, center.a);
 }
 `;
 
@@ -91,8 +94,8 @@ uniform float uAmount;
 
 void main(void) {
     vec4 color = texture(uTexture, vTextureCoord);
-    // Recover the 0..1 position across the visible output frame (screen space):
-    // vTextureCoord spans the whole input texture, only part of which is on screen.
+    // The filtered container uses a viewport-sized filterArea, so this recovers stable
+    // 0..1 viewport coordinates instead of coordinates derived from lyric bounds.
     vec2 screenUv = vTextureCoord * uInputSize.xy / uOutputFrame.zw;
     vec2 centered = screenUv - 0.5;
     centered.x *= uOutputFrame.z / uOutputFrame.w;
