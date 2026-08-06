@@ -633,6 +633,21 @@ describe('Sonnet shot-kind flow layouts', () => {
         });
     });
 
+    // Regression: short cross columns used to stack tiny support words against the
+    // hero and leave the vertical band mostly empty. Column words now grow (capped
+    // below the hero) and justify across the available span.
+    it('grows short cross columns to fill their vertical band', () => {
+        const layout = layoutOf(['あ', 'い', '英雄主詞', 'う', 'え'], 'type-impact');
+        const items = byIndex(layout);
+        const hero = items.get(2)!;
+        const bottom = items.get(4)!;
+
+        expect(bottom.fontScale).toBeGreaterThan(1.8);
+        expect(bottom.fontScale).toBeLessThanOrEqual(hero.fontScale * 0.6 + 1e-6);
+        expectNoOverlap(layout, FLOW_GAP * 0.9);
+        expectHierarchy(layout);
+    });
+
     it('keeps the cross bands in scan order equal to timeline order', () => {
         const words = ['愛', 'を', '懐', 'い', 'て', '理想', 'を', '号', 'ん', 'だ'];
         const layout = layoutOf(words, 'type-impact');

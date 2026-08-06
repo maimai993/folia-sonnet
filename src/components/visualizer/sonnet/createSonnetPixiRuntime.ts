@@ -550,6 +550,24 @@ export class SonnetPixiRuntime {
                     glyph.caRed.position.set(currentOffset, -currentOffset * 0.5);
                 }
 
+                // Semi-hero echo ghosts: split along the layout normal on glyph entry,
+                // fade in over the first quarter, then quickly vanish. One-shot.
+                if (glyph.ghosts && glyph.ghostDuration) {
+                    const ghostProgress = clamp01((time - glyph.startTime) / glyph.ghostDuration);
+                    const ghostActive = glyphVisible && ghostProgress > 0 && ghostProgress < 1;
+                    // Quick fade-in, then a squared falloff so the echo dies fast.
+                    const envelope = ghostProgress <= 0.2
+                        ? ghostProgress / 0.2
+                        : Math.pow(1 - (ghostProgress - 0.2) / 0.8, 2);
+                    const spread = 1 - Math.pow(1 - ghostProgress, 3);
+                    for (const ghost of glyph.ghosts) {
+                        ghost.node.visible = ghostActive;
+                        if (!ghostActive) continue;
+                        ghost.node.position.set(ghost.dirX * spread, ghost.dirY * spread);
+                        ghost.node.alpha = envelope * ghost.alphaBase;
+                    }
+                }
+
                 glyph.updateAnimation?.(time);
             });
         });

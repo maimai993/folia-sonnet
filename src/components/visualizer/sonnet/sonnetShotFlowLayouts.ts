@@ -467,15 +467,48 @@ export const layoutFragmentCollage = <T extends SonnetFlowLayoutBox>(
 export const layoutCrossStack = <T extends SonnetFlowLayoutBox>(
     ctx: SonnetFlowLayoutContext<T>,
 ) => {
-    const { boxes, heroIndex, flowGap, stackGap } = ctx;
+    const { boxes, heroIndex, height, flowGap, stackGap } = ctx;
     const heroBox = boxes[heroIndex];
+    const beforeCount = heroIndex;
+    const topCount = Math.floor(beforeCount / 2);
+    const afterCount = boxes.length - 1 - heroIndex;
+    const rightCount = Math.ceil(afterCount / 2);
+
+    // Column bands used to stack support-scale words tightly against the hero, so
+    // a short column left most of its vertical band empty. Grow undersized column
+    // words (capped below the hero hierarchy) and justify the column across the
+    // available span. Runs inside the fit callback because only the current rung's
+    // (possibly shrunk) hero height tells us how much band is actually free.
+    const fillColumn = (column: T[]) => {
+        if (column.length === 0) return 0;
+        const available = Math.max(0, height * 0.46 - heroBox.measuredHeight / 2 - stackGap);
+        if (available <= 0) return 0;
+        const gaps = stackGap * (column.length - 1);
+        const contentHeight = column.reduce((sum, box) => sum + box.measuredHeight, 0);
+        const target = available * 0.72;
+        if (contentHeight + gaps < target) {
+            const boost = Math.min(2.2, (target - gaps) / Math.max(1, contentHeight));
+            column.forEach(box => {
+                // Never let a boosted word outscale the hero hierarchy.
+                const capped = Math.min(boost, (heroBox.fontScale * 0.6) / box.fontScale);
+                if (capped > 1.05) {
+                    box.fontScale *= capped;
+                    box.measuredWidth *= capped;
+                    box.measuredHeight *= capped;
+                }
+            });
+        }
+        if (column.length < 2) return 0;
+        const grown = column.reduce((sum, box) => sum + box.measuredHeight, 0);
+        const pitch = (available * 0.95 - grown) / (column.length - 1);
+        return Math.max(0, Math.min(stackGap * 2, pitch - stackGap));
+    };
+
     placeWithGlobalFit(ctx, () => {
         heroBox.x = 0;
         heroBox.y = 0;
-        const beforeCount = heroIndex;
-        const topCount = Math.floor(beforeCount / 2);
-        const afterCount = boxes.length - 1 - heroIndex;
-        const rightCount = Math.ceil(afterCount / 2);
+        const topStretch = fillColumn(boxes.slice(0, topCount));
+        const bottomStretch = fillColumn(boxes.slice(heroIndex + rightCount + 1));
 
         // Left row: indices topCount..heroIndex-1, earliest ends up leftmost.
         let currentX = heroBox.x - heroBox.measuredWidth / 2 - stackGap;
@@ -495,7 +528,7 @@ export const layoutCrossStack = <T extends SonnetFlowLayoutBox>(
             box.layoutDirection = 'vertical';
             box.x = heroBox.x + (i % 2 === 0 ? 15 : -15);
             box.y = currentY - box.measuredHeight / 2;
-            currentY -= box.measuredHeight + stackGap;
+            currentY -= box.measuredHeight + stackGap + topStretch;
             box.enterX = 0; box.enterY = -30;
         }
 
@@ -517,7 +550,7 @@ export const layoutCrossStack = <T extends SonnetFlowLayoutBox>(
             box.layoutDirection = 'vertical';
             box.x = heroBox.x + (i % 2 === 0 ? 15 : -15);
             box.y = currentY + box.measuredHeight / 2;
-            currentY += box.measuredHeight + stackGap;
+            currentY += box.measuredHeight + stackGap + bottomStretch;
             box.enterX = 0; box.enterY = 30;
         }
     });

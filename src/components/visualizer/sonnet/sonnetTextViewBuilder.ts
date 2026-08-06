@@ -20,12 +20,23 @@ import {
 // Creates parser-timed core/halo glyph pairs and their semantic guide view.
 type PixiModule = typeof import('pixi.js');
 
+export interface GlyphGhostView {
+    node: import('pixi.js').Text;
+    // Full-spread offset in wrapper-local px and the layer's peak alpha, both
+    // precomputed so the runtime only scales by the envelope.
+    dirX: number;
+    dirY: number;
+    alphaBase: number;
+}
+
 export interface GlyphView {
     display: import('pixi.js').Container;
     halo: import('pixi.js').Text | null;
     caCyan?: import('pixi.js').Text;
     caRed?: import('pixi.js').Text;
     caOffset?: number;
+    ghosts?: GlyphGhostView[];
+    ghostDuration?: number;
     baseX: number;
     baseY: number;
     enterX: number;
@@ -149,6 +160,35 @@ export const buildSonnetTextView = (
         padding: baseDropShadow ? Math.max(20, baseDropShadow.blur * 2.5) : 0,
     });
 
+    // Semi-hero echo ghosts: hollow (stroke-only) copies that split along the
+    // normal of the layout flow direction, fade in and vanish quickly. Peak alpha
+    // is kept low so they read as a faint afterimage, never competing with the core.
+    const isSemiHero = placement.role === 'semi-hero';
+    const ghostStyle = isSemiHero ? new TextStyle({
+        fontFamily: options.fontFamily,
+        fontWeight: renderWeight as import('pixi.js').TextStyleFontWeight,
+        fontSize,
+        fill: 'transparent',
+        stroke: { color: glowColor, width: Math.max(1, Math.min(8, fontSize * 0.006)) },
+        align: 'center',
+    }) : undefined;
+    // Normal of the flow direction in screen space, converted into wrapper-local
+    // coordinates so the ghosts inherit the wrapper's rotation correctly.
+    const ghostNormal = (() => {
+        const screen = placement.layoutDirection === 'vertical' ? { x: 1, y: 0 } : { x: 0, y: 1 };
+        const cosine = Math.cos(-placement.rotation);
+        const sine = Math.sin(-placement.rotation);
+        return {
+            x: screen.x * cosine - screen.y * sine,
+            y: screen.x * sine + screen.y * cosine,
+        };
+    })();
+    const ghostSpread = fontSize * 0.85;
+    const ghostDuration = Math.min(
+        0.7,
+        Math.max(0.4, (options.shotEndTime - options.shotStartTime) * 0.12 + 0.1),
+    );
+
     if (segment.text === '♪') {
         const staffView = buildSonnetStaffView(
             pixi,
@@ -236,6 +276,29 @@ export const buildSonnetTextView = (
 
         wrapper.addChild(display);
 
+        // Echo ghosts sit behind the core glyph; per-ghost dir/alpha precomputed.
+        // Both echoes stack on one normal side (deterministic per segment) so the
+        // afterimage reads as a directional streak rather than a symmetric blur.
+        let ghosts: GlyphGhostView[] | undefined;
+        if (ghostStyle) {
+            ghosts = [];
+            const side = normalOffsetSeed % 2 === 0 ? 1 : -1;
+            for (let layer = 1; layer <= 2; layer++) {
+                const ghost = new Text({ text: glyph.char, style: ghostStyle });
+                ghost.anchor.set(0.5);
+                ghost.alpha = 0;
+                ghost.visible = false;
+                wrapper.addChildAt(ghost, 0);
+                const factor = layer === 1 ? 1 : 1.7;
+                ghosts.push({
+                    node: ghost,
+                    dirX: ghostNormal.x * side * factor * ghostSpread,
+                    dirY: ghostNormal.y * side * factor * ghostSpread,
+                    alphaBase: layer === 1 ? 0.3 : 0.16,
+                });
+            }
+        }
+
         options.textLayer.addChild(wrapper);
 
         return {
@@ -244,6 +307,8 @@ export const buildSonnetTextView = (
             caCyan: caCyanNode,
             caRed: caRedNode,
             caOffset: caOffsetValue,
+            ghosts,
+            ghostDuration: ghosts ? ghostDuration : undefined,
             baseX: glyph.baseX,
             baseY: glyph.baseY,
             enterX: glyph.enterX,
