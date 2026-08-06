@@ -58,12 +58,22 @@ describe('Sonnet scene transitions', () => {
         expect(first.y).toBe(0);
     });
 
-    it('resolves camera pull as a short zoom that settles at identity', () => {
+    it('keeps the post-processed scene at identity scale during camera-pull transitions', () => {
         const start = resolveSonnetEnterTransitionFrame('camera-pull', 0, 0.2, true, 7);
+        const middle = resolveSonnetEnterTransitionFrame('camera-pull', 0.1, 0.2, true, 7);
         const end = resolveSonnetEnterTransitionFrame('camera-pull', 0.2, 0.2, true, 7);
-        expect(start.scale).toBeLessThan(1);
+        expect(start.scale).toBe(1);
+        expect(middle.scale).toBe(1);
         expect(end).toEqual(IDLE_SONNET_TRANSITION_FRAME);
     });
+
+    it.each(['fast-blur', 'mono-glitch', 'camera-pull'] as const)(
+        'does not scale the viewport post-process surface for %s',
+        kind => {
+            expect(resolveSonnetTransitionEffectFrame(kind, 'enter', 0.35, 17).scale).toBe(1);
+            expect(resolveSonnetTransitionEffectFrame(kind, 'exit', 0.65, 17).scale).toBe(1);
+        },
+    );
 
     it('transitions both sides of every internal layout boundary', () => {
         const shots = [shot('first', 1, 2.8), shot('second', 3, 5)];
