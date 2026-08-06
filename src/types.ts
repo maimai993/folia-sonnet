@@ -540,6 +540,11 @@ export interface SonnetTuning {
   postProcessGrain: number;
   /** Contrast boost, 0..1. */
   postProcessContrast: number;
+  /** Fixed print-style passes riding the master switch; strength sliders, 0 disables the pass. */
+  postProcessRgbShift: number;
+  postProcessHalftone: number;
+  /** Vignette strength, 0..2 (2 = double the base darkening). */
+  postProcessVignette: number;
 }
 
 export const DEFAULT_SONNET_TUNING: SonnetTuning = {
@@ -558,6 +563,9 @@ export const DEFAULT_SONNET_TUNING: SonnetTuning = {
   postProcessEnabled: false,
   postProcessGrain: 0.4,
   postProcessContrast: 0.3,
+  postProcessRgbShift: 0.4,
+  postProcessHalftone: 0.55,
+  postProcessVignette: 0.55,
 };
 
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other

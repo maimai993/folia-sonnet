@@ -15,6 +15,7 @@ describe('Sonnet post-process profile', () => {
         expect(profile.glowStrength).toBeGreaterThan(3);
         expect(profile.glowAlpha).toBeLessThanOrEqual(0.62);
         expect(profile.noise).toBe(0);
+        expect(profile.printEffects).toEqual({ rgbShift: 0, halftone: 0, vignette: 0 });
     });
 
     it('disables filter passes in static mode', () => {
@@ -25,7 +26,31 @@ describe('Sonnet post-process profile', () => {
                 noise: 0,
                 contrast: 1,
                 glitchIntensity: 0,
+                printEffects: { rgbShift: 0, halftone: 0, vignette: 0 },
             });
+    });
+
+    it('enables fixed print passes only when post processing is on', () => {
+        const enabled = resolveSonnetPostProcessProfile(
+            theme,
+            { ...DEFAULT_SONNET_TUNING, postProcessEnabled: true },
+            false,
+        );
+
+        expect(enabled.printEffects).toEqual({
+            rgbShift: DEFAULT_SONNET_TUNING.postProcessRgbShift,
+            halftone: DEFAULT_SONNET_TUNING.postProcessHalftone,
+            vignette: DEFAULT_SONNET_TUNING.postProcessVignette,
+        });
+
+        const partial = resolveSonnetPostProcessProfile(
+            theme,
+            { ...DEFAULT_SONNET_TUNING, postProcessEnabled: true, postProcessHalftone: 0 },
+            false,
+        );
+        expect(partial.printEffects.halftone).toBe(0);
+        expect(partial.printEffects.vignette).toBe(DEFAULT_SONNET_TUNING.postProcessVignette);
+        expect(enabled.noise).toBeGreaterThan(0);
     });
 
     it('scales with theme animation intensity without exceeding caps', () => {

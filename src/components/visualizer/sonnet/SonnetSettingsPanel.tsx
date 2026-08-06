@@ -113,28 +113,65 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     isDaylight={isDaylight}
                     theme={theme}
                 />
-                <SonnetRangeControl
-                    label={t('options.sonnetPostProcessGrain') || '胶片颗粒'}
-                    value={sonnetTuning.postProcessGrain}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    rangeInputClass={rangeInputClass}
-                    onChange={postProcessGrain => onSonnetTuningChange?.({ postProcessGrain })}
-                    onPointerDown={onSliderPointerDown}
-                    onPointerUp={onSliderCommit}
-                />
-                <SonnetRangeControl
-                    label={t('options.sonnetPostProcessContrast') || '对比度增强'}
-                    value={sonnetTuning.postProcessContrast}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    rangeInputClass={rangeInputClass}
-                    onChange={postProcessContrast => onSonnetTuningChange?.({ postProcessContrast })}
-                    onPointerDown={onSliderPointerDown}
-                    onPointerUp={onSliderCommit}
-                />
+                {sonnetTuning.postProcessEnabled && (
+                    <>
+                        <SonnetRangeControl
+                            label={t('options.sonnetPostProcessGrain') || '胶片颗粒'}
+                            value={sonnetTuning.postProcessGrain}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            rangeInputClass={rangeInputClass}
+                            onChange={postProcessGrain => onSonnetTuningChange?.({ postProcessGrain })}
+                            onPointerDown={onSliderPointerDown}
+                            onPointerUp={onSliderCommit}
+                        />
+                        <SonnetRangeControl
+                            label={t('options.sonnetPostProcessContrast') || '对比度增强'}
+                            value={sonnetTuning.postProcessContrast}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            rangeInputClass={rangeInputClass}
+                            onChange={postProcessContrast => onSonnetTuningChange?.({ postProcessContrast })}
+                            onPointerDown={onSliderPointerDown}
+                            onPointerUp={onSliderCommit}
+                        />
+                        <SonnetRangeControl
+                            label={t('options.sonnetPostProcessRgbShift') || 'RGB 色差'}
+                            value={sonnetTuning.postProcessRgbShift}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            rangeInputClass={rangeInputClass}
+                            onChange={postProcessRgbShift => onSonnetTuningChange?.({ postProcessRgbShift })}
+                            onPointerDown={onSliderPointerDown}
+                            onPointerUp={onSliderCommit}
+                        />
+                        <SonnetRangeControl
+                            label={t('options.sonnetPostProcessHalftone') || '半调网点'}
+                            value={sonnetTuning.postProcessHalftone}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            rangeInputClass={rangeInputClass}
+                            onChange={postProcessHalftone => onSonnetTuningChange?.({ postProcessHalftone })}
+                            onPointerDown={onSliderPointerDown}
+                            onPointerUp={onSliderCommit}
+                        />
+                        <SonnetRangeControl
+                            label={t('options.sonnetPostProcessVignette') || '暗角'}
+                            value={sonnetTuning.postProcessVignette}
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            rangeInputClass={rangeInputClass}
+                            onChange={postProcessVignette => onSonnetTuningChange?.({ postProcessVignette })}
+                            onPointerDown={onSliderPointerDown}
+                            onPointerUp={onSliderCommit}
+                        />
+                    </>
+                )}
             </SonnetSettingsSection>
 
             <SonnetSettingsSection title={t('options.sonnetDisplaySection')}>
