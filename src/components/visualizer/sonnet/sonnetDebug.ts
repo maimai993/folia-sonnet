@@ -15,7 +15,7 @@ import { SONNET_ADDITIONAL_GEO_VARIANT_START } from './sonnetAdditionalShotMg';
 // Debug-only overlays for visual verification during layout development.
 // Flip DEBUG_SONNET_MEASURED_BOUNDS to true to draw every segment's measured
 // packing box (the same bounds the flow layouts use) on top of the shot.
-export const DEBUG_SONNET_MEASURED_BOUNDS = true;
+export const DEBUG_SONNET_MEASURED_BOUNDS = false;
 
 type PixiModule = typeof import('pixi.js');
 
