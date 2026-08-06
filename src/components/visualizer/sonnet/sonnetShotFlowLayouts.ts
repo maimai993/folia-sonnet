@@ -383,6 +383,19 @@ export const layoutFragmentCollage = <T extends SonnetFlowLayoutBox>(
         Math.max(a.left - b.right, b.left - a.right),
         Math.max(a.top - b.bottom, b.top - a.bottom),
     );
+    // Rotated non-CJK blocks were measured in their tall rotated orientation; the
+    // collage flattens them back to horizontal. Flatten once, before the global-fit
+    // retries snapshot the boxes, so every rung packs the horizontal footprint and
+    // the frame decor never wraps a vertical box around horizontal text.
+    boxes.forEach((box, index) => {
+        if (index === heroIndex) return;
+        if (Math.abs(Math.round(box.rotation / (Math.PI / 2)) % 2) === 1) {
+            const rotatedWidth = box.measuredHeight;
+            box.measuredHeight = box.measuredWidth;
+            box.measuredWidth = rotatedWidth;
+        }
+        box.rotation = 0;
+    });
     placeWithGlobalFit(ctx, (globalScale) => {
         heroBox.x = 0;
         heroBox.y = 0;
@@ -439,7 +452,6 @@ export const layoutFragmentCollage = <T extends SonnetFlowLayoutBox>(
             placed.push(rect);
             box.x = heroBox.x + Math.cos(candidate) * resolvedRadius;
             box.y = heroBox.y + Math.sin(candidate) * resolvedRadius * squash;
-            box.rotation = 0;
             box.layoutDirection = Math.abs(Math.cos(candidate)) >= Math.abs(Math.sin(candidate))
                 ? 'vertical'
                 : 'horizontal';
