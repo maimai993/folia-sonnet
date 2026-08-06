@@ -104,6 +104,39 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 ))}
             </SonnetSettingsSection>
 
+            <SonnetSettingsSection title={t('options.sonnetPostProcessSection') || '后处理'}>
+                <VisualizerPresetGroup
+                    label={t('options.sonnetPostProcessEnabled') || '整体后处理滤镜'}
+                    value={sonnetTuning.postProcessEnabled}
+                    options={booleanOptions}
+                    onChange={postProcessEnabled => onSonnetTuningChange?.({ postProcessEnabled })}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
+                <SonnetRangeControl
+                    label={t('options.sonnetPostProcessGrain') || '胶片颗粒'}
+                    value={sonnetTuning.postProcessGrain}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    rangeInputClass={rangeInputClass}
+                    onChange={postProcessGrain => onSonnetTuningChange?.({ postProcessGrain })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                />
+                <SonnetRangeControl
+                    label={t('options.sonnetPostProcessContrast') || '对比度增强'}
+                    value={sonnetTuning.postProcessContrast}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    rangeInputClass={rangeInputClass}
+                    onChange={postProcessContrast => onSonnetTuningChange?.({ postProcessContrast })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                />
+            </SonnetSettingsSection>
+
             <SonnetSettingsSection title={t('options.sonnetDisplaySection')}>
                 <VisualizerPresetGroup
                     label={t('options.sonnetOuterFrameMode')}

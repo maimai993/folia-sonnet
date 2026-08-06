@@ -24,11 +24,12 @@ export const resolveSonnetPostProcessProfile = (
 ): SonnetPostProcessProfile => {
     if (staticMode) return { glowStrength: 0, glowAlpha: 0, noise: 0, contrast: 1, glitchIntensity: 0 };
     const motion = tuning.typographyMotion * resolveSonnetAnimationScale(theme);
+    const postEnabled = tuning.postProcessEnabled;
     return {
         glowStrength: 2.8 + motion * 1.8,
         glowAlpha: Math.min(0.62, 0.28 + motion * 0.12),
-        noise: 0, // Removed noise per user request
-        contrast: 1.2, // High contrast
+        noise: postEnabled ? tuning.postProcessGrain * 0.35 : 0, // Opt-in film grain, capped subtle so text stays crisp
+        contrast: postEnabled ? 1 + tuning.postProcessContrast * 0.5 : 1, // Opt-in; default off because a ColorMatrix on the scene container aliases thin background strokes
         glitchIntensity: 1, // Used during transitions
     };
 };
@@ -72,10 +73,13 @@ export const applySonnetScenePostProcess = (
         filters.push(noise);
     }
 
-    // ColorMatrix for contrast removed to fix jaggedness (aliasing) on background elements
-    // const colorMatrix = new pixi.ColorMatrixFilter();
-    // colorMatrix.contrast(profile.contrast, false);
-    // filters.push(colorMatrix);
+    // ColorMatrix contrast stays opt-in (profile.contrast === 1 by default) because
+    // it aliases thin background strokes — the user enables it via tuning.
+    if (profile.contrast !== 1) {
+        const colorMatrix = new pixi.ColorMatrixFilter();
+        colorMatrix.contrast(profile.contrast, false);
+        filters.push(colorMatrix);
+    }
 
     if (filters.length > 0) {
         container.filters = filters;
