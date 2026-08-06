@@ -1272,7 +1272,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_12": {
-      "intro": "Here are the new features and improvements in version 0.6.13.",
+      "intro": "Here are the new features and improvements in version 0.6.14.",
       "sonnetLayout": {
         "title": "Rebuilt Sonnet Layout Engine",
         "description": "The Sonnet visualizer's layout engine has been rebuilt for more polished, balanced, and stable lyric typography."
