@@ -33,15 +33,26 @@ uniform highp vec4 uInputSize;
 uniform vec4 uInputClamp;
 uniform float uAmount;
 
+vec4 sampleInside(vec2 uv) {
+    if (uv.x < uInputClamp.x || uv.y < uInputClamp.y
+        || uv.x > uInputClamp.z || uv.y > uInputClamp.w) {
+        return vec4(0.0);
+    }
+    return texture(uTexture, uv);
+}
+
 void main(void) {
     vec2 offset = vec2(0.9063, 0.4226) * uAmount * 3.0 * uInputSize.zw;
-    vec4 redSample = texture(uTexture, clamp(vTextureCoord + offset, uInputClamp.xy, uInputClamp.zw));
-    vec4 center = texture(uTexture, vTextureCoord);
-    vec4 blueSample = texture(uTexture, clamp(vTextureCoord - offset, uInputClamp.xy, uInputClamp.zw));
-    float red = redSample.a > 0.0 ? redSample.r / redSample.a : 0.0;
-    float green = center.a > 0.0 ? center.g / center.a : 0.0;
-    float blue = blueSample.a > 0.0 ? blueSample.b / blueSample.a : 0.0;
-    finalColor = vec4(vec3(red, green, blue) * center.a, center.a);
+    vec4 redSample = sampleInside(vTextureCoord + offset);
+    vec4 center = sampleInside(vTextureCoord);
+    vec4 blueSample = sampleInside(vTextureCoord - offset);
+    float alpha = max(center.a, max(redSample.a, blueSample.a));
+    float coreWeight = 0.84 - clamp(uAmount, 0.0, 1.0) * 0.18;
+    vec3 core = center.rgb * coreWeight;
+    vec3 separated = vec3(redSample.r, center.g, blueSample.b);
+    // Preserve a neutral core for thin strokes so transparent red/blue offset samples cannot
+    // collapse a white MG line into an unintended green-only result.
+    finalColor = vec4(max(core, separated), alpha);
 }
 `;
 
