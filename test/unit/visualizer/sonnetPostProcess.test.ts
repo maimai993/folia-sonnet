@@ -16,6 +16,8 @@ describe('Sonnet post-process profile', () => {
         expect(profile.glowAlpha).toBeLessThanOrEqual(0.62);
         expect(profile.noise).toBe(0);
         expect(profile.contrast).toBe(0);
+        expect(profile.lensDistortion).toBe(0);
+        expect(profile.lensDispersion).toBe(0);
         expect(profile.printEffects).toEqual({ rgbShift: 0, halftone: 0, vignette: 0 });
     });
 
@@ -27,6 +29,8 @@ describe('Sonnet post-process profile', () => {
                 noise: 0,
                 contrast: 0,
                 glitchIntensity: 0,
+                lensDistortion: 0,
+                lensDispersion: 0,
                 printEffects: { rgbShift: 0, halftone: 0, vignette: 0 },
             });
     });
@@ -53,6 +57,16 @@ describe('Sonnet post-process profile', () => {
         expect(partial.printEffects.vignette).toBe(DEFAULT_SONNET_TUNING.postProcessVignette);
         expect(enabled.noise).toBeGreaterThan(0);
         expect(enabled.contrast).toBe(DEFAULT_SONNET_TUNING.postProcessContrast * 0.5);
+        expect(enabled.lensDistortion).toBe(DEFAULT_SONNET_TUNING.postProcessLensDistortion);
+        expect(enabled.lensDispersion).toBe(DEFAULT_SONNET_TUNING.postProcessLensDispersion);
+
+        const disabled = resolveSonnetPostProcessProfile(
+            { ...theme },
+            { ...DEFAULT_SONNET_TUNING, postProcessEnabled: false },
+            false,
+        );
+        expect(disabled.lensDistortion).toBe(0);
+        expect(disabled.lensDispersion).toBe(0);
     });
 
     it('scales with theme animation intensity without exceeding caps', () => {

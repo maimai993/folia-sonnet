@@ -337,6 +337,8 @@ const compressSonnet = (t: any): any => ({
     ppr: t.postProcessRgbShift,
     pph: t.postProcessHalftone,
     ppv: t.postProcessVignette,
+    ppld: t.postProcessLensDistortion,
+    pplx: t.postProcessLensDispersion,
 });
 const decompressSonnet = (o: any): any => ({
     cameraIntensity: o.ci !== undefined ? o.ci : DEFAULT_SONNET_TUNING.cameraIntensity,
@@ -357,6 +359,8 @@ const decompressSonnet = (o: any): any => ({
     postProcessRgbShift: o.ppr !== undefined ? o.ppr : DEFAULT_SONNET_TUNING.postProcessRgbShift,
     postProcessHalftone: o.pph !== undefined ? o.pph : DEFAULT_SONNET_TUNING.postProcessHalftone,
     postProcessVignette: o.ppv !== undefined ? o.ppv : DEFAULT_SONNET_TUNING.postProcessVignette,
+    postProcessLensDistortion: o.ppld !== undefined ? o.ppld : DEFAULT_SONNET_TUNING.postProcessLensDistortion,
+    postProcessLensDispersion: o.pplx !== undefined ? o.pplx : DEFAULT_SONNET_TUNING.postProcessLensDispersion,
 });
 
 export const compressConfig = (config: any): string => {

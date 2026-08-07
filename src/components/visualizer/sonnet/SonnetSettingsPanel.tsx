@@ -149,6 +149,28 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                             onPointerUp={onSliderCommit}
                         />
                         <SonnetRangeControl
+                            label={t('options.sonnetPostProcessLensDistortion') || '透镜扭曲'}
+                            value={sonnetTuning.postProcessLensDistortion}
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            rangeInputClass={rangeInputClass}
+                            onChange={postProcessLensDistortion => onSonnetTuningChange?.({ postProcessLensDistortion })}
+                            onPointerDown={onSliderPointerDown}
+                            onPointerUp={onSliderCommit}
+                        />
+                        <SonnetRangeControl
+                            label={t('options.sonnetPostProcessLensDispersion') || '透镜色散'}
+                            value={sonnetTuning.postProcessLensDispersion}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            rangeInputClass={rangeInputClass}
+                            onChange={postProcessLensDispersion => onSonnetTuningChange?.({ postProcessLensDispersion })}
+                            onPointerDown={onSliderPointerDown}
+                            onPointerUp={onSliderCommit}
+                        />
+                        <SonnetRangeControl
                             label={t('options.sonnetPostProcessHalftone') || '半调网点'}
                             value={sonnetTuning.postProcessHalftone}
                             min={0}

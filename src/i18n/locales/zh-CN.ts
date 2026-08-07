@@ -931,6 +931,8 @@ export default {
     "sonnetPostProcessGrain": "胶片颗粒",
     "sonnetPostProcessContrast": "对比度增强",
     "sonnetPostProcessRgbShift": "RGB 色差",
+    "sonnetPostProcessLensDistortion": "透镜扭曲",
+    "sonnetPostProcessLensDispersion": "透镜色散",
     "sonnetPostProcessHalftone": "半调网点",
     "sonnetPostProcessVignette": "暗角",
     "sonnetToggleOn": "开启",

@@ -928,6 +928,8 @@ export default {
     "sonnetPostProcessGrain": "Film grain",
     "sonnetPostProcessContrast": "Contrast boost",
     "sonnetPostProcessRgbShift": "RGB shift",
+    "sonnetPostProcessLensDistortion": "Lens distortion",
+    "sonnetPostProcessLensDispersion": "Lens dispersion",
     "sonnetPostProcessHalftone": "Halftone screen",
     "sonnetPostProcessVignette": "Vignette",
     "sonnetToggleOn": "On",

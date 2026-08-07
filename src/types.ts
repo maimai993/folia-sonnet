@@ -545,6 +545,10 @@ export interface SonnetTuning {
   postProcessHalftone: number;
   /** Vignette strength, 0..2 (2 = double the base darkening). */
   postProcessVignette: number;
+  /** Radial lens curvature amount, 0..2. */
+  postProcessLensDistortion: number;
+  /** Radial chromatic dispersion amount, 0..1. */
+  postProcessLensDispersion: number;
 }
 
 export const DEFAULT_SONNET_TUNING: SonnetTuning = {
@@ -566,6 +570,8 @@ export const DEFAULT_SONNET_TUNING: SonnetTuning = {
   postProcessRgbShift: 0.4,
   postProcessHalftone: 0.55,
   postProcessVignette: 0.55,
+  postProcessLensDistortion: 0.3,
+  postProcessLensDispersion: 0.35,
 };
 
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other
