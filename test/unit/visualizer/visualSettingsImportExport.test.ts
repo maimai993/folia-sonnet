@@ -6,6 +6,19 @@ import { DEFAULT_SONNET_TUNING } from '@/types';
 // Verifies visual settings configuration compression, base64 encoding, and decompression/restoration.
 
 describe('Visual Settings Import and Export', () => {
+    it('uses the requested Sonnet post-process defaults', () => {
+        expect(DEFAULT_SONNET_TUNING).toMatchObject({
+            postProcessEnabled: true,
+            postProcessGrain: 0.2,
+            postProcessContrast: 0,
+            postProcessRgbShift: 0,
+            postProcessLensDistortion: 0.3,
+            postProcessLensDispersion: 0.6,
+            postProcessHalftone: 0,
+            postProcessVignette: 0.85,
+        });
+    });
+
     const sampleConfig = {
         theme: {
             light: {
