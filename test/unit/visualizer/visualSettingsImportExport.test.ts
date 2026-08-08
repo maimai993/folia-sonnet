@@ -8,7 +8,7 @@ import { DEFAULT_SONNET_TUNING } from '@/types';
 describe('Visual Settings Import and Export', () => {
     it('uses the requested Sonnet post-process defaults', () => {
         expect(DEFAULT_SONNET_TUNING).toMatchObject({
-            postProcessEnabled: true,
+            postProcessEnabled: false,
             postProcessGrain: 0.2,
             postProcessContrast: 0,
             postProcessRgbShift: 0,

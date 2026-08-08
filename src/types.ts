@@ -564,7 +564,7 @@ export const DEFAULT_SONNET_TUNING: SonnetTuning = {
   enableTransitions: true,
   outerFrameMode: 'full',
   textureResolution: 1.5,
-  postProcessEnabled: true,
+  postProcessEnabled: false,
   postProcessGrain: 0.2,
   postProcessContrast: 0,
   postProcessRgbShift: 0,
