@@ -1070,6 +1070,17 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
+    "v0_6_15": {
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.15.",
+      "sonnetLensEffects": {
+        "title": "Efek Lensa Sonnet",
+        "description": "Kontrol distorsi lensa dan dispersi kromatik baru memberikan tampilan optik yang lebih kaya pada visualizer Sonnet."
+      },
+      "sonnetPostProcess": {
+        "title": "Pascapemrosesan Sonnet yang Disempurnakan",
+        "description": "Nilai bawaan yang lebih baik, transisi yang stabil, dan rendering RGB Shift yang lebih bersih menjaga efek Sonnet tetap ekspresif tanpa mengurangi kejelasan lirik."
+      }
+    },
     "v0_6_12": {
       "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.14.",
       "sonnetLayout": {

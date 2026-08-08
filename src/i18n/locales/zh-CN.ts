@@ -1274,6 +1274,17 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
+    "v0_6_15": {
+      "intro": "以下是 0.6.15 的新功能与改进",
+      "sonnetLensEffects": {
+        "title": "商籁镜头特效",
+        "description": "新增透镜扭曲与色散调节，为商籁 / Sonnet 可视化带来更丰富的光学质感。"
+      },
+      "sonnetPostProcess": {
+        "title": "商籁后处理优化",
+        "description": "优化默认参数与转场稳定性，并改善 RGB Shift 的渲染效果，在保持视觉表现力的同时让歌词更加清晰。"
+      }
+    },
     "v0_6_12": {
       "intro": "以下是 0.6.14 的新功能与改进",
       "sonnetLayout": {

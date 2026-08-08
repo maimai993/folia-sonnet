@@ -1273,6 +1273,17 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
+    "v0_6_15": {
+      "intro": "Here are the new features and improvements in version 0.6.15.",
+      "sonnetLensEffects": {
+        "title": "Sonnet Lens Effects",
+        "description": "New lens distortion and chromatic dispersion controls give the Sonnet visualizer a richer optical look."
+      },
+      "sonnetPostProcess": {
+        "title": "Refined Sonnet Post-processing",
+        "description": "Improved defaults, stable transitions, and cleaner RGB Shift rendering keep Sonnet's effects expressive without compromising lyric clarity."
+      }
+    },
     "v0_6_12": {
       "intro": "Here are the new features and improvements in version 0.6.14.",
       "sonnetLayout": {
