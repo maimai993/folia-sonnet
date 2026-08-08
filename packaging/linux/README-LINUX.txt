@@ -21,3 +21,14 @@ Folia Linux 便携版说明
 `Icon=/home/yourname/Apps/Folia/resources/linux/icon.png`
 
 3. 如果您的桌面环境有要求，请将该 `.desktop` 文件标记为可信或可执行。
+
+Linux 图形兼容性：
+
+- `electron/main.cjs` 默认关闭 Vulkan；AppImage 默认使用 `swiftshader`，普通运行默认使用系统图形路径。
+- 如果启动后出现黑屏、透明度/模糊异常或 GPU 崩溃，可尝试：
+  `FOLIA_LINUX_GRAPHICS_MODE=swiftshader ./folia-major`
+- 如果仍不稳定，可使用最保守的软件渲染：
+  `FOLIA_LINUX_GRAPHICS_MODE=software ./folia-major`
+- `FOLIA_LINUX_GRAPHICS_MODE=system` 恢复系统路径。调试非标准 AppImage 运行时可设置 `ELECTRON_LINUX_PACKAGED_GRAPHICS=true`。
+
+这些变量只影响 Electron Linux 启动参数，不改变 Web 端或同步服务配置。排查时先确认可执行文件和 `resources/` 位于同一便携包目录。

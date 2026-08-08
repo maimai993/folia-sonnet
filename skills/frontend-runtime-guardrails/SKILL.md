@@ -53,11 +53,16 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 
 优先参考现有模式：
 
-- `classic` / `partita`：每个词只持有 `waiting | active | passed` 这种粗粒度状态，状态变化时才 `setState`。
+- `classic` / `partita`：每个词只持有 `waiting | active | passed` 这种粗粒度状态，状态变化时才 `setState`；入口都经过 `src/components/visualizer/registry.tsx`。
 - `cappella`：字符数量和时间戳可进入 state，但 setter 需要做相等保护，只在计数真正变化时更新。
 - `cadenza` / `fume`：重动画和高频渲染使用 refs、缓存、canvas、DOM overlay、RAF draw loop，而不是逐帧 React rerender。
 - `claddagh`：用 `buildLineGraphemeTimeline` 保留逐字时间，使用 `pretext` 做字符间距测量，并在 `useLayoutEffect` 中直接写入有限数量 ring line 的 DOM 样式；中心线的音频响应由独立 RAF 驱动，必须清理订阅和 RAF。
+- `diorama`：React Three Fiber / canvas 场景负责粒子、相机和光栅化文字；不要把每帧场景数据提升到 React state。
+- `pendolo`：`PendoloClockworkCanvas`、timeline 和 bounded text layout 负责连续动画；React 只保留 tuning 与离散歌词切换。
+- `sonnet`：`VisualizerSonnet` 负责 React 外壳，`createSonnetPixiRuntime` 与 `sonnet*` helpers 负责 Pixi director；销毁 Pixi runtime、纹理池和 RAF。
 - `VisPlayground`：预览时间可以推进 MotionValue，但派生到 React state 时必须只更新当前行等低频状态。
+
+共享运行时边界是 `VisualizerRenderer.tsx` -> `runtime.ts` / `registry.tsx` / `VisualizerShell.tsx`；它同时被 App、ThemePark、VisPlayground 和 OBS source 复用。新增模式应沿 `entry.tsx` registry 接入，不要在各宿主复制渲染分支。
 
 所有 visualizer 的歌词和字幕字重都必须通过 `src/utils/fontStacks.ts` 的 `resolveThemeFontWeight(theme, modeFallback)` 获取。模式设计字重只能作为 fallback，不能用 `font-bold`、`font-medium`、固定内联 `fontWeight` 或字体规格中的硬编码数字覆盖用户设置。DOM、Canvas、pretext 和光栅化路径必须使用同一个最终字重。
 
@@ -135,6 +140,8 @@ description: Use when adding, refactoring, or reviewing frontend runtime behavio
 遵守仓库职责边界；如果需要 README 背景，按 `readme-reference` 只读取相关片段：
 
 - visualizer 共享逻辑放 `components/visualizer/*` 的 runtime、registry、shell 或相邻 util。
+- 模式实现放 `components/visualizer/<mode>/`；当前模式包括 `classic`、`cadenza`、`partita`、`fume`、`cappella`、`tilt`、`claddagh`、`monet`、`diorama`、`pendolo`、`sonnet`。
+- 背景实现放 `components/visualizer/backgrounds/*`，当前 entry 为 `common`、`latent`、`monet`、`nomand`、`sora`、`url`。
 - 歌词解析真源看 `utils/lyrics/parserCore.ts`。
 - 纯分词、layout、时序映射优先放 `utils/lyrics/*`，并用单测覆盖。
 - 共享类型先看 `types.ts`。

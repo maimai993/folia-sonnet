@@ -26,7 +26,11 @@ description: Use when implementing, refactoring, or reviewing code in this repos
 - 同步配置、主题同步和本地导出：`src/services/sync/*`、`src/components/modal/settings/StorageSettingsSection.tsx`
 - 字体栈和自定义字体：`src/utils/fontStacks.ts`、`src/services/customLyricsFont.ts`
 - 播放队列、播放适配：`src/services/playbackAdapters.ts`、`src/utils/appPlaybackHelpers.ts`
-- 网易云 / Navidrome / 本地音乐 API：`src/services/*`
+- 播放身份与去重：`src/utils/appPlaybackGuards.ts`、`src/utils/appPlaybackHelpers.ts`
+- 在线歌曲统一入口：`src/services/onlineMusic/omni.ts`、`src/types/onlineMusic.ts`
+- 本地库索引与命名：`src/utils/localLibraryIndex.ts`、`localLibraryNames.ts`、`localLibraryResolver.ts`
+- Stage / OBS / PlayerCap 数据转换：`src/utils/appStageHelpers.ts`、`src/utils/stageClientDemo.ts`、`src/utils/stagePlayerSnapshot.ts`、`src/utils/obs*.ts`、`src/utils/playerCap*.ts`
+- 网易云 / Navidrome / 本地音乐 API：`src/services/netease.ts`、`navidromeService.ts`、`localMusicService.ts`
 - 主题、封面、取色、缓存：`src/hooks/themeControllerState.ts`、`src/utils/colorExtractor.ts`、`src/services/themeCache.ts`、`src/services/coverCache.ts`
 - UI 图标、动画、弹窗、选择器：`lucide-react`、`framer-motion`、`components/shared/*`
 
@@ -203,6 +207,8 @@ const { t } = useTranslation();
 - React 生命周期和用户动作编排放 hook 或 app-level builder。
 - 纯计算、映射、格式化放 util。
 - 展示和交互结构放 component。
+- 普通在线歌曲调用必须走 `onlineMusic/omni.ts`；不要在 component/hook/store 中直接调用 provider adapter 或 transport。
+- app-level props、导航和动作组装优先查 `src/components/app/*/build*.ts` / `create*.ts`，不要在 `App.tsx` 重新复制一套映射。
 
 ## Extension Rule
 
@@ -224,6 +230,8 @@ const { t } = useTranslation();
 - 是否直接使用 `line.endTime`，但应该使用 `getLineRenderEndTime`？
 - 是否手写 SVG，而 lucide 已有图标？
 - 是否新建了 service 请求逻辑，但已有 service 已经封装同类 API？
+- 是否绕过 `onlineMusic/omni.ts`，或丢失 `sourceRef/providerId` 造成跨 provider 误去重？
+- 是否复制了本地库索引、播放身份、Stage/OBS/PlayerCap 的现有转换 helper？
 - 是否绕过 `src/services/sync/*`，直接对同步服务发 fetch，或直接读写主题同步 registry / IndexedDB？
 - 是否对大量列表使用普通 `.map()` 而不是虚拟列表？
 - 是否新增硬编码文案却没有更新 i18n 字典？

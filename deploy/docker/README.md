@@ -2,6 +2,8 @@
 
 当前目录提供面向 Docker 部署的完整 Web 堆栈：前端网关、Folia Web API、在线音乐接口和独立的 Sync Server。对外只发布 Web 网关与 Sync Server 两个端口，其余服务仅通过 Docker 网络互访。
 
+Compose 文件边界：`compose.yaml` 是发布版完整栈，`compose.sync.yaml` 只构建 Sync Server，`compose.build.yaml` 将服务切到本地构建镜像；`backend/`、`netease-api/`、`kugou-api/` 和 `gateway/` 是内部服务实现。Web 服务从 gateway 暴露，客户端的 Sync API 直接连接独立 sync-server，不通过 Web gateway 转发。
+
 ## 快速启动
 
 要求 Docker Engine 24+ 与 Docker Compose v2。部署不需要下载源码；新建一个空目录，只下载 Compose 和环境变量模板：
@@ -56,6 +58,8 @@ docker compose ps
 - Sync Server：`http://NAS-IP:13000/health`
 
 网易云、酷狗和 Folia Web API 没有宿主机端口，不能绕过 gateway 直接访问。Sync Server 位于独立网络，不与 Web 内部服务互通。
+
+当前健康检查入口分别是 gateway 的 `/healthz`、`/api/healthz`、`/runtime-config.js`、`/netease/`、`/kugou/`，以及 Sync Server 的 `/health`。本地镜像验证脚本 `scripts/smoke-test.sh` 会检查这些路径和网络隔离。
 
 ## 环境变量
 

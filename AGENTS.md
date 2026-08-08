@@ -12,6 +12,10 @@
 
 当前项目内 skills：
 
+- `codebase-navigation`
+  路径：`skills/codebase-navigation/SKILL.md`
+  用于在面对陌生功能、自然语言术语或不确定代码归属时，按当前代码地图快速定位入口、状态、服务和类型，减少无目标的全文扫描。
+
 - `testing-strategy`
   路径：`skills/testing-strategy/SKILL.md`
   用于决定当前任务应该看热加载报错、跑单测、跑 UI 截图测试，还是避免误跑构建。
@@ -43,6 +47,10 @@
 - `kugou-provider-alignment`
   路径：`skills/kugou-provider-alignment/SKILL.md`
   用于开发阶段根据 `docs\ku-go-api-docs.md`、`.env.local` 中的真实 KuGou 服务和 `test-results\.dev-credentials` 对齐酷狗 provider 的请求与响应，禁止猜测接口结构。
+
+- `online-song-omni-routing`
+  路径：`skills/online-song-omni-routing/SKILL.md`
+  用于所有在线歌曲、搜索、播放、歌词、歌单、账户和跨 provider 数据流，确保普通调用经过 Omni，只有 provider adapter/transport 直接接触原始接口。
 
 全局沟通规则：
 

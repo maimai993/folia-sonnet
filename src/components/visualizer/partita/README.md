@@ -2,6 +2,16 @@
 
 这份说明用于描述 Partita 如何把一行歌词变成最终屏幕上的分层文字。
 
+## 当前代码入口
+
+- renderer、sequential layout、缓存与预热：`VisualizerPartita.tsx`
+- 模式 tuning 和 registry entry：`tuning.ts`、`entry.tsx`
+- semantic/sticky/display layout units：`src/utils/lyrics/cjkSemanticLayout.ts`
+- line transition / word reveal timing：`src/utils/lyrics/renderHints.ts`
+- 当前/下一句预热窗口：`src/components/visualizer/runtime.ts`
+
+修改前先确认这些共享 helper 的契约；Partita 不直接重写 parser，也不修改 `Line.words`。
+
 ## 术语定义
 
 - `word`：歌词解析器产出的原始计时词，来自 `Line.words`。它拥有 `text`、`startTime`、`endTime`。
@@ -211,8 +221,8 @@ Layout units 负责分行规划。
 Sticky layout units 防止标点漂到不同视觉层。
 Display words 决定最终可见文本对象。
 PartitaWord 负责 display word 级动画和 glow layer 逐字动画。
+```
 
 ## 预热与缓存
 
 当前实现会把当前行的 `PartitaSequentialLayout` 缓存在 renderer 内，并在 `shouldPreheatLine()` 判定下一句进入 `0.18s` 至 `1.2s` 的预热窗口时提前构建下一句布局。缓存 key 包含歌词文本、主题、窗口高度和 Partita tuning；缓存只服务布局产物，不改变 `Line.words` 的原始 timing。
-```

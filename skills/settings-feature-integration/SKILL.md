@@ -27,7 +27,7 @@ description: Use when adding, changing, refactoring, or reviewing user-facing se
 - JSON 白名单：`validKeys`
 - 导入应用：`handleImportConfig`
 
-新增 visualizer tuning（例如 `claddaghTuning`、`monetTuning` 等）或全局字重 `fontWeight` 时通常还要同步：
+新增 visualizer tuning（例如 `claddaghTuning`、`monetTuning`、`dioramaTuning`、`pendoloTuning`、`sonnetTuning` 等）或全局字重 `fontWeight` 时通常还要同步：
 
 - `src/types.ts`：新增 tuning / 设置类型和默认值
 - `src/stores/useSettingsUiStore.ts`：读取、持久化、setter、resetter、draft 逻辑；清空自定义字体栈时同步清空字重
@@ -59,6 +59,7 @@ description: Use when adding, changing, refactoring, or reviewing user-facing se
 
 - 外观 / 视觉：`src/components/modal/settings/AppearanceSettingsSubview.tsx`
 - 播放：`src/components/modal/settings/PlaybackSettingsSubview.tsx`
+- 通用：`src/components/modal/settings/GeneralSettingsSubview.tsx`
 - 集成：`src/components/modal/settings/IntegrationSettingsSubview.tsx`
 - 存储：`src/components/modal/settings/StorageSettingsSection.tsx`
   缓存、同步服务配置、主题/视觉设置同步，以及 zip 导入导出动作。
@@ -66,6 +67,7 @@ description: Use when adding, changing, refactoring, or reviewing user-facing se
   包含更新通道选择（release / limo / cielo）和 Acrylic 背景开启确认弹窗。
 - 实验室：`src/components/modal/settings/LabSettingsModal.tsx`
   包含固定顶部标题控件与返回按钮。
+- 固定命令：`src/components/modal/settings/PinnedCommandSettings.tsx`
 - visualizer 专属参数：优先放在模式相邻设置面板，再由 registry 的 `renderSettingsPanel` 挂回
 
 不要把新设置继续堆回 `SettingsModal.tsx` 的大 JSX 分支；如果需要新区域，先按 `file-modularization` 拆成相邻子视图。

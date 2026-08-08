@@ -1,311 +1,100 @@
 ---
 name: glossary-alignment
-description: Use when the user refers to repository-specific terms such as home view, panel, local library, Navidrome view, visualizer mode, queue, current song, search state, or other spoken component/state names and you need to map them quickly to the concrete files, hooks, stores, and code ownership in this project.
+description: Use when the user refers to repository-specific terms such as home view, grid, player panel, local library, online provider, Stage, OBS, visualizer mode, queue, current song, search state, or another spoken component/state name and you need to map it quickly to current files.
 ---
 
 # Glossary Alignment
 
-这个 skill 用于把口头术语快速映射到代码。
-
-目标：
-
-- 当开发者说“首页”“右侧面板”“本地库状态”“当前歌曲”“搜索状态”“心象模式”时，快速知道应该去看哪里
-- 避免因为术语不统一，改错组件、状态层或 service
-
-## When To Use
-
-以下情况优先使用：
-
-- 用户用自然语言描述界面或状态，而不是直接给文件名
-- 需要快速定位“这个词在代码里归谁管”
-- 需要判断某个名词属于组件、hook、store、service 还是共享类型
-- 需要在多人交流时对齐术语
-
-## Primary Mapping
-
-### App / Global
-
-- “主入口”“播放器主调度”“全局状态中心”
-  -> `src/App.tsx`
-
-- “当前歌曲”
-  -> `currentSong` in `src/App.tsx`
-
-- “播放队列”
-  -> `playQueue` in `src/App.tsx`
-
-- “状态提示”“顶部消息条”“toast 状态”
-  -> `statusMsg` in `src/App.tsx`
-
-### Navigation / View
-
-- “首页视图”“当前首页 tab”“主页 tab”
-  -> `homeViewTab` in `src/stores/useSearchNavigationStore.ts`
-  -> consumed by `src/components/Grid3D.tsx` and `src/components/app/home/GridViewOverlayHost.tsx`
-
-- “网格首页”“3D 首页”“集合网格”
-  -> `src/components/Grid3D.tsx` / `src/components/GridView.tsx`
-  -> collection adapters: `src/components/app/home/gridViewCollectionAdapters.ts`
-  -> overlay host: `src/components/app/home/GridViewOverlayHost.tsx`
-
-- “隐藏歌单”“歌单隐藏过滤”
-  -> `isPlaylistHidden` / `hiddenPlaylistKeys` in `src/components/Grid3D.tsx`, `src/components/GridMap.tsx`, `src/components/folia-grid/DesktopGrid3DSurface.tsx`
-
-- “文件夹排序”“本地排序策略”
-  -> `localFolderSortStrategy` in `src/components/GridView.tsx`
-
-- “当前 app 视图”“home/player 切换”
-  -> `useAppNavigation` in `src/hooks/useAppNavigation.ts`
-  -> persisted by `last_app_view`
-
-- “本地库导航状态”
-  -> `localMusicState` in `src/hooks/useAppNavigation.ts`
-  -> passed through `App.tsx` to `Home.tsx` and `LocalMusicView.tsx`
-
-- “Navidrome 待处理跳转”“待打开的 Navi 选择”
-  -> `pendingNavidromeSelection` in `src/hooks/useAppNavigation.ts`
-
-### Home / Library
-
-- “首页”
-  -> app-level entry: `src/components/app/Home.tsx`
-  -> mounts `GridViewOverlayHost` and `Grid3D` directly; legacy carousel and single-view home components are fully removed.
-
-- “首页模型”“Home 装配输入”
-  -> `src/components/app/home/buildHomeModel.ts`
-
-- “本地音乐页”“本地视图”
-  -> `src/components/LocalMusicView.tsx`
-
-- “本地文件夹/本地歌单详情页”
-  -> `src/components/local/LocalPlaylistView.tsx`
-
-- “Navidrome 页面”“Navi 页面”“Navi视图”
-  -> `src/components/navidrome/NavidromeMusicView.tsx`
-
-- “Navidrome 专辑页”
-  -> `src/components/navidrome/NavidromeAlbumView.tsx`
-
-- “网易云歌单页 / 专辑页 / 歌手页 / 详情集合”
-  -> 统一由 `GridView.tsx` 集合导航栈与 `src/components/app/home/gridViewCollectionAdapters.ts` 接管
-
-### Search
-
-- “搜索词”
-  -> `searchQuery` in `src/stores/useSearchNavigationStore.ts`
-
-- “搜索结果”
-  -> `searchResults` in `src/stores/useSearchNavigationStore.ts`
-
-- “搜索来源 tab”
-  -> `searchSourceTab` in `src/stores/useSearchNavigationStore.ts`
-
-- “搜索结果页面”“搜索工作台”
-  -> `src/components/app/search/SearchWorkspace.tsx`
-  -> overlay assembly: `src/components/app/overlays/AppOverlays.tsx`
-
-### Panel / Modal
-
-- “右侧面板”“播放器面板”“unified panel”
-  -> app-level entry: `src/components/app/PlayerPanel.tsx`
-  -> legacy implementation: `src/components/UnifiedPanel.tsx`
-
-- “面板模型”“PlayerPanel 装配输入”
-  -> `src/components/app/player-panel/buildPlayerPanelModel.ts`
-
-- “overlay 总装配”
-  -> `src/components/app/overlays/AppOverlays.tsx`
-  -> model builder: `src/components/app/overlays/buildAppOverlaysModel.ts`
-
-- “dialog 总装配”
-  -> `src/components/app/dialogs/AppDialogs.tsx`
-  -> model builder: `src/components/app/dialogs/buildAppDialogsModel.ts`
-
-- “封面 tab”
-  -> `src/components/panelTab/CoverTab.tsx`
-
-- “控制 tab”
-  -> `src/components/panelTab/ControlsTab.tsx`
-
-- “队列 tab”“播放列表 tab”
-  -> `src/components/panelTab/QueueTab.tsx`
-
-- “账号 tab”
-  -> `src/components/panelTab/AccountTab.tsx`
-
-- “本地 tab”
-  -> `src/components/panelTab/LocalTab.tsx`
-
-- “Navi tab”
-  -> `src/components/panelTab/NaviTab.tsx`
-
-- “FM tab”
-  -> `src/components/panelTab/FmTab.tsx`
-
-- “帮助弹窗”“设置弹窗”“选项中心”
-  -> `src/components/modal/SettingsModal.tsx`
-  -> settings subviews: `src/components/modal/settings/*`
-
-- “命令面板”“command palette”“快捷命令”
-  -> `src/components/command-palette/commandRegistry.ts`
-  -> context type: `src/components/command-palette/types.ts`
-
-- “外观设置”“视觉设置”“视觉配置导入导出”
-  -> `src/components/modal/settings/AppearanceSettingsSubview.tsx`
-  -> settings store: `src/stores/useSettingsUiStore.ts`
-
-- “播放设置”“集成设置”“存储设置”“桌面端设置”“实验室设置”
-  -> `src/components/modal/settings/PlaybackSettingsSubview.tsx`
-  -> `src/components/modal/settings/IntegrationSettingsSubview.tsx`
-  -> `src/components/modal/settings/StorageSettingsSection.tsx`
-  -> `src/components/modal/settings/DesktopSettingsSubview.tsx`
-  -> `src/components/modal/settings/LabSettingsModal.tsx`
-
-- “本地歌词匹配弹窗”
-  -> `src/components/modal/LyricMatchModal.tsx`
-
-- “Navidrome 歌词匹配弹窗”
-  -> `src/components/modal/NaviLyricMatchModal.tsx`
-
-### Visualizer
-
-- “歌词可视化”“全屏歌词层”“visualizer”
-  -> `src/components/visualizer/*`
-
-- “经典模式”“classic”
-  -> `src/components/visualizer/classic/Visualizer.tsx`
-  -> `VisualizerMode = 'classic'`
-
-- “心象模式”“cadenza”
-  -> `src/components/visualizer/cadenza/VisualizerCadenza.tsx`
-  -> `VisualizerMode = 'cadenza'`
-
-- “云阶模式”“partita”
-  -> `src/components/visualizer/partita/VisualizerPartita.tsx`
-  -> `VisualizerMode = 'partita'`
-
-- “浮名模式”“fume”
-  -> `src/components/visualizer/fume/VisualizerFume.tsx`
-  -> `VisualizerMode = 'fume'`
-
-- “群唱模式”“cappella”
-  -> `src/components/visualizer/cappella/VisualizerCappella.tsx`
-  -> `VisualizerMode = 'cappella'`
-
-- “倾诉模式”“tilt”
-  -> `src/components/visualizer/tilt/VisualizerTilt.tsx`
-  -> `VisualizerMode = 'tilt'`
-
-- “莫奈模式”“monet”
-  -> `src/components/visualizer/monet/VisualizerMonet.tsx`
-  -> `VisualizerMode = 'monet'`
-
-- “回环模式”“claddagh”
-  -> `src/components/visualizer/claddagh/VisualizerCladdagh.tsx`
-  -> `VisualizerMode = 'claddagh'`
-  -> tuning: `claddaghTuning` in `src/stores/useSettingsUiStore.ts`
-
-- “漫游模式”“立影模式”“diorama”
-  -> `src/components/visualizer/diorama/VisualizerDiorama.tsx`
-  -> `VisualizerMode = 'diorama'`
-
-- “通用背景 / 莫奈背景 / 隐现双着色器背景”
-  -> `visualizerBackgroundMode` in `src/stores/useSettingsUiStore.ts`
-  -> shell background registry: `src/components/visualizer/backgrounds/registry.tsx`
-
-- “可视化模式状态”
-  -> `visualizerMode` in `src/stores/useSettingsUiStore.ts`
-  -> bridge hook: `src/hooks/useAppPreferences.ts`
-  -> related type in `src/types.ts`
-
-- “更新通道”“limo 通道”“cielo 通道”
-  -> `electron/updateChannels.cjs` / `electron/main.cjs`
-
-- “自定义字重”
-  -> `resolveThemeFontWeight` in `src/utils/fontStacks.ts` / `useSettingsUiStore.ts`
-
-- “Acrylic 确认弹窗”
-  -> `src/components/modal/settings/DesktopSettingsSubview.tsx`
-
-### Data / Service
-
-- “网易云接口层”
-  -> `src/services/netease.ts`
-
-- “酷狗接口层 / 酷狗 Provider”
-  -> `src/services/onlineMusic/kugouTransport.ts` / `kugouProvider.ts`
-
-- “Navidrome 接口层”
-  -> `src/services/navidromeService.ts`（已适配 Navidrome 0.63+ `/api/getLyrics` 歌词接口）
-
-- “本地导入逻辑”“本地文件扫描”“重扫逻辑”
-  -> `src/services/localMusicService.ts`
-
-- “在线播放加载”
-  -> `src/services/onlinePlayback.ts`
-
-- “播放结构适配”
-  -> `src/services/playbackAdapters.ts`
-
-- “缓存数据库”“IndexedDB 层”
-  -> `src/services/db.ts`
-  -> dedicated theme sync registry: `theme_registry` store via `src/services/sync/themeSyncRegistry.ts`
-
-- “预取”
-  -> `src/services/prefetchService.ts`
-
-- “同步服务”“云同步”“主题同步”
-  -> configuration/status: `src/services/sync/syncConfig.ts`
-  -> orchestration: `src/services/sync/syncCoordinator.ts`
-  -> local/remote repository: `src/services/sync/syncRepository.ts`
-  -> stable song fingerprints and local registry: `src/services/sync/syncFingerprint.ts` / `themeSyncRegistry.ts`
-  -> settings UI: `src/components/modal/settings/StorageSettingsSection.tsx`
-  -> command palette: `settings-r2-sync` / `sync-now` in `src/components/command-palette/commandRegistry.ts`
-
-### Types / Shared Definitions
-
-- “统一歌曲结构”
-  -> `SongResult` / `UnifiedSong` in `src/types.ts`
-
-- “本地歌曲结构”
-  -> `LocalSong` in `src/types.ts`
-
-- “Navidrome 类型”
-  -> `src/types/navidrome.ts`
-
-- “首页 tab 类型”
-  -> `HomeViewTab` in `src/types.ts`
-
-- “可视化模式类型”
-  -> `VisualizerMode` in `src/types.ts`
-
-## Fast Lookup Heuristics
-
-- 术语里带“页面”“视图”“弹窗”“tab”
-  -> 先看 `components/app/*` 是否已有 app-level 入口，再看 `components/*`
-
-- 术语里带“状态”“导航”“当前模式”“偏好”
-  -> 先看 `hooks/*` 或 `stores/*`
-
-- 术语里带“模型”“装配”“入口透传”“顶层派生”
-  -> 先看 `components/app/*/build*.ts` 或 `create*.ts`
-
-- 术语里带“接口”“缓存”“导入”“播放流程”
-  -> 先看 `services/*`
-
-- 术语里带“类型”“模式枚举”“共享结构”
-  -> 先看 `types.ts` 或 `types/navidrome.ts`
-
-## Workflow
-
-1. 先把口头术语归类为：组件 / 视图 / 状态 / store / service / type。
-2. 用上面的 glossary 找到第一归属文件。
-3. 再从该文件向上传导或向下调用追踪真实实现。
-4. 如果术语和代码命名不一致，以真实代码为准，并在回答中直接说明映射关系。
-
-## What To Avoid
-
-- 把“首页状态”误认为只在 `Home.tsx` 内部
-- 把“右侧面板”误认为单个 tab 文件
-- 把“可视化模式”误认为只是组件名，而忽略 `VisualizerMode` 和 `useAppPreferences`
-- 把“本地库状态”只看 `LocalMusicView.tsx`，忽略 `useAppNavigation.ts` 里的 `localMusicState`
+把口头术语先映射到当前代码的第一归属，再沿一层调用关系追实现。路径以代码为准；如果文档与代码冲突，直接指出旧映射。
+
+## App / global state
+
+- “主入口 / 播放器主调度 / 当前歌曲 / 主队列” -> `src/App.tsx`；入口 JSX 的区域边界在 `src/components/app/AppShell.tsx`、`Home.tsx`、`PlayerPanel.tsx`、`overlays/AppOverlays.tsx`、`dialogs/AppDialogs.tsx`。
+- “当前歌曲 / 播放队列 / 状态提示” -> `currentSong` / `playQueue` / `statusMsg` in `src/App.tsx`。
+- “home/player 切换 / 最后视图” -> `src/hooks/useAppNavigation.ts`（`last_app_view` 等持久化导航状态）。
+- “搜索词 / 搜索结果 / 搜索来源 tab / 首页 tab” -> `src/stores/useSearchNavigationStore.ts`。
+- “集合导航栈 / 当前集合” -> `src/stores/useCollectionNavigationStore.ts`。
+- “设置 UI 当前页 / quick editor” -> `src/stores/useSettingsUiStore.ts` / `useThemeQuickEditorStore.ts`。
+
+## Home / library
+
+- “首页 / 网格首页 / 3D 首页” -> `src/components/app/Home.tsx` -> `components/app/home/buildHomeModel.ts`、`GridViewOverlayHost.tsx` -> `src/components/Grid3D.tsx` / `GridView.tsx`。
+- “集合卡片 / 网格导航 / 渐进加载 / 六边形 viewport” -> `src/components/folia-grid/*`。
+- “首页 collection adapter” -> `src/components/app/home/gridViewCollectionAdapters.ts`。
+- “本地库首页面 / 本地 3D 网格” -> `src/components/app/home/LocalGrid3DView.tsx`、`localGrid3DModel.ts`。
+- “Navidrome 首页面 / Navi 3D 网格” -> `src/components/app/home/NavidromeGrid3DView.tsx`、`useNavidromeGridLibrary.ts`。
+- “在线 provider 账号 / 登录 / 切换” -> `src/components/app/home/OnlineProvider*`、`onlineProviderAccountView.ts`，状态在 `src/stores/useOnlineProviderAccountStore.ts`，账号/二维码逻辑在 `src/hooks/useOnlineProvider*.ts`。
+- “本地库扫描 / 索引 / 重扫 / 播放” -> `src/hooks/useLocalLibraryCatalog.ts` -> `src/services/localLibraryCatalogService.ts`、`localLibraryCatalogInternals.ts`、`localMusicService.ts`、`src/utils/localLibraryIndex.ts`。
+- “本地文件夹 / 本地歌单 / 实体编辑 / artist split” -> `src/components/local-library-entity/*` -> `src/services/localLibraryEntityMutations.ts`、`localLibraryEntityRepository.ts`。
+- 旧路径 `src/components/LocalMusicView.tsx`、`src/components/local/LocalPlaylistView.tsx`、`src/components/navidrome/*` 不是当前入口。
+
+## Search / panel / dialogs
+
+- “搜索工作台 / 搜索结果页” -> `src/components/app/search/SearchWorkspace.tsx`、`SearchResultsList.tsx`、`SearchResultRow.tsx`；总 overlay 在 `src/components/app/overlays/AppOverlays.tsx`。
+- “右侧播放器面板 / unified panel” -> app entry `src/components/app/PlayerPanel.tsx` -> `player-panel/buildPlayerPanelModel.ts`；旧的实现仍在 `src/components/UnifiedPanel.tsx`。
+- “封面 / 控制 / 队列 / 本地 / Navi / FM / 账号 tab” -> `src/components/panelTab/{Cover,Controls,Queue,Local,Navi,Fm,Account}Tab.tsx`。
+- “overlay 总装配” -> `src/components/app/overlays/AppOverlays.tsx` + `buildAppOverlaysModel.ts`。
+- “dialog 总装配 / 设置 dialog” -> `src/components/app/dialogs/AppDialogs.tsx` + `buildAppDialogsModel.ts` / `buildSettingsDialogModel.ts`。
+- “设置弹窗 / 帮助 / 选项中心” -> `src/components/modal/SettingsModal.tsx`、`UserGuideModal.tsx`；设置分区在 `src/components/modal/settings/*`。
+- “本地歌词匹配 / Navi 歌词匹配” -> `src/components/modal/LyricMatchModal.tsx` / `NaviLyricMatchModal.tsx`。
+- “命令面板 / 快捷命令” -> `src/components/command-palette/commandRegistry.ts`、`types.ts`、`CommandPalette.tsx`。
+
+## Playback / external surfaces
+
+- “播放 transport / queue / audio bridge / visualizer bridge” -> `src/hooks/usePlaybackTransportController.ts`、`usePlaybackQueueController.ts`、`usePlaybackAudioBridge.ts`、`usePlaybackVisualizerBridge.ts`。
+- “在线播放 / 播放源适配 / 预取” -> `src/services/onlinePlayback.ts`、`playbackAdapters.ts`、`prefetchService.ts`。
+- “播放恢复 / 在线回退 / 播放缓存” -> `src/components/app/playback/*`。
+- “Stage 模式 / 外部播放器控制 / Stage session” -> `src/hooks/useStagePlaybackController.ts`、`src/utils/appStageHelpers.ts`、`src/utils/stageClientDemo.ts`、`src/utils/stagePlayerSnapshot.ts`、`electron/stageApi.cjs`。
+- “Now Playing / PlayerCap” -> `src/hooks/useNowPlayingSource.ts`、`usePlayerCapSource.ts`、`src/services/nowPlayingProvider.ts`、`playerCapProvider.ts`、`src/types/playerCap.ts`。
+- “OBS browser source / OBS lyrics / OBS web source” -> `src/components/obs/*`、`src/hooks/useObsBrowserSourcePublisher.ts`、`src/utils/obsBrowserSource.ts`、`src/types/obsBrowserSource.ts`。
+- “Remote 控制 / 远程歌词 / 视频导出” -> `src/components/remote/*`、`src/types/remoteControl.ts`、`src/hooks/useElectronVideoExportController.ts`、`src/services/electronVideoExport.ts`。
+
+## Online music and data
+
+- “在线歌曲、搜索、歌词、音频、歌单、专辑、歌手、推荐、点赞、账户” -> public boundary `src/services/onlineMusic/omni.ts` + `src/types/onlineMusic.ts`。
+- “网易云 provider / 酷狗 provider” -> adapter `neteaseProvider.ts` / `kugouProvider.ts`，transport `kugouTransport.ts`；普通 UI、hook、store、app service 不应直连它们。
+- “provider 注册 / 账号缓存 / provider storage” -> `providerRegistry.ts`、`providerAccountCache.ts`、`providerStorage.ts`。
+- “Navidrome / Subsonic” -> `src/services/navidromeService.ts` + `src/types/navidrome.ts`；它不是在线歌曲 Omni provider。
+- “本地音乐 service / local playlist” -> `src/services/localMusicService.ts`、`localPlaylistService.ts`。
+- “统一歌曲 / 本地歌曲 / 播放身份” -> `src/types.ts`、`src/types/appPlayback.ts`、`src/utils/appPlaybackGuards.ts`、`appPlaybackHelpers.ts`。
+
+## Lyrics / visualizer
+
+- “歌词解析 / 原始歌词格式” -> `src/utils/lyrics/parserCore.ts`、`src/workers/lyricsParser.worker.ts` / `metadataParser.worker.ts`；visualizer 不负责 `.lrc/.vtt/.yrc/.qrc` 解析。
+- “短句 / render end / fast reveal” -> `src/utils/lyrics/renderHints.ts`。
+- “CJK 语义分组 / sticky 标点 / contraction” -> `src/utils/lyrics/cjkSemanticLayout.ts`。
+- “逐字 / grapheme timing” -> `src/utils/lyrics/graphemeTiming.ts`。
+- “visualizer 统一入口 / 当前行 / 背景” -> `src/components/visualizer/VisualizerRenderer.tsx`、`runtime.ts`、`backgrounds/VisualizerBackgroundRenderer.tsx`。
+- “visualizer shared props / tuning 类型” -> `src/components/visualizer/definition.ts`、`tuningRegistry.ts`、`src/types.ts`。
+- 模式入口统一为 `src/components/visualizer/<mode>/entry.tsx`：`classic`、`cadenza`、`partita`、`fume`、`cappella`、`tilt`、`claddagh`、`monet`、`diorama`、`pendolo`、`sonnet`。
+- “Partita layout / 预热” -> `src/components/visualizer/partita/VisualizerPartita.tsx` + `src/components/visualizer/partita/README.md`；共享 layout 工具仍在 `src/utils/lyrics/cjkSemanticLayout.ts`。
+- “Pendolo” -> `src/components/visualizer/pendolo/VisualizerPendolo.tsx`、`pendoloTextLayout.ts`、`pendoloTimeline.ts`、`PendoloClockworkCanvas.tsx`。
+- “Sonnet / Pixi” -> `src/components/visualizer/sonnet/VisualizerSonnet.tsx`、`createSonnetPixiRuntime.ts`、`sonnet*` helpers。
+- “字体栈 / 字重 / 颜色混合” -> `src/utils/fontStacks.ts`、`src/components/visualizer/colorMix.ts`。
+
+## Settings / persistence / deployment
+
+- “外观配置导入导出” -> `src/components/modal/settings/AppearanceSettingsSubview.tsx`；配置 schema 与状态 -> `src/types.ts` / `src/stores/useSettingsUiStore.ts`。
+- “播放 / 通用 / 集成 / 存储 / 桌面 / 实验室设置” -> `PlaybackSettingsSubview.tsx`、`GeneralSettingsSubview.tsx`、`IntegrationSettingsSubview.tsx`、`StorageSettingsSection.tsx`、`DesktopSettingsSubview.tsx`、`LabSettingsModal.tsx`。
+- “同步 / R2 / 主题 registry” -> `src/services/sync/syncCoordinator.ts`、`syncClient.ts`、`syncRepository.ts`、`settingsSnapshot.ts`、`themeSyncRegistry.ts`。
+- “IndexedDB / 主题、封面、二进制缓存” -> `src/services/db.ts`、`appDatabase.ts`、`repositories/*`、`binaryAssetStore.ts`、`coverCache.ts`、`themeCache.ts`。
+- “Electron 主进程 / API bridge” -> `electron/main.cjs`、`preload.cjs`、`stageApi.cjs`、`kugouApiBridge.cjs`、`updateChannels.cjs`；Web API 源码在 `api/`、`api-ts/`。
+- “Sync Server” -> `sync-server/src/app.ts`（路由/协议）、`src/node.ts`、`src/cloudflare.ts`、`src/d1-emulator.ts`；Worker 包装入口是 `worker/index.ts`。
+- “Docker Web stack” -> `deploy/docker/compose.yaml`、`compose.sync.yaml`、`compose.build.yaml`、`scripts/smoke-test.sh`。
+
+## Fast lookup rules
+
+1. 术语带“页面 / 视图 / 弹窗 / tab”时，先找 `components/app/*`，再找具体展示组件。
+2. 术语带“状态 / 导航 / 偏好 / 当前模式”时，先找 `hooks/*` 和 `stores/*`。
+3. 术语带“模型 / 装配 / 派生 / 入口透传”时，先找相邻 `build*.ts` / `create*.ts`。
+4. 术语带“接口 / provider / 缓存 / 导入 / 播放流程”时，先找 `services/*`；在线歌曲先读 `onlineMusic/omni.ts`。
+5. 术语带“类型 / 模式枚举 / 共享结构”时，先找 `types.ts`、领域类型文件和 `visualizer/definition.ts`。
+6. 找到文档里的路径后先用 `git ls-files -- <path>` 验证；不存在的路径按旧文档处理，不要继续追。
+
+## What to avoid
+
+- 把所有首页逻辑都归到 `Home.tsx`，忽略 `buildHomeModel`、collection adapters、grid surface 和导航 store。
+- 把“右侧面板”只理解成某个 panel tab，忽略 `PlayerPanel` 和 `buildPlayerPanelModel`。
+- 把 Navidrome 当作 Omni provider，或让普通在线歌曲调用绕过 `omni`。
+- 把 `VisualizerMode` 当成 `App.tsx` 中的 switch；当前 registry 从每个模式的 `entry.tsx` 自动发现。
+- 把当前精确播放时间当 React state；连续值由 MotionValue / ref / canvas 等运行时路径处理。
