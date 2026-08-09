@@ -14,6 +14,8 @@ import {
     buildTaskbarControlsFromPlaybackSyncBridge,
 } from '../utils/playbackSyncBridge';
 import { resolveStagePlayerPositionSec } from '../utils/stagePlayerSnapshot';
+import { getPlaybackSourceRef } from '../utils/appPlaybackGuards';
+import { omni } from '../services/onlineMusic/omni';
 
 // Bridges Electron-specific shell features without coupling to UI components.
 const DISCORD_PRESENCE_SNAPSHOT_INTERVAL_MS = 1000;
@@ -112,6 +114,19 @@ export const useElectronPlaybackBridge = ({
 }: UseElectronPlaybackBridgeOptions) => {
     const [playbackSyncBridgeStatus, setPlaybackSyncBridgeStatus] = useState<ElectronPlaybackSyncBridgeStatus>(() => emptyPlaybackSyncBridgeStatus());
     const pausedByVoiceInputRef = useRef(false);
+    const currentSongSource = currentSong ? getPlaybackSourceRef(currentSong) : null;
+    const canLikeCurrentSong = Boolean(
+        currentSong
+        && !isNowPlayingStageActive
+        && (
+            currentSongSource?.kind === 'local'
+            || currentSongSource?.kind === 'navidrome'
+            || (currentSongSource?.kind === 'online' && omni.canLikeSong(currentSong))
+        ),
+    );
+    const likeUnavailableProvider = currentSongSource?.kind === 'online' && !canLikeCurrentSong
+        ? omni.getProviderLabel(currentSongSource.providerId)
+        : undefined;
     const stageSnapshotCacheRef = useRef<{
         playQueue: SongResult[];
         currentSong: SongResult | null;
@@ -202,6 +217,8 @@ export const useElectronPlaybackBridge = ({
                 playerChromeVisibilityMode,
             },
             ),
+            canLike: canLikeCurrentSong,
+            likeUnavailableProvider,
         };
     };
 
@@ -474,7 +491,7 @@ export const useElectronPlaybackBridge = ({
             }
 
             if (command.type === 'toggle-like') {
-                onLike?.();
+                if (canLikeCurrentSong && !isNowPlayingControlDisabledRef.current) onLike?.();
                 return;
             }
 
@@ -534,7 +551,7 @@ export const useElectronPlaybackBridge = ({
 
         return window.electron.onRemoteControlCommand(runCommand);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activePlaybackContext, audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteExportCommand, onRemotePlayerChromeVisibilityModeCycle, setShowTransparentWindowBorder, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
+    }, [activePlaybackContext, audioRef, canLikeCurrentSong, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteExportCommand, onRemotePlayerChromeVisibilityModeCycle, setShowTransparentWindowBorder, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
 
     useEffect(() => {
         if (!window.electron?.onStagePlayerControlRequest) {

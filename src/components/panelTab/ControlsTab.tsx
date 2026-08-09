@@ -19,6 +19,8 @@ interface ControlsTabProps {
     onToggleLoop: () => void;
     onLike: () => void;
     isLiked: boolean;
+    likeDisabled?: boolean;
+    likeDisabledReason?: string;
     onGenerateAITheme: () => void;
     isGeneratingTheme: boolean;
     canGenerateAITheme: boolean;
@@ -50,6 +52,8 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     onToggleLoop,
     onLike,
     isLiked,
+    likeDisabled = false,
+    likeDisabledReason,
     onGenerateAITheme,
     isGeneratingTheme,
     canGenerateAITheme,
@@ -221,7 +225,10 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
 
                     <button
                         onClick={onLike}
-                        className={`h-12 rounded-xl flex items-center justify-center transition-colors ${isLiked ? 'bg-red-500/20 text-red-500' : buttonBg}`}
+                        disabled={likeDisabled}
+                        title={likeDisabledReason || (isLiked ? t('player.unlike') : t('player.like'))}
+                        aria-label={likeDisabledReason || (isLiked ? t('player.unlike') : t('player.like'))}
+                        className={`h-12 rounded-xl flex items-center justify-center transition-colors ${isLiked ? 'bg-red-500/20 text-red-500' : buttonBg} ${likeDisabled ? 'opacity-35 cursor-not-allowed' : ''}`}
                     >
                         <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
                     </button>

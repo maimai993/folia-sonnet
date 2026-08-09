@@ -152,6 +152,8 @@ declare global {
     isDaylight?: boolean;
     lyrics?: import('./types').LyricData | null;
     isLiked?: boolean;
+    canLike?: boolean;
+    likeUnavailableProvider?: string;
     updatedAt: number;
     mainWindowWidth?: number;
     mainWindowHeight?: number;

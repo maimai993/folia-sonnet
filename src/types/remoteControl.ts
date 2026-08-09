@@ -48,6 +48,8 @@ export interface RemoteControlSnapshot {
     lyrics?: LyricData | null;
     lyricOffsetMs?: number;
     isLiked?: boolean;
+    canLike?: boolean;
+    likeUnavailableProvider?: string;
     updatedAt: number;
     mainWindowWidth?: number;
     mainWindowHeight?: number;

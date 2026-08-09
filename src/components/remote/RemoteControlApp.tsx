@@ -84,6 +84,7 @@ const emptySnapshot: RemoteControlSnapshot = {
     isDaylight: false,
     lyrics: null,
     isLiked: false,
+    canLike: false,
     updatedAt: 0,
 };
 
@@ -235,6 +236,10 @@ const RemoteControlApp: React.FC = () => {
     const progressValue = duration > 0 ? Math.max(0, Math.min(currentTime, duration)) : 0;
     const isPlaying = snapshot.playerState === PlayerState.PLAYING;
     const primaryDisabled = snapshot.controlsDisabled || !snapshot.hasTrack;
+    const likeDisabled = primaryDisabled || snapshot.canLike === false;
+    const likeUnavailableReason = snapshot.likeUnavailableProvider
+        ? t('status.providerLikeUnavailable', { provider: snapshot.likeUnavailableProvider })
+        : undefined;
     const title = snapshot.title || 'Folia';
     const artist = snapshot.artist || (snapshot.hasTrack ? 'Unknown artist' : 'No active track');
     const exportState = snapshot.exportState ?? idleVideoExportState();
@@ -657,18 +662,20 @@ const RemoteControlApp: React.FC = () => {
                                                                     </button>
                                                                 </div>
                                                                 <div className="flex items-center gap-1.5">
-                                                                    <button
-                                                                        type="button"
-                                                                        title={snapshot.isLiked ? t('remote.unlike') : t('remote.like')}
-                                                                        disabled={primaryDisabled}
-                                                                        onClick={() => sendCommand({ type: 'toggle-like' })}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${snapshot.isLiked
-                                                                            ? (isDaylight ? 'bg-red-500/20 text-red-600 hover:bg-red-500/30' : 'bg-red-500/25 text-red-400 hover:bg-red-500/35')
-                                                                            : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
-                                                                            }`}
-                                                                    >
-                                                                        <Heart size={16} fill={snapshot.isLiked ? 'currentColor' : 'none'} strokeWidth={2} />
-                                                                    </button>
+                                                                    <span title={likeUnavailableReason || (snapshot.isLiked ? t('remote.unlike') : t('remote.like'))}>
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label={likeUnavailableReason || (snapshot.isLiked ? t('remote.unlike') : t('remote.like'))}
+                                                                            disabled={likeDisabled}
+                                                                            onClick={() => sendCommand({ type: 'toggle-like' })}
+                                                                            className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${snapshot.isLiked
+                                                                                ? (isDaylight ? 'bg-red-500/20 text-red-600 hover:bg-red-500/30' : 'bg-red-500/25 text-red-400 hover:bg-red-500/35')
+                                                                                : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
+                                                                                }`}
+                                                                        >
+                                                                            <Heart size={16} fill={snapshot.isLiked ? 'currentColor' : 'none'} strokeWidth={2} />
+                                                                        </button>
+                                                                    </span>
                                                                     <button
                                                                         type="button"
                                                                          title={t('remote.transparentControls')}

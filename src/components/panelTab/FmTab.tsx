@@ -12,6 +12,8 @@ interface FmTabProps {
     onTrash: () => void;
     onLike: () => void;
     isLiked: boolean;
+    likeDisabled?: boolean;
+    likeDisabledReason?: string;
     isDaylight?: boolean;
     primaryColor?: string;
 }
@@ -24,6 +26,8 @@ const FmTab: React.FC<FmTabProps> = ({
     onTrash,
     onLike,
     isLiked,
+    likeDisabled = false,
+    likeDisabledReason,
     isDaylight = false,
     primaryColor = 'var(--text-primary)'
 }) => {
@@ -85,8 +89,10 @@ const FmTab: React.FC<FmTabProps> = ({
                 {/* Like Button */}
                 <button
                     onClick={onLike}
-                    className={`flex flex-col items-center gap-2 group transition-opacity ${isLiked ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}
-                    title={isLiked ? t('player.unlike') : t('player.like')}
+                    disabled={likeDisabled}
+                    className={`flex flex-col items-center gap-2 group transition-opacity ${isLiked ? 'opacity-100' : 'opacity-50 hover:opacity-100'} disabled:cursor-not-allowed disabled:opacity-30`}
+                    title={likeDisabledReason || (isLiked ? t('player.unlike') : t('player.like'))}
+                    aria-label={likeDisabledReason || (isLiked ? t('player.unlike') : t('player.like'))}
                     style={{ color: isLiked ? '#ef4444' : 'var(--text-primary)' }}
                 >
                     <div className={`p-3 rounded-full transition-colors ${btnBg} ${isLiked ? 'bg-red-500/20' : ''}`}>

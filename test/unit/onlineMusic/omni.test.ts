@@ -121,9 +121,39 @@ describe('omni routing', () => {
         useOnlineProviderAccountStore.getState().updateAccount(providerId, {
             collections: [playlist, { ...playlist, id: 'kugou-album', type: 'album' }],
         });
+        registerOnlineMusicProvider({
+            ...provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            capabilities: { ...capabilities, mutations: true, playlistTrackMutations: true },
+            mutations: { updatePlaylistTracks: async () => undefined },
+        });
 
         expect(omni.getPlaylistsForSong(song(providerId))).toEqual([playlist]);
         expect(omni.getPlaylistsForSong({ ...song(providerId), sourceRef: { kind: 'local', mediaId: 'local-song' } })).toEqual([]);
+    });
+
+    it('does not expose read-only provider playlists as mutation targets', async () => {
+        const playlist: ProviderCollection = {
+            providerId,
+            id: 'read-only-playlist',
+            name: 'Read-only playlist',
+            type: 'playlist',
+        };
+        registerOnlineMusicProvider({
+            ...provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            capabilities: { ...capabilities, userLibrary: true, playlists: true },
+            library: {
+                getUserPlaylists: async () => ({ items: [playlist], hasMore: false, nextOffset: 1 }),
+            },
+        });
+        useOnlineProviderAccountStore.getState().updateAccount(providerId, { collections: [playlist] });
+
+        expect(omni.canAddSongToPlaylist(song(providerId))).toBe(false);
+        expect(omni.canEditCollectionTracks(playlist)).toBe(false);
+        expect(omni.canSubscribeCollection(playlist)).toBe(false);
+        expect(omni.getPlaylistsForSong(song(providerId))).toEqual([]);
+        expect(omni.canDislikeSong(song(providerId))).toBe(false);
+        await expect(omni.subscribe(playlist, true)).rejects.toMatchObject({ code: 'unsupported' });
+        await expect(omni.dislikeSong(song(providerId))).rejects.toMatchObject({ code: 'unsupported' });
     });
 
     it('lets a provider hide playlists that cannot accept track mutations', () => {
@@ -141,8 +171,10 @@ describe('omni routing', () => {
         };
         registerOnlineMusicProvider({
             ...provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            capabilities: { ...capabilities, mutations: true, playlistTrackMutations: true },
             mutations: {
                 canAddToPlaylist: playlist => playlist.id === addable.id,
+                updatePlaylistTracks: async () => undefined,
             },
         });
         useOnlineProviderAccountStore.getState().updateAccount(providerId, {
@@ -183,10 +215,12 @@ describe('omni routing', () => {
         const neteaseLike = vi.fn(async () => undefined);
         registerOnlineMusicProvider({
             ...provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            capabilities: { ...capabilities, mutations: true, likes: true },
             mutations: { likeSong: kugouLike },
         });
         registerOnlineMusicProvider({
             ...provider(otherProviderId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            capabilities: { ...capabilities, mutations: true, likes: true },
             mutations: { likeSong: neteaseLike },
         });
         useOnlineProviderAccountStore.getState().updateAccount(providerId, { likedSongIds: ['existing'] });
@@ -197,6 +231,23 @@ describe('omni routing', () => {
         expect(kugouLike).toHaveBeenCalledWith(target, true);
         expect(neteaseLike).not.toHaveBeenCalled();
         expect(useOnlineProviderAccountStore.getState().accounts[providerId]?.likedSongIds).toEqual(['existing', 'kugou-song']);
+    });
+
+    it('keeps readable likes visible without exposing an unsupported like mutation', async () => {
+        registerOnlineMusicProvider({
+            ...provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            capabilities: { ...capabilities, likes: true },
+            library: {
+                getUserPlaylists: async () => ({ items: [], hasMore: false, nextOffset: 0 }),
+                getLikedSongIds: async () => ['liked-song'],
+            },
+        });
+        const target = song(providerId, 'liked-song');
+        useOnlineProviderAccountStore.getState().updateAccount(providerId, { likedSongIds: ['liked-song'] });
+
+        expect(omni.isSongLiked(target)).toBe(true);
+        expect(omni.canLikeSong(target)).toBe(false);
+        await expect(omni.toggleSongLike(target)).rejects.toMatchObject({ code: 'unsupported' });
     });
 
     it('routes playlist track updates through the collection owner', async () => {
@@ -210,6 +261,7 @@ describe('omni routing', () => {
         const getUserPlaylists = vi.fn(async () => ({ items: [refreshedPlaylist], hasMore: false, nextOffset: 1 }));
         registerOnlineMusicProvider({
             ...provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            capabilities: { ...capabilities, mutations: true, playlistTrackMutations: true },
             mutations: { updatePlaylistTracks: updateTracks },
             library: { getUserPlaylists },
         });
@@ -234,6 +286,7 @@ describe('omni routing', () => {
         const updateTracks = vi.fn(async () => undefined);
         registerOnlineMusicProvider({
             ...provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            capabilities: { ...capabilities, mutations: true, playlistTrackMutations: true },
             mutations: {
                 canAddToPlaylist: () => false,
                 updatePlaylistTracks: updateTracks,

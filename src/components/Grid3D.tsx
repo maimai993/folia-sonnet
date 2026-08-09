@@ -172,6 +172,22 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const isOnlineTab = homeViewTab === 'playlist' || homeViewTab === 'albums' || homeViewTab === 'radio';
     const activeProviderId = onlineProviderPlatform?.activeProviderId || 'netease';
     const activeProviderSummary = onlineProviderPlatform?.activeProvider;
+    const activeProviderCapabilities = omni.getProviderCapabilities(activeProviderId);
+    const activeProviderLabel = activeProviderSummary?.shortName
+        || activeProviderSummary?.displayName
+        || omni.getProviderLabel(activeProviderId);
+    const canUseOnlinePlaylists = activeProviderCapabilities.userLibrary && activeProviderCapabilities.playlists;
+    const canUseOnlineAlbums = activeProviderCapabilities.userLibrary && Boolean(activeProviderCapabilities.userAlbums);
+    const canUseOnlineRadio = activeProviderCapabilities.recommendations;
+    const playlistUnavailableReason = canUseOnlinePlaylists
+        ? undefined
+        : t('status.providerLibraryUnavailable', { provider: activeProviderLabel });
+    const albumsUnavailableReason = canUseOnlineAlbums
+        ? undefined
+        : t('status.providerUserAlbumsUnavailable', { provider: activeProviderLabel });
+    const radioUnavailableReason = canUseOnlineRadio
+        ? undefined
+        : t('status.providerRecommendationsUnavailable', { provider: activeProviderLabel });
     const activeUser = activeProviderSummary?.user
         || (activeProviderId === 'netease' ? user : null);
     const activeAccountView = resolveOnlineProviderAccountView({
@@ -308,19 +324,19 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const [loadingRadio, setLoadingRadio] = useState(false);
 
     const isLoading =
-        (homeViewTab === 'playlist' && activeCollections.length === 0 && activeUser !== null) ||
-        (homeViewTab === 'albums' && loadingAlbums) ||
-        (homeViewTab === 'radio' && loadingRadio);
+        (homeViewTab === 'playlist' && canUseOnlinePlaylists && activeCollections.length === 0 && activeUser !== null) ||
+        (homeViewTab === 'albums' && canUseOnlineAlbums && loadingAlbums) ||
+        (homeViewTab === 'radio' && canUseOnlineRadio && loadingRadio);
 
     // Load favorite albums and recommendations
     useEffect(() => {
-        if (homeViewTab === 'albums' && favoriteAlbums.length === 0 && activeUser) {
+        if (homeViewTab === 'albums' && canUseOnlineAlbums && favoriteAlbums.length === 0 && activeUser) {
             fetchFavoriteAlbums();
         }
-        if (homeViewTab === 'radio' && radioItems.length === 0 && activeUser) {
+        if (homeViewTab === 'radio' && canUseOnlineRadio && radioItems.length === 0 && activeUser) {
             fetchRadioItems();
         }
-    }, [activeProviderId, activeUser, homeViewTab]);
+    }, [activeProviderId, activeUser, canUseOnlineAlbums, canUseOnlineRadio, homeViewTab]);
 
     useEffect(() => {
         setFavoriteAlbums([]);
@@ -329,6 +345,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     }, [activeProviderId, activeUser?.id]);
 
     const fetchFavoriteAlbums = async () => {
+        if (!canUseOnlineAlbums) {
+            setFavoriteAlbums([]);
+            return;
+        }
         setLoadingAlbums(true);
         try {
             let allAlbums: ProviderCollection[] = [];
@@ -368,6 +388,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     }, []);
 
     const fetchRadioItems = async () => {
+        if (!canUseOnlineRadio) {
+            setRadioItems([]);
+            return;
+        }
         setLoadingRadio(true);
         try {
             const { personalFm: fmSongs, dailySongs, recommendedCollections } = await omni.getHomeFeed(35);
@@ -459,6 +483,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         if (homeViewTab === 'radio') return radioCards;
         return [];
     }, [homeViewTab, playlistCards, albumCards, radioCards]);
+    const currentOnlineTabUnavailableReason = homeViewTab === 'playlist'
+        ? playlistUnavailableReason
+        : (homeViewTab === 'albums' ? albumsUnavailableReason : radioUnavailableReason);
 
     // Delegate GridView opening to the app-level host so Grid3D remains only the home surface.
     // If Personal FM is clicked, it plays Personal FM directly instead of opening GridView.
@@ -645,31 +672,38 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
                             <div className="inline-flex items-center gap-0">
                                 {[
-                                    ...(showHomeTabPlaylist ? [{ key: 'playlist', label: t('home.playlists') }] : []),
-                                    ...(showHomeTabRadio ? [{ key: 'radio', label: t('home.radio') }] : []),
-                                    ...(showHomeTabAlbums ? [{ key: 'albums', label: t('home.albums') }] : []),
-                                    ...(showHomeTabLocal ? [{ key: 'local', label: t('localMusic.folder') }] : []),
-                                    ...(navidromeEnabled ? [{ key: 'navidrome', label: t('navidrome.title') || 'Navidrome' }] : []),
+                                    ...(showHomeTabPlaylist ? [{ key: 'playlist', label: t('home.playlists'), disabledReason: playlistUnavailableReason }] : []),
+                                    ...(showHomeTabRadio ? [{ key: 'radio', label: t('home.radio'), disabledReason: radioUnavailableReason }] : []),
+                                    ...(showHomeTabAlbums ? [{ key: 'albums', label: t('home.albums'), disabledReason: albumsUnavailableReason }] : []),
+                                    ...(showHomeTabLocal ? [{ key: 'local', label: t('localMusic.folder'), disabledReason: undefined }] : []),
+                                    ...(navidromeEnabled ? [{ key: 'navidrome', label: t('navidrome.title') || 'Navidrome', disabledReason: undefined }] : []),
                                 ].map((tab) => {
                                     const isActive = homeViewTab === tab.key;
                                     return (
-                                        <button
+                                        <span
                                             key={tab.key}
-                                            onClick={() => {
-                                                setHomeViewTab(tab.key as any);
-                                                focusActiveSlider();
-                                            }}
-                                            className={`relative inline-flex items-center justify-center px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${isActive ? activeTabBg : navPillInactiveText}`}
+                                            title={tab.disabledReason || tab.label}
+                                            className="inline-flex"
                                         >
-                                            {isActive && (
-                                                <motion.span
-                                                    layoutId="home-active-tab-pill-desktop"
-                                                    className="absolute inset-0 rounded-full bg-white shadow-sm"
-                                                    transition={{ type: 'spring', stiffness: 460, damping: 36, mass: 0.9 }}
-                                                />
-                                            )}
-                                            <span className="relative z-10">{tab.label}</span>
-                                        </button>
+                                            <button
+                                                disabled={Boolean(tab.disabledReason)}
+                                                aria-label={tab.disabledReason || tab.label}
+                                                onClick={() => {
+                                                    setHomeViewTab(tab.key as any);
+                                                    focusActiveSlider();
+                                                }}
+                                                className={`relative inline-flex items-center justify-center px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-35 ${isActive ? activeTabBg : navPillInactiveText}`}
+                                            >
+                                                {isActive && (
+                                                    <motion.span
+                                                        layoutId="home-active-tab-pill-desktop"
+                                                        className="absolute inset-0 rounded-full bg-white shadow-sm"
+                                                        transition={{ type: 'spring', stiffness: 460, damping: 36, mass: 0.9 }}
+                                                    />
+                                                )}
+                                                <span className="relative z-10">{tab.label}</span>
+                                            </button>
+                                        </span>
                                     );
                                 })}
                                 {stageEnabled && (
@@ -751,7 +785,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         onFocusedIndexChange={setFocusedIndex}
                         onSelect={handleSelectCollectionCard}
                         isLoading={isLoading}
-                        emptyMessage={t('home.loadingLibrary')}
+                        emptyMessage={currentOnlineTabUnavailableReason || t('home.loadingLibrary')}
                         theme={theme}
                         isDaylight={isDaylight}
                         isInteractive={isInteractive}

@@ -535,6 +535,7 @@ export const qqProvider: OnlineMusicProvider = {
         mutations: false,
         wordByWordLyrics: true,
         likes: true,
+        userAlbums: true,
     },
     normalizeSong: normalizeQqSong,
     normalizeUser: normalizeQqUser,

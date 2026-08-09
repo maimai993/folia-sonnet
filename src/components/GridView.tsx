@@ -765,9 +765,6 @@ export const GridView: React.FC<GridViewProps> = ({
     }, []);
 
     const collectionSource = collection?.source as string | undefined;
-    const providerCapabilities = collectionSource === 'online' && collection?.providerId
-        ? omni.getProviderCapabilities(collection.providerId)
-        : null;
     const [collectionDetail, setCollectionDetail] = useState<ProviderCollection | null>(null);
     const isLocalCollection = collectionSource === 'local';
     const isNavidromeCollection = collectionSource === 'navidrome';
@@ -1206,16 +1203,22 @@ export const GridView: React.FC<GridViewProps> = ({
         };
     }, [isDailyRecommendationsCollection]);
 
+    const canEditOnlineCollectionTracks = Boolean(
+        collectionSource === 'online'
+        && collection
+        && omni.canEditCollectionTracks(collection),
+    );
     const canEditOwnedPlaylist = !usesExternalTracks
         && collection
         && collectionSource === 'online'
         && collection.type === 'playlist'
-        && Boolean(currentUserId != null && collection.creator?.id === currentUserId);
+        && Boolean(currentUserId != null && collection.creator?.id === currentUserId)
+        && canEditOnlineCollectionTracks;
     const canEditProviderPlaylist = !usesExternalTracks
         && collectionSource === 'online'
         && collection?.type === 'playlist'
         && collection?.isOwned === true
-        && Boolean(providerCapabilities?.playlistTrackMutations);
+        && canEditOnlineCollectionTracks;
     const canEditPlaylist = Boolean(
         canEditOwnedPlaylist
         || canEditProviderPlaylist
@@ -1227,7 +1230,8 @@ export const GridView: React.FC<GridViewProps> = ({
     const isOnlinePlaylist = collectionSource === 'online' && collection?.type === 'playlist' && !isCloudDrive;
     const isOnlineAlbum = collectionSource === 'online' && collection?.type === 'album' && !isCloudDrive;
     const showSubscribeButton = Boolean(
-        providerCapabilities?.playlistSubscription
+        collection
+        && omni.canSubscribeCollection(collection)
         && ((isOnlinePlaylist && !canEditOwnedPlaylist && !canEditProviderPlaylist) || isOnlineAlbum),
     );
 

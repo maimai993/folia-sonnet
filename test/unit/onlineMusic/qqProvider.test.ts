@@ -164,6 +164,19 @@ describe('qqProvider', () => {
         transportState.hasSession = true;
     });
 
+    it('declares readable library features without exposing unsupported mutations or recommendations', () => {
+        expect(qqProvider.capabilities).toMatchObject({
+            userLibrary: true,
+            playlists: true,
+            userAlbums: true,
+            likes: true,
+            recommendations: false,
+            mutations: false,
+        });
+        expect(qqProvider.mutations).toBeUndefined();
+        expect(qqProvider.recommendations).toBeUndefined();
+    });
+
     it('normalizes a song onto songmid identity and keeps the numeric id in provider data', () => {
         const song = normalizeQqSong(SEARCH_ITEM);
 
