@@ -56,6 +56,8 @@ describe('QQ API startup', () => {
     it('hands the port, state path and explorer opt-out to the package', async () => {
         const env: Record<string, string | undefined> = {};
         const server = new FakeServer();
+        const authSessionRepository = { kind: 'test-encrypted-repository' };
+        const configureAuthSessionRepository = vi.fn();
         const loadModule = vi.fn(() => {
             expect(env.PORT).toBe('45123');
             expect(env.QQ_AUTH_STATE_PATH).toBe('/tmp/qq/qq-device.json');
@@ -63,12 +65,13 @@ describe('QQ API startup', () => {
             // Packaged desktop builds must never spawn npm to check for a newer version.
             expect(env.QQ_DISABLE_UPDATE_CHECK).toBe('true');
             setImmediate(() => server.bind());
-            return { server };
+            return { server, configureAuthSessionRepository };
         });
 
         const result = await startQqApi({
             port: 45123,
             stateFilePath: '/tmp/qq/qq-device.json',
+            authSessionRepository,
             loadModule,
             env,
         });
@@ -79,6 +82,18 @@ describe('QQ API startup', () => {
         expect(result.port).toBe(45123);
         expect(result.stateFilePath).toBe('/tmp/qq/qq-device.json');
         expect(result.server).toBe(server);
+        expect(configureAuthSessionRepository).toHaveBeenCalledWith(authSessionRepository);
+    });
+
+    it('rejects an outdated package when encrypted persistence was requested', async () => {
+        const server = new FakeServer();
+
+        await expect(startQqApi({
+            port: 45123,
+            authSessionRepository: { kind: 'test-encrypted-repository' },
+            loadModule: () => ({ server }),
+            env: {},
+        })).rejects.toThrow(/does not support auth session persistence/);
     });
 
     it('resolves only once the socket is actually bound', async () => {

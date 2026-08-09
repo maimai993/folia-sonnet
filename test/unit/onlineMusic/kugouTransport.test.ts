@@ -22,15 +22,46 @@ describe('KuGou Web transport', () => {
         vi.unstubAllEnvs();
     });
 
-    it('prefers Electron IPC and returns its raw body', async () => {
-        const kugouRequest = vi.fn().mockResolvedValue({ status: 1, url: ['https://example.test/song.mp3'] });
+    it('prefers Electron IPC without copying credentials into renderer storage', async () => {
+        storage.set('online_provider:kugou:cookie', 'token=legacy;userid=7;dfid=legacy-device');
+        storage.set('online_provider:kugou:token', 'legacy');
+        storage.set('online_provider:kugou:userid', '7');
+        storage.set('online_provider:kugou:dfid', 'legacy-device');
+        const kugouRequest = vi.fn().mockResolvedValue({
+            data: { status: 4, token: 'must-not-persist', userid: '123', dfid: 'private-device' },
+        });
         vi.stubGlobal('window', { electron: { kugouRequest } });
         const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
 
-        await expect(requestKugou('song_url', { hash: 'HASH', quality: '128' })).resolves.toEqual({
-            status: 1, url: ['https://example.test/song.mp3'],
+        await expect(requestKugou('login_qr_check', {
+            key: 'qr', token: 'legacy-param', dfid: 'legacy-device',
+        })).resolves.toEqual({
+            data: { status: 4, token: 'must-not-persist', userid: '123', dfid: 'private-device' },
         });
-        expect(kugouRequest).toHaveBeenCalledWith('song_url', { hash: 'HASH', quality: '128' });
+        expect(kugouRequest).toHaveBeenCalledWith('login_qr_check', { key: 'qr' });
+        expect(storage.get('online_provider:kugou:cookie')).toBeUndefined();
+        expect(storage.get('online_provider:kugou:token')).toBeUndefined();
+        expect(storage.get('online_provider:kugou:dfid')).toBeUndefined();
+        expect(storage.get('online_provider:kugou:userid')).toBe('123');
+    });
+
+    it('keeps Web login persistence unchanged', async () => {
+        vi.stubGlobal('window', undefined);
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({
+            data: { status: 4, token: 'web-token', userid: '9', dfid: 'web-device' },
+            cookie: ['token=web-token', 'userid=9', 'dfid=web-device'],
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
+
+        await requestKugou('login_qr_check', { key: 'qr' });
+
+        expect(storage.get('online_provider:kugou:token')).toBe('web-token');
+        expect(storage.get('online_provider:kugou:userid')).toBe('9');
+        expect(storage.get('online_provider:kugou:dfid')).toBe('web-device');
+        expect(storage.get('online_provider:kugou:cookie')).toBe(
+            'token=web-token; userid=9; dfid=web-device',
+        );
     });
 
     it('registers a fresh dfid and retries when an audio URL request requires verification', async () => {
@@ -114,6 +145,16 @@ describe('KuGou Web transport', () => {
         storage.set('online_provider:kugou:token', 'token');
         storage.set('online_provider:kugou:userid', '9');
         expect(hasKugouAuthenticatedSearchSession()).toBe(true);
+    });
+
+    it('uses only the non-secret account id as the Electron authenticated-search hint', async () => {
+        vi.stubGlobal('window', { electron: { kugouRequest: vi.fn() } });
+        storage.set('online_provider:kugou:userid', '9');
+        const { hasKugouAuthenticatedSearchSession } = await import('@/services/onlineMusic/kugouTransport');
+
+        expect(hasKugouAuthenticatedSearchSession()).toBe(true);
+        expect(storage.get('online_provider:kugou:token')).toBeUndefined();
+        expect(storage.get('online_provider:kugou:dfid')).toBeUndefined();
     });
 
     it('builds the anonymous signed search request without provider cookies', async () => {
