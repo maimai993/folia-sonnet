@@ -277,12 +277,28 @@ async function installBaseState(
         }
       }
 
-      postMessage(message: { type: string; requestId: string; file: File; }) {
+      postMessage(message: { type: string; requestId: string; file?: File; cover?: Blob; }) {
         if (!this.#url.includes('metadataParser.worker')) {
           return;
         }
 
-        if (message.type !== 'parse-metadata') {
+        if (message.type === 'hash-cover' && message.cover) {
+          setTimeout(() => {
+            this.onmessage?.({
+              data: {
+                type: 'result',
+                requestId: message.requestId,
+                data: {
+                  cover: message.cover,
+                  coverAssetId: `sha256:${'f'.repeat(64)}`,
+                },
+              },
+            } as MessageEvent);
+          }, 0);
+          return;
+        }
+
+        if (message.type !== 'parse-metadata' || !message.file) {
           return;
         }
 

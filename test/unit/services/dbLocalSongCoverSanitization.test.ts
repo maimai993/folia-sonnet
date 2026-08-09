@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appDatabase } from '../../../src/services/appDatabase';
 import { getLocalSongs, saveLocalSongs } from '../../../src/services/db';
 import type { LocalSong } from '../../../src/types';
@@ -56,5 +56,53 @@ describe('db local song cover sanitization', () => {
 
         expect(songs[0]?.embeddedCover).toBeUndefined();
         expect((await appDatabase.local_music.get('bad-cover-song'))?.embeddedCover).toBeUndefined();
+    });
+
+    it('persists new songs with an asset reference instead of duplicating the cover Blob', async () => {
+        const assetId = `sha256:${'a'.repeat(64)}`;
+        const embeddedCover = new Blob(['cover'], { type: 'image/png' });
+        await appDatabase.local_cover_assets.put({
+            id: assetId,
+            blob: embeddedCover,
+            mimeType: embeddedCover.type,
+            size: embeddedCover.size,
+            createdAt: 1,
+        });
+
+        await saveLocalSongs([buildLocalSong({
+            id: 'asset-cover-song',
+            localCoverAssetId: assetId,
+            localCoverSource: 'embedded',
+            embeddedCover,
+        })]);
+
+        expect(await appDatabase.local_music.get('asset-cover-song')).toMatchObject({
+            localCoverAssetId: assetId,
+            localCoverSource: 'embedded',
+        });
+        expect((await appDatabase.local_music.get('asset-cover-song'))?.embeddedCover).toBeUndefined();
+    });
+
+    it('materializes asset references as runtime cover Blobs while loading the local-song catalog', async () => {
+        const assetId = `sha256:${'b'.repeat(64)}`;
+        const cover = new Blob(['runtime-cover'], { type: 'image/png' });
+        await appDatabase.local_cover_assets.put({
+            id: assetId,
+            blob: cover,
+            mimeType: cover.type,
+            size: cover.size,
+            createdAt: 1,
+        });
+        await appDatabase.local_music.put(buildLocalSong({
+            id: 'runtime-cover-song',
+            localCoverAssetId: assetId,
+        }));
+        const assetRead = vi.spyOn(appDatabase.local_cover_assets, 'get');
+
+        const songs = await getLocalSongs();
+
+        expect(assetRead).toHaveBeenCalledOnce();
+        expect(songs[0]?.embeddedCover).toBeInstanceOf(Blob);
+        expect(songs[0]?.embeddedCover?.type).toBe('image/png');
     });
 });

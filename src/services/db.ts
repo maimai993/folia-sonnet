@@ -28,6 +28,11 @@ import {
 import { clearSessionValues, putSessionValue, readSession } from './repositories/sessionRepository';
 import { readThemeRegistryEntries, writeThemeRegistryEntries } from './repositories/themeRegistryRepository';
 import { clearCoverAssets, getCoverAssetUsage } from './binaryAssetStore';
+import {
+  materializeLocalSongCoverBlobs,
+  prepareLocalSongsCoverAssets,
+  resetLocalCoverAssetRuntime,
+} from './localCoverAssetService';
 
 // src/services/db.ts
 // Keeps the historical storage API stable while delegating every IndexedDB operation to Dexie repositories.
@@ -180,7 +185,8 @@ export const clearCacheByCategory = async (category: CacheCategory): Promise<voi
 export const saveLocalSong = async (song: LocalSong): Promise<void> => {
   try {
     await ensureLocalLibraryInitialized();
-    await assignImportedSongs([song]);
+    const [preparedSong] = await prepareLocalSongsCoverAssets([song]);
+    await assignImportedSongs([preparedSong]);
   } catch (error) {
     console.error('Failed to save local song', error);
   }
@@ -189,7 +195,8 @@ export const saveLocalSong = async (song: LocalSong): Promise<void> => {
 export const saveLocalSongs = async (songs: LocalSong[]): Promise<void> => {
   try {
     await ensureLocalLibraryInitialized();
-    await assignImportedSongs(songs);
+    const preparedSongs = await prepareLocalSongsCoverAssets(songs);
+    await assignImportedSongs(preparedSongs);
   } catch (error) {
     console.error('Failed to save local songs', error);
   }
@@ -198,7 +205,7 @@ export const saveLocalSongs = async (songs: LocalSong[]): Promise<void> => {
 export const getLocalSongs = async (): Promise<LocalSong[]> => {
   try {
     await ensureLocalLibraryInitialized();
-    return await readLocalSongs();
+    return await materializeLocalSongCoverBlobs(await readLocalSongs());
   } catch (error) {
     console.error('Failed to get local songs', error);
     return [];
@@ -225,6 +232,7 @@ export const clearAllData = async (): Promise<void> => {
   try {
     if (hasElectronAudioCacheBridge()) await window.electron!.clearAudioCache();
     await clearCoverAssets();
+    resetLocalCoverAssetRuntime();
     await appDatabase.delete();
     await appDatabase.open();
   } catch (error) {

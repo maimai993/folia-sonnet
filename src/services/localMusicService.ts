@@ -17,11 +17,17 @@ import { removeCachedCover } from './coverCache';
 import { getOnlineMusicProvider } from './onlineMusic/providerRegistry';
 import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 import { normalizeLyricMatchMetadataCandidate } from './onlineMetadataSearchService';
+import {
+    loadLocalSongCoverBlob,
+    prepareLocalCoverBlob,
+    type PreparedLocalCoverBlob,
+} from './localCoverAssetService';
+import { hasLocalSongCover } from '../utils/localSongCover';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
 
-const EMBEDDED_METADATA_VERSION = 4;
+const EMBEDDED_METADATA_VERSION = 5;
 
 interface ImportPreparationMetrics {
     getFileMs: number;
@@ -395,15 +401,6 @@ async function extractEmbeddedMetadata(file: File, includeCover = false): Promis
     return parsed;
 }
 
-function getImportedAlbumKey(song: LocalSong): string | null {
-    const albumName = song.importedMetadata.albumName;
-    if (!albumName) {
-        return null;
-    }
-
-    return `name-${albumName}`;
-}
-
 async function buildSnapshotTree(
     handle: FileSystemDirectoryHandle,
     currentPath: string
@@ -640,6 +637,7 @@ async function collectImportDiffPlan(
             changedAudioPaths.has(snapshotFile.relativePath)
             || !existingSong
             || existingSong.embeddedMetadataVersion !== EMBEDDED_METADATA_VERSION
+            || existingSong.localCoverNeedsAssetMigration
         ) {
             changedEntries.push({
                 handle: fileHandle,
@@ -675,7 +673,7 @@ async function buildImportedSong(
     lrcMap: Map<string, LocalLyricFileCandidate>,
     tlrcMap: Map<string, FileSystemFileHandle>,
     coverMap: Map<string, FileSystemFileHandle>,
-    coverBlobCache: Map<string, Promise<Blob | undefined>>,
+    coverBlobCache: Map<string, Promise<PreparedLocalCoverBlob | undefined>>,
     includeEmbeddedMetadata = true,
     existingSong?: LocalSong
 ): Promise<{ song: LocalSong | null; metrics: ImportPreparationMetrics; }> {
@@ -727,14 +725,14 @@ async function buildImportedSong(
     }
     const lyricReadMs = performance.now() - lyricReadStartedAt;
 
-    let folderCover: Blob | undefined;
+    let folderCover: PreparedLocalCoverBlob | undefined;
     const coverReadStartedAt = performance.now();
     if (coverMap.has(entry.folderName)) {
         if (!coverBlobCache.has(entry.folderName)) {
             coverBlobCache.set(entry.folderName, (async () => {
                 try {
                     const coverFile = await coverMap.get(entry.folderName)!.getFile();
-                    return coverFile;
+                    return (await prepareLocalCoverBlob(coverFile)) || undefined;
                 } catch (error) {
                     console.warn(`[LocalMusic] Failed to read folder cover for ${entry.folderName}:`, error);
                     return undefined;
@@ -797,7 +795,9 @@ async function buildImportedSong(
         onlineMetadata: existingSong?.onlineMetadata,
         trackNumber: embeddedMetadata.trackNumber,
         discNumber: embeddedMetadata.discNumber,
-        embeddedCover: folderCover || embeddedMetadata.cover,
+        localCoverAssetId: folderCover?.assetId,
+        localCoverSource: folderCover ? 'folder' : undefined,
+        embeddedCover: folderCover?.blob,
         hasManualLyricSelection: existingSong?.hasManualLyricSelection ?? false,
         folderName: entry.folderName,
         hasLocalLyrics: !!localLyricsContent,
@@ -848,7 +848,18 @@ async function hydrateSongMetadata(song: LocalSong): Promise<LocalSong> {
 
     try {
         const file = await fileHandle.getFile();
-        const embeddedMetadata = await extractEmbeddedMetadata(file, false);
+        const includeCover = song.localCoverSource !== 'folder';
+        let embeddedMetadata: EmbeddedMetadata;
+        let coverHydrationFailed = false;
+
+        try {
+            embeddedMetadata = await extractEmbeddedMetadata(file, includeCover);
+        } catch (coverError) {
+            if (!includeCover) throw coverError;
+            coverHydrationFailed = true;
+            console.warn(`[LocalMusic][Import] Cover-aware metadata parsing failed for ${song.fileName}; retrying without covers.`, coverError);
+            embeddedMetadata = await extractEmbeddedMetadata(file, false);
+        }
 
         song.duration = embeddedMetadata.duration || song.duration || 0;
         song.fileSize = file.size;
@@ -877,159 +888,17 @@ async function hydrateSongMetadata(song: LocalSong): Promise<LocalSong> {
         song.replayGainTrackPeak = embeddedMetadata.replayGainTrackPeak;
         song.replayGainAlbumGain = embeddedMetadata.replayGainAlbumGain;
         song.replayGainAlbumPeak = embeddedMetadata.replayGainAlbumPeak;
+        if (includeCover) {
+            song.localCoverAssetId = embeddedMetadata.coverAssetId;
+            song.localCoverSource = embeddedMetadata.cover ? 'embedded' : undefined;
+            song.localCoverNeedsAssetMigration = coverHydrationFailed ? true : undefined;
+            song.embeddedCover = embeddedMetadata.cover;
+        }
     } catch (error) {
         console.warn(`[LocalMusic][Import] Failed to hydrate metadata for ${song.fileName}:`, error);
     }
 
     return song;
-}
-
-async function populateRepresentativeCovers(songs: LocalSong[]): Promise<void> {
-    const folderGroups = new Map<string, LocalSong[]>();
-    const albumGroups = new Map<string, LocalSong[]>();
-
-    songs.forEach(song => {
-        const existingFolderSongs = folderGroups.get(song.folderName || '') || [];
-        existingFolderSongs.push(song);
-        folderGroups.set(song.folderName || '', existingFolderSongs);
-
-        const albumKey = getImportedAlbumKey(song);
-        if (albumKey) {
-            const existingAlbumSongs = albumGroups.get(albumKey) || [];
-            existingAlbumSongs.push(song);
-            albumGroups.set(albumKey, existingAlbumSongs);
-        }
-    });
-
-    const coverExtractionCache = new Map<string, Promise<Blob | undefined>>();
-
-    const tryLoadCover = async (song: LocalSong): Promise<Blob | undefined> => {
-        if (isBlob(song.embeddedCover)) {
-            return song.embeddedCover;
-        }
-
-        if (!coverExtractionCache.has(song.id)) {
-            coverExtractionCache.set(song.id, (async () => {
-                const fileHandle = fileHandleMap.get(song.id) || song.fileHandle;
-                if (!fileHandle) {
-                    return undefined;
-                }
-
-                try {
-                    const file = await fileHandle.getFile();
-                    const metadata = await extractEmbeddedMetadata(file, true);
-                    return metadata.cover;
-                } catch (error) {
-                    console.warn(`[LocalMusic] Failed to extract cover for ${song.fileName}:`, error);
-                    return undefined;
-                }
-            })());
-        }
-
-        return coverExtractionCache.get(song.id)!;
-    };
-
-    const ensureGroupCover = async (groupSongs: LocalSong[]) => {
-        if (groupSongs.some(song => isBlob(song.embeddedCover))) {
-            return;
-        }
-
-        const sortedSongs = [...groupSongs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
-        for (const song of sortedSongs) {
-            const cover = await tryLoadCover(song);
-            if (cover) {
-                song.embeddedCover = cover;
-                return;
-            }
-        }
-    };
-
-    await mapWithConcurrency(Array.from(folderGroups.values()), IMPORT_CONCURRENCY, ensureGroupCover);
-    await mapWithConcurrency(Array.from(albumGroups.values()), IMPORT_CONCURRENCY, ensureGroupCover);
-}
-
-// Copies an album's representative imported cover to sibling tracks without fetching more artwork.
-function propagateImportedAlbumCovers(songs: LocalSong[]): number {
-    const albumGroups = new Map<string, LocalSong[]>();
-
-    songs.forEach(song => {
-        const albumKey = getImportedAlbumKey(song);
-        if (!albumKey) {
-            return;
-        }
-
-        const albumSongs = albumGroups.get(albumKey) || [];
-        albumSongs.push(song);
-        albumGroups.set(albumKey, albumSongs);
-    });
-
-    let propagatedCount = 0;
-    albumGroups.forEach(groupSongs => {
-        const representativeCover = [...groupSongs]
-            .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
-            .find(song => isBlob(song.embeddedCover))?.embeddedCover;
-
-        if (!representativeCover) {
-            return;
-        }
-
-        groupSongs.forEach(song => {
-            if (!isBlob(song.embeddedCover)) {
-                song.embeddedCover = representativeCover;
-                propagatedCount += 1;
-            }
-        });
-    });
-
-    return propagatedCount;
-}
-
-async function populateRepresentativeCoversInBackground(rootFolderName: string, songs: LocalSong[]) {
-    const coverStartedAt = performance.now();
-
-    try {
-        await populateRepresentativeCovers(songs);
-        const propagatedCoverCount = propagateImportedAlbumCovers(songs);
-        const songsWithEmbeddedCover = songs.filter(song => isBlob(song.embeddedCover)).length;
-        await saveLocalSongs(songs.filter(song => isBlob(song.embeddedCover)));
-        console.log(`[LocalMusic][Import] Background cover extraction for "${rootFolderName}" finished with ${songsWithEmbeddedCover}/${songs.length} songs carrying embedded covers, propagated to ${propagatedCoverCount} sibling tracks in ${formatImportDuration(performance.now() - coverStartedAt)}.`);
-        notifyLocalMusicUpdated();
-    } catch (error) {
-        console.error(`[LocalMusic][Import] Background cover extraction failed for "${rootFolderName}":`, error);
-    }
-}
-
-function getPriorityRepresentativeCoverCandidateIds(songs: LocalSong[]): Set<string> {
-    const candidateIds = new Set<string>();
-    const folderGroups = new Map<string, LocalSong[]>();
-    const albumGroups = new Map<string, LocalSong[]>();
-
-    songs.forEach(song => {
-        const folderKey = song.folderName || '';
-        const folderSongs = folderGroups.get(folderKey) || [];
-        folderSongs.push(song);
-        folderGroups.set(folderKey, folderSongs);
-
-        const albumKey = getImportedAlbumKey(song);
-        if (albumKey) {
-            const albumSongs = albumGroups.get(albumKey) || [];
-            albumSongs.push(song);
-            albumGroups.set(albumKey, albumSongs);
-        }
-    });
-
-    const collectGroupCandidate = (groupSongs: LocalSong[]) => {
-        const sortedSongs = [...groupSongs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
-        const existingPreferredSong = sortedSongs.find(song => isBlob(song.embeddedCover) || song.onlineMetadata?.coverUrl);
-        if (!existingPreferredSong && sortedSongs[0]) {
-            candidateIds.add(sortedSongs[0].id);
-        }
-    };
-
-    folderGroups.forEach(collectGroupCandidate);
-    albumGroups.forEach(collectGroupCandidate);
-
-    return candidateIds;
 }
 
 async function hydrateImportedSongsInBackground(rootFolderName: string, songs: LocalSong[]) {
@@ -1038,7 +907,6 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
     let savedCount = 0;
     let nextIndex = 0;
     let flushInFlight: Promise<void> | null = null;
-    const priorityCoverCandidateIds = getPriorityRepresentativeCoverCandidateIds(songs);
 
     notifyLocalMusicScanProgress({
         active: true,
@@ -1085,20 +953,11 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
                 return;
             }
 
-            let hydratedSong = await hydrateSongMetadata(songs[currentIndex]);
-            let resolvedCover = false;
-
-            if (priorityCoverCandidateIds.has(hydratedSong.id)) {
-                priorityCoverCandidateIds.delete(hydratedSong.id);
-                if (!isBlob(hydratedSong.embeddedCover)) {
-                    hydratedSong = await ensureLocalSongEmbeddedCover(hydratedSong);
-                    resolvedCover = isBlob(hydratedSong.embeddedCover);
-                }
-            }
+            const hydratedSong = await hydrateSongMetadata(songs[currentIndex]);
 
             pendingBatch.push(hydratedSong);
 
-            if ((pendingBatch.length >= HYDRATION_BATCH_SIZE || resolvedCover) && !flushInFlight) {
+            if (pendingBatch.length >= HYDRATION_BATCH_SIZE && !flushInFlight) {
                 void flushBatch();
             }
         }
@@ -1190,7 +1049,7 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
         // Second pass: Process audio files with limited concurrency
         const metadataStartedAt = performance.now();
         const existingSongsByPath = new Map(existingRootSongs.map(song => [song.filePath, song]));
-        const coverBlobCache = new Map<string, Promise<Blob | undefined>>();
+        const coverBlobCache = new Map<string, Promise<PreparedLocalCoverBlob | undefined>>();
         const processedSongs = await mapWithConcurrency(diffPlan.changedEntries, IMPORT_CONCURRENCY, async (entry) => {
             try {
                 return await buildImportedSong(
@@ -1268,9 +1127,7 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
 
         console.log(`[LocalMusic][Import] Finished importing "${rootFolderName}" with ${importedSongs.length}/${diffPlan.totalAudioFiles} available songs in ${formatImportDuration(performance.now() - importStartedAt)}.`);
         notifyLocalMusicUpdated();
-        void hydrateImportedSongsInBackground(rootFolderName, songsToPersist).then(() =>
-            populateRepresentativeCoversInBackground(rootFolderName, songsToPersist)
-        );
+        void hydrateImportedSongsInBackground(rootFolderName, songsToPersist);
 
         return importedSongs;
     } catch (error) {
@@ -1392,7 +1249,7 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
                     }, {
                         songPatch: {
                             ...song,
-                            useOnlineCover: Boolean(coverUrl && !isBlob(song.embeddedCover)),
+                            useOnlineCover: Boolean(coverUrl && !hasLocalSongCover(song)),
                         },
                         protectOrigins: ['manual', 'manual-match', 'split'],
                     });
@@ -1438,7 +1295,7 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
                 album: matchedMetadata.album,
                 coverUrl: coverUrl?.replace('http:', 'https:'),
             }, {
-                songPatch: { ...song, useOnlineCover: Boolean(coverUrl && !isBlob(song.embeddedCover)) },
+                songPatch: { ...song, useOnlineCover: Boolean(coverUrl && !hasLocalSongCover(song)) },
                 protectOrigins: ['manual', 'manual-match', 'split'],
             });
 
@@ -1469,7 +1326,7 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
             album: matchedMetadata.album,
             coverUrl: coverUrl?.replace('http:', 'https:'),
         }, {
-            songPatch: { ...song, useOnlineCover: Boolean(coverUrl && !isBlob(song.embeddedCover)) },
+            songPatch: { ...song, useOnlineCover: Boolean(coverUrl && !hasLocalSongCover(song)) },
             protectOrigins: ['manual', 'manual-match', 'split'],
         });
         return processed.lyrics;
@@ -1614,10 +1471,38 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
     return null;
 }
 
+// Extracts and persists one song's embedded cover after an explicit playback-time request.
+async function extractAndPersistSongCover(
+    song: LocalSong,
+    fileHandle: FileSystemFileHandle,
+): Promise<LocalSong> {
+    const file = await fileHandle.getFile();
+    const metadata = await extractEmbeddedMetadata(file, true);
+    if (!metadata.cover) return song;
+
+    const updatedSong: LocalSong = {
+        ...song,
+        localCoverAssetId: metadata.coverAssetId,
+        localCoverSource: 'embedded',
+        embeddedCover: metadata.cover,
+        fileHandle,
+    };
+    Object.assign(song, updatedSong);
+    await saveLocalSong(updatedSong);
+    return updatedSong;
+}
+
 export async function ensureLocalSongEmbeddedCover(song: LocalSong): Promise<LocalSong> {
     if (isBlob(song.embeddedCover)) {
         return song;
     }
+
+    const storedCover = await loadLocalSongCoverBlob(song);
+    if (storedCover) {
+        song.embeddedCover = storedCover;
+        return song;
+    }
+    if (song.localCoverSource === 'folder') return song;
 
     if (!embeddedCoverRequestMap.has(song.id)) {
         embeddedCoverRequestMap.set(song.id, (async () => {
@@ -1627,20 +1512,7 @@ export async function ensureLocalSongEmbeddedCover(song: LocalSong): Promise<Loc
             }
 
             try {
-                const file = await fileHandle.getFile();
-                const metadata = await extractEmbeddedMetadata(file, true);
-                if (!metadata.cover) {
-                    return song;
-                }
-
-                const updatedSong: LocalSong = {
-                    ...song,
-                    embeddedCover: metadata.cover,
-                    fileHandle
-                };
-                Object.assign(song, updatedSong);
-                await saveLocalSong(updatedSong);
-                return updatedSong;
+                return await extractAndPersistSongCover(song, fileHandle);
             } catch (error) {
                 console.warn(`[LocalMusic] Failed to ensure embedded cover for ${song.fileName}:`, error);
                 fileHandleMap.delete(song.id);
@@ -1651,20 +1523,7 @@ export async function ensureLocalSongEmbeddedCover(song: LocalSong): Promise<Loc
                         return song;
                     }
 
-                    const file = await recoveredHandle.getFile();
-                    const metadata = await extractEmbeddedMetadata(file, true);
-                    if (!metadata.cover) {
-                        return song;
-                    }
-
-                    const updatedSong: LocalSong = {
-                        ...song,
-                        embeddedCover: metadata.cover,
-                        fileHandle: recoveredHandle
-                    };
-                    Object.assign(song, updatedSong);
-                    await saveLocalSong(updatedSong);
-                    return updatedSong;
+                    return await extractAndPersistSongCover(song, recoveredHandle);
                 } catch (recoveryError) {
                     console.warn(`[LocalMusic] Failed to recover embedded cover for ${song.fileName}:`, recoveryError);
                     return song;

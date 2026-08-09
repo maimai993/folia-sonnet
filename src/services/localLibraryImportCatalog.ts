@@ -9,6 +9,10 @@ import {
 import { appDatabase } from './appDatabase';
 import { resolveEntityNames } from './localLibraryCatalogInternals';
 import { sanitizeLocalSongForStorage } from './repositories/localSongRepository';
+import {
+  deleteUnreferencedLocalCoverAssets,
+  persistLocalSongCoverAssetsInTransaction,
+} from './localCoverAssetService';
 
 // src/services/localLibraryImportCatalog.ts
 // Handles import/rescan assignment and the idempotent legacy bootstrap transaction.
@@ -18,13 +22,22 @@ const assignImportedSongsInTransaction = async (
   preserveNonImportAssignments: boolean,
 ): Promise<void> => {
   if (songs.length === 0) return;
+  const coverPersistence = persistLocalSongCoverAssetsInTransaction(songs);
+  const songsWithValidatedCovers = Array.isArray(coverPersistence)
+    ? coverPersistence
+    : await coverPersistence;
   const [entities, assignments, allSongs] = await Promise.all([
     appDatabase.local_library_entities.toArray(),
     appDatabase.local_library_assignments.toArray(),
     appDatabase.local_music.toArray(),
   ]);
+  const existingSongById = new Map(allSongs.map(song => [song.id, song]));
+  const replacedCoverAssetIds = songsWithValidatedCovers.flatMap(song => {
+    const previousAssetId = existingSongById.get(song.id)?.localCoverAssetId;
+    return previousAssetId && previousAssetId !== song.localCoverAssetId ? [previousAssetId] : [];
+  });
   const assignmentBySongId = new Map(assignments.map(assignment => [assignment.songId, assignment]));
-  const songById = new Map([...allSongs, ...songs].map(song => [song.id, song]));
+  const songById = new Map([...allSongs, ...songsWithValidatedCovers].map(song => [song.id, song]));
   const albumContext = new Map<string, string>();
 
   assignments.forEach(assignment => {
@@ -35,7 +48,7 @@ const assignImportedSongsInTransaction = async (
   });
 
   const nextAssignments: LocalLibraryAssignment[] = [];
-  songs.forEach(song => {
+  songsWithValidatedCovers.forEach(song => {
     const current = assignmentBySongId.get(song.id);
     const preserveArtist = Boolean(preserveNonImportAssignments && current && current.artistOrigin !== 'import');
     const preserveAlbum = Boolean(preserveNonImportAssignments && current && current.albumOrigin !== 'import');
@@ -83,10 +96,11 @@ const assignImportedSongsInTransaction = async (
   });
 
   await Promise.all([
-    appDatabase.local_music.bulkPut(songs.map(sanitizeLocalSongForStorage)),
+    appDatabase.local_music.bulkPut(songsWithValidatedCovers.map(sanitizeLocalSongForStorage)),
     appDatabase.local_library_entities.bulkPut(entities),
     appDatabase.local_library_assignments.bulkPut(nextAssignments),
   ]);
+  await deleteUnreferencedLocalCoverAssets(replacedCoverAssetIds);
 };
 
 export const assignImportedSongs = async (
@@ -95,7 +109,12 @@ export const assignImportedSongs = async (
 ): Promise<void> => {
   await appDatabase.transaction(
     'rw',
-    [appDatabase.local_music, appDatabase.local_library_entities, appDatabase.local_library_assignments],
+    [
+      appDatabase.local_music,
+      appDatabase.local_library_entities,
+      appDatabase.local_library_assignments,
+      appDatabase.local_cover_assets,
+    ],
     () => assignImportedSongsInTransaction(songs, options.preserveNonImportAssignments ?? true),
   );
 };

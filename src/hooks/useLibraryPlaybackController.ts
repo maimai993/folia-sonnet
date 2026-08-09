@@ -42,6 +42,7 @@ import type { NavidromeMatchData } from '../components/modal/NaviLyricMatchModal
 import { applyQueueAddBehavior } from '../utils/queueAddBehavior';
 import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState, getOnlineLyricsStateCacheKey } from '../utils/onlineLyricsState';
 import { createSafeObjectUrl, getBlobObjectUrlSignature, isBlob } from '../utils/blobGuards';
+import { hasLocalSongCover } from '../utils/localSongCover';
 import { applyMatchedMetadata } from '../services/localLibraryCatalogService';
 import { buildLocalSongLyricMatchContext, shouldRefreshLocalSongLyricsFromMetadata, shouldRunLocalSongAutomaticMatch } from '../utils/lyrics/localSongMatchContext';
 import { getLocalLibraryCatalogSnapshot } from '../services/localLibraryEntityRepository';
@@ -431,7 +432,7 @@ export function useLibraryPlaybackController({
             && (!localSong.matchedLyrics && !localSong.matchedIsPureMusic
                 || shouldRefreshLocalSongLyricsFromMetadata(localSong))
         );
-        const needsCoverMatch = !isBlob(localSong.embeddedCover) && !localSong.onlineMetadata?.coverUrl;
+        const needsCoverMatch = !hasLocalSongCover(localSong) && !localSong.onlineMetadata?.coverUrl;
 
         if ((needsLyricsMatch || needsCoverMatch) && shouldRunLocalSongAutomaticMatch(localSong)) {
             setStatusMsg({ type: 'info', text: t('status.matchingLyricsAndCover') || '' });
@@ -589,7 +590,7 @@ export function useLibraryPlaybackController({
             && (!localSong.matchedLyrics && !localSong.matchedIsPureMusic
                 || shouldRefreshLocalSongLyricsFromMetadata(localSong))
         );
-        const needsCoverMatch = !isBlob(localSong.embeddedCover) && !localSong.onlineMetadata?.coverUrl;
+        const needsCoverMatch = !hasLocalSongCover(localSong) && !localSong.onlineMetadata?.coverUrl;
         if ((needsLyricsMatch || needsCoverMatch) && shouldRunLocalSongAutomaticMatch(localSong)) {
             try {
                 const { matchLyrics } = await import('../services/localMusicService');

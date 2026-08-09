@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     createLocalGridViewCollection,
     createNavidromeGridViewCollection,
@@ -258,6 +258,27 @@ describe('gridViewCollectionAdapters', () => {
 
         const refreshed = refreshLocalGridViewCollection(descriptor, songs);
         expect(refreshed.songIds).toEqual(['track-01', 'track-02', 'track-04', 'track-10']);
+    });
+
+    it('uses the materialized runtime Blob in the original local Grid3D model', () => {
+        const assetId = `sha256:${'9'.repeat(64)}`;
+        const embeddedCover = new Blob(['cover'], { type: 'image/png' });
+        const songs = [{
+            ...buildLocalSong('asset-song', 'Asset Song'),
+            folderName: 'Music',
+            localCoverAssetId: assetId,
+            localCoverSource: 'embedded' as const,
+            embeddedCover,
+        }];
+        const createObjectUrl = vi.spyOn(URL, 'createObjectURL');
+
+        const groups = buildLocalGrid3DGroups(songs, [], ((key: string) => key) as any);
+
+        expect(groups.folders.find(group => group.name === 'Music')).toMatchObject({
+            coverUrl: embeddedCover,
+        });
+        expect(createObjectUrl).not.toHaveBeenCalled();
+        createObjectUrl.mockRestore();
     });
 
     it('refreshes folder descriptors without pulling nested folders into the open folder view', () => {

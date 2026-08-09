@@ -16,6 +16,7 @@ import { appDatabase } from './appDatabase';
 import { createLocalLibraryAssignment, resolveEntityNames } from './localLibraryCatalogInternals';
 import { assignImportedSongs } from './localLibraryImportCatalog';
 import { sanitizeLocalSongForStorage } from './repositories/localSongRepository';
+import { deleteUnreferencedLocalCoverAssets } from './localCoverAssetService';
 
 // src/services/localLibraryCatalogService.ts
 // Applies every song/entity/assignment mutation in a single Dexie transaction.
@@ -212,10 +213,16 @@ const deleteSongRecords = async (songIds: string[]): Promise<void> => {
 
   await appDatabase.transaction(
     'rw',
-    [appDatabase.local_music, appDatabase.local_library_entities, appDatabase.local_library_assignments],
+    [
+      appDatabase.local_music,
+      appDatabase.local_library_entities,
+      appDatabase.local_library_assignments,
+      appDatabase.local_cover_assets,
+    ],
     async () => {
       const deletedSongIdSet = new Set(uniqueSongIds);
-      const [deletedAssignments, assignments, entities] = await Promise.all([
+      const [deletedSongs, deletedAssignments, assignments, entities] = await Promise.all([
+        appDatabase.local_music.bulkGet(uniqueSongIds),
         appDatabase.local_library_assignments.bulkGet(uniqueSongIds),
         appDatabase.local_library_assignments.toArray(),
         appDatabase.local_library_entities.toArray(),
@@ -231,6 +238,9 @@ const deleteSongRecords = async (songIds: string[]): Promise<void> => {
         appDatabase.local_library_assignments.bulkDelete(uniqueSongIds),
         appDatabase.local_library_entities.bulkDelete(orphanedEntityIds),
       ]);
+      await deleteUnreferencedLocalCoverAssets(
+        deletedSongs.flatMap(song => song?.localCoverAssetId ? [song.localCoverAssetId] : []),
+      );
     },
   );
 };

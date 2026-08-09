@@ -9,7 +9,9 @@ import { appDatabase } from '../appDatabase';
 export const sanitizeLocalSongForStorage = (song: LocalSong): LocalSong => {
   const normalizedSong = migrateMatchedLyricsCarrierRenderHints(song).value ?? song;
   const { fileHandle, embeddedCover, ...persistedSong } = normalizedSong;
-  return isBlob(embeddedCover) ? { ...persistedSong, embeddedCover } : persistedSong;
+  return !persistedSong.localCoverAssetId && isBlob(embeddedCover)
+    ? { ...persistedSong, embeddedCover }
+    : persistedSong;
 };
 
 const normalizeLocalSongFromStorage = (song: LocalSong): { value: LocalSong; changed: boolean } => {
