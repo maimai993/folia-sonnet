@@ -82,6 +82,16 @@ Folia 提供了从外部与播放器进行交互的 Stage API，从而可以实�
 
 具体可参考 [Stage API 文档](../test/manual/stage-client/README.md)。
 
+### 歌词接口
+
+Electron 桌面端可在“连接与集成”中启用歌词接口。启用后，Folia 仅在回环地址提供无需鉴权的固定接口：
+
+```text
+GET http://127.0.0.1:32109/v1/lyric
+```
+
+接口返回当前歌词的精简 JSON；当前没有歌词时返回 `null`。请求、响应结构、字段说明和调用示例见 [歌词接口文档](lyric-api.md)。
+
 ### 一键部署到 Vercel
 
 如果你希望快速上线 Web 版本，可以直接通过下方入口创建 Vercel 项目：

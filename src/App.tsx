@@ -69,6 +69,7 @@ import { useLocalLibraryCatalog } from './hooks/useLocalLibraryCatalog';
 import { usePlaybackVisualizerBridge } from './hooks/usePlaybackVisualizerBridge';
 import { useRandomVisualizerMode } from './hooks/useRandomVisualizerMode';
 import { useObsBrowserSourcePublisher } from './hooks/useObsBrowserSourcePublisher';
+import { useLyricApiPublisher } from './hooks/useLyricApiPublisher';
 import { ObsBrowserSourceLyrics } from './components/obs/ObsBrowserSourceLyrics';
 import { useSessionRestoreController } from './hooks/useSessionRestoreController';
 import { useStagePlaybackController } from './hooks/useStagePlaybackController';
@@ -1868,6 +1869,13 @@ export default function App() {
         cappellaCustomAvatarImages,
         monetPortraitImage,
     });
+    const {
+        lyricApiStatus,
+        setLyricApiEnabled,
+    } = useLyricApiPublisher({
+        isElectronWindow,
+        lyrics,
+    });
     const canGenerateAITheme = Boolean((lyrics?.lines.length ?? 0) > 0 || currentSong?.isPureMusic);
     const generateCurrentSongTheme = useCallback(() => {
         void generateAITheme(lyrics, currentSong);
@@ -2837,6 +2845,8 @@ export default function App() {
         playerCapPlayers,
         obsBrowserSourceStatus,
         refreshObsBrowserSourceStatus,
+        lyricApiStatus,
+        setLyricApiEnabled,
         onAudioOutputDeviceChange: handleAudioOutputDeviceChange,
         replayGainMode,
         onReplayGainModeChange: handleChangeReplayGainMode,
@@ -2859,6 +2869,8 @@ export default function App() {
         playerCapPlayers,
         obsBrowserSourceStatus,
         refreshObsBrowserSourceStatus,
+        lyricApiStatus,
+        setLyricApiEnabled,
         replayGainMode,
         settingsModalState,
         stageSource,

@@ -518,6 +518,23 @@ describe('command palette registry', () => {
         }
     });
 
+    it('toggles the desktop-local lyrics API', async () => {
+        const getLyricApiStatus = vi.fn().mockResolvedValue({ enabled: false, running: false });
+        const setLyricApiEnabled = vi.fn().mockResolvedValue({ enabled: true, running: true });
+        vi.stubGlobal('window', { electron: { getLyricApiStatus, setLyricApiEnabled } });
+
+        try {
+            const context = createContext();
+            const [match] = getCommandPaletteMatches('歌词接口', context);
+            expect(match.command.id).toBe('desktop-toggle-lyric-api');
+            await match.command.execute('', context);
+            expect(setLyricApiEnabled).toHaveBeenCalledWith(true);
+            expect(context.setStatusMsg).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('matches and executes the desktop display sleep toggle', async () => {
         vi.stubGlobal('window', { electron: {} });
         try {

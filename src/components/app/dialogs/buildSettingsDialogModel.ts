@@ -12,6 +12,7 @@ import type { useThemeController } from '../../../hooks/useThemeController';
 import { type SettingsModalState, useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
 import type { PlayerCapConnectionStatus } from '../../../types/playerCap';
+import type { LyricApiStatus } from '../../../types/lyricApi';
 
 // src/components/app/dialogs/buildSettingsDialogModel.ts
 
@@ -44,6 +45,8 @@ type BuildSettingsDialogModelParams = {
     onToggleTransparentPlayerBackground: (enabled: boolean) => Promise<void> | void;
     obsBrowserSourceStatus?: ObsBrowserSourceStatus | null;
     refreshObsBrowserSourceStatus?: () => Promise<ObsBrowserSourceStatus>;
+    lyricApiStatus?: LyricApiStatus | null;
+    setLyricApiEnabled?: (enabled: boolean) => Promise<LyricApiStatus>;
 };
 
 // Builds the global settings dialog props without tying the modal to Home.
@@ -73,6 +76,8 @@ export const buildSettingsDialogModel = ({
     onToggleTransparentPlayerBackground,
     obsBrowserSourceStatus,
     refreshObsBrowserSourceStatus,
+    lyricApiStatus,
+    setLyricApiEnabled,
 }: BuildSettingsDialogModelParams): SettingsDialogProps | null => {
     if (!state.isOpen) {
         return null;
@@ -102,6 +107,12 @@ export const buildSettingsDialogModel = ({
         playerCapConnectionStatus,
         playerCapPlayers,
         obsBrowserSourceStatus,
+        lyricApiStatus,
+        onToggleLyricApi: setLyricApiEnabled
+            ? async (enabled) => {
+                await setLyricApiEnabled(enabled);
+            }
+            : undefined,
         onToggleObsBrowserSource: async (enabled) => {
             const nextStatus = await window.electron?.setObsBrowserSourceEnabled?.(enabled);
             if (!nextStatus) {

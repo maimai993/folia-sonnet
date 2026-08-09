@@ -80,6 +80,14 @@ contextBridge.exposeInMainWorld('electron', {
     publishObsBrowserSourceConfig: (config) => ipcRenderer.invoke('obs-browser-source-publish-config', config),
     publishObsBrowserSourceClock: (clock) => ipcRenderer.invoke('obs-browser-source-publish-clock', clock),
     publishObsBrowserSourceAudio: (audio) => ipcRenderer.invoke('obs-browser-source-publish-audio', audio),
+    getLyricApiStatus: () => ipcRenderer.invoke('lyric-api-get-status'),
+    setLyricApiEnabled: (enabled) => ipcRenderer.invoke('lyric-api-set-enabled', enabled),
+    publishLyricApiData: (lyrics) => ipcRenderer.invoke('lyric-api-publish', lyrics),
+    onLyricApiStatusChanged: (callback) => {
+        const listener = (_event, status) => callback(status);
+        ipcRenderer.on('lyric-api-status-changed', listener);
+        return () => ipcRenderer.removeListener('lyric-api-status-changed', listener);
+    },
     getDiscordPresenceStatus: () => ipcRenderer.invoke('discord-presence-get-status'),
     publishDiscordPresenceSnapshot: (snapshot) => ipcRenderer.invoke('discord-presence-publish-snapshot', snapshot),
     getPlaybackSyncBridgeStatus: () => ipcRenderer.invoke('playback-sync-bridge-get-status'),

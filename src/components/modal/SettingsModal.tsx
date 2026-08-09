@@ -25,6 +25,7 @@ import { selectSettingsUiSnapshot, type SettingsSubviewId, type VisualizerSettin
 import { useShallow } from 'zustand/react/shallow';
 import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
 import { getWebAiProvider } from '../../services/runtimeConfig';
+import type { LyricApiStatus } from '../../types/lyricApi';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -66,6 +67,8 @@ interface SettingsModalProps {
     obsBrowserSourceStatus?: ObsBrowserSourceStatus | null;
     onToggleObsBrowserSource?: (enabled: boolean) => Promise<void> | void;
     onRegenerateObsBrowserSourceToken?: () => Promise<void> | void;
+    lyricApiStatus?: LyricApiStatus | null;
+    onToggleLyricApi?: (enabled: boolean) => Promise<void> | void;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
     replayGainMode: ReplayGainMode;
     onReplayGainModeChange: (mode: ReplayGainMode) => void;
@@ -118,6 +121,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     obsBrowserSourceStatus = null,
     onToggleObsBrowserSource,
     onRegenerateObsBrowserSourceToken,
+    lyricApiStatus = null,
+    onToggleLyricApi,
     onAudioOutputDeviceChange,
     replayGainMode,
     onReplayGainModeChange,
@@ -1578,6 +1583,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     enabled: electronSettings.DISCORD_RICH_PRESENCE_ENABLED,
                                                     onToggle: handleToggleDiscordPresence,
                                                     status: discordPresenceStatus,
+                                                }}
+                                                lyricApi={{
+                                                    status: lyricApiStatus,
+                                                    onToggle: onToggleLyricApi,
                                                 }}
                                                 stage={{
                                                     nowPlayingConnectionStatus,
