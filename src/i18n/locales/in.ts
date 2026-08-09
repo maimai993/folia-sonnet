@@ -1089,6 +1089,25 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
+    "v0_6_16": {
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.16.",
+      "qqMusicProvider": {
+        "title": "Integrasi Awal QQ Music",
+        "description": "Fitur dasar untuk masuk akun, pencarian online, dan pemutaran kini tersedia. Dukungan fitur masih terbatas dan akan diperluas pada rilis mendatang."
+      },
+      "audioEqualizer": {
+        "title": "Equalizer Audio",
+        "description": "Sesuaikan dan simpan pengaturan equalizer dari kontrol pemutaran agar suara lebih cocok untuk perangkat Anda."
+      },
+      "lyricApi": {
+        "title": "API Lirik Desktop",
+        "description": "API lokal baru memungkinkan aplikasi eksternal membaca lagu yang sedang diputar dan lirik tersinkronisasi."
+      },
+      "localSongCovers": {
+        "title": "Sampul Lagu Lokal",
+        "description": "Kini Anda dapat mengimpor, menampilkan, dan menyimpan sampul khusus untuk setiap lagu lokal."
+      }
+    },
     "v0_6_15": {
       "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.15.",
       "sonnetLensEffects": {

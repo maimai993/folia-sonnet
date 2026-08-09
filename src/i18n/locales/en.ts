@@ -1314,6 +1314,25 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
+    "v0_6_16": {
+      "intro": "Here are the new features and improvements in version 0.6.16.",
+      "qqMusicProvider": {
+        "title": "Initial QQ Music Integration",
+        "description": "Basic account sign-in, online search, and playback are now available. Feature support is still limited and will be expanded in future releases."
+      },
+      "audioEqualizer": {
+        "title": "Audio Equalizer",
+        "description": "Adjust and save equalizer settings from the playback controls for sound better suited to your device."
+      },
+      "lyricApi": {
+        "title": "Desktop Lyrics API",
+        "description": "A new local API lets external apps read the current track and synchronized lyrics."
+      },
+      "localSongCovers": {
+        "title": "Local Track Covers",
+        "description": "You can now import, display, and persist custom artwork for individual local tracks."
+      }
+    },
     "v0_6_15": {
       "intro": "Here are the new features and improvements in version 0.6.15.",
       "sonnetLensEffects": {

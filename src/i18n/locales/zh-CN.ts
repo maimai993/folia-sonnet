@@ -1315,6 +1315,25 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
+    "v0_6_16": {
+      "intro": "以下是 0.6.16 的新功能与改进",
+      "qqMusicProvider": {
+        "title": "QQ 音乐初步接入",
+        "description": "目前提供基础的账号登录、在线搜索与播放能力，支持的功能仍较少，后续版本将继续完善。"
+      },
+      "audioEqualizer": {
+        "title": "音频均衡器",
+        "description": "可在播放控制面板中调节均衡器并保存声音设置，让不同设备获得更合适的听感。"
+      },
+      "lyricApi": {
+        "title": "桌面歌词 API",
+        "description": "新增本地歌词接口，方便外部应用读取当前播放歌曲与同步歌词。"
+      },
+      "localSongCovers": {
+        "title": "本地单曲封面",
+        "description": "现在可以为本地单曲导入、显示并持久化自定义封面。"
+      }
+    },
     "v0_6_15": {
       "intro": "以下是 0.6.15 的新功能与改进",
       "sonnetLensEffects": {
