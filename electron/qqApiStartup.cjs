@@ -68,6 +68,7 @@ async function startQqApi(options = {}) {
   const {
     port,
     stateFilePath,
+    authSessionRepository,
     moduleId = QQ_API_MODULE,
     loadModule = (target) => require(target),
     env = process.env,
@@ -105,6 +106,20 @@ async function startQqApi(options = {}) {
   let qqApi;
   try {
     qqApi = loadModule(moduleId);
+    if (authSessionRepository) {
+      const configureAuthSessionRepository = qqApi && (
+        qqApi.configureAuthSessionRepository ||
+        (qqApi.default && qqApi.default.configureAuthSessionRepository)
+      );
+      if (typeof configureAuthSessionRepository !== 'function') {
+        throw new Error(
+          `QQ API package ${moduleId} does not support auth session persistence`,
+        );
+      }
+      // require() starts the server, but Node cannot accept an HTTP request until this synchronous
+      // stack returns. Injecting here restores encrypted credentials before the first status probe.
+      configureAuthSessionRepository(authSessionRepository);
+    }
   } catch (error) {
     if (isModuleNotFound(error)) {
       const missing = new Error(

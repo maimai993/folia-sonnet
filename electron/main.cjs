@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, nativeImage, desktopCapturer, Menu, Tray, nativeTheme, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, nativeImage, desktopCapturer, Menu, Tray, nativeTheme, powerSaveBlocker, safeStorage } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { createStageApi } = require('./stageApi.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
 const { createKugouApiBridge } = require('./kugouApiBridge.cjs');
+const { createQqAuthSessionRepository } = require('./qqAuthSessionRepository.cjs');
 const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = require('./discordPresence.cjs');
 const { createVoiceInputPauseMonitor } = require('./voiceInputPause.cjs');
 const { createDisplaySleepBlocker } = require('./displaySleepBlocker.cjs');
@@ -73,7 +74,10 @@ if (process.platform === 'darwin' && process.arch === 'x64') {
 }
 
 const store = new Store({ projectName: 'Folia' });
-const kugouApiBridge = createKugouApiBridge({ store });
+// KuGou credentials stay inside the main process and are encrypted lazily after Electron is ready.
+// The bridge refuses Linux's plaintext `basic_text` fallback and degrades to an in-memory session.
+const kugouApiBridge = createKugouApiBridge({ store, safeStorage });
+const qqAuthSessionRepository = createQqAuthSessionRepository({ store, safeStorage });
 
 // --- Electron main process locale map ---
 const APP_LOCALE_KEY = 'APP_LOCALE';
@@ -2259,8 +2263,9 @@ function updateQqApiStatus(nextStatus) {
 
 let qqApiHandle = null;
 
-// Runs @yakult-green-tea/qq-music-api in-process. The device context lives under userData and holds
-// only Android device identifiers, never a musickey, MQTT token or any account credential.
+// Runs @yakult-green-tea/qq-music-api in-process. Device identifiers remain in their existing file;
+// account credentials are owned by the API and cross this boundary only through an encrypted
+// main-process repository. The renderer continues to receive only an opaque session token.
 async function startQqApi() {
   updateQqApiStatus({ status: 'starting', port: null, error: null });
   try {
@@ -2270,6 +2275,7 @@ async function startQqApi() {
     qqApiHandle = await startQqApiServer({
       port: freePort,
       stateFilePath: path.join(app.getPath('userData'), 'qq-auth-state', 'qq-device.json'),
+      authSessionRepository: qqAuthSessionRepository,
     });
     updateQqApiStatus({ status: 'running', port: freePort, error: null });
     console.log('QQ API started on port', freePort);

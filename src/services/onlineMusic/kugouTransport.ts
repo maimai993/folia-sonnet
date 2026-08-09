@@ -92,6 +92,11 @@ const getWebSessionCookie = (): string => {
 };
 
 export const hasKugouAuthenticatedSearchSession = (): boolean => {
+    // Electron keeps the reusable token/dfid in the encrypted main-process bridge. The account id
+    // is only a non-secret hint that lets this synchronous selector choose authenticated search.
+    if (typeof window !== 'undefined' && window.electron?.kugouRequest) {
+        return Boolean(readProviderSessionValue('kugou', 'userid'));
+    }
     const cookie = getWebSessionCookie();
     return ['token', 'userid', 'dfid'].every(key => (
         new RegExp(`(?:^|;)\\s*${key}=[^;]+`, 'i').test(cookie)
@@ -193,6 +198,21 @@ const persistWebSession = (response: any): void => {
     if (dfid) writeProviderSessionValue('kugou', 'dfid', String(dfid));
 };
 
+/**
+ * Removes credentials written by older desktop builds. Electron only retains the non-sensitive
+ * account id in renderer storage; every reusable credential stays in the encrypted IPC bridge.
+ */
+const persistElectronAccountHint = (operation: KugouOperation, response: any): void => {
+    ['cookie', 'token', 'dfid'].forEach(key => removeProviderSessionValue('kugou', key));
+    if (operation === 'logout') {
+        removeProviderSessionValue('kugou', 'userid');
+        return;
+    }
+    const payload = response?.data || response?.body?.data || response?.body || response;
+    const userId = payload?.userid ?? payload?.user_id;
+    if (userId) writeProviderSessionValue('kugou', 'userid', String(userId));
+};
+
 export const getKugouTransportAvailability = () => {
     if (typeof window !== 'undefined' && window.electron?.kugouRequest) return { configured: true } as const;
     return getWebApiBase()
@@ -203,8 +223,13 @@ export const getKugouTransportAvailability = () => {
 // Routes one provider request through Electron IPC or an explicitly configured Web backend.
 export const requestKugou = async <T = unknown>(operation: KugouOperation, params: KugouParams = {}): Promise<T> => {
     if (typeof window !== 'undefined' && window.electron?.kugouRequest) {
-        const response = await window.electron.kugouRequest(operation, params);
-        persistWebSession(response);
+        // Account credentials are injected by the main-process bridge. Drop legacy renderer values
+        // at the IPC boundary so an old localStorage token cannot keep circulating after migration.
+        const electronParams = Object.fromEntries(
+            Object.entries(params).filter(([key]) => !['token', 'dfid', 'cookie'].includes(key.toLowerCase())),
+        );
+        const response = await window.electron.kugouRequest(operation, electronParams);
+        persistElectronAccountHint(operation, response);
         return response as T;
     }
 

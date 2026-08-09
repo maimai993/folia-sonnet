@@ -58,6 +58,7 @@ declare global {
 
   interface ElectronKugouApiStatus {
     available: boolean;
+    authenticated: boolean;
     error: string | null;
   }
 

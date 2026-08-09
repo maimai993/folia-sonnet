@@ -2,7 +2,9 @@ const crypto = require('crypto');
 
 // electron/kugouApiBridge.cjs
 
-const SESSION_KEY = 'KUGOU_API_SESSION_V1';
+const LEGACY_SESSION_KEY = 'KUGOU_API_SESSION_V1';
+const SESSION_KEY = 'KUGOU_API_SESSION_V2';
+const SESSION_ENVELOPE_VERSION = 2;
 const AUTH_COOKIE_KEYS = new Set(['token', 'userid', 'user_id', 'dfid']);
 const OPERATION_MODULES = {
   register_dev: ['register_dev'],
@@ -44,6 +46,85 @@ const OPERATION_MODULES = {
 
 const randomUpperHex = (bytes) => crypto.randomBytes(bytes).toString('hex').toUpperCase();
 
+const isRecord = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * Electron may expose Linux's `basic_text` password backend as available even though it only
+ * obfuscates data. Refusing it keeps KuGou account tokens out of Folia's plaintext config file.
+ */
+function assertEncryptionAvailable(safeStorage, platform) {
+  if (!safeStorage || typeof safeStorage.isEncryptionAvailable !== 'function') {
+    throw new Error('Electron safeStorage is unavailable');
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Electron safeStorage encryption is unavailable');
+  }
+  const backend = platform === 'linux' && typeof safeStorage.getSelectedStorageBackend === 'function'
+    ? safeStorage.getSelectedStorageBackend()
+    : null;
+  if (backend === 'basic_text') {
+    throw new Error('Electron safeStorage selected the unencrypted basic_text backend');
+  }
+}
+
+/**
+ * Stores one encrypted cookie map. Failures deliberately degrade to the bridge's in-memory copy:
+ * login keeps working for the current run, but no credential is written without OS encryption.
+ */
+function createSessionPersistence({ store, safeStorage, platform, warn }) {
+  const remove = key => {
+    if (typeof store.delete === 'function') store.delete(key);
+    else store.set(key, undefined);
+  };
+  const report = (event, error) => warn(`[KuGouSession] ${event}`, {
+    name: error instanceof Error ? error.name : 'Error',
+  });
+
+  return {
+    load() {
+      const encoded = store.get(SESSION_KEY);
+      if (typeof encoded === 'string' && encoded.length > 0) {
+        try {
+          assertEncryptionAvailable(safeStorage, platform);
+          const plaintext = safeStorage.decryptString(Buffer.from(encoded, 'base64'));
+          const envelope = JSON.parse(plaintext);
+          if (
+            !isRecord(envelope) ||
+            envelope.version !== SESSION_ENVELOPE_VERSION ||
+            !isRecord(envelope.cookies)
+          ) {
+            throw new Error('Stored KuGou session envelope is invalid');
+          }
+          return { ...envelope.cookies };
+        } catch (error) {
+          report('load-failed', error);
+        }
+      }
+
+      const legacy = store.get(LEGACY_SESSION_KEY);
+      if (!isRecord(legacy)) return null;
+      // Load the old value into memory once, then remove the plaintext immediately. `save` below
+      // either upgrades it to V2 or leaves it process-local when secure encryption is unavailable.
+      remove(LEGACY_SESSION_KEY);
+      return { ...legacy };
+    },
+    save(cookies) {
+      try {
+        assertEncryptionAvailable(safeStorage, platform);
+        const plaintext = JSON.stringify({
+          version: SESSION_ENVELOPE_VERSION,
+          cookies,
+        });
+        const encrypted = safeStorage.encryptString(plaintext);
+        store.set(SESSION_KEY, encrypted.toString('base64'));
+        remove(LEGACY_SESSION_KEY);
+      } catch (error) {
+        report('save-failed', error);
+      }
+    },
+  };
+}
+
 // Builds the stable lite-client identity expected by KuGouMusicApi without starting its HTTP server.
 function createDeviceCookies() {
   const guid = crypto.randomUUID().replace(/-/g, '').toUpperCase();
@@ -72,15 +153,30 @@ const isDeviceVerificationRequired = (body) => {
   return errorCode === 20028 || message.includes('本次请求需要验证');
 };
 
-function createKugouApiBridge({ store, apiLoader = () => require('kugoumusicapi') }) {
+function createKugouApiBridge({
+  store,
+  safeStorage,
+  platform = process.platform,
+  warn = console.warn,
+  apiLoader = () => require('kugoumusicapi'),
+}) {
   let api = null;
   let loadError = null;
   let registrationPromise = null;
-  const stored = store.get(SESSION_KEY);
-  let cookies = stored && typeof stored === 'object' ? { ...stored } : createDeviceCookies();
+  let cookies = null;
+  const persistence = createSessionPersistence({ store, safeStorage, platform, warn });
 
-  const persist = () => store.set(SESSION_KEY, cookies);
-  persist();
+  // The bridge is constructed before Electron's ready event, while safeStorage cannot be used yet.
+  // Loading lazily on the first IPC call guarantees OS encryption is initialized before migration.
+  const ensureCookies = () => {
+    if (cookies) return cookies;
+    cookies = persistence.load() ?? createDeviceCookies();
+    persistence.save(cookies);
+    return cookies;
+  };
+  const persist = () => {
+    if (cookies) persistence.save(cookies);
+  };
 
   const loadApi = () => {
     if (api) return api;
@@ -96,18 +192,36 @@ function createKugouApiBridge({ store, apiLoader = () => require('kugoumusicapi'
   };
 
   const mergeResponseSession = (result) => {
+    const sessionCookies = ensureCookies();
     const nextCookies = Array.isArray(result?.cookie) ? result.cookie : [];
     nextCookies.forEach(entry => {
       const parsed = parseCookieEntry(entry);
-      if (parsed) cookies[parsed[0]] = parsed[1];
+      if (parsed) sessionCookies[parsed[0]] = parsed[1];
     });
     const body = result?.body ?? result;
     const data = body?.data ?? body;
-    if (data?.token) cookies.token = String(data.token);
-    if (data?.userid ?? data?.user_id) cookies.userid = String(data.userid ?? data.user_id);
-    if (data?.dfid) cookies.dfid = String(data.dfid);
+    if (data?.token) sessionCookies.token = String(data.token);
+    if (data?.userid ?? data?.user_id) sessionCookies.userid = String(data.userid ?? data.user_id);
+    if (data?.dfid) sessionCookies.dfid = String(data.dfid);
     persist();
     return body;
+  };
+
+  // Login responses need their status and account id in the renderer, but not the reusable token
+  // or device credential. Other operation bodies are left untouched to avoid changing provider
+  // response contracts unrelated to authentication.
+  const sanitizeRendererBody = (operation, body) => {
+    if (!['login_qr_check', 'register_dev'].includes(operation) || !isRecord(body)) return body;
+    const removeSecrets = value => {
+      if (!isRecord(value)) return value;
+      return Object.fromEntries(
+        Object.entries(value).filter(([key]) => !['token', 'dfid', 'cookie'].includes(key.toLowerCase())),
+      );
+    };
+    return {
+      ...removeSecrets(body),
+      ...(isRecord(body.data) ? { data: removeSecrets(body.data) } : {}),
+    };
   };
 
   const invokeModule = async (operation, params = {}) => {
@@ -116,28 +230,34 @@ function createKugouApiBridge({ store, apiLoader = () => require('kugoumusicapi'
     if (!candidates) throw new Error(`Unsupported KuGou operation: ${operation}`);
     const moduleName = candidates.find(name => typeof loaded[name] === 'function');
     if (!moduleName) throw new Error(`KuGouMusicApi module is unavailable: ${operation}`);
-    const userId = cookies.userid || cookies.user_id;
+    const sessionCookies = ensureCookies();
+    const userId = sessionCookies.userid || sessionCookies.user_id;
+    const token = sessionCookies.token;
     const result = await loaded[moduleName]({
       ...params,
       ...(userId ? { userid: userId, uid: userId } : {}),
-      cookie: { ...cookies },
+      // Renderer no longer stores the token in Electron mode. Supplying it here preserves modules
+      // such as concept-VIP calls that historically received an explicit token parameter.
+      ...(token ? { token } : {}),
+      cookie: { ...sessionCookies },
     });
     return mergeResponseSession(result);
   };
 
   const ensureRegistered = async (force = false) => {
+    const sessionCookies = ensureCookies();
     if (registrationPromise) return registrationPromise;
-    if (!force && cookies.dfid) return;
+    if (!force && sessionCookies.dfid) return;
 
     if (force) {
-      delete cookies.dfid;
+      delete sessionCookies.dfid;
       persist();
     }
 
     registrationPromise = (async () => {
       try {
         await invokeModule('register_dev');
-        if (!cookies.dfid) throw new Error('KuGou device registration did not return a dfid');
+        if (!sessionCookies.dfid) throw new Error('KuGou device registration did not return a dfid');
       } finally {
         registrationPromise = null;
       }
@@ -148,16 +268,26 @@ function createKugouApiBridge({ store, apiLoader = () => require('kugoumusicapi'
   return {
     getStatus() {
       try {
+        ensureCookies();
         loadApi();
-        return { available: true, error: null };
+        return {
+          available: true,
+          authenticated: Boolean(cookies?.token && (cookies.userid || cookies.user_id)),
+          error: null,
+        };
       } catch (error) {
-        return { available: false, error: error instanceof Error ? error.message : String(error) };
+        return {
+          available: false,
+          authenticated: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
       }
     },
     async request(operation, params) {
       if (!OPERATION_MODULES[operation]) throw new Error(`Unsupported KuGou operation: ${operation}`);
       if (operation === 'logout') {
-        cookies = Object.fromEntries(Object.entries(cookies).filter(([key]) => !AUTH_COOKIE_KEYS.has(key.toLowerCase())));
+        const sessionCookies = ensureCookies();
+        cookies = Object.fromEntries(Object.entries(sessionCookies).filter(([key]) => !AUTH_COOKIE_KEYS.has(key.toLowerCase())));
         persist();
         return { code: 200 };
       }
@@ -167,11 +297,18 @@ function createKugouApiBridge({ store, apiLoader = () => require('kugoumusicapi'
         await ensureRegistered(true);
         body = await invokeModule(operation, params);
       }
-      return operation === 'user_detail' && body?.data && (cookies.userid || cookies.user_id)
-        ? { ...body, data: { ...body.data, userid: String(cookies.userid || cookies.user_id) } }
+      const sessionCookies = ensureCookies();
+      const responseBody = operation === 'user_detail' && body?.data && (sessionCookies.userid || sessionCookies.user_id)
+        ? { ...body, data: { ...body.data, userid: String(sessionCookies.userid || sessionCookies.user_id) } }
         : body;
+      return sanitizeRendererBody(operation, responseBody);
     },
   };
 }
 
-module.exports = { createKugouApiBridge, OPERATION_MODULES };
+module.exports = {
+  LEGACY_SESSION_KEY,
+  SESSION_KEY,
+  createKugouApiBridge,
+  OPERATION_MODULES,
+};
