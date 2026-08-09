@@ -67,6 +67,7 @@ export type CommandPaletteContext = {
     togglePlay: () => void;
     toggleLoop: () => void;
     onReplayGainModeChange: (mode: ReplayGainMode) => void;
+    openAudioEqualizer: () => void;
     handleNextTrack: () => void;
     handlePrevTrack: () => void;
     shuffleQueue: () => void;

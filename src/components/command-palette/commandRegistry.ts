@@ -282,6 +282,19 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createReplayGainCommand('off', 'Disable ReplayGain', 'Play audio without ReplayGain adjustment', ['replaygain off', 'disable replaygain', 'audio gain off', '关闭音频增益', '关闭 replaygain', 'guanbiyinpinzengyi', 'gbyyzy']),
     createReplayGainCommand('track', 'ReplayGain: Track mode', 'Apply per-track ReplayGain adjustment', ['replaygain track', 'track gain', 'single track gain', '单曲增益', '单曲 replaygain', 'danquzengyi', 'dqzy']),
     createReplayGainCommand('album', 'ReplayGain: Album mode', 'Apply album ReplayGain adjustment', ['replaygain album', 'album gain', '专辑增益', '专辑 replaygain', 'zhuanjizengyi', 'zjzy']),
+    {
+        id: 'playback-equalizer',
+        group: 'playback',
+        title: 'Audio equalizer',
+        description: 'Open the ten-band audio equalizer',
+        keywords: ['equalizer', 'audio equalizer', 'eq', '10 band eq', '均衡器', '音频均衡器', '十段均衡器', 'junhengqi', 'yinpinjunhengqi', 'jhh', 'ypjhh'],
+        execute: (_input, context) => {
+            context.setPanelTab('controls');
+            context.setIsPanelOpen(true);
+            context.openAudioEqualizer();
+            return true;
+        },
+    },
     createSettingsCommand('settings-local-lyrics-priority', 'Local song lyrics priority', 'Choose whether local songs prefer local or online lyrics', ['local lyrics priority', 'online lyrics first', 'local song lyrics', '本地歌曲歌词优先级', '在线优先', '本地歌词', 'bendigeciyouxianji', 'zaixianyouxian', 'bdgcyxj', 'zxyx'], 'options', 'playback'),
     createSettingsCommand('settings-integration', 'Integration settings', 'Open Stage, Now Playing, and Navidrome settings', ['integration', 'stage', 'now playing', 'navidrome settings', '集成', '连接', 'jicheng', 'lianjie', 'jc', 'lj'], 'options', 'integration'),
     createSettingsCommand('settings-discord-presence', 'Discord playback status', 'Open Discord Rich Presence settings', ['discord', 'rich presence', 'discord presence', 'playing status', '播放状态', 'discord状态', 'discordzhuangtai', 'bofangzhuangtai', 'dc', 'zt'], 'options', 'integration'),

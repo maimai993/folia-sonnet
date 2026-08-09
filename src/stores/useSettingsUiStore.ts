@@ -24,6 +24,12 @@ import {
     writePinnedCommandIds,
     type PinnedCommandIds,
 } from '../components/command-palette/pinnedCommandPreferences';
+import {
+    readStoredAudioEqualizerSettings,
+    resolveAudioEqualizerSettings,
+    writeStoredAudioEqualizerSettings,
+    type AudioEqualizerSettings,
+} from '../utils/audioEqualizer';
 
 // src/stores/useSettingsUiStore.ts
 // Shared settings state and actions used by App, Home, and SettingsModal.
@@ -1229,6 +1235,8 @@ export type SettingsUiState = {
     webObsThemeMode: 'static' | 'builtin' | 'ai';
     queueAddBehavior: QueueAddBehavior;
     audioOutputDeviceId: string;
+    audioEqualizerSettings: AudioEqualizerSettings;
+    isAudioEqualizerOpen: boolean;
     volume: number;
     isMuted: boolean;
     loopMode: 'off' | 'all' | 'one';
@@ -1373,6 +1381,9 @@ export type SettingsUiState = {
     setWebObsThemeMode: (mode: 'static' | 'builtin' | 'ai') => void;
     handleSetQueueAddBehavior: (behavior: QueueAddBehavior) => void;
     handleSetAudioOutputDeviceId: (deviceId: string) => void;
+    handleSetAudioEqualizerSettings: (settings: AudioEqualizerSettings) => void;
+    openAudioEqualizer: () => void;
+    closeAudioEqualizer: () => void;
     handleSetVolume: (val: number) => void;
     handleToggleMute: () => void;
     handleToggleLoopMode: () => void;
@@ -1490,6 +1501,8 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     webObsThemeMode: readStoredWebObsThemeMode(),
     queueAddBehavior: readStoredQueueAddBehavior(),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
+    audioEqualizerSettings: readStoredAudioEqualizerSettings(),
+    isAudioEqualizerOpen: false,
     volume: readStoredVolume(),
     isMuted: getStoredBoolean('player_is_muted', false),
     loopMode: readStoredLoopMode(),
@@ -2700,6 +2713,13 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.removeItem('audio_output_device_id');
         }
     },
+    handleSetAudioEqualizerSettings: (settings) => {
+        const resolved = resolveAudioEqualizerSettings(settings);
+        writeStoredAudioEqualizerSettings(resolved);
+        set({ audioEqualizerSettings: resolved });
+    },
+    openAudioEqualizer: () => set({ isAudioEqualizerOpen: true }),
+    closeAudioEqualizer: () => set({ isAudioEqualizerOpen: false }),
     handleSetVolume: (val) => {
         if (typeof window !== 'undefined') {
             localStorage.setItem('player_volume', String(val));

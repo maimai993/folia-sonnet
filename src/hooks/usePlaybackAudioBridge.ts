@@ -9,6 +9,8 @@ import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
 import { resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
 import { calculateReplayGain } from '../utils/replayGain';
 import { saveToCache } from '../services/db';
+import { applyAudioEqualizerSettings, connectAudioEqualizerGraph } from '../services/audioEqualizerGraph';
+import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 
 // src/hooks/usePlaybackAudioBridge.ts
 
@@ -64,6 +66,8 @@ export function usePlaybackAudioBridge({
 }: UsePlaybackAudioBridgeParams) {
     const previousAudioSrcRef = useRef<string | null>(null);
     const replayGainLogSignatureRef = useRef<string | null>(null);
+    const equalizerNodesRef = useRef<BiquadFilterNode[]>([]);
+    const audioEqualizerSettings = useSettingsUiStore(state => state.audioEqualizerSettings);
 
     // Recalculates source-specific gain after the audio graph or playback settings become ready.
     const applyReplayGain = useCallback(() => {
@@ -132,7 +136,13 @@ export function usePlaybackAudioBridge({
 
             const source = ctx.createMediaElementSource(audioRef.current);
             source.connect(gainNode);
-            gainNode.connect(analyser);
+            connectAudioEqualizerGraph({
+                context: ctx,
+                input: gainNode,
+                output: analyser,
+                nodesRef: equalizerNodesRef,
+                settings: audioEqualizerSettings,
+            });
             analyser.connect(ctx.destination);
             sourceRef.current = source;
             applyReplayGain();
@@ -140,7 +150,7 @@ export function usePlaybackAudioBridge({
         } catch (error) {
             console.error('Audio Context Setup Failed:', error);
         }
-    }, [analyserRef, applyReplayGain, audioContextRef, audioRef, gainNodeRef, getTargetPlaybackVolume, sourceRef, syncOutputGain]);
+    }, [analyserRef, applyReplayGain, audioContextRef, audioEqualizerSettings, audioRef, gainNodeRef, getTargetPlaybackVolume, sourceRef, syncOutputGain]);
 
     const cacheSongAssets = useCallback(async () => {
         if (!currentSong || !audioSrc || audioSrc.startsWith('blob:')) return;
@@ -189,6 +199,14 @@ export function usePlaybackAudioBridge({
     useEffect(() => {
         applyReplayGain();
     }, [applyReplayGain]);
+
+    useEffect(() => {
+        const context = audioContextRef.current;
+        if (!context || equalizerNodesRef.current.length === 0) {
+            return;
+        }
+        applyAudioEqualizerSettings(context, equalizerNodesRef.current, audioEqualizerSettings);
+    }, [audioContextRef, audioEqualizerSettings]);
 
     useEffect(() => {
         const audioElement = audioRef.current;
