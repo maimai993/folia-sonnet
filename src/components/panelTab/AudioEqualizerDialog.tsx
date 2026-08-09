@@ -4,7 +4,7 @@ import { AudioLines, Power, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../types';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
-import { colorWithAlpha } from '../visualizer/colorMix';
+import { colorWithAlpha, mixColors } from '../visualizer/colorMix';
 import {
     AUDIO_EQUALIZER_BANDS,
     AUDIO_EQUALIZER_MAX_GAIN_DB,
@@ -75,14 +75,18 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight,
         commitSettings(next);
     };
 
-    const inactiveText = isDaylight ? 'text-zinc-500' : 'text-white/45';
-    const trackClass = isDaylight ? 'bg-black/10' : 'bg-white/10';
+    const selectedAccentColor = isDaylight
+        ? mixColors(theme.accentColor, '#18181b', 0.52)
+        : theme.accentColor;
+    const inactiveText = isDaylight ? 'text-zinc-600' : 'text-white/45';
+    const trackClass = isDaylight ? 'bg-zinc-300' : 'bg-white/10';
     const surfaceClass = isDaylight
-        ? 'border-black/10 bg-black/[0.04]'
+        ? 'border-zinc-300 bg-zinc-100/90 text-zinc-800'
         : 'border-white/10 bg-white/[0.05]';
     const buttonClass = isDaylight
-        ? 'border-black/10 bg-black/[0.04] hover:bg-black/[0.08]'
+        ? 'border-zinc-300 bg-zinc-100/90 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-200'
         : 'border-white/10 bg-white/[0.05] hover:bg-white/[0.1]';
+    const gainTextClass = isDaylight ? 'text-zinc-700' : 'text-white';
 
     if (typeof document === 'undefined') {
         return null;
@@ -107,7 +111,11 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight,
                     }}
                     aria-pressed={draft.enabled}
                     className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition-colors ${buttonClass}`}
-                    style={draft.enabled ? { color: theme.accentColor, borderColor: colorWithAlpha(theme.accentColor, 0.35) } : undefined}
+                    style={draft.enabled ? {
+                        color: selectedAccentColor,
+                        borderColor: colorWithAlpha(selectedAccentColor, 0.5),
+                        backgroundColor: colorWithAlpha(selectedAccentColor, 0.1),
+                    } : undefined}
                 >
                     <Power size={14} />
                     {t(draft.enabled ? 'ui.equalizerEnabled' : 'ui.equalizerDisabled')}
@@ -122,9 +130,9 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight,
                             aria-pressed={draft.preset === presetId}
                             className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${buttonClass}`}
                             style={draft.preset === presetId ? {
-                                color: theme.accentColor,
-                                borderColor: colorWithAlpha(theme.accentColor, 0.45),
-                                backgroundColor: colorWithAlpha(theme.accentColor, 0.12),
+                                color: selectedAccentColor,
+                                borderColor: colorWithAlpha(selectedAccentColor, 0.55),
+                                backgroundColor: colorWithAlpha(selectedAccentColor, 0.12),
                             } : undefined}
                         >
                             {t(`ui.equalizerPreset.${presetId}`)}
@@ -152,7 +160,7 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight,
                         const gain = draft.gains[index] ?? 0;
                         return (
                             <label key={band.frequency} className="flex flex-col items-center gap-2">
-                                <span className="text-[10px] font-semibold tabular-nums" style={{ color: gain === 0 ? undefined : theme.accentColor }}>
+                                <span className={`text-[10px] font-semibold tabular-nums ${gainTextClass}`} style={{ color: gain === 0 ? undefined : selectedAccentColor }}>
                                     {gain > 0 ? '+' : ''}{gain}
                                 </span>
                                 <input
@@ -169,7 +177,7 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight,
                                     onKeyUp={() => commitSettings(draftRef.current)}
                                     onBlur={() => commitSettings(draftRef.current)}
                                     className={`h-32 w-1.5 cursor-pointer appearance-none rounded-full ${trackClass}`}
-                                    style={{ writingMode: 'vertical-lr', direction: 'rtl', accentColor: theme.accentColor }}
+                                    style={{ writingMode: 'vertical-lr', direction: 'rtl', accentColor: isDaylight ? selectedAccentColor : theme.accentColor }}
                                 />
                                 <span className={`text-[10px] font-semibold tabular-nums ${inactiveText}`}>{band.label}</span>
                             </label>
