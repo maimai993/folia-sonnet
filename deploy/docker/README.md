@@ -2,7 +2,7 @@
 
 当前目录提供面向 Docker 部署的完整 Web 堆栈：前端网关、Folia Web API、在线音乐接口和独立的 Sync Server。对外只发布 Web 网关与 Sync Server 两个端口，其余服务仅通过 Docker 网络互访。
 
-Compose 文件边界：`compose.yaml` 是发布版完整栈，`compose.sync.yaml` 只构建 Sync Server，`compose.build.yaml` 将服务切到本地构建镜像；`backend/`、`netease-api/`、`kugou-api/` 和 `gateway/` 是内部服务实现。Web 服务从 gateway 暴露，客户端的 Sync API 直接连接独立 sync-server，不通过 Web gateway 转发。
+Compose 文件边界：`compose.yaml` 是发布版完整栈，`compose.sync.yaml` 只构建 Sync Server，`compose.build.yaml` 将服务切到本地构建镜像；`backend/`、`netease-api/`、`kugou-api/`、`qq-api/` 和 `gateway/` 是内部服务实现。Web 服务从 gateway 暴露，客户端的 Sync API 直接连接独立 sync-server，不通过 Web gateway 转发。
 
 ## 快速启动
 
@@ -57,16 +57,16 @@ docker compose ps
 - Web：`http://NAS-IP:18080`
 - Sync Server：`http://NAS-IP:13000/health`
 
-网易云、酷狗和 Folia Web API 没有宿主机端口，不能绕过 gateway 直接访问。Sync Server 位于独立网络，不与 Web 内部服务互通。
+网易云、酷狗、QQ 音乐和 Folia Web API 没有宿主机端口，不能绕过 gateway 直接访问。Sync Server 位于独立网络，不与 Web 内部服务互通。
 
-当前健康检查入口分别是 gateway 的 `/healthz`、`/api/healthz`、`/runtime-config.js`、`/netease/`、`/kugou/`，以及 Sync Server 的 `/health`。本地镜像验证脚本 `scripts/smoke-test.sh` 会检查这些路径和网络隔离。
+当前健康检查入口分别是 gateway 的 `/healthz`、`/api/healthz`、`/runtime-config.js`、`/netease/`、`/kugou/`、`/qq/login/status`，以及 Sync Server 的 `/health`。本地镜像验证脚本 `scripts/smoke-test.sh` 会检查这些路径和网络隔离。
 
 ## 环境变量
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `FOLIA_IMAGE_NAMESPACE` | 模板为 `papersman` | Docker Hub 镜像命名空间，缺失时拒绝启动 |
-| `FOLIA_STACK_VERSION` | `latest` | 四个 Web 堆栈镜像的统一版本 |
+| `FOLIA_STACK_VERSION` | `latest` | 五个 Web 堆栈镜像的统一版本 |
 | `FOLIA_SYNC_VERSION` | `latest` | Sync Server 独立版本 |
 | `FOLIA_HTTP_BIND` / `FOLIA_HTTP_PORT` | `0.0.0.0` / `18080` | Web 网关监听 |
 | `FOLIA_AI_PROVIDER` | `google` | `google`、`gemini` 或 `openai` |
@@ -83,7 +83,23 @@ AI 密钥只传给 backend 容器，不会写入前端静态文件。修改 `FOL
 docker compose up -d --force-recreate gateway
 ```
 
-网易云和酷狗镜像默认不把浏览器或 Docker 私网地址写入上游请求，音乐平台会根据连接本身识别 NAS 的公网出口。只有兼容旧部署行为时才应设置 `FOLIA_FORWARD_CLIENT_IP=true`；这可能使登录记录显示为“局域网”或“未知”。
+网易云和酷狗镜像默认不把浏览器或 Docker 私网地址写入上游请求，音乐平台会根据连接本身识别 NAS 的公网出口。只有兼容旧部署行为时才应设置 `FOLIA_FORWARD_CLIENT_IP=true`；这可能使登录记录显示为“局域网”或“未知”。QQ 音乐镜像不转发浏览器 IP，因此不受该开关影响。
+
+## QQ 音乐服务
+
+`qq-api` 由 npm 包 `@yakult-green-tea/qq-music-api` 提供，网页端通过 gateway 的 `/qq/` 访问，登录走 QQ 音乐 App 原生扫码。独立部署方式、环境变量表、serverless 支持情况与常见错误见 [`qq-api/README.md`](./qq-api/README.md)。
+
+装置状态存放在具名卷 `qq-api-state`（容器内 `/app/.auth-state/qq-device.json`），只包含 Android device 识别值，不含 `musickey`、MQTT token 或任何账号凭证。QIMEI 与 device session 跨容器重启复用，因此正常更新不需要重新注册装置。
+
+需要更换装置身份时删除该卷：
+
+```bash
+docker compose down
+docker volume rm folia_qq-api-state
+docker compose up -d --wait
+```
+
+同一时间只允许一个活跃扫码会话。没有被扫过的旧二维码会被下一次登录请求直接接管，只有正在手机上确认的会话才会让新请求收到 409。上游装置注册失败时服务返回 502 加 `Retry-After`，随后返回 429，属于预期的退避行为。多实例部署不要共用同一个装置状态卷。
 
 ## HTTPS 与浏览器安全上下文
 
@@ -142,9 +158,10 @@ docker compose start sync-server
 
 ```bash
 docker compose ps
-docker compose logs --tail=200 gateway backend netease-api kugou-api sync-server
+docker compose logs --tail=200 gateway backend netease-api kugou-api qq-api sync-server
 curl http://127.0.0.1:18080/healthz
 curl http://127.0.0.1:18080/api/healthz
+curl http://127.0.0.1:18080/qq/login/status
 curl http://127.0.0.1:13000/health
 ```
 

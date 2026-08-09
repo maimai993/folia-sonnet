@@ -16,6 +16,7 @@ import type {
     OmniUser,
     OnlineMusicProvider,
     ProviderCatalogEntityKind,
+    QrLoginMethod,
     QrLoginState,
 } from '../../types/onlineMusic';
 import { resolveProviderLyricsChorus } from '../../utils/lyrics/chorusResolver';
@@ -170,11 +171,16 @@ export const omni = {
         await provider.auth.logout();
     },
 
-    async createQrLogin(providerId: OmniProviderId): Promise<{ key: string; imageUrl: string }> {
+    // 没有这个能力就回空数组，UI 据此走单步流程；netease / kugou 完全不受影响。
+    getQrLoginMethods(providerId: OmniProviderId): QrLoginMethod[] {
+        return requireOnlineMusicProvider(providerId).auth?.getQrLoginMethods?.() ?? [];
+    },
+
+    async createQrLogin(providerId: OmniProviderId, methodId?: string): Promise<{ key: string; imageUrl: string }> {
         const provider = requireOnlineMusicProvider(providerId);
         const auth = provider.auth;
         if (!auth?.getQrKey || !auth.createQr) return unsupported(providerId, 'qr-login');
-        const key = await auth.getQrKey();
+        const key = await auth.getQrKey(methodId);
         return { key, imageUrl: await auth.createQr(key) };
     },
 
@@ -182,6 +188,17 @@ export const omni = {
         const provider = requireOnlineMusicProvider(providerId);
         if (!provider.auth?.checkQr) return unsupported(providerId, 'qr-login');
         return provider.auth.checkQr(key);
+    },
+
+    // 没有这个能力就静默 no-op：netease / kugou 的扫码流程完全不受影响。
+    async cancelQrLogin(providerId: OmniProviderId, key: string): Promise<void> {
+        await requireOnlineMusicProvider(providerId).auth?.cancelQr?.(key);
+    },
+
+    // 只有明确声明了二维码寿命的 provider 才由前端计时；其余照旧只认后端报出的过期状态。
+    getQrTtlMs(providerId: OmniProviderId): number | null {
+        const ttlMs = requireOnlineMusicProvider(providerId).auth?.getQrTtlMs?.();
+        return typeof ttlMs === 'number' && ttlMs > 0 ? ttlMs : null;
     },
 
     async getUserPlaylists(userId: MediaId, page: PageInput): Promise<OmniPage<OmniCollection>> {

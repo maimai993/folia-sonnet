@@ -15,18 +15,28 @@ type OnlineProviderSwitcherProps = {
     onBackToPlayer: () => void;
 };
 
-const ProviderAvatar = ({ provider, className }: { provider: ProviderAccountSummary; className: string }) => (
-    provider.user?.avatarUrl
+// 在线平台使用统一的纯色圆形文字徽章。
+const AVATAR_BADGE_BY_PROVIDER: Record<string, { label: string; iconUrl?: string; className: string }> = {
+    netease: { label: '云', className: 'bg-red-600' },
+    kugou: { label: 'K', className: 'bg-blue-600' },
+    qq: { label: 'Q', className: 'bg-green-600' },
+};
+
+const ProviderAvatar = ({ provider, className }: { provider: ProviderAccountSummary; className: string }) => {
+    const badge = AVATAR_BADGE_BY_PROVIDER[provider.providerId];
+    return provider.user?.avatarUrl
         ? <img src={provider.user.avatarUrl.replace(/^http:/, 'https:')} alt={provider.user.nickname} className={`${className} object-cover`} />
         : (
             <span
                 aria-label={provider.displayName}
-                className={`${className} flex items-center justify-center font-black text-white ${provider.providerId === 'netease' ? 'bg-red-600' : 'bg-blue-600'}`}
+                className={`${className} flex items-center justify-center overflow-hidden font-black text-white ${badge?.className || 'bg-blue-600'}`}
             >
-                {provider.providerId === 'netease' ? '云' : provider.providerId === 'kugou' ? 'K' : <UserRound size={20} />}
+                {badge?.iconUrl
+                    ? <img src={badge.iconUrl} alt="" aria-hidden="true" className="h-3/5 w-3/5 object-contain" />
+                    : badge?.label || <UserRound size={20} />}
             </span>
-        )
-);
+        );
+};
 
 const OnlineProviderSwitcher: React.FC<OnlineProviderSwitcherProps> = ({
     providers,

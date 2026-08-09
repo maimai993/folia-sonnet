@@ -216,12 +216,26 @@ export interface OnlineSongMetadataProvider {
     getSongMetadata(song: SongResult): ProviderSongMetadata;
 }
 
+// provider 自行声明它支持哪几种扫码登录方式；不声明即代表只有单一方式，UI 维持单步流程。
+export interface QrLoginMethod {
+    id: string;          // 传给后端的识别值（QQ: 'mobile' | 'wechat'）
+    labelKey: string;    // i18n key，由 UI 层翻译
+    iconKey: string;     // 图标识别值，由 UI 层映射到静态资源
+}
+
 export interface OnlineAuthProvider {
     getLoginStatus(): Promise<ProviderUser | null>;
     logout(): Promise<void>;
-    getQrKey?(): Promise<string>;
+    getQrLoginMethods?(): QrLoginMethod[];
+    getQrKey?(methodId?: string): Promise<string>;
     createQr?(key: string): Promise<string>;
     checkQr?(key: string): Promise<QrLoginState>;
+    // 只释放这一把 key 的会话，实现必须是幂等的：调用方在关窗时 fire-and-forget，
+    // 未知或已过期的 key 也算成功。没有会话概念的 provider 不必实现。
+    cancelQr?(key: string): Promise<void>;
+    // 二维码的有效期。声明了它，UI 才会自己计时并在到点时停止轮询、给出重试；
+    // 不声明就沿用原本的做法——只认后端报出的过期状态。
+    getQrTtlMs?(): number;
 }
 
 export interface OnlineLibraryProvider {
