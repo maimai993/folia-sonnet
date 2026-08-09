@@ -66,6 +66,7 @@ Thanks goes to these wonderful people. Issue reports, bug reports, ideas, docs, 
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/yakult-green-tea"><img src="https://avatars.githubusercontent.com/u/143932026?v=4?s=100" width="100px;" alt="多多绿"/><br /><sub><b>多多绿</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/commits?author=yakult-green-tea" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/Evil-Ma"><img src="https://avatars.githubusercontent.com/u/300354790?v=4?s=100" width="100px;" alt="Evil-Ma"/><br /><sub><b>Evil-Ma</b></sub></a><br /><a href="#ideas-Evil-Ma" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/qiushuo4a"><img src="https://avatars.githubusercontent.com/u/81014860?v=4?s=100" width="100px;" alt="Qiushuo4a"/><br /><sub><b>Qiushuo4a</b></sub></a><br /><a href="#ideas-qiushuo4a" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/wgfylxkm"><img src="https://avatars.githubusercontent.com/u/192586188?v=4?s=100" width="100px;" alt="wgfylxkm"/><br /><sub><b>wgfylxkm</b></sub></a><br /><a href="#ideas-wgfylxkm" title="Ideas, Planning, & Feedback">🤔</a></td>
     </tr>
   </tbody>
 </table>
