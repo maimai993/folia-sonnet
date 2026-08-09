@@ -1,5 +1,5 @@
 import type { SonnetTuning, Theme } from '../../../types';
-import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
+import { normalizeFontWeight, resolveThemeFontStack } from '../../../utils/fontStacks';
 import type { SonnetParagraph, SonnetShot } from './types';
 import { hashSonnetSeed } from './sonnetRandom';
 import { buildSonnetShotMg } from './sonnetShotMg';
@@ -91,6 +91,8 @@ export const buildSonnetScene = (
         options.tuning,
         options.staticMode,
     );
+    const fontFamily = resolveThemeFontStack(options.theme);
+    const manualFontWeight = normalizeFontWeight(options.theme.fontWeight);
     const postProcessFilters: import('pixi.js').Filter[] = [];
     if (showBackgroundMg) {
         const density = Math.round(4 + options.tuning.mgDensity * 5);
@@ -119,8 +121,10 @@ export const buildSonnetScene = (
         const nameText = new Text({
             text: `[ THEME ] ${options.theme.name.toUpperCase()}`,
             style: new TextStyle({
-                fontFamily: resolveThemeFontStack(options.theme),
-                fontWeight: 'bold',
+                fontFamily,
+                fontWeight: manualFontWeight === null
+                    ? 'bold'
+                    : String(manualFontWeight) as import('pixi.js').TextStyleFontWeight,
                 fontSize: 14,
                 fill: options.theme.primaryColor,
                 letterSpacing: 4
@@ -137,7 +141,10 @@ export const buildSonnetScene = (
         const descText = new Text({
             text: options.theme.description,
             style: new TextStyle({
-                fontFamily: resolveThemeFontStack(options.theme),
+                fontFamily,
+                fontWeight: manualFontWeight === null
+                    ? undefined
+                    : String(manualFontWeight) as import('pixi.js').TextStyleFontWeight,
                 fontSize: 12,
                 fill: options.theme.secondaryColor,
                 wordWrap: true,
@@ -150,12 +157,6 @@ export const buildSonnetScene = (
         if (showOuterMetadata) sceneBackgroundLayer.addChild(descText);
     }
     container.addChild(sceneBackgroundLayer);
-
-
-
-
-    const fontFamily = resolveThemeFontStack(options.theme);
-    const fontWeight = resolveThemeFontWeight(options.theme, 600);
     const shots = paragraph.shots.map((shot, shotIndex) => {
         const shotContainer = new Container();
         const compiledLines = shot.lineIndices
@@ -179,7 +180,7 @@ export const buildSonnetScene = (
             height,
             baseFontSize: fontSize,
             fontFamily,
-            fontWeight,
+            fontWeight: manualFontWeight,
         });
         const mgLayer = buildSonnetShotMg(
             pixi,
@@ -230,7 +231,7 @@ export const buildSonnetScene = (
                     paragraphKind: paragraph.kind,
                     width,
                     fontFamily,
-                    fontWeight,
+                    fontWeight: manualFontWeight,
                     theme: options.theme,
                     glowEnabled: postProcessProfile.glowStrength > 0,
                     showFixedGeo,

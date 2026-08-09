@@ -9,6 +9,7 @@ import {
     isSonnetLayoutSegment,
     resolveSonnetTypographyLayout,
 } from '@/components/visualizer/sonnet/sonnetTypographyLayout';
+import { resolveSonnetRoleFontWeight } from '@/components/visualizer/sonnet/sonnetTypographyRoles';
 import {
     layoutSonnetPosterBlocks,
     type SonnetPosterBlockBox,
@@ -39,6 +40,17 @@ const segment = (text: string, isWordLike = true): SonnetSemanticSegment => ({
 
 describe('Sonnet typography layout', () => {
     const segments = [segment('明かり'), segment('に', false), segment('あなたへ')];
+
+    it('keeps designed role weights in auto mode and uses the manual global override', () => {
+        expect(resolveSonnetRoleFontWeight(undefined, 'support')).toBe(700);
+        expect(resolveSonnetRoleFontWeight(undefined, 'hero')).toBe(900);
+        expect(resolveSonnetRoleFontWeight(null, 'semi-hero')).toBe(900);
+        expect(resolveSonnetRoleFontWeight(null, 'decoration')).toBe(300);
+        expect(resolveSonnetRoleFontWeight(520, 'support')).toBe(520);
+        expect(resolveSonnetRoleFontWeight(520, 'hero')).toBe(520);
+        expect(resolveSonnetRoleFontWeight(520, 'decoration')).toBe(520);
+        expect(resolveSonnetRoleFontWeight(950, 'hero')).toBe(900);
+    });
 
     it('chooses one semantic hero deterministically', () => {
         expect(findSonnetHeroSegmentIndex(segments)).toBe(2);

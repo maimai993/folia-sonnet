@@ -9,6 +9,7 @@ import {
     findSonnetSemiHeroSegmentIndex,
     findSonnetSemiHeroSegmentIndices,
     getSonnetVisibleSegmentLength,
+    resolveSonnetRoleFontWeight,
     scoreSonnetHeroSegment,
     type SonnetSegmentRole,
 } from './sonnetTypographyRoles';
@@ -62,7 +63,7 @@ interface SonnetTypographyLayoutOptions {
     height: number;
     baseFontSize: number;
     fontFamily: string;
-    fontWeight: number;
+    fontWeight?: number | null;
 }
 
 export const isSonnetLayoutSegment = (segment: SonnetSemanticSegment) => (
@@ -227,7 +228,8 @@ export const resolveSonnetTypographyLayout = ({
 
         // To prevent massive text from overflowing 82% of screen width, we calculate a fitScale
         const displayText = vertical ? verticalText(segment) : segment.text;
-        const renderWeight = isEmphasized ? '900' : '700';
+        const renderRole: SonnetSegmentRole = isHero ? 'hero' : isSemiHero ? 'semi-hero' : 'support';
+        const renderWeight = resolveSonnetRoleFontWeight(fontWeight, renderRole);
 
         let targetFontSize = baseFontSize * fontScale;
         const fontSpec = `${renderWeight} ${targetFontSize}px ${fontFamily}`;
