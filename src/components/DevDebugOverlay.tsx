@@ -517,6 +517,9 @@ const SonnetDebugPanel: React.FC<{ isDaylight: boolean; panelClass: string; }> =
                     isDaylight={isDaylight}
                     rows={[
                         { label: 'geoMG', value: info.geoVariantLabel ?? 'n/a (no geo layer)' },
+                        { label: 'bgMG', value: info.backgroundMgLabel },
+                        { label: 'fixedGeo', value: info.fixedGeoLabel ?? 'n/a (no fixed geo)' },
+                        { label: 'decor', value: info.backgroundDecorLabel },
                         { label: 'seed', value: info.programSeed },
                         { label: 'baseFont', value: info.baseFontSize.toFixed(1) },
                         { label: 'words', value: String(info.wordCount) },

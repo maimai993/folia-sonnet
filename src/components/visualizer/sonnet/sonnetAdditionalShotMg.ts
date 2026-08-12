@@ -1,5 +1,6 @@
 import { drawThemedSonnetShotMg } from './sonnetThemedShotMg';
 import { drawOpenSonnetShotMg } from './sonnetOpenFrameShotMg';
+import { drawExtendedSonnetShotMg } from './sonnetExtendedShotMg';
 import { resolveSonnetShotMgBleed } from './sonnetShotMgViewport';
 
 // src/components/visualizer/sonnet/sonnetAdditionalShotMg.ts
@@ -221,6 +222,8 @@ export const drawAdditionalSonnetShotMg = (options: AdditionalSonnetMgOptions) =
             drawHalftonePoster(options);
             return true;
         default:
-            return drawThemedSonnetShotMg(options) || drawOpenSonnetShotMg(options);
+            return drawThemedSonnetShotMg(options)
+                || drawOpenSonnetShotMg(options)
+                || drawExtendedSonnetShotMg(options);
     }
 };

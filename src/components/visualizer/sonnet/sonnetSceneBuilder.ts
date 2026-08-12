@@ -23,6 +23,9 @@ import {
     type SonnetDebugShotInfo,
 } from './sonnetDebug';
 import { resolveSonnetGeoVariant } from './sonnetSpatialMgGeometry';
+import { resolveSonnetBackgroundMgVariant } from './sonnetBackgroundMgVariants';
+import { resolveSonnetBackgroundDecorVariant } from './sonnetBackgroundDecor';
+import { resolveSonnetFixedGeoVariant } from './sonnetFixedGeoVariants';
 
 // src/components/visualizer/sonnet/sonnetSceneBuilder.ts
 // Builds one bounded paragraph scene; playback-time mutation remains in the runtime controller.
@@ -182,13 +185,14 @@ export const buildSonnetScene = (
             fontFamily,
             fontWeight: manualFontWeight,
         });
+        const shotSeed = sceneSeed + shotIndex * 97;
         const mgLayer = buildSonnetShotMg(
             pixi,
             shot.kind,
             options.theme,
             width,
             height,
-            sceneSeed + shotIndex * 97,
+            shotSeed,
             iconTextures
         );
         shotContainer.addChild(mgLayer);
@@ -261,7 +265,10 @@ export const buildSonnetScene = (
             shotCount: paragraph.shots.length,
             baseFontSize: fontSize,
             wordCount,
-            geoVariant: usesGeoMg ? resolveSonnetGeoVariant(sceneSeed + shotIndex * 97) : null,
+            geoVariant: usesGeoMg ? resolveSonnetGeoVariant(shotSeed) : null,
+            backgroundMgVariant: resolveSonnetBackgroundMgVariant(shotSeed),
+            fixedGeoVariant: usesGeoMg ? resolveSonnetFixedGeoVariant(shotSeed) : null,
+            backgroundDecorVariant: resolveSonnetBackgroundDecorVariant(shotSeed),
             placements,
             segmentTexts: segments.map(segment => segment.text),
         });
