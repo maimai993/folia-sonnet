@@ -52,6 +52,10 @@
   路径：`skills/online-song-omni-routing/SKILL.md`
   用于所有在线歌曲、搜索、播放、歌词、歌单、账户和跨 provider 数据流，确保普通调用经过 Omni，只有 provider adapter/transport 直接接触原始接口。
 
+- `prepare-folia-release`
+  路径：`skills/prepare-folia-release/SKILL.md`
+  用于进入稳定版本发布流程：汇总上个稳定版本以来的用户可感知变化，更新新功能介绍、桌面与 Docker 版本元数据，并生成可手动粘贴的 Markdown release note。
+
 全局沟通规则：
 
 - 不需要使用skills的时候，不要读取它们。
