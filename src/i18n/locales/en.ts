@@ -1314,6 +1314,21 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
+    "v0_6_17": {
+      "intro": "Here are the new features and improvements in version 0.6.17.",
+      "sonnetSceneVariants": {
+        "title": "More Sonnet Scene Variants",
+        "description": "Sonnet now draws from 100 background compositions, with new celestial, marine, music, craft, and kinetic themes plus more frame and geometry variations."
+      },
+      "sonnetDrawingMotion": {
+        "title": "Layered Drawing Motion",
+        "description": "Sonnet's lines, fills, and decorative elements now reveal in staggered drawing sequences for richer, more organic scene transitions."
+      },
+      "equalizerDaylight": {
+        "title": "Clearer Daylight Equalizer",
+        "description": "Improved contrast, surfaces, controls, and accent colors make the audio equalizer easier to read and operate in the light theme."
+      }
+    },
     "v0_6_16": {
       "intro": "Here are the new features and improvements in version 0.6.16.",
       "qqMusicProvider": {

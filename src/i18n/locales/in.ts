@@ -1089,6 +1089,21 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
+    "v0_6_17": {
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.17.",
+      "sonnetSceneVariants": {
+        "title": "Lebih Banyak Variasi Adegan Sonnet",
+        "description": "Sonnet kini menggunakan 100 komposisi latar, dengan tema langit, laut, musik, kerajinan, dan kinetik baru serta variasi bingkai dan geometri yang lebih beragam."
+      },
+      "sonnetDrawingMotion": {
+        "title": "Animasi Gambar Berlapis",
+        "description": "Garis, isian, dan elemen dekoratif Sonnet kini muncul dalam urutan gambar bertahap untuk transisi adegan yang lebih kaya dan alami."
+      },
+      "equalizerDaylight": {
+        "title": "Equalizer Lebih Jelas di Tema Terang",
+        "description": "Kontras, permukaan, kontrol, dan warna aksen yang ditingkatkan membuat equalizer audio lebih mudah dibaca dan digunakan pada tema terang."
+      }
+    },
     "v0_6_16": {
       "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.16.",
       "qqMusicProvider": {

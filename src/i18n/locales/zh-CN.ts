@@ -1315,6 +1315,21 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
+    "v0_6_17": {
+      "intro": "以下是 0.6.17 的新功能与改进",
+      "sonnetSceneVariants": {
+        "title": "更多商籁场景变体",
+        "description": "商籁现已扩展至 100 种背景构图，新增天体、海洋、音乐、工艺与动感主题，并带来更多边框和几何变化。"
+      },
+      "sonnetDrawingMotion": {
+        "title": "分层绘制动效",
+        "description": "商籁的线条、填充与装饰元素现在会按错落节奏逐步绘制，让场景转场更丰富、更自然。"
+      },
+      "equalizerDaylight": {
+        "title": "浅色均衡器显示优化",
+        "description": "提升浅色主题下的对比度，并优化面板、控件和强调色，让音频均衡器更清晰易用。"
+      }
+    },
     "v0_6_16": {
       "intro": "以下是 0.6.16 的新功能与改进",
       "qqMusicProvider": {
