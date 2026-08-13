@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFoliaIgnoreMatcher } from '@/utils/foliaIgnore';
+import { createFoliaIgnoreMatcher, isIgnoredByFoliaMatchers } from '@/utils/foliaIgnore';
 
 // test/unit/utils/foliaIgnore.test.ts
 
@@ -35,5 +35,15 @@ archive/**/draft?.flac
         const matcher = createFoliaIgnoreMatcher('\\#notes\n\\!demo');
         expect(matcher.isIgnored('#notes', false)).toBe(true);
         expect(matcher.isIgnored('!demo', false)).toBe(true);
+    });
+
+    it('applies nested matchers relative to their folder and lets child rules override parents', () => {
+        const parent = createFoliaIgnoreMatcher('*.mp3');
+        const child = createFoliaIgnoreMatcher('!keep.mp3\nlocal.flac', 'album/disc');
+
+        expect(isIgnoredByFoliaMatchers([parent, child], 'album/disc/keep.mp3', false)).toBe(false);
+        expect(isIgnoredByFoliaMatchers([parent, child], 'album/disc/drop.mp3', false)).toBe(true);
+        expect(isIgnoredByFoliaMatchers([parent, child], 'album/disc/local.flac', false)).toBe(true);
+        expect(isIgnoredByFoliaMatchers([parent, child], 'album/other/keep.mp3', false)).toBe(true);
     });
 });

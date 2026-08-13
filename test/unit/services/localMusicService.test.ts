@@ -290,6 +290,34 @@ describe('localMusicService', () => {
         }));
     });
 
+    it('applies nested .foliaignore rules relative to each directory', async () => {
+        const selectedHandle = new FakeDirectoryHandle('Music', [
+            new FakeFileHandle('.foliaignore', { content: '*.mp3\n', type: 'text/plain' }),
+            new FakeDirectoryHandle('Album', [
+                new FakeFileHandle('.foliaignore', { content: '!keep.mp3\n*.flac\n', type: 'text/plain' }),
+                new FakeFileHandle('keep.mp3'),
+                new FakeFileHandle('drop.mp3'),
+                new FakeFileHandle('drop.flac'),
+            ]),
+            new FakeDirectoryHandle('Other', [new FakeFileHandle('keep.mp3')]),
+        ]);
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(
+            selectedHandle as unknown as FileSystemDirectoryHandle,
+        );
+
+        const importedSongs = await importFolder();
+
+        expect(importedSongs.map(song => song.filePath)).toEqual(['Music/Album/keep.mp3']);
+        const savedSnapshot = vi.mocked(saveLocalLibrarySnapshot).mock.calls[0][0];
+        expect(savedSnapshot.tree.children.map(node => node.relativePath)).toEqual([
+            'Music/Album',
+            'Music/Other',
+        ]);
+        expect(savedSnapshot.tree.children[0].files).toEqual([
+            expect.objectContaining({ relativePath: 'Music/Album/keep.mp3' }),
+        ]);
+    });
+
     it('routes a child-folder resync through the imported root handle', async () => {
         const persistedHandle = createLibraryHandle();
         vi.mocked(getDirHandles).mockResolvedValue({ Music: persistedHandle as unknown as FileSystemDirectoryHandle });

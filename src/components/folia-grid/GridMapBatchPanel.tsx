@@ -184,6 +184,7 @@ export const GridMapBatchPanel = ({
     };
 
     const actionClass = 'flex w-full items-center justify-center gap-2 rounded-full bg-zinc-800/10 py-2.5 text-xs font-semibold transition hover:bg-zinc-900 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-35 dark:bg-zinc-100/10 dark:hover:bg-zinc-100 dark:hover:text-zinc-900';
+    const primaryActionClass = 'flex w-full items-center justify-center gap-1.5 rounded-full py-3 text-xs font-bold shadow-md transition-transform hover:scale-102 active:scale-98 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100';
 
     return (
         <>
@@ -271,11 +272,19 @@ export const GridMapBatchPanel = ({
             </div>
 
             <div className="mt-3 space-y-2 border-t pt-4" style={{ borderTopColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }}>
-                <button type="button" disabled={!canUseTracks} onClick={() => void runAction('play', () => config.onPlay(context))} className={actionClass}>
-                    <Play size={14} />{t('home.playAll')}
+                <button
+                    type="button"
+                    disabled={!canUseTracks}
+                    onClick={() => void runAction('play', () => config.onPlay(context))}
+                    className={primaryActionClass}
+                    style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-color)' }}
+                >
+                    <Play size={14} fill="currentColor" />
+                    {t('playlist.playFilteredTracks', { count: context.trackIds.length })}
                 </button>
                 <button type="button" disabled={!canUseTracks} onClick={() => void runAction('queue', () => config.onAddToQueue(context))} className={actionClass}>
-                    <ListPlus size={14} />{t('home.gridFolderAddToQueue')}
+                    <ListPlus size={14} />
+                    {t('playlist.addFilteredTracksToQueue', { count: context.trackIds.length })}
                 </button>
                 <button type="button" disabled={!canUseTracks} onClick={() => setShowPlaylistDialog(true)} className={actionClass}>
                     <Plus size={14} />{t('localMusic.createPlaylist')}

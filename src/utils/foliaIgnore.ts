@@ -9,6 +9,7 @@ interface FoliaIgnoreRule {
 
 export interface FoliaIgnoreMatcher {
     isIgnored: (relativePath: string, isDirectory: boolean) => boolean;
+    getDecision: (relativePath: string, isDirectory: boolean) => boolean | null;
     ruleCount: number;
 }
 
@@ -86,27 +87,50 @@ const parseRule = (sourceLine: string): FoliaIgnoreRule | null => {
     return { negated, directoryOnly, matcher };
 };
 
-export const createFoliaIgnoreMatcher = (contents: string): FoliaIgnoreMatcher => {
+export const createFoliaIgnoreMatcher = (
+    contents: string,
+    baseDirectory = '',
+): FoliaIgnoreMatcher => {
     const rules = contents
         .replace(/^\uFEFF/, '')
         .split('\n')
         .map(parseRule)
         .filter((rule): rule is FoliaIgnoreRule => Boolean(rule));
 
+    const normalizedBaseDirectory = normalizePath(baseDirectory);
+    const getDecision = (relativePath: string, isDirectory: boolean): boolean | null => {
+        const normalizedPath = normalizePath(relativePath);
+        const localPath = normalizedBaseDirectory
+            ? normalizedPath.startsWith(`${normalizedBaseDirectory}/`)
+                ? normalizedPath.slice(normalizedBaseDirectory.length + 1)
+                : normalizedPath === normalizedBaseDirectory ? '' : null
+            : normalizedPath;
+        if (!localPath) return null;
+
+        let decision: boolean | null = null;
+        for (const rule of rules) {
+            if (rule.directoryOnly && !isDirectory) continue;
+            if (rule.matcher.test(localPath)) decision = !rule.negated;
+        }
+        return decision;
+    };
+
     return {
         ruleCount: rules.length,
-        isIgnored: (relativePath, isDirectory) => {
-            const normalizedPath = normalizePath(relativePath);
-            if (!normalizedPath) return false;
-
-            let ignored = false;
-            for (const rule of rules) {
-                if (rule.directoryOnly && !isDirectory) continue;
-                if (rule.matcher.test(normalizedPath)) ignored = !rule.negated;
-            }
-            return ignored;
-        },
+        getDecision,
+        isIgnored: (relativePath, isDirectory) => getDecision(relativePath, isDirectory) === true,
     };
 };
 
-export const EMPTY_FOLIA_IGNORE_MATCHER = createFoliaIgnoreMatcher('');
+export const isIgnoredByFoliaMatchers = (
+    matchers: readonly FoliaIgnoreMatcher[],
+    relativePath: string,
+    isDirectory: boolean,
+): boolean => {
+    let ignored = false;
+    for (const matcher of matchers) {
+        const decision = matcher.getDecision(relativePath, isDirectory);
+        if (decision !== null) ignored = decision;
+    }
+    return ignored;
+};
