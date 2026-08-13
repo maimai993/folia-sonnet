@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ListPlus, Minus, Play, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, CircleDot, ListPlus, Minus, Play, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { List as VirtualList, type RowComponentProps } from 'react-window';
 import { createPortal } from 'react-dom';
@@ -8,7 +8,7 @@ import TextInputDialog from '../shared/TextInputDialog';
 import GridMapBatchItemList from './GridMapBatchItemList';
 import type { GridMapItem } from '../GridMap';
 import type { GridMapBatchConfig, GridMapBatchContext, GridMapDirectoryNode } from './gridMapBatch';
-import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapDirectorySelection } from './gridMapBatch';
+import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapDirectorySelection, resolveNextGridMapDirectorySelectionTarget } from './gridMapBatch';
 
 // src/components/folia-grid/GridMapBatchPanel.tsx
 
@@ -58,6 +58,19 @@ const DirectoryRow = ({
     const isBusy = busyRootPath === node.rootPath;
     const selection = resolveGridMapDirectorySelection(node.path, displayItems, excludedItemIds);
     const isSelectionDisabled = selection.itemIds.length === 0;
+    const nextSelectionTarget = resolveNextGridMapDirectorySelectionTarget(selection);
+
+    const cycleSelection = () => {
+        if (nextSelectionTarget === 'none') {
+            onSetItemsSelected(selection.itemIds, false);
+            return;
+        }
+        if (nextSelectionTarget === 'direct') {
+            onSetItemsSelected(selection.directItemIds, true);
+            return;
+        }
+        onSetItemsSelected(selection.itemIds, true);
+    };
 
     return (
         <div {...ariaAttributes} style={style} className="px-1 py-0.5">
@@ -74,26 +87,33 @@ const DirectoryRow = ({
                 <button
                     type="button"
                     disabled={isSelectionDisabled}
-                    onClick={() => onSetItemsSelected(selection.itemIds, selection.state !== 'all')}
+                    onClick={cycleSelection}
+                    role="checkbox"
+                    aria-checked={selection.state === 'all' ? true : selection.state === 'none' ? false : 'mixed'}
                     className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
                     title={node.path}
                 >
                     <span className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border transition-colors ${
                         selection.state === 'all'
                             ? 'border-sky-500 bg-sky-500 text-white'
-                            : selection.state === 'partial'
-                                ? 'border-sky-500/60 bg-sky-500/20 text-sky-500'
-                                : 'border-current/20'
+                                : selection.state === 'direct'
+                                    ? 'border-violet-500/70 bg-violet-500/20 text-violet-500'
+                                    : selection.state === 'partial'
+                                        ? 'border-sky-500/60 bg-sky-500/20 text-sky-500'
+                                        : 'border-current/20'
                     } ${isSelectionDisabled ? 'opacity-25' : ''}`}>
                         {selection.state === 'all' && <Check size={12} strokeWidth={3} />}
+                        {selection.state === 'direct' && <CircleDot size={12} strokeWidth={2.5} />}
                         {selection.state === 'partial' && <Minus size={12} strokeWidth={3} />}
                     </span>
                     <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-semibold">{node.name}</span>
                         <span className="block truncate text-[10px] opacity-45">
-                            {selection.itemIds.length > 0
-                                ? t('home.gridFolderTreeSelectionCount', { selected: selection.selectedCount, total: selection.itemIds.length })
-                                : t('home.gridFolderTrackCount', { count: node.totalTrackCount })}
+                            {selection.state === 'direct'
+                                ? t('home.gridFolderTreeDirectSelection', { count: node.directTrackCount })
+                                : selection.itemIds.length > 0
+                                    ? t('home.gridFolderTreeSelectionCount', { selected: selection.selectedCount, total: selection.itemIds.length })
+                                    : t('home.gridFolderTrackCount', { count: node.totalTrackCount })}
                         </span>
                     </span>
                 </button>

@@ -262,6 +262,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                                 ? String(item.name)
                                 : item.description,
                             summary: item.summary,
+                            trackCount: item.trackCount,
                             type: item.type,
                             path: item.type === 'folder' && !item.isVirtual ? String(item.name) : undefined,
                             trackIds: item.trackIds,

@@ -28,6 +28,7 @@ export interface GridMapItem {
     coverUrl?: string;
     description?: string;
     summary?: string;
+    trackCount?: number;
     type?: string;
     path?: string;
     trackIds?: string[];
@@ -189,6 +190,11 @@ const MapCard = React.memo<{
                                 {compactDescription(item.summary)}
                             </div>
                         )}
+                        {item.type === 'folder' && item.path && typeof item.trackCount === 'number' && item.trackCount > 0 && (
+                            <div className="text-[10px] leading-snug opacity-45 max-w-full font-medium">
+                                {t('home.gridFolderDirectTrackCount', { count: item.trackCount })}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -201,6 +207,7 @@ const MapCard = React.memo<{
             prev.item.coverUrl === next.item.coverUrl &&
             prev.item.description === next.item.description &&
             prev.item.summary === next.item.summary &&
+            prev.item.trackCount === next.item.trackCount &&
             prev.item.type === next.item.type &&
             prev.isDaylight === next.isDaylight &&
             prev.isPlaylistEditMode === next.isPlaylistEditMode &&

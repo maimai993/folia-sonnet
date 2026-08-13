@@ -488,6 +488,8 @@ export default {
     "gridFolderSelectNone": "全不选",
     "gridFolderTreeToggle": "展开或折叠文件夹",
     "gridFolderTrackCount": "子树共 {{count}} 首歌曲",
+    "gridFolderDirectTrackCount": "本目录 {{count}} 首歌曲",
+    "gridFolderTreeDirectSelection": "仅本层 · {{count}} 首歌曲",
     "gridFolderTreeSelectionCount": "筛选范围内已选 {{selected}}/{{total}} 个文件夹",
     "gridFolderTreeEmpty": "暂无可用的导入目录快照。",
     "gridFolderExpandTreePanel": "展开",

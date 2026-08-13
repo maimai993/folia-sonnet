@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapBatchContext, resolveGridMapDirectorySelection, type GridMapDirectoryNode } from '@/components/folia-grid/gridMapBatch';
+import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapBatchContext, resolveGridMapDirectorySelection, resolveNextGridMapDirectorySelectionTarget, type GridMapDirectoryNode } from '@/components/folia-grid/gridMapBatch';
 import type { GridMapItem } from '@/components/GridMap';
 
 // test/unit/gridView/gridMapBatch.test.ts
@@ -54,14 +54,37 @@ describe('GridMap directory flattening', () => {
 
         expect(resolveGridMapDirectorySelection('root', items, new Set(['child']))).toEqual({
             itemIds: ['root', 'child'],
+            directItemIds: ['root'],
             selectedCount: 1,
-            state: 'partial',
+            state: 'direct',
         });
         expect(resolveGridMapDirectorySelection('root/child', items, new Set())).toEqual({
             itemIds: ['child'],
+            directItemIds: ['child'],
             selectedCount: 1,
             state: 'all',
         });
+    });
+
+    it('cycles subtree selection through none and direct-folder-only states', () => {
+        const items: GridMapItem[] = [
+            { id: 'root', name: 'root', path: 'root', trackIds: ['1'] },
+            { id: 'child', name: 'child', path: 'root/child', trackIds: ['2'] },
+        ];
+        const all = resolveGridMapDirectorySelection('root', items, new Set());
+        const none = resolveGridMapDirectorySelection('root', items, new Set(['root', 'child']));
+        const direct = resolveGridMapDirectorySelection('root', items, new Set(['child']));
+
+        expect(resolveNextGridMapDirectorySelectionTarget(all)).toBe('none');
+        expect(resolveNextGridMapDirectorySelectionTarget(none)).toBe('direct');
+        expect(resolveNextGridMapDirectorySelectionTarget(direct)).toBe('all');
+    });
+
+    it('keeps leaf folders on a two-state selection cycle', () => {
+        const items: GridMapItem[] = [{ id: 'leaf', name: 'leaf', path: 'root/leaf', trackIds: ['1'] }];
+        const none = resolveGridMapDirectorySelection('root/leaf', items, new Set(['leaf']));
+
+        expect(resolveNextGridMapDirectorySelectionTarget(none)).toBe('all');
     });
 
     it('compacts deep single-child chains but keeps roots and branching nodes separate', () => {

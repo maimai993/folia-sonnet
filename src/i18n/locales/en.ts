@@ -487,6 +487,8 @@ export default {
     "gridFolderSelectNone": "Select none",
     "gridFolderTreeToggle": "Expand or collapse folder",
     "gridFolderTrackCount": "{{count}} tracks in subtree",
+    "gridFolderDirectTrackCount": "{{count}} tracks in this folder",
+    "gridFolderTreeDirectSelection": "This folder only · {{count}} tracks",
     "gridFolderTreeSelectionCount": "{{selected}}/{{total}} filtered folders selected",
     "gridFolderTreeEmpty": "No imported directory snapshot is available.",
     "gridFolderExpandTreePanel": "Expand",

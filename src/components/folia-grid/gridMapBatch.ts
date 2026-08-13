@@ -31,9 +31,12 @@ export interface GridMapBatchConfig {
 
 export interface GridMapDirectorySelection {
     itemIds: string[];
+    directItemIds: string[];
     selectedCount: number;
-    state: 'none' | 'partial' | 'all';
+    state: 'none' | 'partial' | 'direct' | 'all';
 }
+
+export type GridMapDirectorySelectionTarget = 'none' | 'direct' | 'all';
 
 // Resolves the filtered-by-query batch scope while preserving card and track order.
 export const resolveGridMapBatchContext = (
@@ -141,14 +144,48 @@ export const resolveGridMapDirectorySelection = (
             return itemPath === normalizedPath || itemPath.startsWith(`${normalizedPath}/`);
         })
         .map(item => String(item.id));
+    const directItemIds = displayItems
+        .filter(item => {
+            const itemPath = (item.path || item.name)
+                .replace(/\\/g, '/')
+                .replace(/^\/+|\/+$/g, '')
+                .toLocaleLowerCase();
+            return itemPath === normalizedPath;
+        })
+        .map(item => String(item.id));
     const selectedCount = itemIds.reduce(
         (count, itemId) => count + (excludedItemIds.has(itemId) ? 0 : 1),
         0,
     );
+    const directSelectedCount = directItemIds.reduce(
+        (count, itemId) => count + (excludedItemIds.has(itemId) ? 0 : 1),
+        0,
+    );
+    const hasOnlyDirectItemsSelected = directItemIds.length > 0
+        && directSelectedCount === directItemIds.length
+        && selectedCount === directSelectedCount;
 
     return {
         itemIds,
+        directItemIds,
         selectedCount,
-        state: selectedCount === 0 ? 'none' : selectedCount === itemIds.length ? 'all' : 'partial',
+        state: selectedCount === 0
+            ? 'none'
+            : selectedCount === itemIds.length
+                ? 'all'
+                : hasOnlyDirectItemsSelected
+                    ? 'direct'
+                    : 'partial',
     };
+};
+
+// Cycles a directory between subtree selection, no selection, and direct tracks only.
+export const resolveNextGridMapDirectorySelectionTarget = (
+    selection: GridMapDirectorySelection,
+): GridMapDirectorySelectionTarget => {
+    if (selection.state === 'all') return 'none';
+    if (selection.state === 'none' && selection.directItemIds.length > 0 && selection.directItemIds.length < selection.itemIds.length) {
+        return 'direct';
+    }
+    return 'all';
 };
