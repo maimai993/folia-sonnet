@@ -3,7 +3,6 @@ import { LocalLibraryGroup, LocalSong, SongResult } from '../../../types';
 import { navidromeApi, getNavidromeConfig } from '../../../services/navidromeService';
 import { buildLocalQueue, buildNavidromeQueue } from '../../../services/playbackAdapters';
 import { SubsonicSong } from '../../../types/navidrome';
-import { isBlob } from '../../../utils/blobGuards';
 import { sortLocalFolderSongs } from '../../../utils/localSongSorting';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
 import type {
@@ -13,6 +12,7 @@ import type {
     ProviderUser,
 } from '../../../types/onlineMusic';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/localLibraryIndex';
+import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
 
 // src/components/app/home/gridViewCollectionAdapters.ts
 // Converts home-surface collections into small GridView descriptors and resolves non-Netease tracks outside GridView.
@@ -260,10 +260,10 @@ export const resolveLocalGridViewTracks = (
     return buildLocalQueue(orderedSongs, undefined, catalog) as SongResult[];
 };
 
-const getLocalGridViewCoverSource = (songs: LocalSong[]): Blob | string | undefined => {
+const getLocalGridViewCoverSource = (songs: LocalSong[]): string | undefined => {
     const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     const preferredSong = sortedSongs.find(song => {
-        const hasEmbeddedCover = isBlob(song.embeddedCover);
+        const hasEmbeddedCover = Boolean(getLocalCoverAssetUrl(song.localCoverAssetId));
         if (song.useOnlineCover) {
             return song.onlineMetadata?.coverUrl || hasEmbeddedCover;
         }
@@ -274,18 +274,18 @@ const getLocalGridViewCoverSource = (songs: LocalSong[]): Blob | string | undefi
         return undefined;
     }
 
-    const embeddedCover = isBlob(preferredSong.embeddedCover) ? preferredSong.embeddedCover : undefined;
+    const localCoverUrl = getLocalCoverAssetUrl(preferredSong.localCoverAssetId) || undefined;
     if (preferredSong.useOnlineCover) {
-        return preferredSong.onlineMetadata?.coverUrl || embeddedCover;
+        return preferredSong.onlineMetadata?.coverUrl || localCoverUrl;
     }
 
-    return embeddedCover || preferredSong.onlineMetadata?.coverUrl;
+    return localCoverUrl || preferredSong.onlineMetadata?.coverUrl;
 };
 
 export const resolveLocalGridViewCoverSource = (
     descriptor: LocalGridViewCollectionDescriptor,
     localSongs: LocalSong[]
-): Blob | string | undefined => {
+): string | undefined => {
     const songsById = new Map(localSongs.map(song => [song.id, song]));
     const orderedSongs = descriptor.songIds
         .map(songId => songsById.get(songId))

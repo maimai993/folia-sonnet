@@ -1027,7 +1027,6 @@ export interface LocalSong {
   localCoverAssetId?: string; // Content-addressed preferred local cover stored in local_cover_assets
   localCoverSource?: import('./types/localCover').LocalCoverSourceKind;
   localCoverNeedsAssetMigration?: boolean; // Retries local cover hashing/persistence during the next rescan
-  embeddedCover?: Blob; // Legacy persisted cover or a runtime Blob materialized while loading the local library
   replayGain?: number; // ReplayGain track gain in dB
   replayGainTrackGain?: number; // ReplayGain track gain in dB
   replayGainTrackPeak?: number; // ReplayGain track peak ratio

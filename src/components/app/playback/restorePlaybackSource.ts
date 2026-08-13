@@ -2,7 +2,7 @@ import i18n from '../../../i18n/config';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from '../../../services/coverCache';
 import { getLocalSongs } from '../../../services/db';
-import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from '../../../services/localMusicService';
+import { ensureLocalSongCoverAsset, getAudioFromLocalSong } from '../../../services/localMusicService';
 import { applyLocalLibraryEntityDisplay, buildUnifiedLocalSong } from '../../../services/playbackAdapters';
 import { getLocalLibraryCatalogSnapshot } from '../../../services/localLibraryEntityRepository';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
@@ -18,7 +18,7 @@ import {
     isSamePlaybackSong,
     replacePlaybackSongInQueue,
 } from '../../../utils/appPlaybackGuards';
-import { createSafeObjectUrl, isBlob } from '../../../utils/blobGuards';
+import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
 import { LyricParserFactory } from '../../../utils/lyrics/LyricParserFactory';
 import { isPureMusicLyricText } from '../../../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../../../utils/lyrics/renderHints';
@@ -162,12 +162,15 @@ export const restorePlaybackSourceForSong = async (
             return false;
         }
 
-        songToRestore = await ensureLocalSongEmbeddedCover(songToRestore);
+        songToRestore = await ensureLocalSongCoverAsset(songToRestore);
+        const localCoverUrl = getLocalCoverAssetUrl(songToRestore.localCoverAssetId);
         const catalog = await getLocalLibraryCatalogSnapshot();
         const restoredSong = applyLocalLibraryEntityDisplay(buildUnifiedLocalSong({
             localSong: songToRestore,
             matchedSong: null,
-            coverUrl: songToRestore.useOnlineCover ? songToRestore.onlineMetadata?.coverUrl || null : null,
+            coverUrl: songToRestore.useOnlineCover
+                ? songToRestore.onlineMetadata?.coverUrl || localCoverUrl
+                : localCoverUrl,
             preferOnlineMetadata: false,
         }), catalog);
         setCurrentSong(restoredSong);
@@ -208,8 +211,8 @@ export const restorePlaybackSourceForSong = async (
         if (cachedCoverUrl) setCachedCoverUrl(cachedCoverUrl);
         else if (songToRestore.useOnlineCover && songToRestore.onlineMetadata?.coverUrl) {
             setCachedCoverUrl(await loadCachedOrFetchCover(cacheKey, songToRestore.onlineMetadata.coverUrl));
-        } else if (isBlob(songToRestore.embeddedCover)) {
-            setCachedCoverUrl(createSafeObjectUrl(songToRestore.embeddedCover));
+        } else if (localCoverUrl) {
+            setCachedCoverUrl(localCoverUrl);
         } else {
             setCachedCoverUrl(null);
         }

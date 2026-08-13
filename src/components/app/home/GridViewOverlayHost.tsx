@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import GridView, { GridViewSourceActions } from '../../GridView';
@@ -11,7 +11,7 @@ import { deleteFolderSongs, resyncAllFolders, resyncFolder } from '../../../serv
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
 import { downloadLocalPlaylistM3u8 } from '../../../services/localPlaylistFileService';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
-import { createSafeObjectUrl, getBlobObjectUrlSignature, isBlob } from '../../../utils/blobGuards';
+import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
 import {
     GridViewCollectionDescriptor,
     LocalGridViewCollectionDescriptor,
@@ -46,32 +46,13 @@ type GridViewOverlayHostProps = {
     ) => React.ReactNode;
 };
 
-type LocalTrackCoverObjectUrlEntry = {
-    signature: string;
-    url: string;
-};
-
 const getPersistentCoverUrl = (url?: string) => (
     url && !url.startsWith('blob:') ? url : undefined
 );
 
-const getLocalTrackCoverObjectUrlSignature = (song: LocalSong): string | null => {
-    if (!isBlob(song.embeddedCover)) {
-        return null;
-    }
-
-    return getBlobObjectUrlSignature(song.embeddedCover, [
-        song.id,
-        song.fileSignature || '',
-        song.fileSize,
-        song.fileLastModified || 0,
-    ]);
-};
-
 const resolveLocalCollectionCoverUrlFromTracks = (
     tracks: UnifiedSong[],
     localSongs: LocalSong[],
-    getLocalCoverObjectUrl: (song: LocalSong) => string | undefined
 ): string | undefined => {
     const songsById = new Map(localSongs.map(song => [song.id, song]));
     const songs = tracks
@@ -79,7 +60,7 @@ const resolveLocalCollectionCoverUrlFromTracks = (
         .filter((song): song is LocalSong => Boolean(song))
         .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     const preferredSong = songs.find(song => {
-        const hasEmbeddedCover = isBlob(song.embeddedCover);
+        const hasEmbeddedCover = Boolean(getLocalCoverAssetUrl(song.localCoverAssetId));
         if (song.useOnlineCover) {
             return song.onlineMetadata?.coverUrl || hasEmbeddedCover;
         }
@@ -94,9 +75,8 @@ const resolveLocalCollectionCoverUrlFromTracks = (
         return preferredSong.onlineMetadata.coverUrl;
     }
 
-    if (isBlob(preferredSong.embeddedCover)) {
-        return getLocalCoverObjectUrl(preferredSong);
-    }
+    const localCoverUrl = getLocalCoverAssetUrl(preferredSong.localCoverAssetId);
+    if (localCoverUrl) return localCoverUrl;
 
     return preferredSong.onlineMetadata?.coverUrl;
 };
@@ -151,7 +131,6 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
     const [organizingFolder, setOrganizingFolder] = useState<LocalGridViewCollectionDescriptor | null>(null);
     const [matchingSongId, setMatchingSongId] = useState<string | null>(null);
-    const localTrackCoverObjectUrlsRef = useRef(new Map<string, LocalTrackCoverObjectUrlEntry>());
     const selectedCollectionKey = selectedCollection
         ? `${selectedCollection.source}:${selectedCollection.type}:${String(selectedCollection.id)}`
         : '';
@@ -187,43 +166,6 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             coverUrl,
         };
     }, [liveSelectedCollection, resolvedLocalCollectionCoverUrl]);
-
-    const clearLocalTrackCoverObjectUrls = useCallback(() => {
-        localTrackCoverObjectUrlsRef.current.forEach(entry => URL.revokeObjectURL(entry.url));
-        localTrackCoverObjectUrlsRef.current.clear();
-    }, []);
-
-    const pruneLocalTrackCoverObjectUrls = useCallback((activeSongIds: Set<string>) => {
-        localTrackCoverObjectUrlsRef.current.forEach((entry, songId) => {
-            if (!activeSongIds.has(songId)) {
-                URL.revokeObjectURL(entry.url);
-                localTrackCoverObjectUrlsRef.current.delete(songId);
-            }
-        });
-    }, []);
-
-    const getOrCreateLocalTrackCoverObjectUrl = useCallback((song: LocalSong) => {
-        const signature = getLocalTrackCoverObjectUrlSignature(song);
-        if (!signature || !isBlob(song.embeddedCover)) {
-            return undefined;
-        }
-
-        const cached = localTrackCoverObjectUrlsRef.current.get(song.id);
-        if (cached?.signature === signature) {
-            return cached.url;
-        }
-
-        if (cached) {
-            URL.revokeObjectURL(cached.url);
-        }
-
-        const url = createSafeObjectUrl(song.embeddedCover);
-        if (!url) return undefined;
-        localTrackCoverObjectUrlsRef.current.set(song.id, { signature, url });
-        return url;
-    }, []);
-
-    useEffect(() => clearLocalTrackCoverObjectUrls, [clearLocalTrackCoverObjectUrls]);
 
     const openGridView = useCallback((collection: GridViewCollectionDescriptor) => {
         onOpenCollection(collection);
@@ -430,7 +372,6 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             setExternalTracksLoading(false);
             setResolvedLocalCollectionCoverUrl(undefined);
             setNavidromePlaylistItems([]);
-            clearLocalTrackCoverObjectUrls();
             return;
         }
 
@@ -439,9 +380,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             setExternalTracksLoading(false);
             setResolvedLocalCollectionCoverUrl(undefined);
             setNavidromePlaylistItems([]);
-            clearLocalTrackCoverObjectUrls();
         }
-    }, [clearLocalTrackCoverObjectUrls, selectedCollectionKey]);
+    }, [selectedCollectionKey]);
 
     useEffect(() => {
         if (!selectedCollection || !isLocalGridViewCollection(selectedCollection)) {
@@ -467,10 +407,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         setResolvedLocalCollectionCoverUrl(resolveLocalCollectionCoverUrlFromTracks(
             resolvedTracks,
             surfaceProps.localSongs,
-            getOrCreateLocalTrackCoverObjectUrl
         ));
 
-        const activeTrackCoverSongIds = new Set<string>();
         const localSongsById = new Map(surfaceProps.localSongs.map(song => [song.id, song]));
         const processedTracks = resolvedTracks.map(track => {
             const localData = track.localRef ? localSongsById.get(track.localRef.songId) : undefined;
@@ -481,27 +419,19 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                 return track;
             }
 
-            if (isBlob(localData.embeddedCover)) {
-                const url = getOrCreateLocalTrackCoverObjectUrl(localData);
-                if (url) {
-                    activeTrackCoverSongIds.add(localData.id);
-                    return applyLocalSongCoverDisplay(track, url);
-                }
-            }
+            const url = getLocalCoverAssetUrl(localData.localCoverAssetId);
+            if (url) return applyLocalSongCoverDisplay(track, url);
 
             return track;
         });
-        pruneLocalTrackCoverObjectUrls(activeTrackCoverSongIds);
 
         setExternalTracks(processedTracks);
         setExternalTracksLoading(false);
     }, [
         handleBackCollection,
-        getOrCreateLocalTrackCoverObjectUrl,
         surfaceProps.localSongs,
         liveSelectedCollection,
         localLibraryCatalog,
-        pruneLocalTrackCoverObjectUrls,
         selectedCollection,
     ]);
 
@@ -514,7 +444,6 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         setExternalTracks([]);
         setExternalTracksLoading(true);
         setResolvedLocalCollectionCoverUrl(undefined);
-        clearLocalTrackCoverObjectUrls();
 
         resolveNavidromeGridViewTracks(selectedCollection)
             .then((tracks) => {
@@ -538,7 +467,6 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             cancelled = true;
         };
     }, [
-        clearLocalTrackCoverObjectUrls,
         selectedCollection,
     ]);
 

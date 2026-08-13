@@ -34,6 +34,7 @@ import {
     GRID_INITIAL_BATCH_SIZE,
 } from './folia-grid/progressiveGrid';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
+import { useLocalCoverPreloader } from '../hooks/useLocalCoverPreloader';
 import { compareLocalFolderSongs, type LocalSongFolderSortDirection, type LocalSongFolderSortField } from '../utils/localSongSorting';
 import { resolveGridViewContextTracks } from './folia-grid/gridViewContextActions';
 import {
@@ -1525,6 +1526,8 @@ export const GridView: React.FC<GridViewProps> = ({
         renderRing,
         fallbackIndexRef: focusedIndexRef,
     });
+    const gridCoverUrls = useMemo(() => gridItems.map(item => item.coverUrl), [gridItems]);
+    useLocalCoverPreloader(gridCoverUrls, renderedIndexes);
 
     const dragBounds = useMemo(() => {
         if (baseCoords.length === 0) return { left: 0, right: 0, top: 0, bottom: 0 };

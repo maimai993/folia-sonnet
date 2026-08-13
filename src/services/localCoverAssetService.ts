@@ -1,14 +1,24 @@
 import type { LocalSong } from '../types';
-import type { LocalCoverAsset, LocalCoverPayload } from '../types/localCover';
+import type { LocalCoverAsset } from '../types/localCover';
 import { isBlob } from '../utils/blobGuards';
 import { hashLocalCoverBlobAsync } from '../utils/localMetadataWorkerClient';
 import { appDatabase } from './appDatabase';
+import {
+  hasLocalCoverBinary,
+  isValidLocalCoverAssetId,
+  normalizeLocalCoverMimeType,
+  removeLocalCoverBinary,
+  writeLocalCoverBinary,
+} from './localCoverBinaryStore';
 
 // src/services/localCoverAssetService.ts
-// Persists and deduplicates local cover assets, then materializes them for the existing library model.
+// Owns one-time cover hashing, external persistence, lightweight descriptors, and resumable Blob migration.
 
-const ASSET_ID_PATTERN = /^sha256:[0-9a-f]{64}$/;
-const pendingReads = new Map<string, Promise<Blob | null>>();
+const MIGRATION_BATCH_SIZE = 20;
+const pendingPayloads = new Map<string, Blob>();
+let migrationPromise: Promise<void> | null = null;
+
+type LegacyLocalSongRecord = LocalSong & { embeddedCover?: Blob };
 
 export interface PreparedLocalCoverBlob {
   assetId?: string;
@@ -16,210 +26,197 @@ export interface PreparedLocalCoverBlob {
 }
 
 export const resetLocalCoverAssetRuntime = (): void => {
-  pendingReads.clear();
+  pendingPayloads.clear();
+  migrationPromise = null;
 };
 
 const normalizeLocalCoverBlob = (blob: Blob): Blob | null => {
   if (!isBlob(blob) || blob.size === 0) return null;
-  if (blob.type.startsWith('image/')) return blob;
+  const mimeType = normalizeLocalCoverMimeType(blob.type);
+  if (mimeType) return blob.type === mimeType ? blob : blob.slice(0, blob.size, mimeType);
   if (typeof File === 'undefined' || !(blob instanceof File)) return null;
   const extension = blob.name.split('.').pop()?.toLowerCase();
-  const mimeType = extension === 'png'
+  const inferredMimeType = extension === 'png'
     ? 'image/png'
     : extension === 'jpg' || extension === 'jpeg'
       ? 'image/jpeg'
       : undefined;
-  return mimeType ? new Blob([blob], { type: mimeType }) : null;
+  return inferredMimeType ? blob.slice(0, blob.size, inferredMimeType) : null;
 };
 
-const isValidCoverPayload = (assetId: string, blob: unknown): blob is Blob => (
-  ASSET_ID_PATTERN.test(assetId)
-  && isBlob(blob)
-  && blob.size > 0
-  && blob.type.startsWith('image/')
-);
+export const stageLocalCoverAsset = (assetId: string | undefined, blob: Blob | undefined): boolean => {
+  const normalizedBlob = blob ? normalizeLocalCoverBlob(blob) : null;
+  if (!isValidLocalCoverAssetId(assetId) || !normalizedBlob) return false;
+  if (!pendingPayloads.has(assetId)) pendingPayloads.set(assetId, normalizedBlob);
+  return true;
+};
 
-// Normalizes and hashes a standalone cover without writing outside the owning song transaction.
+// Hashes a cover once and stages its original full-resolution payload for the owning save operation.
 export const prepareLocalCoverBlob = async (blob: Blob): Promise<PreparedLocalCoverBlob | null> => {
   const normalizedBlob = normalizeLocalCoverBlob(blob);
   if (!normalizedBlob) return null;
   try {
     const hashed = await hashLocalCoverBlobAsync(normalizedBlob);
-    return hashed
-      ? { assetId: hashed.coverAssetId, blob: hashed.cover }
-      : { blob: normalizedBlob };
+    if (!hashed) return { blob: normalizedBlob };
+    stageLocalCoverAsset(hashed.coverAssetId, hashed.cover);
+    return { assetId: hashed.coverAssetId, blob: hashed.cover };
   } catch (error) {
-    console.warn('[LocalCoverAsset] Failed to hash local cover; retaining the legacy Blob', error);
+    console.warn('[LocalCoverAsset] Failed to hash a local cover', error);
     return { blob: normalizedBlob };
   }
 };
 
-export const readLocalCoverAsset = async (assetId: string): Promise<Blob | null> => {
-  if (!ASSET_ID_PATTERN.test(assetId)) return null;
-  const pending = pendingReads.get(assetId);
-  if (pending) return pending;
+const toDescriptor = (
+  assetId: string,
+  result: Awaited<ReturnType<typeof writeLocalCoverBinary>>,
+  previous?: LocalCoverAsset,
+): LocalCoverAsset | null => result ? {
+  id: assetId,
+  mimeType: result.mimeType,
+  size: result.size,
+  createdAt: previous?.createdAt || Date.now(),
+  backend: result.backend,
+  migratedAt: Date.now(),
+} : null;
 
-  const read = (async () => {
-    const record = await appDatabase.local_cover_assets.get(assetId);
-    if (!record || !isValidCoverPayload(record.id, record.blob)) {
-      if (record) await appDatabase.local_cover_assets.delete(assetId);
-      return null;
-    }
-    return record.blob;
-  })().catch(error => {
-    console.warn('[LocalCoverAsset] Failed to read local cover asset', error);
-    return null;
-  }).finally(() => {
-    pendingReads.delete(assetId);
-  });
-
-  pendingReads.set(assetId, read);
-  return read;
+const persistOneAsset = async (assetId: string, record?: LocalCoverAsset): Promise<boolean> => {
+  if (record?.backend && await hasLocalCoverBinary(assetId)) return true;
+  const payload = pendingPayloads.get(assetId) || (isBlob(record?.blob) ? record.blob : undefined);
+  if (!payload) return false;
+  const result = await writeLocalCoverBinary(assetId, payload);
+  const descriptor = toDescriptor(assetId, result, record);
+  if (!descriptor) return false;
+  await appDatabase.local_cover_assets.put(descriptor);
+  pendingPayloads.delete(assetId);
+  return true;
 };
 
+// Persists staged payloads before the song transaction and returns records without binary fields.
 export const prepareLocalSongsCoverAssets = async (songs: LocalSong[]): Promise<LocalSong[]> => {
-  return Promise.all(songs.map(async song => {
-    if (!isBlob(song.embeddedCover)) return song;
+  const assetIds = Array.from(new Set(songs.flatMap(song => (
+    isValidLocalCoverAssetId(song.localCoverAssetId) ? [song.localCoverAssetId] : []
+  ))));
+  const records = await appDatabase.local_cover_assets.bulkGet(assetIds);
+  const available = new Set<string>();
 
-    const normalizedBlob = normalizeLocalCoverBlob(song.embeddedCover);
-    if (!normalizedBlob) {
-      return {
-        ...song,
-        localCoverAssetId: undefined,
-        localCoverSource: undefined,
-        embeddedCover: undefined,
-      };
-    }
-
-    if (song.localCoverAssetId && ASSET_ID_PATTERN.test(song.localCoverAssetId)) {
-      return {
-        ...song,
-        localCoverNeedsAssetMigration: undefined,
-        embeddedCover: normalizedBlob,
-      };
-    }
-
+  await Promise.all(assetIds.map(async (assetId, index) => {
     try {
-      const hashed = await hashLocalCoverBlobAsync(normalizedBlob);
-      return hashed
-        ? {
-            ...song,
-            localCoverAssetId: hashed.coverAssetId,
-            localCoverSource: song.localCoverSource || 'embedded',
-            localCoverNeedsAssetMigration: undefined,
-            embeddedCover: hashed.cover,
-          }
-        : {
-            ...song,
-            localCoverAssetId: undefined,
-            localCoverNeedsAssetMigration: true,
-            embeddedCover: normalizedBlob,
-          };
+      if (await persistOneAsset(assetId, records[index])) available.add(assetId);
     } catch (error) {
-      console.warn('[LocalCoverAsset] Failed to prepare local cover; retaining the legacy Blob', error);
-      return {
-        ...song,
-        localCoverAssetId: undefined,
-        localCoverNeedsAssetMigration: true,
-        embeddedCover: normalizedBlob,
-      };
+      console.warn(`[LocalCoverAsset] Failed to persist ${assetId}`, error);
     }
   }));
-};
-
-// Writes cover payloads and validates references inside the caller's Dexie transaction.
-export const persistLocalSongCoverAssetsInTransaction = (
-  songs: LocalSong[],
-): LocalSong[] | Promise<LocalSong[]> => {
-  const referencedAssetIds = Array.from(new Set(songs.flatMap(song => (
-    song.localCoverAssetId && ASSET_ID_PATTERN.test(song.localCoverAssetId)
-      ? [song.localCoverAssetId]
-      : []
-  ))));
-  if (referencedAssetIds.length === 0) {
-    return songs.map(song => {
-      if (!song.localCoverAssetId) return song;
-      const { localCoverAssetId: _assetId, localCoverSource: _source, ...fallbackSong } = song;
-      return { ...fallbackSong, localCoverNeedsAssetMigration: true };
-    });
-  }
-
-  return (async () => {
-    const payloadByAssetId = new Map<string, LocalCoverPayload>();
-    songs.forEach(song => {
-      if (song.localCoverAssetId && isValidCoverPayload(song.localCoverAssetId, song.embeddedCover)) {
-        payloadByAssetId.set(song.localCoverAssetId, {
-          assetId: song.localCoverAssetId,
-          blob: song.embeddedCover,
-        });
-      }
-    });
-
-    const existingAssets = await appDatabase.local_cover_assets.bulkGet(referencedAssetIds);
-    const availableAssetIds = new Set<string>();
-    const assetsToWrite: LocalCoverAsset[] = [];
-    referencedAssetIds.forEach((assetId, index) => {
-      const existing = existingAssets[index];
-      if (existing && isValidCoverPayload(existing.id, existing.blob)) {
-        availableAssetIds.add(assetId);
-        return;
-      }
-
-      const payload = payloadByAssetId.get(assetId);
-      if (!payload) return;
-      assetsToWrite.push({
-        id: assetId,
-        blob: payload.blob,
-        mimeType: payload.blob.type,
-        size: payload.blob.size,
-        createdAt: Date.now(),
-      });
-      availableAssetIds.add(assetId);
-    });
-    if (assetsToWrite.length > 0) {
-      await appDatabase.local_cover_assets.bulkPut(assetsToWrite);
-    }
-
-    return songs.map(song => {
-      if (!song.localCoverAssetId) return song;
-      if (availableAssetIds.has(song.localCoverAssetId)) {
-        return { ...song, localCoverNeedsAssetMigration: undefined };
-      }
-      const { localCoverAssetId: _assetId, localCoverSource: _source, ...fallbackSong } = song;
-      return { ...fallbackSong, localCoverNeedsAssetMigration: true };
-    });
-  })();
-};
-
-export const materializeLocalSongCoverBlobs = async (songs: LocalSong[]): Promise<LocalSong[]> => {
-  const assetIds = Array.from(new Set(songs.flatMap(song => (
-    !isBlob(song.embeddedCover) && song.localCoverAssetId ? [song.localCoverAssetId] : []
-  ))));
-  const coverEntries = await Promise.all(assetIds.map(async assetId => (
-    [assetId, await readLocalCoverAsset(assetId)] as const
-  )));
-  const coversByAssetId = new Map(coverEntries);
 
   return songs.map(song => {
-    if (isBlob(song.embeddedCover) || !song.localCoverAssetId) return song;
-    const embeddedCover = coversByAssetId.get(song.localCoverAssetId);
-    if (embeddedCover) return { ...song, embeddedCover };
-    const { localCoverAssetId: _assetId, localCoverSource: _source, ...fallbackSong } = song;
-    return { ...fallbackSong, localCoverNeedsAssetMigration: true };
+    if (!song.localCoverAssetId) return song;
+    if (!isValidLocalCoverAssetId(song.localCoverAssetId)) {
+      const { localCoverAssetId: _assetId, localCoverSource: _source, ...rest } = song;
+      return { ...rest, localCoverNeedsAssetMigration: true };
+    }
+    return available.has(song.localCoverAssetId)
+      ? { ...song, localCoverNeedsAssetMigration: undefined }
+      : { ...song, localCoverNeedsAssetMigration: true };
   });
-};
-
-export const loadLocalSongCoverBlob = async (song: LocalSong): Promise<Blob | null> => {
-  if (isBlob(song.embeddedCover)) return song.embeddedCover;
-  if (!song.localCoverAssetId) return null;
-  return readLocalCoverAsset(song.localCoverAssetId);
 };
 
 export const deleteUnreferencedLocalCoverAssets = async (assetIds: Iterable<string>): Promise<void> => {
-  const uniqueIds = Array.from(new Set(Array.from(assetIds).filter(id => ASSET_ID_PATTERN.test(id))));
+  const uniqueIds = Array.from(new Set(Array.from(assetIds).filter(isValidLocalCoverAssetId)));
   for (const assetId of uniqueIds) {
     const remaining = await appDatabase.local_music.where('localCoverAssetId').equals(assetId).count();
     if (remaining > 0) continue;
+    await removeLocalCoverBinary(assetId).catch(error => {
+      console.warn(`[LocalCoverAsset] Failed to remove ${assetId} from binary storage`, error);
+    });
     await appDatabase.local_cover_assets.delete(assetId);
+    pendingPayloads.delete(assetId);
   }
+};
+
+const yieldToBrowser = () => new Promise<void>(resolve => window.setTimeout(resolve, 0));
+
+const migrateLegacyAssetRecords = async (failedIds: Set<string>): Promise<number> => {
+  const legacyAssets = await appDatabase.local_cover_assets
+    .filter(record => isBlob(record.blob) && !failedIds.has(record.id))
+    .limit(MIGRATION_BATCH_SIZE)
+    .toArray();
+  let migrated = 0;
+  for (const record of legacyAssets) {
+    try {
+      if (!isValidLocalCoverAssetId(record.id) || !isBlob(record.blob)) throw new Error('Invalid legacy asset');
+      const result = await writeLocalCoverBinary(record.id, record.blob);
+      const descriptor = toDescriptor(record.id, result, record);
+      if (!descriptor) throw new Error('Local cover binary storage is unavailable');
+      await appDatabase.local_cover_assets.put(descriptor);
+      migrated += 1;
+    } catch (error) {
+      failedIds.add(record.id);
+      console.warn(`[LocalCoverAsset] Legacy asset migration will retry later: ${record.id}`, error);
+    }
+  }
+  return migrated;
+};
+
+const migrateLegacySongRecords = async (failedIds: Set<string>): Promise<number> => {
+  const legacySongs = await appDatabase.local_music
+    .filter(song => isBlob((song as LegacyLocalSongRecord).embeddedCover) && !failedIds.has(song.id))
+    .limit(MIGRATION_BATCH_SIZE)
+    .toArray() as LegacyLocalSongRecord[];
+  let migrated = 0;
+  for (const legacySong of legacySongs) {
+    try {
+      const blob = normalizeLocalCoverBlob(legacySong.embeddedCover!);
+      if (!blob) throw new Error('Invalid legacy song cover');
+      let assetId = legacySong.localCoverAssetId;
+      if (!isValidLocalCoverAssetId(assetId)) {
+        const hashed = await hashLocalCoverBlobAsync(blob);
+        if (!hashed) throw new Error('SHA-256 is unavailable');
+        assetId = hashed.coverAssetId;
+      }
+      const result = await writeLocalCoverBinary(assetId, blob);
+      const descriptor = toDescriptor(assetId, result);
+      if (!descriptor) throw new Error('Local cover binary storage is unavailable');
+      const { embeddedCover: _legacyBlob, ...lightweightSong } = legacySong;
+      await appDatabase.transaction('rw', [appDatabase.local_music, appDatabase.local_cover_assets], async () => {
+        await appDatabase.local_cover_assets.put(descriptor);
+        await appDatabase.local_music.put({
+          ...lightweightSong,
+          localCoverAssetId: assetId,
+          localCoverSource: lightweightSong.localCoverSource || 'embedded',
+          localCoverNeedsAssetMigration: undefined,
+        });
+      });
+      migrated += 1;
+    } catch (error) {
+      failedIds.add(legacySong.id);
+      console.warn(`[LocalCoverAsset] Legacy song migration will retry later: ${legacySong.id}`, error);
+    }
+  }
+  return migrated;
+};
+
+// Migrates bounded batches and leaves every failed Blob untouched for the next startup.
+export const migrateLegacyLocalCoverAssetsInBackground = (): Promise<void> => {
+  if (migrationPromise) return migrationPromise;
+  migrationPromise = (async () => {
+    const failedAssetIds = new Set<string>();
+    const failedSongIds = new Set<string>();
+    let totalMigrated = 0;
+    while (true) {
+      const [assets, songs] = await Promise.all([
+        migrateLegacyAssetRecords(failedAssetIds),
+        migrateLegacySongRecords(failedSongIds),
+      ]);
+      totalMigrated += assets + songs;
+      if (assets === 0 && songs === 0) break;
+      await yieldToBrowser();
+    }
+    if (totalMigrated > 0) {
+      window.dispatchEvent(new CustomEvent('folia-local-music-updated'));
+    }
+  })().catch(error => {
+    console.warn('[LocalCoverAsset] Background migration stopped; it will retry on the next startup', error);
+  }).finally(() => {
+    migrationPromise = null;
+  });
+  return migrationPromise;
 };

@@ -1,9 +1,8 @@
 import type { LocalSong } from '../types';
-import { isBlob } from './blobGuards';
 
 // src/utils/localSongCover.ts
-// Detects both content-addressed and legacy local cover storage.
+// Detects the canonical content-addressed local cover reference.
 
 export const hasLocalSongCover = (song: LocalSong): boolean => (
-  Boolean(song.localCoverAssetId) || isBlob(song.embeddedCover)
+  Boolean(song.localCoverAssetId)
 );

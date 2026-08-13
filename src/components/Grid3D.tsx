@@ -16,6 +16,7 @@ import {
     getProviderCollectionArtistLabel,
 } from './app/home/gridViewCollectionAdapters';
 import { importFolder, resyncAllFolders, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../services/localMusicService';
+import { getLocalLibraryAvailability } from '../services/localLibraryAvailability';
 import { importLocalPlaylistFile } from '../services/localPlaylistFileService';
 import { useOnlineProviderQrLogin } from '../hooks/useOnlineProviderQrLogin';
 import type { OnlineProviderPlatformState } from '../hooks/useOnlineProviderPlatform';
@@ -517,6 +518,14 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const handleFolderImport = async () => {
         if (isLocalImporting || isLocalPlaylistImporting || isLocalRefreshing || scanProgress?.active) return;
 
+        const availability = getLocalLibraryAvailability();
+        if (!availability.supported) {
+            alert(t(availability.reason === 'insecure-http'
+                ? 'localMusic.insecureHttpDisabled'
+                : 'localMusic.importNotSupported'));
+            return;
+        }
+
         setIsLocalImporting(true);
         try {
             const importedSongs = await importFolder();
@@ -715,7 +724,15 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     ...(showHomeTabPlaylist ? [{ key: 'playlist', label: t('home.playlists'), disabledReason: playlistUnavailableReason }] : []),
                                     ...(showHomeTabRadio ? [{ key: 'radio', label: t('home.radio'), disabledReason: radioUnavailableReason }] : []),
                                     ...(showHomeTabAlbums ? [{ key: 'albums', label: t('home.albums'), disabledReason: albumsUnavailableReason }] : []),
-                                    ...(showHomeTabLocal ? [{ key: 'local', label: t('localMusic.folder'), disabledReason: undefined }] : []),
+                                    ...(showHomeTabLocal ? [{
+                                        key: 'local',
+                                        label: t('localMusic.folder'),
+                                        disabledReason: getLocalLibraryAvailability().supported
+                                            ? undefined
+                                            : t(getLocalLibraryAvailability().reason === 'insecure-http'
+                                                ? 'localMusic.insecureHttpDisabled'
+                                                : 'localMusic.importNotSupported'),
+                                    }] : []),
                                     ...(navidromeEnabled ? [{ key: 'navidrome', label: t('navidrome.title') || 'Navidrome', disabledReason: undefined }] : []),
                                 ].map((tab) => {
                                     const isActive = homeViewTab === tab.key;

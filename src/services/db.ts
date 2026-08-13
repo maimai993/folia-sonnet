@@ -28,9 +28,8 @@ import {
 import { clearSessionValues, putSessionValue, readSession } from './repositories/sessionRepository';
 import { readThemeRegistryEntries, writeThemeRegistryEntries } from './repositories/themeRegistryRepository';
 import { clearCoverAssets, getCoverAssetUsage } from './binaryAssetStore';
+import { clearLocalCoverBinaries } from './localCoverBinaryStore';
 import {
-  materializeLocalSongCoverBlobs,
-  prepareLocalSongsCoverAssets,
   resetLocalCoverAssetRuntime,
 } from './localCoverAssetService';
 
@@ -185,8 +184,7 @@ export const clearCacheByCategory = async (category: CacheCategory): Promise<voi
 export const saveLocalSong = async (song: LocalSong): Promise<void> => {
   try {
     await ensureLocalLibraryInitialized();
-    const [preparedSong] = await prepareLocalSongsCoverAssets([song]);
-    await assignImportedSongs([preparedSong]);
+    await assignImportedSongs([song]);
   } catch (error) {
     console.error('Failed to save local song', error);
   }
@@ -195,8 +193,7 @@ export const saveLocalSong = async (song: LocalSong): Promise<void> => {
 export const saveLocalSongs = async (songs: LocalSong[]): Promise<void> => {
   try {
     await ensureLocalLibraryInitialized();
-    const preparedSongs = await prepareLocalSongsCoverAssets(songs);
-    await assignImportedSongs(preparedSongs);
+    await assignImportedSongs(songs);
   } catch (error) {
     console.error('Failed to save local songs', error);
   }
@@ -205,7 +202,7 @@ export const saveLocalSongs = async (songs: LocalSong[]): Promise<void> => {
 export const getLocalSongs = async (): Promise<LocalSong[]> => {
   try {
     await ensureLocalLibraryInitialized();
-    return await materializeLocalSongCoverBlobs(await readLocalSongs());
+    return await readLocalSongs();
   } catch (error) {
     console.error('Failed to get local songs', error);
     return [];
@@ -232,6 +229,7 @@ export const clearAllData = async (): Promise<void> => {
   try {
     if (hasElectronAudioCacheBridge()) await window.electron!.clearAudioCache();
     await clearCoverAssets();
+    await clearLocalCoverBinaries();
     resetLocalCoverAssetRuntime();
     await appDatabase.delete();
     await appDatabase.open();

@@ -2,6 +2,7 @@ import { AmllDbPlatform, LocalSong, LyricProviderSource, SongResult, UnifiedSong
 import { NavidromeSong } from '../types/navidrome';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../types/localLibrary';
 import { buildLocalLibraryIndex, followEntityRedirect, type LocalLibraryIndex } from '../utils/localLibraryIndex';
+import { getLocalCoverAssetUrl } from './localCoverAssetUrl';
 
 export type LocalLibraryDisplayCatalog = {
     entities: LocalLibraryEntity[];
@@ -191,10 +192,13 @@ export function buildLocalQueue(
         ? buildLocalLibraryIndex(catalog.entities, catalog.assignments)
         : undefined;
     const convertedQueue = queue.map(song => {
+        const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId);
         return applyLocalLibraryEntityDisplay(buildUnifiedLocalSong({
             localSong: song,
             matchedSong: null,
-            coverUrl: song.useOnlineCover ? song.onlineMetadata?.coverUrl || null : null,
+            coverUrl: song.useOnlineCover
+                ? song.onlineMetadata?.coverUrl || localCoverUrl
+                : localCoverUrl,
             preferOnlineMetadata: false,
         }), catalog, catalogIndex);
     });

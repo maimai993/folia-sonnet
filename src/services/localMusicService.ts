@@ -5,7 +5,7 @@ import { parseEmbeddedMetadataAsync, type EmbeddedMetadataResult } from '../util
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { normalizeLyricMatchText } from '../utils/lyrics/matchScore';
-import { createSafeObjectUrl, isBlob } from '../utils/blobGuards';
+import { createSafeObjectUrl } from '../utils/blobGuards';
 import { resolveExplicitFileTimedLyricFormat, type ExplicitFileTimedLyricFormat } from '../utils/lyrics/formatDetection';
 import { applyMatchedMetadata } from './localLibraryCatalogService';
 import { buildLyricSearchQuery } from '../utils/lyrics/searchQuery';
@@ -18,12 +18,14 @@ import { getOnlineMusicProvider } from './onlineMusic/providerRegistry';
 import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 import { normalizeLyricMatchMetadataCandidate } from './onlineMetadataSearchService';
 import {
-    loadLocalSongCoverBlob,
     prepareLocalCoverBlob,
+    stageLocalCoverAsset,
     type PreparedLocalCoverBlob,
 } from './localCoverAssetService';
+import { hasLocalCoverBinary } from './localCoverBinaryStore';
 import { hasLocalSongCover } from '../utils/localSongCover';
 import { createFoliaIgnoreMatcher, isIgnoredByFoliaMatchers, type FoliaIgnoreMatcher } from '../utils/foliaIgnore';
+import { getLocalLibraryAvailability } from './localLibraryAvailability';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
@@ -76,7 +78,7 @@ interface ImportDiffPlan {
 
 // In-memory storage for hot-path access. Persistent recovery uses directory handles from IndexedDB.
 const fileHandleMap = new Map<string, FileSystemFileHandle>();
-const embeddedCoverRequestMap = new Map<string, Promise<LocalSong>>();
+const localCoverAssetRequestMap = new Map<string, Promise<LocalSong>>();
 const AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i;
 const LYRIC_EXTENSIONS = /\.(lrc|vtt|ttml|qrc|yrc|krc)$/i;
 const TRANSLATION_LYRIC_EXTENSIONS = /\.t\.(lrc|vtt)$/i;
@@ -164,9 +166,8 @@ async function getImportDirectoryHandle(expectedRootName?: string): Promise<File
         return persistedHandle;
     }
 
-    if (!('showDirectoryPicker' in window)) {
-        throw new Error('File System Access API not supported in this browser');
-    }
+    const availability = getLocalLibraryAvailability();
+    if (!availability.supported) throw new Error(`Local library unavailable: ${availability.reason}`);
 
     // @ts-ignore - showDirectoryPicker is not in all TypeScript definitions
     return await window.showDirectoryPicker();
@@ -851,7 +852,6 @@ async function buildImportedSong(
         discNumber: embeddedMetadata.discNumber,
         localCoverAssetId: folderCover?.assetId,
         localCoverSource: folderCover ? 'folder' : undefined,
-        embeddedCover: folderCover?.blob,
         hasManualLyricSelection: existingSong?.hasManualLyricSelection ?? false,
         folderName: entry.folderName,
         hasLocalLyrics: !!localLyricsContent,
@@ -943,10 +943,10 @@ async function hydrateSongMetadata(song: LocalSong): Promise<LocalSong> {
         song.replayGainAlbumGain = embeddedMetadata.replayGainAlbumGain;
         song.replayGainAlbumPeak = embeddedMetadata.replayGainAlbumPeak;
         if (includeCover) {
+            stageLocalCoverAsset(embeddedMetadata.coverAssetId, embeddedMetadata.cover);
             song.localCoverAssetId = embeddedMetadata.coverAssetId;
             song.localCoverSource = embeddedMetadata.cover ? 'embedded' : undefined;
             song.localCoverNeedsAssetMigration = coverHydrationFailed ? true : undefined;
-            song.embeddedCover = embeddedMetadata.cover;
         }
     } catch (error) {
         console.warn(`[LocalMusic][Import] Failed to hydrate metadata for ${song.fileName}:`, error);
@@ -1532,13 +1532,13 @@ async function extractAndPersistSongCover(
 ): Promise<LocalSong> {
     const file = await fileHandle.getFile();
     const metadata = await extractEmbeddedMetadata(file, true);
-    if (!metadata.cover) return song;
+    if (!metadata.cover || !metadata.coverAssetId) return song;
+    stageLocalCoverAsset(metadata.coverAssetId, metadata.cover);
 
     const updatedSong: LocalSong = {
         ...song,
         localCoverAssetId: metadata.coverAssetId,
         localCoverSource: 'embedded',
-        embeddedCover: metadata.cover,
         fileHandle,
     };
     Object.assign(song, updatedSong);
@@ -1546,20 +1546,12 @@ async function extractAndPersistSongCover(
     return updatedSong;
 }
 
-export async function ensureLocalSongEmbeddedCover(song: LocalSong): Promise<LocalSong> {
-    if (isBlob(song.embeddedCover)) {
-        return song;
-    }
-
-    const storedCover = await loadLocalSongCoverBlob(song);
-    if (storedCover) {
-        song.embeddedCover = storedCover;
-        return song;
-    }
+export async function ensureLocalSongCoverAsset(song: LocalSong): Promise<LocalSong> {
+    if (song.localCoverAssetId && await hasLocalCoverBinary(song.localCoverAssetId)) return song;
     if (song.localCoverSource === 'folder') return song;
 
-    if (!embeddedCoverRequestMap.has(song.id)) {
-        embeddedCoverRequestMap.set(song.id, (async () => {
+    if (!localCoverAssetRequestMap.has(song.id)) {
+        localCoverAssetRequestMap.set(song.id, (async () => {
             const fileHandle = await getAccessibleFileHandle(song);
             if (!fileHandle) {
                 return song;
@@ -1583,12 +1575,12 @@ export async function ensureLocalSongEmbeddedCover(song: LocalSong): Promise<Loc
                     return song;
                 }
             } finally {
-                embeddedCoverRequestMap.delete(song.id);
+                localCoverAssetRequestMap.delete(song.id);
             }
         })());
     }
 
-    return await embeddedCoverRequestMap.get(song.id)!;
+    return await localCoverAssetRequestMap.get(song.id)!;
 }
 
 // Get audio blob from File object (for file input imports)
@@ -1612,7 +1604,7 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
     );
     uniqueSongIds.forEach(id => {
         fileHandleMap.delete(id);
-        embeddedCoverRequestMap.delete(id);
+        localCoverAssetRequestMap.delete(id);
     });
     await Promise.all([
         dbDeleteLocalSongs(uniqueSongIds),
@@ -1700,7 +1692,7 @@ export async function deleteFolderSongs(folderName: string): Promise<void> {
     const songIdsToDelete = songsToDelete.map(song => song.id);
     songIdsToDelete.forEach(id => {
         fileHandleMap.delete(id);
-        embeddedCoverRequestMap.delete(id);
+        localCoverAssetRequestMap.delete(id);
     });
     await Promise.all([
         dbDeleteLocalSongs(songIdsToDelete),

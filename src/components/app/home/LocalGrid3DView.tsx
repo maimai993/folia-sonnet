@@ -7,7 +7,6 @@ import { GridViewCollectionDescriptor, createLocalGridViewCollection } from './g
 import { buildLocalGrid3DGroups } from './localGrid3DModel';
 import { useDebouncedFocusSync } from '../../../hooks/useDebouncedFocusSync';
 import { useLocalLibraryCatalog } from '../../../hooks/useLocalLibraryCatalog';
-import { createSafeObjectUrl, isBlob } from '../../../utils/blobGuards';
 import { buildLocalQueue } from '../../../services/playbackAdapters';
 import { createLocalPlaylist } from '../../../services/localPlaylistService';
 import { deleteSongsByIds, removeImportedRoot, resyncFolder } from '../../../services/localMusicService';
@@ -102,87 +101,17 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     useEffect(() => {
         void refreshDirectoryTrees();
     }, [refreshDirectoryTrees]);
-    const { groups, coverSourceMap } = useMemo(() => {
-        const rawGroups = buildLocalGrid3DGroups(localSongs, localPlaylists, t, catalog.ready ? catalog : undefined);
-        const sourceMap = new Map<string, Blob | string | undefined>();
-
-        const processItems = (items: LocalLibraryGroup[]) => items.map(item => {
-            sourceMap.set(item.id, item.coverUrl);
-            return {
-                ...item,
-                coverUrl: undefined,
-            };
-        });
-
-        return {
-            groups: {
-                folders: processItems(rawGroups.folders),
-                albums: processItems(rawGroups.albums),
-                artists: processItems(rawGroups.artists),
-                playlists: processItems(rawGroups.playlists),
-            },
-            coverSourceMap: sourceMap,
-        };
-    }, [catalog.assignments, catalog.entities, catalog.ready, localPlaylists, localSongs, t]);
+    const groups = useMemo(() => buildLocalGrid3DGroups(
+        localSongs,
+        localPlaylists,
+        t,
+        catalog.ready ? catalog : undefined,
+    ), [catalog.assignments, catalog.entities, catalog.ready, localPlaylists, localSongs, t]);
 
     const [localFolderIndex, setLocalFolderIndex] = useDebouncedFocusSync(focusedFolderIndex, setFocusedFolderIndex);
     const [localAlbumIndex, setLocalAlbumIndex] = useDebouncedFocusSync(focusedAlbumIndex, setFocusedAlbumIndex);
     const [localArtistIndex, setLocalArtistIndex] = useDebouncedFocusSync(focusedArtistIndex, setFocusedArtistIndex);
     const [localPlaylistIndex, setLocalPlaylistIndex] = useDebouncedFocusSync(focusedPlaylistIndex, setFocusedPlaylistIndex);
-
-    const [groupCoverObjectUrls, setGroupCoverObjectUrls] = useState<Record<string, string>>({});
-
-    useEffect(() => {
-        const nextObjectUrls: Record<string, string> = {};
-        const createdUrls: string[] = [];
-
-        const allGroups = [
-            ...groups.folders,
-            ...groups.albums,
-            ...groups.artists,
-            ...groups.playlists,
-        ];
-
-        for (const group of allGroups) {
-            const source = coverSourceMap.get(group.id);
-            if (isBlob(source)) {
-                const url = createSafeObjectUrl(source);
-                if (!url) continue;
-                nextObjectUrls[group.id] = url;
-                createdUrls.push(url);
-            }
-        }
-
-        setGroupCoverObjectUrls(current => {
-            if (createdUrls.length === 0 && Object.keys(current).length === 0) {
-                return current;
-            }
-            return nextObjectUrls;
-        });
-
-        return () => {
-            createdUrls.forEach(url => URL.revokeObjectURL(url));
-        };
-    }, [groups, coverSourceMap]);
-
-    const groupsWithCovers = useMemo(() => {
-        const withCoverUrls = (items: typeof groups.folders) => items.map(group => {
-            const source = coverSourceMap.get(group.id);
-            const coverUrl = typeof source === 'string' ? source : groupCoverObjectUrls[group.id];
-
-            return {
-                ...group,
-                coverUrl,
-            };
-        });
-
-        return {
-            folders: withCoverUrls(groups.folders),
-            albums: withCoverUrls(groups.albums),
-            artists: withCoverUrls(groups.artists),
-            playlists: withCoverUrls(groups.playlists),
-        };
-    }, [coverSourceMap, groupCoverObjectUrls, groups]);
 
     const sections = useMemo(() => [
         {
@@ -190,7 +119,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             row: 0 as LocalRow,
             label: t('localMusic.foldersAndPlaylists'),
             icon: <FolderOpen size={13} />,
-            items: groupsWithCovers.folders,
+            items: groups.folders,
             focusedIndex: localFolderIndex,
             setFocusedIndex: setLocalFolderIndex,
             emptyMessage: t('localMusic.noFoldersFound'),
@@ -200,7 +129,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             row: 1 as LocalRow,
             label: t('localMusic.albums'),
             icon: <Disc3 size={13} />,
-            items: groupsWithCovers.albums,
+            items: groups.albums,
             focusedIndex: localAlbumIndex,
             setFocusedIndex: setLocalAlbumIndex,
             emptyMessage: t('localMusic.noAlbumsFound'),
@@ -210,7 +139,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             row: 2 as LocalRow,
             label: t('localMusic.artists'),
             icon: <User size={13} />,
-            items: groupsWithCovers.artists,
+            items: groups.artists,
             focusedIndex: localArtistIndex,
             setFocusedIndex: setLocalArtistIndex,
             emptyMessage: t('localMusic.noArtistsFound'),
@@ -220,7 +149,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             row: 3 as LocalRow,
             label: t('localMusic.customPlaylists') || t('home.playlists'),
             icon: <ListMusic size={13} />,
-            items: groupsWithCovers.playlists,
+            items: groups.playlists,
             focusedIndex: localPlaylistIndex,
             setFocusedIndex: setLocalPlaylistIndex,
             emptyMessage: t('localMusic.noPlaylistsFound'),
@@ -230,7 +159,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
         localArtistIndex,
         localFolderIndex,
         localPlaylistIndex,
-        groupsWithCovers,
+        groups,
         setLocalAlbumIndex,
         setLocalArtistIndex,
         setLocalFolderIndex,

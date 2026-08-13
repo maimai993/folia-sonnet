@@ -210,6 +210,7 @@ const collectOrphanedEntityIds = (
 const deleteSongRecords = async (songIds: string[]): Promise<void> => {
   const uniqueSongIds = Array.from(new Set(songIds));
   if (uniqueSongIds.length === 0) return;
+  let deletedCoverAssetIds: string[] = [];
 
   await appDatabase.transaction(
     'rw',
@@ -217,7 +218,6 @@ const deleteSongRecords = async (songIds: string[]): Promise<void> => {
       appDatabase.local_music,
       appDatabase.local_library_entities,
       appDatabase.local_library_assignments,
-      appDatabase.local_cover_assets,
     ],
     async () => {
       const deletedSongIdSet = new Set(uniqueSongIds);
@@ -232,17 +232,16 @@ const deleteSongRecords = async (songIds: string[]): Promise<void> => {
         assignments.filter(assignment => !deletedSongIdSet.has(assignment.songId)),
         entities,
       );
+      deletedCoverAssetIds = deletedSongs.flatMap(song => song?.localCoverAssetId ? [song.localCoverAssetId] : []);
 
       await Promise.all([
         appDatabase.local_music.bulkDelete(uniqueSongIds),
         appDatabase.local_library_assignments.bulkDelete(uniqueSongIds),
         appDatabase.local_library_entities.bulkDelete(orphanedEntityIds),
       ]);
-      await deleteUnreferencedLocalCoverAssets(
-        deletedSongs.flatMap(song => song?.localCoverAssetId ? [song.localCoverAssetId] : []),
-      );
     },
   );
+  await deleteUnreferencedLocalCoverAssets(deletedCoverAssetIds);
 };
 
 export const deleteSongAssignment = async (songId: string): Promise<void> => deleteSongRecords([songId]);

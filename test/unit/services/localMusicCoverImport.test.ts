@@ -43,8 +43,8 @@ vi.mock('../../../src/utils/localMetadataWorkerClient', () => ({
 }));
 
 vi.mock('../../../src/services/localCoverAssetService', () => ({
-    loadLocalSongCoverBlob: vi.fn(),
     prepareLocalCoverBlob: vi.fn(),
+    stageLocalCoverAsset: vi.fn(),
 }));
 
 class FakeFileHandle {
@@ -123,6 +123,7 @@ describe('local music cover import', () => {
         vi.mocked(prepareLocalCoverBlob).mockResolvedValue(null);
 
         vi.stubGlobal('window', {
+            electron: {},
             showDirectoryPicker: vi.fn(),
             dispatchEvent: vi.fn(),
         });
@@ -155,7 +156,7 @@ describe('local music cover import', () => {
             `sha256:${'1'.repeat(64)}`,
             `sha256:${'2'.repeat(64)}`,
         ]));
-        expect(hydratedSongs.every(song => song.embeddedCover instanceof Blob)).toBe(true);
+        expect(hydratedSongs.every(song => song.localCoverAssetId?.startsWith('sha256:'))).toBe(true);
     });
 
     it('hashes a folder cover once and skips embedded images for every song in that folder', async () => {
@@ -175,7 +176,6 @@ describe('local music cover import', () => {
         expect(hydratedSongs.every(song => (
             song.localCoverAssetId === folderAssetId
             && song.localCoverSource === 'folder'
-            && song.embeddedCover === folderBlob
         ))).toBe(true);
     });
 

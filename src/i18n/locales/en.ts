@@ -1501,6 +1501,7 @@ export default {
     "deleteFolderCount": "This will remove a total of {{count}} song(s) from your library, including nested subfolders.",
     "deleteFolderNote": "Note: This will only remove songs from your library. Your files on disk will not be affected.",
     "importNotSupported": "Folder import not supported in this browser or cancelled",
+    "insecureHttpDisabled": "Local library is disabled on remote HTTP. Use HTTPS, localhost, or the Electron app.",
     "resyncFailed": "Failed to resync folder. Please try again.",
     "deleteFailed": "Failed to delete folder. Please try again.",
     "matchStatus": "Match Status",

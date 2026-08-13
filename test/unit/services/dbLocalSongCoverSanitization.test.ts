@@ -1,28 +1,26 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appDatabase } from '../../../src/services/appDatabase';
-import { getLocalSongs, saveLocalSongs } from '../../../src/services/db';
+import { getLocalSongs } from '../../../src/services/db';
 import type { LocalSong } from '../../../src/types';
 
 // test/unit/services/dbLocalSongCoverSanitization.test.ts
-// Verifies real Dexie persistence never keeps non-Blob local cover payloads.
+// Verifies getLocalSongs returns lightweight records without reading or deleting legacy cover binaries.
 
-const buildLocalSong = (patch: Partial<LocalSong> & Pick<LocalSong, 'id'>): LocalSong => {
-    const { id, ...songPatch } = patch;
-    return {
-        id,
-        fileName: `${id}.mp3`,
-        filePath: `/music/${id}.mp3`,
-        title: id,
-        titleOrigin: 'import',
-        importedMetadata: { title: id, titleSource: 'filename', artistNames: [] },
-        duration: 180000,
-        fileSize: 1024,
-        mimeType: 'audio/mpeg',
-        addedAt: 1,
-        ...songPatch,
-    };
-};
+type LegacyLocalSong = LocalSong & { embeddedCover?: unknown };
+
+const buildLocalSong = (id: string): LocalSong => ({
+    id,
+    fileName: `${id}.mp3`,
+    filePath: `/music/${id}.mp3`,
+    title: id,
+    titleOrigin: 'import',
+    importedMetadata: { title: id, titleSource: 'filename', artistNames: [] },
+    duration: 180000,
+    fileSize: 1024,
+    mimeType: 'audio/mpeg',
+    addedAt: 1,
+});
 
 describe('db local song cover sanitization', () => {
     beforeEach(async () => {
@@ -34,75 +32,39 @@ describe('db local song cover sanitization', () => {
         await appDatabase.delete();
     });
 
-    it('does not persist non-Blob embedded covers', async () => {
-        await saveLocalSongs([
-            buildLocalSong({
-                id: 'bad-cover-song',
-                embeddedCover: { size: 20, type: 'image/png' } as unknown as Blob,
-            }),
-        ]);
+    it('does not read local_cover_assets while loading local songs', async () => {
+        const assetId = `sha256:${'b'.repeat(64)}`;
+        await appDatabase.local_music.put({ ...buildLocalSong('runtime-cover-song'), localCoverAssetId: assetId });
+        const assetRead = vi.spyOn(appDatabase.local_cover_assets, 'get');
+        const assetArrayRead = vi.spyOn(appDatabase.local_cover_assets, 'toArray');
 
-        expect((await appDatabase.local_music.get('bad-cover-song'))?.embeddedCover).toBeUndefined();
+        const songs = await getLocalSongs();
+
+        expect(songs[0]).toMatchObject({ localCoverAssetId: assetId });
+        expect(assetRead).not.toHaveBeenCalled();
+        expect(assetArrayRead).not.toHaveBeenCalled();
     });
 
-    it('sanitizes non-Blob embedded covers when reading local songs and writes them back', async () => {
-        await appDatabase.local_music.put(buildLocalSong({
-            id: 'bad-cover-song',
-            embeddedCover: { size: 20, type: 'image/png' } as unknown as Blob,
-        }));
+    it('strips a valid legacy Blob from returned songs but preserves it for background migration', async () => {
+        const legacy = { ...buildLocalSong('legacy-cover-song'), embeddedCover: new Blob(['cover'], { type: 'image/png' }) };
+        await appDatabase.local_music.put(legacy as LegacyLocalSong);
+
+        const songs = await getLocalSongs();
+
+        expect(songs[0]).not.toHaveProperty('embeddedCover');
+        expect((await appDatabase.local_music.get('legacy-cover-song') as LegacyLocalSong)?.embeddedCover).toBeInstanceOf(Blob);
+    });
+
+    it('removes invalid legacy cover payloads during lightweight reads', async () => {
+        await appDatabase.local_music.put({
+            ...buildLocalSong('invalid-cover-song'),
+            embeddedCover: { size: 20, type: 'image/png' },
+        } as LegacyLocalSong);
 
         const songs = await getLocalSongs();
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(songs[0]?.embeddedCover).toBeUndefined();
-        expect((await appDatabase.local_music.get('bad-cover-song'))?.embeddedCover).toBeUndefined();
-    });
-
-    it('persists new songs with an asset reference instead of duplicating the cover Blob', async () => {
-        const assetId = `sha256:${'a'.repeat(64)}`;
-        const embeddedCover = new Blob(['cover'], { type: 'image/png' });
-        await appDatabase.local_cover_assets.put({
-            id: assetId,
-            blob: embeddedCover,
-            mimeType: embeddedCover.type,
-            size: embeddedCover.size,
-            createdAt: 1,
-        });
-
-        await saveLocalSongs([buildLocalSong({
-            id: 'asset-cover-song',
-            localCoverAssetId: assetId,
-            localCoverSource: 'embedded',
-            embeddedCover,
-        })]);
-
-        expect(await appDatabase.local_music.get('asset-cover-song')).toMatchObject({
-            localCoverAssetId: assetId,
-            localCoverSource: 'embedded',
-        });
-        expect((await appDatabase.local_music.get('asset-cover-song'))?.embeddedCover).toBeUndefined();
-    });
-
-    it('materializes asset references as runtime cover Blobs while loading the local-song catalog', async () => {
-        const assetId = `sha256:${'b'.repeat(64)}`;
-        const cover = new Blob(['runtime-cover'], { type: 'image/png' });
-        await appDatabase.local_cover_assets.put({
-            id: assetId,
-            blob: cover,
-            mimeType: cover.type,
-            size: cover.size,
-            createdAt: 1,
-        });
-        await appDatabase.local_music.put(buildLocalSong({
-            id: 'runtime-cover-song',
-            localCoverAssetId: assetId,
-        }));
-        const assetRead = vi.spyOn(appDatabase.local_cover_assets, 'get');
-
-        const songs = await getLocalSongs();
-
-        expect(assetRead).toHaveBeenCalledOnce();
-        expect(songs[0]?.embeddedCover).toBeInstanceOf(Blob);
-        expect(songs[0]?.embeddedCover?.type).toBe('image/png');
+        expect(songs[0]).not.toHaveProperty('embeddedCover');
+        expect(await appDatabase.local_music.get('invalid-cover-song')).not.toHaveProperty('embeddedCover');
     });
 });

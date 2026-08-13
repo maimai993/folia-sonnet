@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, nativeImage, desktopCapturer, Menu, Tray, nativeTheme, powerSaveBlocker, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, nativeImage, desktopCapturer, Menu, Tray, nativeTheme, powerSaveBlocker, safeStorage, protocol, net: electronNet } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
@@ -12,6 +12,7 @@ const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = requ
 const { createVoiceInputPauseMonitor } = require('./voiceInputPause.cjs');
 const { createDisplaySleepBlocker } = require('./displaySleepBlocker.cjs');
 const { createLyricApi } = require('./lyricApi.cjs');
+const { createLocalCoverAssetStore } = require('./localCoverAssets.cjs');
 const { getReleaseUrl, getUpdateProviderConfig, resolveReleaseChannel } = require('./updateChannels.cjs');
 const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/themeSanitizer.cjs');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
@@ -22,6 +23,17 @@ const linuxGraphicsMode =
   process.platform !== 'linux'
     ? 'system'
     : (process.env.FOLIA_LINUX_GRAPHICS_MODE || (isAppImageRuntime ? 'swiftshader' : 'system'));
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'folia-cover',
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    corsEnabled: true,
+    stream: true,
+  },
+}]);
 
 // Trusts only the known KuGou media CDN hostname mismatch while preserving TLS checks elsewhere.
 app.on('certificate-error', (event, _webContents, requestUrl, error, _certificate, callback) => {
@@ -589,6 +601,14 @@ function getAudioCacheDirectory() {
 function getCoverCacheDirectory() {
   return path.join(getConfiguredCacheDirectory(), 'cover');
 }
+
+function getLocalCoverAssetDirectory() {
+  return path.join(getConfiguredCacheDirectory(), 'local-cover-assets');
+}
+
+const localCoverAssetStore = createLocalCoverAssetStore({
+  getDirectory: getLocalCoverAssetDirectory,
+});
 
 function getAudioCacheBaseName(cacheKey) {
   return crypto.createHash('sha256').update(cacheKey).digest('hex');
@@ -2978,6 +2998,7 @@ app.whenReady().then(async () => {
 
   setupFileSystemAccessPermissionHandlers();
   setupCorsBypassHandlers();
+  localCoverAssetStore.registerProtocolHandler(protocol, electronNet);
 
   session.defaultSession.on('file-system-access-restricted', (event, details, callback) => {
     if (details.isDirectory) {
@@ -3322,6 +3343,23 @@ ipcMain.handle('get-cover-cache-usage', async () => {
 ipcMain.handle('clear-cover-cache', async () => {
   await clearCoverCacheDirectory();
   return true;
+});
+
+ipcMain.handle('has-local-cover-asset', async (_event, assetId) => {
+  return localCoverAssetStore.has(assetId);
+});
+
+ipcMain.handle('save-local-cover-asset', async (_event, assetId, data, mimeType) => {
+  await localCoverAssetStore.write(assetId, data, mimeType);
+  return true;
+});
+
+ipcMain.handle('remove-local-cover-asset', async (_event, assetId) => {
+  return localCoverAssetStore.remove(assetId);
+});
+
+ipcMain.handle('clear-local-cover-assets', async () => {
+  return localCoverAssetStore.clear();
 });
 
 // Retrieve dynamic port of local Netease API Server

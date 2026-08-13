@@ -4,7 +4,7 @@ import type { MotionValue } from 'framer-motion';
 import { LyricParserFactory } from '../utils/lyrics/LyricParserFactory';
 import { getFromCacheWithMigration, getLocalSongs, removeFromCache, saveLocalSong, saveToCache } from '../services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from '../services/coverCache';
-import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from '../services/localMusicService';
+import { ensureLocalSongCoverAsset, getAudioFromLocalSong } from '../services/localMusicService';
 import { addSongsToLocalPlaylist, createLocalPlaylist, getLocalPlaylists, setLocalSongFavorite } from '../services/localPlaylistService';
 import { applyLocalLibraryEntityDisplay, buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong, resolveLocalSongMetadata } from '../services/playbackAdapters';
 import { getPrefetchedData } from '../services/prefetchService';
@@ -41,8 +41,8 @@ import type { NavidromeSong } from '../types/navidrome';
 import type { NavidromeMatchData } from '../components/modal/NaviLyricMatchModal';
 import { applyQueueAddBehavior } from '../utils/queueAddBehavior';
 import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState, getOnlineLyricsStateCacheKey } from '../utils/onlineLyricsState';
-import { createSafeObjectUrl, getBlobObjectUrlSignature, isBlob } from '../utils/blobGuards';
 import { hasLocalSongCover } from '../utils/localSongCover';
+import { getLocalCoverAssetUrl } from '../services/localCoverAssetUrl';
 import { applyMatchedMetadata } from '../services/localLibraryCatalogService';
 import { buildLocalSongLyricMatchContext, shouldRefreshLocalSongLyricsFromMetadata, shouldRunLocalSongAutomaticMatch } from '../utils/lyrics/localSongMatchContext';
 import { getLocalLibraryCatalogSnapshot } from '../services/localLibraryEntityRepository';
@@ -63,11 +63,6 @@ const parseLocalSongLyrics = (song: Pick<LocalSong, 'localLyricsContent' | 'loca
 };
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
-
-type LocalCoverObjectUrlEntry = {
-    signature: string;
-    url: string;
-};
 
 const isBlobObjectUrl = (url: string | null | undefined): url is string => (
     typeof url === 'string' && url.startsWith('blob:')
@@ -149,21 +144,11 @@ export function useLibraryPlaybackController({
     const [showLyricMatchModal, setShowLyricMatchModal] = useState(false);
     const [showNaviLyricMatchModal, setShowNaviLyricMatchModal] = useState(false);
     const [showOnlineLyricMatchModal, setShowOnlineLyricMatchModal] = useState(false);
-    const localCoverObjectUrlsRef = useRef<Map<string, LocalCoverObjectUrlEntry>>(new Map());
     const managedCachedCoverObjectUrlRef = useRef<string | null>(null);
     const resolveLocalSongRecord = useCallback((song: SongResult | null | undefined): LocalSong | undefined => {
         const songId = (song as SongResult & { localRef?: { songId: string } } | null | undefined)?.localRef?.songId;
         return songId ? localSongs.find(localSong => localSong.id === songId) : undefined;
     }, [localSongs]);
-
-    const isRegisteredLocalCoverObjectUrl = useCallback((url: string) => {
-        for (const entry of localCoverObjectUrlsRef.current.values()) {
-            if (entry.url === url) {
-                return true;
-            }
-        }
-        return false;
-    }, []);
 
     const revokeManagedCachedCoverObjectUrl = useCallback(() => {
         if (managedCachedCoverObjectUrlRef.current) {
@@ -179,72 +164,18 @@ export function useLibraryPlaybackController({
             managedCachedCoverObjectUrlRef.current = null;
         }
 
-        if (isBlobObjectUrl(nextUrl) && !isRegisteredLocalCoverObjectUrl(nextUrl)) {
+        if (isBlobObjectUrl(nextUrl)) {
             managedCachedCoverObjectUrlRef.current = nextUrl;
         }
 
         setCachedCoverUrl(nextUrl);
-    }, [isRegisteredLocalCoverObjectUrl, setCachedCoverUrl]);
-
-    const clearLocalCoverObjectUrls = useCallback(() => {
-        localCoverObjectUrlsRef.current.forEach(entry => URL.revokeObjectURL(entry.url));
-        localCoverObjectUrlsRef.current.clear();
-    }, []);
-
-    const pruneLocalCoverObjectUrls = useCallback((activeLocalSongIds: Set<string>) => {
-        localCoverObjectUrlsRef.current.forEach((entry, localSongId) => {
-            if (!activeLocalSongIds.has(localSongId)) {
-                URL.revokeObjectURL(entry.url);
-                localCoverObjectUrlsRef.current.delete(localSongId);
-            }
-        });
-    }, []);
-
-    const getOrCreateLocalCoverObjectUrl = useCallback((song: LocalSong) => {
-        if (!isBlob(song.embeddedCover)) {
-            return null;
-        }
-
-        const signature = getBlobObjectUrlSignature(song.embeddedCover, [
-            song.id,
-            song.fileSignature,
-            song.fileSize,
-            song.fileLastModified,
-        ]);
-        const cached = localCoverObjectUrlsRef.current.get(song.id);
-        if (cached?.signature === signature) {
-            return cached.url;
-        }
-
-        if (cached) {
-            URL.revokeObjectURL(cached.url);
-        }
-
-        const url = createSafeObjectUrl(song.embeddedCover);
-        if (!url) return null;
-        localCoverObjectUrlsRef.current.set(song.id, { signature, url });
-        return url;
-    }, []);
+    }, [setCachedCoverUrl]);
 
     useEffect(() => {
         return () => {
-            clearLocalCoverObjectUrls();
             revokeManagedCachedCoverObjectUrl();
         };
-    }, [clearLocalCoverObjectUrls, revokeManagedCachedCoverObjectUrl]);
-
-    useEffect(() => {
-        const activeLocalSongIds = new Set<string>();
-        if (isLocalPlaybackSong(currentSong)) {
-            activeLocalSongIds.add(currentSong.localRef.songId);
-        }
-        playQueue.forEach(song => {
-            if (isLocalPlaybackSong(song)) {
-                activeLocalSongIds.add(song.localRef.songId);
-            }
-        });
-        pruneLocalCoverObjectUrls(activeLocalSongIds);
-    }, [currentSong, playQueue, pruneLocalCoverObjectUrls]);
+    }, [revokeManagedCachedCoverObjectUrl]);
 
     useEffect(() => {
         if (!isLocalPlaybackSong(currentSong)) {
@@ -455,11 +386,11 @@ export function useLibraryPlaybackController({
     }, [loadLocalSongs, setStatusMsg]);
 
     const resolveLocalMetadataUI = useCallback(async (localData: LocalSong, matchedSong: SongResult | null) => {
-        const embeddedCoverUrl = getOrCreateLocalCoverObjectUrl(localData);
+        const localCoverUrl = getLocalCoverAssetUrl(localData.localCoverAssetId);
         const preferOnlineCover = localData.useOnlineCover === true;
         const coverUrl = preferOnlineCover
-            ? (localData.onlineMetadata?.coverUrl || embeddedCoverUrl || null)
-            : embeddedCoverUrl;
+            ? (localData.onlineMetadata?.coverUrl || localCoverUrl || null)
+            : localCoverUrl;
 
         let nextLyrics: LyricData | null = null;
         const source = localData.lyricsSource;
@@ -491,7 +422,7 @@ export function useLibraryPlaybackController({
         }), catalog);
 
         return { lyrics: nextLyrics, coverUrl, unifiedSong, catalog };
-    }, [getOrCreateLocalCoverObjectUrl]);
+    }, []);
 
     const loadCurrentSongLyricPreview = useCallback(async (): Promise<LyricData | null> => {
         if (!currentSong) {
@@ -556,7 +487,7 @@ export function useLibraryPlaybackController({
     }, [currentSong, lyrics, resolveLocalSongRecord, resolveOnlineSongLyricsState]);
 
     const handleLocalQueueAdd = useCallback(async (localSong: LocalSong) => {
-        const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
+        const preparedLocalSong = await ensureLocalSongCoverAsset(localSong);
         const { unifiedSong } = await resolveLocalMetadataUI(preparedLocalSong, null);
         const baseQueue = playQueue.length > 0 ? playQueue : (currentSong ? [currentSong] : []);
         const { nextQueue, affectedSongs, changed } = applyQueueAddBehavior({
@@ -581,7 +512,7 @@ export function useLibraryPlaybackController({
     }, [currentSong, persistLastPlaybackCache, playQueue, queueAddBehavior, resolveLocalMetadataUI, setPlayQueue, setStatusMsg, t]);
 
     const prewarmLocalSongMetadata = useCallback(async (localSong: LocalSong) => {
-        const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
+        const preparedLocalSong = await ensureLocalSongCoverAsset(localSong);
         Object.assign(localSong, preparedLocalSong);
 
         const onlineFirst = useSettingsUiStore.getState().localLyricsPriority === 'online';
@@ -637,7 +568,7 @@ export function useLibraryPlaybackController({
             return;
         }
 
-        const preparedLocalSong = await ensureLocalSongEmbeddedCover(localSong);
+        const preparedLocalSong = await ensureLocalSongCoverAsset(localSong);
         const initialMeta = await resolveLocalMetadataUI(preparedLocalSong, null);
 
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);

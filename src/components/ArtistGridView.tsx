@@ -10,7 +10,7 @@ import { omni } from '../services/onlineMusic/omni';
 import { createCoverPlaceholder } from '../utils/coverPlaceholders';
 import { getSizedCoverUrl } from '../utils/coverUrl';
 import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
-import { createSafeObjectUrl, getBlobObjectUrlSignature, isBlob } from '../utils/blobGuards';
+import { getLocalCoverAssetUrl } from '../services/localCoverAssetUrl';
 import { PolaroidCard } from './GridView';
 import { HexGridCoord, CubeCoord, getHexCubicSpiral } from './folia-grid/hexViewport';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
@@ -58,11 +58,6 @@ interface GridItem {
     rawTrackIndex?: number;
     rawCollection?: any;
 }
-
-type LocalArtistCoverObjectUrlEntry = {
-    signature: string;
-    url: string;
-};
 
 type StoredArtistGridNavigationState = {
     focusedIndex: number;
@@ -331,7 +326,6 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const isComposingSearchRef = useRef(false);
-    const localCoverObjectUrlsRef = useRef<Map<string, LocalArtistCoverObjectUrlEntry>>(new Map());
     const loadGenerationRef = useRef(0);
 
     // Coordinate motion values mapping grid drags
@@ -369,43 +363,12 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         }
     }, [navigationStorageKey]);
 
-    const clearLocalCoverObjectUrls = useCallback(() => {
-        localCoverObjectUrlsRef.current.forEach(entry => URL.revokeObjectURL(entry.url));
-        localCoverObjectUrlsRef.current.clear();
-    }, []);
-
-    const getOrCreateLocalCoverObjectUrl = useCallback((song: LocalSong) => {
-        if (!isBlob(song.embeddedCover)) {
-            return undefined;
-        }
-
-        const signature = getBlobObjectUrlSignature(song.embeddedCover, [
-            song.id,
-            song.fileSignature,
-            song.fileSize,
-            song.fileLastModified,
-        ]);
-        const cached = localCoverObjectUrlsRef.current.get(song.id);
-        if (cached?.signature === signature) {
-            return cached.url;
-        }
-
-        if (cached) {
-            URL.revokeObjectURL(cached.url);
-        }
-
-        const url = createSafeObjectUrl(song.embeddedCover);
-        if (!url) return null;
-        localCoverObjectUrlsRef.current.set(song.id, { signature, url });
-        return url;
-    }, []);
-
     const resolveLocalSongCoverUrl = useCallback((song: LocalSong) => {
-        const embeddedCoverUrl = getOrCreateLocalCoverObjectUrl(song);
+        const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId);
         return song.useOnlineCover
-            ? (song.onlineMetadata?.coverUrl || embeddedCoverUrl)
-            : embeddedCoverUrl;
-    }, [getOrCreateLocalCoverObjectUrl]);
+            ? (song.onlineMetadata?.coverUrl || localCoverUrl)
+            : localCoverUrl;
+    }, []);
 
     // Appends online provider album pages without replacing already rendered artist content.
     const loadOnlineAlbumPages = async (artistId: string | number, generation: number, startOffset = 0) => {
@@ -569,13 +532,11 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     };
 
     useEffect(() => {
-        clearLocalCoverObjectUrls();
         void loadArtistData();
         return () => {
             loadGenerationRef.current++;
-            clearLocalCoverObjectUrls();
         };
-    }, [clearLocalCoverObjectUrls, collection.id, collection.source, localLibraryCatalog, resolveLocalSongCoverUrl]);
+    }, [collection.id, collection.source, localLibraryCatalog, resolveLocalSongCoverUrl]);
 
     useEffect(() => {
         if (!showSearchPanel) return;

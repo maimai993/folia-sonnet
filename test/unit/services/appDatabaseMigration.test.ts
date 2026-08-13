@@ -121,7 +121,7 @@ describe('AppDatabase native v6 migration', () => {
 
         const storedSong = await appDatabase.local_music.get('legacy-cover-song');
         expect(appDatabase.verno).toBe(0.9);
-        expect(storedSong?.embeddedCover).toBeInstanceOf(Blob);
+        expect((storedSong as typeof storedSong & { embeddedCover?: Blob })?.embeddedCover).toBeInstanceOf(Blob);
         expect(appDatabase.local_music.schema.indexes.map(index => index.name)).toContain('localCoverAssetId');
         expect(await appDatabase.local_cover_assets.count()).toBe(0);
     });

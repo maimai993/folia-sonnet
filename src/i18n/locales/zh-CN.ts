@@ -1502,6 +1502,7 @@ export default {
     "deleteFolderCount": "这将从您的库中移除包含嵌套子目录在内的共 {{count}} 首歌曲。",
     "deleteFolderNote": "注意：这只会从库中移除歌曲，不会影响您的磁盘文件。",
     "importNotSupported": "当前浏览器不支持文件夹导入",
+    "insecureHttpDisabled": "远程 HTTP 环境已禁用本地曲库，请使用 HTTPS、localhost 或 Electron 客户端。",
     "resyncFailed": "重新同步文件夹失败，请重试。",
     "deleteFailed": "删除文件夹失败，请重试。",
     "matchStatus": "匹配状态",

@@ -86,8 +86,8 @@ describe('localLibraryV8Migration', () => {
             legacySong({ id: 'valid', embeddedCover: validCover }),
         ]);
 
-        expect(migrated.songs[0].embeddedCover).toBeUndefined();
-        expect(migrated.songs[1].embeddedCover).toBe(validCover);
+        expect((migrated.songs[0] as LocalSong & { embeddedCover?: Blob }).embeddedCover).toBeUndefined();
+        expect((migrated.songs[1] as LocalSong & { embeddedCover?: Blob }).embeddedCover).toBe(validCover);
     });
 
     it('migrates legacy manual artist and album overrides independently', () => {

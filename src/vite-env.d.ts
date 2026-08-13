@@ -496,6 +496,10 @@ declare global {
       removeCoverCache: (cacheKey: string) => Promise<boolean>;
       getCoverCacheUsage: () => Promise<number>;
       clearCoverCache: () => Promise<boolean>;
+      hasLocalCoverAsset: (assetId: string) => Promise<boolean>;
+      saveLocalCoverAsset: (assetId: string, data: ArrayBuffer, mimeType: string) => Promise<boolean>;
+      removeLocalCoverAsset: (assetId: string) => Promise<boolean>;
+      clearLocalCoverAssets: () => Promise<boolean>;
       generateTheme: (lyricsText: string, options?: { isPureMusic?: boolean; songTitle?: string }) => Promise<any>;
       fetchLyricProxy: (
         url: string,

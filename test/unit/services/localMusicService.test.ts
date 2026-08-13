@@ -227,6 +227,7 @@ describe('localMusicService', () => {
         vi.mocked(getFromCache).mockResolvedValue([]);
 
         vi.stubGlobal('window', {
+            electron: {},
             showDirectoryPicker: vi.fn(),
             dispatchEvent: vi.fn(),
         });
