@@ -9,6 +9,7 @@ import { LocalSong, SongResult, UnifiedSong } from '../../../types';
 import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
 import { deleteFolderSongs, resyncAllFolders, resyncFolder } from '../../../services/localMusicService';
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
+import { downloadLocalPlaylistM3u8 } from '../../../services/localPlaylistFileService';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
 import { createSafeObjectUrl, getBlobObjectUrlSignature, isBlob } from '../../../utils/blobGuards';
 import {
@@ -620,6 +621,15 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             onDeletePlaylist: async (playlistId) => {
                 await deleteLocalPlaylist(playlistId);
                 surfaceProps.onRefreshLocalSongs();
+            },
+            onExportPlaylist: async (playlistId) => {
+                const playlist = surfaceProps.localPlaylists.find(item => item.id === playlistId);
+                if (!playlist) return;
+                downloadLocalPlaylistM3u8(playlist, surfaceProps.localSongs);
+                surfaceProps.onStatusMessage?.({
+                    type: 'success',
+                    text: t('localMusic.playlistExportSuccess', { name: playlist.name }),
+                });
             },
             onRemovePlaylistSongs: async (playlistId, songIds) => {
                 await removeSongsFromLocalPlaylist(playlistId, songIds);

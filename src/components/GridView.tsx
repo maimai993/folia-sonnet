@@ -1,6 +1,6 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, Disc, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2, Star, Tags } from 'lucide-react';
+import { ChevronLeft, Disc, Download, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2, Star, Tags } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult, type LocalSong, type StatusMessage, Theme, type UnifiedSong } from '../types';
 import { getSongUnavailableLabel, isSongUnavailable } from '../services/onlineMusic/songAvailability';
@@ -51,6 +51,7 @@ export interface GridViewSourceActions {
         onDeleteFolder?: (collection: any) => Promise<void> | void;
         onRenamePlaylist?: (playlistId: string, name: string) => Promise<void> | void;
         onDeletePlaylist?: (playlistId: string) => Promise<void> | void;
+        onExportPlaylist?: (playlistId: string) => Promise<void> | void;
         onRemovePlaylistSongs?: (playlistId: string, songIds: string[]) => Promise<void> | void;
         onEditEntity?: (entityId: string) => Promise<void> | void;
         onOrganizeFolderSongInfo?: (collection: any) => Promise<void> | void;
@@ -975,6 +976,17 @@ export const GridView: React.FC<GridViewProps> = ({
             setIsSourceActionPending(false);
         }
     }, [isLocalAllSongsCollection, sourceActions]);
+
+    const handleExportLocalPlaylist = useCallback(async () => {
+        if (!collection?.playlistId || collection.source !== 'local' || collection.type !== 'playlist') return;
+
+        setIsSourceActionPending(true);
+        try {
+            await sourceActions?.local?.onExportPlaylist?.(collection.playlistId);
+        } finally {
+            setIsSourceActionPending(false);
+        }
+    }, [collection, sourceActions]);
 
     const handleAddNavidromeCollectionToPlaylist = useCallback(async (playlistId: string | number) => {
         await sourceActions?.navidrome?.onAddToPlaylist?.(playlistId, playableTracks);
@@ -2522,6 +2534,16 @@ export const GridView: React.FC<GridViewProps> = ({
                                         {isDailyRecommendationsCollection
                                             ? (isEditMode ? t('home.finishManagingRecommendations') : t('home.manageRecommendations'))
                                             : (isEditMode ? t('localMusic.finishEditing') : t('localMusic.editPlaylist'))}
+                                    </button>
+                                )}
+                                {isLocalCollection && collection?.type === 'playlist' && collection.playlistId && sourceActions?.local?.onExportPlaylist && (
+                                    <button
+                                        onClick={() => void handleExportLocalPlaylist()}
+                                        disabled={isSourceActionPending}
+                                        className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                                    >
+                                        {isSourceActionPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                                        {t('localMusic.exportPlaylist')}
                                     </button>
                                 )}
                                 {isLocalEntityCollection && sourceActions?.local?.onEditEntity && (

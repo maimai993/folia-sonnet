@@ -1,6 +1,6 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Loader2, Music, ListMusic, User, Disc3, RefreshCw } from 'lucide-react';
+import { FileUp, FolderOpen, Loader2, Music, ListMusic, User, Disc3, RefreshCw } from 'lucide-react';
 import DesktopGrid3DSurface, { DesktopGrid3DAction } from '../../folia-grid/DesktopGrid3DSurface';
 import { LocalLibraryGroup, LocalPlaylist, LocalSong, Theme } from '../../../types';
 import { GridViewCollectionDescriptor, createLocalGridViewCollection } from './gridViewCollectionAdapters';
@@ -28,11 +28,13 @@ interface LocalGrid3DViewProps {
     focusedPlaylistIndex: number;
     setFocusedPlaylistIndex: (index: number) => void;
     onImportFolder: () => void;
+    onImportPlaylistFile?: (file: File) => Promise<void> | void;
     onRefreshFolders?: () => void;
     importButtonDisabled?: boolean;
     isImporting?: boolean;
     isRefreshing?: boolean;
     isScanInProgress?: boolean;
+    isImportingPlaylist?: boolean;
     onOpenGridView?: (collection: GridViewCollectionDescriptor) => void;
     theme: Theme;
     isDaylight: boolean;
@@ -54,11 +56,13 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     focusedPlaylistIndex,
     setFocusedPlaylistIndex,
     onImportFolder,
+    onImportPlaylistFile,
     onRefreshFolders,
     importButtonDisabled = false,
     isImporting = false,
     isRefreshing = false,
     isScanInProgress = false,
+    isImportingPlaylist = false,
     onOpenGridView,
     theme,
     isDaylight,
@@ -66,6 +70,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     isInteractive = true,
 }) => {
     const { t } = useTranslation();
+    const playlistFileInputRef = useRef<HTMLInputElement>(null);
     const catalog = useLocalLibraryCatalog(localSongs);
     const { groups, coverSourceMap } = useMemo(() => {
         const rawGroups = buildLocalGrid3DGroups(localSongs, localPlaylists, t, catalog.ready ? catalog : undefined);
@@ -230,6 +235,14 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             onClick: onRefreshFolders || (() => {}),
             title: t('options.refresh'),
         },
+        {
+            id: 'import-playlist',
+            label: isImportingPlaylist ? t('localMusic.importingPlaylist') : t('localMusic.importPlaylist'),
+            icon: isImportingPlaylist ? <Loader2 size={13} className="animate-spin" /> : <FileUp size={13} />,
+            disabled: importButtonDisabled || isImportingPlaylist,
+            onClick: () => playlistFileInputRef.current?.click(),
+            title: t('localMusic.importPlaylist'),
+        },
     ];
 
     if (localSongs.length === 0) {
@@ -250,34 +263,47 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     }
 
     return (
-        <DesktopGrid3DSurface
-            title={String(activeSection.label)}
-            mapButtonLabel={t('home.allAlbums')}
-            items={activeSection.items.map((item: any) => ({
-                id: item.id,
-                name: item.name,
-                coverUrl: item.coverUrl,
-                description: item.description,
-                trackCount: item.trackCount,
-                type: item.type,
-            }))}
-            focusedIndex={activeSection.focusedIndex}
-            onFocusedIndexChange={activeSection.setFocusedIndex}
-            onSelect={(_, index) => {
-                const group = activeSection.items[index];
-                if (group) {
-                    onOpenGridView?.(createLocalGridViewCollection(group));
-                }
-            }}
-            tabs={tabs}
-            actions={actions}
-            emptyMessage={activeSection.emptyMessage}
-            theme={theme}
-            isDaylight={isDaylight}
-            isInteractive={isInteractive}
-            hasFloatingPlayer={hasFloatingPlayer}
-            playlistVisibilityScope="local"
-        />
+        <>
+            <input
+                ref={playlistFileInputRef}
+                type="file"
+                accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl"
+                className="hidden"
+                onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (file) void onImportPlaylistFile?.(file);
+                }}
+            />
+            <DesktopGrid3DSurface
+                title={String(activeSection.label)}
+                mapButtonLabel={t('home.allAlbums')}
+                items={activeSection.items.map((item: any) => ({
+                    id: item.id,
+                    name: item.name,
+                    coverUrl: item.coverUrl,
+                    description: item.description,
+                    trackCount: item.trackCount,
+                    type: item.type,
+                }))}
+                focusedIndex={activeSection.focusedIndex}
+                onFocusedIndexChange={activeSection.setFocusedIndex}
+                onSelect={(_, index) => {
+                    const group = activeSection.items[index];
+                    if (group) {
+                        onOpenGridView?.(createLocalGridViewCollection(group));
+                    }
+                }}
+                tabs={tabs}
+                actions={actions}
+                emptyMessage={activeSection.emptyMessage}
+                theme={theme}
+                isDaylight={isDaylight}
+                isInteractive={isInteractive}
+                hasFloatingPlayer={hasFloatingPlayer}
+                playlistVisibilityScope="local"
+            />
+        </>
     );
 };
 

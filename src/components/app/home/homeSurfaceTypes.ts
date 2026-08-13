@@ -44,7 +44,7 @@ export interface HomeSurfaceProps {
     localSongs: LocalSong[];
     localLibraryCatalog: LocalLibraryCatalogSnapshot;
     localPlaylists: LocalPlaylist[];
-    onRefreshLocalSongs: () => void;
+    onRefreshLocalSongs: () => Promise<void> | void;
     onPlayLocalSong: (song: LocalSong, queue?: LocalSong[]) => void;
     onAddLocalSongToQueue?: (song: LocalSong) => void;
     focusedPlaylistIndex?: number;

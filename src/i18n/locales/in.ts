@@ -1225,6 +1225,8 @@ export default {
     "sortDescending": "Menurun",
     "importFolder": "Impor Folder",
     "importing": "Mengimpor...",
+    "importPlaylist": "Impor Playlist",
+    "importingPlaylist": "Mengimpor playlist...",
     "noLocalMusic": "Belum ada musik lokal yang diimpor",
     "noFoldersFound": "Tidak ada folder ditemukan",
     "noAlbumsFound": "Tidak ada album ditemukan",
@@ -1312,6 +1314,12 @@ export default {
     "editPlaylist": "Edit Playlist",
     "finishEditing": "Selesai Mengedit",
     "deletePlaylist": "Hapus Playlist",
+    "exportPlaylist": "Ekspor M3U8",
+    "playlistImportSuccess": "Playlist “{{name}}” diimpor dengan {{count}} trek.",
+    "playlistImportPartial": "{{count}} trek diimpor ke “{{name}}”; {{skipped}} jalur tidak ditemukan atau ambigu.",
+    "playlistImportNoMatches": "Tidak ada jalur playlist yang cocok dengan lagu lokal yang telah diimpor ke Folia.",
+    "playlistImportFailed": "Impor playlist gagal. Pastikan file adalah playlist M3U atau M3U8 yang valid.",
+    "playlistExportSuccess": "Playlist “{{name}}” diekspor.",
     "lyricsNotAppliedOtherSaved": "Lirik tidak diterapkan; pilihan lainnya telah disimpan."
   },
   "navidrome": {
