@@ -5,6 +5,7 @@ import { List as VirtualList, type RowComponentProps } from 'react-window';
 import { createPortal } from 'react-dom';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import TextInputDialog from '../shared/TextInputDialog';
+import GridMapBatchItemList from './GridMapBatchItemList';
 import type { GridMapItem } from '../GridMap';
 import type { GridMapBatchConfig, GridMapBatchContext, GridMapDirectoryNode } from './gridMapBatch';
 import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapDirectorySelection } from './gridMapBatch';
@@ -167,6 +168,7 @@ export const GridMapBatchPanel = ({
         });
     }, [config.directoryTrees]);
     const canUseTracks = context.trackIds.length > 0 && !busyAction;
+    const usesDirectoryTree = config.selectionType === 'folders';
     const allSelectionState = context.items.length === 0
         ? 'none'
         : context.items.length === totalItemCount
@@ -191,7 +193,7 @@ export const GridMapBatchPanel = ({
             <div className="min-w-0">
                 <h3 className="line-clamp-2 text-xl font-bold leading-snug">{title}</h3>
                 <p className="mt-1.5 text-[11px] opacity-50">
-                    {t('home.gridFolderSelectionSummary', {
+                    {t(`home.gridBatchSelectionSummary.${config.selectionType}`, {
                         selected: context.items.length,
                         total: totalItemCount,
                         tracks: context.trackIds.length,
@@ -201,7 +203,7 @@ export const GridMapBatchPanel = ({
 
             <div
                 className={`relative z-10 mt-4 min-h-0 flex-1 overflow-hidden rounded-2xl border backdrop-blur-2xl transition-[width,background-color,box-shadow] duration-200 ${
-                    isTreeExpanded
+                    usesDirectoryTree && isTreeExpanded
                         ? 'w-[min(44rem,calc(100vw-4.5rem))] shrink-0 border-black/10 bg-white/90 shadow-2xl dark:border-white/15 dark:bg-zinc-900/95'
                         : 'w-full border-black/5 bg-black/[0.025] dark:border-white/10 dark:bg-black/10'
                 }`}
@@ -226,19 +228,27 @@ export const GridMapBatchPanel = ({
                         </span>
                         {t('home.gridFolderSelectAll')}
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => setIsTreeExpanded(value => !value)}
-                        className="flex h-7 items-center gap-1 rounded-lg px-2 text-[10px] font-semibold opacity-55 transition hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
-                        title={t(isTreeExpanded ? 'home.gridFolderCollapseTreePanel' : 'home.gridFolderExpandTreePanel')}
-                        aria-expanded={isTreeExpanded}
-                    >
-                        {isTreeExpanded ? <ChevronsLeft size={14} /> : <ChevronsRight size={14} />}
-                        {t(isTreeExpanded ? 'home.gridFolderCollapseTreePanel' : 'home.gridFolderExpandTreePanel')}
-                    </button>
+                    {usesDirectoryTree && (
+                        <button
+                            type="button"
+                            onClick={() => setIsTreeExpanded(value => !value)}
+                            className="flex h-7 items-center gap-1 rounded-lg px-2 text-[10px] font-semibold opacity-55 transition hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
+                            title={t(isTreeExpanded ? 'home.gridFolderCollapseTreePanel' : 'home.gridFolderExpandTreePanel')}
+                            aria-expanded={isTreeExpanded}
+                        >
+                            {isTreeExpanded ? <ChevronsLeft size={14} /> : <ChevronsRight size={14} />}
+                            {t(isTreeExpanded ? 'home.gridFolderCollapseTreePanel' : 'home.gridFolderExpandTreePanel')}
+                        </button>
+                    )}
                 </div>
                 <div className="h-[calc(100%-2.25rem)] min-h-0">
-                    {directoryNodes.length > 0 ? (
+                    {!usesDirectoryTree ? (
+                        <GridMapBatchItemList
+                            items={displayItems}
+                            excludedItemIds={excludedItemIds}
+                            onSetItemsSelected={onSetItemsSelected}
+                        />
+                    ) : directoryNodes.length > 0 ? (
                         <VirtualList
                             style={{ height: '100%', minHeight: 144, width: '100%' }}
                             rowCount={directoryNodes.length}
@@ -289,16 +299,18 @@ export const GridMapBatchPanel = ({
                 <button type="button" disabled={!canUseTracks} onClick={() => setShowPlaylistDialog(true)} className={actionClass}>
                     <Plus size={14} />{t('localMusic.createPlaylist')}
                 </button>
-                <button type="button" disabled={!canUseTracks} onClick={() => setConfirmRemove(true)} className={`${actionClass} !text-red-500 hover:!bg-red-500 hover:!text-white`}>
-                    <Trash2 size={14} />{t('home.gridFolderRemoveSelected')}
-                </button>
+                {config.onRemove && (
+                    <button type="button" disabled={!canUseTracks} onClick={() => setConfirmRemove(true)} className={`${actionClass} !text-red-500 hover:!bg-red-500 hover:!text-white`}>
+                        <Trash2 size={14} />{t('home.gridFolderRemoveSelected')}
+                    </button>
+                )}
             </div>
 
             {dialogHost && createPortal((
                 <>
                     <TextInputDialog
                         isOpen={showPlaylistDialog}
-                        title={t('home.gridFolderCreatePlaylistTitle')}
+                        title={t('localMusic.createPlaylist')}
                         description={t('home.gridFolderCreatePlaylistDescription', { count: context.trackIds.length })}
                         placeholder={t('home.gridFolderPlaylistNamePlaceholder')}
                         confirmLabel={t('localMusic.createPlaylist')}
@@ -307,19 +319,21 @@ export const GridMapBatchPanel = ({
                         onConfirm={name => runAction('playlist', () => config.onCreatePlaylist(name, context))}
                     />
 
-                    <ConfirmDialog
-                        isOpen={confirmRemove}
-                        title={t('home.gridFolderRemoveSelectedTitle')}
-                        description={t('home.gridFolderRemoveSelectedDescription', { count: context.trackIds.length })}
-                        confirmText={t('home.gridFolderRemoveSelected')}
-                        confirmVariant="danger"
-                        isDaylight={isDaylight}
-                        onClose={() => setConfirmRemove(false)}
-                        onConfirm={() => {
-                            setConfirmRemove(false);
-                            void runAction('remove', () => config.onRemove(context));
-                        }}
-                    />
+                    {config.onRemove && (
+                        <ConfirmDialog
+                            isOpen={confirmRemove}
+                            title={t('home.gridFolderRemoveSelectedTitle')}
+                            description={t('home.gridFolderRemoveSelectedDescription', { count: context.trackIds.length })}
+                            confirmText={t('home.gridFolderRemoveSelected')}
+                            confirmVariant="danger"
+                            isDaylight={isDaylight}
+                            onClose={() => setConfirmRemove(false)}
+                            onConfirm={() => {
+                                setConfirmRemove(false);
+                                void runAction('remove', () => config.onRemove?.(context));
+                            }}
+                        />
+                    )}
 
                     <ConfirmDialog
                         isOpen={Boolean(rootToRemove)}

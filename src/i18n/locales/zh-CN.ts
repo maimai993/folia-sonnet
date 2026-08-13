@@ -478,7 +478,12 @@ export default {
     "searchNavidrome": "搜索navidrome...",
     "gridSearchPlaceholder": "过滤歌曲...",
     "gridSearchNoResults": "没有匹配的歌曲",
-    "gridFolderSelectionSummary": "已选 {{selected}}/{{total}} 个文件夹 · {{tracks}} 首歌曲",
+    "gridBatchSelectionSummary": {
+      "folders": "已选 {{selected}}/{{total}} 个文件夹 · {{tracks}} 首歌曲",
+      "albums": "已选 {{selected}}/{{total}} 张专辑 · {{tracks}} 首歌曲",
+      "artists": "已选 {{selected}}/{{total}} 位艺术家 · {{tracks}} 首歌曲"
+    },
+    "gridBatchTrackCount": "{{count}} 首歌曲",
     "gridFolderSelectAll": "全选",
     "gridFolderSelectNone": "全不选",
     "gridFolderTreeToggle": "展开或折叠文件夹",
@@ -491,7 +496,6 @@ export default {
     "gridFolderRemoveRoot": "移除导入根目录",
     "gridFolderAddToQueue": "追加到队列",
     "gridFolderRemoveSelected": "从音乐库移除",
-    "gridFolderCreatePlaylistTitle": "从文件夹新建歌单",
     "gridFolderCreatePlaylistDescription": "使用已选的 {{count}} 首本地歌曲创建歌单。",
     "gridFolderPlaylistNamePlaceholder": "歌单名称",
     "gridFolderRemoveSelectedTitle": "移除已选歌曲？",

@@ -247,11 +247,12 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             .filter((song): song is LocalSong => Boolean(song));
     }, [localSongs]);
 
-    const folderBatchConfig = useMemo<GridMapBatchConfig | undefined>(() => {
-        if (activeSection.key !== 'folders') return undefined;
+    const localBatchConfig = useMemo<GridMapBatchConfig | undefined>(() => {
+        if (!['folders', 'albums', 'artists'].includes(activeSection.key)) return undefined;
 
-        return {
-            directoryTrees,
+        const baseConfig: GridMapBatchConfig = {
+            selectionType: activeSection.key as 'folders' | 'albums' | 'artists',
+            ...(activeSection.key === 'folders' ? { directoryTrees } : {}),
             onPlay: context => {
                 const queue = buildLocalQueue(resolveBatchSongs(context), undefined, catalog.ready ? catalog : undefined);
                 if (queue.length > 0) onPlayAll?.(queue);
@@ -264,6 +265,12 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                 await createLocalPlaylist(name, resolveBatchSongs(context));
                 await onRefreshLocalSongs();
             },
+        };
+
+        if (activeSection.key !== 'folders') return baseConfig;
+
+        return {
+            ...baseConfig,
             onRemove: async context => {
                 await deleteSongsByIds(context.trackIds);
                 await onRefreshLocalSongs();
@@ -372,7 +379,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                 isInteractive={isInteractive}
                 hasFloatingPlayer={hasFloatingPlayer}
                 playlistVisibilityScope="local"
-                batchConfig={folderBatchConfig}
+                batchConfig={localBatchConfig}
             />
         </>
     );

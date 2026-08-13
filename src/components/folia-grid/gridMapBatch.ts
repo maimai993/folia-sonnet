@@ -19,11 +19,12 @@ export interface GridMapBatchContext {
 }
 
 export interface GridMapBatchConfig {
+    selectionType: 'folders' | 'albums' | 'artists';
     directoryTrees?: GridMapDirectoryNode[];
     onPlay: (context: GridMapBatchContext) => Promise<void> | void;
     onAddToQueue: (context: GridMapBatchContext) => Promise<void> | void;
     onCreatePlaylist: (name: string, context: GridMapBatchContext) => Promise<void> | void;
-    onRemove: (context: GridMapBatchContext) => Promise<void> | void;
+    onRemove?: (context: GridMapBatchContext) => Promise<void> | void;
     onRescanRoot?: (rootPath: string) => Promise<void> | void;
     onRemoveRoot?: (rootPath: string) => Promise<void> | void;
 }

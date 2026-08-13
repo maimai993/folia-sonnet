@@ -477,7 +477,12 @@ export default {
     "searchNavidrome": "Search navidrome",
     "gridSearchPlaceholder": "Filter songs...",
     "gridSearchNoResults": "No matching songs",
-    "gridFolderSelectionSummary": "{{selected}}/{{total}} folders · {{tracks}} tracks",
+    "gridBatchSelectionSummary": {
+      "folders": "{{selected}}/{{total}} folders · {{tracks}} tracks",
+      "albums": "{{selected}}/{{total}} albums · {{tracks}} tracks",
+      "artists": "{{selected}}/{{total}} artists · {{tracks}} tracks"
+    },
+    "gridBatchTrackCount": "{{count}} tracks",
     "gridFolderSelectAll": "Select all",
     "gridFolderSelectNone": "Select none",
     "gridFolderTreeToggle": "Expand or collapse folder",
@@ -490,7 +495,6 @@ export default {
     "gridFolderRemoveRoot": "Remove imported root",
     "gridFolderAddToQueue": "Add to queue",
     "gridFolderRemoveSelected": "Remove from library",
-    "gridFolderCreatePlaylistTitle": "Create playlist from folders",
     "gridFolderCreatePlaylistDescription": "Create a playlist with {{count}} selected local tracks.",
     "gridFolderPlaylistNamePlaceholder": "Playlist name",
     "gridFolderRemoveSelectedTitle": "Remove selected tracks?",

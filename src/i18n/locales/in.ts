@@ -418,7 +418,12 @@ export default {
     "searchNavidrome": "Cari navidrome",
     "gridSearchPlaceholder": "Filter lagu...",
     "gridSearchNoResults": "Tidak ada lagu yang cocok",
-    "gridFolderSelectionSummary": "{{selected}}/{{total}} folder · {{tracks}} lagu",
+    "gridBatchSelectionSummary": {
+      "folders": "{{selected}}/{{total}} folder · {{tracks}} lagu",
+      "albums": "{{selected}}/{{total}} album · {{tracks}} lagu",
+      "artists": "{{selected}}/{{total}} artis · {{tracks}} lagu"
+    },
+    "gridBatchTrackCount": "{{count}} lagu",
     "gridFolderSelectAll": "Pilih semua",
     "gridFolderSelectNone": "Batalkan semua",
     "gridFolderTreeToggle": "Buka atau tutup folder",
@@ -431,7 +436,6 @@ export default {
     "gridFolderRemoveRoot": "Hapus direktori akar impor",
     "gridFolderAddToQueue": "Tambahkan ke antrean",
     "gridFolderRemoveSelected": "Hapus dari pustaka",
-    "gridFolderCreatePlaylistTitle": "Buat playlist dari folder",
     "gridFolderCreatePlaylistDescription": "Buat playlist dengan {{count}} lagu lokal terpilih.",
     "gridFolderPlaylistNamePlaceholder": "Nama playlist",
     "gridFolderRemoveSelectedTitle": "Hapus lagu terpilih?",
