@@ -630,6 +630,8 @@ export const GridMap: React.FC<GridMapProps> = ({
                         cardWidth={layoutConfig.cardWidth}
                         cardHeight={layoutConfig.cardHeight}
                         onSelect={() => {
+                            // A drag may still emit a click on the card; suppress it before any batch toggle.
+                            if (suppressSelectionRef.current) return;
                             if (batchConfig && showCutInPanel) {
                                 setSelectedBatchItemIds(current => {
                                     const next = new Set(current);
@@ -640,7 +642,6 @@ export const GridMap: React.FC<GridMapProps> = ({
                                 return;
                             }
                             if (isPlaylistEditMode && item.type === 'playlist') return;
-                            if (suppressSelectionRef.current) return;
                             selectDisplayedItem(item, idx);
                         }}
                     />
