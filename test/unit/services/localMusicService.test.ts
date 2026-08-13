@@ -254,6 +254,36 @@ describe('localMusicService', () => {
         ]);
     });
 
+    it('reuses handles collected during traversal without probing or resolving file paths again', async () => {
+        const lyricHandle = new FakeFileHandle('Track.lrc', { content: '[00:00.00]Track', type: 'text/plain' });
+        const coverHandle = new FakeFileHandle('cover.jpg', { content: 'cover', type: 'image/jpeg' });
+        const albumHandle = new FakeDirectoryHandle('Album', [
+            new FakeFileHandle('Track.mp3'),
+            lyricHandle,
+            coverHandle,
+        ]);
+        const selectedHandle = new FakeDirectoryHandle('Music', [albumHandle]);
+        const rootDirectoryLookup = vi.spyOn(selectedHandle, 'getDirectoryHandle');
+        const rootFileLookup = vi.spyOn(selectedHandle, 'getFileHandle');
+        const albumDirectoryLookup = vi.spyOn(albumHandle, 'getDirectoryHandle');
+        const albumFileLookup = vi.spyOn(albumHandle, 'getFileHandle');
+        const lyricFileLookup = vi.spyOn(lyricHandle, 'getFile');
+        const coverFileLookup = vi.spyOn(coverHandle, 'getFile');
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(
+            selectedHandle as unknown as FileSystemDirectoryHandle,
+        );
+
+        const importedSongs = await importFolder();
+
+        expect(importedSongs).toHaveLength(1);
+        expect(rootDirectoryLookup).not.toHaveBeenCalled();
+        expect(rootFileLookup).not.toHaveBeenCalled();
+        expect(albumDirectoryLookup).not.toHaveBeenCalled();
+        expect(albumFileLookup).not.toHaveBeenCalled();
+        expect(lyricFileLookup).toHaveBeenCalledOnce();
+        expect(coverFileLookup).toHaveBeenCalledOnce();
+    });
+
     it('applies root .foliaignore rules to files, snapshots, and nested directories', async () => {
         const selectedHandle = new FakeDirectoryHandle('Music', [
             new FakeFileHandle('.foliaignore', {
