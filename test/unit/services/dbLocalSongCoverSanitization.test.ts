@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appDatabase } from '../../../src/services/appDatabase';
-import { getLocalSongs } from '../../../src/services/db';
+import { getLocalSongs, saveLocalSong, saveLocalSongs } from '../../../src/services/db';
 import type { LocalSong } from '../../../src/types';
 
 // test/unit/services/dbLocalSongCoverSanitization.test.ts
@@ -29,6 +29,7 @@ describe('db local song cover sanitization', () => {
     });
 
     afterEach(async () => {
+        vi.restoreAllMocks();
         await appDatabase.delete();
     });
 
@@ -66,5 +67,22 @@ describe('db local song cover sanitization', () => {
 
         expect(songs[0]).not.toHaveProperty('embeddedCover');
         expect(await appDatabase.local_music.get('invalid-cover-song')).not.toHaveProperty('embeddedCover');
+    });
+
+    it('rejects when saving one local song fails', async () => {
+        const failure = new Error('single write failed');
+        vi.spyOn(appDatabase.local_music, 'bulkPut').mockRejectedValueOnce(failure);
+
+        await expect(saveLocalSong(buildLocalSong('failed-single-song'))).rejects.toBe(failure);
+    });
+
+    it('rejects when saving multiple local songs fails', async () => {
+        const failure = new Error('batch write failed');
+        vi.spyOn(appDatabase.local_music, 'bulkPut').mockRejectedValueOnce(failure);
+
+        await expect(saveLocalSongs([
+            buildLocalSong('failed-batch-song-1'),
+            buildLocalSong('failed-batch-song-2'),
+        ])).rejects.toBe(failure);
     });
 });

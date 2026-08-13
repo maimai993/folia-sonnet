@@ -183,21 +183,13 @@ export const clearCacheByCategory = async (category: CacheCategory): Promise<voi
 };
 
 export const saveLocalSong = async (song: LocalSong): Promise<void> => {
-  try {
-    await ensureLocalLibraryInitialized();
-    await assignImportedSongs([song]);
-  } catch (error) {
-    console.error('Failed to save local song', error);
-  }
+  await ensureLocalLibraryInitialized();
+  await assignImportedSongs([song]);
 };
 
 export const saveLocalSongs = async (songs: LocalSong[]): Promise<void> => {
-  try {
-    await ensureLocalLibraryInitialized();
-    await assignImportedSongs(songs);
-  } catch (error) {
-    console.error('Failed to save local songs', error);
-  }
+  await ensureLocalLibraryInitialized();
+  await assignImportedSongs(songs);
 };
 
 export const getLocalSongs = async (): Promise<LocalSong[]> => {

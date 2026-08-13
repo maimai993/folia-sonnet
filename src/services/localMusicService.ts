@@ -1020,22 +1020,24 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
         }
     };
 
-    const workerCount = Math.min(IMPORT_CONCURRENCY, songs.length);
-    await Promise.all(Array.from({ length: workerCount }, () => worker()));
-    while (pendingBatch.length > 0) {
-        await flushBatch(true);
+    try {
+        const workerCount = Math.min(IMPORT_CONCURRENCY, songs.length);
+        await Promise.all(Array.from({ length: workerCount }, () => worker()));
+        while (pendingBatch.length > 0) {
+            await flushBatch(true);
+        }
+        if (flushInFlight) {
+            await flushInFlight;
+        }
+        console.log(`[LocalMusic][Import] Background metadata hydration for "${rootFolderName}" finished in ${formatImportDuration(performance.now() - hydrationStartedAt)}.`);
+    } finally {
+        notifyLocalMusicScanProgress({
+            active: false,
+            folderName: rootFolderName,
+            totalSongs: songs.length,
+            completedSongs: savedCount
+        });
     }
-    if (flushInFlight) {
-        await flushInFlight;
-    }
-
-    notifyLocalMusicScanProgress({
-        active: false,
-        folderName: rootFolderName,
-        totalSongs: songs.length,
-        completedSongs: songs.length
-    });
-    console.log(`[LocalMusic][Import] Background metadata hydration for "${rootFolderName}" finished in ${formatImportDuration(performance.now() - hydrationStartedAt)}.`);
 }
 
 
@@ -1182,11 +1184,14 @@ export async function importFolder(expectedRootName?: string): Promise<LocalSong
         } catch (saveError) {
             console.error('Failed to save imported songs:', saveError);
             songsToPersist.forEach(song => fileHandleMap.delete(song.id));
+            throw saveError;
         }
 
         console.log(`[LocalMusic][Import] Finished importing "${rootFolderName}" with ${importedSongs.length}/${diffPlan.totalAudioFiles} available songs in ${formatImportDuration(performance.now() - importStartedAt)}.`);
         notifyLocalMusicUpdated();
-        void hydrateImportedSongsInBackground(rootFolderName, songsToPersist);
+        void hydrateImportedSongsInBackground(rootFolderName, songsToPersist).catch(error => {
+            console.error(`[LocalMusic][Import] Background metadata hydration failed for "${rootFolderName}":`, error);
+        });
 
         return importedSongs;
     } catch (error) {
