@@ -10,6 +10,7 @@ import { buildLyricSearchQuery } from '../../utils/lyrics/searchQuery';
 import { fetchLyricsForMatchSource, LYRIC_MATCH_SOURCES, searchLyricsByMatchSource, sourceSupportsManualSearch } from '../../utils/lyrics/lyricMatchSources';
 import { getLocalCoverAssetUrl } from '../../services/localCoverAssetUrl';
 import { getLocalLibraryAssignment } from '../../services/localLibraryEntityRepository';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 import {
     getLyricMatchSourceLabel,
     getMatchResultAlbumName,
@@ -79,7 +80,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
     }, [selectedResult]);
 
     const previewCoverUrl = useMemo(() => {
-        const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId);
+        const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId, 512);
         if (!selectedResult) {
             return song.useOnlineCover ? song.onlineMetadata?.coverUrl || localCoverUrl : localCoverUrl;
         } else if (useOnlineCover) {
@@ -352,7 +353,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
                                                 <div className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-800 flex-shrink-0">
                                                     {resultCoverUrl ? (
                                                         <img
-                                                            src={resultCoverUrl}
+                                                            src={getSizedCoverUrl(resultCoverUrl, 512)}
                                                             alt={result.name}
                                                             className="w-full h-full object-cover"
                                                         />
@@ -393,7 +394,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
                             <div className="w-32 h-32 min-h-[64px] rounded-2xl overflow-hidden bg-zinc-800 shadow-md flex-shrink transition-all duration-300">
                                 {previewCoverUrl ? (
                                     <img
-                                        src={previewCoverUrl}
+                                        src={getSizedCoverUrl(previewCoverUrl, 512)}
                                         alt="Cover"
                                         className="w-full h-full object-cover"
                                     />

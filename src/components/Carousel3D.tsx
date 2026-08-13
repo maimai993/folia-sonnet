@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, useMotionValue, useTransform, animate, AnimatePresence } from 'framer-motion';
 import { Loader2, Disc, Map as MapIcon, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getSizedCoverUrl } from '../utils/coverUrl';
 
 // Convert HTTP to HTTPS only for Netease CDN URLs
 const toSafeUrl = (url?: string): string | undefined => {
@@ -68,7 +69,7 @@ const CarouselItem: React.FC<{
                 style={{ width: coverSize, height: coverSize }}
             >
                 {item.coverUrl ? (
-                    <img src={toSafeUrl(item.coverUrl)} alt={item.name} className="w-full h-full object-cover pointer-events-none" />
+                    <img src={getSizedCoverUrl(toSafeUrl(item.coverUrl), 512)} alt={item.name} decoding="async" className="w-full h-full object-cover pointer-events-none" />
                 ) : (
                     <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
                         <Disc size={64} className="opacity-20" style={{ color: 'var(--text-primary)' }} />
@@ -431,7 +432,7 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                                             : isDaylight ? 'ring-0 ring-transparent group-hover:ring-2 group-hover:ring-black/30' : 'ring-0 ring-transparent group-hover:ring-2 group-hover:ring-white/30'
                                             }`}>
                                             {item.coverUrl ? (
-                                                <img src={toSafeUrl(item.coverUrl)} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
+                                                <img src={getSizedCoverUrl(toSafeUrl(item.coverUrl), 512)} alt={item.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                                             ) : (
                                                 <div className={`w-full h-full flex items-center justify-center ${isDaylight ? 'bg-zinc-200' : 'bg-zinc-800'}`}>
                                                     <Disc size={32} className={`opacity-20 ${isDaylight ? 'text-black' : 'text-white'}`} />

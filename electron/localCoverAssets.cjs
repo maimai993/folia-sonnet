@@ -7,6 +7,7 @@ const { pathToFileURL } = require('url');
 // Stores content-addressed local covers and exposes them through a validated streaming protocol.
 
 const ASSET_ID_PATTERN = /^sha256:([0-9a-f]{64})$/;
+const THUMBNAIL_SIZES = new Set([512, 1024]);
 const ALLOWED_MIME_TYPES = new Set([
   'image/avif',
   'image/bmp',
@@ -31,6 +32,11 @@ function getAssetPaths(directory, assetId) {
   };
 }
 
+function parseThumbnailSize(requestUrl) {
+  const value = Number(requestUrl.searchParams.get('size'));
+  return Number.isInteger(value) && THUMBNAIL_SIZES.has(value) ? value : null;
+}
+
 function normalizeMimeType(value) {
   return typeof value === 'string' && ALLOWED_MIME_TYPES.has(value.toLowerCase())
     ? value.toLowerCase()
@@ -41,7 +47,27 @@ function getLocalCoverAssetDirectory(userDataDirectory) {
   return path.join(userDataDirectory, 'local-cover-assets');
 }
 
-function createLocalCoverAssetStore({ getDirectory }) {
+function createLocalCoverAssetStore({ getDirectory, createThumbnail }) {
+  const thumbnailJobs = new Map();
+  const thumbnailQueue = [];
+  let activeThumbnailJobs = 0;
+
+  // Bounds expensive native image decodes while pending protocol requests remain asynchronous.
+  const scheduleThumbnailJob = (task) => new Promise((resolve, reject) => {
+    const run = async () => {
+      activeThumbnailJobs += 1;
+      try {
+        resolve(await task());
+      } catch (error) {
+        reject(error);
+      } finally {
+        activeThumbnailJobs -= 1;
+        thumbnailQueue.shift()?.();
+      }
+    };
+    if (activeThumbnailJobs < 2) void run();
+    else thumbnailQueue.push(() => void run());
+  });
   const readDescriptor = async (assetId) => {
     const directory = getDirectory();
     const paths = getAssetPaths(directory, assetId);
@@ -62,6 +88,43 @@ function createLocalCoverAssetStore({ getDirectory }) {
   };
 
   const has = async (assetId) => Boolean(await readDescriptor(assetId));
+
+  // Lazily creates a bounded derivative while coalescing duplicate protocol requests.
+  const getOrCreateThumbnail = async (descriptor, requestedSize) => {
+    if (typeof createThumbnail !== 'function') return null;
+    const thumbnailPath = `${descriptor.dataPath}.${requestedSize}.jpg`;
+    try {
+      const stat = await fsp.stat(thumbnailPath);
+      if (stat.isFile() && stat.size > 0) {
+        return { dataPath: thumbnailPath, mimeType: 'image/jpeg', size: stat.size };
+      }
+    } catch {
+      // Continue with lazy generation.
+    }
+
+    const jobKey = `${descriptor.id}:${requestedSize}`;
+    const existingJob = thumbnailJobs.get(jobKey);
+    if (existingJob) return await existingJob;
+    const job = scheduleThumbnailJob(async () => {
+      const source = await fsp.readFile(descriptor.dataPath);
+      const thumbnail = await createThumbnail(source, requestedSize);
+      if (!thumbnail?.data || thumbnail.data.byteLength === 0) return null;
+      const temporaryPath = `${thumbnailPath}.${process.pid}-${Date.now()}.tmp`;
+      try {
+        await fsp.writeFile(temporaryPath, thumbnail.data);
+        await fsp.rename(temporaryPath, thumbnailPath).catch(async error => {
+          await fsp.rm(thumbnailPath, { force: true });
+          await fsp.rename(temporaryPath, thumbnailPath).catch(() => { throw error; });
+        });
+      } finally {
+        await fsp.rm(temporaryPath, { force: true }).catch(() => undefined);
+      }
+      const stat = await fsp.stat(thumbnailPath);
+      return { dataPath: thumbnailPath, mimeType: thumbnail.mimeType || 'image/jpeg', size: stat.size };
+    }).finally(() => thumbnailJobs.delete(jobKey));
+    thumbnailJobs.set(jobKey, job);
+    return await job;
+  };
 
   const write = async (assetId, data, mimeType) => {
     const parsed = parseAssetId(assetId);
@@ -111,6 +174,7 @@ function createLocalCoverAssetStore({ getDirectory }) {
     await Promise.allSettled([
       fsp.rm(paths.dataPath, { force: true }),
       fsp.rm(paths.metaPath, { force: true }),
+      ...Array.from(THUMBNAIL_SIZES, size => fsp.rm(`${paths.dataPath}.${size}.jpg`, { force: true })),
     ]);
     return true;
   };
@@ -123,24 +187,30 @@ function createLocalCoverAssetStore({ getDirectory }) {
   const registerProtocolHandler = (protocol, net) => {
     protocol.handle('folia-cover', async (request) => {
       let assetId = null;
+      let requestedSize = null;
       try {
         const url = new URL(request.url);
         if (url.hostname !== 'asset') throw new Error('Invalid local cover host');
         assetId = decodeURIComponent(url.pathname.replace(/^\//, ''));
+        requestedSize = parseThumbnailSize(url);
       } catch {
         return new Response('Bad request', { status: 400 });
       }
 
       const descriptor = await readDescriptor(assetId);
       if (!descriptor) return new Response('Not found', { status: 404 });
-      const fileResponse = await net.fetch(pathToFileURL(descriptor.dataPath).toString());
+      const thumbnail = requestedSize
+        ? await getOrCreateThumbnail(descriptor, requestedSize).catch(() => null)
+        : null;
+      const responseDescriptor = thumbnail || descriptor;
+      const fileResponse = await net.fetch(pathToFileURL(responseDescriptor.dataPath).toString());
       if (!fileResponse.ok || !fileResponse.body) return new Response('Not found', { status: 404 });
       return new Response(fileResponse.body, {
         status: 200,
         headers: {
           'Cache-Control': 'public, max-age=31536000, immutable',
-          'Content-Length': String(descriptor.size),
-          'Content-Type': descriptor.mimeType,
+          'Content-Length': String(responseDescriptor.size),
+          'Content-Type': responseDescriptor.mimeType,
           'X-Content-Type-Options': 'nosniff',
         },
       });
@@ -155,5 +225,6 @@ module.exports = {
   ASSET_ID_PATTERN,
   createLocalCoverAssetStore,
   getLocalCoverAssetDirectory,
+  parseThumbnailSize,
   parseAssetId,
 };

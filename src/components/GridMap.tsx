@@ -17,6 +17,7 @@ import {
     shouldSuppressGridMapSelection,
 } from './folia-grid/gridMapNavigation';
 import { formatGridMapFolderTitle } from '../utils/gridMapFolderPath';
+import { getSizedCoverUrl } from '../utils/coverUrl';
 
 // src/components/GridMap.tsx
 // Hexagonal honeycomb layout showing all collections (playlists, albums, radios).
@@ -111,7 +112,7 @@ const MapCard = React.memo<{
                     {item.coverUrl ? (
                         <>
                             <img
-                                src={item.coverUrl}
+                                src={getSizedCoverUrl(item.coverUrl, 512)}
                                 alt={displayName}
                                 loading="lazy"
                                 decoding="async"

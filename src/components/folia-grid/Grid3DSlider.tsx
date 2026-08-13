@@ -3,6 +3,7 @@ import { Disc } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { formatGridMapFolderTitle } from '../../utils/gridMapFolderPath';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 
 // src/components/folia-grid/Grid3DSlider.tsx
 // Controlled desktop Grid3D slider shared by Netease, local music, and Navidrome overview surfaces.
@@ -71,6 +72,8 @@ export const getGrid3DSliderSummaryText = (
 
 const DISCRETE_WHEEL_PIXEL_THRESHOLD = 40;
 const DISCRETE_WHEEL_DISTANCE_MULTIPLIER = 3;
+const GRID3D_CARD_GAP = 48;
+const GRID3D_WINDOW_RADIUS = 18;
 const WHEEL_SMOOTHING_SETTLE_DISTANCE = 0.5;
 const WHEEL_SMOOTHING_MIN_PROGRESS = 0.01;
 const WHEEL_SMOOTHING_MAX_DURATION_MS = 800;
@@ -120,6 +123,18 @@ const clampFocusedIndex = (index: number, itemCount: number) => {
     return Math.min(Math.max(0, Math.trunc(index)), itemCount - 1);
 };
 
+export const getGrid3DWindowRange = (
+    focusedIndex: number,
+    itemCount: number,
+    radius = GRID3D_WINDOW_RADIUS,
+): { start: number; end: number } => {
+    const safeIndex = clampFocusedIndex(focusedIndex, itemCount);
+    return {
+        start: Math.max(0, safeIndex - radius),
+        end: Math.min(itemCount, safeIndex + radius + 1),
+    };
+};
+
 export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     items,
     focusedIndex,
@@ -150,8 +165,6 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     const wheelSmoothingTargetRef = useRef<number | null>(null);
     const wheelSmoothingLastTimeRef = useRef(0);
     const wheelSmoothingStartedAtRef = useRef(0);
-    const cardCentersRef = useRef<number[]>([]);
-    const cardGeometryKeyRef = useRef<string>('');
     const isDraggingRef = useRef(false);
     const startXRef = useRef(0);
     const scrollLeftRef = useRef(0);
@@ -221,83 +234,41 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     const safeFocusedIndex = clampFocusedIndex(focusedIndex, items.length);
     const itemsSignature = useMemo(() => items.map(item => item.id).join(','), [items]);
 
-    const [visibleLimit, setVisibleLimit] = useState(30);
-    const [loadedIndices, setLoadedIndices] = useState<Set<number>>(() => new Set([safeFocusedIndex]));
+    const loadedIndices = useMemo(() => {
+        const indexes = new Set<number>();
+        const start = Math.max(0, safeFocusedIndex - 12);
+        const end = Math.min(items.length - 1, safeFocusedIndex + 12);
+        for (let index = start; index <= end; index += 1) indexes.add(index);
+        return indexes;
+    }, [items.length, safeFocusedIndex]);
 
-    useEffect(() => {
-        setVisibleLimit(30);
-        setLoadedIndices(new Set([safeFocusedIndex]));
-    }, [itemsSignature]);
-
-    useEffect(() => {
-        setLoadedIndices(prev => {
-            const next = new Set(prev);
-            const range = 12;
-            const start = Math.max(0, safeFocusedIndex - range);
-            const end = Math.min(items.length - 1, safeFocusedIndex + range);
-            let changed = false;
-            for (let i = start; i <= end; i++) {
-                if (!next.has(i)) {
-                    next.add(i);
-                    changed = true;
-                }
-            }
-            return changed ? next : prev;
-        });
-    }, [safeFocusedIndex, items.length]);
-
-    useEffect(() => {
-        if (safeFocusedIndex >= visibleLimit) {
-            setVisibleLimit(prev => Math.max(prev, safeFocusedIndex + 30));
-        }
-    }, [safeFocusedIndex, visibleLimit]);
-
-    const currentLimit = Math.max(visibleLimit, safeFocusedIndex + 1);
-    const slicedItems = items.slice(0, currentLimit);
+    const { start: windowStart, end: windowEnd } = getGrid3DWindowRange(safeFocusedIndex, items.length);
+    const windowedItems = items.slice(windowStart, windowEnd);
+    const cardPitch = coverSize + GRID3D_CARD_GAP;
+    const leadingSpacerWidth = windowStart * cardPitch;
+    const remainingItemCount = items.length - windowEnd;
+    const trailingSpacerWidth = remainingItemCount > 0
+        ? remainingItemCount * coverSize + Math.max(0, remainingItemCount - 1) * GRID3D_CARD_GAP
+        : 0;
 
     const updateCardTransforms = useCallback(() => {
         const container = scrollContainerRef.current;
         if (!container) return undefined;
-        const flexWrapper = container.firstElementChild;
-        if (!flexWrapper) return undefined;
-
         const maxDist = 600;
         const isImage = grid3dCardStyle === 'image';
         const peakScale = isImage ? 1.25 : 1.2;
         const minScale = 0.5;
-        const cards = flexWrapper.children;
-
-        let closestIndex = 0;
-        let minPixelDist = Infinity;
-
-        // Card positions also move when `coverSize` / `edgePadding` change, which the container
-        // height breakpoints and the floating player both feed without the card count changing.
-        // This runs from scroll handlers too, so during a resize one of those can repopulate the
-        // cache from a half-applied layout. Keying it on measured geometry makes every caller
-        // self-heal instead of depending on which call wins the race.
+        const cards = container.querySelectorAll<HTMLElement>('[data-grid3d-index]');
         const viewportWidth = container.clientWidth;
-        const firstCard = cards[0] as HTMLElement | undefined;
-        const geometryKey = getGrid3DCardGeometryKey(
-            cards.length,
-            viewportWidth,
-            firstCard?.offsetWidth ?? 0,
-            firstCard?.offsetLeft ?? 0,
-        );
-
-        if (cardGeometryKeyRef.current !== geometryKey) {
-            const nextCenters = new Array<number>(cards.length);
-            for (let i = 0; i < cards.length; i++) {
-                const el = cards[i] as HTMLElement;
-                nextCenters[i] = el.offsetLeft + el.offsetWidth / 2;
-            }
-            cardCentersRef.current = nextCenters;
-            cardGeometryKeyRef.current = geometryKey;
-        }
-
         const containerCenter = container.scrollLeft + viewportWidth / 2;
+        const closestIndex = clampFocusedIndex(
+            Math.round((containerCenter - edgePadding - coverSize / 2) / cardPitch),
+            items.length,
+        );
         for (let i = 0; i < cards.length; i++) {
-            const el = cards[i] as HTMLElement;
-            const cardCenter = cardCentersRef.current[i];
+            const el = cards[i];
+            const itemIndex = Number(el.dataset.grid3dIndex);
+            const cardCenter = edgePadding + itemIndex * cardPitch + coverSize / 2;
             const pixelDist = Math.abs(cardCenter - containerCenter);
             const tValue = Math.min(pixelDist / maxDist, 1);
 
@@ -309,15 +280,10 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
             el.style.transform = `scale(${scale}) translateY(${y}px)`;
             el.style.opacity = String(opacity);
             el.style.zIndex = String(z);
-
-            if (pixelDist < minPixelDist) {
-                minPixelDist = pixelDist;
-                closestIndex = i;
-            }
         }
 
         return closestIndex;
-    }, [grid3dCardStyle]);
+    }, [cardPitch, coverSize, edgePadding, grid3dCardStyle, items.length]);
 
     const reportFocusedIndex = useCallback((index: number) => {
         const nextIndex = clampFocusedIndex(index, items.length);
@@ -448,11 +414,9 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     const centerIndex = useCallback((index: number, behavior: ScrollBehavior = 'smooth') => {
         if (index < 0 || index >= items.length) return;
         const container = scrollContainerRef.current;
-        const flexWrapper = container?.firstElementChild;
-        const cardElement = flexWrapper?.children[index] as HTMLElement | undefined;
-        if (!container || !cardElement) return;
+        if (!container) return;
 
-        const targetScrollLeft = cardElement.offsetLeft + cardElement.offsetWidth / 2 - container.clientWidth / 2;
+        const targetScrollLeft = edgePadding + index * cardPitch + coverSize / 2 - container.clientWidth / 2;
 
         isProgrammaticScrollRef.current = true;
         programmaticTargetLeftRef.current = targetScrollLeft;
@@ -466,7 +430,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
             left: targetScrollLeft,
             behavior,
         });
-    }, [items.length]);
+    }, [cardPitch, coverSize, edgePadding, items.length]);
 
     const scrollToIndex = useCallback((index: number) => {
         if (!isInteractive) return;
@@ -528,13 +492,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
             reportFocusedIndex(closestIndex);
         }
 
-        // Batch load: load more items when scrolling near the end
-        const scrollThreshold = 600;
-        const hasMore = visibleLimit < items.length;
-        if (hasMore && container.scrollWidth - (container.scrollLeft + container.clientWidth) < scrollThreshold) {
-            setVisibleLimit(prev => Math.min(items.length, prev + 30));
-        }
-    }, [isInteractive, reportFocusedIndex, updateCardTransforms, visibleLimit, items.length]);
+    }, [isInteractive, reportFocusedIndex, updateCardTransforms]);
 
     const handleMouseDown = (event: React.MouseEvent) => {
         if (!isInteractive || !scrollContainerRef.current || event.button !== 0) return;
@@ -652,13 +610,11 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         };
     }, [isInteractive, smoothDiscreteWheelBy, startMomentum, stopMomentum, stopWheelSmoothing]);
 
-    // Repaints the transforms once the new layout is committed; `updateCardTransforms` decides on
-    // its own whether the cached centers are still valid. `coverSize` / `edgePadding` are listed
-    // because the floating player can change them without changing `containerSize`.
+    // Repaints the fixed card window after layout or focus changes.
     useEffect(() => {
         const frameId = requestAnimationFrame(() => updateCardTransforms());
         return () => cancelAnimationFrame(frameId);
-    }, [containerSize, coverSize, edgePadding, isLoading, itemsSignature, slicedItems.length, updateCardTransforms]);
+    }, [containerSize, coverSize, edgePadding, isLoading, itemsSignature, windowStart, windowedItems.length, updateCardTransforms]);
 
     useEffect(() => {
         return () => {
@@ -689,7 +645,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                 }`}
                 style={{ scrollbarWidth: 'none' }}
             >
-                <div className="flex gap-12" style={{ paddingInline: edgePadding }}>
+                <div className="flex" style={{ paddingInline: edgePadding }}>
                     {isLoading ? (
                         Array.from({ length: 5 }).map((_, index) => (
                             <div key={`skeleton-${index}`} className="shrink-0 pointer-events-none select-none">
@@ -717,7 +673,12 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                             {emptyMessage}
                         </div>
                     ) : (
-                        slicedItems.map((item, index) => {
+                        <>
+                        {leadingSpacerWidth > 0 && (
+                            <div aria-hidden="true" className="shrink-0" style={{ width: leadingSpacerWidth }} />
+                        )}
+                        {windowedItems.map((item, localIndex) => {
+                            const index = windowStart + localIndex;
                             const isFocused = index === safeFocusedIndex;
                             const folderPath = getLocalFolderPath(item);
                             const displayName = getGrid3DSliderDisplayName(item);
@@ -727,7 +688,9 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                             return (
                                 <div
                                     key={item.id}
+                                    data-grid3d-index={index}
                                     className="shrink-0 cursor-pointer pointer-events-auto select-none"
+                                    style={{ marginRight: index < items.length - 1 ? GRID3D_CARD_GAP : 0 }}
                                     onClick={() => {
                                         if (!isInteractive || dragDistanceRef.current >= 8) return;
                                         if (isFocused) {
@@ -745,7 +708,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                             style={{ width: coverSize, height: coverSize }}
                                         >
                                             {item.coverUrl && loadedIndices.has(index) ? (
-                                                <img src={item.coverUrl} alt={typeof displayName === 'string' ? displayName : ''} className="w-full h-full object-cover pointer-events-none select-none" />
+                                                <img src={getSizedCoverUrl(item.coverUrl, coverSize)} alt={typeof displayName === 'string' ? displayName : ''} loading="lazy" decoding="async" className="w-full h-full object-cover pointer-events-none select-none" />
                                             ) : (
                                                 <div className="w-full h-full bg-zinc-800/20 flex items-center justify-center">
                                                     <Disc size={64} className="opacity-20" />
@@ -760,7 +723,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                         >
                                             <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
                                                 {item.coverUrl && loadedIndices.has(index) ? (
-                                                    <img src={item.coverUrl} alt={typeof displayName === 'string' ? displayName : ''} className="w-full h-full object-cover pointer-events-none select-none" />
+                                                    <img src={getSizedCoverUrl(item.coverUrl, coverSize)} alt={typeof displayName === 'string' ? displayName : ''} loading="lazy" decoding="async" className="w-full h-full object-cover pointer-events-none select-none" />
                                                 ) : (
                                                     <Disc size={64} className="opacity-20" />
                                                 )}
@@ -788,7 +751,11 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                     )}
                                 </div>
                             );
-                        })
+                        })}
+                        {trailingSpacerWidth > 0 && (
+                            <div aria-hidden="true" className="shrink-0" style={{ width: trailingSpacerWidth }} />
+                        )}
+                        </>
                     )}
                 </div>
             </div>

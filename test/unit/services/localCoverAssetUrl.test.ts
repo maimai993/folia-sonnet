@@ -27,6 +27,7 @@ describe('localCoverAssetUrl', () => {
         vi.stubGlobal('window', { electron: { hasLocalCoverAsset: vi.fn() } });
 
         expect(getLocalCoverAssetUrl(assetId)).toBe(`folia-cover://asset/${encodeURIComponent(assetId)}`);
+        expect(getLocalCoverAssetUrl(assetId, 320)).toBe(`folia-cover://asset/${encodeURIComponent(assetId)}?size=512`);
         expect(getLocalCoverAssetUrl('sha256:../cover.png')).toBeNull();
     });
 
@@ -41,7 +42,7 @@ describe('localCoverAssetUrl', () => {
             matchedAt: 1,
         };
 
-        expect(getPreferredLocalSongCoverUrl(song({ localCoverAssetId: assetId }))).toBe(localUrl);
+        expect(getPreferredLocalSongCoverUrl(song({ localCoverAssetId: assetId }))).toBe(`${localUrl}?size=1024`);
         expect(getPreferredLocalSongCoverUrl(song({ localCoverAssetId: assetId, useOnlineCover: true, onlineMetadata })))
             .toBe(onlineMetadata.coverUrl);
     });

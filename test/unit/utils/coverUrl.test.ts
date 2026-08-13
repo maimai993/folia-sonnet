@@ -19,4 +19,14 @@ describe('coverUrl utilities', () => {
         expect(getSizedCoverUrl('https://music.test/rest/getCoverArt.view?id=cover-1&v=1', 150))
             .toBe('https://music.test/rest/getCoverArt.view?id=cover-1&v=1&size=150');
     });
+
+    it('uses bounded thumbnail buckets for Electron local covers', () => {
+        expect(getSizedCoverUrl(`folia-cover://asset/sha256%3A${'a'.repeat(64)}`, 300))
+            .toBe(`folia-cover://asset/sha256%3A${'a'.repeat(64)}?size=512`);
+    });
+
+    it('keeps Web local cover thumbnails at least 512px', () => {
+        expect(getSizedCoverUrl(`/__folia_cover/sha256%3A${'b'.repeat(64)}`, 50))
+            .toBe(`/__folia_cover/sha256%3A${'b'.repeat(64)}?size=512`);
+    });
 });

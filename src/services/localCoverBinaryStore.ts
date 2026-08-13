@@ -15,6 +15,7 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 const OPFS_ROOT_DIRECTORY = 'folia-cache';
 const OPFS_LOCAL_COVER_DIRECTORY = 'local-cover-assets';
+const LOCAL_COVER_THUMBNAIL_SIZES = [512, 1024] as const;
 
 export interface LocalCoverBinaryWriteResult {
   backend: LocalCoverAssetBackend;
@@ -162,6 +163,9 @@ export const removeLocalCoverBinary = async (assetId: string): Promise<void> => 
   await Promise.all([
     directory.removeEntry(names.data).catch(() => undefined),
     directory.removeEntry(names.metadata).catch(() => undefined),
+    ...LOCAL_COVER_THUMBNAIL_SIZES.map(size => (
+      directory.removeEntry(`${names.data}.${size}.webp`).catch(() => undefined)
+    )),
   ]);
 };
 

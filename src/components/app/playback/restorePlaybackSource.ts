@@ -163,7 +163,7 @@ export const restorePlaybackSourceForSong = async (
         }
 
         songToRestore = await ensureLocalSongCoverAsset(songToRestore);
-        const localCoverUrl = getLocalCoverAssetUrl(songToRestore.localCoverAssetId);
+        const localCoverUrl = getLocalCoverAssetUrl(songToRestore.localCoverAssetId, 1024);
         const catalog = await getLocalLibraryCatalogSnapshot();
         const restoredSong = applyLocalLibraryEntityDisplay(buildUnifiedLocalSong({
             localSong: songToRestore,

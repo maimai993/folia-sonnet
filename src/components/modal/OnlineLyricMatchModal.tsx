@@ -15,6 +15,7 @@ import {
 } from './lyricMatchResultHelpers';
 import { LyricPreviewPanel } from './LyricPreviewPanel';
 import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 
 // src/components/modal/OnlineLyricMatchModal.tsx
 
@@ -263,7 +264,7 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                                                 <div className={`w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center ${isDaylight ? 'bg-black/5' : 'bg-white/5'} shrink-0`}>
                                                     {resultCover ? (
                                                         <img
-                                                            src={resultCover}
+                                                            src={getSizedCoverUrl(resultCover, 512)}
                                                             alt="Cover"
                                                             className="w-full h-full object-cover"
                                                         />
@@ -298,13 +299,13 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                             <div className="w-32 h-32 min-h-[64px] rounded-2xl overflow-hidden bg-zinc-800 shadow-md flex-shrink transition-all duration-300">
                                 {selectedResult ? (
                                     getMatchResultCoverUrl(selectedResult, source) ? (
-                                        <img src={getMatchResultCoverUrl(selectedResult, source) || ''} alt="Cover" className="w-full h-full object-cover" />
+                                        <img src={getSizedCoverUrl(getMatchResultCoverUrl(selectedResult, source), 512)} alt="Cover" className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center"><Music size={28} className="opacity-10" /></div>
                                     )
                                 ) : (
                                     getProviderSongMetadata(song).coverUrl ? (
-                                        <img src={getProviderSongMetadata(song).coverUrl || ''} alt="Cover" className="w-full h-full object-cover" />
+                                        <img src={getSizedCoverUrl(getProviderSongMetadata(song).coverUrl, 512)} alt="Cover" className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center"><Music size={28} className="opacity-10" /></div>
                                     )

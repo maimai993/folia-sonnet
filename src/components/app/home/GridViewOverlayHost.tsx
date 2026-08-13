@@ -75,7 +75,7 @@ const resolveLocalCollectionCoverUrlFromTracks = (
         return preferredSong.onlineMetadata.coverUrl;
     }
 
-    const localCoverUrl = getLocalCoverAssetUrl(preferredSong.localCoverAssetId);
+    const localCoverUrl = getLocalCoverAssetUrl(preferredSong.localCoverAssetId, 512);
     if (localCoverUrl) return localCoverUrl;
 
     return preferredSong.onlineMetadata?.coverUrl;
@@ -419,7 +419,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                 return track;
             }
 
-            const url = getLocalCoverAssetUrl(localData.localCoverAssetId);
+            const url = getLocalCoverAssetUrl(localData.localCoverAssetId, 512);
             if (url) return applyLocalSongCoverDisplay(track, url);
 
             return track;

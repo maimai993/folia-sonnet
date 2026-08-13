@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     getGrid3DCardGeometryKey,
+    getGrid3DWindowRange,
     getGrid3DSliderDisplayName,
     getGrid3DSliderSecondaryText,
     getGrid3DSliderSummaryText,
@@ -89,6 +90,17 @@ describe('getGrid3DCardGeometryKey', () => {
 
     it('changes when cards are appended by progressive loading', () => {
         expect(getGrid3DCardGeometryKey(42, 1280, 218, 531)).not.toBe(baseline);
+    });
+});
+
+describe('getGrid3DWindowRange', () => {
+    it('keeps a long slider bounded around the focused card', () => {
+        expect(getGrid3DWindowRange(5_000, 10_000)).toEqual({ start: 4_982, end: 5_019 });
+    });
+
+    it('clamps the window at both list edges', () => {
+        expect(getGrid3DWindowRange(0, 100)).toEqual({ start: 0, end: 19 });
+        expect(getGrid3DWindowRange(99, 100)).toEqual({ start: 81, end: 100 });
     });
 });
 

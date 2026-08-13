@@ -20,7 +20,7 @@ const getLocalCoverUrl = (songs: LocalSong[]): string | undefined => {
 
     if (!preferredSong) return undefined;
 
-    const localCoverUrl = getLocalCoverAssetUrl(preferredSong.localCoverAssetId) || undefined;
+    const localCoverUrl = getLocalCoverAssetUrl(preferredSong.localCoverAssetId, 512) || undefined;
     if (preferredSong.useOnlineCover) {
         return preferredSong.onlineMetadata?.coverUrl || localCoverUrl;
     }

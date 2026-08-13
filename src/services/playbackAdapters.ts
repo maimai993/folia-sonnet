@@ -192,7 +192,7 @@ export function buildLocalQueue(
         ? buildLocalLibraryIndex(catalog.entities, catalog.assignments)
         : undefined;
     const convertedQueue = queue.map(song => {
-        const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId);
+        const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId, 1024);
         return applyLocalLibraryEntityDisplay(buildUnifiedLocalSong({
             localSong: song,
             matchedSong: null,

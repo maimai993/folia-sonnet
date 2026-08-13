@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { isLocalCoverAssetUrl } from '../services/localCoverAssetUrl';
+import { getSizedCoverUrl } from '../utils/coverUrl';
 
 // src/hooks/useLocalCoverPreloader.ts
 // Warms viewport-near stable local-cover responses without retaining full-resolution decoded bitmaps.
@@ -75,7 +76,7 @@ export const useLocalCoverPreloader = (
     }
     return Array.from(indexes)
       .sort((left, right) => left - right)
-      .map(index => coverUrls[index])
+      .map(index => getSizedCoverUrl(coverUrls[index], 512))
       .filter(isLocalCoverAssetUrl);
   }, [coverUrls, renderedIndexes]);
 

@@ -18,6 +18,7 @@ import type { OnlineLyricsState } from '../types';
 import type { AudioQualityPreference } from '../types/onlineMusic';
 import type { ThemeSourceModel } from '../hooks/themeControllerState';
 import { getPlaybackSourceRef, getPlaybackSongSource, hasMixedPlaybackSources } from '../utils/appPlaybackGuards';
+import { getSizedCoverUrl } from '../utils/coverUrl';
 import { omni } from '../services/onlineMusic/omni';
 
 const TOUCH_GUIDE_DISPLAY_MS = 1400;
@@ -698,7 +699,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                     className={`w-full aspect-square rounded-2xl overflow-hidden shadow-lg relative mb-4 ${placeholderBg} flex items-center justify-center group cursor-pointer`}
                                 >
                                     {coverUrl ? (
-                                        <img src={coverUrl} alt="Art" className="w-full h-full object-cover" />
+                                        <img src={getSizedCoverUrl(coverUrl, 512)} alt="Art" decoding="async" className="w-full h-full object-cover" />
                                     ) : (
                                         <Disc size={40} className="text-white/20" />
                                     )}

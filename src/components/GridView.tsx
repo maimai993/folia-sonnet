@@ -254,7 +254,7 @@ export const PolaroidCard = React.memo<{
                     {item.coverUrl ? (
                         <>
                             <img
-                                src={item.coverUrl}
+                                src={getSizedCoverUrl(item.coverUrl, 512)}
                                 alt={typeof item.name === 'string' ? item.name : ''}
                                 loading="lazy"
                                 decoding="async"
@@ -2298,7 +2298,7 @@ export const GridView: React.FC<GridViewProps> = ({
                             {/* Cover Image */}
                             <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-lg mb-4 bg-zinc-800/20 relative shrink-0">
                                 {infoPanelCoverUrl ? (
-                                    <img src={toHttps(infoPanelCoverUrl)} alt={infoCollection?.name || title} className="w-full h-full object-cover select-none pointer-events-none" />
+                                    <img src={getSizedCoverUrl(toHttps(infoPanelCoverUrl), 512)} alt={infoCollection?.name || title} decoding="async" className="w-full h-full object-cover select-none pointer-events-none" />
                                 ) : (
                                     <Disc size={64} className="opacity-20 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                                 )}

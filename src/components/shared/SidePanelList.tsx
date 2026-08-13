@@ -241,7 +241,7 @@ export const CollectionListItem = React.memo<{
                 <div className="w-10 h-10 shrink-0 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800 relative">
                     {item.coverUrl && (
                         <img 
-                            src={item.coverUrl} 
+                            src={getSizedCoverUrl(item.coverUrl, 512)}
                             alt={item.name}
                             className="w-full h-full object-cover"
                             loading="lazy"

@@ -13,6 +13,7 @@ import {
     type OnlineMetadataSource,
 } from '../../services/onlineMetadataSearchService';
 import { DurationMatchBadge } from './DurationMatchBadge';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 
 // src/components/modal/LocalSongMetadataMatchDialog.tsx
 // Lets the user search one provider and independently choose its metadata bundle and cover.
@@ -36,7 +37,7 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
     const [restoringLocalInfo, setRestoringLocalInfo] = useState(false);
     const [useOnlineMetadata, setUseOnlineMetadata] = useState(song.titleOrigin !== 'import');
     const [useOnlineCover, setUseOnlineCover] = useState(song.useOnlineCover ?? !song.localCoverAssetId);
-    const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId);
+    const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId, 512);
     const requestIdRef = useRef(0);
     const target = useMemo(() => buildLocalSongMetadataSearchTarget(song), [song]);
     const currentTitle = song.title;
@@ -174,7 +175,7 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
                                 <div className="mb-2 text-[11px] font-bold uppercase tracking-wider opacity-45">{t('localMusic.currentSongInfo')}</div>
                                 <div className="flex gap-3">
                                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-current/10">
-                                        {currentCoverUrl && <img src={currentCoverUrl} alt="" className="h-full w-full object-cover" />}
+                                        {currentCoverUrl && <img src={getSizedCoverUrl(currentCoverUrl, 512)} alt="" decoding="async" className="h-full w-full object-cover" />}
                                     </div>
                                     <div className="min-w-0 text-xs">
                                         <div className="truncate font-bold">{currentTitle}</div>
@@ -187,7 +188,7 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
                                 <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-blue-500">{t('localMusic.matchResultPreview')}</div>
                                 <div className="flex gap-3">
                                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-current/10">
-                                        {previewCoverUrl && <img src={previewCoverUrl} alt="" className="h-full w-full object-cover" />}
+                                        {previewCoverUrl && <img src={getSizedCoverUrl(previewCoverUrl, 512)} alt="" decoding="async" className="h-full w-full object-cover" />}
                                     </div>
                                     <div className="min-w-0 text-xs">
                                         <div className="truncate font-bold">{previewTitle}</div>

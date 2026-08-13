@@ -604,6 +604,20 @@ function getCoverCacheDirectory() {
 
 const localCoverAssetStore = createLocalCoverAssetStore({
   getDirectory: () => getLocalCoverAssetDirectory(app.getPath('userData')),
+  createThumbnail: async (source, requestedSize) => {
+    const image = nativeImage.createFromBuffer(source);
+    if (image.isEmpty()) return null;
+    const dimensions = image.getSize();
+    const longestEdge = Math.max(dimensions.width, dimensions.height);
+    if (longestEdge <= requestedSize) return null;
+    const scale = requestedSize / longestEdge;
+    const resized = image.resize({
+      width: Math.max(1, Math.round(dimensions.width * scale)),
+      height: Math.max(1, Math.round(dimensions.height * scale)),
+      quality: 'good',
+    });
+    return { data: resized.toJPEG(84), mimeType: 'image/jpeg' };
+  },
 });
 
 function getAudioCacheBaseName(cacheKey) {

@@ -6,6 +6,7 @@ import { AudioBands, Theme } from '../../types';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../utils/fontStacks';
 import { type VisualizerSharedProps } from './definition';
 import VisualizerBackgroundRenderer from './backgrounds/VisualizerBackgroundRenderer';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 
 // Shared outer shell for all visualizers.
 // This is where we keep background layering, font injection, and the hover-only back button
@@ -58,7 +59,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     const [showBackButton, setShowBackButton] = useState(false);
     const playerPanelGuideHotspotRef = useRef(false);
     const touchGuideHideTimeoutRef = useRef<number | null>(null);
-    const resolvedCoverUrl = sharedProps?.coverUrl;
+    const resolvedCoverUrl = getSizedCoverUrl(sharedProps?.coverUrl, 1024) || undefined;
     const resolvedIsDaylight = sharedProps?.isDaylight ?? false;
     const resolvedVisualizerOpacity = sharedProps?.visualizerOpacity ?? visualizerOpacity;
     const resolvedStaticMode = sharedProps?.staticMode ?? false;
