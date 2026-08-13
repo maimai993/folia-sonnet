@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Disc } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { formatGridMapFolderTitle } from '../../utils/gridMapFolderPath';
 
 // src/components/folia-grid/Grid3DSlider.tsx
 // Controlled desktop Grid3D slider shared by Netease, local music, and Navidrome overview surfaces.
@@ -15,6 +16,7 @@ export interface Grid3DSliderItem {
     trackCount?: number;
     trackIds?: string[];
     type?: string;
+    isVirtual?: boolean;
 }
 
 interface Grid3DSliderProps {
@@ -35,12 +37,29 @@ const compactDescription = (description?: string, maxLength = 72) => {
     return normalized.length > maxLength ? `${normalized.substring(0, maxLength)}...` : normalized;
 };
 
+type Grid3DSliderTextItem = Pick<Grid3DSliderItem, 'type' | 'description' | 'summary'>
+    & Partial<Pick<Grid3DSliderItem, 'name' | 'isVirtual'>>;
+
+const getLocalFolderPath = (item: Grid3DSliderTextItem): string => (
+    item.type === 'folder' && !item.isVirtual && typeof item.name === 'string'
+        ? item.name
+        : ''
+);
+
+export const getGrid3DSliderDisplayName = (
+    item: Pick<Grid3DSliderItem, 'name' | 'type' | 'isVirtual'>,
+): React.ReactNode => {
+    const folderPath = getLocalFolderPath(item);
+    return folderPath ? formatGridMapFolderTitle(folderPath) : item.name;
+};
+
 export const getGrid3DSliderSecondaryText = (
-    item: Pick<Grid3DSliderItem, 'type' | 'description' | 'summary'>,
+    item: Grid3DSliderTextItem,
 ): string => (
-    item.type === 'playlist'
+    getLocalFolderPath(item)
+        || (item.type === 'playlist'
         ? compactDescription(item.summary) || compactDescription(item.description)
-        : compactDescription(item.description) || compactDescription(item.summary)
+        : compactDescription(item.description) || compactDescription(item.summary))
 );
 
 export const getGrid3DSliderSummaryText = (
@@ -650,6 +669,10 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
         };
     }, [stopMomentum, stopWheelSmoothing]);
 
+    const focusedItem = items[safeFocusedIndex];
+    const focusedDisplayName = focusedItem ? getGrid3DSliderDisplayName(focusedItem) : '';
+    const focusedSecondaryText = focusedItem ? getGrid3DSliderSecondaryText(focusedItem) : '';
+
     return (
         <div ref={containerRef} className="w-full flex-1 flex flex-col justify-center relative min-h-0 select-none">
             <div
@@ -696,6 +719,8 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                     ) : (
                         slicedItems.map((item, index) => {
                             const isFocused = index === safeFocusedIndex;
+                            const folderPath = getLocalFolderPath(item);
+                            const displayName = getGrid3DSliderDisplayName(item);
                             const secondaryText = getGrid3DSliderSecondaryText(item);
                             const summaryText = getGrid3DSliderSummaryText(item);
 
@@ -720,7 +745,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                             style={{ width: coverSize, height: coverSize }}
                                         >
                                             {item.coverUrl && loadedIndices.has(index) ? (
-                                                <img src={item.coverUrl} alt={typeof item.name === 'string' ? item.name : ''} className="w-full h-full object-cover pointer-events-none select-none" />
+                                                <img src={item.coverUrl} alt={typeof displayName === 'string' ? displayName : ''} className="w-full h-full object-cover pointer-events-none select-none" />
                                             ) : (
                                                 <div className="w-full h-full bg-zinc-800/20 flex items-center justify-center">
                                                     <Disc size={64} className="opacity-20" />
@@ -735,7 +760,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                                         >
                                             <div className="w-full aspect-square rounded-lg overflow-hidden bg-zinc-800/20 relative shadow-inner mb-4 flex items-center justify-center">
                                                 {item.coverUrl && loadedIndices.has(index) ? (
-                                                    <img src={item.coverUrl} alt={typeof item.name === 'string' ? item.name : ''} className="w-full h-full object-cover pointer-events-none select-none" />
+                                                    <img src={item.coverUrl} alt={typeof displayName === 'string' ? displayName : ''} className="w-full h-full object-cover pointer-events-none select-none" />
                                                 ) : (
                                                     <Disc size={64} className="opacity-20" />
                                                 )}
@@ -743,10 +768,13 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
 
                                             <div className="w-full text-left pt-2 min-w-0">
                                                 <h3 className="font-bold text-sm truncate max-w-full tracking-tight">
-                                                    {item.name}
+                                                    {displayName}
                                                 </h3>
                                                 {secondaryText && (
-                                                    <p className="text-xs opacity-50 truncate max-w-full mt-1 font-medium">
+                                                    <p
+                                                        className={`text-xs opacity-50 max-w-full mt-1 font-medium ${folderPath ? 'line-clamp-2 break-words' : 'truncate'}`}
+                                                        title={folderPath || undefined}
+                                                    >
                                                         {secondaryText}
                                                     </p>
                                                 )}
@@ -765,18 +793,18 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                 </div>
             </div>
 
-            {!isLoading && items.length > 0 && items[safeFocusedIndex] && (
+            {!isLoading && focusedItem && (
                 <div
                     className={`relative shrink-0 text-center z-10 px-8 pointer-events-none ${
                         hasFloatingPlayer ? 'pt-6 md:pt-8 pb-0 -mb-4 md:-mb-6' : 'pt-5 md:pt-6 pb-4'
                     }`}
                 >
                     <h3 className="font-bold text-2xl truncate max-w-xl mx-auto" style={{ color: 'var(--text-primary)' }}>
-                        {items[safeFocusedIndex].name}
+                        {focusedDisplayName}
                     </h3>
                     <p className="text-xs opacity-50 font-mono mt-1" style={{ color: 'var(--text-secondary)' }}>
-                        {items[safeFocusedIndex].trackCount !== undefined ? `${items[safeFocusedIndex].trackCount} ${t('playlist.tracks') || 'songs'}` : ''}
-                        {items[safeFocusedIndex].description ? ` • ${items[safeFocusedIndex].description}` : ''}
+                        {focusedItem.trackCount !== undefined ? `${focusedItem.trackCount} ${t('playlist.tracks') || 'songs'}` : ''}
+                        {focusedSecondaryText ? ` • ${focusedSecondaryText}` : ''}
                     </p>
                 </div>
             )}

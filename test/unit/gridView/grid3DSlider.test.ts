@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     getGrid3DCardGeometryKey,
+    getGrid3DSliderDisplayName,
     getGrid3DSliderSecondaryText,
     getGrid3DSliderSummaryText,
     resolveGrid3DWheelInput,
@@ -10,6 +11,29 @@ import {
 // Verifies collection cards use real descriptions instead of a hard-coded symbol.
 
 describe('getGrid3DSliderSecondaryText', () => {
+    it('uses the full local folder path as secondary text', () => {
+        const folder = {
+            type: 'folder',
+            name: 'Astros/Classics/Cello',
+            description: '本地',
+        };
+
+        expect(getGrid3DSliderDisplayName(folder)).toBe('Astros/…/Cello');
+        expect(getGrid3DSliderSecondaryText(folder)).toBe('Astros/Classics/Cello');
+    });
+
+    it('keeps virtual folder labels unchanged', () => {
+        const folder = {
+            type: 'folder',
+            name: '全部歌曲',
+            description: '本地',
+            isVirtual: true,
+        };
+
+        expect(getGrid3DSliderDisplayName(folder)).toBe('全部歌曲');
+        expect(getGrid3DSliderSecondaryText(folder)).toBe('本地');
+    });
+
     it('prefers a playlist summary and falls back to its description', () => {
         expect(getGrid3DSliderSecondaryText({
             type: 'playlist',

@@ -16,6 +16,7 @@ import {
     resolveGridMapSourceIndex,
     shouldSuppressGridMapSelection,
 } from './folia-grid/gridMapNavigation';
+import { formatGridMapFolderTitle } from '../utils/gridMapFolderPath';
 
 // src/components/GridMap.tsx
 // Hexagonal honeycomb layout showing all collections (playlists, albums, radios).
@@ -85,6 +86,9 @@ const MapCard = React.memo<{
     }) => {
         const { t } = useTranslation();
         const isPlaylistSelectionDisabled = isPlaylistEditMode && item.type === 'playlist';
+        const displayName = item.type === 'folder' && item.path
+            ? formatGridMapFolderTitle(item.path)
+            : item.name;
 
         return (
             <div
@@ -107,7 +111,7 @@ const MapCard = React.memo<{
                         <>
                             <img
                                 src={item.coverUrl}
-                                alt={item.name}
+                                alt={displayName}
                                 loading="lazy"
                                 decoding="async"
                                 ref={(el) => {
@@ -170,10 +174,13 @@ const MapCard = React.memo<{
                 <div className="w-full flex-1 flex flex-col justify-between pt-3 text-left min-w-0">
                     <div className="space-y-1 mb-2">
                         <div className="text-xs font-bold tracking-tight opacity-90 max-w-full line-clamp-2 whitespace-normal break-words">
-                            {item.name}
+                            {displayName}
                         </div>
                         {item.description && (
-                            <div className="text-[10px] opacity-55 max-w-full font-medium line-clamp-1 whitespace-normal break-words">
+                            <div
+                                className={`text-[10px] opacity-55 max-w-full font-medium whitespace-normal break-words ${item.path ? 'line-clamp-2' : 'line-clamp-1'}`}
+                                title={item.path ? item.description : undefined}
+                            >
                                 {item.description}
                             </div>
                         )}
