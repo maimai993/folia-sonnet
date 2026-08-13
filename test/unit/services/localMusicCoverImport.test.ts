@@ -179,6 +179,24 @@ describe('local music cover import', () => {
         ))).toBe(true);
     });
 
+    it('marks a folder cover for rescan when hashing does not produce an asset id', async () => {
+        const handle = createLibrary(true);
+        const folderBlob = new Blob(['folder-cover'], { type: 'image/jpeg' });
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(handle as unknown as FileSystemDirectoryHandle);
+        vi.mocked(prepareLocalCoverBlob).mockResolvedValue({ blob: folderBlob });
+        vi.mocked(parseEmbeddedMetadataAsync).mockResolvedValue({ duration: 1, album: 'Shared Album' });
+
+        await importFolder();
+        const hydratedSongs = await waitForHydratedSave(2);
+
+        expect(prepareLocalCoverBlob).toHaveBeenCalledOnce();
+        expect(hydratedSongs.every(song => (
+            song.localCoverAssetId === undefined
+            && song.localCoverSource === 'folder'
+            && song.localCoverNeedsAssetMigration === true
+        ))).toBe(true);
+    });
+
     it('retries without covers when cover-aware parsing fails and still saves metadata', async () => {
         const handle = new FakeDirectoryHandle('Music', [
             new FakeDirectoryHandle('Album', [new FakeFileHandle('01 Broken Cover.mp3')]),

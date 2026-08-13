@@ -12,7 +12,7 @@ const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = requ
 const { createVoiceInputPauseMonitor } = require('./voiceInputPause.cjs');
 const { createDisplaySleepBlocker } = require('./displaySleepBlocker.cjs');
 const { createLyricApi } = require('./lyricApi.cjs');
-const { createLocalCoverAssetStore } = require('./localCoverAssets.cjs');
+const { createLocalCoverAssetStore, getLocalCoverAssetDirectory } = require('./localCoverAssets.cjs');
 const { getReleaseUrl, getUpdateProviderConfig, resolveReleaseChannel } = require('./updateChannels.cjs');
 const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/themeSanitizer.cjs');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
@@ -602,12 +602,8 @@ function getCoverCacheDirectory() {
   return path.join(getConfiguredCacheDirectory(), 'cover');
 }
 
-function getLocalCoverAssetDirectory() {
-  return path.join(getConfiguredCacheDirectory(), 'local-cover-assets');
-}
-
 const localCoverAssetStore = createLocalCoverAssetStore({
-  getDirectory: getLocalCoverAssetDirectory,
+  getDirectory: () => getLocalCoverAssetDirectory(app.getPath('userData')),
 });
 
 function getAudioCacheBaseName(cacheKey) {

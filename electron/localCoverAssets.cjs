@@ -37,6 +37,10 @@ function normalizeMimeType(value) {
     : null;
 }
 
+function getLocalCoverAssetDirectory(userDataDirectory) {
+  return path.join(userDataDirectory, 'local-cover-assets');
+}
+
 function createLocalCoverAssetStore({ getDirectory }) {
   const readDescriptor = async (assetId) => {
     const directory = getDirectory();
@@ -146,5 +150,6 @@ module.exports = {
   ALLOWED_MIME_TYPES,
   ASSET_ID_PATTERN,
   createLocalCoverAssetStore,
+  getLocalCoverAssetDirectory,
   parseAssetId,
 };

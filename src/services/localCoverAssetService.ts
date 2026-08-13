@@ -134,7 +134,12 @@ export const deleteUnreferencedLocalCoverAssets = async (assetIds: Iterable<stri
 
 const yieldToBrowser = () => new Promise<void>(resolve => window.setTimeout(resolve, 0));
 
-const migrateLegacyAssetRecords = async (failedIds: Set<string>): Promise<number> => {
+interface LegacyMigrationBatchResult {
+  attempted: number;
+  migrated: number;
+}
+
+const migrateLegacyAssetRecords = async (failedIds: Set<string>): Promise<LegacyMigrationBatchResult> => {
   const legacyAssets = await appDatabase.local_cover_assets
     .filter(record => isBlob(record.blob) && !failedIds.has(record.id))
     .limit(MIGRATION_BATCH_SIZE)
@@ -153,10 +158,10 @@ const migrateLegacyAssetRecords = async (failedIds: Set<string>): Promise<number
       console.warn(`[LocalCoverAsset] Legacy asset migration will retry later: ${record.id}`, error);
     }
   }
-  return migrated;
+  return { attempted: legacyAssets.length, migrated };
 };
 
-const migrateLegacySongRecords = async (failedIds: Set<string>): Promise<number> => {
+const migrateLegacySongRecords = async (failedIds: Set<string>): Promise<LegacyMigrationBatchResult> => {
   const legacySongs = await appDatabase.local_music
     .filter(song => isBlob((song as LegacyLocalSongRecord).embeddedCover) && !failedIds.has(song.id))
     .limit(MIGRATION_BATCH_SIZE)
@@ -191,7 +196,7 @@ const migrateLegacySongRecords = async (failedIds: Set<string>): Promise<number>
       console.warn(`[LocalCoverAsset] Legacy song migration will retry later: ${legacySong.id}`, error);
     }
   }
-  return migrated;
+  return { attempted: legacySongs.length, migrated };
 };
 
 // Migrates bounded batches and leaves every failed Blob untouched for the next startup.
@@ -206,8 +211,8 @@ export const migrateLegacyLocalCoverAssetsInBackground = (): Promise<void> => {
         migrateLegacyAssetRecords(failedAssetIds),
         migrateLegacySongRecords(failedSongIds),
       ]);
-      totalMigrated += assets + songs;
-      if (assets === 0 && songs === 0) break;
+      totalMigrated += assets.migrated + songs.migrated;
+      if (assets.attempted === 0 && songs.attempted === 0) break;
       await yieldToBrowser();
     }
     if (totalMigrated > 0) {

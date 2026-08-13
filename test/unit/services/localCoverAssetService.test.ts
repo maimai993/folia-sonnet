@@ -53,17 +53,25 @@ describe('localCoverAssetService', () => {
         await appDatabase.delete();
         await appDatabase.open();
         vi.mocked(hashLocalCoverBlobAsync).mockReset();
-        vi.mocked(hasLocalCoverBinary).mockResolvedValue(false);
-        vi.mocked(removeLocalCoverBinary).mockResolvedValue(undefined);
-        vi.mocked(writeLocalCoverBinary).mockImplementation(async (_assetId, blob) => ({
+        vi.mocked(hasLocalCoverBinary).mockReset().mockResolvedValue(false);
+        vi.mocked(removeLocalCoverBinary).mockReset().mockResolvedValue(undefined);
+        vi.mocked(writeLocalCoverBinary).mockReset().mockImplementation(async (_assetId, blob) => ({
             backend: 'opfs',
             mimeType: (blob as Blob).type,
             size: (blob as Blob).size,
         }));
+        vi.stubGlobal('window', {
+            dispatchEvent: vi.fn(),
+            setTimeout: globalThis.setTimeout,
+        });
+        vi.stubGlobal('CustomEvent', class {
+            constructor(public type: string, public init?: CustomEventInit) {}
+        });
     });
 
     afterEach(async () => {
         vi.restoreAllMocks();
+        vi.unstubAllGlobals();
         await appDatabase.delete();
     });
 
@@ -148,5 +156,29 @@ describe('localCoverAssetService', () => {
             mimeType: 'image/webp',
         });
         expect(await appDatabase.local_cover_assets.get(assetId)).not.toHaveProperty('blob');
+    });
+
+    it('continues migration after a complete batch of legacy assets fails', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const records = Array.from({ length: 21 }, (_, index) => {
+            const id = `sha256:${index.toString(16).padStart(64, '0')}`;
+            const blob = new Blob([`legacy-cover-${index}`], { type: 'image/png' });
+            return { id, blob, mimeType: blob.type, size: blob.size, createdAt: index + 1 };
+        });
+        const failedIds = new Set(records.slice(0, 20).map(record => record.id));
+        await appDatabase.local_cover_assets.bulkPut(records);
+        vi.mocked(writeLocalCoverBinary).mockImplementation(async (assetId, blob) => {
+            if (failedIds.has(assetId)) throw new Error('permanent legacy failure');
+            return { backend: 'opfs', mimeType: (blob as Blob).type, size: (blob as Blob).size };
+        });
+
+        await migrateLegacyLocalCoverAssetsInBackground();
+
+        expect(writeLocalCoverBinary).toHaveBeenCalledTimes(21);
+        expect(await appDatabase.local_cover_assets.get(records[20].id)).toMatchObject({
+            id: records[20].id,
+            backend: 'opfs',
+        });
+        expect(await appDatabase.local_cover_assets.get(records[20].id)).not.toHaveProperty('blob');
     });
 });

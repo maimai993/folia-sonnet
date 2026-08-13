@@ -852,6 +852,7 @@ async function buildImportedSong(
         discNumber: embeddedMetadata.discNumber,
         localCoverAssetId: folderCover?.assetId,
         localCoverSource: folderCover ? 'folder' : undefined,
+        localCoverNeedsAssetMigration: folderCover && !folderCover.assetId ? true : undefined,
         hasManualLyricSelection: existingSong?.hasManualLyricSelection ?? false,
         folderName: entry.folderName,
         hasLocalLyrics: !!localLyricsContent,
