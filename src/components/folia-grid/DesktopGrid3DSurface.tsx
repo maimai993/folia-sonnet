@@ -258,6 +258,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                             description: item.description,
                             summary: item.summary,
                             type: item.type,
+                            path: item.type === 'folder' ? String(item.name) : undefined,
                             rawCollection: item,
                         }))}
                         initialFocusedIndex={focusedIndex}

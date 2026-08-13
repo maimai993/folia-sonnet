@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, Disc, Eye, EyeOff, ListFilter, Search, X } from 'lucide-react';
+import { ChevronLeft, Disc, Eye, EyeOff, ListFilter } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Theme } from '../types';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 import { SidePanelList, CollectionListItem } from './shared/SidePanelList';
 import { GridListSearchButton } from './shared/GridListSearchButton';
 import { gridSearchPanelMotion } from './shared/gridSearchPanelMotion';
+import GridMapSearchPanel from './folia-grid/GridMapSearchPanel';
+import { matchesGridMapQuery, parseGridMapQuery } from './folia-grid/gridMapQuery';
 import {
     resolveGridMapDisplayIndex,
     resolveGridMapSourceIndex,
@@ -24,6 +26,7 @@ export interface GridMapItem {
     description?: string;
     summary?: string;
     type?: string;
+    path?: string;
     rawCollection?: any;
 }
 
@@ -215,10 +218,9 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     const [showSearchPanel, setShowSearchPanel] = useState(false);
     const [draftSearchQuery, setDraftSearchQuery] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
-    const deferredSearchQuery = useDeferredValue(searchQuery);
+    const [appliedSearchQuery, setAppliedSearchQuery] = useState('');
+    const deferredSearchQuery = useDeferredValue(appliedSearchQuery);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
-    const isComposingSearchRef = useRef(false);
 
     const [showSidePanel, setShowSidePanel] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
@@ -251,13 +253,19 @@ export const GridMap: React.FC<GridMapProps> = ({
             if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
                 if (event.key === 'Escape' && showSearchPanel) {
                     setShowSearchPanel(false);
-                    setDraftSearchQuery('');
-                    setSearchQuery('');
+                    setDraftSearchQuery(appliedSearchQuery);
                 }
                 return;
             }
 
-            if (event.key === '/' || (event.ctrlKey && event.key === 'f') || (event.metaKey && event.key === 'f')) {
+            if (event.key === '/') {
+                event.preventDefault();
+                setDraftSearchQuery('/');
+                setShowSearchPanel(true);
+                return;
+            }
+
+            if ((event.ctrlKey && event.key === 'f') || (event.metaKey && event.key === 'f')) {
                 event.preventDefault();
                 setShowSearchPanel(true);
                 return;
@@ -271,7 +279,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 
         window.addEventListener('keydown', handleSearchTyping);
         return () => window.removeEventListener('keydown', handleSearchTyping);
-    }, [isInteractive, showSearchPanel]);
+    }, [appliedSearchQuery, isInteractive, showSearchPanel]);
 
     const visibleItems = useMemo(() => {
         if (isPlaylistEditMode && showHiddenPlaylistsOnly) {
@@ -284,16 +292,9 @@ export const GridMap: React.FC<GridMapProps> = ({
     }, [isPlaylistEditMode, isPlaylistHidden, items, showHiddenPlaylistsOnly]);
 
     const displayItems = useMemo(() => {
-        const query = deferredSearchQuery.trim().toLowerCase();
-        if (!query) return visibleItems;
-
-        return visibleItems.filter(item => {
-            return (
-                item.name?.toLowerCase().includes(query) ||
-                item.description?.toLowerCase().includes(query) ||
-                item.summary?.toLowerCase().includes(query)
-            );
-        });
+        const parsedQuery = parseGridMapQuery(deferredSearchQuery);
+        if (!deferredSearchQuery.trim()) return visibleItems;
+        return visibleItems.filter(item => matchesGridMapQuery(item, parsedQuery));
     }, [visibleItems, deferredSearchQuery]);
 
     const togglePlaylistEditMode = useCallback(() => {
@@ -877,55 +878,31 @@ export const GridMap: React.FC<GridMapProps> = ({
                             {...gridSearchPanelMotion}
                             className="absolute top-24 left-1/2 z-[85] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 pointer-events-auto"
                         >
-                            <div className="relative rounded-full border shadow-2xl backdrop-blur-2xl theme-glass-panel">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 opacity-40 w-4 h-4" />
-                                <input
-                                    ref={searchInputRef}
-                                    type="text"
-                                    value={draftSearchQuery}
-                                    onChange={(event) => {
-                                        const nextValue = event.target.value;
-                                        setDraftSearchQuery(nextValue);
-                                        if (!isComposingSearchRef.current) {
-                                            setSearchQuery(nextValue);
+                            <div className="relative">
+                                <GridMapSearchPanel
+                                    draftQuery={draftSearchQuery}
+                                    appliedQuery={appliedSearchQuery}
+                                    items={visibleItems}
+                                    inputRef={searchInputRef}
+                                    onDraftChange={(query, applyBasic) => {
+                                        setDraftSearchQuery(query);
+                                        if (applyBasic && parseGridMapQuery(query).mode === 'basic') {
+                                            setAppliedSearchQuery(query);
                                         }
                                     }}
-                                    onCompositionStart={() => {
-                                        isComposingSearchRef.current = true;
+                                    onApply={(query) => {
+                                        setDraftSearchQuery(query);
+                                        setAppliedSearchQuery(query);
                                     }}
-                                    onCompositionEnd={(event) => {
-                                        isComposingSearchRef.current = false;
-                                        const nextValue = event.currentTarget.value;
-                                        setDraftSearchQuery(nextValue);
-                                        setSearchQuery(nextValue);
+                                    onDismiss={() => {
+                                        setDraftSearchQuery(appliedSearchQuery);
+                                        setShowSearchPanel(false);
                                     }}
-                                    onKeyDown={(event) => {
-                                        if (event.key === 'Escape') {
-                                            setShowSearchPanel(false);
-                                            setDraftSearchQuery('');
-                                            setSearchQuery('');
-                                        }
+                                    onClear={() => {
+                                        setDraftSearchQuery('');
+                                        setAppliedSearchQuery('');
                                     }}
-                                    placeholder={`${t('home.gridSearchPlaceholder') || 'Filter collections...'} (Esc)`}
-                                    className="w-full rounded-full bg-transparent py-3 pl-11 pr-11 text-sm font-medium outline-none placeholder:text-current placeholder:opacity-40"
-                                    style={{ color: 'var(--text-primary)' }}
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (draftSearchQuery) {
-                                            setDraftSearchQuery('');
-                                            setSearchQuery('');
-                                            searchInputRef.current?.focus();
-                                        } else {
-                                            setShowSearchPanel(false);
-                                        }
-                                    }}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-45 transition-opacity hover:opacity-90 cursor-pointer"
-                                    aria-label={draftSearchQuery ? "Clear" : "Close"}
-                                >
-                                    <X size={15} />
-                                </button>
                             </div>
                         </motion.div>
                     )}
