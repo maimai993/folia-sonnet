@@ -135,6 +135,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         navidromeEnabled = false,
         onOpenGridView,
         onStatusMessage,
+        onPlayAll,
+        onAddAllToQueue,
         stageEnabled = false,
         stageIsActive = false,
         onOpenStagePlayer,
@@ -858,6 +860,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             isInteractive={isInteractive}
                             hasFloatingPlayer={Boolean(currentTrack)}
                             onOpenGridView={onOpenGridView}
+                            onPlayAll={onPlayAll}
+                            onAddAllToQueue={onAddAllToQueue}
+                            onRefreshLocalSongs={onRefreshLocalSongs}
                         />
                     </div>
                 ) : (

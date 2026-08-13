@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
     getGridMapQuerySuggestions,
+    getGridMapQueryEditorState,
     isGridMapSyntaxQuery,
     matchesGridMapQuery,
     parseGridMapQuery,
+    updateGridMapQueryEditorValue,
 } from '../../../src/components/folia-grid/gridMapQuery';
 
 // test/unit/gridView/gridMapQuery.test.ts
@@ -16,12 +18,25 @@ const items = [
 ];
 
 describe('gridMapQuery', () => {
-    it('uses only a leading colon to enter syntax mode', () => {
+    it('uses only a leading slash to enter syntax mode', () => {
         expect(isGridMapSyntaxQuery('/path "Library/Rock"')).toBe(true);
         expect(isGridMapSyntaxQuery('  /under "Library"')).toBe(true);
         expect(isGridMapSyntaxQuery('path')).toBe(false);
         expect(isGridMapSyntaxQuery('rock:path')).toBe(false);
         expect(isGridMapSyntaxQuery('：path "Library/Rock"')).toBe(false);
+    });
+
+    it('presents path commands as a mode plus a path-only editor value', () => {
+        expect(getGridMapQueryEditorState('/path "Library/Rock"')).toEqual({
+            operator: 'path',
+            visibleValue: 'Library/Rock',
+        });
+        expect(getGridMapQueryEditorState('/under "Library"')).toEqual({
+            operator: 'under',
+            visibleValue: 'Library',
+        });
+        expect(updateGridMapQueryEditorValue('/path "Library/Rock"', 'Other/Pop')).toBe('/path "Other/Pop"');
+        expect(updateGridMapQueryEditorValue('/under ', 'Library/Rock')).toBe('/under "Library/Rock"');
     });
 
     it('keeps basic search as a text match', () => {

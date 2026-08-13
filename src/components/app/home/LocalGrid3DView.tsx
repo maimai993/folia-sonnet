@@ -8,6 +8,12 @@ import { buildLocalGrid3DGroups } from './localGrid3DModel';
 import { useDebouncedFocusSync } from '../../../hooks/useDebouncedFocusSync';
 import { useLocalLibraryCatalog } from '../../../hooks/useLocalLibraryCatalog';
 import { createSafeObjectUrl, isBlob } from '../../../utils/blobGuards';
+import { buildLocalQueue } from '../../../services/playbackAdapters';
+import { createLocalPlaylist } from '../../../services/localPlaylistService';
+import { deleteSongsByIds, removeImportedRoot, resyncFolder } from '../../../services/localMusicService';
+import { loadLocalLibraryDirectoryTrees } from '../../../services/localLibraryDirectoryTree';
+import type { GridMapBatchConfig, GridMapBatchContext, GridMapDirectoryNode } from '../../folia-grid/gridMapBatch';
+import type { SongResult } from '../../../types';
 
 // src/components/app/home/LocalGrid3DView.tsx
 // Desktop-only local music Grid3D overview that opens GridView instead of legacy carousel details.
@@ -36,6 +42,9 @@ interface LocalGrid3DViewProps {
     isScanInProgress?: boolean;
     isImportingPlaylist?: boolean;
     onOpenGridView?: (collection: GridViewCollectionDescriptor) => void;
+    onPlayAll?: (songs: SongResult[]) => void;
+    onAddAllToQueue?: (songs: SongResult[]) => void;
+    onRefreshLocalSongs: () => Promise<void> | void;
     theme: Theme;
     isDaylight: boolean;
     hasFloatingPlayer?: boolean;
@@ -64,6 +73,9 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     isScanInProgress = false,
     isImportingPlaylist = false,
     onOpenGridView,
+    onPlayAll,
+    onAddAllToQueue,
+    onRefreshLocalSongs,
     theme,
     isDaylight,
     hasFloatingPlayer = false,
@@ -71,7 +83,25 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
 }) => {
     const { t } = useTranslation();
     const playlistFileInputRef = useRef<HTMLInputElement>(null);
+    const [directoryTrees, setDirectoryTrees] = useState<GridMapDirectoryNode[]>([]);
+    const [directoryTreesLoaded, setDirectoryTreesLoaded] = useState(false);
     const catalog = useLocalLibraryCatalog(localSongs);
+
+    const refreshDirectoryTrees = React.useCallback(async () => {
+        try {
+            const trees = await loadLocalLibraryDirectoryTrees(localSongs);
+            setDirectoryTrees(trees);
+        } catch (error) {
+            console.warn('[LocalGrid3DView] Failed to load directory snapshots:', error);
+            setDirectoryTrees([]);
+        } finally {
+            setDirectoryTreesLoaded(true);
+        }
+    }, [localSongs]);
+
+    useEffect(() => {
+        void refreshDirectoryTrees();
+    }, [refreshDirectoryTrees]);
     const { groups, coverSourceMap } = useMemo(() => {
         const rawGroups = buildLocalGrid3DGroups(localSongs, localPlaylists, t, catalog.ready ? catalog : undefined);
         const sourceMap = new Map<string, Blob | string | undefined>();
@@ -210,6 +240,45 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
 
     const activeSection = sections.find(section => section.row === activeRow) ?? sections[0];
 
+    const resolveBatchSongs = React.useCallback((context: GridMapBatchContext) => {
+        const songsById = new Map(localSongs.map(song => [song.id, song]));
+        return context.trackIds
+            .map(id => songsById.get(id))
+            .filter((song): song is LocalSong => Boolean(song));
+    }, [localSongs]);
+
+    const folderBatchConfig = useMemo<GridMapBatchConfig | undefined>(() => {
+        if (activeSection.key !== 'folders') return undefined;
+
+        return {
+            directoryTrees,
+            onPlay: context => {
+                const queue = buildLocalQueue(resolveBatchSongs(context), undefined, catalog.ready ? catalog : undefined);
+                if (queue.length > 0) onPlayAll?.(queue);
+            },
+            onAddToQueue: context => {
+                const queue = buildLocalQueue(resolveBatchSongs(context), undefined, catalog.ready ? catalog : undefined);
+                if (queue.length > 0) onAddAllToQueue?.(queue);
+            },
+            onCreatePlaylist: async (name, context) => {
+                await createLocalPlaylist(name, resolveBatchSongs(context));
+                await onRefreshLocalSongs();
+            },
+            onRemove: async context => {
+                await deleteSongsByIds(context.trackIds);
+                await onRefreshLocalSongs();
+            },
+            onRescanRoot: async rootPath => {
+                await resyncFolder(rootPath);
+                await onRefreshLocalSongs();
+            },
+            onRemoveRoot: async rootPath => {
+                await removeImportedRoot(rootPath);
+                await onRefreshLocalSongs();
+            },
+        };
+    }, [activeSection.key, catalog, directoryTrees, onAddAllToQueue, onPlayAll, onRefreshLocalSongs, resolveBatchSongs]);
+
     const tabs: DesktopGrid3DAction[] = sections.map(section => ({
         id: section.key,
         label: section.label,
@@ -245,7 +314,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
         },
     ];
 
-    if (localSongs.length === 0) {
+    if (directoryTreesLoaded && localSongs.length === 0 && directoryTrees.length === 0) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center gap-4 opacity-60">
                 <Music size={64} />
@@ -285,6 +354,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                     description: item.description,
                     trackCount: item.trackCount,
                     type: item.type,
+                    trackIds: item.songs.map((song: LocalSong) => song.id),
                 }))}
                 focusedIndex={activeSection.focusedIndex}
                 onFocusedIndexChange={activeSection.setFocusedIndex}
@@ -302,6 +372,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                 isInteractive={isInteractive}
                 hasFloatingPlayer={hasFloatingPlayer}
                 playlistVisibilityScope="local"
+                batchConfig={folderBatchConfig}
             />
         </>
     );

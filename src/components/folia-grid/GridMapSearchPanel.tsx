@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import type { GridMapItem } from '../GridMap';
 import {
     getGridMapQuerySuggestions,
-    getGridMapSyntaxBody,
+    getGridMapQueryEditorState,
     isGridMapSyntaxQuery,
     parseGridMapQuery,
+    updateGridMapQueryEditorValue,
 } from './gridMapQuery';
 
 // src/components/folia-grid/GridMapSearchPanel.tsx
@@ -23,10 +24,9 @@ interface GridMapSearchPanelProps {
     onClear: () => void;
 }
 
-const getModeLabelKey = (query: string): string => {
-    const parsed = parseGridMapQuery(query);
-    if (parsed.pathConditions.length === 1 && parsed.textTerms.length === 0) {
-        return parsed.pathConditions[0].operator === 'path'
+const getModeLabelKey = (operator: 'path' | 'under' | null): string => {
+    if (operator) {
+        return operator === 'path'
             ? 'home.gridQueryExactPath'
             : 'home.gridQuerySubtree';
     }
@@ -46,6 +46,7 @@ const GridMapSearchPanel: React.FC<GridMapSearchPanelProps> = ({
     const { t } = useTranslation();
     const isSyntaxMode = isGridMapSyntaxQuery(draftQuery);
     const parsedQuery = useMemo(() => parseGridMapQuery(draftQuery), [draftQuery]);
+    const editorState = useMemo(() => getGridMapQueryEditorState(draftQuery), [draftQuery]);
     const suggestions = useMemo(
         () => getGridMapQuerySuggestions(draftQuery, items),
         [draftQuery, items],
@@ -58,9 +59,8 @@ const GridMapSearchPanel: React.FC<GridMapSearchPanelProps> = ({
         setActiveSuggestionIndex(0);
     }, [draftQuery]);
 
-    const visibleValue = isSyntaxMode ? getGridMapSyntaxBody(draftQuery).replace(/^\s+/, '') : draftQuery;
     const updateVisibleValue = (value: string, applyBasic: boolean) => {
-        onDraftChange(isSyntaxMode ? `/${value}` : value, applyBasic);
+        onDraftChange(updateGridMapQueryEditorValue(draftQuery, value), applyBasic);
     };
     const applyQuery = (query = draftQuery) => {
         if (parseGridMapQuery(query).valid) onApply(query);
@@ -80,14 +80,14 @@ const GridMapSearchPanel: React.FC<GridMapSearchPanelProps> = ({
                         className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[11px] font-semibold shadow-sm transition-colors hover:bg-white/15"
                         title={t('home.gridQueryExit')}
                     >
-                        <span>{t(getModeLabelKey(draftQuery))}</span>
+                        <span>{t(getModeLabelKey(editorState.operator))}</span>
                         <X size={12} className="opacity-55" />
                     </button>
                 )}
                 <input
                     ref={inputRef}
                     type="text"
-                    value={visibleValue}
+                    value={editorState.visibleValue}
                     onChange={(event) => updateVisibleValue(event.target.value, !isComposingRef.current)}
                     onCompositionStart={() => {
                         isComposingRef.current = true;
@@ -125,16 +125,15 @@ const GridMapSearchPanel: React.FC<GridMapSearchPanelProps> = ({
                         }
                     }}
                     placeholder={isSyntaxMode
-                        ? t('home.gridQueryPlaceholder')
+                        ? t(editorState.operator === 'path'
+                            ? 'home.gridQueryExactPathPlaceholder'
+                            : editorState.operator === 'under'
+                                ? 'home.gridQuerySubtreePlaceholder'
+                                : 'home.gridQueryPlaceholder')
                         : `${t('home.gridSearchPlaceholder')} (/)`}
                     className="min-w-0 flex-1 bg-transparent py-3 text-sm font-medium outline-none placeholder:text-current placeholder:opacity-40"
                     style={{ color: 'var(--text-primary)' }}
                 />
-                {isSyntaxMode && (
-                    <span className={`shrink-0 text-[10px] font-medium ${isDirty ? 'text-amber-500' : 'opacity-40'}`}>
-                        {t(isDirty ? 'home.gridQueryPending' : 'home.gridQueryApplied')}
-                    </span>
-                )}
                 {isSyntaxMode && (
                     <button
                         type="button"

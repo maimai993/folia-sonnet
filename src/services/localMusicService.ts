@@ -1546,14 +1546,48 @@ export async function getAudioFromFile(file: File): Promise<string> {
 
 // Delete songs by their specific IDs
 export async function deleteSongsByIds(songIds: string[]): Promise<void> {
-    songIds.forEach(id => {
+    const uniqueSongIds = Array.from(new Set(songIds));
+    if (uniqueSongIds.length === 0) return;
+    const allSongs = await getLocalSongs();
+    const deletedIdSet = new Set(uniqueSongIds);
+    const affectedRoots = new Set(
+        allSongs
+            .filter(song => deletedIdSet.has(song.id))
+            .map(getRootFolderName)
+            .filter((root): root is string => Boolean(root)),
+    );
+    uniqueSongIds.forEach(id => {
         fileHandleMap.delete(id);
         embeddedCoverRequestMap.delete(id);
     });
-    await dbDeleteLocalSongs(songIds);
-    await removeDeletedSongIdsFromPlaylists(songIds);
+    await Promise.all([
+        dbDeleteLocalSongs(uniqueSongIds),
+        ...uniqueSongIds.map(id => removeCachedCover(`cover_local_${id}`)),
+    ]);
+    await removeDeletedSongIdsFromPlaylists(uniqueSongIds);
+    await Promise.all(Array.from(affectedRoots).map(cleanupDirHandleIfUnused));
     notifyLocalMusicUpdated();
-    console.log(`[LocalMusic] Deleted ${songIds.length} songs by ID`);
+    console.log(`[LocalMusic] Deleted ${uniqueSongIds.length} songs by ID`);
+}
+
+// Removes an imported root from the app, including empty roots, without deleting disk files.
+export async function removeImportedRoot(rootFolderName: string): Promise<void> {
+    const normalizedRoot = rootFolderName.split('/')[0]?.trim();
+    if (!normalizedRoot) return;
+
+    const allSongs = await getLocalSongs();
+    const songIds = allSongs
+        .filter(song => getRootFolderName(song) === normalizedRoot)
+        .map(song => song.id);
+
+    if (songIds.length > 0) {
+        await deleteSongsByIds(songIds);
+    }
+    await Promise.all([
+        deleteDirHandle(normalizedRoot),
+        deleteLocalLibrarySnapshot(normalizedRoot),
+    ]);
+    notifyLocalMusicUpdated();
 }
 
 // Resync folder: refresh an imported folder in place using the persisted root handle

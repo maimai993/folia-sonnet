@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     deleteFolderSongs,
+    deleteSongsByIds,
     deleteLocalSong as deleteLocalMusicSong,
     extractMetadataFromFilename,
     importFolder,
     resyncAllFolders,
     resyncFolder,
+    removeImportedRoot,
 } from '@/services/localMusicService';
 import {
     deleteDirHandle,
@@ -362,5 +364,24 @@ describe('localMusicService', () => {
         expect(removeCachedCover).toHaveBeenCalledTimes(2);
         expect(removeCachedCover).toHaveBeenCalledWith('cover_local_song-1');
         expect(removeCachedCover).toHaveBeenCalledWith('cover_local_song-2');
+    });
+
+    it('cleans cover cache when deleting a selected batch by song id', async () => {
+        vi.mocked(getLocalSongs).mockResolvedValue([createSong({ id: 'song-1' })]);
+
+        await deleteSongsByIds(['song-1', 'song-1']);
+
+        expect(deleteLocalSongs).toHaveBeenCalledWith(['song-1']);
+        expect(removeCachedCover).toHaveBeenCalledWith('cover_local_song-1');
+    });
+
+    it('removes an imported root even when it contains no music', async () => {
+        vi.mocked(getLocalSongs).mockResolvedValue([]);
+
+        await removeImportedRoot('EmptyRoot');
+
+        expect(deleteDirHandle).toHaveBeenCalledWith('EmptyRoot');
+        expect(deleteLocalLibrarySnapshot).toHaveBeenCalledWith('EmptyRoot');
+        expect(deleteLocalSongs).not.toHaveBeenCalled();
     });
 });

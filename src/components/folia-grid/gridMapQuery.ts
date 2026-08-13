@@ -33,6 +33,11 @@ export interface GridMapQuerySuggestion {
     completedQuery: string;
 }
 
+export interface GridMapQueryEditorState {
+    operator: GridMapPathOperator | null;
+    visibleValue: string;
+}
+
 const SYNTAX_PREFIX = '/';
 const QUERY_COMMANDS: GridMapPathOperator[] = ['path', 'under'];
 
@@ -41,6 +46,42 @@ export const isGridMapSyntaxQuery = (query: string): boolean => query.trimStart(
 export const getGridMapSyntaxBody = (query: string): string => {
     const trimmedStart = query.trimStart();
     return trimmedStart.startsWith(SYNTAX_PREFIX) ? trimmedStart.slice(1) : query;
+};
+
+const escapeQuotedPath = (path: string): string => path.replace(/"/g, '\\"');
+
+// Separates the syntax command from the value rendered in the structured search input.
+export const getGridMapQueryEditorState = (query: string): GridMapQueryEditorState => {
+    if (!isGridMapSyntaxQuery(query)) {
+        return { operator: null, visibleValue: query };
+    }
+
+    const body = getGridMapSyntaxBody(query).replace(/^\s+/, '');
+    const commandMatch = /^(path|under)(?:\s+(.*))?$/i.exec(body);
+    if (!commandMatch) {
+        return { operator: null, visibleValue: body };
+    }
+
+    const rawValue = commandMatch[2] || '';
+    const visibleValue = rawValue.startsWith('"')
+        ? rawValue.slice(1).replace(/"$/, '').replace(/\\"/g, '"')
+        : rawValue;
+    return {
+        operator: commandMatch[1].toLocaleLowerCase() as GridMapPathOperator,
+        visibleValue,
+    };
+};
+
+export const updateGridMapQueryEditorValue = (
+    query: string,
+    visibleValue: string,
+): string => {
+    const editorState = getGridMapQueryEditorState(query);
+    if (!isGridMapSyntaxQuery(query)) return visibleValue;
+    if (!editorState.operator) return `/${visibleValue}`;
+    return visibleValue
+        ? `/${editorState.operator} "${escapeQuotedPath(visibleValue)}"`
+        : `/${editorState.operator} `;
 };
 
 export const normalizeGridMapPath = (value: string): string => value
@@ -154,8 +195,6 @@ export const matchesGridMapQuery = (
     });
 };
 
-const escapeQuotedPath = (path: string): string => path.replace(/"/g, '\\"');
-
 const rankPath = (path: string, query: string): number => {
     const normalizedPath = path.toLocaleLowerCase();
     const normalizedQuery = query.toLocaleLowerCase();
@@ -188,7 +227,7 @@ const buildPathSuggestions = (
     body: string,
     items: readonly GridMapQueryableItem[],
 ): GridMapQuerySuggestion[] => {
-    const match = /(^|\s)(path|under)\s+(?:"([^"]*)|([^\s]*))$/i.exec(body);
+    const match = /(^|\s)(path|under)\s+(?:"([^"]*)"?|([^\s]*))$/i.exec(body);
     if (!match) return [];
 
     const operator = match[2].toLocaleLowerCase() as GridMapPathOperator;

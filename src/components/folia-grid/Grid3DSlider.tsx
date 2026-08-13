@@ -13,6 +13,7 @@ export interface Grid3DSliderItem {
     description?: string;
     summary?: string;
     trackCount?: number;
+    trackIds?: string[];
     type?: string;
 }
 

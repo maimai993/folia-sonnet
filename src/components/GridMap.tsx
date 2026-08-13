@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, Disc, Eye, EyeOff, ListFilter } from 'lucide-react';
+import { Check, ChevronLeft, Disc, Eye, EyeOff, ListFilter, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Theme } from '../types';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
@@ -9,6 +9,8 @@ import { GridListSearchButton } from './shared/GridListSearchButton';
 import { gridSearchPanelMotion } from './shared/gridSearchPanelMotion';
 import GridMapSearchPanel from './folia-grid/GridMapSearchPanel';
 import { matchesGridMapQuery, parseGridMapQuery } from './folia-grid/gridMapQuery';
+import GridMapBatchPanel from './folia-grid/GridMapBatchPanel';
+import { resolveGridMapBatchContext, type GridMapBatchConfig } from './folia-grid/gridMapBatch';
 import {
     resolveGridMapDisplayIndex,
     resolveGridMapSourceIndex,
@@ -27,6 +29,7 @@ export interface GridMapItem {
     summary?: string;
     type?: string;
     path?: string;
+    trackIds?: string[];
     rawCollection?: any;
 }
 
@@ -43,6 +46,7 @@ interface GridMapProps {
     isInteractive?: boolean;
     isPlaylistHidden?: (item: GridMapItem) => boolean;
     onTogglePlaylistHidden?: (item: GridMapItem) => void;
+    batchConfig?: GridMapBatchConfig;
 }
 
 const compactDescription = (description?: string, maxLength = 72) => {
@@ -61,6 +65,8 @@ const MapCard = React.memo<{
     onSelect: () => void;
     isPlaylistEditMode: boolean;
     isHidden: boolean;
+    isBatchMode: boolean;
+    isBatchSelected: boolean;
     onTogglePlaylistHidden?: () => void;
     cardWidth: number;
     cardHeight: number;
@@ -71,6 +77,8 @@ const MapCard = React.memo<{
         onSelect,
         isPlaylistEditMode,
         isHidden,
+        isBatchMode,
+        isBatchSelected,
         onTogglePlaylistHidden,
         cardWidth,
         cardHeight,
@@ -80,9 +88,9 @@ const MapCard = React.memo<{
 
         return (
             <div
-                className={`rounded-xl p-3 flex flex-col items-center border backdrop-blur-md transition-shadow duration-300 shadow-lg theme-polaroid-card ${
+                className={`rounded-xl p-3 flex flex-col items-center border backdrop-blur-md transition-all duration-300 shadow-lg theme-polaroid-card ${
                     isPlaylistSelectionDisabled ? 'cursor-default' : 'cursor-pointer hover:shadow-2xl'
-                }`}
+                } ${isBatchMode && !isBatchSelected ? 'opacity-35 grayscale' : ''}`}
                 style={{
                     width: cardWidth,
                     minHeight: cardHeight,
@@ -149,6 +157,13 @@ const MapCard = React.memo<{
                             {isHidden ? <EyeOff size={17} /> : <Eye size={17} />}
                         </button>
                     )}
+                    {isBatchMode && (
+                        <span className={`absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border shadow-lg backdrop-blur-md ${
+                            isBatchSelected ? 'border-sky-300/50 bg-sky-500 text-white' : 'border-white/20 bg-black/45 text-white'
+                        }`}>
+                            {isBatchSelected ? <Check size={16} strokeWidth={3} /> : <X size={15} />}
+                        </span>
+                    )}
                 </div>
 
                 {/* Bottom Polaroid Frame Label Details */}
@@ -183,6 +198,8 @@ const MapCard = React.memo<{
             prev.isDaylight === next.isDaylight &&
             prev.isPlaylistEditMode === next.isPlaylistEditMode &&
             prev.isHidden === next.isHidden &&
+            prev.isBatchMode === next.isBatchMode &&
+            prev.isBatchSelected === next.isBatchSelected &&
             prev.onTogglePlaylistHidden === next.onTogglePlaylistHidden &&
             prev.cardWidth === next.cardWidth &&
             prev.cardHeight === next.cardHeight &&
@@ -204,6 +221,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     isInteractive = true,
     isPlaylistHidden = () => false,
     onTogglePlaylistHidden,
+    batchConfig,
 }) => {
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement>(null);
@@ -226,7 +244,9 @@ export const GridMap: React.FC<GridMapProps> = ({
     const [showCutInPanel, setShowCutInPanel] = useState(false);
     const [isPlaylistEditMode, setIsPlaylistEditMode] = useState(false);
     const [showHiddenPlaylistsOnly, setShowHiddenPlaylistsOnly] = useState(false);
+    const [selectedBatchItemIds, setSelectedBatchItemIds] = useState<Set<string>>(new Set());
     const hasPlaylistItems = useMemo(() => items.some(item => item.type === 'playlist'), [items]);
+    const hasCutInPanel = hasPlaylistItems || Boolean(batchConfig);
 
     const selectDisplayedItem = useCallback((item: GridMapItem, displayIndex: number) => {
         const sourceIndex = resolveGridMapSourceIndex(items, item, displayIndex);
@@ -296,6 +316,15 @@ export const GridMap: React.FC<GridMapProps> = ({
         if (!deferredSearchQuery.trim()) return visibleItems;
         return visibleItems.filter(item => matchesGridMapQuery(item, parsedQuery));
     }, [visibleItems, deferredSearchQuery]);
+    const excludedBatchItemIds = useMemo(() => new Set(
+        displayItems
+            .map(item => String(item.id))
+            .filter(itemId => !selectedBatchItemIds.has(itemId)),
+    ), [displayItems, selectedBatchItemIds]);
+    const batchContext = useMemo(
+        () => resolveGridMapBatchContext(displayItems, excludedBatchItemIds),
+        [displayItems, excludedBatchItemIds],
+    );
 
     const togglePlaylistEditMode = useCallback(() => {
         setIsPlaylistEditMode(previous => {
@@ -309,6 +338,7 @@ export const GridMap: React.FC<GridMapProps> = ({
         setShowCutInPanel(false);
         setIsPlaylistEditMode(false);
         setShowHiddenPlaylistsOnly(false);
+        setSelectedBatchItemIds(new Set());
     }, []);
 
     // Track responsive container size to scale grid card dimensions dynamically
@@ -589,12 +619,23 @@ export const GridMap: React.FC<GridMapProps> = ({
                         isDaylight={isDaylight}
                         isPlaylistEditMode={isPlaylistEditMode}
                         isHidden={isPlaylistHidden(item)}
+                        isBatchMode={Boolean(batchConfig && showCutInPanel)}
+                        isBatchSelected={selectedBatchItemIds.has(String(item.id))}
                         onTogglePlaylistHidden={item.type === 'playlist' && onTogglePlaylistHidden
                             ? () => onTogglePlaylistHidden(item)
                             : undefined}
                         cardWidth={layoutConfig.cardWidth}
                         cardHeight={layoutConfig.cardHeight}
                         onSelect={() => {
+                            if (batchConfig && showCutInPanel) {
+                                setSelectedBatchItemIds(current => {
+                                    const next = new Set(current);
+                                    const id = String(item.id);
+                                    if (next.has(id)) next.delete(id); else next.add(id);
+                                    return next;
+                                });
+                                return;
+                            }
                             if (isPlaylistEditMode && item.type === 'playlist') return;
                             if (suppressSelectionRef.current) return;
                             selectDisplayedItem(item, idx);
@@ -610,6 +651,9 @@ export const GridMap: React.FC<GridMapProps> = ({
         isDaylight,
         isPlaylistEditMode,
         isPlaylistHidden,
+        batchConfig,
+        showCutInPanel,
+        selectedBatchItemIds,
         onTogglePlaylistHidden,
         layoutConfig.cardWidth,
         layoutConfig.cardHeight,
@@ -820,11 +864,12 @@ export const GridMap: React.FC<GridMapProps> = ({
 
                 <button
                     type="button"
-                    disabled={!hasPlaylistItems}
+                    disabled={!hasCutInPanel}
                     onClick={() => {
                         if (showCutInPanel) {
                             closeCutInPanel();
                         } else {
+                            setSelectedBatchItemIds(new Set());
                             setShowCutInPanel(true);
                         }
                     }}
@@ -836,7 +881,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                 >
                     <h2 className="text-lg font-bold tracking-tight">
                         {title}
-                        {hasPlaylistItems && (
+                        {hasCutInPanel && (
                             <span className="ml-1.5 rounded-full bg-zinc-500/20 px-1.5 py-0.5 text-[9px] font-normal opacity-60">
                                 {t(showCutInPanel ? 'ui.close' : 'ui.info')}
                             </span>
@@ -945,7 +990,7 @@ export const GridMap: React.FC<GridMapProps> = ({
             </div>
 
             <AnimatePresence>
-                {showCutInPanel && hasPlaylistItems && (
+                {showCutInPanel && hasCutInPanel && (
                     <motion.div
                         initial={{ opacity: 0, x: -60, scale: 0.95 }}
                         animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -953,28 +998,57 @@ export const GridMap: React.FC<GridMapProps> = ({
                         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                         className="absolute left-6 top-24 bottom-28 sm:bottom-6 w-80 rounded-3xl z-[80] flex flex-col p-6 shadow-2xl border backdrop-blur-2xl pointer-events-auto theme-glass-panel"
                     >
-                        <div
-                            className="relative mb-4 aspect-square shrink-0 overflow-hidden rounded-2xl shadow-lg"
-                            style={{
-                                background: `linear-gradient(145deg, ${theme.primaryColor}, ${theme.accentColor})`,
-                            }}
-                        >
-                            <div
-                                className="absolute inset-0 opacity-60"
-                                style={{
-                                    background: `radial-gradient(circle at 20% 15%, ${theme.secondaryColor}, transparent 58%)`,
+                        {batchConfig ? (
+                            <GridMapBatchPanel
+                                title={title}
+                                context={batchContext}
+                                totalItemCount={displayItems.length}
+                                displayItems={displayItems}
+                                excludedItemIds={excludedBatchItemIds}
+                                config={batchConfig}
+                                isDaylight={isDaylight}
+                                onToggleSelectAll={(selected) => setSelectedBatchItemIds(
+                                    selected ? new Set(displayItems.map(item => String(item.id))) : new Set(),
+                                )}
+                                onSetItemsSelected={(itemIds, selected) => {
+                                    setSelectedBatchItemIds(current => {
+                                        const next = new Set(current);
+                                        itemIds.forEach(itemId => {
+                                            if (selected) next.add(itemId); else next.delete(itemId);
+                                        });
+                                        return next;
+                                    });
+                                }}
+                                onStagePathQuery={(path, operator) => {
+                                    const escapedPath = path.replace(/"/g, '\\"');
+                                    setDraftSearchQuery(`/${operator} "${escapedPath}"`);
+                                    setShowSearchPanel(true);
                                 }}
                             />
-                            <div className="absolute inset-0 bg-black/15" />
-                        </div>
-                        <div className="min-w-0">
-                            <h3 className="line-clamp-2 text-xl font-bold leading-snug">{title}</h3>
-                            <p className="mt-1.5 text-[10px] opacity-40">{t('home.playlists')}</p>
-                        </div>
-                        <div
-                            className="mt-auto space-y-2 border-t pt-4"
-                            style={{ borderTopColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }}
-                        >
+                        ) : (
+                            <>
+                                <div
+                                    className="relative mb-4 aspect-square shrink-0 overflow-hidden rounded-2xl shadow-lg"
+                                    style={{
+                                        background: `linear-gradient(145deg, ${theme.primaryColor}, ${theme.accentColor})`,
+                                    }}
+                                >
+                                    <div
+                                        className="absolute inset-0 opacity-60"
+                                        style={{
+                                            background: `radial-gradient(circle at 20% 15%, ${theme.secondaryColor}, transparent 58%)`,
+                                        }}
+                                    />
+                                    <div className="absolute inset-0 bg-black/15" />
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="line-clamp-2 text-xl font-bold leading-snug">{title}</h3>
+                                    <p className="mt-1.5 text-[10px] opacity-40">{t('home.playlists')}</p>
+                                </div>
+                                <div
+                                    className="mt-auto space-y-2 border-t pt-4"
+                                    style={{ borderTopColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }}
+                                >
                             {isPlaylistEditMode && (
                                 <button
                                     type="button"
@@ -1001,7 +1075,9 @@ export const GridMap: React.FC<GridMapProps> = ({
                                 {isPlaylistEditMode ? <EyeOff size={14} /> : <Eye size={14} />}
                                 {isPlaylistEditMode ? t('home.finishHidingPlaylists') : t('home.hidePlaylists')}
                             </button>
-                        </div>
+                                </div>
+                            </>
+                        )}
                     </motion.div>
                 )}
             </AnimatePresence>
