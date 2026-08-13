@@ -1340,6 +1340,29 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
+    "v0_6_18": {
+      "intro": "Here are the new features and improvements in version 0.6.18.",
+      "m3uPlaylists": {
+        "title": "Portable M3U8 Playlists",
+        "description": "Import .m3u8 files into your local library and export Folia playlists as UTF-8 M3U8 files with portable paths. Unmatched or ambiguous paths are reported instead of being added silently."
+      },
+      "gridMapBatchTools": {
+        "title": "Search and Manage Local Collections",
+        "description": "GridMap search now supports multiple terms across names, paths, and metadata. Select folders, albums, or artists in batches to play, queue, create playlists, or remove library entries; folders can also be rescanned without touching files on disk."
+      },
+      "foliaIgnore": {
+        "title": "Flexible .foliaignore Rules",
+        "description": "Add .foliaignore files to imported roots or subfolders to exclude temporary files, cache directories, and unwanted audio with familiar gitignore-style patterns. Changes apply on the next re-import."
+      },
+      "incrementalLocalScans": {
+        "title": "Faster Incremental Library Scans",
+        "description": "Re-imports now reuse unchanged files, detect additions and removals, and load metadata in the background, making large local libraries quicker to refresh."
+      },
+      "localCoverAssets": {
+        "title": "More Efficient Local Artwork",
+        "description": "Local covers are deduplicated into persistent assets and served in size-aware thumbnails, reducing repeated storage and unnecessary full-resolution image work across the library."
+      }
+    },
     "v0_6_17": {
       "intro": "Here are the new features and improvements in version 0.6.17.",
       "sonnetSceneVariants": {

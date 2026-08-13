@@ -1113,6 +1113,29 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
+    "v0_6_18": {
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.18.",
+      "m3uPlaylists": {
+        "title": "Playlist M3U8 Portabel",
+        "description": "Impor file .m3u8 ke pustaka lokal dan ekspor playlist Folia sebagai M3U8 UTF-8 dengan jalur yang mudah dipindahkan. Jalur yang tidak cocok atau ambigu akan dilaporkan, bukan ditambahkan diam-diam."
+      },
+      "gridMapBatchTools": {
+        "title": "Cari dan Kelola Koleksi Lokal",
+        "description": "Pencarian GridMap kini mendukung beberapa istilah pada nama, jalur, dan metadata. Pilih folder, album, atau artis secara massal untuk memutar, menambahkan ke antrean, membuat playlist, atau menghapusnya dari pustaka; folder juga dapat dipindai ulang tanpa menghapus berkas di disk."
+      },
+      "foliaIgnore": {
+        "title": "Aturan .foliaignore yang Fleksibel",
+        "description": "Tambahkan .foliaignore di direktori akar atau subfolder impor untuk mengecualikan berkas sementara, direktori cache, dan audio yang tidak diperlukan dengan pola bergaya gitignore. Perubahan berlaku saat impor ulang berikutnya."
+      },
+      "incrementalLocalScans": {
+        "title": "Pemindaian Pustaka Lebih Cepat",
+        "description": "Impor ulang kini menggunakan kembali berkas yang tidak berubah, mendeteksi konten baru dan yang dihapus, serta memuat metadata di latar belakang agar pustaka lokal besar lebih cepat diperbarui."
+      },
+      "localCoverAssets": {
+        "title": "Penyimpanan Sampul Lokal Lebih Efisien",
+        "description": "Sampul lokal dideduplikasi berdasarkan konten dan disimpan sebagai aset persisten; antarmuka memakai thumbnail berukuran sesuai kebutuhan untuk mengurangi penyimpanan duplikat dan pemrosesan gambar penuh yang tidak perlu."
+      }
+    },
     "v0_6_17": {
       "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.17.",
       "sonnetSceneVariants": {

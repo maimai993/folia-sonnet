@@ -1341,6 +1341,29 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
+    "v0_6_18": {
+      "intro": "以下是 0.6.18 的新功能与改进",
+      "m3uPlaylists": {
+        "title": "便携的 M3U8 歌单",
+        "description": "可将 .m3u8 文件导入本地曲库，也可把 Folia 歌单导出为 UTF-8 M3U8，并保留便于迁移的路径。无法匹配或存在歧义的路径会明确统计，不会被静默加入。"
+      },
+      "gridMapBatchTools": {
+        "title": "搜索与批量管理本地集合",
+        "description": "GridMap 搜索现在支持多词查询，并会匹配名称、路径和元数据。可批量选择文件夹、专辑或艺术家进行播放、加入队列、创建歌单或从曲库移除；文件夹还支持重新扫描导入根目录，磁盘文件不会被删除。"
+      },
+      "foliaIgnore": {
+        "title": "灵活的 .foliaignore 规则",
+        "description": "可在导入根目录或子目录放置 .foliaignore，用熟悉的 gitignore 风格规则排除临时文件、缓存目录和不需要导入的音频。规则会在下次重新导入时生效。"
+      },
+      "incrementalLocalScans": {
+        "title": "更快的增量扫描",
+        "description": "重新导入时会复用未变化的文件，只处理新增、修改或移除的内容，并在后台读取元数据，让大型本地曲库刷新更快。"
+      },
+      "localCoverAssets": {
+        "title": "更高效的本地封面",
+        "description": "本地封面会按内容去重并持久化保存，界面按需要使用合适尺寸的缩略图，减少重复存储和不必要的原图处理。"
+      }
+    },
     "v0_6_17": {
       "intro": "以下是 0.6.17 的新功能与改进",
       "sonnetSceneVariants": {
