@@ -67,10 +67,14 @@ function createLocalCoverAssetStore({ getDirectory }) {
     const parsed = parseAssetId(assetId);
     const normalizedMimeType = normalizeMimeType(mimeType);
     if (!parsed || !normalizedMimeType) throw new Error('Invalid local cover asset metadata');
-    const buffer = Buffer.isBuffer(data)
+    const bytes = Buffer.isBuffer(data)
       ? data
-      : Buffer.from(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
-    if (buffer.byteLength === 0) throw new Error('Cannot persist an empty local cover asset');
+      : data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : ArrayBuffer.isView(data)
+          ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+          : Buffer.from(data);
+    if (bytes.byteLength === 0) throw new Error('Cannot persist an empty local cover asset');
 
     const directory = getDirectory();
     const paths = getAssetPaths(directory, assetId);
@@ -79,11 +83,11 @@ function createLocalCoverAssetStore({ getDirectory }) {
     const temporaryMetaPath = `${paths.metaPath}.${nonce}.tmp`;
     await fsp.mkdir(directory, { recursive: true });
     try {
-      await fsp.writeFile(temporaryDataPath, buffer);
+      await fsp.writeFile(temporaryDataPath, bytes);
       await fsp.writeFile(temporaryMetaPath, JSON.stringify({
         id: assetId,
         mimeType: normalizedMimeType,
-        size: buffer.byteLength,
+        size: bytes.byteLength,
         updatedAt: Date.now(),
       }), 'utf8');
       await Promise.allSettled([
@@ -98,7 +102,7 @@ function createLocalCoverAssetStore({ getDirectory }) {
         fsp.rm(temporaryMetaPath, { force: true }),
       ]);
     }
-    return { mimeType: normalizedMimeType, size: buffer.byteLength };
+    return { mimeType: normalizedMimeType, size: bytes.byteLength };
   };
 
   const remove = async (assetId) => {

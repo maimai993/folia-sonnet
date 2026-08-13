@@ -971,16 +971,15 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
     });
 
     const flushBatch = async (forceNotify = false) => {
+        while (flushInFlight) {
+            await flushInFlight;
+        }
         if (pendingBatch.length === 0) {
             return;
         }
 
         const batch = pendingBatch.splice(0, pendingBatch.length);
-        const previousFlush = flushInFlight;
         const currentFlush = (async () => {
-            if (previousFlush) {
-                await previousFlush;
-            }
             await saveLocalSongs(batch);
             savedCount += batch.length;
             if (forceNotify || savedCount % HYDRATION_REFRESH_EVERY === 0 || savedCount === songs.length) {
@@ -995,9 +994,12 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
             console.log(`[LocalMusic][Import] Background metadata hydration saved ${savedCount}/${songs.length} songs for "${rootFolderName}".`);
         })();
         flushInFlight = currentFlush;
-        await currentFlush;
-        if (flushInFlight === currentFlush) {
-            flushInFlight = null;
+        try {
+            await currentFlush;
+        } finally {
+            if (flushInFlight === currentFlush) {
+                flushInFlight = null;
+            }
         }
     };
 
@@ -1012,15 +1014,17 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
 
             pendingBatch.push(hydratedSong);
 
-            if (pendingBatch.length >= HYDRATION_BATCH_SIZE && !flushInFlight) {
-                void flushBatch();
+            if (pendingBatch.length >= HYDRATION_BATCH_SIZE) {
+                await flushBatch();
             }
         }
     };
 
     const workerCount = Math.min(IMPORT_CONCURRENCY, songs.length);
     await Promise.all(Array.from({ length: workerCount }, () => worker()));
-    await flushBatch(true);
+    while (pendingBatch.length > 0) {
+        await flushBatch(true);
+    }
     if (flushInFlight) {
         await flushInFlight;
     }

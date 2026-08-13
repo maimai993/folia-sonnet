@@ -358,4 +358,46 @@ describe('local music cover import', () => {
             `sha256:${'5'.repeat(64)}`,
         ]));
     });
+
+    it('applies backpressure while a hydration batch is being saved', async () => {
+        const fileCount = 100;
+        const handle = new FakeDirectoryHandle('Music', [
+            new FakeDirectoryHandle('Album', Array.from({ length: fileCount }, (_, index) => (
+                new FakeFileHandle(`${String(index + 1).padStart(3, '0')} Song.mp3`)
+            ))),
+        ]);
+        let releaseFirstHydrationSave!: () => void;
+        let notifyFirstHydrationSave!: () => void;
+        const firstHydrationSaveStarted = new Promise<void>(resolve => { notifyFirstHydrationSave = resolve; });
+        const firstHydrationSaveBlocked = new Promise<void>(resolve => { releaseFirstHydrationSave = resolve; });
+        let blockedFirstHydrationSave = false;
+        let hydratedSaveSongCount = 0;
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(handle as unknown as FileSystemDirectoryHandle);
+        vi.mocked(parseEmbeddedMetadataAsync).mockImplementation(async file => {
+            const index = Number.parseInt(file.name, 10);
+            return {
+                duration: 1,
+                cover: new Blob([file.name], { type: 'image/png' }),
+                coverAssetId: `sha256:${index.toString(16).padStart(64, '0')}`,
+            };
+        });
+        vi.mocked(saveLocalSongs).mockImplementation(async songs => {
+            const isHydrationBatch = songs.some(song => song.embeddedMetadataVersion === 5);
+            if (isHydrationBatch) hydratedSaveSongCount += songs.length;
+            if (isHydrationBatch && !blockedFirstHydrationSave) {
+                blockedFirstHydrationSave = true;
+                notifyFirstHydrationSave();
+                await firstHydrationSaveBlocked;
+            }
+        });
+
+        await importFolder();
+        await firstHydrationSaveStarted;
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(vi.mocked(parseEmbeddedMetadataAsync).mock.calls.length).toBeLessThanOrEqual(55);
+        releaseFirstHydrationSave();
+        await vi.waitFor(() => expect(parseEmbeddedMetadataAsync).toHaveBeenCalledTimes(fileCount));
+        await vi.waitFor(() => expect(hydratedSaveSongCount).toBe(fileCount));
+    });
 });

@@ -30,6 +30,7 @@ import { readThemeRegistryEntries, writeThemeRegistryEntries } from './repositor
 import { clearCoverAssets, getCoverAssetUsage } from './binaryAssetStore';
 import { clearLocalCoverBinaries } from './localCoverBinaryStore';
 import {
+  cancelLocalCoverAssetMigration,
   resetLocalCoverAssetRuntime,
 } from './localCoverAssetService';
 
@@ -229,6 +230,7 @@ export const clearAllData = async (): Promise<void> => {
   try {
     if (hasElectronAudioCacheBridge()) await window.electron!.clearAudioCache();
     await clearCoverAssets();
+    await cancelLocalCoverAssetMigration();
     await clearLocalCoverBinaries();
     resetLocalCoverAssetRuntime();
     await appDatabase.delete();
