@@ -8,7 +8,7 @@ import { SidePanelList, CollectionListItem } from './shared/SidePanelList';
 import { GridListSearchButton } from './shared/GridListSearchButton';
 import { gridSearchPanelMotion } from './shared/gridSearchPanelMotion';
 import GridMapSearchPanel from './folia-grid/GridMapSearchPanel';
-import { matchesGridMapQuery, parseGridMapQuery } from './folia-grid/gridMapQuery';
+import { matchesGridMapSearch } from './folia-grid/gridMapSearch';
 import GridMapBatchPanel from './folia-grid/GridMapBatchPanel';
 import { resolveGridMapBatchContext, type GridMapBatchConfig } from './folia-grid/gridMapBatch';
 import {
@@ -235,9 +235,8 @@ export const GridMap: React.FC<GridMapProps> = ({
     const wheelTargetRef = useRef({ x: 0, y: 0 });
 
     const [showSearchPanel, setShowSearchPanel] = useState(false);
-    const [draftSearchQuery, setDraftSearchQuery] = useState('');
-    const [appliedSearchQuery, setAppliedSearchQuery] = useState('');
-    const deferredSearchQuery = useDeferredValue(appliedSearchQuery);
+    const [searchQuery, setSearchQuery] = useState('');
+    const deferredSearchQuery = useDeferredValue(searchQuery);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
 
     const [showSidePanel, setShowSidePanel] = useState(false);
@@ -261,10 +260,10 @@ export const GridMap: React.FC<GridMapProps> = ({
         if (!showSearchPanel) return;
         const id = requestAnimationFrame(() => {
             searchInputRef.current?.focus();
-            searchInputRef.current?.setSelectionRange(draftSearchQuery.length, draftSearchQuery.length);
+            searchInputRef.current?.setSelectionRange(searchQuery.length, searchQuery.length);
         });
         return () => cancelAnimationFrame(id);
-    }, [draftSearchQuery.length, showSearchPanel]);
+    }, [searchQuery.length, showSearchPanel]);
 
     useEffect(() => {
         if (!isInteractive) return;
@@ -273,14 +272,12 @@ export const GridMap: React.FC<GridMapProps> = ({
             if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
                 if (event.key === 'Escape' && showSearchPanel) {
                     setShowSearchPanel(false);
-                    setDraftSearchQuery(appliedSearchQuery);
                 }
                 return;
             }
 
             if (event.key === '/') {
                 event.preventDefault();
-                setDraftSearchQuery('/');
                 setShowSearchPanel(true);
                 return;
             }
@@ -299,7 +296,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 
         window.addEventListener('keydown', handleSearchTyping);
         return () => window.removeEventListener('keydown', handleSearchTyping);
-    }, [appliedSearchQuery, isInteractive, showSearchPanel]);
+    }, [isInteractive, showSearchPanel]);
 
     const visibleItems = useMemo(() => {
         if (isPlaylistEditMode && showHiddenPlaylistsOnly) {
@@ -312,9 +309,8 @@ export const GridMap: React.FC<GridMapProps> = ({
     }, [isPlaylistEditMode, isPlaylistHidden, items, showHiddenPlaylistsOnly]);
 
     const displayItems = useMemo(() => {
-        const parsedQuery = parseGridMapQuery(deferredSearchQuery);
         if (!deferredSearchQuery.trim()) return visibleItems;
-        return visibleItems.filter(item => matchesGridMapQuery(item, parsedQuery));
+        return visibleItems.filter(item => matchesGridMapSearch(item, deferredSearchQuery));
     }, [visibleItems, deferredSearchQuery]);
     const excludedBatchItemIds = useMemo(() => new Set(
         displayItems
@@ -925,28 +921,10 @@ export const GridMap: React.FC<GridMapProps> = ({
                         >
                             <div className="relative">
                                 <GridMapSearchPanel
-                                    draftQuery={draftSearchQuery}
-                                    appliedQuery={appliedSearchQuery}
-                                    items={visibleItems}
+                                    query={searchQuery}
                                     inputRef={searchInputRef}
-                                    onDraftChange={(query, applyBasic) => {
-                                        setDraftSearchQuery(query);
-                                        if (applyBasic && parseGridMapQuery(query).mode === 'basic') {
-                                            setAppliedSearchQuery(query);
-                                        }
-                                    }}
-                                    onApply={(query) => {
-                                        setDraftSearchQuery(query);
-                                        setAppliedSearchQuery(query);
-                                    }}
-                                    onDismiss={() => {
-                                        setDraftSearchQuery(appliedSearchQuery);
-                                        setShowSearchPanel(false);
-                                    }}
-                                    onClear={() => {
-                                        setDraftSearchQuery('');
-                                        setAppliedSearchQuery('');
-                                    }}
+                                    onChange={setSearchQuery}
+                                    onDismiss={() => setShowSearchPanel(false)}
                                 />
                             </div>
                         </motion.div>
@@ -1003,6 +981,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                                 title={title}
                                 context={batchContext}
                                 totalItemCount={displayItems.length}
+                                searchQuery={deferredSearchQuery}
                                 displayItems={displayItems}
                                 excludedItemIds={excludedBatchItemIds}
                                 config={batchConfig}
@@ -1018,11 +997,6 @@ export const GridMap: React.FC<GridMapProps> = ({
                                         });
                                         return next;
                                     });
-                                }}
-                                onStagePathQuery={(path, operator) => {
-                                    const escapedPath = path.replace(/"/g, '\\"');
-                                    setDraftSearchQuery(`/${operator} "${escapedPath}"`);
-                                    setShowSearchPanel(true);
                                 }}
                             />
                         ) : (

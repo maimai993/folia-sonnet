@@ -254,6 +254,42 @@ describe('localMusicService', () => {
         ]);
     });
 
+    it('applies root .foliaignore rules to files, snapshots, and nested directories', async () => {
+        const selectedHandle = new FakeDirectoryHandle('Music', [
+            new FakeFileHandle('.foliaignore', {
+                content: 'Ignored/\n*.tmp.mp3\n!keep.tmp.mp3\n',
+                type: 'text/plain',
+            }),
+            new FakeDirectoryHandle('Ignored', [new FakeFileHandle('Hidden.mp3')]),
+            new FakeDirectoryHandle('Visible', [
+                new FakeFileHandle('Drop.tmp.mp3'),
+                new FakeFileHandle('keep.tmp.mp3'),
+                new FakeFileHandle('Track.mp3'),
+            ]),
+        ]);
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(
+            selectedHandle as unknown as FileSystemDirectoryHandle,
+        );
+
+        const importedSongs = await importFolder();
+
+        expect(importedSongs.map(song => song.filePath)).toEqual([
+            'Music/Visible/keep.tmp.mp3',
+            'Music/Visible/Track.mp3',
+        ]);
+        expect(saveLocalLibrarySnapshot).toHaveBeenCalledWith(expect.objectContaining({
+            tree: expect.objectContaining({
+                children: [expect.objectContaining({
+                    relativePath: 'Music/Visible',
+                    files: expect.arrayContaining([
+                        expect.objectContaining({ relativePath: 'Music/Visible/keep.tmp.mp3' }),
+                        expect.objectContaining({ relativePath: 'Music/Visible/Track.mp3' }),
+                    ]),
+                })],
+            }),
+        }));
+    });
+
     it('routes a child-folder resync through the imported root handle', async () => {
         const persistedHandle = createLibraryHandle();
         vi.mocked(getDirHandles).mockResolvedValue({ Music: persistedHandle as unknown as FileSystemDirectoryHandle });

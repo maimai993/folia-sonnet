@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, FolderSearch, ListPlus, Minus, Play, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ListPlus, Minus, Play, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { List as VirtualList, type RowComponentProps } from 'react-window';
 import { createPortal } from 'react-dom';
@@ -7,7 +7,7 @@ import ConfirmDialog from '../shared/ConfirmDialog';
 import TextInputDialog from '../shared/TextInputDialog';
 import type { GridMapItem } from '../GridMap';
 import type { GridMapBatchConfig, GridMapBatchContext, GridMapDirectoryNode } from './gridMapBatch';
-import { compactGridMapDirectoryTrees, flattenExpandedGridMapDirectories, resolveGridMapDirectorySelection } from './gridMapBatch';
+import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapDirectorySelection } from './gridMapBatch';
 
 // src/components/folia-grid/GridMapBatchPanel.tsx
 
@@ -15,13 +15,13 @@ interface GridMapBatchPanelProps {
     title: string;
     context: GridMapBatchContext;
     totalItemCount: number;
+    searchQuery: string;
     displayItems: GridMapItem[];
     excludedItemIds: ReadonlySet<string>;
     config: GridMapBatchConfig;
     isDaylight: boolean;
     onToggleSelectAll: (selected: boolean) => void;
     onSetItemsSelected: (itemIds: string[], selected: boolean) => void;
-    onStagePathQuery: (path: string, operator: 'path' | 'under') => void;
 }
 
 interface DirectoryRowProps {
@@ -32,7 +32,6 @@ interface DirectoryRowProps {
     excludedItemIds: ReadonlySet<string>;
     onToggleExpanded: (id: string) => void;
     onSetItemsSelected: GridMapBatchPanelProps['onSetItemsSelected'];
-    onStagePathQuery: GridMapBatchPanelProps['onStagePathQuery'];
     onRescanRoot?: GridMapBatchConfig['onRescanRoot'];
     onRequestRemoveRoot?: (path: string) => void;
 }
@@ -48,7 +47,6 @@ const DirectoryRow = ({
     excludedItemIds,
     onToggleExpanded,
     onSetItemsSelected,
-    onStagePathQuery,
     onRescanRoot,
     onRequestRemoveRoot,
 }: RowComponentProps<DirectoryRowProps>) => {
@@ -98,14 +96,6 @@ const DirectoryRow = ({
                         </span>
                     </span>
                 </button>
-                <button
-                    type="button"
-                    onClick={() => onStagePathQuery(node.path, node.children.length > 0 ? 'under' : 'path')}
-                    className="rounded-lg p-1.5 opacity-45 transition hover:opacity-100"
-                    title={t(node.children.length > 0 ? 'home.gridFolderSubtreePath' : 'home.gridFolderExactPath')}
-                >
-                    <FolderSearch size={13} />
-                </button>
                 {isRoot && onRescanRoot && (
                     <button
                         type="button"
@@ -137,13 +127,13 @@ export const GridMapBatchPanel = ({
     title,
     context,
     totalItemCount,
+    searchQuery,
     displayItems,
     excludedItemIds,
     config,
     isDaylight,
     onToggleSelectAll,
     onSetItemsSelected,
-    onStagePathQuery,
 }: GridMapBatchPanelProps) => {
     const { t } = useTranslation();
     const [showPlaylistDialog, setShowPlaylistDialog] = useState(false);
@@ -154,9 +144,15 @@ export const GridMapBatchPanel = ({
     const [expandedIds, setExpandedIds] = useState<Set<string>>(
         () => new Set((config.directoryTrees || []).map(node => node.id)),
     );
+    const visibleDirectoryTrees = useMemo(
+        () => searchQuery.trim()
+            ? filterGridMapDirectoryTreesByItems(config.directoryTrees || [], displayItems)
+            : config.directoryTrees || [],
+        [config.directoryTrees, displayItems, searchQuery],
+    );
     const compactDirectoryTrees = useMemo(
-        () => compactGridMapDirectoryTrees(config.directoryTrees || []),
-        [config.directoryTrees],
+        () => compactGridMapDirectoryTrees(visibleDirectoryTrees),
+        [visibleDirectoryTrees],
     );
     const directoryNodes = useMemo(
         () => flattenExpandedGridMapDirectories(compactDirectoryTrees, expandedIds),
@@ -258,7 +254,6 @@ export const GridMapBatchPanel = ({
                                     return next;
                                 }),
                                 onSetItemsSelected,
-                                onStagePathQuery,
                                 onRescanRoot: config.onRescanRoot
                                     ? rootPath => runAction(`root:${rootPath}`, () => config.onRescanRoot?.(rootPath))
                                     : undefined,

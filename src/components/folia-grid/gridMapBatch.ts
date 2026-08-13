@@ -100,6 +100,30 @@ export const compactGridMapDirectoryTrees = (
     return roots.map(root => compactNode(root, 0, true));
 };
 
+// Keeps search-matching folders and their ancestors so tree context is never lost.
+export const filterGridMapDirectoryTreesByItems = (
+    roots: GridMapDirectoryNode[],
+    items: readonly GridMapItem[],
+): GridMapDirectoryNode[] => {
+    const itemPaths = items.map(item => (item.path || item.name)
+        .replace(/\\/g, '/')
+        .replace(/^\/+|\/+$/g, '')
+        .toLocaleLowerCase());
+
+    const filterNode = (node: GridMapDirectoryNode): GridMapDirectoryNode | null => {
+        const nodePath = node.path.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLocaleLowerCase();
+        const children = node.children
+            .map(filterNode)
+            .filter((child): child is GridMapDirectoryNode => Boolean(child));
+        const isContextOrMatch = itemPaths.some(path => (
+            path === nodePath || path.startsWith(`${nodePath}/`)
+        ));
+        return isContextOrMatch || children.length > 0 ? { ...node, children } : null;
+    };
+
+    return roots.map(filterNode).filter((root): root is GridMapDirectoryNode => Boolean(root));
+};
+
 // Resolves one tree node against the currently filtered GridMap cards.
 export const resolveGridMapDirectorySelection = (
     nodePath: string,

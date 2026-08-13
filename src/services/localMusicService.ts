@@ -23,6 +23,7 @@ import {
     type PreparedLocalCoverBlob,
 } from './localCoverAssetService';
 import { hasLocalSongCover } from '../utils/localSongCover';
+import { createFoliaIgnoreMatcher, EMPTY_FOLIA_IGNORE_MATCHER, type FoliaIgnoreMatcher } from '../utils/foliaIgnore';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
@@ -403,7 +404,9 @@ async function extractEmbeddedMetadata(file: File, includeCover = false): Promis
 
 async function buildSnapshotTree(
     handle: FileSystemDirectoryHandle,
-    currentPath: string
+    currentPath: string,
+    rootFolderName: string,
+    ignoreMatcher: FoliaIgnoreMatcher,
 ): Promise<SnapshotTraversalResult> {
     const files: LocalLibrarySnapshotFile[] = [];
     const children: LocalLibrarySnapshotNode[] = [];
@@ -434,11 +437,28 @@ async function buildSnapshotTree(
     childEntries.sort((a, b) => a.name.localeCompare(b.name));
 
     for (const entry of childEntries) {
+        if (currentPath === rootFolderName && entry.name === '.foliaignore') {
+            continue;
+        }
+
+        const entryPath = `${currentPath}/${entry.name}`;
+        const importRelativePath = entryPath.startsWith(`${rootFolderName}/`)
+            ? entryPath.slice(rootFolderName.length + 1)
+            : entryPath;
+        if (ignoreMatcher.isIgnored(importRelativePath, entry.kind === 'directory')) {
+            continue;
+        }
+
         if (entry.kind === 'directory') {
-            const childPath = `${currentPath}/${entry.name}`;
+            const childPath = entryPath;
 
             try {
-                const childResult = await buildSnapshotTree(entry as FileSystemDirectoryHandle, childPath);
+                const childResult = await buildSnapshotTree(
+                    entry as FileSystemDirectoryHandle,
+                    childPath,
+                    rootFolderName,
+                    ignoreMatcher,
+                );
                 children.push(childResult.tree);
                 relevantFileCount += childResult.relevantFileCount;
             } catch (error) {
@@ -485,6 +505,21 @@ async function buildSnapshotTree(
     return { tree, relevantFileCount };
 }
 
+async function loadFoliaIgnoreMatcher(dirHandle: FileSystemDirectoryHandle): Promise<FoliaIgnoreMatcher> {
+    try {
+        const ignoreHandle = await dirHandle.getFileHandle('.foliaignore');
+        const ignoreFile = await ignoreHandle.getFile();
+        const matcher = createFoliaIgnoreMatcher(await ignoreFile.text());
+        console.log(`[LocalMusic][Import] Loaded ${matcher.ruleCount} .foliaignore rules from "${dirHandle.name}".`);
+        return matcher;
+    } catch (error) {
+        if (error instanceof DOMException && error.name !== 'NotFoundError') {
+            console.warn(`[LocalMusic][Import] Failed to read .foliaignore from "${dirHandle.name}":`, error);
+        }
+        return EMPTY_FOLIA_IGNORE_MATCHER;
+    }
+}
+
 function flattenSnapshotFiles(node: LocalLibrarySnapshotNode, target = new Map<string, LocalLibrarySnapshotFile>()) {
     node.files.forEach(file => {
         target.set(file.relativePath, file);
@@ -499,7 +534,8 @@ async function collectImportDiffPlan(
     existingSongs: LocalSong[],
     previousSnapshot: LocalLibrarySnapshot | null
 ): Promise<ImportDiffPlan> {
-    const traversalResult = await buildSnapshotTree(dirHandle, rootFolderName);
+    const ignoreMatcher = await loadFoliaIgnoreMatcher(dirHandle);
+    const traversalResult = await buildSnapshotTree(dirHandle, rootFolderName, rootFolderName, ignoreMatcher);
     const snapshot: LocalLibrarySnapshot = {
         rootFolderName,
         scannedAt: Date.now(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactGridMapDirectoryTrees, flattenExpandedGridMapDirectories, resolveGridMapBatchContext, resolveGridMapDirectorySelection, type GridMapDirectoryNode } from '@/components/folia-grid/gridMapBatch';
+import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapBatchContext, resolveGridMapDirectorySelection, type GridMapDirectoryNode } from '@/components/folia-grid/gridMapBatch';
 import type { GridMapItem } from '@/components/GridMap';
 
 // test/unit/gridView/gridMapBatch.test.ts
@@ -109,5 +109,27 @@ describe('GridMap directory flattening', () => {
         const [compactedRoot] = compactGridMapDirectoryTrees([deepRoot]);
         expect(compactedRoot.children[0].name).toBe('a');
         expect(compactedRoot.children[0].children[0].name).toBe('b');
+    });
+
+    it('keeps matching folders and their ancestors when filtering the tree', () => {
+        const album: GridMapDirectoryNode = {
+            id: 'root:music/album', name: 'album', path: 'music/album', rootPath: 'music', depth: 1,
+            directTrackCount: 1, totalTrackCount: 1, children: [],
+        };
+        const other: GridMapDirectoryNode = {
+            id: 'root:music/other', name: 'other', path: 'music/other', rootPath: 'music', depth: 1,
+            directTrackCount: 1, totalTrackCount: 1, children: [],
+        };
+        const root: GridMapDirectoryNode = {
+            id: 'root:music', name: 'music', path: 'music', rootPath: 'music', depth: 0,
+            directTrackCount: 0, totalTrackCount: 2, children: [album, other],
+        };
+
+        const [filteredRoot] = filterGridMapDirectoryTreesByItems([root], [
+            { id: 'album', name: 'album', path: 'music/album' },
+        ]);
+
+        expect(filteredRoot.path).toBe('music');
+        expect(filteredRoot.children.map(node => node.path)).toEqual(['music/album']);
     });
 });
