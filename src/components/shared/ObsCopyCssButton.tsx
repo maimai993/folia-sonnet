@@ -28,15 +28,18 @@ export const ObsCopyCssButton: React.FC<ObsCopyCssButtonProps> = ({ disabled, bu
     const handleCopy = async () => {
         const setStatus = useSettingsUiStore.getState().statusSetter;
         try {
-            const css = await buildObsCustomCss();
-            if (!css) {
+            const result = await buildObsCustomCss();
+            if (!result) {
                 setStatus?.({ type: 'error', text: t('status.copyFailed') });
                 return;
             }
-            await navigator.clipboard.writeText(css);
+            await navigator.clipboard.writeText(result.css);
             setCopied(true);
             window.setTimeout(() => setCopied(false), 1600);
-            setStatus?.({ type: 'info', text: t('options.obsCssCopiedHint') });
+            const hintText = result.degradedGifCount > 0
+                ? t('options.obsCssCopiedHintDegraded', { count: result.degradedGifCount })
+                : t('options.obsCssCopiedHint');
+            setStatus?.({ type: 'info', text: hintText });
         } catch (err) {
             console.error('Failed to copy OBS CSS:', err);
             setStatus?.({ type: 'error', text: t('status.copyFailed') });

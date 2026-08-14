@@ -1249,6 +1249,7 @@ export default {
     "copyObsCss": "Copy OBS CSS",
     "copyObsCssHint": "Copy the CSS for uploaded assets (custom background / portrait) to paste into the OBS Browser Source Custom CSS box",
     "obsCssCopiedHint": "CSS copied; paste it into OBS Browser Source -> Custom CSS (use it alongside the link).",
+    "obsCssCopiedHintDegraded": "CSS copied; {{count}} GIF asset(s) exceeded the size budget and were copied as static frames. Paste into OBS Browser Source -> Custom CSS.",
     "obsUrlCustomFontHint": "Copied (includes a custom font); It will fall back to default if not installed on the system.",
     "obsUrlUploadedAssetHint": "Copied; these settings use uploaded assets -- also click \"Copy OBS CSS\" and paste it into the OBS Browser Source Custom CSS box, otherwise the OBS overlay falls back to defaults.",
     "obsThemeMode": "OBS theme",

@@ -17,6 +17,21 @@ const CAPPELLA_AVATAR_MAX_SIZE = 256;
 const CAPPELLA_EMOJI_MAX_SIZE = 128;
 const BACKGROUND_QUALITY = 0.82;
 
+// Raw-passthrough budgets for animated GIF assets. Portraits / Cappella packs render through
+// <img> / CSS background-image, so a canvas snapshot silently kills the animation the main app
+// shows. When a GIF fits, we ship the original bytes as `data:image/gif;base64,...` and preserve
+// frames. Backgrounds always stay on the canvas path (Monet blurs & Nomand dithers everything to a
+// still frame anyway, so raw bytes would only bloat the payload).
+// The absolute cap on the full CSS snippet keeps the OBS Custom CSS box within its comfortable
+// range (see obs-browser browser-client.cpp: CSS goes through CefURIEncode + ExecuteJavaScript over
+// a Mojo IPC with a 128 MB message limit; 12 MB is well below the point where the editor UI, scene
+// save/load, and the CEF apply step start to feel it). RAW_PORTRAIT / RAW_CAPPELLA_ITEM are
+// per-file, and the downgrade pass in buildObsCustomCss enforces the total.
+const RAW_PORTRAIT_MAX_BYTES = 8 * 1024 * 1024;
+const RAW_CAPPELLA_ITEM_MAX_BYTES = 4 * 1024 * 1024;
+const TOTAL_CSS_MAX_BYTES = 12 * 1024 * 1024;
+const GIF_MIME = 'image/gif';
+
 const OBS_CSS_BACKGROUND_VAR = '--folia-obs-custom-bg';
 const OBS_CSS_PORTRAIT_VAR = '--folia-obs-custom-portrait';
 const OBS_CSS_CAPPELLA_EMOJIS_VAR = '--folia-obs-cappella-emojis';
@@ -71,17 +86,68 @@ const encodeBoundedDataUrl = async (
   return canvas.toDataURL(mimeType, quality);
 };
 
-// Isolating wrapper: a corrupt file / stale blob URL rejects load; without this every asset in the
-// copy operation would go down with it. Instead we swallow the failure, log it, and let the caller
-// treat this entry as absent so the rest of the pack (and the other asset categories) survive.
-const safeEncodeBoundedDataUrl = async (
-  sourceUrl: string,
-  maxSize: number,
-  mimeType: 'image/jpeg' | 'image/png',
-  quality?: number,
-): Promise<string | null> => {
+// Peek at the source blob so we can branch on MIME (raw-GIF passthrough vs canvas). Returns null on
+// fetch / decode failure so callers can silently fall through to the canvas path.
+const readSourceBlob = async (sourceUrl: string): Promise<Blob | null> => {
   try {
-    return await encodeBoundedDataUrl(sourceUrl, maxSize, mimeType, quality);
+    const res = await fetch(sourceUrl);
+    if (!res.ok) return null;
+    return await res.blob();
+  } catch (err) {
+    console.warn('OBS CSS: failed to read source blob, falling back.', err);
+    return null;
+  }
+};
+
+// Chunked binary -> base64. Uploaded assets can be several MB, and String.fromCharCode(...bytes) on
+// the whole array blows the call stack past a few hundred KB.
+const encodeBlobAsBase64DataUrl = async (blob: Blob, mimeType: string): Promise<string> => {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return `data:${mimeType};base64,${btoa(binary)}`;
+};
+
+// Encoded asset with just enough context to be re-encoded down to a canvas snapshot later, in case
+// the total-budget pass in buildObsCustomCss decides to drop this raw GIF frame.
+interface EncodedAsset {
+  dataUrl: string;
+  // True while we hold the raw GIF; buildObsCustomCss can downgrade it to canvas to fit the total.
+  isRawGif: boolean;
+  // Downgrade recipe. Preserved even for canvas-first assets so the shape stays uniform.
+  sourceUrl: string;
+  canvasMaxSize: number;
+  canvasMime: 'image/jpeg' | 'image/png';
+  canvasQuality?: number;
+}
+
+// Prefer raw-GIF passthrough for animated inputs (portrait / Cappella packs) when the file fits its
+// per-item budget; otherwise fall back to the canvas snapshot path. rawBudget=0 disables raw entirely
+// (backgrounds always stay canvas). A corrupt file / stale blob URL is isolated here so one asset
+// cannot take down the whole copy operation.
+const safeEncodeAssetDataUrl = async (
+  sourceUrl: string,
+  canvasMaxSize: number,
+  canvasMime: 'image/jpeg' | 'image/png',
+  rawBudget: number,
+  canvasQuality?: number,
+): Promise<EncodedAsset | null> => {
+  try {
+    if (rawBudget > 0) {
+      const blob = await readSourceBlob(sourceUrl);
+      if (blob && blob.type === GIF_MIME && blob.size <= rawBudget) {
+        const dataUrl = await encodeBlobAsBase64DataUrl(blob, GIF_MIME);
+        return { dataUrl, isRawGif: true, sourceUrl, canvasMaxSize, canvasMime, canvasQuality };
+      }
+    }
+    const canvasUrl = await encodeBoundedDataUrl(sourceUrl, canvasMaxSize, canvasMime, canvasQuality);
+    return canvasUrl
+      ? { dataUrl: canvasUrl, isRawGif: false, sourceUrl, canvasMaxSize, canvasMime, canvasQuality }
+      : null;
   } catch (err) {
     console.warn('OBS CSS: failed to encode asset, skipping.', err);
     return null;
@@ -110,25 +176,46 @@ const decodeBase64Utf8 = (value: string): string => {
   return new TextDecoder().decode(bytes);
 };
 
-// Downscale every image in a pack and pack the {id, name, url} list into a base64(JSON) string, or
-// null when nothing survives. id/name are preserved because the overlay keys emoji triggers by name.
-// Encoding is isolated per entry so a single corrupt file cannot take down the rest of the pack.
-const encodeImageListProperty = async (
+// Encode every image in a pack, keeping the {id, name, encoded} shape so the downgrade pass in
+// buildObsCustomCss can walk raw-GIF entries alongside single-asset raw-GIFs. Encoding is isolated
+// per entry so a single corrupt file cannot take down the rest of the pack.
+interface EncodedPackEntry {
+  id: string;
+  name: string;
+  encoded: EncodedAsset;
+}
+
+const encodeImagePack = async (
   images: NamedImageAsset[],
-  maxSize: number,
-): Promise<string | null> => {
-  const encoded = await Promise.all(images.map(async (image) => {
-    const url = await safeEncodeBoundedDataUrl(image.url, maxSize, 'image/png');
-    return url ? { id: image.id, name: image.name, url } : null;
+  canvasMaxSize: number,
+  rawBudget: number,
+): Promise<EncodedPackEntry[]> => {
+  const results = await Promise.all(images.map(async (image) => {
+    const encoded = await safeEncodeAssetDataUrl(image.url, canvasMaxSize, 'image/png', rawBudget);
+    return encoded ? { id: image.id, name: image.name, encoded } : null;
   }));
-  const kept = encoded.filter((entry): entry is NamedImageAsset => entry !== null);
-  return kept.length > 0 ? encodeBase64Utf8(JSON.stringify(kept)) : null;
+  return results.filter((entry): entry is EncodedPackEntry => entry !== null);
 };
+
+// Serialise the surviving pack entries into the base64(JSON) form the overlay parses. Reads the
+// current encoded.dataUrl, so a downgrade in the total-budget pass shows up here for free.
+const serialiseEncodedPack = (entries: EncodedPackEntry[]): string | null => {
+  if (entries.length === 0) return null;
+  const list = entries.map((entry) => ({ id: entry.id, name: entry.name, url: entry.encoded.dataUrl }));
+  return encodeBase64Utf8(JSON.stringify(list));
+};
+
+export interface BuildObsCustomCssResult {
+  css: string;
+  // Count of GIFs we had to downgrade to a canvas snapshot to stay under TOTAL_CSS_MAX_BYTES so the
+  // caller can warn the user "your animation was flattened".
+  degradedGifCount: number;
+}
 
 // Build the CSS snippet the user pastes into OBS Browser Source -> Custom CSS. Returns null when no
 // uploaded asset is actually in use, so callers can hide the affordance. Includes OBS's own
 // transparent-body reset so the snippet is a complete drop-in replacement, not an addition.
-export const buildObsCustomCss = async (): Promise<string | null> => {
+export const buildObsCustomCss = async (): Promise<BuildObsCustomCssResult | null> => {
   const store = useSettingsUiStore.getState();
   const usesUploadedBackground = store.monetBackgroundTuning.backgroundSource === 'uploaded-global'
     || store.nomandBackgroundTuning.imageSource === 'uploaded-global';
@@ -138,27 +225,66 @@ export const buildObsCustomCss = async (): Promise<string | null> => {
   const usesCustomAvatars = store.cappellaTuning.avatarSource === 'custom'
     && store.cappellaCustomAvatarImages.length > 0;
 
-  const [backgroundDataUrl, portraitDataUrl, emojiList, avatarList] = await Promise.all([
+  const [background, portrait, emojiEntries, avatarEntries] = await Promise.all([
     usesUploadedBackground && store.monetBackgroundImage
-      ? safeEncodeBoundedDataUrl(store.monetBackgroundImage.url, BACKGROUND_MAX_SIZE, 'image/jpeg', BACKGROUND_QUALITY)
+      ? safeEncodeAssetDataUrl(store.monetBackgroundImage.url, BACKGROUND_MAX_SIZE, 'image/jpeg', 0, BACKGROUND_QUALITY)
       : null,
     usesCustomPortrait && store.monetPortraitImage
-      ? safeEncodeBoundedDataUrl(store.monetPortraitImage.url, PORTRAIT_MAX_SIZE, 'image/png')
+      ? safeEncodeAssetDataUrl(store.monetPortraitImage.url, PORTRAIT_MAX_SIZE, 'image/png', RAW_PORTRAIT_MAX_BYTES)
       : null,
-    usesCustomEmojis ? encodeImageListProperty(store.cappellaCustomEmojiImages, CAPPELLA_EMOJI_MAX_SIZE) : null,
-    usesCustomAvatars ? encodeImageListProperty(store.cappellaCustomAvatarImages, CAPPELLA_AVATAR_MAX_SIZE) : null,
+    usesCustomEmojis
+      ? encodeImagePack(store.cappellaCustomEmojiImages, CAPPELLA_EMOJI_MAX_SIZE, RAW_CAPPELLA_ITEM_MAX_BYTES)
+      : [] as EncodedPackEntry[],
+    usesCustomAvatars
+      ? encodeImagePack(store.cappellaCustomAvatarImages, CAPPELLA_AVATAR_MAX_SIZE, RAW_CAPPELLA_ITEM_MAX_BYTES)
+      : [] as EncodedPackEntry[],
   ]);
 
+  // Total-budget downgrade pass. Every raw GIF we picked can still be re-encoded to a canvas snapshot
+  // if the whole snippet blows past TOTAL_CSS_MAX_BYTES; we shed the largest one at a time, in place,
+  // until we fit or nothing raw is left. The dataUrl length is a fine proxy for the CSS byte count -
+  // everything downstream is ASCII plus a fixed wrapper per slot.
+  const collectAssets = (): EncodedAsset[] => [
+    ...(background ? [background] : []),
+    ...(portrait ? [portrait] : []),
+    ...emojiEntries.map((entry) => entry.encoded),
+    ...avatarEntries.map((entry) => entry.encoded),
+  ];
+  const totalBytes = () => collectAssets().reduce((sum, asset) => sum + asset.dataUrl.length, 0);
+  let degradedGifCount = 0;
+  while (totalBytes() > TOTAL_CSS_MAX_BYTES) {
+    const rawEntries = collectAssets().filter((asset) => asset.isRawGif);
+    if (rawEntries.length === 0) break;
+    rawEntries.sort((a, b) => b.dataUrl.length - a.dataUrl.length);
+    const target = rawEntries[0];
+    try {
+      const snapshot = await encodeBoundedDataUrl(target.sourceUrl, target.canvasMaxSize, target.canvasMime, target.canvasQuality);
+      if (!snapshot) {
+        // Canvas path also unusable for this asset; mark non-raw so we don't retry it forever.
+        target.isRawGif = false;
+        continue;
+      }
+      target.dataUrl = snapshot;
+      target.isRawGif = false;
+      degradedGifCount += 1;
+    } catch (err) {
+      console.warn('OBS CSS: failed to downgrade raw GIF asset, dropping animation.', err);
+      target.isRawGif = false;
+    }
+  }
+
   const declarations: string[] = [];
-  if (backgroundDataUrl) {
-    declarations.push(`  ${OBS_CSS_BACKGROUND_VAR}: url("${backgroundDataUrl}");`);
+  if (background) {
+    declarations.push(`  ${OBS_CSS_BACKGROUND_VAR}: url("${background.dataUrl}");`);
   }
-  if (portraitDataUrl) {
-    declarations.push(`  ${OBS_CSS_PORTRAIT_VAR}: url("${portraitDataUrl}");`);
+  if (portrait) {
+    declarations.push(`  ${OBS_CSS_PORTRAIT_VAR}: url("${portrait.dataUrl}");`);
   }
+  const emojiList = serialiseEncodedPack(emojiEntries);
   if (emojiList) {
     declarations.push(`  ${OBS_CSS_CAPPELLA_EMOJIS_VAR}: "${emojiList}";`);
   }
+  const avatarList = serialiseEncodedPack(avatarEntries);
   if (avatarList) {
     declarations.push(`  ${OBS_CSS_CAPPELLA_AVATARS_VAR}: "${avatarList}";`);
   }
@@ -167,7 +293,7 @@ export const buildObsCustomCss = async (): Promise<string | null> => {
     return null;
   }
 
-  return [
+  const css = [
     '/* Folia OBS custom assets. Paste into OBS Browser Source -> Custom CSS. */',
     'body { background-color: rgba(0, 0, 0, 0); margin: 0; overflow: hidden; }',
     ':root {',
@@ -175,6 +301,7 @@ export const buildObsCustomCss = async (): Promise<string | null> => {
     '}',
     '',
   ].join('\n');
+  return { css, degradedGifCount };
 };
 
 // Pull the data URL out of a `url("data:...")` custom-property value. Returns null for anything that

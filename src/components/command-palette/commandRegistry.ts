@@ -339,13 +339,18 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
                 return true;
             }
             try {
-                const css = await buildObsCustomCss();
-                if (!css) {
+                const result = await buildObsCustomCss();
+                if (!result) {
                     context.setStatusMsg({ type: 'error', text: context.t('status.copyFailed', 'Copy failed') });
                     return true;
                 }
-                await navigator.clipboard.writeText(css);
-                context.setStatusMsg({ type: 'info', text: context.t('options.obsCssCopiedHint', 'CSS copied; paste it into OBS Browser Source -> Custom CSS.') });
+                await navigator.clipboard.writeText(result.css);
+                const hintText = result.degradedGifCount > 0
+                    ? context
+                        .t('options.obsCssCopiedHintDegraded', 'CSS copied; {{count}} GIF asset(s) copied as static frames due to size. Paste it into OBS Browser Source -> Custom CSS.')
+                        .replace('{{count}}', String(result.degradedGifCount))
+                    : context.t('options.obsCssCopiedHint', 'CSS copied; paste it into OBS Browser Source -> Custom CSS.');
+                context.setStatusMsg({ type: 'info', text: hintText });
             } catch (err) {
                 console.error('Failed to copy OBS CSS:', err);
                 context.setStatusMsg({ type: 'error', text: context.t('status.copyFailed', 'Copy failed') });

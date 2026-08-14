@@ -1253,6 +1253,7 @@ export default {
     "copyObsCss": "复制 OBS CSS",
     "copyObsCssHint": "复制自定义资产（上传的背景/立绘）的 CSS，粘贴到 OBS 浏览器源的自定义 CSS 框",
     "obsCssCopiedHint": "CSS 已复制；粘贴到 OBS 浏览器源 → 自定义 CSS 框（与链接配套使用）。",
+    "obsCssCopiedHintDegraded": "CSS 已复制；有 {{count}} 张 GIF 超出体积预算，已以静帧形式复制。粘贴到 OBS 浏览器源 → 自定义 CSS 框。",
     "obsUrlCustomFontHint": "已复制（含自定义字体）；系统未安装字体时将自动回退默认。",
     "obsUrlUploadedAssetHint": "已复制；此配置用到上传的自定义资产——请同时点「复制 OBS CSS」并粘贴到 OBS 浏览器源的自定义 CSS 框，否则 OBS 端会回退到默认。",
     "obsThemeMode": "OBS 主题",
