@@ -87,7 +87,10 @@ export const ObsCopyUrlButton: React.FC<ObsCopyUrlButtonProps> = ({ onCopy, copi
     const baseBtn = 'text-xs font-medium flex items-center gap-1.5 bg-white/10 hover:bg-white/15 active:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
     const menuBg = isDaylight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(24, 24, 27, 0.98)';
     const menuBorder = isDaylight ? 'rgba(24, 24, 27, 0.12)' : 'rgba(255, 255, 255, 0.12)';
-    const menuWidth = Math.min(MENU_WIDTH, typeof window !== 'undefined' ? window.innerWidth * 0.8 : MENU_WIDTH);
+    // Match the trigger's live width so the menu visually anchors to the split button; fall back to
+    // the estimated width only if we somehow render without a measured rect. Cap at 80vw for safety.
+    const viewportCap = typeof window !== 'undefined' ? window.innerWidth * 0.8 : MENU_WIDTH;
+    const menuWidth = Math.min(triggerRect?.width ?? MENU_WIDTH, viewportCap);
 
     return (
         <div ref={containerRef} className="relative inline-flex items-stretch">
