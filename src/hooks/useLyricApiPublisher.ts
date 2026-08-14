@@ -16,9 +16,11 @@ const emptyStatus = (): LyricApiStatus => ({
 export const useLyricApiPublisher = ({
     isElectronWindow,
     lyrics,
+    offset,
 }: {
     isElectronWindow: boolean;
     lyrics: LyricData | null;
+    offset: number;
 }) => {
     const [status, setStatus] = useState<LyricApiStatus>(() => emptyStatus());
 
@@ -42,10 +44,10 @@ export const useLyricApiPublisher = ({
         if (!status.enabled || !window.electron?.publishLyricApiData) {
             return;
         }
-        void window.electron.publishLyricApiData(lyrics).catch((error) => {
+        void window.electron.publishLyricApiData(lyrics, offset).catch((error) => {
             console.warn('[Lyric API] Failed to publish lyrics:', error);
         });
-    }, [lyrics, status.enabled]);
+    }, [lyrics, offset, status.enabled]);
 
     const setEnabled = useCallback(async (enabled: boolean) => {
         if (!window.electron?.setLyricApiEnabled) {

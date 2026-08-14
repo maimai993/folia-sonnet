@@ -42,12 +42,13 @@ function sanitizeBackgroundVocal(vocal) {
 }
 
 // Converts the internal rendering model into the stable, renderer-agnostic API shape.
-function sanitizeLyricData(lyrics) {
+function sanitizeLyricData(lyrics, offset = 0) {
   if (!lyrics || typeof lyrics !== 'object' || !Array.isArray(lyrics.lines)) {
     return null;
   }
 
   const result = {
+    offset: copyTime(offset),
     lines: lyrics.lines.map((line) => {
       const sanitizedLine = {
         text: copyText(line?.fullText) ?? '',
@@ -179,8 +180,8 @@ function createLyricApi({
     return enabled ? start() : stop();
   };
 
-  const publishLyricData = (lyrics) => {
-    currentLyrics = sanitizeLyricData(lyrics);
+  const publishLyricData = (lyrics, offset) => {
+    currentLyrics = sanitizeLyricData(lyrics, offset);
     return true;
   };
 

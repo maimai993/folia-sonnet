@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 const { createLyricApi, sanitizeLyricData } = require('../../../electron/lyricApi.cjs') as {
     createLyricApi: (options: Record<string, unknown>) => {
         buildStatus: () => { running: boolean };
-        publishLyricData: (lyrics: unknown) => boolean;
+        publishLyricData: (lyrics: unknown, offset?: number) => boolean;
         setEnabled: (enabled: boolean) => Promise<{ enabled: boolean; running: boolean; url: string | null }>;
         stop: () => Promise<unknown>;
     };
@@ -71,6 +71,7 @@ describe('desktop lyric API', () => {
             title: 'Song',
             artist: 'Artist',
             wordByWord: true,
+            offset: 0,
             lines: [{
                 text: 'Hello',
                 startTime: 1,
@@ -97,10 +98,11 @@ describe('desktop lyric API', () => {
 
         api.publishLyricData({
             lines: [{ fullText: 'Line', startTime: 0, endTime: 1, words: [] }],
-        });
+        }, -250);
         const response = await getJson(`${status.url}`);
         expect(response.headers['access-control-allow-origin']).toBe('*');
         expect(response.body).toEqual({
+            offset: -250,
             lines: [{ text: 'Line', startTime: 0, endTime: 1, words: [] }],
             wordByWord: false,
         });

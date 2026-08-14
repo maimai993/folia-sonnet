@@ -67,6 +67,7 @@ Access-Control-Allow-Origin: *
 type LyricResponse = LyricData | null;
 
 interface LyricData {
+  offset: number;
   lines: LyricLine[];
   wordByWord: boolean;
   title?: string;
@@ -99,12 +100,13 @@ interface BackgroundVocal {
 }
 ```
 
-所有时间字段的单位均为秒。
+歌词行、逐字和背景人声的 `startTime` / `endTime` 单位均为秒；顶层 `offset` 单位为毫秒。
 
 ### 顶层字段
 
 | 字段 | 类型 | 必需 | 说明 |
 | --- | --- | --- | --- |
+| `offset` | `number` | 是 | 用户在歌词面板中为当前歌曲设置的歌词时间偏移，单位为毫秒。正值表示歌词延后，负值表示歌词提前，未调整时为 `0`。 |
 | `lines` | `LyricLine[]` | 是 | 按时间顺序排列的歌词行。 |
 | `wordByWord` | `boolean` | 是 | 表示时间轴来源：`true` 为数据源提供的原生逐字时间，`false` 为 Folia 根据逐行时间合成的逐字时间。两种情况下歌词行都会提供 `words`。 |
 | `title` | `string` | 否 | 歌词数据附带的歌曲标题；为空时不会返回。 |
@@ -140,6 +142,7 @@ interface BackgroundVocal {
 
 ```json
 {
+  "offset": -250,
   "lines": [
     {
       "text": "Hello world",
@@ -173,6 +176,7 @@ interface BackgroundVocal {
 
 ```json
 {
+  "offset": 0,
   "lines": [
     {
       "text": "这是一行歌词",
@@ -230,6 +234,7 @@ null
 
 | Folia 内部字段 | 公开字段或处理方式 |
 | --- | --- |
+| 当前歌曲的手动歌词时间偏移 | 输出为顶层 `offset`，单位为毫秒 |
 | `fullText` | 改名为 `text` |
 | `isWordByWord` | 改名为 `wordByWord`；表示原生或合成逐字时间，不表示 `words` 是否存在 |
 | 行和逐字的 `startTime` / `endTime` | 保留，单位为秒 |
@@ -285,6 +290,7 @@ const lyrics = await response.json();
 if (lyrics === null) {
   console.log('当前没有歌词');
 } else {
+  console.log(`歌词偏移：${lyrics.offset} ms`);
   console.log(lyrics.lines);
 }
 ```
@@ -304,14 +310,16 @@ lyrics = response.json()
 if lyrics is None:
     print("当前没有歌词")
 else:
+    print(f"歌词偏移：{lyrics['offset']} ms")
     print(lyrics["lines"])
 ```
 
 ## 使用注意事项
 
 - 接口返回的是歌词数据快照，不包含当前播放时间、当前歌词行索引、播放状态或播放控制能力。
+- `offset` 是用户为当前歌曲手动设置的歌词时间偏移，单位为毫秒；客户端若自行按播放时间匹配歌词，应使用 `播放时间（秒） - offset / 1000` 作为歌词时间。
 - Folia 会把逐行歌词归一化为逐字时间轴；`wordByWord: false` 表示逐字时间由行时间估算生成，外部程序不应把它当作原生精确逐字时间。
-- 歌词对象通常只会在切歌、歌词加载完成或歌词来源发生变化时更新，不会随播放进度持续变化。
+- 歌词对象通常只会在切歌、歌词加载完成、歌词来源发生变化或用户调整歌词时间偏移时更新，不会随播放进度持续变化。
 - 需要感知切歌的客户端可以低频轮询，例如每 `500–1000 ms` 请求一次，并比较响应内容。
 - 客户端必须正确处理 `200 OK` 加 JSON `null` 的情况。
 - 这是无鉴权本地接口。不要通过端口转发、反向代理或防火墙规则将它暴露到不可信网络。

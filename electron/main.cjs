@@ -3598,11 +3598,11 @@ ipcMain.handle('lyric-api-set-enabled', (event, enabled) => {
   return lyricApi.setEnabled(Boolean(enabled));
 });
 
-ipcMain.handle('lyric-api-publish', (event, lyrics) => {
+ipcMain.handle('lyric-api-publish', (event, lyrics, offset) => {
   if (!isTrustedMainWindowContents(event.sender)) {
     return false;
   }
-  return lyricApi.publishLyricData(lyrics);
+  return lyricApi.publishLyricData(lyrics, offset);
 });
 
 ipcMain.handle('discord-presence-get-status', (event) => {
