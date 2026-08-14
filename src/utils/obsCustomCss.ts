@@ -71,6 +71,23 @@ const encodeBoundedDataUrl = async (
   return canvas.toDataURL(mimeType, quality);
 };
 
+// Isolating wrapper: a corrupt file / stale blob URL rejects load; without this every asset in the
+// copy operation would go down with it. Instead we swallow the failure, log it, and let the caller
+// treat this entry as absent so the rest of the pack (and the other asset categories) survive.
+const safeEncodeBoundedDataUrl = async (
+  sourceUrl: string,
+  maxSize: number,
+  mimeType: 'image/jpeg' | 'image/png',
+  quality?: number,
+): Promise<string | null> => {
+  try {
+    return await encodeBoundedDataUrl(sourceUrl, maxSize, mimeType, quality);
+  } catch (err) {
+    console.warn('OBS CSS: failed to encode asset, skipping.', err);
+    return null;
+  }
+};
+
 // UTF-8-safe base64, chunked so a large pack never overflows the call stack. A JSON list of data URLs
 // carries characters ("/;,) and non-ASCII emoji names that are awkward to escape inside a raw CSS
 // string, so packing it as base64 keeps the custom-property value a single CSS-safe token.
@@ -95,12 +112,13 @@ const decodeBase64Utf8 = (value: string): string => {
 
 // Downscale every image in a pack and pack the {id, name, url} list into a base64(JSON) string, or
 // null when nothing survives. id/name are preserved because the overlay keys emoji triggers by name.
+// Encoding is isolated per entry so a single corrupt file cannot take down the rest of the pack.
 const encodeImageListProperty = async (
   images: NamedImageAsset[],
   maxSize: number,
 ): Promise<string | null> => {
   const encoded = await Promise.all(images.map(async (image) => {
-    const url = await encodeBoundedDataUrl(image.url, maxSize, 'image/png');
+    const url = await safeEncodeBoundedDataUrl(image.url, maxSize, 'image/png');
     return url ? { id: image.id, name: image.name, url } : null;
   }));
   const kept = encoded.filter((entry): entry is NamedImageAsset => entry !== null);
@@ -122,10 +140,10 @@ export const buildObsCustomCss = async (): Promise<string | null> => {
 
   const [backgroundDataUrl, portraitDataUrl, emojiList, avatarList] = await Promise.all([
     usesUploadedBackground && store.monetBackgroundImage
-      ? encodeBoundedDataUrl(store.monetBackgroundImage.url, BACKGROUND_MAX_SIZE, 'image/jpeg', BACKGROUND_QUALITY)
+      ? safeEncodeBoundedDataUrl(store.monetBackgroundImage.url, BACKGROUND_MAX_SIZE, 'image/jpeg', BACKGROUND_QUALITY)
       : null,
     usesCustomPortrait && store.monetPortraitImage
-      ? encodeBoundedDataUrl(store.monetPortraitImage.url, PORTRAIT_MAX_SIZE, 'image/png')
+      ? safeEncodeBoundedDataUrl(store.monetPortraitImage.url, PORTRAIT_MAX_SIZE, 'image/png')
       : null,
     usesCustomEmojis ? encodeImageListProperty(store.cappellaCustomEmojiImages, CAPPELLA_EMOJI_MAX_SIZE) : null,
     usesCustomAvatars ? encodeImageListProperty(store.cappellaCustomAvatarImages, CAPPELLA_AVATAR_MAX_SIZE) : null,
