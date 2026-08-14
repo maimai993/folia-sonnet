@@ -11,6 +11,8 @@ import type {
 } from './types';
 import type { SearchSource } from '../../stores/useSearchNavigationStore';
 import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
+import { buildObsCustomCss } from '../../utils/obsCustomCss';
+import { hasUploadedObsAsset } from '../../utils/visualSettingsConfig';
 import { ListMusic, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward } from 'lucide-react';
 
 // src/components/command-palette/commandRegistry.ts
@@ -319,6 +321,35 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
                         : context.t('options.lyricApiEnableFailed', 'Failed to start the Lyrics API')
                     : context.t('options.lyricApiDisabledStatus', 'Lyrics API disabled'),
             });
+            return true;
+        },
+    },
+    {
+        id: 'settings-obs-copy-css',
+        group: 'settings',
+        title: 'Copy OBS CSS',
+        description: 'Copy the OBS Browser Source Custom CSS carrying uploaded background / portrait / Cappella assets',
+        keywords: ['obs css', 'copy obs css', 'obs custom css', 'obs assets', 'browser source css', '复制 obs css', 'obs 自定义 css', 'obs 资产', 'fuzhiobscss', 'obszidingyicss', 'obszichan', 'fzobscss', 'obszdycss', 'obszc'],
+        execute: async (_input, context) => {
+            if (!hasUploadedObsAsset()) {
+                context.setStatusMsg({
+                    type: 'info',
+                    text: context.t('commandPalette.obsCssNoAsset', 'No uploaded OBS assets are in use. Upload a custom background, portrait, emoji, or avatar first.'),
+                });
+                return true;
+            }
+            try {
+                const css = await buildObsCustomCss();
+                if (!css) {
+                    context.setStatusMsg({ type: 'error', text: context.t('status.copyFailed', 'Copy failed') });
+                    return true;
+                }
+                await navigator.clipboard.writeText(css);
+                context.setStatusMsg({ type: 'info', text: context.t('options.obsCssCopiedHint', 'CSS copied; paste it into OBS Browser Source -> Custom CSS.') });
+            } catch (err) {
+                console.error('Failed to copy OBS CSS:', err);
+                context.setStatusMsg({ type: 'error', text: context.t('status.copyFailed', 'Copy failed') });
+            }
             return true;
         },
     },
