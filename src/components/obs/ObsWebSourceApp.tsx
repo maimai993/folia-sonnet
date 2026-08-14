@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import VisualizerRenderer from '../visualizer/VisualizerRenderer';
 import { buildVisualizerTheme } from '../app/presentation/buildVisualizerTheme';
-import type { Line, Theme } from '../../types';
+import type { Line, MonetPortraitImage, Theme } from '../../types';
+import type { VisualizerBackgroundConfig } from '../visualizer/backgrounds/definition';
 import { findLatestActiveLineIndex } from '../../utils/appPlaybackHelpers';
 import { buildBuiltinDualTheme } from '../../hooks/themeControllerState';
 import { extractColors } from '../../utils/colorExtractor';
+import { readObsCustomCssAssets, type ObsCustomCssAssets } from '../../utils/obsCustomCss';
 import type { WebLyricSource } from '../../types/webLyricSource';
 import type { ObsWebAppearance } from '../../utils/obsWebAppearance';
 import { useObsAiTheme } from '../../hooks/useObsAiTheme';
@@ -43,6 +45,8 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
     const [theme, setTheme] = useState<Theme>(() => appearance.theme ?? pickBuiltinTheme([], isDaylight));
     const [obsScale, setObsScale] = useState(1);
     const [obsDimensions, setObsDimensions] = useState({ width: '100vw', height: '100vh' });
+    // Uploaded assets OBS injected through the Custom CSS field; the cfg URL cannot carry an image blob.
+    const [cssAssets, setCssAssets] = useState<ObsCustomCssAssets>({ backgroundUrl: null, portraitUrl: null, cappellaEmojis: [], cappellaAvatars: [] });
 
     const currentLineIndexRef = useRef(-1);
     const linesRef = useRef<Line[]>([]);
@@ -68,6 +72,27 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
         document.documentElement.style.backgroundColor = 'transparent';
         document.body.style.overflow = 'hidden';
         document.title = 'Folia OBS';
+    }, []);
+
+    // OBS applies the Custom CSS field around page load, which may land just before or just after this
+    // mounts. Poll a few times (~1s) until an asset shows up, then stop; a source with no custom CSS
+    // simply keeps both null and the overlay falls back to the cover as before.
+    useEffect(() => {
+        let attempts = 0;
+        let timerId = 0;
+        const read = () => {
+            const assets = readObsCustomCssAssets();
+            const hasAny = assets.backgroundUrl || assets.portraitUrl
+                || assets.cappellaEmojis.length > 0 || assets.cappellaAvatars.length > 0;
+            if (hasAny || attempts >= 5) {
+                setCssAssets(assets);
+                return;
+            }
+            attempts += 1;
+            timerId = window.setTimeout(read, 200);
+        };
+        read();
+        return () => window.clearTimeout(timerId);
     }, []);
 
     // 4K scaling: same as the upstream ObsBrowserSourceApp -lay children out as 1920x1080
@@ -166,6 +191,18 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
     // 'idle', which the clock and the visuals would otherwise interpret differently.
     const paused = !state.clock.playing;
 
+    // Graft the Custom-CSS assets onto the cfg appearance: the uploaded background feeds the Monet /
+    // Nomand pipelines through customImage, the portrait rides its own renderer prop. Present-wins, so
+    // an overlay with no custom CSS is byte-for-byte the old cover-derived behaviour.
+    const backgroundWithAssets = useMemo<VisualizerBackgroundConfig>(() => (
+        cssAssets.backgroundUrl
+            ? { ...appearance.background, customImage: { id: 'obs-css-bg', name: 'obs-css-bg', url: cssAssets.backgroundUrl } }
+            : appearance.background
+    ), [appearance.background, cssAssets.backgroundUrl]);
+    const portraitImage = useMemo<MonetPortraitImage | null>(() => (
+        cssAssets.portraitUrl ? { id: 'obs-css-portrait', name: 'obs-css-portrait', url: cssAssets.portraitUrl } : null
+    ), [cssAssets.portraitUrl]);
+
     // Overlay the cfg font stack onto the resolved theme so the OBS fonts match the main window
     // (same helper as the main app). appStyle {} keeps theme.backgroundColor.
     const { visualizerTheme, visualizerSubtitleTheme } = buildVisualizerTheme({
@@ -212,7 +249,10 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
                 seed={state.track?.seed || 'folia-obs-web'}
                 paused={paused}
                 visualizerOpacity={appearance.visualizerOpacity}
-                background={appearance.background}
+                background={backgroundWithAssets}
+                monetPortraitImage={portraitImage}
+                cappellaCustomEmojiImages={cssAssets.cappellaEmojis}
+                cappellaCustomAvatarImages={cssAssets.cappellaAvatars}
                 lyricsFontScale={appearance.lyricsFontScale}
                 subtitleFontScale={appearance.subtitleFontScale}
                 subtitleOverlayBackground={appearance.subtitleOverlayBackground}

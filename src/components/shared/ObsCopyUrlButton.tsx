@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Copy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
@@ -14,13 +15,16 @@ interface ObsCopyUrlButtonProps {
     buttonClassName?: string;
 }
 
-// Rough menu height used to decide the open direction (3 single-line rows + padding).
+// Rough menu size used to decide the open direction and clamp its width.
 const MENU_ESTIMATED_HEIGHT = 150;
+const MENU_WIDTH = 224; // w-56
 
 // Split button (obs-endpoint-enhance): a primary "copy OBS URL" action plus a ▾ dropdown to pick the
 // theme mode (static / builtin / ai). The dropdown is a pure selector — it only sets the mode; copying
-// is the primary button's job. Each mode's behavior shows on hover (title). Open direction is detected
-// from the live space below the trigger, so it stays correct even if the surrounding layout changes.
+// is the primary button's job. Each mode's behavior shows on hover (title). The menu renders in a
+// portal with fixed positioning so it escapes the settings modal's overflow clipping (an absolutely
+// positioned menu got cut off near the panel edge); open direction and coordinates come from the live
+// trigger rect, kept fresh on scroll/resize while open.
 export const ObsCopyUrlButton: React.FC<ObsCopyUrlButtonProps> = ({ onCopy, copied, disabled, buttonClassName }) => {
     const { t } = useTranslation();
     const mode = useSettingsUiStore((s) => s.webObsThemeMode);
@@ -28,19 +32,37 @@ export const ObsCopyUrlButton: React.FC<ObsCopyUrlButtonProps> = ({ onCopy, copi
     const isDaylight = useSettingsUiStore((s) => s.isDaylight);
     const [open, setOpen] = useState(false);
     const [openUp, setOpenUp] = useState(false);
+    const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    const measure = () => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        setOpenUp(spaceBelow < MENU_ESTIMATED_HEIGHT && rect.top > spaceBelow);
+        setTriggerRect(rect);
+    };
 
     useEffect(() => {
         if (!open) return undefined;
         const onDocMouseDown = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+            const target = e.target as Node;
+            if (containerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+            setOpen(false);
         };
         const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+        // The trigger sits in a scrollable modal, so keep the fixed-position menu pinned to it.
+        const reposition = () => measure();
         document.addEventListener('mousedown', onDocMouseDown);
         document.addEventListener('keydown', onKeyDown);
+        window.addEventListener('scroll', reposition, true);
+        window.addEventListener('resize', reposition);
         return () => {
             document.removeEventListener('mousedown', onDocMouseDown);
             document.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('scroll', reposition, true);
+            window.removeEventListener('resize', reposition);
         };
     }, [open]);
 
@@ -53,12 +75,7 @@ export const ObsCopyUrlButton: React.FC<ObsCopyUrlButtonProps> = ({ onCopy, copi
 
     const toggleMenu = () => {
         if (open) { setOpen(false); return; }
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (rect) {
-            const spaceBelow = window.innerHeight - rect.bottom;
-            // Flip up only when there isn't room below and there's more room above.
-            setOpenUp(spaceBelow < MENU_ESTIMATED_HEIGHT && rect.top > spaceBelow);
-        }
+        measure();
         setOpen(true);
     };
 
@@ -70,6 +87,10 @@ export const ObsCopyUrlButton: React.FC<ObsCopyUrlButtonProps> = ({ onCopy, copi
     const baseBtn = 'text-xs font-medium flex items-center gap-1.5 bg-white/10 hover:bg-white/15 active:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
     const menuBg = isDaylight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(24, 24, 27, 0.98)';
     const menuBorder = isDaylight ? 'rgba(24, 24, 27, 0.12)' : 'rgba(255, 255, 255, 0.12)';
+    // Match the trigger's live width so the menu visually anchors to the split button; fall back to
+    // the estimated width only if we somehow render without a measured rect. Cap at 80vw for safety.
+    const viewportCap = typeof window !== 'undefined' ? window.innerWidth * 0.8 : MENU_WIDTH;
+    const menuWidth = Math.min(triggerRect?.width ?? MENU_WIDTH, viewportCap);
 
     return (
         <div ref={containerRef} className="relative inline-flex items-stretch">
@@ -102,10 +123,21 @@ export const ObsCopyUrlButton: React.FC<ObsCopyUrlButtonProps> = ({ onCopy, copi
             >
                 <ChevronDown size={13} />
             </button>
-            {open && (
+            {open && triggerRect && createPortal(
                 <div
-                    className={`absolute right-0 ${openUp ? 'bottom-full mb-1' : 'top-full mt-1'} w-56 max-w-[80vw] rounded-xl border p-1 z-50 shadow-xl`}
-                    style={{ backgroundColor: menuBg, borderColor: menuBorder }}
+                    ref={menuRef}
+                    className="rounded-xl border p-1 shadow-xl"
+                    style={{
+                        position: 'fixed',
+                        left: Math.max(8, triggerRect.right - menuWidth),
+                        width: menuWidth,
+                        ...(openUp
+                            ? { bottom: window.innerHeight - triggerRect.top + 4 }
+                            : { top: triggerRect.bottom + 4 }),
+                        zIndex: 1000,
+                        backgroundColor: menuBg,
+                        borderColor: menuBorder,
+                    }}
                 >
                     {options.map((o) => {
                         const selected = o.value === mode;
@@ -123,7 +155,8 @@ export const ObsCopyUrlButton: React.FC<ObsCopyUrlButtonProps> = ({ onCopy, copi
                             </button>
                         );
                     })}
-                </div>
+                </div>,
+                document.body,
             )}
         </div>
     );
