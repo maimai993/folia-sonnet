@@ -246,14 +246,9 @@ export const buildSonnetScene = (
             ));
         });
         const bounds = shotContainer.getLocalBounds();
-        if (shot.kind === 'mask-reveal') {
-            const mask = new Graphics()
-                .rect(bounds.x - 6, bounds.y - 6, bounds.width + 12, bounds.height + 12)
-                .fill(0xffffff);
-            shotContainer.addChild(mask);
-            shotContainer.mask = mask;
-        }
-        // Debug overlay stays above the text and never feeds the bounds/mask math.
+        // `mask-reveal` is revealed by the glyph timeline. A bounds-sized mask would stay
+        // static while camera tracking and parallax move the shot, clipping open MG artwork.
+        // Debug overlay stays above the text and never feeds the bounds/focus math.
         shotContainer.addChild(buildSonnetMeasuredBoundsDebug(pixi, placements));
         const usesGeoMg = shot.kind === 'type-impact' || shot.kind === 'fragment-collage';
         const debugInfo = createSonnetShotDebugInfo({
