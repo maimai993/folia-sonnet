@@ -6,7 +6,6 @@ import NaviLyricMatchModal from '../../modal/NaviLyricMatchModal';
 import OnlineLyricMatchModal from '../../modal/OnlineLyricMatchModal';
 import UnavailableReplacementDialog from '../../modal/UnavailableReplacementDialog';
 import SettingsModal from '../../modal/SettingsModal';
-import SonnetPerformanceWarningDialog from '../../modal/SonnetPerformanceWarningDialog';
 import ConfirmDialog from '../../shared/ConfirmDialog';
 import type { AppDialogsModel } from './buildAppDialogsModel';
 
@@ -16,7 +15,7 @@ type AppDialogsProps = {
 };
 
 const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
-    const { statusToast, lyricMatchDialog, naviLyricMatchDialog, onlineLyricMatchDialog, unavailableReplacementDialog, settingsDialog, providerSwitchConfirmDialog, sonnetPerformanceWarningDialog } = model;
+    const { statusToast, lyricMatchDialog, naviLyricMatchDialog, onlineLyricMatchDialog, unavailableReplacementDialog, settingsDialog, providerSwitchConfirmDialog } = model;
 
     return (
         <>
@@ -62,7 +61,6 @@ const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
             {onlineLyricMatchDialog && <OnlineLyricMatchModal {...onlineLyricMatchDialog} />}
             {unavailableReplacementDialog && <UnavailableReplacementDialog {...unavailableReplacementDialog} />}
             {providerSwitchConfirmDialog && <ConfirmDialog {...providerSwitchConfirmDialog} />}
-            {sonnetPerformanceWarningDialog && <SonnetPerformanceWarningDialog {...sonnetPerformanceWarningDialog} />}
             <AnimatePresence>
                 {settingsDialog && <SettingsModal {...settingsDialog} />}
             </AnimatePresence>

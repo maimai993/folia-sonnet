@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft, Blend } from 'lucide-react';
+import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft, MirrorRectangular } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, ThemeMode, VisualizerMode } from '../types';
 import type { ProviderCollection, ProviderUser } from '../types/onlineMusic';
@@ -758,7 +758,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             aria-label={t('options.transparentPlayerBackground')}
                                             aria-pressed={transparentPlayerBackground}
                                         >
-                                            <Blend size={18} />
+                                            <MirrorRectangular size={18} />
                                         </button>
                                     </div>
 

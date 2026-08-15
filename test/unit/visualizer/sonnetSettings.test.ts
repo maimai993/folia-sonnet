@@ -3,7 +3,7 @@ import { DEFAULT_SONNET_TUNING } from '@/types';
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 
 // test/unit/visualizer/sonnetSettings.test.ts
-// Verifies Sonnet visibility tuning and the first-entry performance warning at the store boundary.
+// Verifies Sonnet visibility tuning at the store boundary.
 const createLocalStorageMock = (): Storage => {
     const values = new Map<string, string>();
 
@@ -29,10 +29,6 @@ describe('Sonnet settings', () => {
         useSettingsUiStore.setState({
             visualizerMode: 'classic',
             sonnetTuning: { ...DEFAULT_SONNET_TUNING },
-            sonnetPerformanceWarningOpen: false,
-            sonnetPerformanceWarningDontShowAgain: false,
-            sonnetPerformanceWarningDismissed: false,
-            pendingVisualizerMode: null,
         });
     });
 
@@ -76,23 +72,11 @@ describe('Sonnet settings', () => {
         });
     });
 
-    it('requires confirmation before entering Sonnet and remembers the opt-out', () => {
+    it('enters Sonnet directly without an interstitial confirmation', () => {
         useSettingsUiStore.getState().handleSetVisualizerMode('sonnet');
 
-        expect(useSettingsUiStore.getState().visualizerMode).toBe('classic');
-        expect(useSettingsUiStore.getState().sonnetPerformanceWarningOpen).toBe(true);
-
-        useSettingsUiStore.getState().handleSetSonnetPerformanceWarningDontShowAgain(true);
-        useSettingsUiStore.getState().handleConfirmSonnetPerformanceWarning();
-
         expect(useSettingsUiStore.getState().visualizerMode).toBe('sonnet');
-        expect(useSettingsUiStore.getState().sonnetPerformanceWarningOpen).toBe(false);
-        expect(storage.getItem('sonnet_performance_warning_dismissed')).toBe('true');
-
-        useSettingsUiStore.getState().handleSetVisualizerMode('classic');
-        useSettingsUiStore.getState().handleSetVisualizerMode('sonnet');
-        expect(useSettingsUiStore.getState().visualizerMode).toBe('sonnet');
-        expect(useSettingsUiStore.getState().sonnetPerformanceWarningOpen).toBe(false);
+        expect(storage.getItem('visualizer_mode')).toBe('sonnet');
     });
 
     it('allows the stronger lens distortion range without accepting out-of-range values', () => {
