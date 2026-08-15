@@ -40,6 +40,8 @@ type BuildPlayerPanelModelParams = {
     daylightTheme: UnifiedPanelProps['playback']['daylightTheme'];
     visualizerMode: UnifiedPanelProps['playback']['visualizerMode'];
     handleSetVisualizerMode: UnifiedPanelProps['playback']['onVisualizerModeChange'];
+    transparentPlayerBackground: UnifiedPanelProps['playback']['transparentPlayerBackground'];
+    toggleTransparentModeWithHandoff: UnifiedPanelProps['playback']['onToggleTransparentPlayerBackground'];
     handleManualMatchOnline: UnifiedPanelProps['playback']['onMatchOnline'];
     handleUpdateLocalLyrics: UnifiedPanelProps['playback']['onUpdateLocalLyrics'];
     handleChangeLyricsSource: UnifiedPanelProps['playback']['onChangeLyricsSource'];
@@ -136,6 +138,8 @@ export const buildPlayerPanelModel = ({
     daylightTheme,
     visualizerMode,
     handleSetVisualizerMode,
+    transparentPlayerBackground,
+    toggleTransparentModeWithHandoff,
     handleManualMatchOnline,
     handleUpdateLocalLyrics,
     handleChangeLyricsSource,
@@ -231,6 +235,8 @@ export const buildPlayerPanelModel = ({
             daylightTheme,
             visualizerMode,
             onVisualizerModeChange: handleSetVisualizerMode,
+            transparentPlayerBackground,
+            onToggleTransparentPlayerBackground: toggleTransparentModeWithHandoff,
             onMatchOnline: handleManualMatchOnline,
             onUpdateLocalLyrics: handleUpdateLocalLyrics,
             onChangeLyricsSource: handleChangeLyricsSource,

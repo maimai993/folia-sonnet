@@ -3,6 +3,7 @@ import { DEFAULT_MONET_BACKGROUND_TUNING } from '../../../../types';
 import { MonetBackgroundSettingsCard } from './MonetBackgroundSettingsCard';
 import MonetBackgroundLayer from './MonetBackgroundLayer';
 import { defineVisualizerBackground } from '../definition';
+import { QuickControlChip } from '../../../shared/QuickControlChip';
 
 // src/components/visualizer/backgrounds/monet/entry.tsx
 // Registers the Monet image-treatment shell background.
@@ -49,5 +50,21 @@ export default defineVisualizerBackground({
             onSliderCommit={onSliderCommit}
         />
     ),
+    renderQuickControls: ({ config, actions, t, isDaylight }) => {
+        const tuning = config?.monet?.tuning ?? DEFAULT_MONET_BACKGROUND_TUNING;
+        const isFullOverlay = tuning.backgroundLayout === 'full-overlay';
+        const layoutLabel = t(isFullOverlay ? 'options.monetLayoutFullOverlay' : 'options.monetLayoutHalfPane');
+
+        return (
+            <QuickControlChip
+                isDaylight={isDaylight}
+                label={layoutLabel}
+                title={`${t('options.monetBackgroundLayout')}: ${layoutLabel}`}
+                onClick={() => actions?.monet?.onTuningChange?.({
+                    backgroundLayout: isFullOverlay ? 'half-pane-gradient' : 'full-overlay',
+                })}
+            />
+        );
+    },
     resetSettings: actions => actions?.monet?.onResetTuning?.(),
 });

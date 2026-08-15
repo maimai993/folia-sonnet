@@ -2504,6 +2504,8 @@ export default function App() {
         daylightTheme: DAYLIGHT_THEME,
         visualizerMode,
         handleSetVisualizerMode,
+        transparentPlayerBackground,
+        toggleTransparentModeWithHandoff,
         handleManualMatchOnline,
         handleUpdateLocalLyrics,
         handleChangeLyricsSource,
@@ -2752,6 +2754,8 @@ export default function App() {
         handlePlayerPanelAlbumSelect,
         handlePlayerPanelArtistSelect,
         navigateDirectHome,
+        transparentPlayerBackground,
+        toggleTransparentModeWithHandoff,
     ]);
     const appOverlaysModel = useMemo(() => buildAppOverlaysModel({
         currentView,

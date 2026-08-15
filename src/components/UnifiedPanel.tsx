@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft } from 'lucide-react';
+import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft, Blend } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, ThemeMode, VisualizerMode } from '../types';
 import type { ProviderCollection, ProviderUser } from '../types/onlineMusic';
@@ -86,6 +86,8 @@ type UnifiedPanelPlaybackProps = {
     onOpenSettings?: () => void;
     onOpenCommandPalette?: () => void;
     isCommandPaletteOpen?: boolean;
+    transparentPlayerBackground: boolean;
+    onToggleTransparentPlayerBackground: (enable: boolean) => void;
 };
 
 type UnifiedPanelQueueProps = {
@@ -203,6 +205,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         onOpenSettings,
         onOpenCommandPalette,
         isCommandPaletteOpen = false,
+        transparentPlayerBackground,
+        onToggleTransparentPlayerBackground,
     } = playback;
     const { playQueue, onPlaySong, queueScrollRef, onShuffle, onRemoveSong, onMoveSongToEnd, onMoveSongToNext } = queue;
     const {
@@ -732,6 +736,31 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             </button>
                                         </div>
                                     )}
+
+                                    {/* 右上角：播放页透明。不算高频，所以只占封面的空位，不占面板结构 */}
+                                    <div className={`absolute right-3 top-3 transition-all duration-200 ${
+                                        supportsHover
+                                            ? 'pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 translate-x-3 -translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
+                                            : `${isCoverActionsVisible ? 'pointer-events-auto opacity-100 translate-x-0 translate-y-0' : 'pointer-events-none opacity-0 translate-x-3 -translate-y-3'}`
+                                    }`}>
+                                        <button
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                onToggleTransparentPlayerBackground(!transparentPlayerBackground);
+                                            }}
+                                            className={`w-11 h-11 rounded-full border backdrop-blur-md flex items-center justify-center transition-all ${
+                                                transparentPlayerBackground
+                                                    ? 'border-white/30 bg-white/85 text-zinc-900 hover:bg-white'
+                                                    : 'border-white/15 bg-black/25 text-white/90 hover:bg-black/40 hover:text-white'
+                                            }`}
+                                            title={t('options.transparentPlayerBackground')}
+                                            aria-label={t('options.transparentPlayerBackground')}
+                                            aria-pressed={transparentPlayerBackground}
+                                        >
+                                            <Blend size={18} />
+                                        </button>
+                                    </div>
 
                                     <div className={`absolute left-3 bottom-3 transition-all duration-200 ${
                                         supportsHover

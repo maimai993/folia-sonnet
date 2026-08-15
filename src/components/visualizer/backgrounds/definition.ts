@@ -96,6 +96,15 @@ export interface VisualizerBackgroundSettingsProps {
     onSliderCommit?: () => void;
 }
 
+/** 播放面板背景行里该模式专属的快捷参数，只放一到两个最常调的项。 */
+export interface VisualizerBackgroundQuickControlsProps {
+    config?: VisualizerBackgroundConfig;
+    actions?: VisualizerBackgroundActions;
+    t: (key: string) => string;
+    isDaylight: boolean;
+    theme: Theme;
+}
+
 export interface VisualizerBackgroundRegistryEntry {
     mode: VisualizerBackgroundMode;
     order: number;
@@ -103,6 +112,7 @@ export interface VisualizerBackgroundRegistryEntry {
     labelFallback: string;
     render: (props: VisualizerBackgroundRenderProps) => React.ReactNode;
     renderSettingsPanel?: (props: VisualizerBackgroundSettingsProps) => React.ReactNode;
+    renderQuickControls?: (props: VisualizerBackgroundQuickControlsProps) => React.ReactNode;
     resetSettings?: (actions?: VisualizerBackgroundActions) => void;
 }
 
