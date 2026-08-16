@@ -210,6 +210,9 @@ const compressMonetBackground = (t: any): any => ({
     mbh: t.backgroundHalfPaneOffsetX,
     mbwcm: t.backgroundWashColorMode,
     mbwcc: t.backgroundWashCustomColor,
+    mbde: t.backgroundDriftEnabled,
+    mbds: t.backgroundDriftStrength,
+    mbse: t.backgroundStreaksEnabled,
 });
 const decompressMonetBackground = (o: any): any => ({
     backgroundSource: o.mbs || DEFAULT_MONET_BACKGROUND_TUNING.backgroundSource,
@@ -222,6 +225,9 @@ const decompressMonetBackground = (o: any): any => ({
     backgroundHalfPaneOffsetX: o.mbh !== undefined ? o.mbh : DEFAULT_MONET_BACKGROUND_TUNING.backgroundHalfPaneOffsetX,
     backgroundWashColorMode: o.mbwcm || DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashColorMode,
     backgroundWashCustomColor: o.mbwcc || DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashCustomColor,
+    backgroundDriftEnabled: o.mbde !== undefined ? o.mbde : DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftEnabled,
+    backgroundDriftStrength: o.mbds !== undefined ? o.mbds : DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength,
+    backgroundStreaksEnabled: o.mbse !== undefined ? o.mbse : DEFAULT_MONET_BACKGROUND_TUNING.backgroundStreaksEnabled,
 });
 
 const compressNomandBackground = (t: any): any => ({

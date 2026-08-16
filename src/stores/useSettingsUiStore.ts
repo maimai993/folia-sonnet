@@ -770,6 +770,12 @@ export const resolveStoredMonetBackgroundTuning = (parsed: StoredMonetBackground
         parsed.backgroundWashCustomColor,
         DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashCustomColor,
     ),
+    backgroundDriftEnabled: parsed.backgroundDriftEnabled ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftEnabled,
+    backgroundDriftStrength: clampUnitInterval(
+        parsed.backgroundDriftStrength ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength,
+        DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength,
+    ),
+    backgroundStreaksEnabled: parsed.backgroundStreaksEnabled ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundStreaksEnabled,
 });
 
 const resolveNomandBackgroundSource = (value: NomandBackgroundSource | undefined): NomandBackgroundSource => (

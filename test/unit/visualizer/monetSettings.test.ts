@@ -73,6 +73,9 @@ describe('Monet tuning and lyric helpers', () => {
             backgroundHalfPaneOffsetX: 40,
             backgroundWashColorMode: 'custom',
             backgroundWashCustomColor: '#aabbcc',
+            backgroundDriftEnabled: DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftEnabled,
+            backgroundDriftStrength: DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength,
+            backgroundStreaksEnabled: DEFAULT_MONET_BACKGROUND_TUNING.backgroundStreaksEnabled,
         });
 
         expect(resolveStoredMonetBackgroundTuning({
@@ -88,6 +91,38 @@ describe('Monet tuning and lyric helpers', () => {
         });
 
         expect(resolveStoredMonetBackgroundTuning({})).toEqual(DEFAULT_MONET_BACKGROUND_TUNING);
+    });
+
+    it('clamps Monet background drift strength and keeps the drift and streak switches', () => {
+        expect(resolveStoredMonetBackgroundTuning({
+            backgroundDriftEnabled: false,
+            backgroundDriftStrength: 9,
+            backgroundStreaksEnabled: false,
+        })).toEqual({
+            ...DEFAULT_MONET_BACKGROUND_TUNING,
+            backgroundDriftEnabled: false,
+            backgroundDriftStrength: 1,
+            backgroundStreaksEnabled: false,
+        });
+
+        expect(resolveStoredMonetBackgroundTuning({
+            backgroundDriftStrength: Number.NaN,
+        }).backgroundDriftStrength).toBe(DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength);
+    });
+
+    it('keeps drift out of the Monet background cache key but rebakes when streaks toggle', () => {
+        const theme = { backgroundColor: '#101014', primaryColor: '#ffffff', accentColor: '#8fb7ff' } as Theme;
+        const base = { coverUrl: 'https://example.com/cover.jpg', theme, tuning: DEFAULT_MONET_BACKGROUND_TUNING };
+
+        expect(getMonetBackgroundCacheKey({
+            ...base,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundDriftEnabled: false, backgroundDriftStrength: 1 },
+        })).toBe(getMonetBackgroundCacheKey(base));
+
+        expect(getMonetBackgroundCacheKey({
+            ...base,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundStreaksEnabled: false },
+        })).not.toBe(getMonetBackgroundCacheKey(base));
     });
 
     it('normalizes persisted Monet lyric and portrait tuning values', () => {

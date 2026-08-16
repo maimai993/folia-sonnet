@@ -106,6 +106,9 @@ describe('obsBrowserSource utilities', () => {
                     backgroundHalfPaneOffsetX: 0,
                     backgroundWashColorMode: 'theme',
                     backgroundWashCustomColor: '#8fb7ff',
+                    backgroundDriftEnabled: true,
+                    backgroundDriftStrength: 0.5,
+                    backgroundStreaksEnabled: true,
                 },
             },
             url: {

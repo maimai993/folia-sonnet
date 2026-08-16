@@ -721,6 +721,12 @@ export interface MonetBackgroundTuning {
   backgroundHalfPaneOffsetX: number;
   backgroundWashColorMode: MonetBackgroundWashColorMode;
   backgroundWashCustomColor: string;
+  /** 整张背景图的缓慢缩放漂移；纯 CSS 合成层动画，不参与背景烘焙。 */
+  backgroundDriftEnabled: boolean;
+  /** 漂移幅度 0..1，同时决定位移距离和为防止露边而预放大的倍率。 */
+  backgroundDriftStrength: number;
+  /** 是否在烘焙的 overlay 里绘制那几条 1px 竖向纹理。 */
+  backgroundStreaksEnabled: boolean;
 }
 
 export interface NomandBackgroundTuning {
@@ -773,6 +779,9 @@ export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
   backgroundHalfPaneOffsetX: 0,
   backgroundWashColorMode: 'theme',
   backgroundWashCustomColor: '#8fb7ff',
+  backgroundDriftEnabled: true,
+  backgroundDriftStrength: 0.5,
+  backgroundStreaksEnabled: true,
 };
 
 export const DEFAULT_NOMAND_BACKGROUND_TUNING: NomandBackgroundTuning = {
