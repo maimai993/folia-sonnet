@@ -1830,7 +1830,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                 onSelect={() => {
                                     if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
                                         persistNavigationState(idx);
-                                        onSelectTrack(item.rawTrack, displayTracks);
+                                        onSelectTrack(item.rawTrack, contextActionTracks);
                                     } else if (mode === 'collection' && onSelectCollection) {
                                         onSelectCollection(item.rawCollection || item);
                                     }
@@ -1876,7 +1876,7 @@ export const GridView: React.FC<GridViewProps> = ({
         cardFrameOptions,
         isEditMode,
         focusedIndex,
-        displayTracks,
+        contextActionTracks,
         onSelectTrack,
         onSelectCollection,
         onSelectArtist,
@@ -1984,7 +1984,7 @@ export const GridView: React.FC<GridViewProps> = ({
                 if (mode === 'tracks' && onSelectTrack && focusedItem.rawTrack) {
                     e.preventDefault();
                     persistNavigationState(focusedIndex);
-                    onSelectTrack(focusedItem.rawTrack, displayTracks);
+                    onSelectTrack(focusedItem.rawTrack, contextActionTracks);
                 } else if (mode === 'collection' && onSelectCollection) {
                     e.preventDefault();
                     onSelectCollection(focusedItem.rawCollection || focusedItem);
@@ -2031,7 +2031,7 @@ export const GridView: React.FC<GridViewProps> = ({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [
         baseCoords,
-        displayTracks,
+        contextActionTracks,
         focusedIndex,
         gridItems,
         isCreatePlaylistOpen,

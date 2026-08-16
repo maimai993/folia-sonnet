@@ -22,6 +22,7 @@ import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntra
 import { useLocalLibraryCatalog } from '../hooks/useLocalLibraryCatalog';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../utils/localLibraryIndex';
 import { ArtistGridInfoCutInPanel } from './artist-grid/ArtistGridInfoCutInPanel';
+import { isSongUnavailable } from '../services/onlineMusic/songAvailability';
 
 /*
  * ArtistGridView.tsx
@@ -653,6 +654,11 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
         return itemsList;
     }, [albumGridItems, artistInfo, topSongs]);
+    // Queue context for track selection: unavailable tracks are excluded so playback matches the playlist/album surfaces.
+    const playableTopSongs = useMemo(
+        () => topSongs.filter(song => !isSongUnavailable(song)),
+        [topSongs]
+    );
     const shouldAnimateItemEntrance = useProgressiveItemEntrance(
         `${String(collection.source)}:${String(collection.id)}`
     );
@@ -945,7 +951,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     setShowFullBio(true);
                 } else if (focusedItem.rawTrack && onSelectTrack) {
                     e.preventDefault();
-                    onSelectTrack(focusedItem.rawTrack, topSongs);
+                    onSelectTrack(focusedItem.rawTrack, playableTopSongs);
                 } else if (focusedItem.rawCollection && onSelectAlbum) {
                     e.preventDefault();
                     persistNavigationState(focusedIndex);
@@ -1003,7 +1009,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         showFullBio,
         showSearchPanel,
         showSidePanel,
-        topSongs,
+        playableTopSongs,
     ]);
 
     const renderedCards = useMemo(() => {
@@ -1155,7 +1161,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         isFocused={focusedIndex === idx}
                         onSelect={() => {
                             if (isSongCard && onSelectTrack && item.rawTrack) {
-                                onSelectTrack(item.rawTrack, topSongs);
+                                onSelectTrack(item.rawTrack, playableTopSongs);
                             } else if (!isSongCard && onSelectAlbum && item.rawCollection) {
                                 persistNavigationState(idx);
                                 onSelectAlbum(item.rawCollection.id, item.rawCollection);
@@ -1190,7 +1196,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         clipRadius,
         focusedIndex,
         artistInfo,
-        topSongs,
+        playableTopSongs,
         onSelectTrack,
         onSelectAlbum,
         onSelectArtist,
