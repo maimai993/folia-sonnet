@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import type { MotionValue } from 'framer-motion';
 import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Monitor, PlayCircle, Loader2, Server, Check, AlertCircle, FlaskConical, ChevronLeft, ChevronRight, RefreshCw, Download, ExternalLink, Sparkles, Palette, CircleHelp, Languages, Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
@@ -10,6 +11,7 @@ import VisPlayground from '../visualizer/VisPlayground';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel } from '../visualizer/registry';
 import ThemePark from './ThemePark';
 import LyricFilterSettingsModal from './LyricFilterSettingsModal';
+import GlobalLyricOffsetModal from './settings/GlobalLyricOffsetModal';
 import AppearanceSettingsSubview from './settings/AppearanceSettingsSubview';
 import DesktopSettingsSubview from './settings/DesktopSettingsSubview';
 import GeneralSettingsSubview from './settings/GeneralSettingsSubview';
@@ -52,6 +54,8 @@ interface SettingsModalProps {
     onToggleSongThemeAutoGenerate: (enabled: boolean) => void;
     onToggleNavidrome?: (enabled: boolean) => void;
     loadLyricFilterPreview: () => Promise<LyricData | null>;
+    currentLyrics: LyricData | null;
+    lyricCurrentTime: MotionValue<number>;
     currentSongTitle?: string | null;
     onSaveLyricFilterPattern: (pattern: string) => Promise<void> | void;
     stageStatus?: StageStatus | null;
@@ -106,6 +110,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     onToggleSongThemeAutoGenerate,
     onToggleNavidrome,
     loadLyricFilterPreview,
+    currentLyrics,
+    lyricCurrentTime,
     currentSongTitle,
     onSaveLyricFilterPattern,
     stageStatus = null,
@@ -332,6 +338,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [showVisPlayground, setShowVisPlayground] = useState(false);
     const [showThemePark, setShowThemePark] = useState(false);
     const [showLyricFilterSettings, setShowLyricFilterSettings] = useState(false);
+    const [showGlobalLyricOffset, setShowGlobalLyricOffset] = useState(false);
     const [showAiHelpPrompt, setShowAiHelpPrompt] = useState(false);
     const [versionCopied, setVersionCopied] = useState(false);
     const [stageAddressCopied, setStageAddressCopied] = useState(false);
@@ -344,6 +351,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setShowVisPlayground(initialSubview === 'visualizer');
         setShowThemePark(initialSubview === 'themePark');
         setShowLyricFilterSettings(initialSubview === 'lyricFilter');
+        setShowGlobalLyricOffset(initialSubview === 'globalLyricOffset');
 
         if (
             initialSubview === 'appearance' ||
@@ -352,9 +360,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             initialSubview === 'integration' ||
             initialSubview === 'storage' ||
             initialSubview === 'desktop' ||
-            initialSubview === 'lab'
+            initialSubview === 'lab' ||
+            initialSubview === 'globalLyricOffset'
         ) {
-            setActiveSettingsSection(initialSubview);
+            setActiveSettingsSection(initialSubview === 'globalLyricOffset' ? 'lab' : initialSubview);
         } else {
             setActiveSettingsSection(prev => prev || 'appearance');
         }
@@ -924,6 +933,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const isAnySubviewOpen = showVisPlayground
         || showThemePark
         || showLyricFilterSettings
+        || showGlobalLyricOffset
         || showAiHelpPrompt;
 
     const closeAllSubviews = () => {
@@ -934,6 +944,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setShowVisPlayground(false);
         setShowThemePark(false);
         setShowLyricFilterSettings(false);
+        setShowGlobalLyricOffset(false);
         setShowAiHelpPrompt(false);
     };
 
@@ -1677,6 +1688,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 isOpen={true}
                                                 onClose={() => { }}
                                                 onOpenLyricFilterSettings={() => setShowLyricFilterSettings(true)}
+                                                onOpenGlobalLyricOffsetSettings={() => setShowGlobalLyricOffset(true)}
                                                 theme={theme}
                                                 embedded={true}
                                                 voiceInputPause={{
@@ -1925,6 +1937,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 loadPreviewLyrics={loadLyricFilterPreview}
                 onClose={() => closeSubviewOrModal(() => setShowLyricFilterSettings(false))}
                 onSave={onSaveLyricFilterPattern}
+            />
+            <GlobalLyricOffsetModal
+                isOpen={showGlobalLyricOffset}
+                isDaylight={isDaylight}
+                lyrics={currentLyrics}
+                lyricCurrentTime={lyricCurrentTime}
+                onClose={() => closeSubviewOrModal(() => setShowGlobalLyricOffset(false))}
             />
             <AiHelpPromptModal
                 isOpen={showAiHelpPrompt}

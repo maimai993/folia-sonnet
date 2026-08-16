@@ -41,7 +41,7 @@ const LAST_SEEN_GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';
 
 export type AudioQuality = AudioQualityPreference;
 export type SettingsModalInitialTab = 'help' | 'options';
-export type SettingsSubviewId = 'appearance' | 'general' | 'playback' | 'integration' | 'storage' | 'desktop' | 'lab' | 'visualizer' | 'themePark' | 'lyricFilter';
+export type SettingsSubviewId = 'appearance' | 'general' | 'playback' | 'integration' | 'storage' | 'desktop' | 'lab' | 'visualizer' | 'themePark' | 'lyricFilter' | 'globalLyricOffset';
 export type VisualizerSettingsSection = 'common' | 'background' | 'visualizer' | 'subtitle';
 export type SettingsModalState = {
     isOpen: boolean;
@@ -53,6 +53,7 @@ export type SettingsModalState = {
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 export const VOICE_INPUT_PAUSE_STORAGE_KEY = 'voice_input_pause_enabled';
 export const PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY = 'prevent_display_sleep_during_playback';
+export const GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY = 'global_lyric_timeline_offset_ms';
 export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_taskbar';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
@@ -209,6 +210,26 @@ const readStoredVisualizerFrameRate = (): VisualizerFrameRate => {
     }
 
     return parseVisualizerFrameRate(localStorage.getItem(VISUALIZER_FRAME_RATE_STORAGE_KEY));
+};
+
+// Device-local audio/visual latency compensation (Bluetooth headphones and the like). Deliberately
+// NOT part of the synced visual config: the right value belongs to this machine's output path.
+export const GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS = 2000;
+
+export const clampGlobalLyricTimelineOffsetMs = (value: number): number => {
+    if (!Number.isFinite(value)) {
+        return 0;
+    }
+
+    return Math.round(Math.min(GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS, Math.max(-GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS, value)));
+};
+
+const readStoredGlobalLyricTimelineOffsetMs = (): number => {
+    if (typeof window === 'undefined') {
+        return 0;
+    }
+
+    return clampGlobalLyricTimelineOffsetMs(Number(localStorage.getItem(GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY)));
 };
 
 const clampClassicBreathingFloatMultiplier = (value: number, fallback: number) => {
@@ -1249,6 +1270,7 @@ export type SettingsUiState = {
     urlBackgroundList: UrlBackgroundItem[];
     urlBackgroundSelectedId: string | null;
     visualizerFrameRate: VisualizerFrameRate;
+    globalLyricTimelineOffsetMs: number;
     isDaylight: boolean;
     followSystemTheme: boolean;
     visualizerMode: VisualizerMode;
@@ -1381,6 +1403,7 @@ export type SettingsUiState = {
     handleSetUrlBackgroundSelectedId: (id: string | null) => void;
     handleSetUrlBackgroundList: (items: UrlBackgroundItem[]) => void;
     handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
+    handleSetGlobalLyricTimelineOffsetMs: (offsetMs: number) => void;
     setDaylightPreference: (isDaylight: boolean) => void;
     setDaylightPreferenceFromSystem: (isDaylight: boolean) => void;
     setFollowSystemTheme: (enabled: boolean) => void;
@@ -1510,6 +1533,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     urlBackgroundList: readStoredUrlBackgroundList(),
     urlBackgroundSelectedId: readStoredUrlBackgroundSelectedId(),
     visualizerFrameRate: readStoredVisualizerFrameRate(),
+    globalLyricTimelineOffsetMs: readStoredGlobalLyricTimelineOffsetMs(),
     followSystemTheme: initialFollowSystemTheme,
     isDaylight: initialDaylight,
     visualizerMode: readStoredVisualizerMode(),
@@ -1982,6 +2006,13 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         setGlobalVisualizerFrameRate(frameRate);
         set({ visualizerFrameRate: frameRate });
+    },
+    handleSetGlobalLyricTimelineOffsetMs: (offsetMs) => {
+        const nextOffsetMs = clampGlobalLyricTimelineOffsetMs(offsetMs);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY, String(nextOffsetMs));
+        }
+        set({ globalLyricTimelineOffsetMs: nextOffsetMs });
     },
     // System updates are kept separate from the manual setter so a user click can disable auto-follow.
     setDaylightPreferenceFromSystem: (enabled) => {
@@ -2847,6 +2878,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     urlBackgroundList: state.urlBackgroundList,
     urlBackgroundSelectedId: state.urlBackgroundSelectedId,
     visualizerFrameRate: state.visualizerFrameRate,
+    globalLyricTimelineOffsetMs: state.globalLyricTimelineOffsetMs,
     isDaylight: state.isDaylight,
     followSystemTheme: state.followSystemTheme,
     lastSeenGuideVersion: state.lastSeenGuideVersion,
@@ -2942,6 +2974,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetUrlBackgroundSelectedId: state.handleSetUrlBackgroundSelectedId,
     handleSetUrlBackgroundList: state.handleSetUrlBackgroundList,
     handleSetVisualizerFrameRate: state.handleSetVisualizerFrameRate,
+    handleSetGlobalLyricTimelineOffsetMs: state.handleSetGlobalLyricTimelineOffsetMs,
     setDaylightPreference: state.setDaylightPreference,
     setDaylightPreferenceFromSystem: state.setDaylightPreferenceFromSystem,
     setFollowSystemTheme: state.setFollowSystemTheme,

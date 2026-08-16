@@ -1,4 +1,5 @@
 import type React from 'react';
+import type { MotionValue } from 'framer-motion';
 import type SettingsModal from '../../modal/SettingsModal';
 import type {
     DualTheme,
@@ -28,6 +29,8 @@ type BuildSettingsDialogModelParams = {
     currentSongTitle?: string | null;
     loadLyricFilterPreview: () => Promise<LyricData | null>;
     onSaveLyricFilterPattern: (pattern: string) => Promise<void> | void;
+    currentLyrics: LyricData | null;
+    lyricCurrentTime: MotionValue<number>;
     stageStatus?: StageStatus | null;
     stageSource?: StageSource | null;
     activePlaybackContext: 'main' | 'stage';
@@ -59,6 +62,8 @@ export const buildSettingsDialogModel = ({
     currentSongTitle,
     loadLyricFilterPreview,
     onSaveLyricFilterPattern,
+    currentLyrics,
+    lyricCurrentTime,
     stageStatus,
     stageSource,
     activePlaybackContext,
@@ -101,6 +106,8 @@ export const buildSettingsDialogModel = ({
         currentSongTitle,
         loadLyricFilterPreview,
         onSaveLyricFilterPattern,
+        currentLyrics,
+        lyricCurrentTime,
         stageStatus,
         stageSource,
         nowPlayingConnectionStatus,
