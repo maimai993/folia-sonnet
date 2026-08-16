@@ -321,6 +321,12 @@ export const buildSonnetScene = (
         ? new pixi.BlurFilter({ strength: 0, quality: 1, kernelSize: 5, resolution: 0.5 })
         : null;
     if (transitionBlurFilter) {
+        // BlurFilter's padding is strength * 2, and Pixi pads the chain's shared render frame
+        // (already clipped to the viewport) by the sum of all enabled filters' padding. A growing
+        // frame rescales the vignette pass's screen coordinates, so ramping the blur brightened the
+        // vignette mid-transition. repeatEdgePixels pins padding at 0; the extra margin was
+        // off-screen anyway.
+        transitionBlurFilter.repeatEdgePixels = true;
         transitionBlurFilter.enabled = false;
         container.filters = [...(container.filters ?? []), transitionBlurFilter];
         postProcessFilters.push(transitionBlurFilter);
