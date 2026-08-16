@@ -5,6 +5,7 @@ import type SearchWorkspace from '../search/SearchWorkspace';
 import type DevDebugOverlay from '../../DevDebugOverlay';
 import { PlayerState } from '../../../types';
 import type { SongResult, UnifiedSong, LyricData } from '../../../types';
+import { resolvePlaybackNeighbors } from '../../../utils/playbackNeighbors';
 
 // src/components/app/overlays/buildAppOverlaysModel.ts
 
@@ -56,6 +57,13 @@ type BuildAppOverlaysModelParams = {
     onSeekMainAudio: (time: number) => void;
     onStagePlayerSeek: () => Promise<unknown>;
     noTrackText: string;
+    playQueue: SongResult[];
+    isFmMode: boolean;
+    isNowPlayingStageActive: boolean;
+    handlePrevTrack: () => void;
+    handleNextTrack: () => void;
+    prevTrackLabel: string;
+    nextTrackLabel: string;
 };
 
 // Builds the full overlay model, including detail overlays and floating playback controls.
@@ -97,6 +105,13 @@ export const buildAppOverlaysModel = ({
     onSeekMainAudio,
     onStagePlayerSeek,
     noTrackText,
+    playQueue,
+    isFmMode,
+    isNowPlayingStageActive,
+    handlePrevTrack,
+    handleNextTrack,
+    prevTrackLabel,
+    nextTrackLabel,
 }: BuildAppOverlaysModelParams): AppOverlaysModel => ({
     searchOverlay: currentView === 'home'
         ? {
@@ -158,6 +173,26 @@ export const buildAppOverlaysModel = ({
             isDaylight,
             isHidden: currentView === 'player' && isPlayerChromeHidden,
             hideControlBar: shouldHidePlayerProgressBar,
+            trackNavigation: ((): FloatingControlsProps['trackNavigation'] => {
+                const neighbors = resolvePlaybackNeighbors({
+                    playQueue,
+                    currentSong,
+                    loopMode: effectiveLoopMode,
+                    isFmMode,
+                    isStageActive: isNowPlayingStageActive,
+                });
+
+                return {
+                    onPrev: handlePrevTrack,
+                    onNext: handleNextTrack,
+                    canPrev: neighbors.prev.canGo && !isNowPlayingControlDisabled,
+                    canNext: neighbors.next.canGo && !isNowPlayingControlDisabled,
+                    prevTitle: neighbors.prev.title,
+                    nextTitle: neighbors.next.title,
+                    prevLabel: prevTrackLabel,
+                    nextLabel: nextTrackLabel,
+                };
+            })(),
         }
         : null,
 });

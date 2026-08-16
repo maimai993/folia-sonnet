@@ -315,6 +315,8 @@ export default {
   },
   "ui": {
     "noTrack": "No Track",
+    "previousTrack": "Previous track",
+    "nextTrack": "Next track",
     "loopingOn": "Looping On",
     "loopOff": "Loop Off",
     "toggleBackground": "Toggle Background",

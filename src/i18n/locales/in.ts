@@ -288,6 +288,8 @@ export default {
     "play": "Putar",
     "pause": "Jeda",
     "noTrack": "Tidak Ada Trek",
+    "previousTrack": "Trek sebelumnya",
+    "nextTrack": "Trek berikutnya",
     "loopingOn": "Loop Aktif",
     "loopOff": "Loop Mati",
     "toggleBackground": "Alihkan Latar Belakang",

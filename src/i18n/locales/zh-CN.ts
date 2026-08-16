@@ -317,6 +317,8 @@ export default {
   },
   "ui": {
     "noTrack": "无音轨",
+    "previousTrack": "上一首",
+    "nextTrack": "下一首",
     "loopingOn": "循环开启",
     "loopOff": "循环关闭",
     "toggleBackground": "切换背景",
