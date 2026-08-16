@@ -287,6 +287,18 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.subtitleFontWeight).toBeNull();
     });
 
+    it.each([
+        ['useCoverColorBg', true],
+        ['disableVisualizerGeometricBackground', true],
+        ['disableVisualizerVignette', true],
+        ['staticMode', true],
+        ['subtitleOverlayOpacity', 0.45],
+    ])('round-trips the standalone %s field', (key, value) => {
+        const decoded = decompressConfig(compressConfig({ [key]: value }));
+
+        expect(decoded[key]).toBe(value);
+    });
+
     it('round-trips Sonnet tuning through the renderer tuning bundle', () => {
         const sonnet = {
             cameraIntensity: 1.25,

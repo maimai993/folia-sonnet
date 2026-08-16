@@ -469,7 +469,8 @@ export const compressConfig = (config: any): string => {
 export const decompressConfig = (str: string): any => {
     let parsed: any = null;
     const trimmed = str.trim();
-    if (trimmed.startsWith('folia-theme://')) {
+    const isCompressedShortcode = trimmed.startsWith('folia-theme://');
+    if (isCompressedShortcode) {
         const base64 = trimmed.slice('folia-theme://'.length);
         const binaryString = atob(base64);
         const bytes = Uint8Array.from(binaryString, char => char.charCodeAt(0));
@@ -483,9 +484,15 @@ export const decompressConfig = (str: string): any => {
         throw new Error('Invalid format');
     }
 
-    const isMinified = parsed.t !== undefined
+    const isMinified = isCompressedShortcode
+        || parsed.t !== undefined
         || parsed.vm !== undefined
         || parsed.rvms !== undefined
+        || parsed.ccb !== undefined
+        || parsed.dvgb !== undefined
+        || parsed.dvv !== undefined
+        || parsed.stm !== undefined
+        || parsed.soo !== undefined
         || parsed.ct !== undefined
         || parsed.cat !== undefined
         || parsed.dot !== undefined
