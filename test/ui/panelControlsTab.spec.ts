@@ -74,3 +74,14 @@ test('steps straight through sonnet without an interstitial dialog', async ({ pa
     expect(await readVisualizerMode(page)).toBe('sonnet');
     await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+test('closes the ten-band equalizer with Escape', async ({ page }) => {
+    await openControlsTab(page);
+
+    await page.getByRole('button', { name: '打开音频均衡器' }).click();
+    const equalizerTitle = page.getByText('10 段音频均衡器', { exact: true });
+    await expect(equalizerTitle).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(equalizerTitle).toBeHidden();
+});
