@@ -6,6 +6,7 @@ import type DevDebugOverlay from '../../DevDebugOverlay';
 import { PlayerState } from '../../../types';
 import type { SongResult, UnifiedSong, LyricData } from '../../../types';
 import { resolvePlaybackNeighbors } from '../../../utils/playbackNeighbors';
+import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 
 // src/components/app/overlays/buildAppOverlaysModel.ts
 
@@ -183,6 +184,7 @@ export const buildAppOverlaysModel = ({
                 });
 
                 return {
+                    currentTrackKey: getPlaybackSongKey(currentSong),
                     onPrev: handlePrevTrack,
                     onNext: handleNextTrack,
                     canPrev: neighbors.prev.canGo && !isNowPlayingControlDisabled,

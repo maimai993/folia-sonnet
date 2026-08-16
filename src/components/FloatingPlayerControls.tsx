@@ -8,6 +8,8 @@ import LyricsTimelineModal from './modal/LyricsTimelineModal';
 import TrackTitleNavigator from './floating-player/TrackTitleNavigator';
 
 export interface TrackNavigation {
+    /** 当前曲目的稳定身份，用于识别「确实换歌了」；相邻两首同名时标题字符串不变，不能拿标题判断 */
+    currentTrackKey: string;
     onPrev: () => void;
     onNext: () => void;
     canPrev: boolean;
@@ -296,6 +298,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
                 {trackNavigation ? (
                     <TrackTitleNavigator
                         title={currentSong?.name || noTrackText}
+                        trackKey={trackNavigation.currentTrackKey}
                         prevTitle={trackNavigation.prevTitle}
                         nextTitle={trackNavigation.nextTitle}
                         canPrev={trackNavigation.canPrev}
