@@ -20,7 +20,7 @@ const BACKGROUND_QUALITY = 0.82;
 // Raw-passthrough budgets for animated GIF assets. Portraits / Cappella packs render through
 // <img> / CSS background-image, so a canvas snapshot silently kills the animation the main app
 // shows. When a GIF fits, we ship the original bytes as `data:image/gif;base64,...` and preserve
-// frames. Backgrounds always stay on the canvas path (Monet blurs & Nomand dithers everything to a
+// frames. Backgrounds always stay on the canvas path (Monet and Nomand process images through their
 // still frame anyway, so raw bytes would only bloat the payload).
 // The absolute cap on the full CSS snippet keeps the OBS Custom CSS box within its comfortable
 // range (see obs-browser browser-client.cpp: CSS goes through CefURIEncode + ExecuteJavaScript over

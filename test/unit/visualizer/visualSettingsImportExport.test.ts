@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
-import { DEFAULT_SONNET_TUNING } from '@/types';
+import { DEFAULT_NOMAND_BACKGROUND_TUNING, DEFAULT_SONNET_TUNING } from '@/types';
 
 // test/unit/visualizer/visualSettingsImportExport.test.ts
 // Verifies visual settings configuration compression, base64 encoding, and decompression/restoration.
@@ -321,6 +321,22 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.nomandBackgroundTuning.ditheringType).toBe('8x8');
         expect(decoded.nomandBackgroundTuning.overlayEnabled).toBe(true);
         expect(decoded.nomandBackgroundTuning.overlayOpacity).toBe(0.35);
+    });
+
+    it('round-trips Nomand Paper effect variants through the shortcode', () => {
+        const nomandBackgroundTuning = {
+            ...DEFAULT_NOMAND_BACKGROUND_TUNING,
+            effect: 'halftone-dots' as const,
+            imageSource: 'uploaded-global' as const,
+            halftoneDotsSize: 0.72,
+            halftoneDotsRadius: 1.6,
+            halftoneDotsContrast: 0.85,
+            halftoneDotsOriginalColors: true,
+            halftoneDotsInverted: true,
+        };
+        const decoded = decompressConfig(compressConfig({ nomandBackgroundTuning }));
+
+        expect(decoded.nomandBackgroundTuning).toEqual(nomandBackgroundTuning);
     });
 
     it('round-trips a Diorama-only short code including geometry child switches', () => {

@@ -7,7 +7,7 @@ import { defineVisualizerBackground } from '../definition';
 import { QuickControlToggle } from '../../../shared/QuickControlChip';
 
 // src/components/visualizer/backgrounds/nomand/entry.tsx
-// Registers the Paper image-dithering shell background.
+// Registers the Paper image-effect shell background.
 
 export default defineVisualizerBackground({
     mode: 'nomand',

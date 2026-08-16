@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type React from 'react';
-import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_LATENT_BACKGROUND_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_NOMAND_BACKGROUND_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_PENDOLO_TUNING, DEFAULT_SONNET_TUNING, DEFAULT_TILT_TUNING, DIORAMA_PARTICLE_DENSITY_MAX, DIORAMA_PARTICLE_DENSITY_MIN, DIORAMA_PARTICLE_GLOW_INTENSITY_MAX, DIORAMA_PARTICLE_GLOW_INTENSITY_MIN, DIORAMA_PARTICLE_SIZE_MAX, DIORAMA_PARTICLE_SIZE_MIN, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type DioramaTuning, type FumeTuning, type LatentBackgroundColorSource, type LatentBackgroundDisplayMode, type LatentBackgroundTuning, type LocalLyricsPriority, type LyricProviderSource, type MonetBackgroundImage, type MonetBackgroundLayout, type MonetBackgroundSource, type MonetBackgroundTuning, type MonetBackgroundWashColorMode, type MonetPortraitImage, type MonetPortraitSource, type MonetTuning, type NomandBackgroundDitheringType, type NomandBackgroundSource, type NomandBackgroundTuning, type PartitaTuning, type PendoloTuning, type QueueAddBehavior, type SonnetTuning, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type StoredMonetBackgroundImage, type StoredMonetPortraitImage, type SubtitleContentMode, type Theme, type TiltTuning, type UrlBackgroundItem, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
+import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_LATENT_BACKGROUND_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_NOMAND_BACKGROUND_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_PENDOLO_TUNING, DEFAULT_SONNET_TUNING, DEFAULT_TILT_TUNING, DIORAMA_PARTICLE_DENSITY_MAX, DIORAMA_PARTICLE_DENSITY_MIN, DIORAMA_PARTICLE_GLOW_INTENSITY_MAX, DIORAMA_PARTICLE_GLOW_INTENSITY_MIN, DIORAMA_PARTICLE_SIZE_MAX, DIORAMA_PARTICLE_SIZE_MIN, type CadenzaTuning, type CappellaAvatarImage, type CappellaAvatarSource, type CappellaEmojiImage, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type DioramaTuning, type FumeTuning, type LatentBackgroundColorSource, type LatentBackgroundDisplayMode, type LatentBackgroundTuning, type LocalLyricsPriority, type LyricProviderSource, type MonetBackgroundImage, type MonetBackgroundLayout, type MonetBackgroundSource, type MonetBackgroundTuning, type MonetBackgroundWashColorMode, type MonetPortraitImage, type MonetPortraitSource, type MonetTuning, type NomandBackgroundDitheringType, type NomandBackgroundEffect, type NomandBackgroundSource, type NomandBackgroundTuning, type PartitaTuning, type PendoloTuning, type QueueAddBehavior, type SonnetTuning, type StatusMessage, type StoredCappellaAvatarImage, type StoredCappellaEmojiImage, type StoredCustomLyricsFont, type StoredMonetBackgroundImage, type StoredMonetPortraitImage, type SubtitleContentMode, type Theme, type TiltTuning, type UrlBackgroundItem, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 import { DEFAULT_VISUALIZER_MODE, getVisualizerModeLabel, getVisualizerRegistryEntry, hasVisualizerMode } from '../components/visualizer/registry';
 import { DEFAULT_VISUALIZER_BACKGROUND_MODE, hasVisualizerBackgroundMode } from '../components/visualizer/backgrounds/registry';
 import { resolveDioramaMoteCircumference, resolveDioramaMoteRadial } from '../components/visualizer/diorama/dioramaMoteField';
@@ -790,19 +790,91 @@ const resolveNomandDitheringType = (
         : DEFAULT_NOMAND_BACKGROUND_TUNING.ditheringType
 );
 
-type StoredNomandBackgroundTuningInput = Omit<Partial<NomandBackgroundTuning>, 'ditheringType'> & {
+const resolveNomandBackgroundEffect = (value: unknown): NomandBackgroundEffect => (
+    value === 'fluted-glass'
+        || value === 'paper-texture'
+        || value === 'halftone-dots'
+        || value === 'lens-distortion'
+        || value === 'dithering'
+        ? value
+        : DEFAULT_NOMAND_BACKGROUND_TUNING.effect
+);
+
+const clampNomandEffectValue = (value: unknown, fallback: number, min = 0, max = 1) => (
+    Math.min(max, Math.max(min, typeof value === 'number' && Number.isFinite(value) ? value : fallback))
+);
+
+type StoredNomandBackgroundTuningInput = Omit<Partial<NomandBackgroundTuning>, 'ditheringType' | 'effect'> & {
     ditheringType?: unknown;
+    effect?: unknown;
 };
 
 export const resolveStoredNomandBackgroundTuning = (
     parsed: StoredNomandBackgroundTuningInput,
 ): NomandBackgroundTuning => ({
     imageSource: resolveNomandBackgroundSource(parsed.imageSource),
+    effect: resolveNomandBackgroundEffect(parsed.effect),
     ditheringType: resolveNomandDitheringType(parsed.ditheringType),
     size: Math.min(20, Math.max(0.5, Number.isFinite(parsed.size) ? parsed.size! : DEFAULT_NOMAND_BACKGROUND_TUNING.size)),
     colorSteps: Math.min(7, Math.max(1, Math.round(Number.isFinite(parsed.colorSteps) ? parsed.colorSteps! : DEFAULT_NOMAND_BACKGROUND_TUNING.colorSteps))),
     originalColors: parsed.originalColors ?? DEFAULT_NOMAND_BACKGROUND_TUNING.originalColors,
     inverted: parsed.inverted ?? DEFAULT_NOMAND_BACKGROUND_TUNING.inverted,
+    flutedGlassSize: clampNomandEffectValue(
+        parsed.flutedGlassSize,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.flutedGlassSize,
+        0.1,
+    ),
+    flutedGlassDistortion: clampNomandEffectValue(
+        parsed.flutedGlassDistortion,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.flutedGlassDistortion,
+    ),
+    flutedGlassBlur: clampNomandEffectValue(
+        parsed.flutedGlassBlur,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.flutedGlassBlur,
+    ),
+    paperTextureContrast: clampNomandEffectValue(
+        parsed.paperTextureContrast,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.paperTextureContrast,
+    ),
+    paperTextureRoughness: clampNomandEffectValue(
+        parsed.paperTextureRoughness,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.paperTextureRoughness,
+    ),
+    paperTextureFiber: clampNomandEffectValue(
+        parsed.paperTextureFiber,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.paperTextureFiber,
+    ),
+    halftoneDotsSize: clampNomandEffectValue(
+        parsed.halftoneDotsSize,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.halftoneDotsSize,
+        0.1,
+    ),
+    halftoneDotsRadius: clampNomandEffectValue(
+        parsed.halftoneDotsRadius,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.halftoneDotsRadius,
+        0.1,
+        2,
+    ),
+    halftoneDotsContrast: clampNomandEffectValue(
+        parsed.halftoneDotsContrast,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.halftoneDotsContrast,
+    ),
+    halftoneDotsOriginalColors: parsed.halftoneDotsOriginalColors ?? DEFAULT_NOMAND_BACKGROUND_TUNING.halftoneDotsOriginalColors,
+    halftoneDotsInverted: parsed.halftoneDotsInverted ?? DEFAULT_NOMAND_BACKGROUND_TUNING.halftoneDotsInverted,
+    lensDistortionSpread: clampNomandEffectValue(
+        parsed.lensDistortionSpread,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.lensDistortionSpread,
+    ),
+    lensDistortionBulge: clampNomandEffectValue(
+        parsed.lensDistortionBulge,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.lensDistortionBulge,
+        -1,
+        1,
+    ),
+    lensDistortionDispersion: clampNomandEffectValue(
+        parsed.lensDistortionDispersion,
+        DEFAULT_NOMAND_BACKGROUND_TUNING.lensDistortionDispersion,
+    ),
     overlayEnabled: typeof parsed.overlayEnabled === 'boolean'
         ? parsed.overlayEnabled
         : DEFAULT_NOMAND_BACKGROUND_TUNING.overlayEnabled,

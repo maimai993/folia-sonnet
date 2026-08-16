@@ -171,6 +171,7 @@ describe('Monet tuning and lyric helpers', () => {
             overlayEnabled: false,
             overlayOpacity: 4,
         })).toEqual({
+            ...DEFAULT_NOMAND_BACKGROUND_TUNING,
             imageSource: 'uploaded-global',
             ditheringType: '8x8',
             size: 20,
@@ -185,6 +186,28 @@ describe('Monet tuning and lyric helpers', () => {
             ditheringType: 'invalid' as never,
             size: Number.NaN,
         })).toEqual(DEFAULT_NOMAND_BACKGROUND_TUNING);
+    });
+
+    it('normalizes and clamps Paper effect variant tuning', () => {
+        expect(resolveStoredNomandBackgroundTuning({
+            effect: 'lens-distortion',
+            flutedGlassSize: 0,
+            flutedGlassDistortion: 2,
+            paperTextureContrast: -1,
+            halftoneDotsRadius: 4,
+            lensDistortionSpread: 2,
+            lensDistortionBulge: -2,
+            lensDistortionDispersion: Number.NaN,
+        })).toMatchObject({
+            effect: 'lens-distortion',
+            flutedGlassSize: 0.1,
+            flutedGlassDistortion: 1,
+            paperTextureContrast: 0,
+            halftoneDotsRadius: 2,
+            lensDistortionSpread: 1,
+            lensDistortionBulge: -1,
+            lensDistortionDispersion: DEFAULT_NOMAND_BACKGROUND_TUNING.lensDistortionDispersion,
+        });
     });
 
     it('normalizes Latent background tuning and clamps shader speed settings to 0-2', () => {

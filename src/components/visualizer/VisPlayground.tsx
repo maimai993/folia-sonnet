@@ -14,6 +14,7 @@ import {
     DEFAULT_LATENT_BACKGROUND_TUNING,
     DEFAULT_MONET_BACKGROUND_TUNING,
     DEFAULT_MONET_TUNING,
+    DEFAULT_NOMAND_BACKGROUND_TUNING,
     DEFAULT_PARTITA_TUNING,
     DEFAULT_PENDOLO_TUNING,
     DEFAULT_SONNET_TUNING,
@@ -30,6 +31,7 @@ import {
     type MonetBackgroundTuning,
     type MonetPortraitImage,
     type MonetTuning,
+    type NomandBackgroundTuning,
     type PartitaTuning,
     type PendoloTuning,
     type SonnetTuning,
@@ -378,6 +380,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const { t } = useTranslation();
     const backgroundOpacity = backgroundConfig?.common?.opacity ?? 0.75;
     const monetBackgroundTuning = backgroundConfig?.monet?.tuning ?? DEFAULT_MONET_BACKGROUND_TUNING;
+    const nomandBackgroundTuning = backgroundConfig?.nomand?.tuning ?? DEFAULT_NOMAND_BACKGROUND_TUNING;
     const latentBackgroundTuning = backgroundConfig?.latent?.tuning ?? DEFAULT_LATENT_BACKGROUND_TUNING;
     const currentTime = useMotionValue(0);
     const audioPower = useMotionValue(0.24);
@@ -414,6 +417,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [draftTiltTuning, setDraftTiltTuning] = useState<TiltTuning>(tiltTuning);
     const [draftDioramaTuning, setDraftDioramaTuning] = useState<DioramaTuning>(dioramaTuning);
     const [draftMonetBackgroundTuning, setDraftMonetBackgroundTuning] = useState<MonetBackgroundTuning>(monetBackgroundTuning);
+    const [draftNomandBackgroundTuning, setDraftNomandBackgroundTuning] = useState<NomandBackgroundTuning>(nomandBackgroundTuning);
     const [draftLatentBackgroundTuning, setDraftLatentBackgroundTuning] = useState<LatentBackgroundTuning>(latentBackgroundTuning);
     const [draftMonetTuning, setDraftMonetTuning] = useState<MonetTuning>(monetTuning);
     const [draftPendoloTuning, setDraftPendoloTuning] = useState<PendoloTuning>(pendoloTuning);
@@ -570,6 +574,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     useEffect(() => { setDraftTiltTuning(tiltTuning); }, [tiltTuning]);
     useEffect(() => { setDraftDioramaTuning(dioramaTuning); }, [dioramaTuning]);
     useEffect(() => { setDraftMonetBackgroundTuning(monetBackgroundTuning); }, [monetBackgroundTuning]);
+    useEffect(() => { setDraftNomandBackgroundTuning(nomandBackgroundTuning); }, [nomandBackgroundTuning]);
     useEffect(() => { setDraftLatentBackgroundTuning(latentBackgroundTuning); }, [latentBackgroundTuning]);
     useEffect(() => { setDraftMonetTuning(monetTuning); }, [monetTuning]);
     useEffect(() => { setDraftPendoloTuning(pendoloTuning); }, [pendoloTuning]);
@@ -935,6 +940,16 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         }
     };
 
+    const handleNomandBackgroundTuningDraft = (patch: Partial<NomandBackgroundTuning>) => {
+        const next = { ...draftNomandBackgroundTuning, ...patch };
+        setDraftNomandBackgroundTuning(next);
+        if (!isDraggingSlider.current) {
+            backgroundActions?.nomand?.onTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => backgroundActions?.nomand?.onTuningChange?.(patch);
+        }
+    };
+
     const handleLatentBackgroundTuningDraft = (patch: Partial<LatentBackgroundTuning>) => {
         setDraftLatentBackgroundTuning(prev => ({ ...prev, ...patch }));
         if (!isDraggingSlider.current) {
@@ -1030,6 +1045,10 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             ...backgroundConfig?.monet,
             tuning: draftMonetBackgroundTuning,
         },
+        nomand: {
+            ...backgroundConfig?.nomand,
+            tuning: draftNomandBackgroundTuning,
+        },
         latent: {
             ...backgroundConfig?.latent,
             tuning: draftLatentBackgroundTuning,
@@ -1047,6 +1066,14 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             onResetTuning: () => {
                 setDraftMonetBackgroundTuning(DEFAULT_MONET_BACKGROUND_TUNING);
                 backgroundActions?.monet?.onResetTuning?.();
+            },
+        },
+        nomand: {
+            ...backgroundActions?.nomand,
+            onTuningChange: handleNomandBackgroundTuningDraft,
+            onResetTuning: () => {
+                setDraftNomandBackgroundTuning(DEFAULT_NOMAND_BACKGROUND_TUNING);
+                backgroundActions?.nomand?.onResetTuning?.();
             },
         },
         latent: {
