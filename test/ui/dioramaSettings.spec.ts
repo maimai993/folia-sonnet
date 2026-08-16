@@ -3,18 +3,19 @@ import {
     DIORAMA_PARTICLE_DENSITY_MAX,
     DIORAMA_PARTICLE_DENSITY_MIN,
 } from '../../src/types';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from './helpers/appState';
 
 // test/ui/dioramaSettings.spec.ts
 // Verifies Diorama's point-cloud controls - including the mutually-exclusive clouds/corridor mode
 // switch - in the real settings panel without relying on screenshots.
 test('switches between clouds and corridor mode and keeps particle controls interactive', async ({ page }) => {
-    await page.addInitScript(() => {
+    await page.addInitScript(([version, guideKey]) => {
         localStorage.clear();
         localStorage.setItem('i18nextLng', 'en');
         localStorage.setItem('visualizer_mode', 'diorama');
         localStorage.setItem('static_mode', 'true');
-        localStorage.setItem('folia_last_seen_guide_version', '0.5.27');
-    });
+        localStorage.setItem(guideKey, version);
+    }, [APP_VERSION, GUIDE_VERSION_STORAGE_KEY]);
     await page.route('**/__mock_netease__/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
@@ -25,7 +26,9 @@ test('switches between clouds and corridor mode and keeps particle controls inte
         useSettingsUiStore.getState().openSettings('options', 'visualizer', 'visualizer');
     });
 
-    const particleLabel = page.getByText('Background Particles', { exact: true });
+    // 不能用 getByText：fieldset 的 sr-only <legend> 也叫这个名字，会撞上 strict mode。
+    // 这里要断言的本来就是那个可见的控件本身。
+    const particleLabel = page.getByRole('button', { name: 'Background Particles' });
     const expander = page.getByRole('button', { name: /Particle Geometry/ });
     const parentSwitch = page.getByRole('switch', { name: 'Particle Geometry' });
     await expect(particleLabel).toBeVisible();

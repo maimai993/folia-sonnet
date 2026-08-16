@@ -16,6 +16,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:probe": "vite --open /dev-probe.html",
     "build": "npm run build:vercel-api && vite build",
     "build:vercel-api": "tsc -p api-ts/tsconfig.json",
     "preview": "vite preview",

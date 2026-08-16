@@ -20,6 +20,12 @@ export default defineConfig({
   timeout: 90_000,
   expect: {
     timeout: 15_000,
+    // 多 worker 并行时 CPU 争用会让个别文字标签的抗锯齿/过渡落定结果有微小出入，
+    // 实测抖动量级在 ~115px。真实 UI 变化的量级完全不同（基线过期时是 80 万像素），
+    // 所以这个容差不会掩盖回归。
+    toHaveScreenshot: {
+      maxDiffPixels: 600,
+    },
   },
   use: {
     baseURL: 'http://127.0.0.1:4173',

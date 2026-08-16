@@ -57,7 +57,26 @@ description: Use when the task involves choosing how to validate a change in thi
 - `src/services/themeCache.ts`、`src/services/db.ts` 的缓存边界，优先看 `test/unit/cache/**` 和相关 service 测试
 - 同步测试应 mock 本地存储、IndexedDB adapter 或远端 client，不要连接真实的用户同步服务
 
-### 3. Electron / 打包 / release 流程
+### 3. 单个组件的浏览器级行为
+
+有些问题只在真实浏览器里暴露，单测和整应用 UI 测试都盖不住：层叠与命中测试、
+Tailwind 版本相关的类名语法、StrictMode 下 effect 双调用、异步 props 到达前的中间态。
+这类情况用 dev 组件探针，不要为此启动整个应用流程。
+
+- 页面：`dev-probe.html`，用 `?probe=<id>` 选择挂载哪个组件
+- 命令：`npm run dev:probe`
+- 探针实现：`dev/probes/*.probe.tsx`，默认导出 `ProbeDefinition` 即自动注册
+- 写用例：`test/ui/helpers/probe.ts` 的 `openProbe(page, id)`，参考
+  `test/ui/trackTitleNavigator.spec.ts`
+
+探针页刻意开启 `React.StrictMode`，并使用真实 vite + 真实 Tailwind 产物；
+它不加载首页数据、弹窗和背景 shader，所以比整应用测试快且稳定。
+`dev-probe.html` 不在 `vite.config.ts` 的 `build.rollupOptions.input` 里，不会进生产产物。
+
+新增探针时，探针内要复刻真实环境里的异步时序（例如切歌 props 晚几帧到达），
+否则中间态 bug 复现不出来。
+
+### 4. Electron / 打包 / release 流程
 
 不要默认通过完整打包来验证。
 
@@ -73,7 +92,7 @@ description: Use when the task involves choosing how to validate a change in thi
 - `electron/main.cjs` / `electron/updateChannels.cjs` (更新通道检查逻辑可通过 `test/unit/electron/updateChannels.test.ts` 跑单测)
 - `package.json`
 
-### 4. 开发服务器已经在跑
+### 5. 开发服务器已经在跑
 
 如果已有 dev server 在跑：
 
@@ -81,7 +100,7 @@ description: Use when the task involves choosing how to validate a change in thi
 - 不要为了“确认一下”再启动第二个 dev server
 - 优先读取现有终端错误和浏览器/运行时反馈
 
-### 5. 仅改文档、issue template、配置说明
+### 6. 仅改文档、issue template、配置说明
 
 通常不需要运行测试。
 
@@ -104,6 +123,7 @@ description: Use when the task involves choosing how to validate a change in thi
 - `npm run test:unit`
 - `npm run test:ui`
 - `npm run test:ui:update`
+- `npm run dev:probe`
 
 同步/主题文档涉及协议或持久化边界时，可优先选择：
 

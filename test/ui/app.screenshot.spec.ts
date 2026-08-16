@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from './helpers/appState';
 
 type MockNeteaseMode = 'logged-in' | 'guest';
 
@@ -187,6 +188,8 @@ async function installBaseState(
     navidromeEnabled: boolean;
     navidromeConfig: typeof navidromeFixtures.config;
     localImportFixture?: typeof localImportFixture;
+    appVersion: string;
+    guideVersionStorageKey: string;
   }) => {
     const createMatchMediaResult = (query: string) => ({
       matches: query.includes('light'),
@@ -219,7 +222,8 @@ async function installBaseState(
     localStorage.setItem('static_mode', 'true');
     localStorage.setItem('last_app_view', 'home');
     localStorage.setItem('last_home_view_tab', 'playlist');
-    localStorage.setItem('folia_last_seen_guide_version', '0.6.0');
+    // 必须写当前版本：写死旧版本会让用户指引弹窗自动弹出并盖住整页，后续点击全部被拦截
+    localStorage.setItem(payload.guideVersionStorageKey, payload.appVersion);
 
     if (payload.navidromeEnabled) {
       localStorage.setItem('navidrome_enabled', 'true');
@@ -387,6 +391,8 @@ async function installBaseState(
     navidromeEnabled: options.navidromeEnabled ?? false,
     navidromeConfig: navidromeFixtures.config,
     localImportFixture: options.localImportFixture,
+    appVersion: APP_VERSION,
+    guideVersionStorageKey: GUIDE_VERSION_STORAGE_KEY,
   });
 }
 
@@ -585,6 +591,12 @@ async function openApp(page: Page) {
     content: `
       *, *::before, *::after {
         caret-color: transparent !important;
+      }
+      /* 隐藏所有 canvas：shell 背景是 Paper shader（latent 模式），每次加载的相位不同，
+         即使 static_mode 冻结了动画，跨加载依然渲染出不同纹理 —— 实测三次加载得到三个哈希。
+         不中和它就录不出稳定基线。用 visibility 而非 display，保持布局不变。 */
+      canvas {
+        visibility: hidden !important;
       }
     `,
   });

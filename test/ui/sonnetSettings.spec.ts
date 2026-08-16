@@ -1,16 +1,11 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
+import { APP_VERSION } from './helpers/appState';
 
 // test/ui/sonnetSettings.spec.ts
 // Verifies entering Sonnet from the real settings UI and the visibility tuning controls it exposes.
 
 // 新功能弹窗只在 lastSeenGuideVersion 不等于当前版本时弹出，会挡住所有点击。
 // 直接读 package.json 对齐版本号，避免每次发版都要回来改这里。
-const appVersion = JSON.parse(
-    readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'),
-).version as string;
-
 test('enters Sonnet from settings and exposes its layer controls', async ({ page }) => {
     await page.addInitScript((version) => {
         localStorage.clear();
@@ -18,7 +13,7 @@ test('enters Sonnet from settings and exposes its layer controls', async ({ page
         localStorage.setItem('visualizer_mode', 'classic');
         localStorage.setItem('static_mode', 'true');
         localStorage.setItem('folia_last_seen_guide_version', version);
-    }, appVersion);
+    }, APP_VERSION);
     await page.route('**/__mock_netease__/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from './helpers/appState';
 
 // test/ui/panelControlsTab.spec.ts
 // 覆盖播放面板控制页的模式取景器：箭头步进、完整列表入口，以及步进经过商籁时不再被拦截。
@@ -10,14 +11,14 @@ const readVisualizerMode = (page: import('@playwright/test').Page) => page.evalu
 });
 
 const openControlsTab = async (page: import('@playwright/test').Page) => {
-    await page.addInitScript(() => {
+    await page.addInitScript(([version, guideKey]) => {
         localStorage.clear();
         localStorage.setItem('i18nextLng', 'zh-CN');
         localStorage.setItem('open_player_on_launch', 'true');
         localStorage.setItem('visualizer_mode', 'classic');
         localStorage.setItem('static_mode', 'true');
-        localStorage.setItem('folia_last_seen_guide_version', '0.6.18');
-    });
+        localStorage.setItem(guideKey, version);
+    }, [APP_VERSION, GUIDE_VERSION_STORAGE_KEY]);
     await page.route('**/__mock_netease__/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });

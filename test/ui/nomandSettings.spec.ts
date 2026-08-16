@@ -1,13 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
+import { APP_VERSION } from './helpers/appState';
 
 // test/ui/nomandSettings.spec.ts
 // Verifies Nomand swaps its effect-specific tuning controls while keeping the shared settings shell.
-
-const appVersion = JSON.parse(
-    readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'),
-).version as string;
 
 test('switches Nomand Paper effects and exposes matching tuning controls', async ({ page }) => {
     await page.addInitScript((version) => {
@@ -16,7 +11,7 @@ test('switches Nomand Paper effects and exposes matching tuning controls', async
         localStorage.setItem('visualizer_mode', 'classic');
         localStorage.setItem('static_mode', 'true');
         localStorage.setItem('folia_last_seen_guide_version', version);
-    }, appVersion);
+    }, APP_VERSION);
     await page.route('**/__mock_netease__/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
