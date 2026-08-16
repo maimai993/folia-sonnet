@@ -24,11 +24,22 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     randomVisualizerModePerSong: store.randomVisualizerModePerSong,
     visualizerBackgroundMode: store.visualizerBackgroundMode,
     backgroundOpacity: store.backgroundOpacity,
+    // The other three legs of background.common, alongside the opacity above. The local OBS browser
+    // source has always carried them (it publishes the whole VisualizerBackgroundConfig), so leaving
+    // them out here made the two OBS paths disagree — and a copied config silently lost the cover-color,
+    // geometric-background and vignette toggles on re-import.
+    useCoverColorBg: store.useCoverColorBg,
+    disableVisualizerGeometricBackground: store.disableVisualizerGeometricBackground,
+    disableVisualizerVignette: store.disableVisualizerVignette,
+    // Static mode is not merely an audio-reactivity switch: it selects the low-motion branch inside
+    // several renderers, so a web overlay without it animates where the main window does not.
+    staticMode: store.staticMode,
     visualizerOpacity: store.visualizerOpacity,
     hidePlayerTranslationSubtitle: store.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: store.showSubtitleTranslation,
     subtitleContentMode: store.subtitleContentMode,
     subtitleOverlayBackground: store.subtitleOverlayBackground,
+    subtitleOverlayOpacity: store.subtitleOverlayOpacity,
     showHarmonySubtitle: store.showHarmonySubtitle,
     harmonySubtitleBackground: store.harmonySubtitleBackground,
     lyricsFontStyle: store.lyricsFontStyle,

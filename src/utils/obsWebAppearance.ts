@@ -42,10 +42,14 @@ export interface ObsWebAppearance {
   lyricsFontScale?: number;
   subtitleFontScale?: number;
   lyricsFontWeight?: number | null;
+  staticMode?: boolean;
   hideTranslationSubtitle?: boolean;
   showSubtitleTranslation?: boolean;
   subtitleContentMode?: SubtitleContentMode;
   subtitleOverlayBackground?: boolean;
+  subtitleOverlayOpacity?: number;
+  showHarmonySubtitle?: boolean;
+  harmonySubtitleBackground?: boolean;
   // Font stack (raw store fields; overlaid onto the theme in ObsWebSourceApp so fonts match the
   // main window). Only a system custom font's family transfers (uploaded fonts do not).
   lyricsFontStyle?: Theme['fontStyle'];
@@ -128,7 +132,14 @@ export function buildObsAppearanceFromShortcode(
   const background: VisualizerBackgroundConfig = {
     mode: decoded?.visualizerBackgroundMode ?? undefined,
     transparent,
-    common: { opacity: decoded?.backgroundOpacity },
+    // cfg speaks store field names, so the two negated flags are renamed to the shorter names the
+    // background layers read. undefined leaves each layer on its own default, as before.
+    common: {
+      opacity: decoded?.backgroundOpacity,
+      useCoverColorBg: decoded?.useCoverColorBg,
+      disableGeometricBackground: decoded?.disableVisualizerGeometricBackground,
+      disableVignette: decoded?.disableVisualizerVignette,
+    },
     monet: decoded?.monetBackgroundTuning ? { tuning: decoded.monetBackgroundTuning } : undefined,
     nomand: decoded?.nomandBackgroundTuning ? { tuning: decoded.nomandBackgroundTuning } : undefined,
     latent: decoded?.latentBackgroundTuning ? { tuning: decoded.latentBackgroundTuning } : undefined,
@@ -147,10 +158,14 @@ export function buildObsAppearanceFromShortcode(
     lyricsFontScale: decoded?.lyricsFontScale,
     subtitleFontScale: decoded?.subtitleFontScale,
     lyricsFontWeight: decoded?.lyricsFontWeight,
+    staticMode: decoded?.staticMode,
     hideTranslationSubtitle: decoded?.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: decoded?.showSubtitleTranslation,
     subtitleContentMode: decoded?.subtitleContentMode,
     subtitleOverlayBackground: decoded?.subtitleOverlayBackground,
+    subtitleOverlayOpacity: decoded?.subtitleOverlayOpacity,
+    showHarmonySubtitle: decoded?.showHarmonySubtitle,
+    harmonySubtitleBackground: decoded?.harmonySubtitleBackground,
     lyricsFontStyle: decoded?.lyricsFontStyle,
     lyricsCustomFontFamily: decoded?.lyricsCustomFontFamily,
     // Guard the fallback arrays like urlBackgroundList: a hand-edited cfg with a non-array value

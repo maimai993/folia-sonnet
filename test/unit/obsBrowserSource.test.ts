@@ -58,6 +58,14 @@ describe('obsBrowserSource utilities', () => {
             buildObsConfig({ theme: { ...DEFAULT_THEME, primaryColor: '#ff0000' } }),
             buildObsConfig({ visualizerTunings: { sonnet: { ...DEFAULT_SONNET_TUNING, cameraIntensity: 0.5 } } }),
             buildObsConfig({ background: { mode: 'common', transparent: false } }),
+            // Subtitle scale and the harmony toggles were published (or, for the harmony pair, not
+            // published at all) without the config contract declaring them, so the OBS page had no
+            // typed way to read them and silently rendered its own defaults. These overrides are typed
+            // as Partial<ObsBrowserSourceConfig>, so dropping a field from the contract fails the
+            // typecheck here, and the signature assertion pins that changing one still reaches OBS.
+            buildObsConfig({ subtitleFontScale: 1.3 }),
+            buildObsConfig({ showHarmonySubtitle: false }),
+            buildObsConfig({ harmonySubtitleBackground: false }),
         ];
 
         variants.forEach(config => {

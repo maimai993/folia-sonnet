@@ -179,6 +179,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
         handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
         handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
+        handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
+        handleToggleCoverColorBg: state.handleToggleCoverColorBg,
+        handleToggleStaticMode: state.handleToggleStaticMode,
+        handleToggleDisableVisualizerGeometricBackground: state.handleToggleDisableVisualizerGeometricBackground,
+        handleToggleDisableVisualizerVignette: state.handleToggleDisableVisualizerVignette,
         handleToggleShowHarmonySubtitle: state.handleToggleShowHarmonySubtitle,
         handleToggleHarmonySubtitleBackground: state.handleToggleHarmonySubtitleBackground,
         handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
@@ -376,6 +381,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             if (has('subtitleOverlayBackground')) {
                 store.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
             }
+            if (has('subtitleOverlayOpacity')) {
+                store.handleSetSubtitleOverlayOpacity(config.subtitleOverlayOpacity);
+            }
             if (has('showHarmonySubtitle')) {
                 store.handleToggleShowHarmonySubtitle(Boolean(config.showHarmonySubtitle));
             }
@@ -388,6 +396,21 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (has('backgroundOpacity')) {
                 store.handleSetBackgroundOpacity(config.backgroundOpacity);
+            }
+            // Each of these four setters raises its own toast. They fire before the importSuccess
+            // message below, which writes the same single status slot last, so the user still ends
+            // on "imported" rather than on whichever toggle happened to be applied last.
+            if (has('useCoverColorBg')) {
+                store.handleToggleCoverColorBg(Boolean(config.useCoverColorBg));
+            }
+            if (has('disableVisualizerGeometricBackground')) {
+                store.handleToggleDisableVisualizerGeometricBackground(Boolean(config.disableVisualizerGeometricBackground));
+            }
+            if (has('disableVisualizerVignette')) {
+                store.handleToggleDisableVisualizerVignette(Boolean(config.disableVisualizerVignette));
+            }
+            if (has('staticMode')) {
+                store.handleToggleStaticMode(Boolean(config.staticMode));
             }
 
             if (has('lyricsFontStyle') && config.lyricsFontStyle) {

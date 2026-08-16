@@ -411,11 +411,16 @@ export const compressConfig = (config: any): string => {
     if (config.randomVisualizerModePerSong !== undefined) minified.rvms = config.randomVisualizerModePerSong;
     if (config.visualizerBackgroundMode) minified.vbm = config.visualizerBackgroundMode;
     if (config.backgroundOpacity !== undefined) minified.bo = config.backgroundOpacity;
+    if (config.useCoverColorBg !== undefined) minified.ccb = config.useCoverColorBg;
+    if (config.disableVisualizerGeometricBackground !== undefined) minified.dvgb = config.disableVisualizerGeometricBackground;
+    if (config.disableVisualizerVignette !== undefined) minified.dvv = config.disableVisualizerVignette;
+    if (config.staticMode !== undefined) minified.stm = config.staticMode;
     if (config.visualizerOpacity !== undefined) minified.vo = config.visualizerOpacity;
     if (config.hidePlayerTranslationSubtitle !== undefined) minified.hpts = config.hidePlayerTranslationSubtitle;
     if (config.showSubtitleTranslation !== undefined) minified.sst = config.showSubtitleTranslation;
     if (config.subtitleContentMode !== undefined) minified.scm = config.subtitleContentMode;
     if (config.subtitleOverlayBackground !== undefined) minified.sob = config.subtitleOverlayBackground;
+    if (config.subtitleOverlayOpacity !== undefined) minified.soo = config.subtitleOverlayOpacity;
     if (config.showHarmonySubtitle !== undefined) minified.shs = config.showHarmonySubtitle;
     if (config.harmonySubtitleBackground !== undefined) minified.hsb = config.harmonySubtitleBackground;
     if (config.lyricsFontStyle) minified.lfs = config.lyricsFontStyle;
@@ -510,11 +515,16 @@ export const decompressConfig = (str: string): any => {
         if (parsed.rvms !== undefined) decompressed.randomVisualizerModePerSong = parsed.rvms;
         if (parsed.vbm) decompressed.visualizerBackgroundMode = parsed.vbm;
         if (parsed.bo !== undefined) decompressed.backgroundOpacity = parsed.bo;
+        if (parsed.ccb !== undefined) decompressed.useCoverColorBg = parsed.ccb;
+        if (parsed.dvgb !== undefined) decompressed.disableVisualizerGeometricBackground = parsed.dvgb;
+        if (parsed.dvv !== undefined) decompressed.disableVisualizerVignette = parsed.dvv;
+        if (parsed.stm !== undefined) decompressed.staticMode = parsed.stm;
         if (parsed.vo !== undefined) decompressed.visualizerOpacity = parsed.vo;
         if (parsed.hpts !== undefined) decompressed.hidePlayerTranslationSubtitle = parsed.hpts;
         if (parsed.sst !== undefined) decompressed.showSubtitleTranslation = parsed.sst;
         if (parsed.scm !== undefined) decompressed.subtitleContentMode = parsed.scm;
         if (parsed.sob !== undefined) decompressed.subtitleOverlayBackground = parsed.sob;
+        if (parsed.soo !== undefined) decompressed.subtitleOverlayOpacity = parsed.soo;
         if (parsed.shs !== undefined) decompressed.showHarmonySubtitle = parsed.shs;
         if (parsed.hsb !== undefined) decompressed.harmonySubtitleBackground = parsed.hsb;
         if (parsed.lfs) decompressed.lyricsFontStyle = parsed.lfs;
@@ -554,8 +564,9 @@ export const decompressConfig = (str: string): any => {
     } else {
         const validKeys = [
             'theme', 'visualizerMode', 'randomVisualizerModePerSong', 'visualizerBackgroundMode', 'backgroundOpacity',
+            'useCoverColorBg', 'disableVisualizerGeometricBackground', 'disableVisualizerVignette', 'staticMode',
             'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation', 'subtitleContentMode',
-            'subtitleOverlayBackground',
+            'subtitleOverlayBackground', 'subtitleOverlayOpacity',
             'showHarmonySubtitle', 'harmonySubtitleBackground',
             'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontWeight', 'lyricsFontFallbackFamilies',
             'subtitleFontInheritsLyrics', 'subtitleFontScale', 'subtitleFontStyle', 'subtitleFontWeight', 'subtitleFontFamily',

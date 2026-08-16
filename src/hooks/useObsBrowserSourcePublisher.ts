@@ -73,6 +73,8 @@ type UseObsBrowserSourcePublisherOptions = {
     visualizerOpacity: number;
     subtitleOverlayOpacity: number;
     subtitleOverlayBackground: boolean;
+    showHarmonySubtitle: boolean;
+    harmonySubtitleBackground: boolean;
     staticMode: boolean;
     hideTranslationSubtitle: boolean;
     showSubtitleTranslation: boolean;
@@ -119,6 +121,8 @@ export const useObsBrowserSourcePublisher = ({
     visualizerOpacity,
     subtitleOverlayOpacity,
     subtitleOverlayBackground,
+    showHarmonySubtitle,
+    harmonySubtitleBackground,
     staticMode,
     hideTranslationSubtitle,
     showSubtitleTranslation,
@@ -239,6 +243,8 @@ export const useObsBrowserSourcePublisher = ({
             visualizerOpacity,
             subtitleOverlayOpacity,
             subtitleOverlayBackground,
+            showHarmonySubtitle,
+            harmonySubtitleBackground,
             staticMode,
             hideTranslationSubtitle,
             showSubtitleTranslation,
@@ -267,6 +273,8 @@ export const useObsBrowserSourcePublisher = ({
         staticMode,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
+        showHarmonySubtitle,
+        harmonySubtitleBackground,
         theme,
         subtitleTheme,
         visualizerMode,

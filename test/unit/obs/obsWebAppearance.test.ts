@@ -42,7 +42,15 @@ const sampleConfig = {
     showSubtitleTranslation: false,
     subtitleContentMode: 'romanization' as const,
     subtitleOverlayBackground: true,
+    subtitleOverlayOpacity: 0.45,
+    showHarmonySubtitle: false,
+    harmonySubtitleBackground: false,
+    useCoverColorBg: true,
+    disableVisualizerGeometricBackground: true,
+    disableVisualizerVignette: true,
+    staticMode: true,
     lyricsFontScale: 1.25,
+    subtitleFontScale: 1.1,
     lyricsFontWeight: 650,
     subtitleFontWeight: 350,
 };
@@ -64,6 +72,36 @@ describe('buildObsAppearanceFromShortcode', () => {
         expect(a.background.mode).toBe('monet');
         expect(a.background.common?.opacity).toBe(0.85);
         expect(a.background.transparent).toBe(true);
+    });
+
+    // These rode in cfg (or, for the background trio, did not ride at all) but were dropped on the way
+    // out, so the overlay fell back to defaults while the main window showed something else. The two
+    // negated background flags also change name on the way through: cfg speaks store field names, the
+    // background layers speak shorter ones.
+    it('maps the subtitle overlay, harmony and background settings the overlay used to drop', () => {
+        const a = buildObsAppearanceFromShortcode(shortcode, { isDaylight: false, transparent: true });
+        expect(a.subtitleFontScale).toBe(1.1);
+        expect(a.subtitleOverlayOpacity).toBe(0.45);
+        expect(a.showHarmonySubtitle).toBe(false);
+        expect(a.harmonySubtitleBackground).toBe(false);
+        expect(a.staticMode).toBe(true);
+        expect(a.background.common?.useCoverColorBg).toBe(true);
+        expect(a.background.common?.disableGeometricBackground).toBe(true); // disableVisualizerGeometricBackground → disableGeometricBackground
+        expect(a.background.common?.disableVignette).toBe(true); // disableVisualizerVignette → disableVignette
+    });
+
+    // An older link carries none of the above. Leaving each undefined is what lets the renderer apply
+    // its own default, so a pre-existing OBS source keeps rendering exactly as it did.
+    it('leaves the newer fields undefined for a link that predates them', () => {
+        const legacy = compressConfig({ visualizerMode: 'monet' });
+        const a = buildObsAppearanceFromShortcode(legacy, { isDaylight: false, transparent: false });
+        expect(a.subtitleOverlayOpacity).toBeUndefined();
+        expect(a.showHarmonySubtitle).toBeUndefined();
+        expect(a.harmonySubtitleBackground).toBeUndefined();
+        expect(a.staticMode).toBeUndefined();
+        expect(a.background.common?.useCoverColorBg).toBeUndefined();
+        expect(a.background.common?.disableGeometricBackground).toBeUndefined();
+        expect(a.background.common?.disableVignette).toBeUndefined();
     });
 
     it('selects the theme side by daylight', () => {
