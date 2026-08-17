@@ -10,6 +10,7 @@ import {
     useSettingsUiStore,
 } from '../../../stores/useSettingsUiStore';
 import GlobalLyricOffsetPreview from './GlobalLyricOffsetPreview';
+import GlobalLyricOffsetRuler from './GlobalLyricOffsetRuler';
 
 // src/components/modal/settings/GlobalLyricOffsetModal.tsx
 // 实验室里的“全局时间偏移”校准窗口：正在播放的歌词按草稿偏移实时推进，
@@ -178,16 +179,15 @@ const GlobalLyricOffsetModal: React.FC<GlobalLyricOffsetModalProps> = ({
                                     ))}
                                 </div>
 
-                                <input
-                                    type="range"
-                                    min={-GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS}
-                                    max={GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS}
-                                    step={10}
-                                    value={draftOffsetMs}
-                                    onChange={(event) => setDraftOffsetMs(clampGlobalLyricTimelineOffsetMs(Number(event.target.value)))}
-                                    className={`mt-5 w-full accent-current ${isDaylight ? 'text-zinc-900' : 'text-white'}`}
-                                    aria-label={t('globalLyricOffset.title')}
-                                />
+                                <div className="mt-5">
+                                    <GlobalLyricOffsetRuler
+                                        valueMs={draftOffsetMs}
+                                        limitMs={GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS}
+                                        isDaylight={isDaylight}
+                                        ariaLabel={t('globalLyricOffset.title')}
+                                        onChange={(nextMs) => setDraftOffsetMs(clampGlobalLyricTimelineOffsetMs(nextMs))}
+                                    />
+                                </div>
 
                                 <div className={`mt-3 text-center text-xs ${mutedText}`}>
                                     {isDirty
