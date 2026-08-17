@@ -1418,6 +1418,29 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
+    "v0_6_19": {
+      "intro": "以下是 0.6.19 的新功能与改进",
+      "audioEffectChain": {
+        "title": "均衡器后处理效果链",
+        "description": "均衡器现在支持在频段调节之后继续添加截止、饱和、降质、抖晃、黑胶噪声、立体声宽度、空间混响和动态压缩等效果，并可随内置或自定义音效预设保存。"
+      },
+      "globalLyricOffset": {
+        "title": "全局歌词时间偏移",
+        "description": "可为本设备的所有歌曲整体平移歌词时间轴，补偿蓝牙或其他输出延迟，并通过实时预览微调。"
+      },
+      "obsCustomCssAssets": {
+        "title": "OBS 上传资源与自定义 CSS",
+        "description": "可复制一段直接粘贴到 OBS Browser Source「Custom CSS」的代码，把上传的背景、肖像等资源带入 OBS；体积超限的 GIF 会提示并转为静态帧。"
+      },
+      "trackSwitchPreview": {
+        "title": "更清晰的切歌预览",
+        "description": "浮动播放条支持悬停预览上一首和下一首的标题，切歌箭头可保持显示，命令面板还新增清空播放队列命令。"
+      },
+      "visualizerBackgroundEffects": {
+        "title": "更丰富的视觉背景效果",
+        "description": "莫奈背景新增缓慢漂移和竖向纹理开关，漫游背景新增像素画、纹理玻璃、纸张纹理、半调网点与镜头畸变等效果。"
+      }
+    },
     "v0_6_18": {
       "intro": "以下是 0.6.18 的新功能与改进",
       "m3uPlaylists": {

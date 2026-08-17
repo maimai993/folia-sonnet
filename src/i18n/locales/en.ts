@@ -1416,6 +1416,29 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
+    "v0_6_19": {
+      "intro": "Here are the new features and improvements in version 0.6.19.",
+      "audioEffectChain": {
+        "title": "Post-processing Audio Effects",
+        "description": "The equalizer now supports a post-processing chain after the frequency bands, with tone shaping, saturation, bit crush, wow, vinyl noise, stereo width, space, and dynamics controls that can be saved in sound presets."
+      },
+      "globalLyricOffset": {
+        "title": "Global Lyric Timing Offset",
+        "description": "Shift lyrics for every song on this device to compensate for Bluetooth or other output latency, with a live preview for fine tuning."
+      },
+      "obsCustomCssAssets": {
+        "title": "OBS Custom CSS for Uploaded Assets",
+        "description": "Copy a ready-to-paste Custom CSS snippet for uploaded backgrounds, portraits, and other assets in OBS Browser Source. GIFs keep their animation when they fit the size budget; oversized GIFs are copied as static frames."
+      },
+      "trackSwitchPreview": {
+        "title": "Clearer Track Switching",
+        "description": "Hover the floating player's previous and next controls to preview neighboring track titles, keep the navigation arrows visible, and clear the current queue from the Command Palette."
+      },
+      "visualizerBackgroundEffects": {
+        "title": "Richer Visualizer Background Effects",
+        "description": "Monet backgrounds can drift slowly with optional vertical streaks, while Nomand adds dithering, fluted glass, paper texture, halftone dots, and lens distortion controls."
+      }
+    },
     "v0_6_18": {
       "intro": "Here are the new features and improvements in version 0.6.18.",
       "m3uPlaylists": {

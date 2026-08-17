@@ -1160,6 +1160,29 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia",
   },
   "releaseNotes": {
+    "v0_6_19": {
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.19.",
+      "audioEffectChain": {
+        "title": "Efek Audio Pasca-EQ",
+        "description": "Equalizer kini mendukung rantai efek setelah band frekuensi, dengan kontrol pembentukan nada, saturasi, bit crush, wow, noise vinil, lebar stereo, ruang, dan dinamika yang dapat disimpan dalam preset suara."
+      },
+      "globalLyricOffset": {
+        "title": "Offset Waktu Lirik Global",
+        "description": "Geser garis waktu lirik untuk semua lagu di perangkat ini guna mengompensasi latensi Bluetooth atau keluaran lain, dengan pratinjau langsung untuk penyetelan."
+      },
+      "obsCustomCssAssets": {
+        "title": "Aset Unggahan OBS melalui CSS Kustom",
+        "description": "Salin potongan CSS siap tempel untuk membawa latar belakang, potret, dan aset unggahan lain ke OBS Browser Source. GIF tetap beranimasi jika sesuai batas ukuran; GIF yang terlalu besar disalin sebagai bingkai statis."
+      },
+      "trackSwitchPreview": {
+        "title": "Pergantian Lagu Lebih Jelas",
+        "description": "Arahkan kursor ke kontrol lagu sebelumnya dan berikutnya pada pemutar mengambang untuk melihat pratinjau judul, tampilkan panah navigasi secara permanen, dan kosongkan antrean dari Palette Perintah."
+      },
+      "visualizerBackgroundEffects": {
+        "title": "Efek Latar Visualizer Lebih Kaya",
+        "description": "Latar Monet dapat bergeser perlahan dengan garis vertikal opsional, sementara Nomand menambahkan kontrol dithering, kaca beralur, tekstur kertas, titik halftone, dan distorsi lensa."
+      }
+    },
     "v0_6_18": {
       "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.18.",
       "m3uPlaylists": {
