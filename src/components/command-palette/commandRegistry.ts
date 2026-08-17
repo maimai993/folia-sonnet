@@ -13,7 +13,7 @@ import type { SearchSource } from '../../stores/useSearchNavigationStore';
 import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 import { buildObsCustomCss } from '../../utils/obsCustomCss';
 import { hasUploadedObsAsset } from '../../utils/visualSettingsConfig';
-import { ListMusic, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward } from 'lucide-react';
+import { ListMusic, ListX, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward } from 'lucide-react';
 
 // src/components/command-palette/commandRegistry.ts
 // Defines command palette entries and the lightweight matching used for autocomplete.
@@ -529,6 +529,21 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         },
     },
     {
+        id: 'playback-clear-queue',
+        group: 'playback',
+        title: 'Clear queue',
+        description: 'Remove all songs from the current play queue',
+        keywords: ['clear queue', 'empty queue', 'clear playlist', 'remove all songs', '清空队列', '清空播放队列', '清除队列', 'qingkongduilie', 'qingkongbofangduilie', 'qingchuduilie', 'qkdl', 'qcdl'],
+        icon: ListX,
+        execute: (_input, context) => {
+            if (context.playQueue.length === 0) {
+                return false;
+            }
+            context.clearQueue();
+            return true;
+        },
+    },
+    {
         id: 'theme-generate-current',
         group: 'settings',
         title: 'Generate AI theme',
@@ -891,6 +906,10 @@ export const getAvailableCommandPaletteCommands = (context?: CommandPaletteConte
 
     if (command.id === 'theme-generate-current') {
         return context ? context.canGenerateAITheme && !context.isGeneratingTheme : true;
+    }
+
+    if (command.id === 'playback-clear-queue') {
+        return context ? context.playQueue.length > 0 : true;
     }
 
     if (command.id === 'theme-quick-editor') {

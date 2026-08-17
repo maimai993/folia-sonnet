@@ -1290,6 +1290,7 @@ export default function App() {
         skipAfterPlaybackFailure,
         handleStageExternalPlayRequest,
         shuffleQueue,
+        clearQueue,
     } = usePlaybackQueueController({
         t,
         audioQuality,
@@ -1960,6 +1961,7 @@ export default function App() {
         handleNextTrack,
         handlePrevTrack,
         shuffleQueue,
+        clearQueue,
         playQueue,
         playSong,
         canGenerateAITheme,
@@ -2042,6 +2044,7 @@ export default function App() {
         currentSearchSourceTabInPalette,
         setHomeViewTab,
         shuffleQueue,
+        clearQueue,
         submitSearch,
         t,
         toggleBrowserFullscreen,

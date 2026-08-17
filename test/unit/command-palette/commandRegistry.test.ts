@@ -28,6 +28,7 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     handleNextTrack: vi.fn(),
     handlePrevTrack: vi.fn(),
     shuffleQueue: vi.fn(),
+    clearQueue: vi.fn(),
     canGenerateAITheme: true,
     isGeneratingTheme: false,
     generateAITheme: vi.fn(),
@@ -224,6 +225,25 @@ describe('command palette registry', () => {
         expect(fullQueue[17].command.queueSong).toBe(playQueue[17]);
         expect(filteredQueue).toHaveLength(1);
         expect(filteredQueue[0].command.queueIndex).toBe(17);
+    });
+
+    it('clears the play queue and hides the command when the queue is empty', () => {
+        const playQueue: SongResult[] = [{
+            id: 1,
+            name: 'Queue Song 1',
+            artists: [{ id: 1, name: 'Artist 1' }],
+            album: { id: 1, name: 'Album 1' },
+            durationMs: 180_000,
+        }];
+        const context = createContext({ playQueue });
+
+        const [match] = getCommandPaletteMatches('清空队列', context);
+        expect(match.command.id).toBe('playback-clear-queue');
+        expect(match.command.execute(match.input, context)).toBe(true);
+        expect(context.clearQueue).toHaveBeenCalled();
+
+        expect(getCommandPaletteMatches('清空队列', createContext())
+            .some(entry => entry.command.id === 'playback-clear-queue')).toBe(false);
     });
 
     it('matches commands by Chinese keyword and pinyin', () => {

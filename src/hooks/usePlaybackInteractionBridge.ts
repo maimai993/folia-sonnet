@@ -93,6 +93,30 @@ export function usePlaybackInteractionBridge({
     resumePlayback,
     syncStageLyricsClock,
 }: UsePlaybackInteractionBridgeParams) {
+    // resumePlayback rethrows after showing the error toast so awaiting callers can react, but
+    // togglePlay is fire-and-forget: without this the rejection escapes as an unhandled promise
+    // rejection with no media context. Log the element state that explains why play() failed
+    // (expired online stream, ended element with an empty queue, decode error, ...).
+    const startPlaybackFromInteraction = useCallback(() => {
+        void resumePlayback().catch(error => {
+            const audioElement = audioRef.current;
+            console.error('[Playback] Resume from interaction failed', {
+                error,
+                audioSrc,
+                songId: currentSong?.id ?? null,
+                playerState,
+                paused: audioElement?.paused ?? null,
+                ended: audioElement?.ended ?? null,
+                currentTime: audioElement?.currentTime ?? null,
+                duration: audioElement?.duration ?? null,
+                readyState: audioElement?.readyState ?? null,
+                networkState: audioElement?.networkState ?? null,
+                mediaErrorCode: audioElement?.error?.code ?? null,
+                mediaErrorMessage: audioElement?.error?.message ?? null,
+            });
+        });
+    }, [audioRef, audioSrc, currentSong, playerState, resumePlayback]);
+
     const togglePlay = useCallback((event?: React.MouseEvent | KeyboardEvent) => {
         event?.stopPropagation();
 
@@ -104,7 +128,7 @@ export function usePlaybackInteractionBridge({
             if (playerState === PlayerState.PLAYING) {
                 pausePlayback();
             } else {
-                void resumePlayback();
+                startPlaybackFromInteraction();
             }
             return;
         }
@@ -113,10 +137,10 @@ export function usePlaybackInteractionBridge({
             if (!audioRef.current.paused && !audioRef.current.ended) {
                 pausePlayback();
             } else {
-                void resumePlayback();
+                startPlaybackFromInteraction();
             }
         }
-    }, [activePlaybackContext, audioRef, audioSrc, isNowPlayingStageActive, pausePlayback, playerState, resumePlayback, stageActiveEntryKind]);
+    }, [activePlaybackContext, audioRef, audioSrc, isNowPlayingStageActive, pausePlayback, playerState, startPlaybackFromInteraction, stageActiveEntryKind]);
 
     const toggleLoop = useCallback((event?: React.MouseEvent) => {
         event?.stopPropagation();

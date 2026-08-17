@@ -827,7 +827,22 @@ export function usePlaybackQueueController({
 
     const handleNextTrack = useCallback(async (options?: NextTrackOptions) => {
         if (isNowPlayingStageActive) return;
-        if (!currentSong || playQueue.length === 0) return;
+
+        const stopAtQueueEnd = () => {
+            if (audioRef.current) {
+                audioRef.current.pause();
+            }
+            setPlayerState(PlayerState.IDLE);
+        };
+
+        // An emptied queue still has to stop playback at the end of the current track; returning
+        // early here left the audio element `ended` while playerState stayed PLAYING.
+        if (!currentSong || playQueue.length === 0) {
+            if (options?.allowStopOnMissing) {
+                stopAtQueueEnd();
+            }
+            return;
+        }
 
         const shouldNavigateToPlayer = options?.shouldNavigateToPlayer ?? true;
         const currentSongKey = getPlaybackSongKey(currentSong);
@@ -866,10 +881,7 @@ export function usePlaybackQueueController({
                 unavailableSkipCount: options?.unavailableSkipCount,
             });
         } else if (options?.allowStopOnMissing) {
-            if (audioRef.current) {
-                audioRef.current.pause();
-            }
-            setPlayerState(PlayerState.IDLE);
+            stopAtQueueEnd();
         }
     }, [audioRef, currentSong, isFmMode, isNowPlayingStageActive, loopMode, playQueue, playSong, setPlayQueue, setPlayerState]);
 
@@ -1236,6 +1248,15 @@ export function usePlaybackQueueController({
         }
     }, [audioQuality, currentSong, isNowPlayingStageActive, playQueue, setPlayQueue, setStatusMsg, t, userId]);
 
+    const clearQueue = useCallback(() => {
+        if (isNowPlayingStageActive) return;
+        if (!playQueue || playQueue.length === 0) return;
+
+        setPlayQueue([]);
+        void persistLastPlaybackCache(currentSong, []);
+        setStatusMsg({ type: 'success', text: t('status.queueCleared') || 'Queue cleared', nonce: Date.now(), durationMs: 1200 });
+    }, [currentSong, isNowPlayingStageActive, persistLastPlaybackCache, playQueue, setPlayQueue, setStatusMsg, t]);
+
     return {
         pendingUnavailableReplacement,
         setPendingUnavailableReplacement,
@@ -1255,5 +1276,6 @@ export function usePlaybackQueueController({
         skipAfterPlaybackFailure,
         handleStageExternalPlayRequest,
         shuffleQueue,
+        clearQueue,
     };
 }

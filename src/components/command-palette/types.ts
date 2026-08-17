@@ -71,6 +71,7 @@ export type CommandPaletteContext = {
     handleNextTrack: () => void;
     handlePrevTrack: () => void;
     shuffleQueue: () => void;
+    clearQueue: () => void;
     playQueue: SongResult[];
     playSong: (song: SongResult, queue?: SongResult[]) => void | Promise<void>;
     canGenerateAITheme: boolean;
