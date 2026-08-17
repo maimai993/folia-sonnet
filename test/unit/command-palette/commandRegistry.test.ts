@@ -25,6 +25,7 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     toggleLoop: vi.fn(),
     onReplayGainModeChange: vi.fn(),
     openAudioEqualizer: vi.fn(),
+    applyAudioSoundPreset: vi.fn(),
     handleNextTrack: vi.fn(),
     handlePrevTrack: vi.fn(),
     shuffleQueue: vi.fn(),
@@ -147,6 +148,16 @@ describe('command palette registry', () => {
         expect(context.setPanelTab).toHaveBeenCalledWith('controls');
         expect(context.setIsPanelOpen).toHaveBeenCalledWith(true);
         expect(context.openAudioEqualizer).toHaveBeenCalled();
+    });
+
+    it('applies a full sound preset from the command palette', () => {
+        const context = createContext();
+        const [match] = getCommandPaletteMatches('低保真', context);
+
+        expect(match.command.id).toBe('playback-sound-preset-lofi');
+        match.command.execute(match.input, context);
+
+        expect(context.applyAudioSoundPreset).toHaveBeenCalledWith('lofi');
     });
 
     it('matches sync server settings and manual sync commands', () => {

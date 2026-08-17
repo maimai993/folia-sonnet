@@ -10,6 +10,7 @@ import { resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
 import { calculateReplayGain } from '../utils/replayGain';
 import { saveToCache } from '../services/db';
 import { applyAudioEqualizerSettings, connectAudioEqualizerGraph } from '../services/audioEqualizerGraph';
+import { createAudioEffectChain, type AudioEffectChain } from '../services/audioEffects/effectChain';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 
 // src/hooks/usePlaybackAudioBridge.ts
@@ -67,6 +68,7 @@ export function usePlaybackAudioBridge({
     const previousAudioSrcRef = useRef<string | null>(null);
     const replayGainLogSignatureRef = useRef<string | null>(null);
     const equalizerNodesRef = useRef<BiquadFilterNode[]>([]);
+    const effectChainRef = useRef<AudioEffectChain | null>(null);
     const audioEqualizerSettings = useSettingsUiStore(state => state.audioEqualizerSettings);
 
     // Recalculates source-specific gain after the audio graph or playback settings become ready.
@@ -136,12 +138,21 @@ export function usePlaybackAudioBridge({
 
             const source = ctx.createMediaElementSource(audioRef.current);
             source.connect(gainNode);
+            // Keeps a stable seam between the equalizer bands and the effect chain.
+            const equalizerOutput = ctx.createGain();
             connectAudioEqualizerGraph({
                 context: ctx,
                 input: gainNode,
-                output: analyser,
+                output: equalizerOutput,
                 nodesRef: equalizerNodesRef,
                 settings: audioEqualizerSettings,
+            });
+            effectChainRef.current = createAudioEffectChain({
+                context: ctx,
+                input: equalizerOutput,
+                output: analyser,
+                effects: audioEqualizerSettings.effects,
+                enabled: audioEqualizerSettings.enabled,
             });
             analyser.connect(ctx.destination);
             sourceRef.current = source;
@@ -206,7 +217,13 @@ export function usePlaybackAudioBridge({
             return;
         }
         applyAudioEqualizerSettings(context, equalizerNodesRef.current, audioEqualizerSettings);
+        effectChainRef.current?.apply(audioEqualizerSettings.effects, audioEqualizerSettings.enabled);
     }, [audioContextRef, audioEqualizerSettings]);
+
+    useEffect(() => () => {
+        effectChainRef.current?.dispose();
+        effectChainRef.current = null;
+    }, []);
 
     useEffect(() => {
         const audioElement = audioRef.current;

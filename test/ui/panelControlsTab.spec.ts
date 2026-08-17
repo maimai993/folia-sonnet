@@ -76,11 +76,11 @@ test('steps straight through sonnet without an interstitial dialog', async ({ pa
     await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('closes the ten-band equalizer with Escape', async ({ page }) => {
+test('closes the audio effect dialog with Escape', async ({ page }) => {
     await openControlsTab(page);
 
     await page.getByRole('button', { name: '打开音频均衡器' }).click();
-    const equalizerTitle = page.getByText('10 段音频均衡器', { exact: true });
+    const equalizerTitle = page.getByText('音频效果器', { exact: true });
     await expect(equalizerTitle).toBeVisible();
 
     await page.keyboard.press('Escape');

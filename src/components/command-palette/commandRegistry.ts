@@ -12,6 +12,7 @@ import type {
 import type { SearchSource } from '../../stores/useSearchNavigationStore';
 import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 import { buildObsCustomCss } from '../../utils/obsCustomCss';
+import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import { hasUploadedObsAsset } from '../../utils/visualSettingsConfig';
 import { ListMusic, ListX, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward } from 'lucide-react';
 
@@ -203,6 +204,24 @@ const createReplayGainCommand = (
     },
 });
 
+// Applies a built-in sound preset or a saved custom slot (EQ curve plus effect chain) without opening the dialog.
+const createSoundPresetCommand = (
+    presetId: AudioEqualizerModeId,
+    title: string,
+    description: string,
+    keywords: string[],
+): CommandPaletteCommand => ({
+    id: `playback-sound-preset-${presetId}`,
+    group: 'playback',
+    title,
+    description,
+    keywords: [...keywords, 'sound preset', 'audio preset', '音效预设', 'yinxiaoyushe', 'yxys'],
+    execute: (_input, context) => {
+        context.applyAudioSoundPreset(presetId);
+        return true;
+    },
+});
+
 const createHomeTabCommand = (
     tab: HomeViewTab,
     title: string,
@@ -287,9 +306,9 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     {
         id: 'playback-equalizer',
         group: 'playback',
-        title: 'Audio equalizer',
-        description: 'Open the ten-band audio equalizer',
-        keywords: ['equalizer', 'audio equalizer', 'eq', '10 band eq', '均衡器', '音频均衡器', '十段均衡器', 'junhengqi', 'yinpinjunhengqi', 'jhh', 'ypjhh'],
+        title: 'Audio effects',
+        description: 'Open the equalizer and effect chain',
+        keywords: ['equalizer', 'audio equalizer', 'eq', '10 band eq', 'audio effects', 'effect chain', '均衡器', '音频均衡器', '十段均衡器', '音效', '效果器', 'junhengqi', 'yinpinjunhengqi', 'yinxiao', 'xiaoguoqi', 'jhh', 'ypjhh', 'yx', 'xgq'],
         execute: (_input, context) => {
             context.setPanelTab('controls');
             context.setIsPanelOpen(true);
@@ -297,6 +316,14 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
             return true;
         },
     },
+    createSoundPresetCommand('flat', 'Sound: Level', 'Clear the equalizer and every effect', ['flat', 'reset audio effects', '水平', '关闭音效', 'shuiping', 'guanbiyinxiao', 'sp', 'gbyx']),
+    createSoundPresetCommand('lofi', 'Sound: Lo-Fi', 'Filtered, crushed and wobbly with vinyl noise', ['lofi', 'lo-fi', 'low fidelity', '低保真', 'dibaozhen', 'dbz']),
+    createSoundPresetCommand('radio', 'Sound: Radio', 'Narrow band, nearly mono broadcast tone', ['radio', 'am radio', 'telephone', '收音机', '广播', 'shouyinji', 'guangbo', 'syj', 'gb']),
+    createSoundPresetCommand('hall', 'Sound: Hall', 'Wide stereo image with reverb space', ['hall', 'reverb', 'space', '大厅', '混响', '空间', 'daating', 'hunxiang', 'dt', 'hx']),
+    createSoundPresetCommand('vocal', 'Sound: Vocal', 'Lift the voice range and tighten dynamics', ['vocal', 'voice', '人声', 'rensheng', 'rs']),
+    createSoundPresetCommand('bass', 'Sound: Bass boost', 'Heavier low end with extra punch', ['bass boost', 'bass', '低音增强', '重低音', 'diyinzengqiang', 'zhongdiyin', 'dyzq', 'zdy']),
+    createSoundPresetCommand('custom1', 'Sound: Custom 1', 'Apply the first saved custom sound', ['custom 1', 'custom sound 1', '自定义 1', '自定义音效1', 'zidingyi1', 'zdy1']),
+    createSoundPresetCommand('custom2', 'Sound: Custom 2', 'Apply the second saved custom sound', ['custom 2', 'custom sound 2', '自定义 2', '自定义音效2', 'zidingyi2', 'zdy2']),
     createSettingsCommand('settings-local-lyrics-priority', 'Local song lyrics priority', 'Choose whether local songs prefer local or online lyrics', ['local lyrics priority', 'online lyrics first', 'local song lyrics', '本地歌曲歌词优先级', '在线优先', '本地歌词', 'bendigeciyouxianji', 'zaixianyouxian', 'bdgcyxj', 'zxyx'], 'options', 'playback'),
     createSettingsCommand('settings-integration', 'Integration settings', 'Open Stage, Now Playing, and Navidrome settings', ['integration', 'stage', 'now playing', 'navidrome settings', '集成', '连接', 'jicheng', 'lianjie', 'jc', 'lj'], 'options', 'integration'),
     createSettingsCommand('settings-discord-presence', 'Discord playback status', 'Open Discord Rich Presence settings', ['discord', 'rich presence', 'discord presence', 'playing status', '播放状态', 'discord状态', 'discordzhuangtai', 'bofangzhuangtai', 'dc', 'zt'], 'options', 'integration'),

@@ -1,8 +1,22 @@
+import {
+    areAudioEffectsEqual,
+    createNeutralAudioEffects,
+    normalizeAudioEffects,
+    type AudioEffectSettings,
+} from './audioEffects';
+import { AUDIO_SOUND_PRESETS, isAudioSoundPresetId, type AudioSoundPresetId } from './audioPresets';
+
+export type AudioEqualizerCustomSlot = {
+    gains: number[];
+    effects: AudioEffectSettings;
+};
+
 export type AudioEqualizerSettings = {
     enabled: boolean;
     gains: number[];
     preset: AudioEqualizerModeId;
-    customGains: number[];
+    effects: AudioEffectSettings;
+    customSlots: AudioEqualizerCustomSlot[];
 };
 
 // src/utils/audioEqualizer.ts
@@ -25,23 +39,38 @@ export const AUDIO_EQUALIZER_BANDS = [
     { frequency: 16000, label: '16k' },
 ] as const;
 
-export type AudioEqualizerPresetId = 'flat' | 'lofi' | 'radio' | 'vinyl' | 'vocal' | 'bass';
-export type AudioEqualizerModeId = AudioEqualizerPresetId | 'custom';
+export type AudioEqualizerPresetId = AudioSoundPresetId;
+export const AUDIO_EQUALIZER_CUSTOM_SLOT_IDS = ['custom1', 'custom2'] as const;
+export type AudioEqualizerCustomSlotId = typeof AUDIO_EQUALIZER_CUSTOM_SLOT_IDS[number];
+export type AudioEqualizerModeId = AudioEqualizerPresetId | AudioEqualizerCustomSlotId;
 
-export const AUDIO_EQUALIZER_PRESETS: Record<AudioEqualizerPresetId, readonly number[]> = {
-    flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    lofi: [-4, -2, 0, 2, 3, 2, 0, -3, -7, -10],
-    radio: [-12, -8, -3, 2, 4, 4, 2, -3, -8, -12],
-    vinyl: [3, 2, 1, 0, -1, -1, -2, -3, -5, -7],
-    vocal: [-2, -1, 0, 2, 4, 4, 3, 1, 0, -1],
-    bass: [6, 5, 3, 1, 0, -1, -1, 0, 1, 2],
-};
+export const AUDIO_EQUALIZER_PRESETS = Object.fromEntries(
+    Object.entries(AUDIO_SOUND_PRESETS).map(([presetId, preset]) => [presetId, preset.gains]),
+) as Record<AudioEqualizerPresetId, readonly number[]>;
+
+export const isAudioEqualizerCustomSlotId = (value: unknown): value is AudioEqualizerCustomSlotId => (
+    AUDIO_EQUALIZER_CUSTOM_SLOT_IDS.includes(value as AudioEqualizerCustomSlotId)
+);
+
+export const getAudioEqualizerCustomSlotIndex = (slotId: AudioEqualizerCustomSlotId) => (
+    AUDIO_EQUALIZER_CUSTOM_SLOT_IDS.indexOf(slotId)
+);
+
+const createEmptyCustomSlot = (): AudioEqualizerCustomSlot => ({
+    gains: [...AUDIO_SOUND_PRESETS.flat.gains],
+    effects: createNeutralAudioEffects(),
+});
+
+const createEmptyCustomSlots = (): AudioEqualizerCustomSlot[] => (
+    AUDIO_EQUALIZER_CUSTOM_SLOT_IDS.map(createEmptyCustomSlot)
+);
 
 export const DEFAULT_AUDIO_EQUALIZER_SETTINGS: AudioEqualizerSettings = {
     enabled: false,
     gains: [...AUDIO_EQUALIZER_PRESETS.flat],
     preset: 'flat',
-    customGains: [...AUDIO_EQUALIZER_PRESETS.flat],
+    effects: createNeutralAudioEffects(),
+    customSlots: createEmptyCustomSlots(),
 };
 
 const clampGain = (value: unknown): number => {
@@ -57,41 +86,110 @@ const normalizeGains = (value: unknown): number[] => {
     return AUDIO_EQUALIZER_BANDS.map((_, index) => clampGain(rawGains[index]));
 };
 
-const isPresetId = (value: unknown): value is AudioEqualizerPresetId => (
-    typeof value === 'string' && Object.hasOwn(AUDIO_EQUALIZER_PRESETS, value)
-);
+// Built-in presets that used to exist; their persisted settings migrate into a custom slot.
+const RETIRED_PRESET_IDS = ['tape', 'vinyl'];
 
-const resolveModeId = (value: unknown, gains: number[]): AudioEqualizerModeId => {
-    if (value === 'custom' || isPresetId(value)) {
+const isRetiredPresetId = (value: unknown) => typeof value === 'string' && RETIRED_PRESET_IDS.includes(value);
+
+type LegacyCustomFields = {
+    customGains?: unknown;
+    customEffects?: unknown;
+};
+
+const normalizeCustomSlot = (value: unknown): AudioEqualizerCustomSlot => {
+    const candidate = (value && typeof value === 'object' ? value : {}) as Partial<AudioEqualizerCustomSlot>;
+    return {
+        gains: normalizeGains(candidate.gains),
+        effects: normalizeAudioEffects(candidate.effects),
+    };
+};
+
+const resolveModeId = (
+    value: unknown,
+    gains: number[],
+    effects: AudioEffectSettings,
+): AudioEqualizerModeId => {
+    if (isAudioSoundPresetId(value) || isAudioEqualizerCustomSlotId(value)) {
         return value;
     }
 
-    return (Object.entries(AUDIO_EQUALIZER_PRESETS) as Array<[AudioEqualizerPresetId, readonly number[]]>)
-        .find(([, presetGains]) => presetGains.every((gain, index) => gain === gains[index]))?.[0]
-        ?? 'custom';
+    // The former single custom slot and the retired built-ins all land in the first custom slot.
+    if (value === 'custom' || isRetiredPresetId(value)) {
+        return 'custom1';
+    }
+
+    return (Object.entries(AUDIO_SOUND_PRESETS) as Array<[AudioEqualizerPresetId, typeof AUDIO_SOUND_PRESETS[AudioEqualizerPresetId]]>)
+        .find(([, preset]) => (
+            preset.gains.every((gain, index) => gain === gains[index])
+            && areAudioEffectsEqual(preset.effects, effects)
+        ))?.[0]
+        ?? 'custom1';
 };
 
-// Normalizes untrusted persisted or imported data into exactly ten safe gain values.
+// Rebuilds both custom slots, folding the older single-slot and retired-preset layouts into them.
+const resolveCustomSlots = (
+    candidate: Partial<AudioEqualizerSettings> & LegacyCustomFields,
+    gains: number[],
+    effects: AudioEffectSettings,
+    mode: AudioEqualizerModeId,
+): AudioEqualizerCustomSlot[] => {
+    const storedSlots = Array.isArray(candidate.customSlots) ? candidate.customSlots : null;
+    const hasLegacyCustom = Array.isArray(candidate.customGains)
+        || Boolean(candidate.customEffects && typeof candidate.customEffects === 'object');
+
+    const slots = storedSlots
+        ? AUDIO_EQUALIZER_CUSTOM_SLOT_IDS.map((_, index) => normalizeCustomSlot(storedSlots[index]))
+        : [
+            hasLegacyCustom
+                ? normalizeCustomSlot({ gains: candidate.customGains, effects: candidate.customEffects })
+                : createEmptyCustomSlot(),
+            createEmptyCustomSlot(),
+        ];
+
+    // A sound saved under a retired built-in keeps playing as the first custom slot, and whatever the
+    // older single custom slot held moves into the second one so neither of them is lost.
+    if (isRetiredPresetId(candidate.preset)) {
+        slots[1] = slots[0];
+        slots[0] = { gains: [...gains], effects: { ...effects } };
+        return slots;
+    }
+
+    if (isAudioEqualizerCustomSlotId(mode) && !storedSlots && !hasLegacyCustom) {
+        slots[getAudioEqualizerCustomSlotIndex(mode)] = { gains: [...gains], effects: { ...effects } };
+    }
+
+    return slots;
+};
+
+// Normalizes untrusted persisted or imported data into ten safe gain values plus a complete effect chain.
 export const resolveAudioEqualizerSettings = (value: unknown): AudioEqualizerSettings => {
     if (!value || typeof value !== 'object') {
         return {
             enabled: DEFAULT_AUDIO_EQUALIZER_SETTINGS.enabled,
             gains: [...DEFAULT_AUDIO_EQUALIZER_SETTINGS.gains],
             preset: DEFAULT_AUDIO_EQUALIZER_SETTINGS.preset,
-            customGains: [...DEFAULT_AUDIO_EQUALIZER_SETTINGS.customGains],
+            effects: createNeutralAudioEffects(),
+            customSlots: createEmptyCustomSlots(),
         };
     }
 
-    const candidate = value as Partial<AudioEqualizerSettings>;
+    const candidate = value as Partial<AudioEqualizerSettings> & LegacyCustomFields;
     const gains = normalizeGains(candidate.gains);
-    const preset = resolveModeId(candidate.preset, gains);
+    const hasStoredEffects = Boolean(candidate.effects) && typeof candidate.effects === 'object';
+    const storedEffects = hasStoredEffects ? normalizeAudioEffects(candidate.effects) : createNeutralAudioEffects();
+    const preset = resolveModeId(candidate.preset, gains, storedEffects);
+    // Settings persisted before the effect chain existed only carried EQ gains, so a still-supported
+    // preset id keeps its intended character instead of collapsing to a neutral chain.
+    const effects = !hasStoredEffects && isAudioSoundPresetId(candidate.preset)
+        ? { ...AUDIO_SOUND_PRESETS[candidate.preset].effects }
+        : storedEffects;
+
     return {
         enabled: candidate.enabled === true,
         gains,
         preset,
-        customGains: Array.isArray(candidate.customGains)
-            ? normalizeGains(candidate.customGains)
-            : [...(preset === 'custom' ? gains : DEFAULT_AUDIO_EQUALIZER_SETTINGS.customGains)],
+        effects,
+        customSlots: resolveCustomSlots(candidate, gains, effects, preset),
     };
 };
 

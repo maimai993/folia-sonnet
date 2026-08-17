@@ -25,11 +25,15 @@ import {
     type PinnedCommandIds,
 } from '../components/command-palette/pinnedCommandPreferences';
 import {
+    getAudioEqualizerCustomSlotIndex,
+    isAudioEqualizerCustomSlotId,
     readStoredAudioEqualizerSettings,
     resolveAudioEqualizerSettings,
     writeStoredAudioEqualizerSettings,
+    type AudioEqualizerModeId,
     type AudioEqualizerSettings,
 } from '../utils/audioEqualizer';
+import { AUDIO_SOUND_PRESETS } from '../utils/audioPresets';
 
 // src/stores/useSettingsUiStore.ts
 // Shared settings state and actions used by App, Home, and SettingsModal.
@@ -1473,6 +1477,7 @@ export type SettingsUiState = {
     handleSetQueueAddBehavior: (behavior: QueueAddBehavior) => void;
     handleSetAudioOutputDeviceId: (deviceId: string) => void;
     handleSetAudioEqualizerSettings: (settings: AudioEqualizerSettings) => void;
+    handleApplyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;
     openAudioEqualizer: () => void;
     closeAudioEqualizer: () => void;
     handleSetVolume: (val: number) => void;
@@ -2778,6 +2783,26 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     },
     handleSetAudioEqualizerSettings: (settings) => {
         const resolved = resolveAudioEqualizerSettings(settings);
+        writeStoredAudioEqualizerSettings(resolved);
+        set({ audioEqualizerSettings: resolved });
+    },
+    // Applies a built-in sound preset or a saved custom slot, and turns processing on.
+    handleApplyAudioSoundPreset: (modeId) => {
+        const current = get().audioEqualizerSettings;
+        const source = isAudioEqualizerCustomSlotId(modeId)
+            ? current.customSlots[getAudioEqualizerCustomSlotIndex(modeId)]
+            : AUDIO_SOUND_PRESETS[modeId];
+        if (!source) {
+            return;
+        }
+
+        const resolved = resolveAudioEqualizerSettings({
+            ...current,
+            enabled: true,
+            preset: modeId,
+            gains: [...source.gains],
+            effects: { ...source.effects },
+        });
         writeStoredAudioEqualizerSettings(resolved);
         set({ audioEqualizerSettings: resolved });
     },

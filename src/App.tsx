@@ -148,6 +148,7 @@ export default function App() {
         setLastSeenGuideVersion,
         setIsUserGuideModalOpen,
         openAudioEqualizer,
+        applyAudioSoundPreset,
     } = useSettingsUiStore(useShallow(state => ({
         closeSettings: state.closeSettings,
         isSettingsSubviewOpen: state.isSubSettingsViewOpen,
@@ -158,6 +159,7 @@ export default function App() {
         setLastSeenGuideVersion: state.setLastSeenGuideVersion,
         setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
         openAudioEqualizer: state.openAudioEqualizer,
+        applyAudioSoundPreset: state.handleApplyAudioSoundPreset,
     })));
     const setThemeQuickEditorContext = useThemeQuickEditorStore(state => state.setContext);
     const openThemeQuickEditor = useThemeQuickEditorStore(state => state.openEditor);
@@ -1960,6 +1962,7 @@ export default function App() {
         toggleLoop,
         onReplayGainModeChange: handleChangeReplayGainMode,
         openAudioEqualizer,
+        applyAudioSoundPreset,
         handleNextTrack,
         handlePrevTrack,
         shuffleQueue,
@@ -2060,6 +2063,7 @@ export default function App() {
         togglePlay,
         handleChangeReplayGainMode,
         openAudioEqualizer,
+        applyAudioSoundPreset,
         transparentPlayerBackground,
         toggleTransparentModeWithHandoff,
         toggleDaylightMode,

@@ -6,6 +6,8 @@ import {
     DEFAULT_AUDIO_EQUALIZER_SETTINGS,
     resolveAudioEqualizerSettings,
 } from '@/utils/audioEqualizer';
+import { createNeutralAudioEffects, normalizeAudioEffects } from '@/utils/audioEffects';
+import { AUDIO_SOUND_PRESETS } from '@/utils/audioPresets';
 
 // test/unit/utils/audioEqualizer.test.ts
 // Verifies persisted equalizer normalization and the ten-node Web Audio chain.
@@ -34,8 +36,8 @@ describe('audio equalizer model', () => {
         expect(settings.enabled).toBe(true);
         expect(settings.gains).toHaveLength(AUDIO_EQUALIZER_BANDS.length);
         expect(settings.gains.slice(0, 5)).toEqual([12, -12, 4, 0, 0]);
-        expect(settings.preset).toBe('custom');
-        expect(settings.customGains).toEqual(settings.gains);
+        expect(settings.preset).toBe('custom1');
+        expect(settings.customSlots[0].gains).toEqual(settings.gains);
     });
 
     it('returns an independent flat default for invalid input', () => {
@@ -45,20 +47,95 @@ describe('audio equalizer model', () => {
 
         expect(second).toEqual(DEFAULT_AUDIO_EQUALIZER_SETTINGS);
         expect(second.gains).not.toBe(DEFAULT_AUDIO_EQUALIZER_SETTINGS.gains);
-        expect(second.customGains).not.toBe(DEFAULT_AUDIO_EQUALIZER_SETTINGS.customGains);
+        expect(second.customSlots[0].gains).not.toBe(DEFAULT_AUDIO_EQUALIZER_SETTINGS.customSlots[0].gains);
     });
 
-    it('preserves a separate custom slot while a built-in preset is active', () => {
+    it('preserves the custom slots while a built-in preset is active', () => {
         const settings = resolveAudioEqualizerSettings({
             enabled: true,
             gains: AUDIO_EQUALIZER_PRESETS.lofi,
             preset: 'lofi',
-            customGains: [3, 2, 1, 0, -1, -2, -3, -4, -5, -6],
+            customSlots: [{ gains: [3, 2, 1, 0, -1, -2, -3, -4, -5, -6] }, {}],
         });
 
         expect(settings.preset).toBe('lofi');
         expect(settings.gains).toEqual(AUDIO_EQUALIZER_PRESETS.lofi);
-        expect(settings.customGains).toEqual([3, 2, 1, 0, -1, -2, -3, -4, -5, -6]);
+        expect(settings.customSlots).toHaveLength(2);
+        expect(settings.customSlots[0].gains).toEqual([3, 2, 1, 0, -1, -2, -3, -4, -5, -6]);
+        expect(settings.customSlots[1].gains).toEqual(Array(10).fill(0));
+    });
+});
+
+describe('audio effect model', () => {
+    it('restores preset effects for settings persisted before the effect chain existed', () => {
+        const settings = resolveAudioEqualizerSettings({
+            enabled: true,
+            gains: AUDIO_EQUALIZER_PRESETS.lofi,
+            preset: 'lofi',
+            customGains: Array(10).fill(0),
+        });
+
+        expect(settings.effects).toEqual(AUDIO_SOUND_PRESETS.lofi.effects);
+        expect(settings.customSlots[0].effects).toEqual(createNeutralAudioEffects());
+    });
+
+    it('clamps malformed effect values and fills missing ones with their neutral value', () => {
+        const effects = normalizeAudioEffects({ drive: 4, width: -1, space: 'x', lowpass: 8000 });
+
+        expect(effects.drive).toBe(1);
+        expect(effects.width).toBe(0);
+        expect(effects.space).toBe(0);
+        expect(effects.lowpass).toBe(8000);
+        expect(effects.highpass).toBe(20);
+    });
+
+    it('detects a built-in preset only when gains and effects both match', () => {
+        const matched = resolveAudioEqualizerSettings({
+            enabled: true,
+            gains: AUDIO_SOUND_PRESETS.hall.gains,
+            effects: AUDIO_SOUND_PRESETS.hall.effects,
+        });
+        const mismatched = resolveAudioEqualizerSettings({
+            enabled: true,
+            gains: AUDIO_SOUND_PRESETS.hall.gains,
+            effects: { ...AUDIO_SOUND_PRESETS.hall.effects, space: 0 },
+        });
+
+        expect(matched.preset).toBe('hall');
+        expect(mismatched.preset).toBe('custom1');
+    });
+
+    it('moves a retired preset into the first custom slot without losing the older custom sound', () => {
+        const retiredSound = {
+            gains: [3, 2, 1, 0, -1, -1, -2, -3, -5, -7],
+            effects: normalizeAudioEffects({ noise: 0.38, wow: 0.22, lowpass: 11000 }),
+        };
+        const settings = resolveAudioEqualizerSettings({
+            enabled: true,
+            preset: 'vinyl',
+            gains: retiredSound.gains,
+            effects: retiredSound.effects,
+            customGains: [6, 6, 6, 0, 0, 0, 0, 0, 0, 0],
+        });
+
+        expect(settings.preset).toBe('custom1');
+        expect(settings.gains).toEqual(retiredSound.gains);
+        expect(settings.effects).toEqual(retiredSound.effects);
+        expect(settings.customSlots[0]).toEqual(retiredSound);
+        expect(settings.customSlots[1].gains).toEqual([6, 6, 6, 0, 0, 0, 0, 0, 0, 0]);
+    });
+
+    it('maps the former single custom slot onto the first of the two slots', () => {
+        const settings = resolveAudioEqualizerSettings({
+            enabled: true,
+            preset: 'custom',
+            gains: Array(10).fill(2),
+            customGains: Array(10).fill(2),
+        });
+
+        expect(settings.preset).toBe('custom1');
+        expect(settings.customSlots[0].gains).toEqual(Array(10).fill(2));
+        expect(settings.customSlots[1].gains).toEqual(Array(10).fill(0));
     });
 });
 
@@ -81,8 +158,9 @@ describe('audio equalizer graph', () => {
             settings: {
                 enabled: true,
                 gains: Array.from({ length: 10 }, (_, index) => index - 5),
-                preset: 'custom',
-                customGains: Array(10).fill(0),
+                preset: 'custom1',
+                effects: createNeutralAudioEffects(),
+                customSlots: [],
             },
         });
 
@@ -102,8 +180,9 @@ describe('audio equalizer graph', () => {
         applyAudioEqualizerSettings(context, nodes, {
             enabled: false,
             gains: Array(10).fill(6),
-            preset: 'custom',
-            customGains: Array(10).fill(6),
+            preset: 'custom1',
+            effects: createNeutralAudioEffects(),
+            customSlots: [],
         });
 
         nodes.forEach(node => {
