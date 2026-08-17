@@ -768,6 +768,17 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         },
     },
     {
+        id: 'settings-toggle-track-switch-buttons',
+        group: 'settings',
+        title: 'Always show track switch arrows',
+        description: 'Toggle whether the progress bar track switch arrows stay visible beside the title',
+        keywords: ['always show track switch arrows', 'track switch buttons', 'previous next arrows', 'progress bar arrows', 'song switch buttons', '切歌箭头', '切换箭头', '始终显示切歌按钮', '进度条切歌按钮', '上一首下一首按钮', 'qiege jiantou', 'qiehuan jiantou', 'jinduting qiege', 'qgjt', 'qhjt', 'sysqgan'],
+        execute: (_input, context) => {
+            context.toggleAlwaysShowTrackSwitchButtons();
+            return true;
+        },
+    },
+    {
         id: 'settings-toggle-main-window-titlebar',
         group: 'settings',
         title: 'Always show window control buttons',

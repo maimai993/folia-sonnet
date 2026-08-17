@@ -1247,6 +1247,7 @@ export type SettingsUiState = {
     subtitleContentMode: SubtitleContentMode;
     hidePlayerRightPanelButton: boolean;
     alwaysShowPlayerBackButton: boolean;
+    alwaysShowTrackSwitchButtons: boolean;
     alwaysShowMainWindowTitlebar: boolean;
     transparentPlayerBackground: boolean;
     enablePlayerPageNativeBlur: boolean;
@@ -1377,6 +1378,7 @@ export type SettingsUiState = {
     handleSetSubtitleContentMode: (mode: SubtitleContentMode) => void;
     handleToggleHidePlayerRightPanelButton: (enable: boolean) => void;
     handleToggleAlwaysShowPlayerBackButton: (enable: boolean) => void;
+    handleToggleAlwaysShowTrackSwitchButtons: (enable: boolean) => void;
     handleToggleAlwaysShowMainWindowTitlebar: (enable: boolean) => void;
     handleToggleTransparentPlayerBackground: (enable: boolean) => void;
     handleToggleAutoHidePlayerChrome: (enable: boolean) => void;
@@ -1510,6 +1512,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     subtitleContentMode: readStoredSubtitleContentMode(),
     hidePlayerRightPanelButton: getStoredBoolean('hide_player_right_panel_button', false),
     alwaysShowPlayerBackButton: getStoredBoolean('always_show_player_back_button', false),
+    alwaysShowTrackSwitchButtons: getStoredBoolean('always_show_track_switch_buttons', false),
     alwaysShowMainWindowTitlebar: getStoredBoolean('always_show_main_window_titlebar', false),
     transparentPlayerBackground: getStoredBoolean('transparent_player_background', false),
     enablePlayerPageNativeBlur: getStoredBoolean('enable_player_page_native_blur', false),
@@ -1757,6 +1760,14 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         notify(get, {
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'playerBackButtonAlwaysShown' : 'playerBackButtonAutoHidden')),
+        });
+    },
+    handleToggleAlwaysShowTrackSwitchButtons: (enable) => {
+        setStoredBoolean('always_show_track_switch_buttons', enable);
+        set({ alwaysShowTrackSwitchButtons: enable });
+        notify(get, {
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'trackSwitchButtonsAlwaysShown' : 'trackSwitchButtonsAutoHidden')),
         });
     },
     handleToggleAlwaysShowMainWindowTitlebar: (enable) => {
@@ -2856,6 +2867,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     subtitleContentMode: state.subtitleContentMode,
     hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
     alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
+    alwaysShowTrackSwitchButtons: state.alwaysShowTrackSwitchButtons,
     alwaysShowMainWindowTitlebar: state.alwaysShowMainWindowTitlebar,
     transparentPlayerBackground: state.transparentPlayerBackground,
     autoHidePlayerChrome: state.autoHidePlayerChrome,
@@ -2946,6 +2958,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
     handleToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
     handleToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
+    handleToggleAlwaysShowTrackSwitchButtons: state.handleToggleAlwaysShowTrackSwitchButtons,
     handleToggleAlwaysShowMainWindowTitlebar: state.handleToggleAlwaysShowMainWindowTitlebar,
     handleToggleTransparentPlayerBackground: state.handleToggleTransparentPlayerBackground,
     enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,

@@ -143,3 +143,23 @@ test('切歌确认窗口：先亮新曲名，指针未动则窗口结束后恢�
         .poll(() => preview.evaluate(el => Number(getComputedStyle(el).opacity)), { timeout: 3000 })
         .toBeGreaterThan(0.3);
 });
+
+test('实验室开关开启时箭头常驻，不再依赖悬浮', async ({ page }) => {
+    // 这条 addInitScript 必须排在 openProbe 的之后：openProbe 会 localStorage.clear()
+    await page.addInitScript(() => {
+        localStorage.setItem('always_show_track_switch_buttons', 'true');
+    });
+    await page.reload();
+    await page.waitForSelector('[data-probe-id="trackTitleNavigator"]');
+
+    // 悬浮播放按钮把胶囊展开，但指针始终不进标题区：
+    // 常驻模式下箭头不能再靠 group-hover/title 才浮出
+    const titleArea = await expandBar(page);
+    await page.locator('button.h-12.w-12').first().hover();
+    await expect(titleArea).toBeVisible();
+
+    const nextArrow = page.getByRole('button', { name: 'Next track' });
+    await expect
+        .poll(() => nextArrow.evaluate(el => Number(getComputedStyle(el).opacity)))
+        .toBeGreaterThan(0.3);
+});

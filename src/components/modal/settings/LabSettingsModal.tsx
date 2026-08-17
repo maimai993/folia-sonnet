@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronLeft, ChevronRight, Cpu, GamepadDirectional, Mic, Monitor, Moon, PlayCircle, RotateCcw, Settings2, Timer } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ChevronsLeftRight, Cpu, GamepadDirectional, Mic, Monitor, Moon, PlayCircle, RotateCcw, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme, VisualizerFrameRate } from '../../../types';
@@ -15,7 +15,6 @@ type LabSettingsModalProps = {
     isOpen: boolean;
     onClose: () => void;
     onOpenLyricFilterSettings: () => void;
-    onOpenGlobalLyricOffsetSettings: () => void;
     theme?: Theme;
     voiceInputPause?: {
         enabled: boolean;
@@ -38,7 +37,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     isOpen,
     onClose,
     onOpenLyricFilterSettings,
-    onOpenGlobalLyricOffsetSettings,
     theme,
     voiceInputPause,
     embedded,
@@ -51,17 +49,18 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         hidePlayerProgressBar,
         hidePlayerRightPanelButton,
         alwaysShowPlayerBackButton,
+        alwaysShowTrackSwitchButtons,
         alwaysShowMainWindowTitlebar,
         hidePlayerTranslationSubtitle,
         isDaylight,
         showOpenPanelCloseButton,
         staticMode,
         visualizerFrameRate,
-        globalLyricTimelineOffsetMs,
         onToggleDisableHomeDynamicBackground,
         onToggleHidePlayerProgressBar,
         onToggleHidePlayerRightPanelButton,
         onToggleAlwaysShowPlayerBackButton,
+        onToggleAlwaysShowTrackSwitchButtons,
         onToggleAlwaysShowMainWindowTitlebar,
         onToggleHidePlayerTranslationSubtitle,
         onToggleHideTaskbarIcon,
@@ -79,18 +78,19 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         hidePlayerProgressBar: state.hidePlayerProgressBar,
         hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
         alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
+        alwaysShowTrackSwitchButtons: state.alwaysShowTrackSwitchButtons,
         alwaysShowMainWindowTitlebar: state.alwaysShowMainWindowTitlebar,
         hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
         isDaylight: state.isDaylight,
         showOpenPanelCloseButton: state.showOpenPanelCloseButton,
         staticMode: state.staticMode,
         visualizerFrameRate: state.visualizerFrameRate,
-        globalLyricTimelineOffsetMs: state.globalLyricTimelineOffsetMs,
         enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
         onToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
         onToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
         onToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
         onToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
+        onToggleAlwaysShowTrackSwitchButtons: state.handleToggleAlwaysShowTrackSwitchButtons,
         onToggleAlwaysShowMainWindowTitlebar: state.handleToggleAlwaysShowMainWindowTitlebar,
         onToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
         onToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
@@ -339,6 +339,19 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     {renderToggle(alwaysShowPlayerBackButton, () => onToggleAlwaysShowPlayerBackButton(!alwaysShowPlayerBackButton))}
                                 </div>
 
+                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                            <ChevronsLeftRight size={14} />
+                                            {t('options.alwaysShowTrackSwitchButtons')}
+                                        </div>
+                                        <div className="text-xs opacity-50 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.alwaysShowTrackSwitchButtonsDesc')}
+                                        </div>
+                                    </div>
+                                    {renderToggle(alwaysShowTrackSwitchButtons, () => onToggleAlwaysShowTrackSwitchButtons(!alwaysShowTrackSwitchButtons))}
+                                </div>
+
                                 <div className="border-t border-white/10 pt-5">
                                     <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                                         {t('options.labWindowAndToolsSection')}
@@ -389,30 +402,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                         {renderToggle(enablePlayerPageNativeBlur, handleNativeBlurToggle)}
                                     </div>
                                 )}
-
-                                <button
-                                    type="button"
-                                    onClick={onOpenGlobalLyricOffsetSettings}
-                                    className={`w-full p-4 rounded-xl border transition-colors hover:bg-white/8 text-left ${settingsCardInteractiveClass}`}
-                                >
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div className="space-y-1">
-                                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                                <Timer size={14} />
-                                                {t('options.globalLyricTimelineOffset')}
-                                            </div>
-                                            <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                                {t('options.globalLyricTimelineOffsetDesc')}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <span className="font-mono text-xs opacity-70" style={{ color: 'var(--text-primary)' }}>
-                                                {globalLyricTimelineOffsetMs > 0 ? `+${globalLyricTimelineOffsetMs}` : globalLyricTimelineOffsetMs}ms
-                                            </span>
-                                            <ChevronRight size={18} className="opacity-60" style={{ color: 'var(--text-primary)' }} />
-                                        </div>
-                                    </div>
-                                </button>
 
                                 <button
                                     type="button"

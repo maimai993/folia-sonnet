@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AudioLines, Monitor, PlayCircle, RefreshCw, Settings2 } from 'lucide-react';
+import { AudioLines, ChevronRight, Monitor, PlayCircle, RefreshCw, Settings2, Timer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { LocalLyricsPriority, QueueAddBehavior, ReplayGainMode, Theme } from '../../../types';
@@ -24,6 +24,7 @@ type PlaybackSettingsSubviewProps = {
     isOpen: boolean;
     isDaylight: boolean;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
+    onOpenGlobalLyricOffsetSettings: () => void;
     replayGainMode: ReplayGainMode;
     onReplayGainModeChange: (mode: ReplayGainMode) => void;
     settingsCardClass: string;
@@ -39,6 +40,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
     isOpen,
     isDaylight,
     onAudioOutputDeviceChange,
+    onOpenGlobalLyricOffsetSettings,
     replayGainMode,
     onReplayGainModeChange,
     settingsCardClass,
@@ -52,6 +54,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
         preferredAlternativeLyricSource,
         localLyricsPriority,
         queueAddBehavior,
+        globalLyricTimelineOffsetMs,
         onToggleAutoUseBestLyric,
         onPreferredAlternativeLyricSourceChange,
         onLocalLyricsPriorityChange,
@@ -62,6 +65,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
         preferredAlternativeLyricSource: state.preferredAlternativeLyricSource,
         localLyricsPriority: state.localLyricsPriority,
         queueAddBehavior: state.queueAddBehavior,
+        globalLyricTimelineOffsetMs: state.globalLyricTimelineOffsetMs,
         onToggleAutoUseBestLyric: state.handleToggleAutoUseBestLyric,
         onPreferredAlternativeLyricSourceChange: state.handleSetPreferredAlternativeLyricSource,
         onLocalLyricsPriorityChange: state.handleSetLocalLyricsPriority,
@@ -340,6 +344,30 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                                 })}
                             </div>
                     </div>
+                    <button
+                        type="button"
+                        onClick={onOpenGlobalLyricOffsetSettings}
+                        className="w-full p-4 border-t text-left transition-colors hover:bg-white/8"
+                        style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.06))' }}
+                    >
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                    <Timer size={14} />
+                                    {t('options.globalLyricTimelineOffset')}
+                                </div>
+                                <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.globalLyricTimelineOffsetDesc')}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-mono text-xs opacity-70" style={{ color: 'var(--text-primary)' }}>
+                                    {globalLyricTimelineOffsetMs > 0 ? `+${globalLyricTimelineOffsetMs}` : globalLyricTimelineOffsetMs}ms
+                                </span>
+                                <ChevronRight size={18} className="opacity-60" style={{ color: 'var(--text-primary)' }} />
+                            </div>
+                        </div>
+                    </button>
                 </div>
             </section>
 

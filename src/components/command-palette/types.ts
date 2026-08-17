@@ -92,6 +92,8 @@ export type CommandPaletteContext = {
     toggleSubtitleOverlayBackground: () => void;
     alwaysShowPlayerBackButton: boolean;
     toggleAlwaysShowPlayerBackButton: () => void;
+    alwaysShowTrackSwitchButtons: boolean;
+    toggleAlwaysShowTrackSwitchButtons: () => void;
     alwaysShowMainWindowTitlebar: boolean;
     toggleAlwaysShowMainWindowTitlebar: () => void;
     toggleDaylightMode: () => void;

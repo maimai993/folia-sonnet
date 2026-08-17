@@ -358,6 +358,7 @@ export default function App() {
         lyricFilterPattern,
         showOpenPanelCloseButton,
         alwaysShowPlayerBackButton,
+        alwaysShowTrackSwitchButtons,
         alwaysShowMainWindowTitlebar,
         enableNowPlayingStage,
         enablePlayerCapStage,
@@ -417,6 +418,7 @@ export default function App() {
         handleSetLyricFilterPattern,
         handleToggleOpenPanelCloseButton,
         handleToggleAlwaysShowPlayerBackButton,
+        handleToggleAlwaysShowTrackSwitchButtons,
         handleToggleAlwaysShowMainWindowTitlebar,
         handleToggleNowPlayingStage,
         handleSetQueueAddBehavior,
@@ -1995,6 +1997,10 @@ export default function App() {
         toggleAlwaysShowPlayerBackButton: () => {
             handleToggleAlwaysShowPlayerBackButton(!alwaysShowPlayerBackButton);
         },
+        alwaysShowTrackSwitchButtons,
+        toggleAlwaysShowTrackSwitchButtons: () => {
+            handleToggleAlwaysShowTrackSwitchButtons(!alwaysShowTrackSwitchButtons);
+        },
         alwaysShowMainWindowTitlebar,
         toggleAlwaysShowMainWindowTitlebar: () => {
             handleToggleAlwaysShowMainWindowTitlebar(!alwaysShowMainWindowTitlebar);
@@ -2066,8 +2072,10 @@ export default function App() {
         subtitleOverlayBackground,
         handleToggleSubtitleOverlayBackground,
         handleToggleAlwaysShowPlayerBackButton,
+        handleToggleAlwaysShowTrackSwitchButtons,
         handleToggleAlwaysShowMainWindowTitlebar,
         alwaysShowPlayerBackButton,
+        alwaysShowTrackSwitchButtons,
         alwaysShowMainWindowTitlebar,
         setIsUserGuideModalOpen,
         openThemeQuickEditor,

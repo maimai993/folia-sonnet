@@ -363,7 +363,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             initialSubview === 'lab' ||
             initialSubview === 'globalLyricOffset'
         ) {
-            setActiveSettingsSection(initialSubview === 'globalLyricOffset' ? 'lab' : initialSubview);
+            setActiveSettingsSection(initialSubview === 'globalLyricOffset' ? 'playback' : initialSubview);
         } else {
             setActiveSettingsSection(prev => prev || 'appearance');
         }
@@ -1555,6 +1555,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 isOpen={true}
                                                 isDaylight={isDaylight}
                                                 onAudioOutputDeviceChange={onAudioOutputDeviceChange}
+                                                onOpenGlobalLyricOffsetSettings={() => setShowGlobalLyricOffset(true)}
                                                 replayGainMode={replayGainMode}
                                                 onReplayGainModeChange={onReplayGainModeChange}
                                                 settingsCardClass={settingsCardClass}
@@ -1688,7 +1689,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 isOpen={true}
                                                 onClose={() => { }}
                                                 onOpenLyricFilterSettings={() => setShowLyricFilterSettings(true)}
-                                                onOpenGlobalLyricOffsetSettings={() => setShowGlobalLyricOffset(true)}
                                                 theme={theme}
                                                 embedded={true}
                                                 voiceInputPause={{

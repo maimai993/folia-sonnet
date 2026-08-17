@@ -47,6 +47,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     toggleSubtitleOverlayBackground: vi.fn(),
     alwaysShowPlayerBackButton: false,
     toggleAlwaysShowPlayerBackButton: vi.fn(),
+    alwaysShowTrackSwitchButtons: false,
+    toggleAlwaysShowTrackSwitchButtons: vi.fn(),
     alwaysShowMainWindowTitlebar: false,
     toggleAlwaysShowMainWindowTitlebar: vi.fn(),
     toggleDaylightMode: vi.fn(),
