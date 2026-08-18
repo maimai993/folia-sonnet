@@ -11,6 +11,8 @@ export type SongThemeAutoGenerationDecisionInput = {
     isLyricsLoading: boolean;
     hasAttempted: boolean;
     hasCachedTheme: boolean;
+    // Cover-derived themes read the artwork, not the lyrics, so they need no prompt source.
+    requiresPromptSource?: boolean;
 };
 
 export const getSongThemeAutoGenerationKey = (song: SongResult | null) => (
@@ -38,10 +40,11 @@ export const shouldRequestSongThemeAutoGeneration = ({
     isLyricsLoading,
     hasAttempted,
     hasCachedTheme,
+    requiresPromptSource = true,
 }: SongThemeAutoGenerationDecisionInput) => {
     if (!enabled || !currentSong || isLyricsLoading || hasAttempted || hasCachedTheme) {
         return false;
     }
 
-    return hasSongThemePromptSource(currentSong, lyrics);
+    return requiresPromptSource ? hasSongThemePromptSource(currentSong, lyrics) : true;
 };

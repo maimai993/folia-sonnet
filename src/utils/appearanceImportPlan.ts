@@ -121,6 +121,7 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
 
     songThemeAutoSwitchEnabled: 'songTheme',
     songThemeAutoGenerateEnabled: 'songTheme',
+    themeGenerationSource: 'songTheme',
     followSystemTheme: 'theme',
 };
 

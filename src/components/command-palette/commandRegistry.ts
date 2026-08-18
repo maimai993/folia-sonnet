@@ -585,6 +585,34 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         },
     },
     {
+        id: 'theme-source-ai',
+        group: 'settings',
+        title: 'Theme source: AI inference',
+        description: 'Generate song themes by having AI read the lyrics',
+        keywords: ['theme source ai', 'ai theme source', 'theme generation source', '主题来源AI', '主题生成来源', 'AI推断', 'zhutilaiyuan', 'zhutishengchenglaiyuan', 'aituiduan', 'ztly', 'ztsclly', 'aitd'],
+        execute: (_input, context) => {
+            if (context.themeGenerationSource === 'ai') {
+                return false;
+            }
+            context.setThemeGenerationSource('ai');
+            return true;
+        },
+    },
+    {
+        id: 'theme-source-cover',
+        group: 'settings',
+        title: 'Theme source: cover colors',
+        description: 'Generate song themes from the cover artwork palette',
+        keywords: ['theme source cover', 'cover theme source', 'cover colors', 'theme generation source', '主题来源封面', '封面取色', '主题生成来源', 'fengmianqvse', 'fengmianquse', 'zhutilaiyuan', 'ztlyfm', 'fmqs'],
+        execute: (_input, context) => {
+            if (context.themeGenerationSource === 'cover') {
+                return false;
+            }
+            context.setThemeGenerationSource('cover');
+            return true;
+        },
+    },
+    {
         id: 'theme-quick-editor',
         group: 'settings',
         title: 'Quick theme editor',
@@ -952,6 +980,15 @@ export const getAvailableCommandPaletteCommands = (context?: CommandPaletteConte
 
     if (command.id === 'theme-quick-editor') {
         return context ? context.canOpenThemeQuickEditor : true;
+    }
+
+    // Only offer the source the user is not already on.
+    if (command.id === 'theme-source-ai') {
+        return context ? context.themeGenerationSource !== 'ai' : true;
+    }
+
+    if (command.id === 'theme-source-cover') {
+        return context ? context.themeGenerationSource !== 'cover' : true;
     }
 
     if (command.group === 'search' && command.id !== 'search-current' && context) {

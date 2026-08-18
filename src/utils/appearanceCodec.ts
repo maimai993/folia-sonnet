@@ -454,6 +454,7 @@ export const compressConfig = (config: any): string => {
     if (config.urlBackgroundSelectedId) minified.ubid = config.urlBackgroundSelectedId;
     if (config.songThemeAutoSwitchEnabled !== undefined) minified.stas = config.songThemeAutoSwitchEnabled;
     if (config.songThemeAutoGenerateEnabled !== undefined) minified.stag = config.songThemeAutoGenerateEnabled;
+    if (config.themeGenerationSource !== undefined) minified.tgs = config.themeGenerationSource;
     if (config.followSystemTheme !== undefined) minified.fst = config.followSystemTheme;
 
     const jsonStr = JSON.stringify(minified);
@@ -565,6 +566,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.ubid) decompressed.urlBackgroundSelectedId = parsed.ubid;
         if (parsed.stas !== undefined) decompressed.songThemeAutoSwitchEnabled = parsed.stas;
         if (parsed.stag !== undefined) decompressed.songThemeAutoGenerateEnabled = parsed.stag;
+        if (parsed.tgs !== undefined) decompressed.themeGenerationSource = parsed.tgs;
         if (parsed.fst !== undefined) decompressed.followSystemTheme = parsed.fst;
 
         return decompressed;
@@ -582,7 +584,7 @@ export const decompressConfig = (str: string): any => {
             'tiltTuning', 'dioramaTuning', 'monetBackgroundTuning', 'nomandBackgroundTuning', 'latentBackgroundTuning', 'monetTuning',
             'pendoloTuning', 'sonnetTuning',
             'urlBackgroundList', 'urlBackgroundSelectedId',
-            'songThemeAutoSwitchEnabled', 'songThemeAutoGenerateEnabled', 'followSystemTheme',
+            'songThemeAutoSwitchEnabled', 'songThemeAutoGenerateEnabled', 'themeGenerationSource', 'followSystemTheme',
         ];
         const hasValidKey = validKeys.some(k => parsed[k] !== undefined);
         if (!hasValidKey) {

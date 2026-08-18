@@ -748,6 +748,7 @@ export default function App() {
         isCustomThemePreferred,
         songThemeAutoSwitchEnabled,
         songThemeAutoGenerateEnabled,
+        themeGenerationSource,
         bgMode,
         isGeneratingTheme,
         handleToggleDaylight,
@@ -763,6 +764,7 @@ export default function App() {
         handleCustomThemePreferenceChange,
         handleSongThemeAutoSwitchChange,
         handleSongThemeAutoGenerateChange,
+        handleThemeGenerationSourceChange,
     } = themeController;
 
     useEffect(() => {
@@ -2024,6 +2026,8 @@ export default function App() {
         setIsUserGuideModalOpen,
         openThemeQuickEditor,
         canOpenThemeQuickEditor,
+        themeGenerationSource,
+        setThemeGenerationSource: handleThemeGenerationSourceChange,
     }), [
         enablePlayerPageNativeBlur,
         generateCurrentSongTheme,
@@ -2084,6 +2088,8 @@ export default function App() {
         setIsUserGuideModalOpen,
         openThemeQuickEditor,
         canOpenThemeQuickEditor,
+        themeGenerationSource,
+        handleThemeGenerationSourceChange,
     ]);
     const commandPalette = useCommandPalette({
         currentView,
@@ -2170,6 +2176,7 @@ export default function App() {
         currentSong,
         lyrics,
         isLyricsLoading,
+        themeGenerationSource,
         generateAITheme,
     });
     const seekMainAudio = useCallback((time: number) => {

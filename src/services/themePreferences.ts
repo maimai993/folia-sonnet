@@ -3,6 +3,8 @@ import { DualTheme, Theme } from '../types';
 // Shared helpers for persisted theme preferences and applied theme selection.
 
 export type ThemeAnimationIntensity = Theme['animationIntensity'];
+// Where a song theme comes from: the AI model reading the lyrics, or the cover's own palette.
+export type ThemeGenerationSource = 'ai' | 'cover';
 export type LastAppliedThemePointer = 'default' | 'ai' | 'custom';
 export type ThemePreferenceSwitchState = {
     isCustomThemePreferred: boolean;
@@ -11,6 +13,7 @@ export type ThemePreferenceSwitchState = {
 };
 
 const THEME_ANIMATION_INTENSITY_KEY = 'theme_animation_intensity';
+const THEME_GENERATION_SOURCE_KEY = 'theme_generation_source';
 const THEME_AUTO_SWITCH_KEY = 'theme_auto_switch_enabled';
 const THEME_AUTO_GENERATE_KEY = 'theme_auto_generate_enabled';
 const LAST_APPLIED_THEME_POINTER_KEY = 'last_applied_theme_pointer';
@@ -24,6 +27,27 @@ export const isThemeAnimationIntensity = (value: unknown): value is ThemeAnimati
 const isLastAppliedThemePointer = (value: unknown): value is LastAppliedThemePointer => (
     value === 'default' || value === 'ai' || value === 'custom'
 );
+
+export const isThemeGenerationSource = (value: unknown): value is ThemeGenerationSource => (
+    value === 'ai' || value === 'cover'
+);
+
+export const readStoredThemeGenerationSource = (): ThemeGenerationSource => {
+    if (!isBrowser()) {
+        return 'ai';
+    }
+
+    const storedValue = window.localStorage.getItem(THEME_GENERATION_SOURCE_KEY);
+    return isThemeGenerationSource(storedValue) ? storedValue : 'ai';
+};
+
+export const saveStoredThemeGenerationSource = (value: ThemeGenerationSource) => {
+    if (!isBrowser()) {
+        return;
+    }
+
+    window.localStorage.setItem(THEME_GENERATION_SOURCE_KEY, value);
+};
 
 export const readStoredAnimationIntensity = (): ThemeAnimationIntensity => {
     if (!isBrowser()) {

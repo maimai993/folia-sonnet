@@ -7,6 +7,7 @@ import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/useSettingsUiStore';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
+import type { ThemeGenerationSource } from '../../services/themePreferences';
 
 // src/components/command-palette/types.ts
 // Shared command palette contracts used by the registry, hook, and UI shell.
@@ -109,4 +110,6 @@ export type CommandPaletteContext = {
     setIsUserGuideModalOpen: (isOpen: boolean) => void;
     openThemeQuickEditor: () => void;
     canOpenThemeQuickEditor: boolean;
+    themeGenerationSource: ThemeGenerationSource;
+    setThemeGenerationSource: (source: ThemeGenerationSource) => void;
 };

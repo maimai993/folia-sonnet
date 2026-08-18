@@ -8,10 +8,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/services/themePreferences', () => ({
     readStoredThemeAutoSwitchEnabled: vi.fn(),
     readStoredThemeAutoGenerateEnabled: vi.fn(),
+    readStoredThemeGenerationSource: vi.fn(),
 }));
 
 import { buildVisualSettingsConfig } from '@/utils/visualSettingsConfig';
-import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled } from '@/services/themePreferences';
+import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled, readStoredThemeGenerationSource } from '@/services/themePreferences';
 import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
 import { extractCfgFromInput } from '@/utils/obsUrl';
 import { DEFAULT_SONNET_TUNING } from '@/types';
@@ -19,6 +20,7 @@ import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 
 const switchMock = vi.mocked(readStoredThemeAutoSwitchEnabled);
 const generateMock = vi.mocked(readStoredThemeAutoGenerateEnabled);
+const generationSourceMock = vi.mocked(readStoredThemeGenerationSource);
 
 // A copied OBS URL, shaped as buildObsSourceUrl emits it (cfg is the terminal segment).
 const asObsUrl = (cfg: string) =>
@@ -27,6 +29,7 @@ const asObsUrl = (cfg: string) =>
 describe('buildVisualSettingsConfig', () => {
     beforeEach(() => {
         switchMock.mockReset().mockReturnValue(true);
+        generationSourceMock.mockReset().mockReturnValue('ai');
         generateMock.mockReset().mockReturnValue(false);
         useSettingsUiStore.setState({ followSystemTheme: false, isDaylight: false });
     });
@@ -154,5 +157,15 @@ describe('buildVisualSettingsConfig', () => {
         expect(buildVisualSettingsConfig()).toMatchObject({ sonnetTuning });
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
         expect(restored.sonnetTuning).toEqual(sonnetTuning);
+    });
+
+    it('carries the theme generation source through compress and decompress', () => {
+        generationSourceMock.mockReturnValue('cover');
+
+        const config = buildVisualSettingsConfig();
+        expect(config.themeGenerationSource).toBe('cover');
+
+        const restored = decompressConfig(compressConfig(config));
+        expect(restored.themeGenerationSource).toBe('cover');
     });
 });

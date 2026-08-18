@@ -28,6 +28,9 @@ import { useShallow } from 'zustand/react/shallow';
 import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
 import { getWebAiProvider } from '../../services/runtimeConfig';
 import type { LyricApiStatus } from '../../types/lyricApi';
+import type { SongResult } from '../../types';
+import type { ThemeCacheSongKey } from '../../services/themeCache';
+import type { ThemeGenerationSource } from '../../services/themePreferences';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -48,9 +51,12 @@ interface SettingsModalProps {
     songThemeAutoSwitchEnabled: boolean;
     songThemeAutoGenerateEnabled: boolean;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
+    onSaveAiTheme: (dualTheme: DualTheme, song: SongResult | null, songKey: ThemeCacheSongKey | null) => void;
     onApplyCustomTheme: () => void;
     onToggleCustomThemePreferred: (enabled: boolean) => void;
     onToggleSongThemeAutoSwitch: (enabled: boolean) => void;
+    themeGenerationSource: ThemeGenerationSource;
+    onChangeThemeGenerationSource: (source: ThemeGenerationSource) => void;
     onToggleSongThemeAutoGenerate: (enabled: boolean) => void;
     onToggleNavidrome?: (enabled: boolean) => void;
     loadLyricFilterPreview: () => Promise<LyricData | null>;
@@ -104,9 +110,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     songThemeAutoSwitchEnabled,
     songThemeAutoGenerateEnabled,
     onSaveCustomTheme,
+    onSaveAiTheme,
     onApplyCustomTheme,
     onToggleCustomThemePreferred,
     onToggleSongThemeAutoSwitch,
+    themeGenerationSource,
+    onChangeThemeGenerationSource,
     onToggleSongThemeAutoGenerate,
     onToggleNavidrome,
     loadLyricFilterPreview,
@@ -1525,6 +1534,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 onToggleFollowSystemTheme={onSetFollowSystemTheme}
                                                 onToggleCustomThemePreferred={onToggleCustomThemePreferred}
                                                 onToggleSongThemeAutoSwitch={onToggleSongThemeAutoSwitch}
+                                                themeGenerationSource={themeGenerationSource}
+                                                onChangeThemeGenerationSource={onChangeThemeGenerationSource}
                                                 onToggleTransparentPlayerBackground={resolvedToggleTransparentPlayerBackground}
                                                 onToggleAutoHidePlayerChrome={onToggleAutoHidePlayerChrome}
                                                 onSaveCustomTheme={onSaveCustomTheme}
@@ -1920,8 +1931,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         lyricsFontScale={lyricsFontScale}
                         lyricsFontWeight={lyricsFontWeight}
                         lyricsCustomFontFamily={lyricsCustomFontFamily}
-                        onSaveTheme={(dualTheme) => {
+                        onSaveCustomTheme={(dualTheme) => {
                             onSaveCustomTheme(dualTheme);
+                            setShowThemePark(false);
+                        }}
+                        onSaveAiTheme={(dualTheme, song, songKey) => {
+                            onSaveAiTheme(dualTheme, song, songKey);
                             setShowThemePark(false);
                         }}
                         onClose={() => closeSubviewOrModal(() => setShowThemePark(false))}

@@ -99,4 +99,44 @@ describe('songThemeAutoGeneration', () => {
             enabled: false,
         })).toBe(false);
     });
+
+    it('still waits for a prompt source by default', () => {
+        expect(shouldRequestSongThemeAutoGeneration({
+            enabled: true,
+            currentSong: song,
+            lyrics: null,
+            isLyricsLoading: false,
+            hasAttempted: false,
+            hasCachedTheme: false,
+        })).toBe(false);
+    });
+
+    it('generates without lyrics when the source does not need a prompt', () => {
+        // Cover-derived themes read the artwork, so an instrumental with no lyrics still qualifies.
+        expect(shouldRequestSongThemeAutoGeneration({
+            enabled: true,
+            currentSong: song,
+            lyrics: null,
+            isLyricsLoading: false,
+            hasAttempted: false,
+            hasCachedTheme: false,
+            requiresPromptSource: false,
+        })).toBe(true);
+    });
+
+    it('still respects the other guards when no prompt source is required', () => {
+        const base = {
+            currentSong: song,
+            lyrics: null,
+            isLyricsLoading: false,
+            hasAttempted: false,
+            hasCachedTheme: false,
+            requiresPromptSource: false,
+        };
+
+        expect(shouldRequestSongThemeAutoGeneration({ ...base, enabled: false })).toBe(false);
+        expect(shouldRequestSongThemeAutoGeneration({ ...base, enabled: true, hasCachedTheme: true })).toBe(false);
+        expect(shouldRequestSongThemeAutoGeneration({ ...base, enabled: true, hasAttempted: true })).toBe(false);
+        expect(shouldRequestSongThemeAutoGeneration({ ...base, enabled: true, isLyricsLoading: true })).toBe(false);
+    });
 });

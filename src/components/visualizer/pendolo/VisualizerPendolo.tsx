@@ -1,9 +1,9 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
 import { Star, type LucideIcon } from 'lucide-react';
-import * as LucideIcons from 'lucide-react';
 import { DEFAULT_PENDOLO_TUNING } from '../../../types';
 import { colorWithAlpha } from '../colorMix';
+import { resolveLucideIcon } from '../../../utils/lucideIconResolver';
 import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import PendoloClockworkCanvas from './PendoloClockworkCanvas';
@@ -412,12 +412,10 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const primaryTextColor = theme.primaryColor || '#FFFFFF';
     const accentTextColor = theme.accentColor || '#3B82F6';
     const secondaryTextColor = theme.secondaryColor || '#9CA3AF';
-    const BalanceIcon = useMemo<LucideIcon>(() => {
-        const iconName = theme.lyricsIcons?.[0];
-        return (iconName
-            ? LucideIcons[iconName as keyof typeof LucideIcons]
-            : undefined) as LucideIcon | undefined ?? Star;
-    }, [theme.lyricsIcons]);
+    const BalanceIcon = useMemo<LucideIcon>(
+        () => resolveLucideIcon(theme.lyricsIcons?.[0]) ?? Star,
+        [theme.lyricsIcons],
+    );
     const balanceGearX = centerX + baseRadius * 0.2;
     const balanceGearY = centerY - baseRadius * 0.75;
 

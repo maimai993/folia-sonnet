@@ -21,6 +21,7 @@ import { buildCurrentObsUrl } from '../../../utils/currentObsUrl';
 import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
 import { resolveWebObsTarget, selectWebObsSource } from '../../../utils/webObsTarget';
 import { buildVisualSettingsConfig, resolveObsCopyHintKey } from '../../../utils/visualSettingsConfig';
+import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../services/themePreferences';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -40,6 +41,8 @@ type AppearanceSettingsSubviewProps = {
     onToggleFollowSystemTheme: (enabled: boolean) => void;
     onToggleCustomThemePreferred: (enabled: boolean) => void;
     onToggleSongThemeAutoSwitch: (enabled: boolean) => void;
+    themeGenerationSource: ThemeGenerationSource;
+    onChangeThemeGenerationSource: (source: ThemeGenerationSource) => void;
     onToggleTransparentPlayerBackground: (enabled: boolean) => void;
     onToggleAutoHidePlayerChrome: (enabled: boolean) => void;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
@@ -77,6 +80,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     onToggleFollowSystemTheme,
     onToggleCustomThemePreferred,
     onToggleSongThemeAutoSwitch,
+    themeGenerationSource,
+    onChangeThemeGenerationSource,
     onToggleTransparentPlayerBackground,
     onToggleAutoHidePlayerChrome,
     onSaveCustomTheme,
@@ -503,6 +508,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             if (has('songThemeAutoGenerateEnabled')) {
                 onToggleSongThemeAutoGenerate(Boolean(config.songThemeAutoGenerateEnabled));
             }
+            if (has('themeGenerationSource') && isThemeGenerationSource(config.themeGenerationSource)) {
+                onChangeThemeGenerationSource(config.themeGenerationSource);
+            }
             if (has('followSystemTheme')) {
                 store.handleToggleFollowSystemTheme(Boolean(config.followSystemTheme));
             }
@@ -569,6 +577,38 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{t('options.customTheme') || 'Custom'}</span>
                         </button>
                     </div>
+                    <div className={`p-3 rounded-xl border space-y-3 ${settingsCardClass}`}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.themeGenerationSource')}
+                            </div>
+                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                {t(themeGenerationSource === 'cover'
+                                    ? 'options.themeGenerationSourceCoverDesc'
+                                    : 'options.themeGenerationSourceAiDesc')}
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {(['ai', 'cover'] as ThemeGenerationSource[]).map(source => (
+                                <button
+                                    key={source}
+                                    type="button"
+                                    onClick={() => onChangeThemeGenerationSource(source)}
+                                    aria-pressed={themeGenerationSource === source}
+                                    className="px-3 py-2 rounded-lg border text-xs font-semibold transition-all"
+                                    style={{
+                                        ...getAccentOptionStyle(themeGenerationSource === source),
+                                        color: 'var(--text-primary)',
+                                        backgroundColor: themeGenerationSource === source
+                                            ? (isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`)
+                                            : (isDaylight ? 'rgba(24, 24, 27, 0.035)' : 'rgba(9, 9, 11, 0.5)'),
+                                    }}
+                                >
+                                    {t(source === 'cover' ? 'options.themeGenerationSourceCover' : 'options.themeGenerationSourceAi')}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                     <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
                         <div className="space-y-1">
                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -630,7 +670,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                     {t('options.autoGenerateSongTheme')}
                                 </div>
                                 <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.autoGenerateSongThemeDesc')}
+                                    {t(themeGenerationSource === 'cover'
+                                        ? 'options.autoGenerateSongThemeCoverDesc'
+                                        : 'options.autoGenerateSongThemeDesc')}
                                 </div>
                             </div>
                             <button

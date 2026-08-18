@@ -33,6 +33,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     canGenerateAITheme: true,
     isGeneratingTheme: false,
     generateAITheme: vi.fn(),
+    themeGenerationSource: 'ai',
+    setThemeGenerationSource: vi.fn(),
     setVisualizerMode: vi.fn(),
     randomVisualizerModePerSong: false,
     toggleRandomVisualizerModePerSong: vi.fn(),
@@ -601,5 +603,33 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('visualizer-toggle-random-per-song');
         match.command.execute('', context);
         expect(context.toggleRandomVisualizerModePerSong).toHaveBeenCalled();
+    });
+});
+
+describe('theme generation source commands', () => {
+    it('offers only the source that is not already active', () => {
+        const aiContext = createContext({ themeGenerationSource: 'ai' });
+        const aiIds = getCommandPaletteMatches('theme source', aiContext).map(match => match.command.id);
+        expect(aiIds).toContain('theme-source-cover');
+        expect(aiIds).not.toContain('theme-source-ai');
+
+        const coverContext = createContext({ themeGenerationSource: 'cover' });
+        const coverIds = getCommandPaletteMatches('theme source', coverContext).map(match => match.command.id);
+        expect(coverIds).toContain('theme-source-ai');
+        expect(coverIds).not.toContain('theme-source-cover');
+    });
+
+    it('switches the source when executed', () => {
+        const context = createContext({ themeGenerationSource: 'ai' });
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === 'theme-source-cover');
+
+        expect(command?.execute('', context)).toBe(true);
+        expect(context.setThemeGenerationSource).toHaveBeenCalledWith('cover');
+    });
+
+    it('is findable by its Chinese name', () => {
+        const ids = getCommandPaletteMatches('封面取色', createContext({ themeGenerationSource: 'ai' }))
+            .map(match => match.command.id);
+        expect(ids).toContain('theme-source-cover');
     });
 });
