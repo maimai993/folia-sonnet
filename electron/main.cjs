@@ -130,12 +130,62 @@ const mainLocale = {
   },
 };
 
+// Maps an arbitrary BCP 47 tag onto one of the three locales the main process ships.
+// Returns null for unsupported tags so callers can keep walking the preference list.
+function normalizeMainLocaleKey(value) {
+  if (typeof value !== 'string' || !value) {
+    return null;
+  }
+
+  const lowered = value.toLowerCase();
+  if (lowered === 'in' || lowered.startsWith('id')) {
+    return 'in';
+  }
+  if (lowered.startsWith('zh')) {
+    return 'zh-CN';
+  }
+  if (lowered.startsWith('en')) {
+    return 'en';
+  }
+  return null;
+}
+
+// Used before the renderer has ever pushed APP_LOCALE, so a fresh install shows
+// tray and dialog text in the system language instead of hard-defaulting to English.
+// Both Electron locale APIs require `ready`, which every caller here is past.
+function detectSystemLocaleKey() {
+  const candidates = [];
+
+  if (typeof app.getPreferredSystemLanguages === 'function') {
+    try {
+      candidates.push(...app.getPreferredSystemLanguages());
+    } catch (error) {
+      console.warn('[Electron] Failed to read preferred system languages', error);
+    }
+  }
+
+  try {
+    candidates.push(app.getLocale());
+  } catch (error) {
+    console.warn('[Electron] Failed to read app locale', error);
+  }
+
+  for (const candidate of candidates) {
+    const normalized = normalizeMainLocaleKey(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return 'en';
+}
+
 function getMainLocale() {
   const stored = store.get(APP_LOCALE_KEY);
   if (stored === 'zh-CN' || stored === 'en' || stored === 'in') {
     return mainLocale[stored];
   }
-  return mainLocale.en;
+  return mainLocale[detectSystemLocaleKey()];
 }
 
 
