@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import VisualizerRenderer from '../visualizer/VisualizerRenderer';
 import { buildVisualizerTheme } from '../app/presentation/buildVisualizerTheme';
-import type { Line, MonetPortraitImage, Theme } from '../../types';
+import type { DualTheme, Line, MonetPortraitImage, Theme } from '../../types';
 import type { VisualizerBackgroundConfig } from '../visualizer/backgrounds/definition';
 import { findLatestActiveLineIndex } from '../../utils/appPlaybackHelpers';
 import { buildBuiltinDualTheme } from '../../hooks/themeControllerState';
@@ -22,12 +22,6 @@ import type { ObsAiConfig } from '../../services/gemini';
 
 const EMPTY_SPECTRUM = new Uint8Array(0);
 
-// Cover colors -> Folia builtin dual theme (the fallback when cfg carries no theme; same
-// as the main app without an AI key); pick the side by daylight.
-const pickBuiltinTheme = (coverColors: string[], isDaylight: boolean): Theme => {
-    const dual = buildBuiltinDualTheme({ coverColors });
-    return isDaylight ? dual.light : dual.dark;
-};
 
 interface ObsWebSourceAppProps {
     source: WebLyricSource;
@@ -42,7 +36,9 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
     const { isDaylight, transparent } = appearance;
 
     const [currentLineIndex, setCurrentLineIndex] = useState(-1);
-    const [theme, setTheme] = useState<Theme>(() => appearance.theme ?? pickBuiltinTheme([], isDaylight));
+    // The builtin fallback is generated as a light/dark pair and kept whole: it is randomized per
+    // cover, so re-deriving it on a daylight toggle would hand back an unrelated theme.
+    const [builtinDualTheme, setBuiltinDualTheme] = useState<DualTheme>(() => buildBuiltinDualTheme());
     const [obsScale, setObsScale] = useState(1);
     const [obsDimensions, setObsDimensions] = useState({ width: '100vw', height: '100vh' });
     // Uploaded assets OBS injected through the Custom CSS field; the cfg URL cannot carry an image blob.
@@ -146,24 +142,21 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
     // Priority: per-song AI theme (Dynamic AI) > cfg theme (static burn-in) > cover-derived builtin.
     const aiTheme = aiDualTheme ? (isDaylight ? aiDualTheme.light : aiDualTheme.dark) : null;
     useEffect(() => {
-        if (aiTheme) {
-            setTheme(aiTheme);
-            return;
-        }
-        if (cfgTheme) {
-            setTheme(cfgTheme);
+        if (aiTheme || cfgTheme) {
             return;
         }
         let cancelled = false;
         if (!coverUrl) {
-            setTheme(pickBuiltinTheme([], isDaylight));
+            setBuiltinDualTheme(buildBuiltinDualTheme());
             return () => { cancelled = true; };
         }
         void extractColors(coverUrl, 5)
-            .then((colors) => { if (!cancelled) setTheme(pickBuiltinTheme(colors, isDaylight)); })
-            .catch(() => { if (!cancelled) setTheme(pickBuiltinTheme([], isDaylight)); });
+            .then((colors) => { if (!cancelled) setBuiltinDualTheme(buildBuiltinDualTheme({ coverColors: colors })); })
+            .catch(() => { if (!cancelled) setBuiltinDualTheme(buildBuiltinDualTheme()); });
         return () => { cancelled = true; };
-    }, [coverUrl, isDaylight, cfgTheme, aiTheme]);
+    }, [coverUrl, cfgTheme, aiTheme]);
+
+    const theme: Theme = aiTheme ?? cfgTheme ?? (isDaylight ? builtinDualTheme.light : builtinDualTheme.dark);
 
     // Clock + current line index: extrapolated by source.getCurrentTimeSec.
     useEffect(() => {
