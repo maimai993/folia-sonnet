@@ -1,5 +1,7 @@
 import type { TemperaDecorSpec, TemperaShotKind } from './types';
 import type { TemperaPalette } from './temperaPalette';
+import { clamp01, easeTemperaEnter, easeTemperaInOut, resolveShotPacedDuration } from './temperaMotion';
+import { temperaHash01 } from './temperaRandom';
 import {
     drawTemperaComposition,
     type TemperaBlockOptions,
@@ -8,13 +10,15 @@ import {
 
 // src/components/visualizer/tempera/temperaBlocks.ts
 // Screentone MG layer per shot: owns enter/exit motion state and delegates all geometry to
-// temperaCompositions. Playback writes transforms only, so a seek repaints the same frame.
+// temperaCompositions. Timings are fractions of the shot's own duration, so the graphics
+// advance with the lyric rather than finishing in a fixed fraction of a second. Nothing here
+// reacts to audio; a seek repaints exactly the same frame.
 type PixiModule = typeof import('pixi.js');
 type Graphics = import('pixi.js').Graphics;
 
 export interface TemperaBlocksView {
     container: import('pixi.js').Container;
-    updateTime: (time: number, shotStart: number, shotEnd: number, audioPower: number) => void;
+    updateTime: (time: number, shotStart: number, shotEnd: number) => void;
 }
 
 export interface TemperaBlocksOptions {
@@ -25,6 +29,8 @@ export interface TemperaBlocksOptions {
     height: number;
     seed: number;
     showDecor: boolean;
+    /** Direction the whole composition travels in; shared with the camera and transitions. */
+    flowAngle: number;
 }
 
 interface BlockItem {
@@ -34,14 +40,13 @@ interface BlockItem {
     baseAlpha: number;
     enterDX: number;
     enterDY: number;
-    delay: number;
-    span: number;
-    pulse: boolean;
+    /** Fractions of the shot duration, resolved to seconds at update time. */
+    delayFraction: number;
+    spanFraction: number;
+    drift: boolean;
+    driftPhase: number;
     grow: boolean;
 }
-
-const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
-const easeOutCubic = (value: number) => 1 - Math.pow(1 - clamp01(value), 3);
 
 export const buildTemperaBlocks = (
     pixi: PixiModule,
@@ -49,6 +54,11 @@ export const buildTemperaBlocks = (
 ): TemperaBlocksView => {
     const container = new pixi.Container();
     const items: BlockItem[] = [];
+    const flowX = Math.cos(options.flowAngle);
+    const flowY = Math.sin(options.flowAngle);
+    // Per-item stagger distance only. The bulk of the hand-off travel belongs to the shot
+    // container, which moves the type along with the graphics.
+    const carry = Math.max(options.width, options.height) * 0.09;
 
     const add = (node: Graphics, blockOptions: TemperaBlockOptions = {}, parent?: import('pixi.js').Container) => {
         items.push({
@@ -58,9 +68,10 @@ export const buildTemperaBlocks = (
             baseAlpha: blockOptions.alpha ?? 1,
             enterDX: blockOptions.enterDX ?? 0,
             enterDY: blockOptions.enterDY ?? 0,
-            delay: blockOptions.delay ?? 0,
-            span: blockOptions.span ?? 0.45,
-            pulse: blockOptions.pulse ?? false,
+            delayFraction: blockOptions.delay ?? 0,
+            spanFraction: blockOptions.span ?? 0.45,
+            drift: blockOptions.drift ?? false,
+            driftPhase: temperaHash01(options.seed, items.length, 173) * Math.PI * 2,
             grow: blockOptions.grow ?? false,
         });
         (parent ?? container).addChild(node);
@@ -84,27 +95,42 @@ export const buildTemperaBlocks = (
         height: options.height,
         seed: options.seed,
         showDecor: options.showDecor,
+        bleed: carry + Math.max(options.width, options.height) * 0.08,
         add,
         createGroup,
     };
     drawTemperaComposition(context);
 
-    // Drives enter/exit block motion from absolute time so seeks render the same frame.
-    const updateTime = (time: number, shotStart: number, shotEnd: number, audioPower: number) => {
-        const exitT = clamp01((shotEnd - time) / 0.28);
+    // Drives block motion from absolute time so seeks render the same frame. There is no exit
+    // ramp here: the shot container owns the hand-off slide, so the outgoing composition
+    // leaves as one piece with its own type still attached to it.
+    const updateTime = (time: number, shotStart: number, shotEnd: number) => {
+        const duration = Math.max(shotEnd - shotStart, 0.2);
+        const progress = clamp01((time - shotStart) / duration);
+        // A steady creep along the flow vector for the whole shot; the camera rides the same
+        // axis, so the frame is always already moving when the next composition arrives.
+        const creep = easeTemperaInOut(progress) * carry * 0.35;
+        const budget = Math.max(0.5, duration);
+
         for (const item of items) {
-            const enter = easeOutCubic((time - shotStart - item.delay) / item.span);
-            const visibility = Math.min(enter, exitT);
-            item.node.alpha = item.baseAlpha * visibility;
-            item.node.visible = visibility > 0.001;
+            const rawDelay = resolveShotPacedDuration(duration, item.delayFraction, 0, 1.4);
+            const rawSpan = resolveShotPacedDuration(duration, item.spanFraction, 0.7, 2.6);
+            // Short shots compress the whole stagger instead of dropping the late items.
+            const compress = Math.min(1, budget / (rawDelay + rawSpan));
+            const enter = easeTemperaEnter((time - shotStart - rawDelay * compress) / (rawSpan * compress));
+            item.node.alpha = item.baseAlpha * enter;
+            item.node.visible = enter > 0.001;
+            const behind = (1 - enter) * carry - creep;
             item.node.position.set(
-                item.baseX + item.enterDX * (1 - enter),
-                item.baseY + item.enterDY * (1 - enter),
+                item.baseX + item.enterDX * (1 - enter) - flowX * behind,
+                item.baseY + item.enterDY * (1 - enter) - flowY * behind,
             );
-            if (item.pulse || item.grow) {
-                const beat = item.pulse ? 1 + audioPower * 0.08 : 1;
-                // Hatch fills open horizontally from their pivot instead of fading flat.
-                item.node.scale.set(item.grow ? Math.max(0.0001, enter) * beat : beat, beat);
+            if (item.drift || item.grow) {
+                // A slow float replaces the old audio pulse: deterministic, seek-safe, and it
+                // keeps decor from looking frozen once the shot has settled.
+                const float = item.drift ? 1 + Math.sin(time * 0.5 + item.driftPhase) * 0.02 : 1;
+                item.node.scale.set(item.grow ? Math.max(0.0001, enter) * float : float, float);
+                if (item.drift) item.node.rotation = Math.sin(time * 0.33 + item.driftPhase) * 0.012;
             }
         }
     };

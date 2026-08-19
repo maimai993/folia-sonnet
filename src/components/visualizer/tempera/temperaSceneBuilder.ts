@@ -9,7 +9,6 @@ import { buildTemperaFragmentViews, buildTemperaTextViews, type TemperaGlyphView
 import { createTemperaDifferenceFilter } from './temperaDifferenceFilter';
 import { buildDotGrid } from './temperaHatch';
 import { drawSquareMarks } from './temperaShapes';
-import { createSonnetGlitchEffect, type SonnetGlitchEffect } from '../sonnet/sonnetGlitchFilter';
 import { createSonnetLensFilter } from '../sonnet/sonnetLensFilter';
 import { createSonnetPrintFilters } from '../sonnet/sonnetPrintFilters';
 
@@ -28,7 +27,6 @@ export interface TemperaShotView {
     blocks: TemperaBlocksView;
     baseX: number;
     baseY: number;
-    haloLayer: import('pixi.js').Container;
     /** Carries the difference inversion filter; the runtime clears it on destroy. */
     textLayer: import('pixi.js').Container;
     revealDoneTime: number;
@@ -38,11 +36,9 @@ export interface TemperaSceneView {
     paragraph: TemperaParagraph;
     container: import('pixi.js').Container;
     shots: TemperaShotView[];
-    shotTimeline: TemperaShot[];
     palette: TemperaPalette;
     postProcessFilters: import('pixi.js').Filter[];
     transitionBlurFilter: import('pixi.js').BlurFilter | null;
-    transitionGlitchEffect: SonnetGlitchEffect | null;
     activeShotIndex: number;
 }
 
@@ -127,19 +123,6 @@ export const buildTemperaCreditsPoster = (
     return container;
 };
 
-const createTemperaHaloLayer = (pixi: PixiModule, glowStrength: number, glowAlpha: number) => {
-    const layer = new pixi.Container();
-    const filters: import('pixi.js').Filter[] = [];
-    if (glowStrength > 0) {
-        const blur = new pixi.BlurFilter({ strength: glowStrength, quality: 2, kernelSize: 5, resolution: 0.75 });
-        layer.filters = [blur];
-        layer.alpha = glowAlpha;
-        layer.blendMode = 'screen';
-        filters.push(blur);
-    }
-    return { layer, filters };
-};
-
 // Assembles the scene post-process chain from tuning; GLSL factories are shared with sonnet.
 const applyTemperaScenePostProcess = (
     pixi: PixiModule,
@@ -208,28 +191,30 @@ export const buildTemperaScene = (
     }
 
     const postProcessFilters: import('pixi.js').Filter[] = [];
-    const glowStrength = options.staticMode ? 0 : 2.4;
-    const glowAlpha = 0.3;
-    // Dynamic text inversion rides the existing post-process switch; when it is off the
-    // glyphs simply stay ink-colored, which stays readable on every composition.
-    const inversionEnabled = tuning.postProcessEnabled && !options.staticMode;
+    // Tempera deliberately has no glow layer: a screen-blend halo washes the glyph toward
+    // white and, wherever it lands, becomes backdrop the inversion filter has to read.
+    //
+    // The inversion is NOT a post-process pass: it is how this mode colors type. Hanging it
+    // off `postProcessEnabled` left it dead for everyone, because that setting defaults to
+    // false. It now always runs; the flat ink fallback only applies if the renderer itself
+    // skips the filter.
 
     const shots = paragraph.shots.map((shot, shotIndex) => {
         const shotContainer = new Container();
-        const compiledLines = shot.lineIndices
-            .map(lineIndex => paragraph.lines.find(item => item.sourceIndex === lineIndex))
-            .filter(Boolean) as TemperaParagraph['lines'];
-        const linesSegments = compiledLines
-            .map(line => line.segments.filter(isTemperaLayoutSegment))
+        // A shot shows one half-phrase slice, so the type can be set much larger than it
+        // could when a whole line had to fit.
+        const linesSegments = shot.slices
+            .map(slice => paragraph.lines.find(item => item.sourceIndex === slice.lineIndex)
+                ?.segments.slice(slice.segmentStart, slice.segmentEnd)
+                .filter(isTemperaLayoutSegment) ?? [])
             .filter(segments => segments.length > 0);
 
-        // Tempera sizes type from the longest line so every composition fills its region.
-        const maxGraphemes = Math.max(4, ...linesSegments.map(
+        const maxGraphemes = Math.max(3, ...linesSegments.map(
             segments => segments.reduce((sum, segment) => sum + segment.graphemes.length, 0),
         ));
-        const baseFontSize = Math.max(26, Math.min(96, (
-            width / Math.max(8, maxGraphemes * 1.12)
-        ) * 1.4)) * options.lyricsFontScale;
+        const baseFontSize = Math.max(34, Math.min(150, (
+            width / Math.max(5, maxGraphemes * 1.05)
+        ) * 1.5)) * options.lyricsFontScale;
 
         const shotSeed = sceneSeed + shotIndex * 97;
         const blocks = buildTemperaBlocks(pixi, {
@@ -240,17 +225,15 @@ export const buildTemperaScene = (
             height,
             seed: shotSeed,
             showDecor: tuning.showDecor,
+            flowAngle: shot.flowAngle,
         });
         blocks.container.visible = tuning.showBlocks;
 
-        const { layer: haloLayer, filters: haloFilters } = createTemperaHaloLayer(pixi, glowStrength, glowAlpha);
         const underLayer = new Container();
         const textLayer = new Container();
-        haloLayer.visible = glowStrength > 0;
         // Order matters: everything the inversion filter should read must render before the
-        // text layer, and the halo glow must stay outside it.
-        shotContainer.addChild(blocks.container, underLayer, textLayer, haloLayer);
-        postProcessFilters.push(...haloFilters);
+        // text layer.
+        shotContainer.addChild(blocks.container, underLayer, textLayer);
 
         const placements = resolveTemperaLayout({
             lines: linesSegments,
@@ -260,16 +243,14 @@ export const buildTemperaScene = (
             baseFontSize,
             fontFamily,
             fontWeight,
+            seed: shotSeed,
         });
         const glyphs = buildTemperaTextViews(pixi, {
             placements,
             palette,
             fontFamily,
             fontWeight,
-            glowEnabled: glowStrength > 0,
-            highlightEnabled: true,
             shadowEnabled: tuning.showDecor,
-            haloLayer,
             textLayer,
             underLayer,
         });
@@ -285,17 +266,16 @@ export const buildTemperaScene = (
                 layer: textLayer,
             });
         }
-        if (inversionEnabled) {
-            // Scoped to the text layer only: blendRequired copies the pixels under these
-            // bounds every frame, so a full-scene filter here would be a viewport-sized blit.
-            textLayer.filters = [createTemperaDifferenceFilter(pixi, {
-                ink: palette.ink,
-                paper: palette.paper,
-            })];
-            postProcessFilters.push(...textLayer.filters);
-        }
+        // Scoped to the text layer only: blendRequired copies the pixels under these bounds
+        // every frame, so a full-scene filter here would be a viewport-sized blit.
+        const differenceFilter = createTemperaDifferenceFilter(pixi, {
+            ink: palette.ink,
+            paper: palette.paper,
+        });
+        textLayer.filters = [differenceFilter];
+        postProcessFilters.push(differenceFilter);
         const revealDoneTime = glyphs.length > 0
-            ? Math.max(...glyphs.map(glyph => glyph.startTime))
+            ? Math.max(...glyphs.map(glyph => glyph.motion.settleTime))
             : shot.endTime;
 
         shotContainer.pivot.set(width / 2, height / 2);
@@ -308,7 +288,6 @@ export const buildTemperaScene = (
             blocks,
             baseX: shotContainer.x,
             baseY: shotContainer.y,
-            haloLayer,
             textLayer,
             revealDoneTime,
         };
@@ -333,24 +312,14 @@ export const buildTemperaScene = (
         container.filters = [...(container.filters ?? []), transitionBlurFilter];
         postProcessFilters.push(transitionBlurFilter);
     }
-    const transitionGlitchEffect = tuning.enableTransitions && !options.staticMode
-        ? createSonnetGlitchEffect(pixi)
-        : null;
-    if (transitionGlitchEffect) {
-        container.filters = [...(container.filters ?? []), transitionGlitchEffect.filter];
-        postProcessFilters.push(transitionGlitchEffect.filter);
-    }
-
     container.visible = false;
     return {
         paragraph,
         container,
         shots,
-        shotTimeline: shots.map(shot => shot.shot),
         palette,
         postProcessFilters,
         transitionBlurFilter,
-        transitionGlitchEffect,
         activeShotIndex: -1,
     };
 };

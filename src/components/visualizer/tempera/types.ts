@@ -11,11 +11,14 @@ export type TemperaShotKind =
     | 'frame-window'
     | 'poster-panel'
     | 'quiet-line';
+/**
+ * Every transition is led by the large graphics or the camera; nothing dissolves or cuts
+ * hard, because a dissolve reads as an edit and Tempera's compositions should hand off.
+ */
 export const TEMPERA_TRANSITION_KINDS = [
-    'fast-blur',
-    'mono-glitch',
     'block-wipe',
     'camera-pan',
+    'shape-carry',
 ] as const;
 export type TemperaTransitionKind = typeof TEMPERA_TRANSITION_KINDS[number];
 
@@ -74,16 +77,35 @@ export interface TemperaDecorSpec {
     fragments: TemperaDecorFragment[];
 }
 
+/**
+ * A shot shows part of one lyric line: a half-phrase, sliced on word boundaries. Keeping the
+ * unit smaller than a line is what lets a single line run across several shots and read as
+ * one continuous camera move instead of one static card per line.
+ */
+export interface TemperaShotSlice {
+    /** `sourceIndex` of the compiled line this slice belongs to. */
+    lineIndex: number;
+    /** Half-open range into that line's `segments`. */
+    segmentStart: number;
+    segmentEnd: number;
+}
+
 export interface TemperaShot {
     id: string;
     kind: TemperaShotKind;
     startTime: number;
     endTime: number;
-    lineIndices: number[];
+    slices: TemperaShotSlice[];
     /** Camera keyframe at shot start (fractional viewport offsets). */
     camera: TemperaCameraKey;
     /** Camera keyframe at shot end; the runtime interpolates between the two. */
     cameraEnd: TemperaCameraKey;
+    /**
+     * Direction (radians) this shot's graphics travel in. Consecutive shots only turn it by
+     * a small amount, so blocks keep sweeping the same way across a cut and the boundary
+     * reads as one continuous move rather than as an edit.
+     */
+    flowAngle: number;
     /** Deterministic screentone decor description for the MG layer. */
     decor: TemperaDecorSpec;
 }

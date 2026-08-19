@@ -36,7 +36,8 @@ export interface TemperaBlockOptions {
     enterDY?: number;
     delay?: number;
     span?: number;
-    pulse?: boolean;
+    /** Slow deterministic float once the item has landed; replaces the old audio pulse. */
+    drift?: boolean;
     /** Opens the node horizontally from its pivot, used for hatch density reveals. */
     grow?: boolean;
 }
@@ -50,6 +51,12 @@ export interface TemperaCompositionContext {
     height: number;
     seed: number;
     showDecor: boolean;
+    /**
+     * Extra margin every full-bleed shape must extend past the viewport. Compositions travel
+     * along the flow vector for the whole shot, so a shape drawn exactly to the frame edge
+     * would expose the background as it slides.
+     */
+    bleed: number;
     add: (node: Graphics, options?: TemperaBlockOptions, parent?: Container) => void;
     createGroup: (rotation: number, x: number, y: number) => Container;
 }
@@ -66,14 +73,14 @@ const addCrossingLines = (ctx: TemperaCompositionContext) => {
 };
 
 const addDuoSplit = (ctx: TemperaCompositionContext) => {
-    const { width, height, palette } = ctx;
+    const { width, height, palette, bleed } = ctx;
     const horizontal = temperaHash01(ctx.seed, 1, 3) > 0.5;
     const regionA = horizontal
-        ? rectPolygon(0, 0, width, height * 0.52)
-        : rectPolygon(0, 0, width * 0.5, height);
+        ? rectPolygon(-bleed, -bleed, width + bleed * 2, height * 0.52 + bleed)
+        : rectPolygon(-bleed, -bleed, width * 0.5 + bleed, height + bleed * 2);
     const regionB = horizontal
-        ? rectPolygon(0, height * 0.52, width, height * 0.48)
-        : rectPolygon(width * 0.5, 0, width * 0.5, height);
+        ? rectPolygon(-bleed, height * 0.52, width + bleed * 2, height * 0.48 + bleed)
+        : rectPolygon(width * 0.5, -bleed, width * 0.5 + bleed, height + bleed * 2);
     const hatch = buildHatchSpec(ctx.seed, 5);
 
     ctx.add(drawPolygonFill(ctx.pixi, regionA, palette.tone1, 0.95), {
@@ -91,34 +98,34 @@ const addDuoSplit = (ctx: TemperaCompositionContext) => {
         { delay: 0.12, grow: true, span: 0.5 });
 
     const splitBar = horizontal
-        ? rectPolygon(0, height * 0.52 - 1.5, width, 3)
-        : rectPolygon(width * 0.5 - 1.5, 0, 3, height);
+        ? rectPolygon(-bleed, height * 0.52 - 1.5, width + bleed * 2, 3)
+        : rectPolygon(width * 0.5 - 1.5, -bleed, 3, height + bleed * 2);
     ctx.add(drawPolygonFill(ctx.pixi, splitBar, palette.ink, 0.85), { delay: 0.16, span: 0.5 });
 
     if (!ctx.showDecor) return;
     const markX = horizontal ? width * 0.18 : width * 0.5;
     const markY = horizontal ? height * 0.52 : height * 0.2;
     ctx.add(drawConcentricDiamonds(ctx.pixi, markX, markY, 22, 22, 2, palette.ink, 0.9),
-        { delay: 0.24, pulse: true });
+        { delay: 0.24, drift: true });
 };
 
 const addBandStrip = (ctx: TemperaCompositionContext) => {
-    const { width, height, palette } = ctx;
+    const { width, height, palette, bleed } = ctx;
     const bandY = height * 0.37;
     const bandHeight = height * 0.3;
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(0, bandY, width, bandHeight), palette.tone3, 0.96),
-        { span: 0.55, enterDX: -width * 0.6 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, bandY, width + bleed * 2, bandHeight), palette.tone3, 0.96),
+        { span: 0.55, enterDX: -width * 0.5 });
     // Guide lines hug the band edges; the lyric inverts against the mid tone between them.
     ctx.add(drawLines(ctx.pixi, [
-        { x1: -width * 0.05, y1: bandY - 10, x2: width * 1.05, y2: bandY - 22 },
-        { x1: -width * 0.05, y1: bandY + bandHeight + 22, x2: width * 1.05, y2: bandY + bandHeight + 10 },
-    ], palette.tone4, 1.4, 0.75), { delay: 0.12, enterDX: width * 0.3 });
+        { x1: -bleed, y1: bandY - 10, x2: width + bleed, y2: bandY - 22 },
+        { x1: -bleed, y1: bandY + bandHeight + 22, x2: width + bleed, y2: bandY + bandHeight + 10 },
+    ], palette.tone4, 1.4, 0.75), { delay: 0.12, enterDX: width * 0.25 });
 
     if (!ctx.showDecor) return;
     const crosses = buildCrossRow(ctx.seed, 17, width * 0.06, bandY - height * 0.16, 4, width * 0.055, 9);
     ctx.add(drawCrossMarks(ctx.pixi, crosses, palette.ink, 2, 0.8), { delay: 0.2, span: 0.5 });
     const dots = buildDotRow(ctx.seed, 19, width * 0.94, bandY + bandHeight + height * 0.06, 3, height * 0.05, 6);
-    ctx.add(drawSquareMarks(ctx.pixi, dots, palette.ink, 0.75), { delay: 0.26, pulse: true });
+    ctx.add(drawSquareMarks(ctx.pixi, dots, palette.ink, 0.75), { delay: 0.26, drift: true });
 };
 
 const addFrameWindow = (ctx: TemperaCompositionContext) => {
@@ -193,7 +200,7 @@ const addMotif = (ctx: TemperaCompositionContext) => {
     switch (decor.motif) {
         case 'diamonds':
             ctx.add(drawConcentricDiamonds(ctx.pixi, cornerX, cornerY, 34, 34, 3, palette.tone4, 0.8),
-                { delay: 0.34, pulse: true });
+                { delay: 0.34, drift: true });
             return;
         case 'hatch-twin': {
             const spec = { ...buildHatchSpec(ctx.seed, 67), angle: decor.hatchAngle };

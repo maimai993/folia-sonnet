@@ -303,11 +303,13 @@ export const buildCrossingLines = (
         const anchorY = height * (0.18 + temperaHash01(seed, index, salt) * 0.64);
         const sign = temperaHash01(seed, index, salt + 5) > 0.5 ? 1 : -1;
         const angle = sign * (0.07 + temperaHash01(seed, index, salt + 9) * 0.11);
-        const reach = width * 0.7;
+        // Reach well past both edges: the layer slides with the composition, and a line that
+        // stopped at the frame would visibly detach from it.
+        const reach = width * 0.9;
         lines.push({
-            x1: -width * 0.1,
+            x1: -width * 0.3,
             y1: anchorY - Math.tan(angle) * reach,
-            x2: width * 1.1,
+            x2: width * 1.3,
             y2: anchorY + Math.tan(angle) * reach,
         });
     }

@@ -1,13 +1,11 @@
-import {
-    TEMPERA_TRANSITION_KINDS,
-    type TemperaParagraph,
-    type TemperaShot,
-    type TemperaTransitionKind,
-} from './types';
+import type { TemperaParagraph, TemperaTransitionKind } from './types';
+import { easeTemperaInOut, clamp01 } from './temperaMotion';
 
 // src/components/visualizer/tempera/temperaTransitions.ts
-// Seek-stable transition frames; block-wipe and camera-pan let the large color fields
-// guide the cut instead of dissolving typography.
+// Seek-stable transition frames for *paragraph* boundaries. Shot boundaries need none: the
+// compositions hand off to each other directly in the runtime. Every kind here is led by the
+// large graphics or by the camera and runs along the shot's flow angle, so the outgoing and
+// incoming paragraphs travel the same way and the boundary reads as one continuous move.
 export interface TemperaTransitionFrame {
     x: number;
     y: number;
@@ -15,12 +13,10 @@ export interface TemperaTransitionFrame {
     rotation: number;
     alpha: number;
     blur: number;
-    glitch: number;
-    glitchSeed: number;
-    /** 0..1 sweep coverage of the wipe block drawn by the runtime overlay. */
+    /** 0..2 sweep travel of the wipe block drawn by the runtime overlay; 1 is full cover. */
     wipe: number;
-    /** -1 | 0 | 1 pan direction for camera-pan; 0 when unused. */
-    panDirection: number;
+    /** Direction the wipe block sweeps in, in radians; matches the shot flow. */
+    wipeAngle: number;
 }
 
 export const IDLE_TEMPERA_TRANSITION_FRAME: TemperaTransitionFrame = {
@@ -30,71 +26,68 @@ export const IDLE_TEMPERA_TRANSITION_FRAME: TemperaTransitionFrame = {
     rotation: 0,
     alpha: 1,
     blur: 0,
-    glitch: 0,
-    glitchSeed: 0,
     wipe: 0,
-    panDirection: 0,
+    wipeAngle: 0,
 };
 
-const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
-const easeInOut = (value: number) => {
-    const t = clamp01(value);
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-};
-
-const resolveBoundaryKind = (seed: number, boundaryIndex: number): TemperaTransitionKind => {
-    const mixed = (seed ^ Math.imul(boundaryIndex + 1, 0x9e3779b1)) >>> 0;
-    return TEMPERA_TRANSITION_KINDS[mixed % TEMPERA_TRANSITION_KINDS.length];
-};
-
+/**
+ * Resolves one side of a boundary. `exit` moves the outgoing composition further along the
+ * flow; `enter` starts the incoming one upstream and lets it arrive on the same vector, so
+ * across the swap the on-screen motion never changes direction.
+ */
 export const resolveTemperaTransitionEffectFrame = (
     kind: TemperaTransitionKind,
     phase: 'enter' | 'exit',
     progress: number,
-    seed: number,
+    flowAngle: number,
 ): TemperaTransitionFrame => {
     const linear = clamp01(progress);
-    const eased = easeInOut(linear);
-    const amount = phase === 'exit' ? eased : 1 - eased;
-
-    if (kind === 'fast-blur') {
-        return {
-            ...IDLE_TEMPERA_TRANSITION_FRAME,
-            alpha: phase === 'exit' ? 1 - amount : 1 - amount * 0.82,
-            blur: amount * 14,
-        };
-    }
-
-    if (kind === 'mono-glitch') {
-        const step = Math.floor(linear * 14);
-        return {
-            ...IDLE_TEMPERA_TRANSITION_FRAME,
-            alpha: phase === 'exit' && linear > 0.86
-                ? 1 - (linear - 0.86) / 0.14
-                : 1,
-            glitch: amount,
-            glitchSeed: seed * 0.0001 + step * 0.173,
-        };
-    }
+    const eased = easeTemperaInOut(linear);
+    const flowX = Math.cos(flowAngle);
+    const flowY = Math.sin(flowAngle);
 
     if (kind === 'block-wipe') {
-        // The scene stays opaque; a full-height block sweeps across and the cut happens
-        // underneath full coverage. Enter replays the sweep in reverse.
+        // The scene stays fully opaque and in place; a screen-sized block slides across on the
+        // flow vector and the swap happens under full coverage. The sweep is one continuous
+        // 0..2 travel: 0..1 brings the block in, 1..2 carries it off the far side, so the
+        // block never reverses direction halfway through the boundary.
         return {
             ...IDLE_TEMPERA_TRANSITION_FRAME,
-            wipe: phase === 'exit' ? eased : 1 - eased,
+            wipe: phase === 'exit' ? eased : 1 + eased,
+            wipeAngle: flowAngle,
         };
     }
 
-    // camera-pan: the frame tilts vertically as if the next composition is pulled into view.
-    const direction = seed % 2 === 0 ? 1 : -1;
-    const travel = 0.42 * direction;
+    if (kind === 'camera-pan') {
+        const travel = 0.5;
+        // Alpha is held until the composition is nearly off frame, so the swipe never dips
+        // to an empty screen in the middle of the move.
+        const offset = phase === 'exit' ? eased * travel : -(1 - eased) * travel;
+        const alpha = phase === 'exit'
+            ? 1 - clamp01((linear - 0.72) / 0.28)
+            : clamp01(linear / 0.3);
+        return {
+            ...IDLE_TEMPERA_TRANSITION_FRAME,
+            x: flowX * offset,
+            y: flowY * offset,
+            scale: 1 + (phase === 'exit' ? eased : 1 - eased) * 0.03,
+            alpha,
+            wipeAngle: flowAngle,
+        };
+    }
+
+    // shape-carry: the composition keeps drifting on the flow vector while it dilates and
+    // softens, as if the next graphic were pulling it out of focus. No hard cut, no glitch.
+    const drift = (phase === 'exit' ? eased : eased - 1) * 0.09;
+    const away = phase === 'exit' ? eased : 1 - eased;
     return {
         ...IDLE_TEMPERA_TRANSITION_FRAME,
-        y: phase === 'exit' ? eased * travel : -(1 - eased) * travel,
-        scale: 1 + amount * 0.05,
-        alpha: phase === 'exit' ? 1 - eased * 0.9 : 0.1 + eased * 0.9,
-        panDirection: direction,
+        x: flowX * drift,
+        y: flowY * drift,
+        scale: 1 + away * 0.07,
+        alpha: phase === 'exit' ? 1 - clamp01((linear - 0.55) / 0.45) : clamp01(linear / 0.45),
+        blur: away * 6,
+        wipeAngle: flowAngle,
     };
 };
 
@@ -102,12 +95,12 @@ export const resolveTemperaExitTransitionFrame = (
     paragraph: TemperaParagraph,
     time: number,
     enabled: boolean,
-    seed: number,
 ) => {
     const transition = paragraph.transitionOut;
     if (!enabled || !transition || time < transition.startTime) return IDLE_TEMPERA_TRANSITION_FRAME;
     const progress = (time - transition.startTime) / Math.max(transition.endTime - transition.startTime, 0.001);
-    return resolveTemperaTransitionEffectFrame(transition.kind, 'exit', progress, seed);
+    const flowAngle = paragraph.shots.at(-1)?.flowAngle ?? 0;
+    return resolveTemperaTransitionEffectFrame(transition.kind, 'exit', progress, flowAngle);
 };
 
 export const resolveTemperaEnterTransitionFrame = (
@@ -115,49 +108,10 @@ export const resolveTemperaEnterTransitionFrame = (
     timeSinceStart: number,
     duration: number,
     enabled: boolean,
-    seed: number,
+    flowAngle: number,
 ) => {
     if (!enabled || !kind || timeSinceStart < 0 || timeSinceStart > duration) {
         return IDLE_TEMPERA_TRANSITION_FRAME;
     }
-    return resolveTemperaTransitionEffectFrame(kind, 'enter', timeSinceStart / Math.max(duration, 0.001), seed);
-};
-
-// Gives every shot boundary a short transition; paragraphs commonly contain several shots.
-export const resolveTemperaShotTransitionFrame = (
-    shots: TemperaShot[],
-    activeShotIndex: number,
-    time: number,
-    enabled: boolean,
-    seed: number,
-) => {
-    if (!enabled || shots.length < 2) return IDLE_TEMPERA_TRANSITION_FRAME;
-    const current = shots[activeShotIndex];
-    if (!current) return IDLE_TEMPERA_TRANSITION_FRAME;
-
-    if (activeShotIndex > 0) {
-        const previous = shots[activeShotIndex - 1];
-        const duration = Math.min(0.24, Math.max(0.14, (current.startTime - previous.startTime) * 0.18));
-        if (time <= current.startTime + duration) {
-            return resolveTemperaEnterTransitionFrame(
-                resolveBoundaryKind(seed, activeShotIndex - 1),
-                time - current.startTime,
-                duration,
-                true,
-                seed + activeShotIndex * 97,
-            );
-        }
-    }
-
-    const next = shots[activeShotIndex + 1];
-    if (!next) return IDLE_TEMPERA_TRANSITION_FRAME;
-    const duration = Math.min(0.24, Math.max(0.14, (next.startTime - current.startTime) * 0.18));
-    const transitionStart = next.startTime - duration;
-    if (time < transitionStart) return IDLE_TEMPERA_TRANSITION_FRAME;
-    return resolveTemperaTransitionEffectFrame(
-        resolveBoundaryKind(seed, activeShotIndex),
-        'exit',
-        (time - transitionStart) / duration,
-        seed + (activeShotIndex + 1) * 97,
-    );
+    return resolveTemperaTransitionEffectFrame(kind, 'enter', timeSinceStart / Math.max(duration, 0.001), flowAngle);
 };

@@ -133,8 +133,6 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
                     theme,
                     tuning: temperaTuning,
                     currentTime,
-                    audioPower,
-                    audioBands,
                     lyricsFontScale,
                     staticMode,
                     paused: pausedRef.current,

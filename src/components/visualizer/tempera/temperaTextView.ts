@@ -1,29 +1,24 @@
 import type { TemperaGlyphPlacement } from './temperaLayout';
 import type { TemperaPalette } from './temperaPalette';
 import type { TemperaDecorFragment } from './types';
+import type { TemperaGlyphMotionInput } from './temperaMotion';
 
 // src/components/visualizer/tempera/temperaTextView.ts
 // Builds one Pixi Text node per grapheme plus a hard offset copy for print registration.
-// The shadow copies and the highlight block sit *below* the inverted text layer on purpose:
-// the difference filter reads them as backdrop, which is what makes the glyph flip color.
+// The shadow copies sit *below* the inverted text layer on purpose: the difference filter
+// reads them as backdrop, which is what makes the glyph flip color. Nothing is ever painted
+// behind a glyph to emphasise it - the inversion against the artwork is the emphasis.
 type PixiModule = typeof import('pixi.js');
 
 export interface TemperaGlyphView {
     display: import('pixi.js').Text;
     shadow: import('pixi.js').Text | null;
-    halo: import('pixi.js').Text | null;
-    highlight: import('pixi.js').Graphics | null;
-    startTime: number;
-    endTime: number;
-    settleTime: number;
+    /** Everything the per-frame motion solver needs; the runtime never reads layout again. */
+    motion: TemperaGlyphMotionInput;
     baseX: number;
     baseY: number;
     shadowDX: number;
     shadowDY: number;
-    rotation: number;
-    enterX: number;
-    enterY: number;
-    isCurrent: boolean;
 }
 
 interface TemperaTextViewOptions {
@@ -31,12 +26,9 @@ interface TemperaTextViewOptions {
     palette: TemperaPalette;
     fontFamily: string;
     fontWeight: number;
-    glowEnabled: boolean;
-    highlightEnabled: boolean;
     shadowEnabled: boolean;
-    haloLayer: import('pixi.js').Container;
     textLayer: import('pixi.js').Container;
-    /** Rendered under the inverted text layer: shadow copies and current-glyph backing. */
+    /** Rendered under the inverted text layer, so the filter reads it as backdrop. */
     underLayer: import('pixi.js').Container;
 }
 
@@ -47,7 +39,7 @@ export const buildTemperaTextViews = (
     pixi: PixiModule,
     options: TemperaTextViewOptions,
 ): TemperaGlyphView[] => {
-    const { Graphics, Text, TextStyle } = pixi;
+    const { Text, TextStyle } = pixi;
     const { palette, fontFamily, fontWeight } = options;
     const views: TemperaGlyphView[] = [];
     const weightToken = String(fontWeight) as import('pixi.js').TextStyleFontWeight;
@@ -67,19 +59,6 @@ export const buildTemperaTextViews = (
         display.position.set(placement.x, placement.y);
         display.rotation = placement.rotation;
 
-        let highlight: import('pixi.js').Graphics | null = null;
-        if (options.highlightEnabled) {
-            const blockWidth = placement.fontSize * 1.04;
-            const blockHeight = placement.fontSize * 1.22;
-            highlight = new Graphics()
-                .rect(-blockWidth / 2, -blockHeight / 2, blockWidth, blockHeight)
-                .fill({ color: pixi.Color.shared.setValue(palette.accent).toNumber() });
-            highlight.position.set(placement.x, placement.y);
-            highlight.rotation = placement.rotation;
-            highlight.visible = false;
-            options.underLayer.addChild(highlight);
-        }
-
         // Hard (unblurred) offset copy; reads as an off-register second printing plate.
         let shadow: import('pixi.js').Text | null = null;
         if (options.shadowEnabled) {
@@ -92,35 +71,25 @@ export const buildTemperaTextViews = (
             options.underLayer.addChildAt(shadow, 0);
         }
 
-        let halo: import('pixi.js').Text | null = null;
-        if (options.glowEnabled) {
-            halo = new Text({
-                text: placement.char,
-                style: new TextStyle({ ...baseStyle, fill: palette.accent }),
-            });
-            halo.anchor.set(0.5);
-            halo.position.set(placement.x, placement.y);
-            halo.rotation = placement.rotation;
-            options.haloLayer.addChild(halo);
-        }
-
         options.textLayer.addChild(display);
         views.push({
             display,
             shadow,
-            halo,
-            highlight,
-            startTime: placement.startTime,
-            endTime: placement.endTime,
-            settleTime: placement.settleTime,
+            motion: {
+                startTime: placement.startTime,
+                settleTime: placement.settleTime,
+                endTime: placement.endTime,
+                enterX: placement.enterX,
+                enterY: placement.enterY,
+                enterRotation: placement.enterRotation,
+                enterScale: placement.enterScale,
+                driftPhase: placement.driftPhase,
+                rotation: placement.rotation,
+            },
             baseX: placement.x,
             baseY: placement.y,
             shadowDX: placement.fontSize * SHADOW_OFFSET_X,
             shadowDY: placement.fontSize * SHADOW_OFFSET_Y,
-            rotation: placement.rotation,
-            enterX: placement.enterX,
-            enterY: placement.enterY,
-            isCurrent: false,
         });
     });
 

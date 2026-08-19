@@ -104,6 +104,31 @@ describe('Tempera palette', () => {
         });
     });
 
+    it('forces duo ink to contrast when the theme pairs a pale primary with pale paper', () => {
+        const luminance = (color: string) => {
+            const { r, g, b } = channelsOf(color);
+            return r * 0.2126 + g * 0.7152 + b * 0.0722;
+        };
+        // The exact failure from the screenshot: near-white paper, pale mint primary.
+        const palette = resolveTemperaPalette(theme({
+            backgroundColor: '#efe8ec',
+            primaryColor: '#dcf2ea',
+        }), { colorMode: 'duo' });
+
+        expect(palette.ink).not.toBe('#dcf2ea');
+        expect(Math.abs(luminance(palette.ink) - luminance(palette.paper))).toBeGreaterThanOrEqual(96);
+        // The whole ladder rides on the corrected ink, so the graphics gain contrast too.
+        expect(Math.abs(luminance(palette.tone4) - luminance(palette.paper))).toBeGreaterThan(40);
+    });
+
+    it('leaves a theme that already contrasts untouched', () => {
+        const palette = resolveTemperaPalette(theme({
+            backgroundColor: '#fbfbf7',
+            primaryColor: '#151515',
+        }), { colorMode: 'duo' });
+        expect(palette.ink).toBe('#151515');
+    });
+
     it('keeps duo anchored to the themed paper and ink', () => {
         const palette = resolveTemperaPalette(theme({}), { colorMode: 'duo' });
         expect(palette.paper).toBe('#101014');

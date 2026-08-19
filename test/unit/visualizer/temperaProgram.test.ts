@@ -97,20 +97,42 @@ describe('Tempera program compiler', () => {
         expect(shotKinds.every(kind => TEMPERA_SHOT_KINDS.includes(kind))).toBe(true);
     });
 
-    it('keeps shot groups within the 4-line / 6-second envelope and clamps render tails', () => {
+    it('slices lines into half-phrase shots that tile the paragraph without holes', () => {
         const lines = Array.from({ length: 6 }, (_, index) => line(
-            `line ${index}`,
-            index * 2,
-            index * 2 + 1.8,
+            `first second third fourth fifth ${index}`,
+            index * 4,
+            index * 4 + 3.6,
+            [
+                { text: 'first', startTime: index * 4, endTime: index * 4 + 0.6 },
+                { text: 'second', startTime: index * 4 + 0.6, endTime: index * 4 + 1.2 },
+                { text: 'third', startTime: index * 4 + 1.2, endTime: index * 4 + 1.8 },
+                { text: 'fourth', startTime: index * 4 + 1.8, endTime: index * 4 + 2.4 },
+                { text: 'fifth', startTime: index * 4 + 2.4, endTime: index * 4 + 3 },
+                { text: `${index}`, startTime: index * 4 + 3, endTime: index * 4 + 3.6 },
+            ],
         ));
         const program = compileTemperaProgram(lines, 'grouping');
 
         program.paragraphs.forEach(paragraph => {
+            // Every shot draws from exactly one line, and a line takes more than one shot.
+            const perLine = new Map<number, number>();
             paragraph.shots.forEach(shot => {
-                expect(shot.lineIndices.length).toBeLessThanOrEqual(4);
-                expect(shot.endTime - shot.startTime).toBeLessThanOrEqual(6.0 + 1.8);
-                expect(shot.endTime).toBeGreaterThanOrEqual(shot.startTime);
+                expect(shot.slices).toHaveLength(1);
+                const slice = shot.slices[0];
+                expect(slice.segmentEnd).toBeGreaterThan(slice.segmentStart);
+                expect(shot.endTime).toBeGreaterThan(shot.startTime);
+                perLine.set(slice.lineIndex, (perLine.get(slice.lineIndex) ?? 0) + 1);
             });
+            expect(Math.max(...perLine.values())).toBeGreaterThan(1);
+
+            // Consecutive shots tile: the next one opens exactly where the last one closed.
+            paragraph.shots.forEach((shot, index) => {
+                const next = paragraph.shots[index + 1];
+                if (next) expect(shot.endTime).toBeCloseTo(next.startTime, 6);
+            });
+            expect(paragraph.shots.at(-1)!.endTime)
+                .toBeGreaterThanOrEqual(paragraph.lines.at(-1)!.renderEndTime);
+
             paragraph.lines.forEach((compiled, index) => {
                 const next = paragraph.lines[index + 1];
                 if (next) expect(compiled.renderEndTime).toBeLessThanOrEqual(next.line.startTime);
@@ -217,6 +239,46 @@ describe('Tempera program compiler', () => {
         ], 'dense');
         expect(program.paragraphs[0].kind).toBe('chorus');
         expect(program.paragraphs[0].shots[0].decor.fragments).toEqual([]);
+    });
+
+    it('turns the flow angle only slightly between consecutive shots', () => {
+        const program = compileTemperaProgram([
+            line('第一句歌词很长可以撑满一个镜头', 0, 3),
+            line('第二句歌词继续往下走', 3.2, 6),
+            line('第三句换一个分镜', 10, 13),
+            line('第四句收尾这里也要够长', 13.2, 16),
+            line('第五句还要再多一点内容', 20, 23),
+        ], 'flow');
+        const flows = program.paragraphs.flatMap(paragraph => paragraph.shots).map(shot => shot.flowAngle);
+        expect(flows.length).toBeGreaterThan(2);
+        for (let index = 1; index < flows.length; index += 1) {
+            // A small turn keeps the graphics sweeping the same way across a cut; a big jump
+            // would make the boundary read as an edit.
+            expect(Math.abs(flows[index] - flows[index - 1])).toBeLessThanOrEqual(0.4);
+        }
+        // Camera travel is aligned to that flow rather than to a fixed axis.
+        program.paragraphs.flatMap(paragraph => paragraph.shots).forEach(shot => {
+            const travelX = shot.cameraEnd.x - shot.camera.x;
+            const travelY = shot.cameraEnd.y - shot.camera.y;
+            if (Math.hypot(travelX, travelY) < 1e-6) return;
+            const alignment = Math.cos(shot.flowAngle) * travelX + Math.sin(shot.flowAngle) * travelY;
+            expect(alignment).toBeGreaterThan(0);
+        });
+    });
+
+    it('gives boundaries a transition long enough for the graphics to carry the cut', () => {
+        const program = compileTemperaProgram([
+            line('alpha', 0, 2),
+            line('beta', 8, 10),
+            line('gamma', 20, 22),
+        ], 'duration');
+        const transitions = program.paragraphs.map(paragraph => paragraph.transitionOut).filter(Boolean);
+        expect(transitions.length).toBeGreaterThan(0);
+        transitions.forEach(transition => {
+            const duration = transition!.endTime - transition!.startTime;
+            expect(duration).toBeGreaterThanOrEqual(0.35);
+            expect(duration).toBeLessThanOrEqual(1.0001);
+        });
     });
 
     it('resolves the active paragraph for any seek target', () => {

@@ -23,6 +23,12 @@ export interface TemperaPalette {
 /** Fixed paper -> ink mix positions; the screentone layer maps tone index to hatch density. */
 export const TEMPERA_TONE_STOPS = [0.12, 0.3, 0.52, 0.72] as const;
 
+const luminanceOf = (color: string) => {
+    const channels = parseColorChannels(color);
+    if (!channels) return 128;
+    return channels.r * 0.2126 + channels.g * 0.7152 + channels.b * 0.0722;
+};
+
 // Collapses a color to its Rec.709 luminance so mono blocks stay a true grayscale ladder.
 const toGray = (color: string, fallback: string) => {
     const channels = parseColorChannels(color);
@@ -33,11 +39,22 @@ const toGray = (color: string, fallback: string) => {
 
 const grayLevel = (color: string) => parseColorChannels(color)?.r ?? 128;
 
-const luminanceOf = (color: string) => {
-    const channels = parseColorChannels(color);
-    if (!channels) return 128;
-    return channels.r * 0.2126 + channels.g * 0.7152 + channels.b * 0.0722;
+const MIN_INK_CONTRAST = 96;
+
+/**
+ * Guarantees the ink/paper pair actually contrasts. `theme.primaryColor` carries no such
+ * promise: plenty of themes pair a pale primary with a pale background, which leaves the
+ * lyric unreadable and gives the difference filter two near-identical colors to choose
+ * between. When that happens the ink is pushed to the opposite end of the paper and keeps
+ * only a whisper of the theme hue.
+ */
+const ensureInkContrast = (paper: string, ink: string) => {
+    if (Math.abs(luminanceOf(ink) - luminanceOf(paper)) >= MIN_INK_CONTRAST) return ink;
+    const target = luminanceOf(paper) < 128 ? '#f4f4f2' : '#141414';
+    const tinted = mixColors(target, ink, 0.14);
+    return Math.abs(luminanceOf(tinted) - luminanceOf(paper)) >= MIN_INK_CONTRAST ? tinted : target;
 };
+
 
 // Rescales a tinted color back onto the untinted step's luminance, so adding hue never
 // reorders the tone ladder.
@@ -97,13 +114,13 @@ export const resolveTemperaPalette = (
         };
     }
     const paper = theme.backgroundColor;
-    const ink = theme.primaryColor;
+    const ink = ensureInkContrast(paper, theme.primaryColor);
     return {
         paper,
         ink,
         blockA: mixColors(paper, theme.accentColor, 0.55),
         blockB: mixColors(paper, theme.secondaryColor, 0.6),
-        blockC: mixColors(paper, theme.primaryColor, 0.78),
+        blockC: mixColors(paper, ink, 0.78),
         accent: theme.accentColor,
         line: colorWithAlpha(mixColors(paper, ink, 0.6), 0.5),
         shadow: colorWithAlpha(mixColors(paper, ink, 0.8), 0.32),

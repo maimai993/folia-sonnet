@@ -4,6 +4,7 @@ import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import type {
     TemperaCameraKey,
     TemperaCompiledLine,
+    TemperaShotSlice,
     TemperaDecorFragment,
     TemperaDecorMotif,
     TemperaDecorSpec,
@@ -174,69 +175,102 @@ const classifyParagraph = (lines: TemperaCompiledLine[], index: number, total: n
     return 'verse';
 };
 
-const groupShotLines = (lines: TemperaCompiledLine[]) => {
-    const groups: TemperaCompiledLine[][] = [];
-    let currentGroup: TemperaCompiledLine[] = [];
-    let groupStartTime = 0;
+interface ShotChunk {
+    lineIndex: number;
+    segmentStart: number;
+    segmentEnd: number;
+    startTime: number;
+    endTime: number;
+}
 
-    for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index];
-        if (currentGroup.length === 0) {
-            currentGroup.push(line);
-            groupStartTime = line.line.startTime;
-        } else {
-            const durationSoFar = line.renderEndTime - groupStartTime;
-            // Group up to 4 lines, max 6 seconds total, so one block composition hosts a phrase.
-            if (currentGroup.length < 4 && durationSoFar <= 6.0) {
-                currentGroup.push(line);
-            } else {
-                groups.push(currentGroup);
-                currentGroup = [line];
-                groupStartTime = line.line.startTime;
+const isRenderableSegment = (segment: TemperaSegment) => (
+    segment.text.trim().length > 0 && segment.graphemes.length > 0
+);
+
+/**
+ * Slices every lyric line into half-phrase chunks on word boundaries. A chunk closes once it
+ * holds a seeded 2..4 words or has run for ~2.2s, so one line usually becomes several shots
+ * and the composition keeps moving while the line is still being sung.
+ */
+const buildShotChunks = (lines: TemperaCompiledLine[], seed: string, paragraphIndex: number): ShotChunk[] => {
+    const chunks: ShotChunk[] = [];
+    lines.forEach(line => {
+        const usable = line.segments
+            .map((segment, index) => ({ segment, index }))
+            .filter(entry => isRenderableSegment(entry.segment));
+        if (usable.length === 0) return;
+
+        let segmentStart = usable[0].index;
+        let startTime = usable[0].segment.startTime;
+        let words = 0;
+        usable.forEach((entry, order) => {
+            words += 1;
+            const chunkSeed = hashTemperaSeed(`${seed}:${paragraphIndex}:${line.sourceIndex}:${chunks.length}`);
+            const target = 2 + Math.floor(temperaHash01(chunkSeed, 1, 179) * 3);
+            const spent = entry.segment.endTime - startTime;
+            const isLast = order === usable.length - 1;
+            if (!isLast && words < target && spent < 2.2) return;
+
+            chunks.push({
+                lineIndex: line.sourceIndex,
+                segmentStart,
+                segmentEnd: entry.index + 1,
+                startTime,
+                endTime: Math.max(entry.segment.endTime, startTime + 0.2),
+            });
+            const next = usable[order + 1];
+            if (next) {
+                segmentStart = next.index;
+                startTime = next.segment.startTime;
+                words = 0;
             }
-        }
-    }
-    if (currentGroup.length > 0) groups.push(currentGroup);
-    return groups;
+        });
+    });
+    // Tile the timeline: every shot runs until the next one opens, so the runtime's
+    // "last shot whose startTime has passed" lookup never lands in a hole.
+    return chunks.map((chunk, index) => ({
+        ...chunk,
+        endTime: Math.max(chunk.startTime + 0.2, chunks[index + 1]?.startTime ?? chunk.endTime),
+    }));
 };
 
-// Hand-tuned slow camera paths per block composition; seed jitter keeps siblings distinct.
-const buildCameraKeys = (kind: TemperaShotKind, seed: number): { start: TemperaCameraKey; end: TemperaCameraKey } => {
-    const jitterX = (temperaHash01(seed, 1, 11) - 0.5) * 0.03;
-    const jitterY = (temperaHash01(seed, 2, 23) - 0.5) * 0.03;
-    const jitterZoom = temperaHash01(seed, 3, 37) * 0.03;
+// Travel amplitude and zoom ramp per composition; the direction itself always comes from the
+// shot's flow angle so the camera keeps moving the same way the graphics do.
+const CAMERA_PROFILES: Record<TemperaShotKind, { travel: number; zoomStart: number; zoomEnd: number }> = {
+    'duo-split': { travel: 0.11, zoomStart: 1.06, zoomEnd: 1.13 },
+    'band-strip': { travel: 0.12, zoomStart: 1.03, zoomEnd: 1.1 },
+    // Slow pull-out: the frame breathes open while the lyric settles.
+    'frame-window': { travel: 0.05, zoomStart: 1.14, zoomEnd: 1.03 },
+    'poster-panel': { travel: 0.08, zoomStart: 1.05, zoomEnd: 1.12 },
+    'quiet-line': { travel: 0.03, zoomStart: 1.0, zoomEnd: 1.04 },
+};
+
+const buildCameraKeys = (
+    kind: TemperaShotKind,
+    seed: number,
+    flowAngle: number,
+): { start: TemperaCameraKey; end: TemperaCameraKey } => {
+    const jitterX = (temperaHash01(seed, 1, 11) - 0.5) * 0.02;
+    const jitterY = (temperaHash01(seed, 2, 23) - 0.5) * 0.02;
+    const jitterZoom = temperaHash01(seed, 3, 37) * 0.025;
     const jitterRotation = (temperaHash01(seed, 4, 51) - 0.5) * 0.012;
-    const panSign = temperaHash01(seed, 5, 67) > 0.5 ? 1 : -1;
-    switch (kind) {
-        case 'duo-split':
-            // Vertical drift: the split band reads as a slow tilt across the two color fields.
-            return {
-                start: { x: jitterX, y: -0.055 * panSign + jitterY, zoom: 1.06 + jitterZoom, rotation: jitterRotation },
-                end: { x: jitterX, y: 0.055 * panSign + jitterY, zoom: 1.13 + jitterZoom, rotation: -jitterRotation },
-            };
-        case 'band-strip':
-            return {
-                start: { x: -0.06 * panSign + jitterX, y: jitterY, zoom: 1.03 + jitterZoom, rotation: jitterRotation },
-                end: { x: 0.06 * panSign + jitterX, y: jitterY, zoom: 1.1 + jitterZoom, rotation: jitterRotation },
-            };
-        case 'frame-window':
-            // Slow pull-out: the frame breathes open while the lyric settles.
-            return {
-                start: { x: jitterX, y: jitterY, zoom: 1.14 + jitterZoom, rotation: jitterRotation },
-                end: { x: jitterX, y: jitterY, zoom: 1.03 + jitterZoom, rotation: -jitterRotation },
-            };
-        case 'poster-panel':
-            return {
-                start: { x: -0.035 * panSign + jitterX, y: jitterY, zoom: 1.05 + jitterZoom, rotation: -0.012 + jitterRotation },
-                end: { x: 0.035 * panSign + jitterX, y: jitterY, zoom: 1.11 + jitterZoom, rotation: 0.008 + jitterRotation },
-            };
-        case 'quiet-line':
-        default:
-            return {
-                start: { x: jitterX * 0.5, y: jitterY * 0.5, zoom: 1.0 + jitterZoom, rotation: jitterRotation * 0.5 },
-                end: { x: jitterX * 0.5, y: jitterY * 0.5, zoom: 1.035 + jitterZoom, rotation: jitterRotation * 0.5 },
-            };
-    }
+    const profile = CAMERA_PROFILES[kind] ?? CAMERA_PROFILES['quiet-line'];
+    const travelX = Math.cos(flowAngle) * profile.travel;
+    const travelY = Math.sin(flowAngle) * profile.travel;
+    return {
+        start: {
+            x: -travelX / 2 + jitterX,
+            y: -travelY / 2 + jitterY,
+            zoom: profile.zoomStart + jitterZoom,
+            rotation: jitterRotation,
+        },
+        end: {
+            x: travelX / 2 + jitterX,
+            y: travelY / 2 + jitterY,
+            zoom: profile.zoomEnd + jitterZoom,
+            rotation: -jitterRotation,
+        },
+    };
 };
 
 // Picks the stray glyphs that drift in the margins of sparse compositions; they are drawn
@@ -284,6 +318,18 @@ const buildDecorSpec = (
     };
 };
 
+// Vertical is Tempera's home axis: the compositions hand off by sliding past each other, and
+// a mostly-vertical flow is what makes that read as diving through a scene rather than as a
+// horizontal slide show. Each shot turns a little and is pulled back toward the axis.
+const resolveFlowAngle = (previous: number | null, seed: number) => {
+    if (previous === null) {
+        const sign = temperaHash01(seed, 6, 71) > 0.5 ? 1 : -1;
+        return sign * Math.PI / 2 + (temperaHash01(seed, 8, 79) - 0.5) * 0.4;
+    }
+    const axis = (Math.sin(previous) >= 0 ? 1 : -1) * Math.PI / 2;
+    return previous + (axis - previous) * 0.3 + (temperaHash01(seed, 7, 73) - 0.5) * 0.5;
+};
+
 const buildShots = (
     lines: TemperaCompiledLine[],
     kind: TemperaParagraphKind,
@@ -291,24 +337,39 @@ const buildShots = (
     seed: string,
     previousKind: TemperaShotKind | null,
     previousMotif: TemperaDecorMotif | null,
+    previousFlow: number | null,
 ): TemperaShot[] => {
     let lastKind = previousKind;
     let lastMotif = previousMotif;
-    return groupShotLines(lines).map((group, shotIndex) => {
-        const signature = group.map(item => item.line.fullText).join('|');
-        let shotKind = chooseWithoutRepeat(TEMPERA_SHOT_KINDS, `${seed}:${paragraphIndex}:${shotIndex}:${signature}`, lastKind);
-        const wordCount = group.reduce((sum, item) => sum + item.segments.filter(s => s.isWordLike).length, 0);
+    let lastFlow = previousFlow;
+    const paragraphEnd = lines.at(-1)?.renderEndTime ?? 0;
+    const chunks = buildShotChunks(lines, seed, paragraphIndex);
+    const byIndex = new Map(lines.map(line => [line.sourceIndex, line]));
+
+    return chunks.map((chunk, shotIndex) => {
+        const line = byIndex.get(chunk.lineIndex);
+        const sliceSegments = line?.segments.slice(chunk.segmentStart, chunk.segmentEnd) ?? [];
+        const sliceText = sliceSegments.map(segment => segment.text).join('');
+        let shotKind = chooseWithoutRepeat(TEMPERA_SHOT_KINDS, `${seed}:${paragraphIndex}:${shotIndex}:${sliceText}`, lastKind);
+        const wordCount = sliceSegments.filter(segment => segment.isWordLike).length;
         // Breathing paragraphs read as sparse compositions; chorus never whispers.
         if (kind === 'breath' && shotIndex === 0 && wordCount <= 3) shotKind = 'quiet-line';
         if (kind === 'chorus' && shotKind === 'quiet-line') shotKind = 'poster-panel';
         lastKind = shotKind;
+
         const cameraSeed = hashTemperaSeed(`${seed}:${paragraphIndex}:${shotIndex}:camera`);
-        const { start, end } = buildCameraKeys(shotKind, cameraSeed);
-        const grouped = new Set(group.map(item => item.sourceIndex));
+        const flowAngle = resolveFlowAngle(lastFlow, cameraSeed);
+        lastFlow = flowAngle;
+        const { start, end } = buildCameraKeys(shotKind, cameraSeed, flowAngle);
+
+        // Margin fragments come from the rest of the paragraph, never from the words this
+        // shot is already showing.
         const fragmentPool = lines
-            .filter(item => !grouped.has(item.sourceIndex))
-            .map(item => item.line.fullText)
-            .join('') || group.map(item => item.line.fullText).join('');
+            .flatMap(item => (item.sourceIndex === chunk.lineIndex
+                ? item.segments.filter((_, index) => index < chunk.segmentStart || index >= chunk.segmentEnd)
+                : item.segments))
+            .map(segment => segment.text)
+            .join('') || sliceText;
         const decor = buildDecorSpec(
             kind,
             shotKind,
@@ -317,14 +378,24 @@ const buildShots = (
             lastMotif,
         );
         lastMotif = decor.motif;
+
+        const slices: TemperaShotSlice[] = [{
+            lineIndex: chunk.lineIndex,
+            segmentStart: chunk.segmentStart,
+            segmentEnd: chunk.segmentEnd,
+        }];
         return {
             id: `p${paragraphIndex}-s${shotIndex}`,
             kind: shotKind,
-            startTime: group[0].line.startTime,
-            endTime: group.at(-1)!.renderEndTime,
-            lineIndices: group.map(item => item.sourceIndex),
+            startTime: chunk.startTime,
+            // The closing shot holds until the paragraph's own render tail ends.
+            endTime: shotIndex === chunks.length - 1
+                ? Math.max(chunk.endTime, paragraphEnd)
+                : chunk.endTime,
+            slices,
             camera: start,
             cameraEnd: end,
+            flowAngle,
             decor,
         };
     });
@@ -364,12 +435,14 @@ export const compileTemperaProgram = (lines: Line[], seed: string | number = 'te
     const resolvedSeed = String(seed);
     let previousShot: TemperaShotKind | null = null;
     let previousMotif: TemperaDecorMotif | null = null;
+    let previousFlow: number | null = null;
     let previousTransition: TemperaTransitionKind | null = null;
     const paragraphs: TemperaParagraph[] = drafts.map((draft, index) => {
         const kind = classifyParagraph(draft.lines, index, drafts.length);
-        const shots = buildShots(draft.lines, kind, index, resolvedSeed, previousShot, previousMotif);
+        const shots = buildShots(draft.lines, kind, index, resolvedSeed, previousShot, previousMotif, previousFlow);
         previousShot = shots.at(-1)?.kind ?? previousShot;
         previousMotif = shots.at(-1)?.decor.motif ?? previousMotif;
+        previousFlow = shots.at(-1)?.flowAngle ?? previousFlow;
         const next = drafts[index + 1];
         const endTime = draft.lines.at(-1)!.renderEndTime;
         const gap = next ? next.lines[0].line.startTime - endTime : 0;
@@ -377,7 +450,9 @@ export const compileTemperaProgram = (lines: Line[], seed: string | number = 'te
             ? chooseWithoutRepeat(TEMPERA_TRANSITION_KINDS, `${resolvedSeed}:${index}:transition`, previousTransition)
             : null;
         if (transitionKind) previousTransition = transitionKind;
-        const transitionDuration = next ? Math.min(0.3, Math.max(0.16, gap > 0 ? gap * 0.5 : 0.2)) : 0;
+        // Long enough for the graphics to carry the cut, but never eating more than ~0.3s
+        // into the tail of the outgoing paragraph.
+        const transitionDuration = next ? Math.min(1, Math.max(0.35, Math.max(gap, 0) + 0.3)) : 0;
         const transitionEndTime = next?.lines[0].line.startTime ?? endTime;
         return {
             id: `tempera-p${index}`,
