@@ -574,6 +574,48 @@ export const DEFAULT_SONNET_TUNING: SonnetTuning = {
   postProcessLensDispersion: 0.6,
 };
 
+export type TemperaColorMode = 'duo' | 'mono';
+
+export interface TemperaTuning {
+  cameraIntensity: number;
+  /** Per-glyph entrance motion strength, 0..2. */
+  glyphMotion: number;
+  /** duo derives blocks from theme hues; mono collapses to a grayscale ink/paper ladder. */
+  colorMode: TemperaColorMode;
+  showBlocks: boolean;
+  showDecor: boolean;
+  enableTransitions: boolean;
+  textureResolution: number;
+  /** Master switch for the scene-wide post-process stack (grain + contrast + print passes). */
+  postProcessEnabled: boolean;
+  /** Film grain amount, 0..1. */
+  postProcessGrain: number;
+  /** Contrast boost, 0..1. */
+  postProcessContrast: number;
+  /** RGB shift pass strength, 0..1 (0 disables the pass). */
+  postProcessRgbShift: number;
+  /** Vignette strength, 0..2 (2 = double the base darkening). */
+  postProcessVignette: number;
+  /** Radial lens curvature amount, 0..2. */
+  postProcessLensDistortion: number;
+}
+
+export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
+  cameraIntensity: 1,
+  glyphMotion: 1,
+  colorMode: 'duo',
+  showBlocks: true,
+  showDecor: true,
+  enableTransitions: true,
+  textureResolution: 1.5,
+  postProcessEnabled: false,
+  postProcessGrain: 0.2,
+  postProcessContrast: 0,
+  postProcessRgbShift: 0,
+  postProcessVignette: 0.85,
+  postProcessLensDistortion: 0.3,
+};
+
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other
 // visualizer it follows theme.animationIntensity (the player-panel intensity chip / AI themes), so
 // the theme system stays the single source of truth. The tuning only carries diorama-specific knobs.

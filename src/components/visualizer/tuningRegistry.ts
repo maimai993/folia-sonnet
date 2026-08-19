@@ -9,6 +9,7 @@ import type {
     PartitaTuning,
     PendoloTuning,
     SonnetTuning,
+    TemperaTuning,
     TiltTuning,
     VisualizerMode,
 } from '../../types';
@@ -28,6 +29,7 @@ export interface VisualizerTuningMap {
     monet: MonetTuning;
     pendolo: PendoloTuning;
     sonnet: SonnetTuning;
+    tempera: TemperaTuning;
 }
 
 export type VisualizerTuningMode = keyof VisualizerTuningMap;

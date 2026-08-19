@@ -95,6 +95,7 @@ const TUNING_MODES: Record<string, string> = {
     monetTuning: 'monet',
     pendoloTuning: 'pendolo',
     sonnetTuning: 'sonnet',
+    temperaTuning: 'tempera',
 };
 
 interface BoxTone {

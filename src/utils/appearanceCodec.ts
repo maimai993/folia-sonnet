@@ -7,6 +7,7 @@ import {
     DEFAULT_NOMAND_BACKGROUND_TUNING,
     DEFAULT_PENDOLO_TUNING,
     DEFAULT_SONNET_TUNING,
+    DEFAULT_TEMPERA_TUNING,
     type DualTheme,
     type Theme,
 } from '../types';
@@ -399,6 +400,37 @@ const decompressSonnet = (o: any): any => ({
     postProcessLensDispersion: o.pplx !== undefined ? o.pplx : DEFAULT_SONNET_TUNING.postProcessLensDispersion,
 });
 
+const compressTempera = (t: any): any => ({
+    ci: t.cameraIntensity,
+    gm: t.glyphMotion,
+    cm: t.colorMode,
+    sb: t.showBlocks,
+    sd: t.showDecor,
+    et: t.enableTransitions,
+    tr: t.textureResolution,
+    ppe: t.postProcessEnabled,
+    ppg: t.postProcessGrain,
+    ppc: t.postProcessContrast,
+    ppr: t.postProcessRgbShift,
+    ppv: t.postProcessVignette,
+    ppld: t.postProcessLensDistortion,
+});
+const decompressTempera = (o: any): any => ({
+    cameraIntensity: o.ci !== undefined ? o.ci : DEFAULT_TEMPERA_TUNING.cameraIntensity,
+    glyphMotion: o.gm !== undefined ? o.gm : DEFAULT_TEMPERA_TUNING.glyphMotion,
+    colorMode: o.cm !== undefined ? o.cm : DEFAULT_TEMPERA_TUNING.colorMode,
+    showBlocks: o.sb !== undefined ? o.sb : DEFAULT_TEMPERA_TUNING.showBlocks,
+    showDecor: o.sd !== undefined ? o.sd : DEFAULT_TEMPERA_TUNING.showDecor,
+    enableTransitions: o.et !== undefined ? o.et : DEFAULT_TEMPERA_TUNING.enableTransitions,
+    textureResolution: o.tr !== undefined ? o.tr : DEFAULT_TEMPERA_TUNING.textureResolution,
+    postProcessEnabled: o.ppe !== undefined ? o.ppe : DEFAULT_TEMPERA_TUNING.postProcessEnabled,
+    postProcessGrain: o.ppg !== undefined ? o.ppg : DEFAULT_TEMPERA_TUNING.postProcessGrain,
+    postProcessContrast: o.ppc !== undefined ? o.ppc : DEFAULT_TEMPERA_TUNING.postProcessContrast,
+    postProcessRgbShift: o.ppr !== undefined ? o.ppr : DEFAULT_TEMPERA_TUNING.postProcessRgbShift,
+    postProcessVignette: o.ppv !== undefined ? o.ppv : DEFAULT_TEMPERA_TUNING.postProcessVignette,
+    postProcessLensDistortion: o.ppld !== undefined ? o.ppld : DEFAULT_TEMPERA_TUNING.postProcessLensDistortion,
+});
+
 export const compressConfig = (config: any): string => {
     const minified: any = {};
     if (config.theme) {
@@ -450,6 +482,7 @@ export const compressConfig = (config: any): string => {
     if (config.monetTuning) minified.mt = compressMonet(config.monetTuning);
     if (config.pendoloTuning) minified.pdt = compressPendolo(config.pendoloTuning);
     if (config.sonnetTuning) minified.snt = compressSonnet(config.sonnetTuning);
+    if (config.temperaTuning) minified.tmp = compressTempera(config.temperaTuning);
     if (config.urlBackgroundList) minified.ubl = config.urlBackgroundList;
     if (config.urlBackgroundSelectedId) minified.ubid = config.urlBackgroundSelectedId;
     if (config.songThemeAutoSwitchEnabled !== undefined) minified.stas = config.songThemeAutoSwitchEnabled;
@@ -562,6 +595,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.mt) decompressed.monetTuning = decompressMonet(parsed.mt);
         if (parsed.pdt) decompressed.pendoloTuning = decompressPendolo(parsed.pdt);
         if (parsed.snt) decompressed.sonnetTuning = decompressSonnet(parsed.snt);
+        if (parsed.tmp) decompressed.temperaTuning = decompressTempera(parsed.tmp);
         if (parsed.ubl) decompressed.urlBackgroundList = parsed.ubl;
         if (parsed.ubid) decompressed.urlBackgroundSelectedId = parsed.ubid;
         if (parsed.stas !== undefined) decompressed.songThemeAutoSwitchEnabled = parsed.stas;
@@ -582,7 +616,7 @@ export const decompressConfig = (str: string): any => {
             'subtitleFontFallbackFamilies', 'visualizerTunings', 'classicTuning',
             'cadenzaTuning', 'partitaTuning', 'fumeTuning', 'claddaghTuning', 'cappellaTuning',
             'tiltTuning', 'dioramaTuning', 'monetBackgroundTuning', 'nomandBackgroundTuning', 'latentBackgroundTuning', 'monetTuning',
-            'pendoloTuning', 'sonnetTuning',
+            'pendoloTuning', 'sonnetTuning', 'temperaTuning',
             'urlBackgroundList', 'urlBackgroundSelectedId',
             'songThemeAutoSwitchEnabled', 'songThemeAutoGenerateEnabled', 'themeGenerationSource', 'followSystemTheme',
         ];
