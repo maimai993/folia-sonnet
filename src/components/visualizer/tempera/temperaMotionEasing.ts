@@ -34,20 +34,12 @@ export const resolveCubicBezier = (
 
 /**
  * Long, soft deceleration: decisive at the start, then a long creeping tail. Gentler curves
- * were tried here and read as sluggish - the punch of the fast opening is what gives the
- * entrance its snap, so leave the shape alone.
+ * were tried here and read as sluggish; the punch of the fast opening is what gives the whole
+ * mode its motion, so leave the shape alone.
  */
 export const easeTemperaEnter = (value: number) => resolveCubicBezier(0.22, 1, 0.36, 1, value);
 export const easeTemperaInOut = (value: number) => resolveCubicBezier(0.62, 0, 0.32, 1, value);
 
-/**
- * Accelerating exit. A shot that is already drifting must not restart from zero velocity when
- * its hand-off begins, so this leaves at ~0.6x speed and keeps building.
- */
-export const easeTemperaOutward = (value: number) => {
-    const t = clamp01(value);
-    return t * (0.62 + 0.38 * t);
-};
 /** Mild anticipation on the way out; used for scale so glyphs settle with a small overshoot. */
 export const easeTemperaSoftBack = (value: number) => {
     const t = clamp01(value);

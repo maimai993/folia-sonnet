@@ -51,14 +51,10 @@ const horizonBand: TemperaCompositionDrawer = ctx => {
 const deepDive: TemperaCompositionDrawer = ctx => {
     const { width, height, palette, bleed } = ctx;
     const tones = [palette.tone1, palette.tone2, palette.tone3, palette.tone4];
-    // Bands are sized from the viewport, never from the bleed: a wide bleed margin would
-    // otherwise push most of the strata off frame and leave one flat tone on screen.
-    const bandHeight = height / tones.length;
+    const bandHeight = (height + bleed * 2) / tones.length;
     tones.forEach((tone, index) => {
-        const top = bandHeight * index;
-        const extraTop = index === 0 ? bleed : 0;
-        const extraBottom = index === tones.length - 1 ? bleed : 1;
-        ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, top - extraTop, width + bleed * 2, bandHeight + extraTop + extraBottom), tone, 0.95, ctx.gradient),
+        const top = -bleed + bandHeight * index;
+        ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, top, width + bleed * 2, bandHeight + 1), tone, 0.95, ctx.gradient),
             { delay: index * 0.06, span: 0.55, enterDY: height * 0.3 });
         if (index === 0) return;
         ctx.add(drawPolyline(ctx.pixi, buildWavyPath(ctx.seed, 37 + index, -bleed, width + bleed, top, height * 0.008, 24), palette.paper, 1.6, 0.5),
@@ -72,11 +68,9 @@ const toneRamp: TemperaCompositionDrawer = ctx => {
     const spec = buildHatchSpec(ctx.seed, 41);
     ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.92, ctx.gradient), { span: 0.5 });
     const steps = 4;
-    const columnWidth = width / steps;
     for (let index = 0; index < steps; index += 1) {
-        const left = columnWidth * index - (index === 0 ? bleed : 0);
-        const right = columnWidth * (index + 1) + (index === steps - 1 ? bleed : 0);
-        const column = rectPolygon(left, -bleed, right - left, height + bleed * 2);
+        const columnWidth = (width + bleed * 2) / steps;
+        const column = rectPolygon(-bleed + columnWidth * index, -bleed, columnWidth, height + bleed * 2);
         ctx.add(drawHatchFill(ctx.pixi, column, { ...spec, spacing: spec.spacing * (1.6 - index * 0.32) }, palette.tone4, 0.6),
             { delay: index * 0.06, span: 0.55, grow: true });
     }

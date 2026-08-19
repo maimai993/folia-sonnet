@@ -36,12 +36,6 @@ export interface TemperaShotView {
     /** Carries the difference inversion filter; the runtime clears it on destroy. */
     textLayer: import('pixi.js').Container;
     revealDoneTime: number;
-    /**
-     * How long this shot keeps travelling out after its own end. Derived from the dead tail it
-     * has left after the type has landed and from how much room the next shot can spare, so a
-     * shot with time on its hands leaves slowly and a tight one leaves briskly.
-     */
-    handoffDuration: number;
 }
 
 export interface TemperaSceneView {
@@ -192,24 +186,15 @@ export const buildTemperaScene = (
     // A translucent paper wash unifies the block colors with the shell background, and the
     // dot lattice on top gives the whole frame its printed-paper grain. Both are built once
     // per paragraph scene and never touched again during playback.
-    // Both extend past the frame: a paragraph transition may scale or drift the whole scene,
-    // and a ground layer that stopped at the frame edge would let the shell show through.
-    const wash = Math.max(width, height) * 0.15;
     const paperWash = new Graphics()
-        .rect(-wash, -wash, width + wash * 2, height + wash * 2)
+        .rect(0, 0, width, height)
         .fill({ color: pixi.Color.shared.setValue(palette.paper).toNumber(), alpha: 0.35 });
     paperWash.visible = tuning.showBlocks;
     container.addChild(paperWash);
     if (tuning.showBlocks) {
         // Spacing grows with the viewport so the lattice stays around 3k dots on any display.
         const toneSpacing = Math.max(26, Math.sqrt((width * height) / 6000));
-        const screentone = drawSquareMarks(
-            pixi,
-            buildDotGrid(width + wash * 2, height + wash * 2, toneSpacing, 1.6),
-            palette.tone4,
-            0.05,
-        );
-        screentone.position.set(-wash, -wash);
+        const screentone = drawSquareMarks(pixi, buildDotGrid(width, height, toneSpacing, 1.6), palette.tone4, 0.05);
         container.addChild(screentone);
     }
 
@@ -337,14 +322,8 @@ export const buildTemperaScene = (
         textLayer.filters = [differenceFilter];
         postProcessFilters.push(differenceFilter);
         const revealDoneTime = glyphs.length > 0
-            ? Math.min(shot.endTime, Math.max(...glyphs.map(glyph => glyph.motion.settleTime)))
-            : shot.startTime;
-        const tail = Math.max(0, shot.endTime - revealDoneTime);
-        const nextShot = paragraph.shots[shotIndex + 1];
-        const nextDuration = nextShot
-            ? nextShot.endTime - nextShot.startTime
-            : shot.endTime - shot.startTime;
-        const handoffDuration = Math.min(1.8, Math.max(0.35, Math.min(tail * 0.9 + 0.35, nextDuration * 0.5)));
+            ? Math.max(...glyphs.map(glyph => glyph.motion.settleTime))
+            : shot.endTime;
 
         shotContainer.pivot.set(width / 2, height / 2);
         shotContainer.position.set(width / 2, height / 2);
@@ -358,7 +337,6 @@ export const buildTemperaScene = (
             baseY: shotContainer.y,
             textLayer,
             revealDoneTime,
-            handoffDuration,
         };
     });
 

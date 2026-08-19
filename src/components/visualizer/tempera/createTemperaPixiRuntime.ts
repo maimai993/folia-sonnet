@@ -24,7 +24,7 @@ import {
     clamp01,
     easeTemperaEnter,
     easeTemperaInOut,
-    easeTemperaOutward,
+    resolveShotPacedDuration,
     resolveTemperaGlyphMotion,
 } from './temperaMotion';
 
@@ -263,8 +263,17 @@ export class TemperaPixiRuntime {
         });
     }
 
+    /**
+     * How long a finished shot keeps sliding out while the next one is already sliding in.
+     * The overlap is the whole point: two compositions share the frame and the outgoing one
+     * carries the eye into the incoming one instead of being cut away.
+     */
+    private resolveShotHandoff(view: TemperaShotView) {
+        return resolveShotPacedDuration(view.shot.endTime - view.shot.startTime, 0.3, 0.4, 1.1);
+    }
+
     private resolveShotExit(view: TemperaShotView, time: number) {
-        return clamp01((time - view.shot.endTime) / view.handoffDuration);
+        return clamp01((time - view.shot.endTime) / this.resolveShotHandoff(view));
     }
 
     private updateShot(view: TemperaShotView, time: number, width: number, height: number) {
@@ -290,29 +299,19 @@ export class TemperaPixiRuntime {
         // over, keeps travelling downstream out of frame. Both shots run this at the same
         // time during the overlap, so the outgoing composition visibly pushes past the
         // incoming one rather than being cut away.
+        const handoff = this.resolveShotHandoff(view);
         const span = Math.max(width, height);
         // The arrival is front-loaded on purpose: the glyphs start revealing on the shot's
         // own timeline, so a slow entrance would expose type that is still off frame.
-        const enter = easeTemperaEnter(clamp01((time - view.shot.startTime) / (view.handoffDuration * 0.8)));
-        // Anticipation: once the type has landed, the frame starts accelerating into its own
-        // exit instead of holding still, so the dead tail of a shot never feels like a wait.
-        const tailWindow = Math.max(view.shot.endTime - view.revealDoneTime, 0.001);
-        const anticipation = Math.pow(clamp01((time - view.revealDoneTime) / tailWindow), 2);
-        // The exit leaves at speed rather than from rest, picking up where anticipation left
-        // off, and keeps building - a decelerating exit is what reads as stopping to wait.
-        const exit = easeTemperaOutward(this.resolveShotExit(view, time));
-        // The arrival offset must stay inside the compositions' bleed margin, otherwise an
-        // incoming full-bleed shape has not reached the frame edge yet and the shell shows
-        // through. The exit is free to overshoot it: leaving the frame is the intent there.
-        const travel = anticipation * span * 0.05
-            + exit * span * 0.55
-            - (1 - enter) * span * 0.14;
+        const enter = easeTemperaEnter(clamp01((time - view.shot.startTime) / (handoff * 0.8)));
+        const exit = easeTemperaInOut(this.resolveShotExit(view, time));
+        const travel = exit * span * 0.55 - (1 - enter) * span * 0.32;
         view.container.position.set(
             view.baseX + frame.x * width * camera + Math.cos(view.shot.flowAngle) * travel,
             view.baseY + frame.y * height * camera + Math.sin(view.shot.flowAngle) * travel,
         );
         // Opaque on the way in: this is a push, not a dissolve. Only the exit fades.
-        view.container.alpha = 1 - easeTemperaInOut(this.resolveShotExit(view, time));
+        view.container.alpha = 1 - exit;
         view.container.scale.set((1 + (frame.scale - 1) * camera) * (1 - exit * 0.08));
         view.container.rotation = frame.rotation * camera;
 

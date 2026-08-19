@@ -2,7 +2,6 @@ import {
     clamp01,
     easeTemperaEnter,
     easeTemperaInOut,
-    easeTemperaOutward,
     easeTemperaSoftBack,
     resolveCubicBezier,
 } from './temperaMotionEasing';
@@ -11,14 +10,7 @@ import { resolveTemperaEnterFrame, type TemperaEnterStyle } from './temperaEnter
 // src/components/visualizer/tempera/temperaMotion.ts
 // Pure absolute-time motion evaluation for Tempera. Every value is derived from the clock
 // and per-glyph constants, so a seek paints exactly the frame continuous playback would.
-export {
-    clamp01,
-    easeTemperaEnter,
-    easeTemperaInOut,
-    easeTemperaOutward,
-    easeTemperaSoftBack,
-    resolveCubicBezier,
-};
+export { clamp01, easeTemperaEnter, easeTemperaInOut, easeTemperaSoftBack, resolveCubicBezier };
 
 export interface TemperaGlyphMotionInput {
     startTime: number;
@@ -115,26 +107,14 @@ export const resolveTemperaGlyphMotion = (
     };
 };
 
-export interface TemperaStaggerWindow {
-    delay: number;
-    span: number;
-}
-
 /**
- * Spreads one staggered item across the shot it belongs to. There is deliberately no upper
- * clamp in seconds: capping the window meant a long shot finished all of its motion early
- * and then sat on a still frame. The only guards are a floor, so a very short shot does not
- * flash, and a compression pass so the last item still lands before the shot ends.
+ * Maps a shot-relative fraction onto seconds, clamped so a very short or very long shot
+ * still animates at a watchable speed. This is what ties block motion to the line's pace
+ * instead of to a fixed wall-clock duration.
  */
-export const resolveShotStagger = (
+export const resolveShotPacedDuration = (
     shotDuration: number,
-    delayFraction: number,
-    spanFraction: number,
-    minSpan = 0.42,
-): TemperaStaggerWindow => {
-    const span = Math.max(minSpan, shotDuration * spanFraction);
-    const delay = Math.max(0, shotDuration * delayFraction);
-    const budget = Math.max(minSpan, shotDuration * 0.94);
-    const compress = Math.min(1, budget / (delay + span));
-    return { delay: delay * compress, span: Math.max(minSpan * 0.6, span * compress) };
-};
+    fraction: number,
+    minSeconds: number,
+    maxSeconds: number,
+) => Math.min(maxSeconds, Math.max(minSeconds, shotDuration * fraction));

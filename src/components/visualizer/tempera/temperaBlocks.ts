@@ -1,6 +1,6 @@
 import type { TemperaDecorSpec, TemperaShotKind } from './types';
 import type { TemperaPalette } from './temperaPalette';
-import { clamp01, easeTemperaEnter, easeTemperaInOut, resolveShotStagger } from './temperaMotion';
+import { clamp01, easeTemperaEnter, easeTemperaInOut, resolveShotPacedDuration } from './temperaMotion';
 import { temperaHash01 } from './temperaRandom';
 import {
     drawTemperaComposition,
@@ -45,22 +45,8 @@ interface BlockItem {
     spanFraction: number;
     drift: boolean;
     driftPhase: number;
-    /** Per-item multiplier on the flow creep; the spread is what keeps the frame alive. */
-    creepScale: number;
     grow: boolean;
 }
-
-/**
- * How fast an item creeps along the flow relative to the rest. Structural fills stay locked
- * to 1: letting two adjacent tone panels drift apart would tear a gap open at their seam.
- * Only the hatch overlays (a little, for print misregistration) and the small decor marks
- * (freely) get a parallax spread.
- */
-const resolveCreepScale = (seed: number, index: number, options: TemperaBlockOptions) => {
-    if (options.drift) return 0.5 + temperaHash01(seed, index, 181) * 1.3;
-    if (options.grow) return 0.9 + temperaHash01(seed, index, 191) * 0.25;
-    return 1;
-};
 
 export const buildTemperaBlocks = (
     pixi: PixiModule,
@@ -86,7 +72,6 @@ export const buildTemperaBlocks = (
             spanFraction: blockOptions.span ?? 0.45,
             drift: blockOptions.drift ?? false,
             driftPhase: temperaHash01(options.seed, items.length, 173) * Math.PI * 2,
-            creepScale: resolveCreepScale(options.seed, items.length, blockOptions),
             grow: blockOptions.grow ?? false,
         });
         (parent ?? container).addChild(node);
@@ -110,9 +95,7 @@ export const buildTemperaBlocks = (
         height: options.height,
         seed: options.seed,
         showDecor: options.showDecor,
-        // Covers the internal creep, the camera pan and the shot's arrival offset, so a
-        // full-bleed shape reaches past the frame edge at every point of the hand-off.
-        bleed: carry + Math.max(options.width, options.height) * 0.17,
+        bleed: carry + Math.max(options.width, options.height) * 0.08,
         // Gradient mode only: a per-shot axis so neighbouring compositions do not all ramp
         // the cover colours the same way.
         gradient: options.palette.gradient
@@ -129,16 +112,17 @@ export const buildTemperaBlocks = (
     const updateTime = (time: number, shotStart: number, shotEnd: number) => {
         const duration = Math.max(shotEnd - shotStart, 0.2);
         const progress = clamp01((time - shotStart) / duration);
-        // Mostly linear on purpose. A pure ease flattens at both ends, and a shot long enough
-        // to flatten is exactly the one that must not sit on a still frame.
-        const travelled = progress * 0.8 + easeTemperaInOut(progress) * 0.2;
+        // A steady creep along the flow vector for the whole shot; the camera rides the same
+        // axis, so the frame is always already moving when the next composition arrives.
+        const creep = easeTemperaInOut(progress) * carry * 0.35;
+        const budget = Math.max(0.5, duration);
 
         for (const item of items) {
-            const { delay, span } = resolveShotStagger(duration, item.delayFraction, item.spanFraction);
-            const enter = easeTemperaEnter((time - shotStart - delay) / span);
-            // Items creep along the flow at different rates, so the composition keeps
-            // re-arranging itself for the whole shot instead of translating as one slab.
-            const creep = travelled * carry * 0.4 * item.creepScale;
+            const rawDelay = resolveShotPacedDuration(duration, item.delayFraction, 0, 1.4);
+            const rawSpan = resolveShotPacedDuration(duration, item.spanFraction, 0.7, 2.6);
+            // Short shots compress the whole stagger instead of dropping the late items.
+            const compress = Math.min(1, budget / (rawDelay + rawSpan));
+            const enter = easeTemperaEnter((time - shotStart - rawDelay * compress) / (rawSpan * compress));
             item.node.alpha = item.baseAlpha * enter;
             item.node.visible = enter > 0.001;
             const behind = (1 - enter) * carry - creep;
