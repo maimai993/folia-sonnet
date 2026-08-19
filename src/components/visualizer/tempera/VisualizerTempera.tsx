@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { DEFAULT_TEMPERA_TUNING } from '../../../types';
 import type { Line } from '../../../types';
 import { extractRepresentativeColors } from '../../../utils/colorExtractor';
+import { loadTemperaLayerImageBlobs } from '../../../services/temperaLayerImages';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import type { VisualizerSharedProps } from '../definition';
@@ -48,6 +49,8 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
     const runtimeRef = useRef<TemperaPixiRuntime | null>(null);
     const pausedRef = useRef(paused);
     pausedRef.current = paused;
+    const temperaTuningRef = useRef(temperaTuning);
+    temperaTuningRef.current = temperaTuning;
     const latestSongMetadataRef = useRef<TemperaSongMetadata>({
         title: songTitle,
         artist: songArtist,
@@ -59,6 +62,7 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
         album: songAlbum,
     };
     const [coverColors, setCoverColors] = useState<string[]>([]);
+    const [imageBlobs, setImageBlobs] = useState<Map<string, Blob>>(() => new Map());
     const [runtimeFailed, setRuntimeFailed] = useState(false);
     const [isInstrumental, setIsInstrumental] = useState(false);
     const lyricsSig = lines.length === 0 ? '' : `${lines.length}|${lines[0]?.fullText ?? ''}`;
@@ -139,6 +143,36 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
         };
     }, [coverUrl, needsCoverColors]);
 
+    // The placed images live in IndexedDB; only their ids and placement ride in the tuning.
+    // Blobs are handed to the renderer as-is, which decodes them itself - see the note there
+    // on why an object URL would not survive Pixi's asset loader.
+    const layerImages = temperaTuning.layerImages;
+    const layerImagesRef = useRef(layerImages);
+    layerImagesRef.current = layerImages;
+    // Keyed on the id set, not the array: dragging a placement slider hands down a new array
+    // every pointer move, and re-reading IndexedDB for each of those would be pure waste.
+    const layerImageIds = layerImages.map(image => image.id).join('|');
+    useEffect(() => {
+        const placements = layerImagesRef.current;
+        if (placements.length === 0) {
+            setImageBlobs(new Map());
+            return undefined;
+        }
+        let active = true;
+        void loadTemperaLayerImageBlobs(placements).then(blobs => {
+            if (active) setImageBlobs(blobs);
+        });
+        return () => {
+            active = false;
+        };
+    }, [layerImageIds]);
+
+    // Tuning is pushed into the live renderer rather than rebuilding it. A rebuild per pointer
+    // move re-initialises WebGL, re-decodes every placed image and re-measures every line.
+    useEffect(() => {
+        runtimeRef.current?.setTuning(temperaTuning);
+    }, [temperaTuning]);
+
     useEffect(() => {
         const host = hostRef.current;
         if (!host) return undefined;
@@ -153,11 +187,12 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
                     host,
                     program,
                     theme,
-                    tuning: temperaTuning,
+                    tuning: temperaTuningRef.current,
                     currentTime,
                     lyricsFontScale,
                     staticMode,
                     coverColors,
+                    imageBlobs,
                     paused: pausedRef.current,
                     songTitle: metadata.title,
                     songArtist: metadata.artist,
@@ -173,6 +208,8 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
                 createdRuntime = runtime;
                 runtimeRef.current = runtime;
                 runtime.setSongMetadata(latestSongMetadataRef.current);
+                // The tuning may have moved on while Pixi was importing or initializing.
+                runtime.setTuning(temperaTuningRef.current);
                 // The pause state may have changed while Pixi was importing or initializing.
                 runtime.setPaused(pausedRef.current);
             })
@@ -196,9 +233,9 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
     }, [
         coverColors,
         currentTime,
+        imageBlobs,
         lyricsFontScale,
         program,
-        temperaTuning,
         staticMode,
         theme,
     ]);

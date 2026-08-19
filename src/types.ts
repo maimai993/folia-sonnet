@@ -580,6 +580,30 @@ export const DEFAULT_SONNET_TUNING: SonnetTuning = {
  */
 export type TemperaColorMode = 'duo' | 'mono' | 'gradient';
 
+/** Where an image tends to sit; the exact spot is picked per shot from the seed. */
+export type TemperaLayerImageAlign = 'left' | 'center' | 'right' | 'free';
+
+/**
+ * One image in the user's Tempera pool - character art, a logo, a texture. Each shot picks one
+ * of them and places it itself, so an image carries a *tendency* rather than coordinates:
+ * hand-placing every picture would defeat the point of a pool. The file itself sits in
+ * IndexedDB under the same `id`, keeping the tuning small enough to sync.
+ */
+export interface TemperaLayerImage {
+  id: string;
+  name: string;
+  align: TemperaLayerImageAlign;
+  /** Height as a fraction of the viewport height; width follows the source aspect. */
+  scale: number;
+  opacity: number;
+}
+
+export const DEFAULT_TEMPERA_LAYER_IMAGE: Omit<TemperaLayerImage, 'id' | 'name'> = {
+  align: 'free',
+  scale: 0.7,
+  opacity: 1,
+};
+
 export interface TemperaTuning {
   cameraIntensity: number;
   /** Per-glyph entrance motion strength, 0..2. */
@@ -594,6 +618,12 @@ export interface TemperaTuning {
    * has its own switch rather than riding `postProcessEnabled`.
    */
   textInversion: boolean;
+  /** Pool of user images; each shot picks one. The files themselves live in IndexedDB. */
+  layerImages: TemperaLayerImage[];
+  /** `back` lets the lyric invert against the picture; `front` puts it over the lyric. */
+  layerImageDepth: 'back' | 'front';
+  /** 0..1 chance that a given shot shows an image at all. */
+  layerImageFrequency: number;
   enableTransitions: boolean;
   textureResolution: number;
   /** Master switch for the scene-wide post-process stack (grain + contrast + print passes). */
@@ -617,6 +647,9 @@ export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
   showBlocks: true,
   showDecor: true,
   textInversion: true,
+  layerImages: [],
+  layerImageDepth: 'back',
+  layerImageFrequency: 0.6,
   enableTransitions: true,
   textureResolution: 1.5,
   postProcessEnabled: false,

@@ -14,6 +14,7 @@ import {
     type TemperaGlyphView,
 } from './temperaTextView';
 import { createTemperaDifferenceFilter } from './temperaDifferenceFilter';
+import { buildTemperaImageLayer, type TemperaImageLayerView } from './temperaImageLayer';
 import { buildDotGrid, buildHatchSpec, circlePolygon, rectPolygon } from './temperaHatch';
 import { drawHatchFill, drawPolygonFill, drawPolygonOutline, drawSquareMarks } from './temperaShapes';
 import { createSonnetLensFilter } from '../sonnet/sonnetLensFilter';
@@ -32,6 +33,7 @@ export interface TemperaShotView {
     container: import('pixi.js').Container;
     glyphs: TemperaGlyphView[];
     blocks: TemperaBlocksView;
+    images: TemperaImageLayerView;
     baseX: number;
     baseY: number;
     /** Carries the difference inversion filter; the runtime clears it on destroy. */
@@ -58,6 +60,8 @@ export interface TemperaSceneBuildOptions {
     staticMode: boolean;
     /** Cover-art colours for the gradient colour mode; empty falls back to the theme hues. */
     coverColors: string[];
+    /** Loaded textures for the user's placed images, keyed by placement id. */
+    imageTextures: Map<string, import('pixi.js').Texture>;
 }
 
 export interface TemperaCreditsMetadata {
@@ -348,6 +352,8 @@ export const buildTemperaScene = (
             : [],
     ]));
 
+    // Threaded so two neighbouring shots do not land on the same picture.
+    let lastImageId: string | null = null;
     const shots = paragraph.shots.map((shot, shotIndex) => {
         const shotContainer = new Container();
         // A shot shows one half-phrase slice, so the type can be set much larger than it
@@ -386,6 +392,18 @@ export const buildTemperaScene = (
         });
         blocks.container.visible = tuning.showBlocks;
 
+        const images = buildTemperaImageLayer(pixi, {
+            pool: tuning.layerImages,
+            frequency: tuning.layerImageFrequency,
+            depth: tuning.layerImageDepth,
+            textures: options.imageTextures,
+            width,
+            height,
+            seed: shotSeed,
+            flowAngle: shot.flowAngle,
+            previousId: lastImageId,
+        });
+        lastImageId = images.chosenId ?? lastImageId;
         const watermarkLayer = new Container();
         const textLayer = new Container();
         const echoLayer = new Container();
@@ -395,7 +413,17 @@ export const buildTemperaScene = (
         // lyric flips colour where it crosses those strokes. Nothing glyph-shaped may go there
         // though, or each glyph inverts against its own ghost and shatters into patches.
         // Echoes and keyword-coloured glyphs render after it, unfiltered, keeping their colour.
-        shotContainer.addChild(blocks.container, watermarkLayer, textLayer, echoLayer, keywordLayer);
+        // A `back` image joins the artwork the inversion reads; a `front` one sits over
+        // everything, including the lyric.
+        shotContainer.addChild(
+            blocks.container,
+            images.back,
+            watermarkLayer,
+            textLayer,
+            echoLayer,
+            keywordLayer,
+            images.front,
+        );
 
         const placements = resolveTemperaLayout({
             lines: linesSegments,
@@ -470,6 +498,7 @@ export const buildTemperaScene = (
             container: shotContainer,
             glyphs,
             blocks,
+            images,
             baseX: shotContainer.x,
             baseY: shotContainer.y,
             textLayer,

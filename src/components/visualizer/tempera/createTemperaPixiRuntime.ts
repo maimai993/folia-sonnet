@@ -53,6 +53,8 @@ export interface TemperaRuntimeOptions {
     lyricsFontScale: number;
     staticMode: boolean;
     coverColors?: string[];
+    /** Stored files for the user's placed images, keyed by placement id. */
+    imageBlobs?: Map<string, Blob>;
     paused: boolean;
     songTitle?: string | null;
     songArtist?: string | null;
@@ -60,6 +62,30 @@ export interface TemperaRuntimeOptions {
     signal?: AbortSignal;
 }
 
+
+/**
+ * Decodes an image blob to something Pixi can wrap. `createImageBitmap` handles every raster
+ * format; SVG is the one it commonly refuses, so that falls back to an image element.
+ */
+const decodeImageBlob = async (blob: Blob): Promise<ImageBitmap | HTMLImageElement> => {
+    try {
+        return await createImageBitmap(blob);
+    } catch {
+        const url = URL.createObjectURL(blob);
+        try {
+            const image = new Image();
+            image.decoding = 'async';
+            await new Promise<void>((resolve, reject) => {
+                image.onload = () => resolve();
+                image.onerror = () => reject(new Error('Tempera layer image failed to decode'));
+                image.src = url;
+            });
+            return image;
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    }
+};
 
 const resolveAnimationScale = (theme: Theme) => (
     theme.animationIntensity === 'calm' ? 0.65 : theme.animationIntensity === 'chaotic' ? 1.35 : 1
@@ -78,6 +104,32 @@ const resolveCreditsFrame = (time: number, finalEndTime: number) => {
     };
 };
 
+/**
+ * Which tuning fields change what a scene *is*, as opposed to how it is animated. Camera and
+ * glyph motion are read fresh every frame, and image placement is re-applied to the existing
+ * sprites, so neither needs the cached scenes thrown away. The image *set* does: a new id has
+ * no sprite yet.
+ */
+const requiresSceneRebuild = (previous: TemperaTuning, next: TemperaTuning) => (
+    previous.colorMode !== next.colorMode
+    || previous.showBlocks !== next.showBlocks
+    || previous.showDecor !== next.showDecor
+    || previous.textInversion !== next.textInversion
+    || previous.enableTransitions !== next.enableTransitions
+    || previous.postProcessEnabled !== next.postProcessEnabled
+    || previous.postProcessGrain !== next.postProcessGrain
+    || previous.postProcessContrast !== next.postProcessContrast
+    || previous.postProcessRgbShift !== next.postProcessRgbShift
+    || previous.postProcessVignette !== next.postProcessVignette
+    || previous.postProcessLensDistortion !== next.postProcessLensDistortion
+    || previous.layerImageDepth !== next.layerImageDepth
+    || previous.layerImageFrequency !== next.layerImageFrequency
+    || previous.layerImages.length !== next.layerImages.length
+    || previous.layerImages.some((image, index) => (
+        image.id !== next.layerImages[index]?.id || image.align !== next.layerImages[index]?.align
+    ))
+);
+
 export class TemperaPixiRuntime {
     private readonly sceneCache = new Map<number, TemperaSceneView>();
     private activeParagraphIndex = -1;
@@ -89,6 +141,7 @@ export class TemperaPixiRuntime {
     private sceneContainer!: import('pixi.js').Container;
     private creditsContainer!: import('pixi.js').Container;
     private credits: TemperaCreditsView | null = null;
+    private readonly imageTextures = new Map<string, import('pixi.js').Texture>();
     private overlayContainer!: import('pixi.js').Container;
     private wipeGraphics: import('pixi.js').Graphics | null = null;
 
@@ -125,6 +178,10 @@ export class TemperaPixiRuntime {
         runtime.creditsContainer = new pixi.Container();
         runtime.overlayContainer = new pixi.Container();
         app.stage.addChild(runtime.sceneContainer, runtime.creditsContainer, runtime.overlayContainer);
+
+        // Textures are loaded once and shared by every scene: paragraph scenes are rebuilt as
+        // playback moves, and reloading a character cut-out on each one would thrash.
+        await runtime.loadImageTextures();
 
         if (options.signal?.aborted) {
             runtime.destroy();
@@ -227,6 +284,25 @@ export class TemperaPixiRuntime {
         this.overlayContainer.addChild(g);
     }
 
+    /**
+     * Decodes the user's images straight from their blobs. `Assets.load` is deliberately not
+     * used: it chooses a parser from the URL's file extension, and a blob URL has none, so it
+     * refuses the load outright. Decoding here also means there is no object URL to leak.
+     */
+    private async loadImageTextures() {
+        const blobs = this.options.imageBlobs;
+        if (!blobs || blobs.size === 0) return;
+        await Promise.all([...blobs].map(async ([id, blob]) => {
+            try {
+                const source = await decodeImageBlob(blob);
+                if (this.destroyed) return;
+                this.imageTextures.set(id, this.pixi.Texture.from(source));
+            } catch {
+                // A corrupt or unsupported file simply leaves that placement unrendered.
+            }
+        }));
+    }
+
     private disposeCredits() {
         this.credits?.container.children.forEach(child => {
             child.filters = null;
@@ -266,6 +342,7 @@ export class TemperaPixiRuntime {
             lyricsFontScale: this.options.lyricsFontScale,
             staticMode: this.options.staticMode,
             coverColors: this.options.coverColors ?? [],
+            imageTextures: this.imageTextures,
         }, this.options.program.paragraphs[index]);
         this.sceneCache.set(index, scene);
         this.sceneContainer.addChild(scene.container);
@@ -333,6 +410,7 @@ export class TemperaPixiRuntime {
         view.container.rotation = frame.rotation * camera;
 
         view.blocks.updateTime(time, view.shot.startTime, view.shot.endTime);
+        view.images.updateTime(time, view.shot.startTime, view.shot.endTime);
 
         view.glyphs.forEach(glyph => {
             const frame = resolveTemperaGlyphMotion(glyph.motion, time, motion);
@@ -565,6 +643,33 @@ export class TemperaPixiRuntime {
         this.app.renderer.render(this.app.stage);
     }
 
+    /**
+     * Applies a tuning change in place. Rebuilding the renderer for one is ruinous: sliders
+     * fire continuously while dragged, and a rebuild re-initialises WebGL, re-decodes every
+     * placed image and re-measures every line. Only settings that change what a scene *is*
+     * drop the cached scenes; the rest are read live or re-applied to the sprites.
+     */
+    setTuning(tuning: TemperaTuning) {
+        if (this.destroyed) return;
+        const previous = this.options.tuning;
+        if (previous === tuning) return;
+        this.options.tuning = tuning;
+        if (requiresSceneRebuild(previous, tuning)) {
+            this.clearScenes();
+            // Before the first resize pass there is nothing sized to redraw; the install pass
+            // will draw both against real dimensions.
+            if (this.lastWidth > 0 && this.lastHeight > 0) {
+                this.drawOverlay(this.lastWidth, this.lastHeight);
+                this.drawCredits(this.lastWidth, this.lastHeight);
+            }
+        } else {
+            this.sceneCache.forEach(scene => {
+                scene.shots.forEach(shot => shot.images.applyPool(tuning.layerImages));
+            });
+        }
+        if (this.options.paused) this.renderOnce();
+    }
+
     setPaused(paused: boolean) {
         if (this.destroyed) return;
         this.options.paused = paused;
@@ -586,6 +691,10 @@ export class TemperaPixiRuntime {
         this.clearScenes();
         this.creditsContainer.removeChildren().forEach(child => child.destroy({ children: true }));
         this.wipeGraphics = null;
+        // These textures were built here rather than owned by a scene, so they are released
+        // here too; app.destroy only walks what is still on the stage.
+        this.imageTextures.forEach(texture => texture.destroy(true));
+        this.imageTextures.clear();
         this.app.destroy({ removeView: true }, { children: true, texture: true });
     }
 }

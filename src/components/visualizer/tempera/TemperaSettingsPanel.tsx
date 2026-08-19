@@ -4,6 +4,7 @@ import { colorWithAlpha } from '../colorMix';
 import type { VisualizerSettingsPanelProps } from '../definition';
 import VisualizerPresetGroup, { type VisualizerPresetOption } from '../VisualizerPresetGroup';
 import { TemperaRangeControl, TemperaSettingsSection } from './TemperaSettingsControls';
+import TemperaImageLayerControls from './TemperaImageLayerControls';
 
 // src/components/visualizer/tempera/TemperaSettingsPanel.tsx
 // Keeps Tempera's tuning controls adjacent to the mode implementation.
@@ -60,6 +61,18 @@ const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     {t('options.temperaSettingsDesc')}
                 </div>
             </div>
+
+            <TemperaSettingsSection title={t('options.temperaImageSection') || '画布图片'}>
+                <TemperaImageLayerControls
+                    images={temperaTuning.layerImages}
+                    depth={temperaTuning.layerImageDepth}
+                    frequency={temperaTuning.layerImageFrequency}
+                    rangeInputClass={rangeInputClass}
+                    onChange={layerImages => onTemperaTuningChange?.({ layerImages })}
+                    onDepthChange={layerImageDepth => onTemperaTuningChange?.({ layerImageDepth })}
+                    onFrequencyChange={layerImageFrequency => onTemperaTuningChange?.({ layerImageFrequency })}
+                />
+            </TemperaSettingsSection>
 
             <TemperaSettingsSection title={t('options.temperaQualitySection')}>
                 <div
