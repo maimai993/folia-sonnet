@@ -169,6 +169,29 @@ describe('Tempera entrance styles', () => {
         expect(new Set(openings).size).toBe(TEMPERA_ENTER_STYLES.length);
     });
 
+    it('keeps every style on the same modest travel distance', () => {
+        // No long-haul fly-ins: switching style changes the direction a glyph comes from,
+        // never how far it has to come.
+        const reach = TEMPERA_ENTER_STYLES.map(enterStyle => {
+            const frame = resolveTemperaGlyphMotion(glyph({ enterStyle }), 10, 1);
+            return Math.hypot(frame.x, frame.y);
+        });
+        const base = Math.hypot(40, 25);
+        reach.forEach((distance, index) => {
+            expect(distance, TEMPERA_ENTER_STYLES[index]).toBeLessThanOrEqual(base + 1e-6);
+        });
+    });
+
+    it('scales uniformly on both axes', () => {
+        // Single-axis stretches read as a gimmick against the deterministic typesetting.
+        TEMPERA_ENTER_STYLES.forEach(enterStyle => {
+            [10, 10.2, 10.5, 10.8].forEach(time => {
+                const frame = resolveTemperaGlyphMotion(glyph({ enterStyle }), time, 1);
+                expect(frame.scaleX, `${enterStyle}@${time}`).toBeCloseTo(frame.scaleY, 9);
+            });
+        });
+    });
+
     it('trails echoes only for styles that actually travel', () => {
         const travelling = resolveTemperaGlyphMotion(glyph({ enterStyle: 'slide' }), 10.05, 1);
         expect(travelling.echoAlpha).toBeGreaterThan(0.1);

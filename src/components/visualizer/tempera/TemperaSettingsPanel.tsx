@@ -30,11 +30,12 @@ const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     ]), [t]);
 
     const visibilityControls: Array<{
-        key: Extract<keyof TemperaTuning, 'showBlocks' | 'showDecor' | 'enableTransitions'>;
+        key: Extract<keyof TemperaTuning, 'showBlocks' | 'showDecor' | 'textInversion' | 'enableTransitions'>;
         label: string;
     }> = [
         { key: 'showBlocks', label: t('options.temperaShowBlocks') || '色块场景' },
         { key: 'showDecor', label: t('options.temperaShowDecor') || '装饰元素' },
+        { key: 'textInversion', label: t('options.temperaTextInversion') || '文字动态反色' },
         { key: 'enableTransitions', label: t('options.temperaEnableTransitions') || '场景转场' },
     ];
 

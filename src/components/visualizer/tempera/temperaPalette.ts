@@ -23,6 +23,12 @@ export interface TemperaPalette {
      * flat modes; shape fills read it to build a linear gradient instead of a solid colour.
      */
     gradient: string[] | null;
+    /**
+     * Vivid four-colour ramp for the lyric itself in gradient mode. Unlike `gradient` this one
+     * is NOT flattened onto the paper -> ink ladder: the type is what carries the cover's
+     * colour, so hue is preserved and only a contrast floor against the paper is enforced.
+     */
+    textGradient: string[] | null;
 }
 
 /** Fixed paper -> ink mix positions; the screentone layer maps tone index to hatch density. */
@@ -108,8 +114,32 @@ const buildGradientRamp = (paper: string, ink: string, sources: string[]) => {
     return TEMPERA_TONE_STOPS.map((stop, index) => {
         const rung = mixColors(paper, ink, stop);
         const hue = ordered[index % Math.max(ordered.length, 1)];
-        return hue ? matchLuminance(mixColors(rung, hue, 0.62), rung) : rung;
+        return hue ? matchLuminance(mixColors(rung, hue, 0.78), rung) : rung;
     });
+};
+
+/**
+ * Keeps a cover colour recognisable while guaranteeing it reads against the paper. Rather than
+ * pulling it onto the ink ladder (which is what greys the background ramp out), it is only
+ * pushed away from the paper's luminance until it clears the floor.
+ */
+const enforceReadable = (paper: string, color: string) => {
+    const paperLuminance = luminanceOf(paper);
+    if (Math.abs(luminanceOf(color) - paperLuminance) >= 88) return color;
+    const away = paperLuminance < 128 ? '#ffffff' : '#101010';
+    for (let step = 1; step <= 5; step += 1) {
+        const pushed = mixColors(color, away, step * 0.16);
+        if (Math.abs(luminanceOf(pushed) - paperLuminance) >= 88) return pushed;
+    }
+    return mixColors(color, away, 0.8);
+};
+
+const buildTextGradient = (paper: string, sources: string[]) => {
+    const usable = sources.map(color => color.trim()).filter(Boolean);
+    if (usable.length === 0) return null;
+    return Array.from({ length: 4 }, (_, index) => (
+        enforceReadable(paper, usable[index % usable.length])
+    ));
 };
 
 export const resolveTemperaPalette = (
@@ -135,15 +165,17 @@ export const resolveTemperaPalette = (
             shadow: colorWithAlpha(mixColors(paper, ink, 0.75), 0.35),
             ...buildToneLadder(paper, ink),
             gradient: null,
+            textGradient: null,
         };
     }
     const paper = theme.backgroundColor;
     const ink = ensureInkContrast(paper, theme.primaryColor);
     if (tuning.colorMode === 'gradient') {
         // Cover colours first, theme hues as the fallback when there is no artwork yet.
-        const ramp = buildGradientRamp(paper, ink, coverColors.length >= 2
+        const hues = coverColors.length >= 2
             ? coverColors
-            : [theme.accentColor, theme.secondaryColor, theme.primaryColor, theme.backgroundColor]);
+            : [theme.accentColor, theme.secondaryColor, theme.primaryColor, ink];
+        const ramp = buildGradientRamp(paper, ink, hues);
         return {
             paper,
             ink,
@@ -158,6 +190,7 @@ export const resolveTemperaPalette = (
             tone3: ramp[2],
             tone4: ramp[3],
             gradient: ramp,
+            textGradient: buildTextGradient(paper, hues),
         };
     }
     return {
@@ -173,5 +206,6 @@ export const resolveTemperaPalette = (
         // so a screentone composition reads identically in both color modes.
         ...buildToneLadder(paper, ink, theme.accentColor, theme.secondaryColor),
         gradient: null,
+        textGradient: null,
     };
 };

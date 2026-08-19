@@ -1077,6 +1077,7 @@ export default {
     "temperaTexturePerformanceWarning": "Higher texture resolution increases GPU memory usage and render load, which may affect performance.",
     "temperaShowBlocks": "Color Blocks",
     "temperaShowDecor": "Decorations",
+    "temperaTextInversion": "Dynamic text inversion",
     "temperaEnableTransitions": "Scene Transitions",
     "temperaPostProcessSection": "Post-processing",
     "temperaPostProcessEnabled": "Master Post-process Filters",

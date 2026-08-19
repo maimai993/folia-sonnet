@@ -202,10 +202,9 @@ export const buildTemperaScene = (
     // Tempera deliberately has no glow layer: a screen-blend halo washes the glyph toward
     // white and, wherever it lands, becomes backdrop the inversion filter has to read.
     //
-    // The inversion is NOT a post-process pass: it is how this mode colors type. Hanging it
-    // off `postProcessEnabled` left it dead for everyone, because that setting defaults to
-    // false. It now always runs; the flat ink fallback only applies if the renderer itself
-    // skips the filter.
+    // The inversion is NOT a post-process pass: it is how this mode colors type, so it has its
+    // own `textInversion` switch (default on) rather than riding `postProcessEnabled`, which
+    // defaults to false and once left the effect dead for everyone.
 
     // 关键字着色: the theme's wordColors are matched once per line and handed to the typesetter
     // as per-segment colours. Matched glyphs opt out of the inversion filter so the hue lands.
@@ -284,6 +283,7 @@ export const buildTemperaScene = (
             fontWeight,
             shadowEnabled: tuning.showDecor,
             echoCount: tuning.showDecor && !options.staticMode ? 2 : 0,
+            textGradient: palette.textGradient,
             textLayer,
             underLayer,
             echoLayer,
@@ -314,13 +314,17 @@ export const buildTemperaScene = (
             });
         }
         // Scoped to the text layer only: blendRequired copies the pixels under these bounds
-        // every frame, so a full-scene filter here would be a viewport-sized blit.
-        const differenceFilter = createTemperaDifferenceFilter(pixi, {
-            ink: palette.ink,
-            paper: palette.paper,
-        });
-        textLayer.filters = [differenceFilter];
-        postProcessFilters.push(differenceFilter);
+        // every frame, so a full-scene filter here would be a viewport-sized blit. In gradient
+        // colour mode the layer is empty anyway - every glyph carries its own ramp and lives
+        // in the unfiltered layer - so the filter is skipped outright.
+        if (tuning.textInversion && !palette.textGradient) {
+            const differenceFilter = createTemperaDifferenceFilter(pixi, {
+                ink: palette.ink,
+                paper: palette.paper,
+            });
+            textLayer.filters = [differenceFilter];
+            postProcessFilters.push(differenceFilter);
+        }
         const revealDoneTime = glyphs.length > 0
             ? Math.max(...glyphs.map(glyph => glyph.motion.settleTime))
             : shot.endTime;

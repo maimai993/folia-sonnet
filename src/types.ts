@@ -588,6 +588,12 @@ export interface TemperaTuning {
   colorMode: TemperaColorMode;
   showBlocks: boolean;
   showDecor: boolean;
+  /**
+   * 文字动态反色: the lyric samples the artwork under it and picks whichever of ink/paper
+   * contrasts more, per pixel. This is how the mode colours type, not a post-process, so it
+   * has its own switch rather than riding `postProcessEnabled`.
+   */
+  textInversion: boolean;
   enableTransitions: boolean;
   textureResolution: number;
   /** Master switch for the scene-wide post-process stack (grain + contrast + print passes). */
@@ -610,6 +616,7 @@ export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
   colorMode: 'duo',
   showBlocks: true,
   showDecor: true,
+  textInversion: true,
   enableTransitions: true,
   textureResolution: 1.5,
   postProcessEnabled: false,

@@ -41,6 +41,8 @@ export interface TemperaGlyphPlacement {
     releaseTime: number;
     trackingX: number;
     trackingY: number;
+    /** 0..1 position across the block; gradient mode sweeps the colour ramp along it. */
+    gradientOffset: number;
 }
 
 interface TemperaLayoutOptions {
@@ -220,6 +222,15 @@ const applyGlyphTiming = (placements: TemperaGlyphPlacement[]) => {
         placement.trackingX = placement.x - centerX;
         placement.trackingY = placement.y - centerY;
     });
+
+    // Normalised horizontal position, so a colour ramp can sweep the whole block instead of
+    // repeating inside every glyph.
+    const minX = Math.min(...placements.map(placement => placement.x));
+    const maxX = Math.max(...placements.map(placement => placement.x));
+    const span = Math.max(1, maxX - minX);
+    placements.forEach(placement => {
+        placement.gradientOffset = (placement.x - minX) / span;
+    });
     return placements;
 };
 
@@ -334,6 +345,7 @@ export const resolveTemperaLayout = ({
                     releaseTime: 0,
                     trackingX: 0,
                     trackingY: 0,
+                    gradientOffset: 0,
                 });
             });
         });

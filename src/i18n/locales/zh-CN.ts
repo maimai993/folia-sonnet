@@ -1081,6 +1081,7 @@ export default {
     "temperaTexturePerformanceWarning": "提高纹理分辨率会增加 GPU 显存占用和渲染负载，可能影响性能。",
     "temperaShowBlocks": "色块场景",
     "temperaShowDecor": "装饰元素",
+    "temperaTextInversion": "文字动态反色",
     "temperaEnableTransitions": "场景转场",
     "temperaPostProcessSection": "后处理",
     "temperaPostProcessEnabled": "整体后处理滤镜",

@@ -552,6 +552,7 @@ const readStoredTemperaTuning = (): TemperaTuning => {
             cameraIntensity: resolvePendoloNumber(parsed.cameraIntensity, DEFAULT_TEMPERA_TUNING.cameraIntensity, 0, 2),
             glyphMotion: resolvePendoloNumber(parsed.glyphMotion, DEFAULT_TEMPERA_TUNING.glyphMotion, 0, 2),
             colorMode: parsed.colorMode === 'mono' || parsed.colorMode === 'gradient' ? parsed.colorMode : DEFAULT_TEMPERA_TUNING.colorMode,
+            textInversion: typeof parsed.textInversion === 'boolean' ? parsed.textInversion : DEFAULT_TEMPERA_TUNING.textInversion,
             showBlocks: typeof parsed.showBlocks === 'boolean'
                 ? parsed.showBlocks
                 : DEFAULT_TEMPERA_TUNING.showBlocks,
@@ -2324,6 +2325,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             cameraIntensity: resolvePendoloNumber(patch.cameraIntensity, prev.cameraIntensity, 0, 2),
             glyphMotion: resolvePendoloNumber(patch.glyphMotion, prev.glyphMotion, 0, 2),
             colorMode: patch.colorMode === 'duo' || patch.colorMode === 'mono' || patch.colorMode === 'gradient' ? patch.colorMode : prev.colorMode,
+            textInversion: typeof patch.textInversion === 'boolean' ? patch.textInversion : prev.textInversion,
             showBlocks: typeof patch.showBlocks === 'boolean' ? patch.showBlocks : prev.showBlocks,
             showDecor: typeof patch.showDecor === 'boolean' ? patch.showDecor : prev.showDecor,
             enableTransitions: typeof patch.enableTransitions === 'boolean'

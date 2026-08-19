@@ -164,8 +164,35 @@ describe('Tempera palette', () => {
     });
 
     it('leaves the flat colour modes without a gradient ramp', () => {
-        expect(resolveTemperaPalette(theme({}), { colorMode: 'duo' }).gradient).toBeNull();
-        expect(resolveTemperaPalette(theme({}), { colorMode: 'mono' }).gradient).toBeNull();
+        (['duo', 'mono'] as const).forEach(colorMode => {
+            const palette = resolveTemperaPalette(theme({}), { colorMode });
+            expect(palette.gradient).toBeNull();
+            expect(palette.textGradient).toBeNull();
+        });
+    });
+
+    it('keeps the text ramp vivid while the background ramp stays on the tone ladder', () => {
+        const chroma = (color: string) => {
+            const { r, g, b } = channelsOf(color);
+            return Math.max(r, g, b) - Math.min(r, g, b);
+        };
+        const luminance = (color: string) => {
+            const { r, g, b } = channelsOf(color);
+            return r * 0.2126 + g * 0.7152 + b * 0.0722;
+        };
+        const cover = ['#c94f6d', '#2f6f8f', '#e8c46a', '#3d3a52'];
+        const palette = resolveTemperaPalette(theme({}), { colorMode: 'gradient' }, cover);
+
+        expect(palette.textGradient).toHaveLength(4);
+        // The type is what carries the cover's colour, so it must not be flattened onto the
+        // paper -> ink ladder the way the background ramp is.
+        const textChroma = palette.textGradient!.map(chroma);
+        const blockChroma = palette.gradient!.map(chroma);
+        expect(Math.max(...textChroma)).toBeGreaterThan(Math.max(...blockChroma));
+        // ...but every text colour still has to clear the paper.
+        palette.textGradient!.forEach(color => {
+            expect(Math.abs(luminance(color) - luminance(palette.paper))).toBeGreaterThanOrEqual(88);
+        });
     });
 
     it('keeps duo anchored to the themed paper and ink', () => {

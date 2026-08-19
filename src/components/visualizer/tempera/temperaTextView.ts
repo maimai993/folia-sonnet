@@ -2,6 +2,7 @@ import type { TemperaGlyphPlacement } from './temperaLayout';
 import type { TemperaPalette } from './temperaPalette';
 import type { TemperaDecorFragment, TemperaDecorWatermark } from './types';
 import type { TemperaGlyphMotionInput } from './temperaMotion';
+import { mixColors } from '../colorMix';
 
 // src/components/visualizer/tempera/temperaTextView.ts
 // Builds one Pixi Text node per grapheme plus a hard offset copy for print registration.
@@ -30,6 +31,12 @@ interface TemperaTextViewOptions {
     fontWeight: number;
     shadowEnabled: boolean;
     echoCount: number;
+    /**
+     * Vivid four-colour ramp for gradient colour mode. When present the lyric carries the
+     * cover's colour itself, so those glyphs skip the inversion filter - it would overwrite
+     * every text pixel with a flat ink/paper choice and throw the gradient away.
+     */
+    textGradient: string[] | null;
     textLayer: import('pixi.js').Container;
     /** Rendered under the inverted text layer, so the filter reads it as backdrop. */
     underLayer: import('pixi.js').Container;
@@ -47,6 +54,28 @@ interface TemperaTextViewOptions {
 
 const SHADOW_OFFSET_X = 0.06;
 const SHADOW_OFFSET_Y = 0.08;
+/** How much of the ramp one glyph spans; the rest of the sweep happens across the block. */
+const GLYPH_GRADIENT_WINDOW = 0.16;
+
+const sampleRamp = (colors: string[], position: number) => {
+    const clamped = Math.min(1, Math.max(0, position));
+    const scaled = clamped * (colors.length - 1);
+    const index = Math.min(colors.length - 2, Math.floor(scaled));
+    return mixColors(colors[index], colors[index + 1], scaled - index);
+};
+
+// Each glyph gets a slice of the ramp centred on its position in the block, so the colour
+// sweeps across the whole line rather than repeating inside every character.
+const buildGlyphGradient = (pixi: PixiModule, colors: string[], offset: number) => new pixi.FillGradient({
+    type: 'linear',
+    start: { x: 0, y: 0.15 },
+    end: { x: 1, y: 0.85 },
+    colorStops: [0, 0.5, 1].map(step => ({
+        offset: step,
+        color: sampleRamp(colors, offset + (step - 0.5) * GLYPH_GRADIENT_WINDOW),
+    })),
+    textureSpace: 'local',
+});
 
 export const buildTemperaTextViews = (
     pixi: PixiModule,
@@ -64,9 +93,16 @@ export const buildTemperaTextViews = (
             fontWeight: weightToken,
             fontSize: placement.fontSize,
         };
+        // Keyword colour wins over the gradient: it is a deliberate per-word statement.
+        const gradientFill = !placement.color && options.textGradient
+            ? buildGlyphGradient(pixi, options.textGradient, placement.gradientOffset)
+            : null;
         const display = new Text({
             text: placement.char,
-            style: new TextStyle({ ...baseStyle, fill: placement.color ?? palette.ink }),
+            style: new TextStyle({
+                ...baseStyle,
+                fill: gradientFill ?? placement.color ?? palette.ink,
+            }),
         });
         display.anchor.set(0.5);
         display.position.set(placement.x, placement.y);
@@ -99,7 +135,8 @@ export const buildTemperaTextViews = (
             echoes.push(echo);
         }
 
-        (placement.color ? options.keywordLayer : options.textLayer).addChild(display);
+        const unfiltered = Boolean(placement.color) || Boolean(gradientFill);
+        (unfiltered ? options.keywordLayer : options.textLayer).addChild(display);
         views.push({
             display,
             shadow,

@@ -257,6 +257,15 @@ describe('Tempera collage layout', () => {
         expect(Math.abs(outermost.trackingX)).toBeGreaterThan(outermost.fontSize);
     });
 
+    it('sweeps the gradient offset across the whole block', () => {
+        const offsets = layout().map(placement => placement.gradientOffset);
+        // Normalised 0..1 across the block, so a colour ramp runs the length of the line
+        // instead of repeating inside every glyph.
+        expect(Math.min(...offsets)).toBeCloseTo(0, 6);
+        expect(Math.max(...offsets)).toBeCloseTo(1, 6);
+        expect(new Set(offsets.map(value => value.toFixed(3))).size).toBeGreaterThan(4);
+    });
+
     it('returns nothing for an empty shot', () => {
         expect(layout({ lines: [] })).toEqual([]);
     });
