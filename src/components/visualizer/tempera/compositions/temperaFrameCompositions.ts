@@ -106,10 +106,91 @@ const cornerBrackets: TemperaCompositionDrawer = ctx => {
     { delay: 0.24, drift: true });
 };
 
+// One inset rectangle, faintly filled: the quietest way to hold a phrase.
+const insetBox: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    const box = rectPolygon(width * 0.14, height * 0.2, width * 0.72, height * 0.6);
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, box, palette.tone3, 0.55, ctx.gradient), { delay: 0.05, span: 0.55, enterDY: height * 0.06 });
+    ctx.add(drawPolygonOutline(ctx.pixi, box, palette.ink, 2.4, 0.85), { delay: 0.1, span: 0.5 });
+};
+
+// Two facing brackets instead of a closed box; the phrase sits between the jaws.
+const bracketPair: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    const inset = width * 0.16;
+    const arm = width * 0.09;
+    const top = height * 0.26;
+    const bottom = height * 0.74;
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone2, 0.9, ctx.gradient), { span: 0.5 });
+    ([1, -1] as const).forEach((side, index) => {
+        const x = side === 1 ? inset : width - inset;
+        ctx.add(drawLines(ctx.pixi, [
+            { x1: x, y1: top, x2: x + side * arm, y2: top },
+            { x1: x, y1: top, x2: x, y2: bottom },
+            { x1: x, y1: bottom, x2: x + side * arm, y2: bottom },
+        ], palette.ink, 4, 0.9), { delay: index * 0.07, span: 0.5, enterDX: side * width * 0.08 });
+    });
+};
+
+// A rounded-top window: half disc riding a rectangle.
+const archWindow: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    const radius = width * 0.24;
+    const cx = width / 2;
+    const shoulder = height * 0.42;
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone3, 0.92, ctx.gradient), { span: 0.5 });
+    const arch = circlePolygon(cx, shoulder, radius, 48);
+    const body = rectPolygon(cx - radius, shoulder, radius * 2, height * 0.4);
+    ctx.add(drawPolygonFill(ctx.pixi, arch, palette.paper, 0.95, ctx.gradient), { delay: 0.05, span: 0.55, enterDY: -height * 0.08 });
+    ctx.add(drawPolygonFill(ctx.pixi, body, palette.paper, 0.95, ctx.gradient), { delay: 0.05, span: 0.55, enterDY: height * 0.08 });
+    ctx.add(drawPolygonOutline(ctx.pixi, arch, palette.ink, 2.4, 0.8), { delay: 0.12, span: 0.5 });
+    ctx.add(drawPolygonOutline(ctx.pixi, body, palette.ink, 2.4, 0.8), { delay: 0.12, span: 0.5 });
+};
+
+// A hairline 3x3 lattice; the lyric runs across the middle row.
+const gridCells: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
+    const left = width * 0.12;
+    const top = height * 0.18;
+    const cellWidth = (width * 0.76) / 3;
+    const cellHeight = (height * 0.64) / 3;
+    for (let row = 0; row < 3; row += 1) {
+        for (let column = 0; column < 3; column += 1) {
+            const cell = rectPolygon(left + cellWidth * column, top + cellHeight * row, cellWidth, cellHeight);
+            const index = row * 3 + column;
+            if (row === 1 && column === 1) {
+                ctx.add(drawPolygonFill(ctx.pixi, cell, palette.tone4, 0.75, ctx.gradient), { delay: index * 0.03, span: 0.5 });
+            }
+            ctx.add(drawPolygonOutline(ctx.pixi, cell, palette.tone4, 1.2, 0.6), { delay: index * 0.03, span: 0.5 });
+        }
+    }
+};
+
+// Disc over a narrow shaft: the silhouette reads as a keyhole cut in the tone.
+const keyhole: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    const radius = Math.min(width, height) * 0.19;
+    const cx = width / 2;
+    const cy = height * 0.36;
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone4, 0.94, ctx.gradient), { span: 0.5 });
+    const head = circlePolygon(cx, cy, radius, 48);
+    const shaft = rectPolygon(cx - radius * 0.55, cy, radius * 1.1, height * 0.46);
+    ctx.add(drawPolygonFill(ctx.pixi, head, palette.paper, 0.96, ctx.gradient), { delay: 0.05, span: 0.55 });
+    ctx.add(drawPolygonFill(ctx.pixi, shaft, palette.paper, 0.96, ctx.gradient), { delay: 0.08, span: 0.55, enterDY: height * 0.1 });
+    ctx.add(drawPolygonOutline(ctx.pixi, head, palette.ink, 2, 0.7), { delay: 0.14, span: 0.5 });
+};
+
 export const TEMPERA_FRAME_COMPOSITIONS: Partial<Record<TemperaShotKind, TemperaCompositionDrawer>> = {
     'frame-window': frameWindow,
     'double-frame': doubleFrame,
     'circle-window': circleWindow,
     'ladder-frame': ladderFrame,
     'corner-brackets': cornerBrackets,
+    'inset-box': insetBox,
+    'bracket-pair': bracketPair,
+    'arch-window': archWindow,
+    'grid-cells': gridCells,
+    'keyhole': keyhole,
 };

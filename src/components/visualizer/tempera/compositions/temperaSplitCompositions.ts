@@ -136,6 +136,77 @@ const crossAxis: TemperaCompositionDrawer = ctx => {
         { delay: 0.12, span: 0.5, enterDX: width * 0.5 });
 };
 
+// Two halves shoved past each other; the step where they miss is the composition.
+const offsetHalves: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    const step = height * (0.06 + temperaHash01(ctx.seed, 7, 23) * 0.06);
+    const seam = width * 0.48;
+    addPanels(ctx, [
+        { polygon: rectPolygon(-bleed, -bleed, seam + bleed, height * 0.5 + step + bleed), tone: palette.tone1, enterDX: -width * 0.3, enterDY: 0 },
+        { polygon: rectPolygon(seam, -bleed, width - seam + bleed, height * 0.5 - step + bleed), tone: palette.tone3, enterDX: width * 0.3, enterDY: 0 },
+        { polygon: rectPolygon(-bleed, height * 0.5 + step, seam + bleed, height * 0.5 - step + bleed), tone: palette.tone4, enterDX: -width * 0.2, enterDY: 0 },
+        { polygon: rectPolygon(seam, height * 0.5 - step, width - seam + bleed, height * 0.5 + step + bleed), tone: palette.tone2, enterDX: width * 0.2, enterDY: 0 },
+    ], 2);
+};
+
+// Four blocks marching down the diagonal, each one a step darker.
+const stairBlocks: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    const tones = [palette.tone1, palette.tone2, palette.tone3, palette.tone4];
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
+    tones.forEach((tone, index) => {
+        const left = width * (0.06 + index * 0.2);
+        const top = height * (0.1 + index * 0.16);
+        ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(left, top, width * 0.3, height * 0.34), tone, 0.94, ctx.gradient),
+            { delay: index * 0.06, span: 0.5, enterDX: -width * 0.2, enterDY: height * 0.12 });
+    });
+};
+
+// Two heavy masses leave a bright vertical slot; the lyric stands in the slot.
+const pillarGap: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    const gap = width * (0.26 + temperaHash01(ctx.seed, 8, 29) * 0.08);
+    const side = (width - gap) / 2;
+    addPanels(ctx, [
+        { polygon: rectPolygon(-bleed, -bleed, side + bleed, height + bleed * 2), tone: palette.tone4, enterDX: -width * 0.3, enterDY: 0 },
+        { polygon: rectPolygon(width - side, -bleed, side + bleed, height + bleed * 2), tone: palette.tone4, enterDX: width * 0.3, enterDY: 0 },
+    ], 1);
+};
+
+// Quadrants of deliberately unequal weight, split off-centre in both axes.
+const cornerQuad: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    const splitX = width * (0.6 + temperaHash01(ctx.seed, 9, 31) * 0.12);
+    const splitY = height * (0.62 + temperaHash01(ctx.seed, 10, 37) * 0.1);
+    addPanels(ctx, [
+        { polygon: rectPolygon(-bleed, -bleed, splitX + bleed, splitY + bleed), tone: palette.tone2, enterDX: 0, enterDY: -height * 0.25 },
+        { polygon: rectPolygon(splitX, -bleed, width - splitX + bleed, splitY + bleed), tone: palette.tone4, enterDX: width * 0.25, enterDY: 0 },
+        { polygon: rectPolygon(-bleed, splitY, splitX + bleed, height - splitY + bleed), tone: palette.tone1, enterDX: -width * 0.25, enterDY: 0 },
+        { polygon: rectPolygon(splitX, splitY, width - splitX + bleed, height - splitY + bleed), tone: palette.tone3, enterDX: 0, enterDY: height * 0.25 },
+    ], 0);
+};
+
+// A stack of thin alternating slivers filling one side of the frame.
+const sliverStack: TemperaCompositionDrawer = ctx => {
+    const { width, height, palette, bleed } = ctx;
+    const fromLeft = temperaHash01(ctx.seed, 11, 41) > 0.5;
+    const slabWidth = width * 0.46;
+    const left = fromLeft ? -bleed : width - slabWidth;
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
+    const count = 9;
+    const sliver = (height + bleed * 2) / count;
+    for (let index = 0; index < count; index += 1) {
+        if (index % 2 === 1) continue;
+        ctx.add(drawPolygonFill(
+            ctx.pixi,
+            rectPolygon(left, -bleed + sliver * index, slabWidth + bleed, sliver),
+            palette.tone4,
+            0.92,
+            ctx.gradient,
+        ), { delay: index * 0.02, span: 0.5, enterDX: (fromLeft ? -1 : 1) * width * 0.2 });
+    }
+};
+
 export const TEMPERA_SPLIT_COMPOSITIONS: Partial<Record<TemperaShotKind, TemperaCompositionDrawer>> = {
     'duo-split': duoSplit,
     'quad-split': quadSplit,
@@ -145,4 +216,9 @@ export const TEMPERA_SPLIT_COMPOSITIONS: Partial<Record<TemperaShotKind, Tempera
     'corner-wedge': cornerWedge,
     'diagonal-halves': diagonalHalves,
     'cross-axis': crossAxis,
+    'offset-halves': offsetHalves,
+    'stair-blocks': stairBlocks,
+    'pillar-gap': pillarGap,
+    'corner-quad': cornerQuad,
+    'sliver-stack': sliverStack,
 };

@@ -24,7 +24,7 @@ const line = (
 describe('Tempera program compiler', () => {
     it('gives every shot kind a layout profile and a composition', () => {
         // A half-phrase shot list has to be long enough that a paragraph rarely repeats one.
-        expect(TEMPERA_SHOT_KINDS.length).toBeGreaterThanOrEqual(20);
+        expect(TEMPERA_SHOT_KINDS.length).toBeGreaterThanOrEqual(62);
         expect(new Set(TEMPERA_SHOT_KINDS).size).toBe(TEMPERA_SHOT_KINDS.length);
 
         TEMPERA_SHOT_KINDS.forEach(kind => {
@@ -33,13 +33,28 @@ describe('Tempera program compiler', () => {
             expect(profile.region.w, kind).toBeGreaterThan(0);
             expect(profile.region.h, kind).toBeGreaterThan(0);
             expect(profile.camera.travel, kind).toBeGreaterThanOrEqual(0);
-            // A missing drawer would silently fall back to duo-split for that kind.
+            // A missing drawer silently falls back to duo-split, so identity is what has to
+            // be checked - `typeof === 'function'` would pass for every gap.
             expect(resolveTemperaComposition(kind), kind).toBeTypeOf('function');
+            if (kind !== 'duo-split') {
+                expect(resolveTemperaComposition(kind), kind).not.toBe(resolveTemperaComposition('duo-split'));
+            }
         });
         // Both mood extremes must exist, otherwise the chorus/breath filters have nothing to pick.
         const moods = new Set(TEMPERA_SHOT_KINDS.map(kind => TEMPERA_SHOT_PROFILES[kind].mood));
         expect(moods.has('quiet')).toBe(true);
         expect(moods.has('loud')).toBe(true);
+    });
+
+    it('keeps the interstitial cards bare and everything else decorated', () => {
+        // A Monogatari-style card is a flat field with type on it; the shared crossing lines
+        // and motif overlay would defeat the whole point.
+        TEMPERA_SHOT_KINDS.forEach(kind => {
+            const bare = TEMPERA_SHOT_PROFILES[kind].sharedDecor === false;
+            expect(bare, kind).toBe(kind.startsWith('monogatari-'));
+        });
+        expect(TEMPERA_SHOT_KINDS.filter(kind => kind.startsWith('monogatari-')).length).toBeGreaterThan(0);
+        expect(TEMPERA_SHOT_KINDS.filter(kind => kind.startsWith('cinema-')).length).toBeGreaterThan(0);
     });
 
     it('preserves CJK, whitespace, punctuation, and parser timing losslessly', () => {

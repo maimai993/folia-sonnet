@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TemperaSegment } from '@/components/visualizer/tempera/types';
 import { resolveTemperaLayout } from '@/components/visualizer/tempera/temperaLayout';
 import { TEMPERA_ENTER_STYLES } from '@/components/visualizer/tempera/temperaEnterStyles';
+import { TEMPERA_SHOT_KINDS } from '@/components/visualizer/tempera/types';
 
 // test/unit/visualizer/temperaLayout.test.ts
 // Locks the collage typesetter: reading order survives, the composition stays inside its
@@ -64,7 +65,9 @@ describe('Tempera collage layout', () => {
     });
 
     it('keeps the composition inside the viewport', () => {
-        (['duo-split', 'band-strip', 'frame-window', 'poster-panel', 'quiet-line'] as const)
+        // Every registered kind, not a sample: a bad region is invisible until that one shot
+        // happens to come up in a song.
+        TEMPERA_SHOT_KINDS
             .forEach(shotKind => {
                 layout({ shotKind }).forEach(placement => {
                     expect(placement.x).toBeGreaterThan(-placement.fontSize);

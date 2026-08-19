@@ -16,6 +16,9 @@ import { TEMPERA_BAND_COMPOSITIONS } from './compositions/temperaBandComposition
 import { TEMPERA_FRAME_COMPOSITIONS } from './compositions/temperaFrameCompositions';
 import { TEMPERA_POSTER_COMPOSITIONS } from './compositions/temperaPosterCompositions';
 import { TEMPERA_SPARSE_COMPOSITIONS } from './compositions/temperaSparseCompositions';
+import { TEMPERA_CINEMA_COMPOSITIONS } from './compositions/temperaCinemaCompositions';
+import { TEMPERA_MONOGATARI_COMPOSITIONS } from './compositions/temperaMonogatariCompositions';
+import { resolveTemperaShotProfile } from './temperaShotProfiles';
 
 // src/components/visualizer/tempera/temperaCompositions.ts
 // Composition registry plus the two layers every shot kind shares. The per-kind drawing lives
@@ -29,6 +32,8 @@ const COMPOSITIONS: Partial<Record<TemperaShotKind, TemperaCompositionDrawer>> =
     ...TEMPERA_FRAME_COMPOSITIONS,
     ...TEMPERA_POSTER_COMPOSITIONS,
     ...TEMPERA_SPARSE_COMPOSITIONS,
+    ...TEMPERA_CINEMA_COMPOSITIONS,
+    ...TEMPERA_MONOGATARI_COMPOSITIONS,
 };
 
 /** Every kind must resolve to a drawer; the registry test asserts there are no gaps. */
@@ -99,6 +104,8 @@ const addMotif = (ctx: TemperaCompositionContext) => {
 
 export const drawTemperaComposition = (ctx: TemperaCompositionContext) => {
     resolveTemperaComposition(ctx.kind)(ctx);
+    // Interstitial cards are a bare field by definition; the shared overlays would undo them.
+    if (resolveTemperaShotProfile(ctx.kind).sharedDecor === false) return;
     addCrossingLines(ctx);
     if (ctx.showDecor) addMotif(ctx);
 };
