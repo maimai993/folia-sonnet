@@ -85,6 +85,29 @@ describe('Tempera difference filter', () => {
         expect(uniformsOf(buildFilter({ ink: '#fff', paper: '#000', threshold: 0.7 })).uBias.value).toBeCloseTo(0.2, 6);
     });
 
+    it('leaves the tint off unless a ramp is supplied', () => {
+        const uniforms = uniformsOf(buildFilter({ ink: '#fff', paper: '#000' }));
+        expect(uniforms.uTintAmount.value).toBe(0);
+        expect(uniformsOf(buildFilter({ ink: '#fff', paper: '#000', tint: ['#ff0000'] })).uTintAmount.value)
+            .toBe(0);
+    });
+
+    it('tints the inversion instead of replacing it when a ramp is supplied', () => {
+        const uniforms = uniformsOf(buildFilter({
+            ink: '#ffffff',
+            paper: '#000000',
+            tint: ['#ff0000', '#00ff00', '#0000ff', '#ffff00'],
+        }));
+        expect(uniforms.uTintAmount.value).toBe(1);
+        expect(Array.from(uniforms.uTintA.value as Float32Array)).toEqual([1, 0, 0]);
+        expect(Array.from(uniforms.uTintD.value as Float32Array)).toEqual([1, 1, 0]);
+
+        // The shader must keep the luminance the inversion picked and take only the hue from
+        // the ramp; anything else throws away the readability guarantee.
+        const { fragment } = buildFilter({ ink: '#fff', paper: '#000' }).glProgram;
+        expect(fragment).toContain('toneLuminance / tintLuminance');
+    });
+
     it('carries no time-varying uniform, so a seek needs no filter update', () => {
         const uniforms = uniformsOf(buildFilter({ ink: '#fff', paper: '#000' }));
 

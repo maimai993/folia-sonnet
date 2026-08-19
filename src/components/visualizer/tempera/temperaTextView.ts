@@ -2,13 +2,16 @@ import type { TemperaGlyphPlacement } from './temperaLayout';
 import type { TemperaPalette } from './temperaPalette';
 import type { TemperaDecorFragment, TemperaDecorWatermark } from './types';
 import type { TemperaGlyphMotionInput } from './temperaMotion';
-import { mixColors } from '../colorMix';
 
 // src/components/visualizer/tempera/temperaTextView.ts
-// Builds one Pixi Text node per grapheme plus a hard offset copy for print registration.
-// The shadow copies sit *below* the inverted text layer on purpose: the difference filter
-// reads them as backdrop, which is what makes the glyph flip color. Nothing is ever painted
-// behind a glyph to emphasise it - the inversion against the artwork is the emphasis.
+// Builds one Pixi Text node per grapheme plus an offset ghost copy for print misregistration.
+//
+// The ghost lives *inside* the inverted layer, not below it. Below it, the ghost becomes part
+// of the backdrop the filter samples: each glyph then flips colour against its own shadow and
+// breaks into hard patches along its strokes. Inside the layer the filter colours ghost and
+// glyph alike, so the offset copy reads as a second printing plate instead of corrupting the
+// decision. Nothing is ever painted behind a glyph to emphasise it either - the inversion
+// against the artwork is the emphasis.
 type PixiModule = typeof import('pixi.js');
 
 export interface TemperaGlyphView {
@@ -31,15 +34,7 @@ interface TemperaTextViewOptions {
     fontWeight: number;
     shadowEnabled: boolean;
     echoCount: number;
-    /**
-     * Vivid four-colour ramp for gradient colour mode. When present the lyric carries the
-     * cover's colour itself, so those glyphs skip the inversion filter - it would overwrite
-     * every text pixel with a flat ink/paper choice and throw the gradient away.
-     */
-    textGradient: string[] | null;
     textLayer: import('pixi.js').Container;
-    /** Rendered under the inverted text layer, so the filter reads it as backdrop. */
-    underLayer: import('pixi.js').Container;
     /**
      * Rendered above the inverted layer and unfiltered. Echoes live here so a trail never
      * becomes backdrop the filter has to resolve against mid-entrance.
@@ -54,29 +49,8 @@ interface TemperaTextViewOptions {
 
 const SHADOW_OFFSET_X = 0.06;
 const SHADOW_OFFSET_Y = 0.08;
-/** How much of the ramp one glyph spans; the rest of the sweep happens across the block. */
-const GLYPH_GRADIENT_WINDOW = 0.16;
-
-const sampleRamp = (colors: string[], position: number) => {
-    const clamped = Math.min(1, Math.max(0, position));
-    const scaled = clamped * (colors.length - 1);
-    const index = Math.min(colors.length - 2, Math.floor(scaled));
-    return mixColors(colors[index], colors[index + 1], scaled - index);
-};
-
-// Each glyph gets a slice of the ramp centred on its position in the block, so the colour
-// sweeps across the whole line rather than repeating inside every character.
-const buildGlyphGradient = (pixi: PixiModule, colors: string[], offset: number) => new pixi.FillGradient({
-    type: 'linear',
-    start: { x: 0, y: 0.15 },
-    end: { x: 1, y: 0.85 },
-    colorStops: [0, 0.5, 1].map(step => ({
-        offset: step,
-        color: sampleRamp(colors, offset + (step - 0.5) * GLYPH_GRADIENT_WINDOW),
-    })),
-    textureSpace: 'local',
-});
-
+/** The ghost is tinted by the filter, so only its opacity is its own. */
+const SHADOW_ALPHA = 0.34;
 export const buildTemperaTextViews = (
     pixi: PixiModule,
     options: TemperaTextViewOptions,
@@ -93,31 +67,25 @@ export const buildTemperaTextViews = (
             fontWeight: weightToken,
             fontSize: placement.fontSize,
         };
-        // Keyword colour wins over the gradient: it is a deliberate per-word statement.
-        const gradientFill = !placement.color && options.textGradient
-            ? buildGlyphGradient(pixi, options.textGradient, placement.gradientOffset)
-            : null;
         const display = new Text({
             text: placement.char,
-            style: new TextStyle({
-                ...baseStyle,
-                fill: gradientFill ?? placement.color ?? palette.ink,
-            }),
+            style: new TextStyle({ ...baseStyle, fill: placement.color ?? palette.ink }),
         });
         display.anchor.set(0.5);
         display.position.set(placement.x, placement.y);
         display.rotation = placement.rotation;
 
-        // Hard (unblurred) offset copy; reads as an off-register second printing plate.
+        // Unblurred offset copy at partial alpha; the filter tints it with the glyph, so it
+        // reads as an off-register second printing plate.
         let shadow: import('pixi.js').Text | null = null;
         if (options.shadowEnabled) {
             shadow = new Text({
                 text: placement.char,
-                style: new TextStyle({ ...baseStyle, fill: palette.shadow }),
+                style: new TextStyle({ ...baseStyle, fill: palette.ink }),
             });
             shadow.anchor.set(0.5);
             shadow.rotation = placement.rotation;
-            options.underLayer.addChildAt(shadow, 0);
+            options.textLayer.addChildAt(shadow, 0);
         }
 
         // Motion echoes: dimmed copies parked further back along the entrance vector. The
@@ -135,8 +103,7 @@ export const buildTemperaTextViews = (
             echoes.push(echo);
         }
 
-        const unfiltered = Boolean(placement.color) || Boolean(gradientFill);
-        (unfiltered ? options.keywordLayer : options.textLayer).addChild(display);
+        (placement.color ? options.keywordLayer : options.textLayer).addChild(display);
         views.push({
             display,
             shadow,

@@ -134,6 +134,17 @@ const enforceReadable = (paper: string, color: string) => {
     return mixColors(color, away, 0.8);
 };
 
+/**
+ * How much of the theme is mixed into each extracted cover colour. The cover stays dominant -
+ * it is what the mode is sampling - but a purely cover-derived ramp drops the theme entirely,
+ * which makes the mode ignore the user's palette exactly when it is most visible.
+ */
+const THEME_HUE_MIX = 0.32;
+
+const blendCoverWithTheme = (cover: string[], themeHues: string[]) => (
+    cover.slice(0, 4).map((color, index) => mixColors(color, themeHues[index % themeHues.length], THEME_HUE_MIX))
+);
+
 const buildTextGradient = (paper: string, sources: string[]) => {
     const usable = sources.map(color => color.trim()).filter(Boolean);
     if (usable.length === 0) return null;
@@ -171,10 +182,12 @@ export const resolveTemperaPalette = (
     const paper = theme.backgroundColor;
     const ink = ensureInkContrast(paper, theme.primaryColor);
     if (tuning.colorMode === 'gradient') {
-        // Cover colours first, theme hues as the fallback when there is no artwork yet.
+        // Cover colours carry the ramp, each one tinted toward the theme so the user's palette
+        // is still present; with no artwork yet the theme hues stand on their own.
+        const themeHues = [theme.accentColor, theme.secondaryColor, theme.primaryColor, ink];
         const hues = coverColors.length >= 2
-            ? coverColors
-            : [theme.accentColor, theme.secondaryColor, theme.primaryColor, ink];
+            ? blendCoverWithTheme(coverColors, themeHues)
+            : themeHues;
         const ramp = buildGradientRamp(paper, ink, hues);
         return {
             paper,

@@ -237,8 +237,12 @@ export const buildTemperaCreditsPoster = (
     if (subtitle) buildLine(subtitle, Math.max(14, titleSize * 0.34), title.height / 2 + titleSize * 0.22, 0.75);
 
     // The title stays put while the shapes move under it, so the inversion keeps re-cutting it.
-    if (options.tuning.textInversion && !palette.textGradient) {
-        const filter = createTemperaDifferenceFilter(pixi, { ink: palette.ink, paper: palette.paper });
+    if (options.tuning.textInversion) {
+        const filter = createTemperaDifferenceFilter(pixi, {
+            ink: palette.ink,
+            paper: palette.paper,
+            tint: palette.textGradient,
+        });
         titleLayer.filters = [filter];
         filters.push(filter);
     }
@@ -383,15 +387,15 @@ export const buildTemperaScene = (
         blocks.container.visible = tuning.showBlocks;
 
         const watermarkLayer = new Container();
-        const underLayer = new Container();
         const textLayer = new Container();
         const echoLayer = new Container();
         const keywordLayer = new Container();
         // Order matters. Everything the inversion filter should read must render before the
         // text layer - that includes the decorative watermark, which is the point of it: the
-        // lyric flips colour where it crosses those strokes. Echoes and keyword-coloured
-        // glyphs render after it, unfiltered, so they keep their own colour.
-        shotContainer.addChild(blocks.container, watermarkLayer, underLayer, textLayer, echoLayer, keywordLayer);
+        // lyric flips colour where it crosses those strokes. Nothing glyph-shaped may go there
+        // though, or each glyph inverts against its own ghost and shatters into patches.
+        // Echoes and keyword-coloured glyphs render after it, unfiltered, keeping their colour.
+        shotContainer.addChild(blocks.container, watermarkLayer, textLayer, echoLayer, keywordLayer);
 
         const placements = resolveTemperaLayout({
             lines: linesSegments,
@@ -411,9 +415,7 @@ export const buildTemperaScene = (
             fontWeight,
             shadowEnabled: tuning.showDecor,
             echoCount: tuning.showDecor && !options.staticMode ? 2 : 0,
-            textGradient: palette.textGradient,
             textLayer,
-            underLayer,
             echoLayer,
             keywordLayer,
         });
@@ -443,12 +445,13 @@ export const buildTemperaScene = (
         }
         // Scoped to the text layer only: blendRequired copies the pixels under these bounds
         // every frame, so a full-scene filter here would be a viewport-sized blit. In gradient
-        // colour mode the layer is empty anyway - every glyph carries its own ramp and lives
-        // in the unfiltered layer - so the filter is skipped outright.
-        if (tuning.textInversion && !palette.textGradient) {
+        // colour mode the ramp rides along as a tint - the filter still decides the luminance,
+        // which is the only thing keeping the lyric readable over arbitrary artwork.
+        if (tuning.textInversion) {
             const differenceFilter = createTemperaDifferenceFilter(pixi, {
                 ink: palette.ink,
                 paper: palette.paper,
+                tint: palette.textGradient,
             });
             textLayer.filters = [differenceFilter];
             postProcessFilters.push(differenceFilter);

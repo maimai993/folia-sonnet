@@ -171,6 +171,22 @@ describe('Tempera palette', () => {
         });
     });
 
+    it('mixes the theme into the cover ramp instead of replacing it', () => {
+        const cover = ['#c94f6d', '#2f6f8f', '#e8c46a', '#3d3a52'];
+        const warm = resolveTemperaPalette(theme({ accentColor: '#ff8800' }), { colorMode: 'gradient' }, cover);
+        const cool = resolveTemperaPalette(theme({ accentColor: '#0088ff' }), { colorMode: 'gradient' }, cover);
+        // Same artwork, different theme: the ramp has to move, or the mode is ignoring the
+        // user's palette exactly when it is most visible.
+        expect(warm.gradient).not.toEqual(cool.gradient);
+        expect(warm.textGradient).not.toEqual(cool.textGradient);
+
+        // ...but the cover still dominates: the ramp is nowhere near the raw theme hue.
+        const channels = channelsOf(warm.textGradient![0]);
+        const accent = channelsOf('#ff8800');
+        const distance = Math.abs(channels.r - accent.r) + Math.abs(channels.g - accent.g) + Math.abs(channels.b - accent.b);
+        expect(distance).toBeGreaterThan(60);
+    });
+
     it('keeps the text ramp vivid while the background ramp stays on the tone ladder', () => {
         const chroma = (color: string) => {
             const { r, g, b } = channelsOf(color);

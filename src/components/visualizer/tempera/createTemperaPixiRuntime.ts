@@ -344,7 +344,7 @@ export class TemperaPixiRuntime {
             glyph.display.scale.set(frame.scaleX, frame.scaleY);
             glyph.display.rotation = frame.rotation;
             if (glyph.shadow) {
-                glyph.shadow.alpha = frame.alpha * 0.9;
+                glyph.shadow.alpha = frame.alpha * 0.34;
                 glyph.shadow.visible = frame.visible;
                 glyph.shadow.position.set(x + glyph.shadowDX, y + glyph.shadowDY);
                 glyph.shadow.scale.set(frame.scaleX, frame.scaleY);
