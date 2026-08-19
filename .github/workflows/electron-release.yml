@@ -130,6 +130,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Rust toolchain
+        if: runner.os == 'Linux'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo build
+        if: runner.os == 'Linux'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .windowtolayer-src
+
+      - name: Build windowtolayer from upstream + patch (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          # Shared with local `npm run build:electron*`: fetches the pinned upstream source,
+          # applies packaging/linux/patches/windowtolayer-popup-resilience.patch (git apply fails loudly instead
+          # of shipping a broken build if the revision drifts) and produces
+          # build/windowtolayer + build/windowtolayer-COPYING for extraResources.
+          node packaging/linux/build-windowtolayer.mjs
+
       - name: Stamp Realeco package metadata
         shell: bash
         env:

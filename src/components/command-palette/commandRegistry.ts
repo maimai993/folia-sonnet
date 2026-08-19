@@ -429,6 +429,18 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
             return true;
         },
     },
+    createSettingsCommand('settings-wallpaper-mode', 'Wallpaper mode settings', 'Open wallpaper mode settings', ['wallpaper mode', 'desktop wallpaper', 'lyrics wallpaper', '壁纸模式', '桌面壁纸', '歌词壁纸', 'bizhimoshi', 'zhuomianbizhi', 'gecibizhi', 'bzms', 'zmbz', 'gcbz'], 'options', 'desktop'),
+    {
+        id: 'desktop-toggle-wallpaper-mode',
+        group: 'settings',
+        title: 'Toggle wallpaper mode',
+        description: 'Turn the app into a desktop lyrics wallpaper',
+        keywords: ['wallpaper mode', 'desktop wallpaper', 'lyrics wallpaper', '壁纸模式', '桌面壁纸', '歌词壁纸', 'bizhimoshi', 'zhuomianbizhi', 'gecibizhi', 'bzms', 'zmbz', 'gcbz'],
+        execute: (_input, context) => {
+            context.toggleWallpaperMode();
+            return true;
+        },
+    },
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室', 'shiyan', 'shiyanshi', 'sy', 'sys'], 'options', 'lab'),
     createSettingsCommand('settings-visualizer', 'Visualizer settings', 'Open lyrics animation workbench', ['visualizer settings', 'visualizer workbench', '可视化', '歌词动画', 'keshihua', 'gecidonghua', 'ksh', 'gcdh', 'donghua'], 'options', 'visualizer'),
     createSettingsCommand('settings-theme-park', 'Color', 'Open theme editor', ['color', 'theme park', 'theme', '配色', '主题', '主题公园', 'peise', 'zhuti', 'zhutigongyuan', 'ps', 'zt', 'ztgy'], 'options', 'themePark'),
@@ -959,6 +971,14 @@ export const getAvailableCommandPaletteCommands = (context?: CommandPaletteConte
         const isWebBrowser = typeof window !== 'undefined';
         const isElectron = isWebBrowser && Boolean((window as any).electron);
         if (isWebBrowser && !isElectron) {
+            return false;
+        }
+    }
+
+    // Wallpaper mode is a Linux-only desktop feature; never offer it on web or other platforms.
+    if (command.id === 'settings-wallpaper-mode' || command.id === 'desktop-toggle-wallpaper-mode') {
+        const isLinuxElectron = typeof window !== 'undefined' && (window as any).electron?.platform === 'linux';
+        if (!isLinuxElectron) {
             return false;
         }
     }

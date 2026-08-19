@@ -105,6 +105,7 @@ export type CommandPaletteContext = {
     toggleVoiceInputPause: () => void;
     preventDisplaySleepDuringPlayback: boolean;
     togglePreventDisplaySleepDuringPlayback: () => void;
+    toggleWallpaperMode: () => void;
     setAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void> | void;
     runAutoMatchBestLyric: () => Promise<boolean>;
     setIsUserGuideModalOpen: (isOpen: boolean) => void;

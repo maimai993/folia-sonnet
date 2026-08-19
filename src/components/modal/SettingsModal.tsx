@@ -166,6 +166,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         voiceInputPauseEnabled,
         hideTaskbarIcon,
         hideRemoteControlTaskbarIcon,
+        wallpaperMode,
+        handleToggleWallpaperMode: onToggleWallpaperMode,
         openPlayerOnLaunch,
         enableMediaCache,
         backgroundOpacity,
@@ -1713,6 +1715,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     onToggleMinimizeToTray,
                                                     onToggleOpenPlayerOnLaunch,
                                                     openPlayerOnLaunch,
+                                                    wallpaperMode,
+                                                    onToggleWallpaperMode,
                                                 }}
                                             />
                                         )}

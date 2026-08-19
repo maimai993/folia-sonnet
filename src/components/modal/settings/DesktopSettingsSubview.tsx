@@ -58,6 +58,8 @@ export type DesktopSettingsPreferences = {
     onToggleMinimizeToTray: (enabled: boolean) => void;
     onToggleOpenPlayerOnLaunch: (enabled: boolean) => void;
     openPlayerOnLaunch: boolean;
+    wallpaperMode: boolean;
+    onToggleWallpaperMode: (enabled: boolean) => void;
 };
 
 export type DesktopSettingsModel = {
@@ -110,7 +112,10 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
         onToggleMinimizeToTray,
         onToggleOpenPlayerOnLaunch,
         openPlayerOnLaunch,
+        wallpaperMode,
+        onToggleWallpaperMode,
     } = preferences;
+    const isLinux = isElectron && window.electron?.platform === 'linux';
     const {
         canDownloadUpdate,
         canEnableAutoUpdate,
@@ -247,6 +252,32 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                     </motion.div>
                 )}
             </section>
+
+            {isLinux && (
+                <section className="space-y-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2 opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                        <AppWindow size={14} className="opacity-70" /> {t('options.wallpaperMode') || 'Wallpaper Mode'}
+                    </h3>
+                    <div className={`border rounded-2xl overflow-hidden ${borderColor} ${settingsCardClass}`}>
+                        <div className={`flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors border-b ${borderColor}`}>
+                            <div className="flex items-start gap-3 min-w-0">
+                                <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
+                                    <AppWindow size={16} />
+                                </div>
+                                <div className="space-y-0.5 text-left">
+                                    <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
+                                        {t('options.wallpaperMode')}
+                                    </h4>
+                                    <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('options.wallpaperModeDesc') || 'Sink the app window to the bottom of the desktop and keep it always visible as a lyrics wallpaper.'}
+                                    </p>
+                                </div>
+                            </div>
+                            {renderToggle(wallpaperMode, () => onToggleWallpaperMode(!wallpaperMode))}
+                        </div>
+                    </div>
+                </section>
+            )}
 
             <section className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-widest mb-3 flex items-center justify-between gap-3 opacity-60" style={{ color: 'var(--text-secondary)' }}>

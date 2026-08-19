@@ -32,3 +32,9 @@ Linux 图形兼容性：
 - `FOLIA_LINUX_GRAPHICS_MODE=system` 恢复系统路径。调试非标准 AppImage 运行时可设置 `ELECTRON_LINUX_PACKAGED_GRAPHICS=true`。
 
 这些变量只影响 Electron Linux 启动参数，不改变 Web 端或同步服务配置。排查时先确认可执行文件和 `resources/` 位于同一便携包目录。
+
+壁纸模式（桌面歌词壁纸）：
+
+- 在“选项 → 桌面端”中开启“壁纸模式”，将整个窗口沉到所有正常窗口之下，作为桌面歌词壁纸。
+- 需要 Wayland 合成器支持 `wlr-layer-shell` 协议（GNOME 不支持）。切换开关后应用会自动重启。
+- Wayland（如 niri、KWin、Hyprland）下通过 `resources/windowtolayer` 将窗口包装为 `wlr-layer-shell` 的 bottom 层表面；X11 下主窗口变成桌面窗口（`_NET_WM_WINDOW_TYPE_DESKTOP`）。

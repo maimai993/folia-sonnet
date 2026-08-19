@@ -60,6 +60,7 @@ export const PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY = 'prevent_displa
 export const GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY = 'global_lyric_timeline_offset_ms';
 export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_taskbar';
+export const WALLPAPER_MODE_STORAGE_KEY = 'wallpaper_mode';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
 export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
 export const SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY = 'subtitle_overlay_background';
@@ -1263,6 +1264,7 @@ export type SettingsUiState = {
     preventDisplaySleepDuringPlayback: boolean;
     hideTaskbarIcon: boolean;
     hideRemoteControlTaskbarIcon: boolean;
+    wallpaperMode: boolean;
     openPlayerOnLaunch: boolean;
     enableMediaCache: boolean;
     backgroundOpacity: number;
@@ -1353,7 +1355,7 @@ export type SettingsUiState = {
     setAudioQuality: (quality: AudioQuality) => void;
     setTransparentPlayerBackgroundFromSystem: (enabled: boolean) => void;
     handleTogglePlayerPageNativeBlur: (enable: boolean) => void;
-    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; }) => void;
+    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; wallpaper_mode?: unknown; }) => void;
     setStoredCappellaEmojiPack: (pack: StoredCappellaEmojiImage[]) => void;
     setCappellaCustomEmojiImages: (images: CappellaEmojiImage[]) => void;
     setIsLoadingCappellaCustomEmojiPack: (loading: boolean) => void;
@@ -1393,6 +1395,7 @@ export type SettingsUiState = {
     handleTogglePreventDisplaySleepDuringPlayback: (enable: boolean) => void;
     handleToggleHideTaskbarIcon: (enable: boolean) => void;
     handleToggleHideRemoteControlTaskbarIcon: (enable: boolean) => void;
+    handleToggleWallpaperMode: (enable: boolean) => void;
     handleToggleOpenPlayerOnLaunch: (enable: boolean) => void;
     handleToggleMediaCache: (enable: boolean) => void;
     handleSetBackgroundOpacity: (opacity: number) => void;
@@ -1529,6 +1532,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     preventDisplaySleepDuringPlayback: getStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, false),
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
     hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
+    wallpaperMode: getStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, false),
     openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
     enableMediaCache: getStoredBoolean(ENABLE_MEDIA_CACHE_KEY, false),
     backgroundOpacity: readStoredBackgroundOpacity(),
@@ -1666,6 +1670,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         if (typeof settings.REMOTE_CONTROL_SKIP_TASKBAR === 'boolean') {
             patch.hideRemoteControlTaskbarIcon = settings.REMOTE_CONTROL_SKIP_TASKBAR;
             setStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, settings.REMOTE_CONTROL_SKIP_TASKBAR);
+        }
+        if (typeof settings.wallpaper_mode === 'boolean') {
+            patch.wallpaperMode = settings.wallpaper_mode;
+            setStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, settings.wallpaper_mode);
         }
         set(patch);
     },
@@ -1897,6 +1905,18 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         if (window.electron?.saveSettings) {
             void window.electron.saveSettings('REMOTE_CONTROL_SKIP_TASKBAR', enable);
         }
+    },
+    handleToggleWallpaperMode: (enable) => {
+        setStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, enable);
+        set({ wallpaperMode: enable });
+        if (window.electron?.saveSettings) {
+            // The main process schedules a full relaunch after this IPC returns.
+            void window.electron.saveSettings('wallpaper_mode', enable);
+        }
+        notify(get, {
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'wallpaperModeOn' : 'wallpaperModeOff')),
+        });
     },
     handleToggleOpenPlayerOnLaunch: (enable) => {
         setStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, enable);
@@ -2903,6 +2923,8 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
     hideTaskbarIcon: state.hideTaskbarIcon,
     hideRemoteControlTaskbarIcon: state.hideRemoteControlTaskbarIcon,
+    wallpaperMode: state.wallpaperMode,
+    handleToggleWallpaperMode: state.handleToggleWallpaperMode,
     openPlayerOnLaunch: state.openPlayerOnLaunch,
     enableMediaCache: state.enableMediaCache,
     backgroundOpacity: state.backgroundOpacity,

@@ -390,6 +390,8 @@ export default function App() {
         handleToggleVoiceInputPause,
         preventDisplaySleepDuringPlayback,
         handleTogglePreventDisplaySleepDuringPlayback,
+        wallpaperMode,
+        handleToggleWallpaperMode,
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
@@ -2021,6 +2023,9 @@ export default function App() {
         togglePreventDisplaySleepDuringPlayback: () => {
             handleTogglePreventDisplaySleepDuringPlayback(!preventDisplaySleepDuringPlayback);
         },
+        toggleWallpaperMode: () => {
+            handleToggleWallpaperMode(!wallpaperMode);
+        },
         setAppLanguagePreference: handleSetAppLanguagePreference,
         runAutoMatchBestLyric: handleAutoMatchBestLyricForCurrentSong,
         setIsUserGuideModalOpen,
@@ -2075,6 +2080,8 @@ export default function App() {
         handleToggleVoiceInputPause,
         preventDisplaySleepDuringPlayback,
         handleTogglePreventDisplaySleepDuringPlayback,
+        wallpaperMode,
+        handleToggleWallpaperMode,
 
         subtitleContentMode,
         subtitleOverlayBackground,
@@ -3001,18 +3008,21 @@ export default function App() {
         }
     }, [shouldKeepHomeMounted]);
 
+    // X11 wallpaper mode cannot use click-through:because it would let clicks raise other background window above Folia. Hide the toggle.
+    const isX11WallpaperMode = isElectronWindow && window.electron?.isLinuxX11 === true && wallpaperMode;
+
     return (
         <AppShell
             appStyle={appStyle}
             isElectronWindow={isElectronWindow}
             usesCustomWindowChrome={usesCustomWindowChrome}
-            useCustomWindowRadius={isElectronWindow && transparentPlayerBackground}
+            useCustomWindowRadius={isElectronWindow && transparentPlayerBackground && !wallpaperMode}
             showTransparentWindowBorder={showTransparentWindowBorder}
             isPlayerView={isPlayerView}
             isTitlebarRevealed={isTitlebarRevealed}
             alwaysShowMainWindowTitlebar={alwaysShowMainWindowTitlebar}
             isMainWindowClickThroughEnabled={isMainWindowClickThroughEnabled}
-            showMainWindowClickThroughToggle={isMainWindowClickThroughEnabled ? isClickThroughToggleHotspotActive : isTitlebarRevealed}
+            showMainWindowClickThroughToggle={!isX11WallpaperMode && (isMainWindowClickThroughEnabled ? isClickThroughToggleHotspotActive : isTitlebarRevealed)}
             isDaylight={isDaylight}
             onToggleMainWindowClickThrough={() => {
                 const nextEnabled = !isMainWindowClickThroughEnabled;

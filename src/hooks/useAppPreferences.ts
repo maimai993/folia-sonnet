@@ -153,6 +153,12 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
     }, [setDesktopPreferenceSnapshot]);
 
     useEffect(() => {
+        return window.electron?.onWallpaperModeChanged?.((settings) => {
+            setDesktopPreferenceSnapshot(settings);
+        });
+    }, [setDesktopPreferenceSnapshot]);
+
+    useEffect(() => {
         let isCancelled = false;
 
         const loadCustomEmojiPack = async () => {
