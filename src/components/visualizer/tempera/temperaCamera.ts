@@ -27,8 +27,9 @@ export interface TemperaCameraFrame {
 // inter-line gaps so the frame keeps drifting instead of freezing.
 export const resolveTemperaCameraFrame = (shot: TemperaShot, progress: number): TemperaCameraFrame => {
     const clamped = clamp01(progress);
-    // Blend constant velocity into the ease so the middle of the shot never stalls.
-    const eased = clamped * 0.5 + easeInOut(clamped) * 0.5;
+    // Mostly constant velocity: an ease-in-out camera comes to a stop well before the shot
+    // does, and a long shot then holds a still frame until the hand-off starts.
+    const eased = clamped * 0.78 + easeInOut(clamped) * 0.22;
     const overshoot = Math.max(0, progress - 1) * 0.35;
     const amount = eased + overshoot;
     const { camera: start, cameraEnd: end } = shot;

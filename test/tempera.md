@@ -5,7 +5,7 @@
 - **色块分割 PV 风格**：大面积色块、裁切、优雅简洁几何元素、图层叠加、投影/发光、丰富转场。
 - **调色**：从 DualTheme 当前主题经 `colorMix`（`mixColors` / `colorWithAlpha`）派生调色板；提供 mono（黑白灰）模式。
 - **摄影机**：追踪当前 shot（分镜级运动），不追踪逐字动画；shot 之间由大面积图形引导自然切镜（如从上摇到下）。
-命名约定（与 sonnet 对齐）：mode id `'tempera'`，组件 `VisualizerTempera`，labelKey `ui.visualizerTempera`，中文名「蛋彩」/英文「Tempera」。
+命名约定（与 sonnet 对齐）：mode id `'tempera'`，组件 `VisualizerTempera`，labelKey `ui.visualizerTempera`，中文名「凝彩」/英文「Tempera」。
 ## 架构决策
 **复制 sonnet 骨架、重写排版与 MG 视觉层，不重构 sonnet。**
 - 照搬骨架（改名 tempera，逻辑与排版无关）：React 外壳、Pixi runtime 生命周期（ticker/resize/destroy/scene 缓存 ±1）、program 编译管线（段落切分/分类/shot 分组/seed 确定性）、转场帧纯函数、后处理挂载链、纹理池、设置面板样板。

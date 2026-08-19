@@ -5,7 +5,7 @@ import TemperaSettingsPanel from './TemperaSettingsPanel';
 import VisualizerTempera from './VisualizerTempera';
 
 // src/components/visualizer/tempera/entry.tsx
-// Registers 蛋彩, the deterministic block-composition lyric-PV director.
+// Registers 凝彩, the deterministic block-composition lyric-PV director.
 export default defineVisualizer({
     mode: 'tempera',
     order: 71,

@@ -5,6 +5,7 @@ import {
     easeTemperaSoftBack,
     resolveCubicBezier,
     resolveShotPacedDuration,
+    resolveShotStagger,
     resolveTemperaGlyphMotion,
     type TemperaGlyphMotionInput,
 } from '@/components/visualizer/tempera/temperaMotion';
@@ -120,5 +121,37 @@ describe('Shot-paced durations', () => {
         expect(resolveShotPacedDuration(4, 0.25, 0.3, 2)).toBeCloseTo(1, 6);
         expect(resolveShotPacedDuration(0.4, 0.25, 0.3, 2)).toBeCloseTo(0.3, 6);
         expect(resolveShotPacedDuration(30, 0.25, 0.3, 2)).toBeCloseTo(2, 6);
+    });
+});
+
+describe('Shot stagger windows', () => {
+    // The stagger fractions the latest-arriving composition items actually use.
+    const LATEST = { delay: 0.34, span: 0.6 };
+
+    it('stretches with the shot instead of capping at a fixed number of seconds', () => {
+        const short = resolveShotStagger(2, LATEST.delay, LATEST.span);
+        const long = resolveShotStagger(9, LATEST.delay, LATEST.span);
+        expect(long.delay).toBeGreaterThan(short.delay * 3);
+        expect(long.span).toBeGreaterThan(short.span * 3);
+    });
+
+    it('keeps the last item moving until near the end of any shot', () => {
+        // A long shot must not finish all of its motion early and then hold a still frame.
+        [1.5, 3, 6, 12].forEach(duration => {
+            const { delay, span } = resolveShotStagger(duration, LATEST.delay, LATEST.span);
+            const finishes = delay + span;
+            expect(finishes, `${duration}s`).toBeLessThanOrEqual(duration * 0.95 + 1e-6);
+            expect(finishes, `${duration}s`).toBeGreaterThan(duration * 0.55);
+        });
+    });
+
+    it('never collapses to an instant flash on a very short shot', () => {
+        const { delay, span } = resolveShotStagger(0.3, LATEST.delay, LATEST.span);
+        expect(span).toBeGreaterThanOrEqual(0.25);
+        expect(delay).toBeLessThan(span);
+    });
+
+    it('is deterministic', () => {
+        expect(resolveShotStagger(4, 0.2, 0.5)).toEqual(resolveShotStagger(4, 0.2, 0.5));
     });
 });

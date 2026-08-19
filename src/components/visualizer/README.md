@@ -43,7 +43,7 @@ App / ThemePark / VisPlayground / OBS source
 | `diorama` | 镜台 | `diorama/VisualizerDiorama.tsx`、`diorama/DioramaScene.tsx`、`diorama/dioramaTextRaster.ts` |
 | `pendolo` | Pendolo | `pendolo/VisualizerPendolo.tsx`、`pendolo/pendoloTextLayout.ts`、`pendolo/pendoloTimeline.ts` |
 | `sonnet` | 商籁 | `sonnet/VisualizerSonnet.tsx`、`sonnet/createSonnetPixiRuntime.ts`、`sonnet/*` |
-| `tempera` | 蛋彩 | `tempera/VisualizerTempera.tsx`、`tempera/createTemperaPixiRuntime.ts`、`tempera/*` |
+| `tempera` | 凝彩 | `tempera/VisualizerTempera.tsx`、`tempera/createTemperaPixiRuntime.ts`、`tempera/*` |
 
 `registry.tsx` 的默认模式是 `classic`。模式枚举/共享 tuning map 见 `src/types.ts`、`definition.ts`、`tuningRegistry.ts`。
 
@@ -127,7 +127,7 @@ Visualizer 消费已解析的 `LyricData` / `Line` / `Word`，不负责解析 `.
 
 `tempera/VisualizerTempera.tsx` 负责 React shell/subtitle，`createTemperaPixiRuntime.ts` 创建 Pixi runtime（scene cache ±1、绝对时间驱动、无外部纹理）。与 sonnet 同族但视觉路线不同：`temperaProgram.ts` 编译段落/shot；镜头共 25 种，定义在 `types.ts` 的 `TEMPERA_SHOT_KINDS`，排版区域/入场向量/镜头位移/mood 在 `temperaShotProfiles.ts`（纯数据、无 pixi），绘制在 `compositions/*` 按族分文件、由 `temperaCompositions.ts` 注册聚合；mood（quiet/neutral/loud）决定换气段只取安静构图、副歌不取安静构图；**一个 shot 只放半句**——每行按词边界切成 2~4 词或 ~2.2s 的 `TemperaShotSlice`，所以一句歌词会横跨多个 shot，shot 之间由 runtime 直接交接（上一个 shot 沿 flowAngle 继续推出画面、下一个从上游推进来，两者在 handoff 窗口内同屏重叠），不再有 shot 级的场景转场；flowAngle 以垂直为主轴，交接因此读作纵向长镜头而非切换，`temperaLayout.ts` + `temperaMeasure.ts` 做拼贴式排版：Intl.Segmenter 分词**只用来定字号层级**，不影响字间距——词间只有在原文确实有空白（比对 `startOffset`/`endOffset`）时才给一个空格宽，CJK 的分词边界只留 0.035em 视觉微距；每行一个 hero 词放大到 1.34~1.6×、其余压到 0.7~0.86×，形成视觉重心，行高 1.02~1.12 保持紧凑，每字有独立入场向量（替代 sonnet 的散布式布局）；关键字着色走共享的 `wordColoring.ts`（`theme.wordColors`，无独立开关），命中的字带 `color` 并渲染到 textLayer 之上的 **keywordLayer**——那层不挂 difference filter，否则主题色会被反色抹掉，`temperaBlocks.ts` 绘制大面积色块 MG 并兼作转场引导，`temperaCamera.ts` 只做 shot 级镜头（不追踪逐字），`temperaPalette.ts` 从主题派生 duo/mono 调色板。后处理复用 sonnet 的纯 GLSL filter（`sonnetLensFilter`/`sonnetGlitchFilter`/`sonnetPrintFilters`），其余不交叉引用。
 
-运动统一走 `temperaMotion.ts`（cubic-bezier 缓动 + 逐字 solver）：逐字入场时长由该字到下一个字的时间间隔推出（0.34~1.35s），色块的 delay/span 是 shot 时长的比例而非固定秒数，因此动画节奏跟着歌词行推进；落位后有极小的确定性浮动，避免画面完全静止。每个 shot 有 `flowAngle`，相邻 shot 只小幅转向，色块进出场、镜头位移和转场（`block-wipe`/`camera-pan`/`shape-carry`）都沿同一方向，所以边界是「接力」而不是硬切；`block-wipe` 的色块按 0..2 连续行程扫过，1 为满覆盖，场景在满覆盖瞬间切换。Tempera 渲染层不消费音频（`audioPower`/`audioBands` 只传给共享背景层）。
+运动统一走 `temperaMotion.ts`（cubic-bezier 缓动 + 逐字 solver）：逐字入场时长由该字到下一个字的时间间隔推出（0.34~1.35s），色块的 delay/span 由 `resolveShotStagger` 按 shot 时长成比例展开、**没有秒数上限**（封顶会让长 shot 提前跑完动作然后停在静帧上），只保留下限和一次压缩以保证最后一个元素在 shot 结束前落位；镜头位移与色块沿 flow 的推移都以近线性速度推进而非 ease-in-out，避免中后段停摆；hatch 叠层和小装饰另有 parallax 速差（结构色块锁定为 1，否则相邻面板会在接缝处拉开缝隙）；落位后有极小的确定性浮动，避免画面完全静止。每个 shot 有 `flowAngle`，相邻 shot 只小幅转向，色块进出场、镜头位移和转场（`block-wipe`/`camera-pan`/`shape-carry`）都沿同一方向，所以边界是「接力」而不是硬切；`block-wipe` 的色块按 0..2 连续行程扫过，1 为满覆盖，场景在满覆盖瞬间切换。Tempera 渲染层不消费音频（`audioPower`/`audioBands` 只传给共享背景层）。
 
 视觉层为「网点图形」语言：`temperaHatch.ts` 是纯函数生成器（斜线 hatch、抖动涂鸦折线、重复符行列、贯穿斜线、纸面点阵），`temperaShapes.ts` 把它们变成静态 Pixi Graphics，`temperaCompositions.ts` 按 shot kind 组合构图，`temperaBlocks.ts` 只保留 enter/exit 运动状态。每个 shot 的 `decor`（motif、hatch 角度、贯穿线数量、碎字）在 `temperaProgram.ts` 编译期由 seed 定死，渲染层零随机。
 

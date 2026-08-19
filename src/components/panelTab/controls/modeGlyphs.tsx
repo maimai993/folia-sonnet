@@ -108,7 +108,7 @@ const VISUALIZER_MODE_GLYPHS: Record<string, React.ReactNode> = {
             <path d="M8.5 12h7" opacity="0.6" />
         </>
     ),
-    // 蛋彩：上下色块分割与分割线
+    // 凝彩：上下色块分割与分割线
     tempera: (
         <>
             <rect x="4" y="4" width="16" height="6.5" rx="1" />
