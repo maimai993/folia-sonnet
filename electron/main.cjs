@@ -1294,6 +1294,22 @@ function isUpdateCheckSupported() {
   return getUpdateCheckSupportReason() === null;
 }
 
+function isDevUpdatePreviewEnabled() {
+  return process.env.ELECTRON_DEV === 'true' && process.env.FOLIA_DEV_UPDATE_PREVIEW === 'true';
+}
+
+// Builds a believable next patch version so the preview stays aligned with package metadata.
+function getDevUpdatePreviewVersion() {
+  const currentVersion = normalizeVersion(app.getVersion());
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(currentVersion);
+
+  if (!match) {
+    return '999.0.0';
+  }
+
+  return `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
+}
+
 function isAutoUpdaterSupported() {
   return (
     isUpdateCheckSupported() &&
@@ -1315,12 +1331,13 @@ const updateState = {
 
 function getUpdateStatus() {
   const availableVersion = updateState.availableVersion;
+  const isDevPreview = isDevUpdatePreviewEnabled();
 
   return {
     ...updateState,
-    supported: isAutoUpdaterSupported(),
-    updateCheckSupported: isUpdateCheckSupported(),
-    updateCheckSupportReason: getUpdateCheckSupportReason(),
+    supported: isDevPreview || isAutoUpdaterSupported(),
+    updateCheckSupported: isDevPreview || isUpdateCheckSupported(),
+    updateCheckSupportReason: isDevPreview ? null : getUpdateCheckSupportReason(),
     platform: process.platform,
     updateCheckEnabled: getUpdateCheckEnabled(),
     autoUpdateEnabled: getAutoUpdateEnabled(),
@@ -1447,6 +1464,11 @@ function configureAutoUpdaterChannel(updater) {
 }
 
 async function downloadAvailableUpdate() {
+  if (isDevUpdatePreviewEnabled()) {
+    setUpdateState({ status: 'downloaded', error: null, downloadProgress: null });
+    return getUpdateStatus();
+  }
+
   if (!isAutoUpdaterSupported()) {
     setUpdateState({ status: 'unsupported', error: null });
     return getUpdateStatus();
@@ -1485,6 +1507,19 @@ async function downloadAvailableUpdate() {
 }
 
 async function checkForUpdates({ manual = false } = {}) {
+  if (isDevUpdatePreviewEnabled()) {
+    const availableVersion = getDevUpdatePreviewVersion();
+    setUpdateState({
+      status: 'available',
+      availableVersion,
+      updateUrl: getReleaseUrl(getCurrentReleaseChannel().id, availableVersion, FOLIA_RELEASES_URL),
+      error: null,
+      lastCheckedAt: Date.now(),
+      downloadProgress: null,
+    });
+    return getUpdateStatus();
+  }
+
   if (!getUpdateCheckEnabled() && !manual) {
     setUpdateState({ status: 'disabled', error: null, downloadProgress: null });
     return getUpdateStatus();
@@ -1551,6 +1586,11 @@ async function openExternalUrl(url) {
 }
 
 function scheduleStartupUpdateCheck() {
+  if (isDevUpdatePreviewEnabled()) {
+    void checkForUpdates({ manual: true });
+    return;
+  }
+
   if (!getUpdateCheckEnabled()) {
     setUpdateState({ status: 'disabled', error: null });
     return;

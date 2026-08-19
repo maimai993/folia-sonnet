@@ -68,6 +68,7 @@ export type DesktopSettingsModel = {
     onCheckForUpdates: () => Promise<void> | void;
     onDownloadUpdate: () => Promise<void> | void;
     onInstallUpdate: () => Promise<void> | void;
+    onOpenBaiduDownload: () => Promise<void> | void;
     onOpenChinaDownload: () => Promise<void> | void;
     onUpdateChannelChange: (channel: 'realeco' | 'limo' | 'cielo') => Promise<void> | void;
     onSaveElectronSettings: () => Promise<void> | void;
@@ -118,6 +119,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
         onCheckForUpdates,
         onDownloadUpdate,
         onInstallUpdate,
+        onOpenBaiduDownload,
         onOpenChinaDownload,
         onUpdateChannelChange,
         onSaveElectronSettings,
@@ -404,26 +406,6 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                         )}
 
                         <div className="flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3.5 py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                                style={{ color: 'var(--text-primary)' }}
-                            >
-                                <ExternalLink size={14} />
-                                {t('options.openReleasePage') || 'Open Release Page'}
-                            </button>
-                            {electronSettings.UPDATE_CHANNEL === 'realeco' && updateStatus.platform !== 'linux' && (
-                                <button
-                                    type="button"
-                                    onClick={onOpenChinaDownload}
-                                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3.5 py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                                    style={{ color: 'var(--text-primary)' }}
-                                >
-                                    <ExternalLink size={14} />
-                                    {t('options.downloadChina')}
-                                </button>
-                            )}
                             {!electronSettings.ENABLE_AUTO_UPDATE && (
                                 <button
                                     type="button"
@@ -446,6 +428,47 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                     {t('options.restartToInstallUpdate') || 'Restart to Install'}
                                 </button>
                             )}
+                        </div>
+
+                        {/* 备用下载入口收拢成可换行的小组，避免与更新主操作争抢视觉层级。 */}
+                        <div
+                            className="flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-white/[0.035] p-1.5"
+                            aria-label={t('options.downloadSources')}
+                        >
+                            <span className="px-1.5 text-[11px] opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.downloadSources')}
+                            </span>
+                            {electronSettings.UPDATE_CHANNEL === 'realeco' && updateStatus.platform !== 'linux' && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={onOpenChinaDownload}
+                                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:bg-white/10 hover:opacity-100"
+                                        style={{ color: 'var(--text-primary)' }}
+                                    >
+                                        <ExternalLink size={12} />
+                                        {t('options.quarkDrive')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={onOpenBaiduDownload}
+                                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:bg-white/10 hover:opacity-100"
+                                        style={{ color: 'var(--text-primary)' }}
+                                    >
+                                        <ExternalLink size={12} />
+                                        {t('options.baiduDrive')}
+                                    </button>
+                                </>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
+                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:bg-white/10 hover:opacity-100"
+                                style={{ color: 'var(--text-primary)' }}
+                            >
+                                <ExternalLink size={12} />
+                                {t('options.githubRelease')}
+                            </button>
                         </div>
 
                         {updateStatus.platform !== 'linux' && (
