@@ -14,6 +14,7 @@ import {
 } from './temperaTransitions';
 import {
     buildTemperaCreditsPoster,
+    type TemperaCreditsView,
     buildTemperaScene,
     hasTemperaCreditsMetadata,
     type TemperaSceneView,
@@ -87,6 +88,7 @@ export class TemperaPixiRuntime {
 
     private sceneContainer!: import('pixi.js').Container;
     private creditsContainer!: import('pixi.js').Container;
+    private credits: TemperaCreditsView | null = null;
     private overlayContainer!: import('pixi.js').Container;
     private wipeGraphics: import('pixi.js').Graphics | null = null;
 
@@ -118,6 +120,8 @@ export class TemperaPixiRuntime {
         });
         const runtime = new TemperaPixiRuntime(pixi, options, app);
         runtime.sceneContainer = new pixi.Container();
+        // Paragraph scenes overlap during a boundary, so they must stack by paragraph order.
+        runtime.sceneContainer.sortableChildren = true;
         runtime.creditsContainer = new pixi.Container();
         runtime.overlayContainer = new pixi.Container();
         app.stage.addChild(runtime.sceneContainer, runtime.creditsContainer, runtime.overlayContainer);
@@ -159,7 +163,7 @@ export class TemperaPixiRuntime {
     }
 
     private drawCredits(width: number, height: number) {
-        this.creditsContainer.removeChildren().forEach(child => child.destroy({ children: true }));
+        this.disposeCredits();
         const metadata = {
             title: this.options.songTitle,
             artist: this.options.songArtist,
@@ -168,17 +172,21 @@ export class TemperaPixiRuntime {
         if (!hasTemperaCreditsMetadata(metadata)) return;
         // Before any scene exists (metadata-only songs) the poster uses a freshly resolved palette.
         const palette = this.sceneCache.get(Math.max(0, this.activeParagraphIndex))?.palette
-            ?? resolveTemperaPalette(this.options.theme, this.options.tuning);
-        this.creditsContainer.addChild(buildTemperaCreditsPoster(
-            this.pixi,
-            this.options.theme,
+            ?? resolveTemperaPalette(this.options.theme, this.options.tuning, this.options.coverColors ?? []);
+        this.credits = buildTemperaCreditsPoster(this.pixi, {
+            theme: this.options.theme,
+            tuning: this.options.tuning,
             palette,
             metadata,
             width,
             height,
-            this.options.lyricsFontScale,
-        ));
-        this.creditsContainer.pivot.set(width / 2, height / 2);
+            lyricsFontScale: this.options.lyricsFontScale,
+        });
+        this.creditsContainer.addChild(this.credits.container);
+        // The poster is already built around its own origin, so the pivot stays at zero and
+        // the per-frame position alone centres it. Giving it a viewport pivot as well parked
+        // the whole card in the top-left corner with half of it off screen.
+        this.creditsContainer.pivot.set(0, 0);
         this.creditsContainer.position.set(width / 2, height / 2);
         this.creditsContainer.visible = false;
     }
@@ -217,6 +225,15 @@ export class TemperaPixiRuntime {
         g.moveTo(width - paddingX - 14, height - paddingY).lineTo(width - paddingX, height - paddingY).lineTo(width - paddingX, height - paddingY - 14)
             .stroke({ color: primary, width: 1.5, alpha: 0.5 });
         this.overlayContainer.addChild(g);
+    }
+
+    private disposeCredits() {
+        this.credits?.container.children.forEach(child => {
+            child.filters = null;
+        });
+        this.credits?.filters.forEach(filter => filter.destroy());
+        this.credits = null;
+        this.creditsContainer.removeChildren().forEach(child => child.destroy({ children: true }));
     }
 
     private clearScenes() {
@@ -410,42 +427,71 @@ export class TemperaPixiRuntime {
         const hasCredits = this.creditsContainer.children.length > 0;
         let wipeDrawn = false;
 
+        const transitionsEnabled = this.options.tuning.enableTransitions && !this.options.staticMode;
+        const outgoingTransition = this.options.program.paragraphs[paragraphIndex]?.transitionOut ?? null;
+        /**
+         * A translating transition needs something on the other side. Paragraph boundaries
+         * often sit in a gap with no lyric at all, and the next scene used to be drawn only
+         * once its own paragraph started - so the outgoing one slid away into the bare shell.
+         * Pre-rolling the incoming scene through the same window gives the move a far side.
+         *
+         * `block-wipe` is excluded: its block already covers the swap, and its enter phase is
+         * the *uncover*, which has to happen after the boundary, not before it.
+         */
+        const preRoll = transitionsEnabled
+            && outgoingTransition !== null
+            && outgoingTransition.kind !== 'block-wipe'
+            && time >= outgoingTransition.startTime;
+
         this.sceneCache.forEach((scene, index) => {
             const isActive = index === paragraphIndex;
+            const isIncoming = preRoll && index === paragraphIndex + 1;
 
-            // Strict visibility: only the active scene is ever drawn. Zero overlap between scenes.
-            scene.container.visible = isActive;
-            if (!isActive) {
+            scene.container.visible = isActive || isIncoming;
+            // The arriving scene has to sit above the one it is replacing; cache insertion
+            // order says nothing about paragraph order.
+            scene.container.zIndex = index;
+            if (!scene.container.visible) {
                 scene.activeShotIndex = -1;
                 return;
             }
 
-            const transitionsEnabled = this.options.tuning.enableTransitions && !this.options.staticMode;
             const previousTransition = index > 0
                 ? this.options.program.paragraphs[index - 1]?.transitionOut
                 : null;
             const enterDuration = previousTransition
                 ? Math.max(0.35, Math.min(1, previousTransition.endTime - previousTransition.startTime))
                 : 0;
+            // Only a wipe still enters after the boundary; everything else has already
+            // arrived by then, because it was pre-rolled through the outgoing window.
             const entering = transitionsEnabled
                 && previousTransition !== null
+                && previousTransition.kind === 'block-wipe'
                 && time >= scene.paragraph.startTime
                 && time <= scene.paragraph.startTime + enterDuration;
-            const paragraphTransitionFrame = entering
+            const paragraphTransitionFrame = isIncoming && outgoingTransition
                 ? resolveTemperaEnterTransitionFrame(
-                    previousTransition.kind,
-                    time - scene.paragraph.startTime,
-                    enterDuration,
+                    outgoingTransition.kind,
+                    time - outgoingTransition.startTime,
+                    Math.max(0.001, outgoingTransition.endTime - outgoingTransition.startTime),
                     true,
                     // Enter on the incoming paragraph's own flow, so the arrival continues
                     // the direction the outgoing composition was already travelling.
                     scene.paragraph.shots[0]?.flowAngle ?? 0,
                 )
-                : resolveTemperaExitTransitionFrame(
-                    scene.paragraph,
-                    time,
-                    transitionsEnabled,
-                );
+                : entering && previousTransition
+                    ? resolveTemperaEnterTransitionFrame(
+                        previousTransition.kind,
+                        time - scene.paragraph.startTime,
+                        enterDuration,
+                        true,
+                        scene.paragraph.shots[0]?.flowAngle ?? 0,
+                    )
+                    : resolveTemperaExitTransitionFrame(
+                        scene.paragraph,
+                        time,
+                        transitionsEnabled,
+                    );
 
             // Strictly determine the single active shot within this scene to avoid intra-scene residues.
             let activeShotIndex = 0;
@@ -500,6 +546,11 @@ export class TemperaPixiRuntime {
         if (!wipeDrawn) this.drawWipe(0, 0, width, height, '#000000');
         this.creditsContainer.visible = creditsFrame.active && hasCredits;
         this.creditsContainer.alpha = creditsFrame.posterAlpha;
+        // The card is never a still frame: shapes keep drifting under the fixed title, so the
+        // inversion filter re-cuts it for as long as the outro runs.
+        if (this.creditsContainer.visible) {
+            this.credits?.updateTime(time - (finalParagraph?.endTime ?? time));
+        }
         this.creditsContainer.position.set(
             width / 2,
             height / 2 + creditsFrame.posterOffsetY * height,

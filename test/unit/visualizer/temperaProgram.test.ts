@@ -127,7 +127,7 @@ describe('Tempera program compiler', () => {
         program.paragraphs.forEach(paragraph => {
             // Every shot draws from exactly one line, and a line takes more than one shot.
             const perLine = new Map<number, number>();
-            paragraph.shots.forEach(shot => {
+            paragraph.shots.filter(shot => !shot.isBridge).forEach(shot => {
                 expect(shot.slices).toHaveLength(1);
                 const slice = shot.slices[0];
                 expect(slice.segmentEnd).toBeGreaterThan(slice.segmentStart);
@@ -326,6 +326,84 @@ describe('Tempera program compiler', () => {
             // A loud composition already carries a dominant shape; a watermark would fight it.
             expect(TEMPERA_SHOT_PROFILES[shot.kind].mood).not.toBe('loud');
         });
+    });
+
+    it('starts a paragraph\'s opening composition inside the previous transition', () => {
+        // Boundaries often sit in a lyric gap. If the incoming scene only began at its own
+        // paragraph start, a translating transition would slide away into nothing.
+        const program = compileTemperaProgram([
+            line('第一段第一句要够长撑满镜头', 0, 3),
+            line('第一段第二句继续往下走', 3.2, 6),
+            line('第二段开场句在间隙之后', 12, 15),
+            line('第二段收尾句', 15.2, 18),
+        ], 'preroll');
+        expect(program.paragraphs.length).toBeGreaterThan(1);
+
+        program.paragraphs.forEach((paragraph, index) => {
+            const transition = program.paragraphs[index - 1]?.transitionOut;
+            const opening = paragraph.shots[0];
+            if (!transition || transition.kind === 'block-wipe') {
+                expect(opening.startTime).toBeGreaterThanOrEqual(program.paragraphs[index - 1]?.endTime ?? 0);
+                return;
+            }
+            // The composition is already building while the previous paragraph exits...
+            expect(opening.startTime).toBeLessThanOrEqual(transition.endTime);
+            expect(opening.startTime).toBeGreaterThanOrEqual(transition.startTime - 1e-6);
+            // ...but never reaches back into the previous paragraph's own content.
+            expect(opening.startTime).toBeGreaterThanOrEqual(program.paragraphs[index - 1].endTime - 1e-6);
+            expect(opening.endTime).toBeGreaterThan(opening.startTime);
+        });
+    });
+
+    it('leaves glyph timing untouched by the composition pre-roll', () => {
+        const lines = [
+            line('第一段第一句要够长撑满镜头', 0, 3),
+            line('第二段开场句在间隙之后', 12, 15),
+        ];
+        const program = compileTemperaProgram(lines, 'preroll');
+        // The type still lands exactly when it is sung; only the shot's own clock moved.
+        program.paragraphs.flatMap(paragraph => paragraph.lines).forEach((compiled, index) => {
+            expect(compiled.line.startTime).toBe(lines[index].startTime);
+            compiled.segments.forEach(segment => {
+                expect(segment.startTime).toBeGreaterThanOrEqual(lines[index].startTime);
+            });
+        });
+    });
+
+    it('bridges an instrumental gap with lyric-free shots', () => {
+        const program = compileTemperaProgram([
+            line('第一段唱完这里就断开了', 0, 3),
+            line('间隙之后第二段才进来', 14, 17),
+        ], 'bridge');
+        expect(program.paragraphs.length).toBeGreaterThan(1);
+
+        const bridges = program.paragraphs[0].shots.filter(shot => shot.isBridge);
+        expect(bridges.length).toBeGreaterThan(0);
+        bridges.forEach(bridge => {
+            // No type at all: a bridge is composition only.
+            expect(bridge.slices).toEqual([]);
+            expect(bridge.endTime).toBeGreaterThan(bridge.startTime);
+            // An instrumental beat is never the loudest thing in the song.
+            expect(TEMPERA_SHOT_PROFILES[bridge.kind].mood).not.toBe('loud');
+        });
+
+        // The bridge picks up exactly where the sung shots stop and carries to the next
+        // paragraph, so the gap is never an empty frame.
+        const shots = program.paragraphs[0].shots;
+        shots.forEach((shot, index) => {
+            const next = shots[index + 1];
+            if (next) expect(shot.endTime).toBeCloseTo(next.startTime, 6);
+        });
+        expect(shots.at(-1)!.isBridge).toBe(true);
+        expect(shots.at(-1)!.endTime).toBeCloseTo(program.paragraphs[1].startTime, 6);
+    });
+
+    it('leaves short gaps to the transition instead of bridging them', () => {
+        const program = compileTemperaProgram([
+            line('第一段唱完这里就断开了', 0, 3),
+            line('很快就接上的第二段', 3.6, 6),
+        ], 'short-gap');
+        expect(program.paragraphs.flatMap(paragraph => paragraph.shots).some(shot => shot.isBridge)).toBe(false);
     });
 
     it('resolves the active paragraph for any seek target', () => {

@@ -2,7 +2,8 @@ import type { TemperaTuning, Theme } from '../../../types';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { buildWordColorRangesFromMatchers, prepareWordColorMatchers } from '../wordColoring';
 import type { TemperaParagraph, TemperaShot } from './types';
-import { hashTemperaSeed } from './temperaRandom';
+import { hashTemperaSeed, temperaHash01 } from './temperaRandom';
+import { easeTemperaEnter } from './temperaMotion';
 import { resolveTemperaPalette, type TemperaPalette } from './temperaPalette';
 import { buildTemperaBlocks, type TemperaBlocksView } from './temperaBlocks';
 import { isTemperaLayoutSegment, resolveTemperaLayout } from './temperaLayout';
@@ -13,8 +14,8 @@ import {
     type TemperaGlyphView,
 } from './temperaTextView';
 import { createTemperaDifferenceFilter } from './temperaDifferenceFilter';
-import { buildDotGrid } from './temperaHatch';
-import { drawSquareMarks } from './temperaShapes';
+import { buildDotGrid, buildHatchSpec, circlePolygon, rectPolygon } from './temperaHatch';
+import { drawHatchFill, drawPolygonFill, drawPolygonOutline, drawSquareMarks } from './temperaShapes';
 import { createSonnetLensFilter } from '../sonnet/sonnetLensFilter';
 import { createSonnetPrintFilters } from '../sonnet/sonnetPrintFilters';
 
@@ -71,64 +72,191 @@ export const hasTemperaCreditsMetadata = (metadata: TemperaCreditsMetadata) => B
     || (metadata.album && metadata.album.trim()),
 );
 
-// Minimal block-style credits poster: an accent panel with the song metadata in ink.
+/**
+ * Closing card. Oversized opaque discs press in from beyond the edges, a light panel holds the
+ * middle, and the title crosses the boundary between them so the inversion filter flips it
+ * mid-word - the same trick the lyrics use, applied to the outro.
+ *
+ * Everything is drawn around the container's own origin, so the runtime centres it by position
+ * alone; giving this container a viewport pivot as well is what once parked the whole poster
+ * in the top-left corner with half of it off screen.
+ */
+export interface TemperaCreditsView {
+    container: import('pixi.js').Container;
+    filters: import('pixi.js').Filter[];
+    /** `elapsed` is seconds since the card started; negative before it appears. */
+    updateTime: (elapsed: number) => void;
+}
+
+export interface TemperaCreditsOptions {
+    theme: Theme;
+    tuning: TemperaTuning;
+    palette: TemperaPalette;
+    metadata: TemperaCreditsMetadata;
+    width: number;
+    height: number;
+    lyricsFontScale: number;
+}
+
+interface CreditsItem {
+    node: import('pixi.js').Container;
+    baseX: number;
+    baseY: number;
+    enterDX: number;
+    enterDY: number;
+    delay: number;
+    driftX: number;
+    driftY: number;
+    grow: number;
+}
+
+/** Asymptotic: always moving, never running away. */
+const creditsCreep = (elapsed: number) => 1 - Math.exp(-Math.max(0, elapsed) / 7);
+
 export const buildTemperaCreditsPoster = (
     pixi: PixiModule,
-    theme: Theme,
-    palette: TemperaPalette,
-    metadata: TemperaCreditsMetadata,
-    width: number,
-    height: number,
-    lyricsFontScale: number,
-) => {
-    const { Container, Graphics, Text, TextStyle } = pixi;
+    options: TemperaCreditsOptions,
+): TemperaCreditsView => {
+    const { palette, metadata, width, height } = options;
+    const { Container, Text, TextStyle } = pixi;
     const container = new Container();
-    const panelWidth = Math.min(width * 0.62, 720);
-    const panelHeight = Math.min(height * 0.4, 300);
-    const panel = new Graphics()
-        .rect(-panelWidth / 2, -panelHeight / 2, panelWidth, panelHeight)
-        .fill({ color: pixi.Color.shared.setValue(palette.blockB).toNumber(), alpha: 0.9 });
-    const bar = new Graphics()
-        .rect(-panelWidth / 2, -panelHeight / 2, 6, panelHeight)
-        .fill({ color: pixi.Color.shared.setValue(palette.accent).toNumber() });
-    container.addChild(panel, bar);
+    const filters: import('pixi.js').Filter[] = [];
+    const items: CreditsItem[] = [];
+    const seed = hashTemperaSeed(`${metadata.title ?? ''}|${metadata.artist ?? ''}`);
+    const diagonal = Math.hypot(width, height);
+    const bleed = diagonal * 0.25;
+    const halfWidth = width / 2;
+    const halfHeight = height / 2;
+    // One seeded bit mirrors the whole layout, so the card is not always the same picture.
+    const flip = temperaHash01(seed, 1, 229) > 0.5 ? 1 : -1;
 
-    const fontFamily = resolveThemeFontStack(theme);
-    const fontWeight = String(resolveThemeFontWeight(theme, 600)) as import('pixi.js').TextStyleFontWeight;
-    const title = new Text({
-        text: metadata.title?.trim() || '♪',
-        style: new TextStyle({
-            fontFamily,
-            fontWeight,
-            fontSize: Math.max(22, 34 * lyricsFontScale),
-            fill: palette.ink,
-            wordWrap: true,
-            wordWrapWidth: panelWidth - 80,
-        }),
-    });
-    title.anchor.set(0, 0.5);
-    title.position.set(-panelWidth / 2 + 44, metadata.artist ? -panelHeight * 0.14 : 0);
-    container.addChild(title);
+    const add = (
+        node: import('pixi.js').Container,
+        item: Partial<Omit<CreditsItem, 'node' | 'baseX' | 'baseY'>> = {},
+    ) => {
+        items.push({
+            node,
+            baseX: node.x,
+            baseY: node.y,
+            enterDX: item.enterDX ?? 0,
+            enterDY: item.enterDY ?? 0,
+            delay: item.delay ?? 0,
+            driftX: item.driftX ?? 0,
+            driftY: item.driftY ?? 0,
+            grow: item.grow ?? 0,
+        });
+        container.addChild(node);
+    };
 
-    const subtitle = [metadata.artist, metadata.album].filter(Boolean).join(' — ');
-    if (subtitle) {
-        const subtitleText = new Text({
-            text: subtitle,
+    container.addChild(drawPolygonFill(
+        pixi,
+        rectPolygon(-halfWidth - bleed, -halfHeight - bleed, width + bleed * 2, height + bleed * 2),
+        palette.paper,
+        1,
+    ));
+
+    // A disc is pivoted on its own centre so it can drift and breathe as one piece.
+    const addDisc = (cx: number, cy: number, radius: number, tone: string, item: Partial<CreditsItem>) => {
+        const disc = drawPolygonFill(pixi, circlePolygon(0, 0, radius, 72), tone, 1);
+        disc.position.set(cx, cy);
+        add(disc, item);
+        const outline = drawPolygonOutline(pixi, circlePolygon(0, 0, radius, 72), palette.ink, 1.4, 0.35);
+        outline.position.set(cx, cy);
+        add(outline, item);
+    };
+
+    // Mid-tone disc pressing down from the top edge.
+    addDisc(
+        halfWidth * 0.4 * flip,
+        -halfHeight * 1.5,
+        diagonal * (0.34 + temperaHash01(seed, 2, 233) * 0.05),
+        palette.tone2,
+        { enterDY: -diagonal * 0.14, driftY: diagonal * 0.035, delay: 0.1 },
+    );
+    // Smaller one rolling in from the bottom corner.
+    addDisc(
+        -halfWidth * 0.8 * flip,
+        halfHeight * 1.2,
+        diagonal * (0.27 + temperaHash01(seed, 3, 239) * 0.05),
+        palette.tone2,
+        { enterDX: -diagonal * 0.12 * flip, driftX: diagonal * 0.03 * flip, delay: 0.22 },
+    );
+
+    // The light plate the title sits on.
+    const panel = drawPolygonFill(
+        pixi,
+        rectPolygon(-halfWidth * 0.58 * flip, -halfHeight * 0.3, halfWidth * 0.86, halfHeight * 0.72),
+        palette.tone4,
+        1,
+    );
+    add(panel, { enterDX: -diagonal * 0.1 * flip, driftX: diagonal * 0.018 * flip, delay: 0.04 });
+
+    // The big near-ground disc: it reads only where it bites into the plate, and its edge is
+    // what the title crosses.
+    addDisc(
+        halfWidth * flip,
+        halfHeight,
+        diagonal * 0.5,
+        palette.tone1,
+        { enterDX: diagonal * 0.16 * flip, enterDY: diagonal * 0.1, driftX: -diagonal * 0.03 * flip, delay: 0.34 },
+    );
+
+    // A stroke-only ring, slowly opening.
+    const ring = drawPolygonOutline(pixi, circlePolygon(0, 0, diagonal * 0.21, 72), palette.ink, 1.5, 0.5);
+    ring.position.set(-halfWidth * 0.2 * flip, -halfHeight * 0.08);
+    add(ring, { delay: 0.5, grow: 0.09, driftY: diagonal * 0.02 });
+
+    const fontFamily = resolveThemeFontStack(options.theme);
+    const fontWeight = String(resolveThemeFontWeight(options.theme, 600)) as import('pixi.js').TextStyleFontWeight;
+    const wrapWidth = Math.min(width * 0.72, diagonal * 0.52);
+    const subtitle = [metadata.artist, metadata.album].filter(Boolean).join(' - ');
+    const titleLayer = new Container();
+    const titleSize = Math.max(26, Math.min(width, height) * 0.085 * options.lyricsFontScale);
+
+    const buildLine = (text: string, size: number, offsetY: number, alpha: number) => {
+        const node = new Text({
+            text,
             style: new TextStyle({
                 fontFamily,
                 fontWeight,
-                fontSize: Math.max(14, 18 * lyricsFontScale),
+                fontSize: size,
                 fill: palette.ink,
+                align: 'center',
                 wordWrap: true,
-                wordWrapWidth: panelWidth - 80,
+                wordWrapWidth: wrapWidth,
             }),
         });
-        subtitleText.alpha = 0.72;
-        subtitleText.anchor.set(0, 0.5);
-        subtitleText.position.set(-panelWidth / 2 + 44, panelHeight * 0.18);
-        container.addChild(subtitleText);
+        node.anchor.set(0.5);
+        node.position.set(0, offsetY);
+        node.alpha = alpha;
+        titleLayer.addChild(node);
+        return node;
+    };
+
+    const title = buildLine(metadata.title?.trim() || '\u266a', titleSize, subtitle ? -titleSize * 0.35 : 0, 1);
+    if (subtitle) buildLine(subtitle, Math.max(14, titleSize * 0.34), title.height / 2 + titleSize * 0.22, 0.75);
+
+    // The title stays put while the shapes move under it, so the inversion keeps re-cutting it.
+    if (options.tuning.textInversion && !palette.textGradient) {
+        const filter = createTemperaDifferenceFilter(pixi, { ink: palette.ink, paper: palette.paper });
+        titleLayer.filters = [filter];
+        filters.push(filter);
     }
-    return container;
+    add(titleLayer, { enterDY: diagonal * 0.03, delay: 0.6 });
+
+    const updateTime = (elapsed: number) => {
+        const creep = creditsCreep(elapsed);
+        for (const item of items) {
+            const enter = easeTemperaEnter((elapsed - item.delay) / 1.1);
+            item.node.position.set(
+                item.baseX + item.enterDX * (1 - enter) + item.driftX * creep,
+                item.baseY + item.enterDY * (1 - enter) + item.driftY * creep,
+            );
+            if (item.grow !== 0) item.node.scale.set(1 + item.grow * creep);
+        }
+    };
+    updateTime(0);
+    return { container, filters, updateTime };
 };
 
 // Assembles the scene post-process chain from tuning; GLSL factories are shared with sonnet.
@@ -325,9 +453,11 @@ export const buildTemperaScene = (
             textLayer.filters = [differenceFilter];
             postProcessFilters.push(differenceFilter);
         }
+        // A bridge shot has no type to reveal, so the camera breath may start immediately -
+        // an instrumental gap should not hold a rigid frame.
         const revealDoneTime = glyphs.length > 0
             ? Math.max(...glyphs.map(glyph => glyph.motion.settleTime))
-            : shot.endTime;
+            : shot.startTime;
 
         shotContainer.pivot.set(width / 2, height / 2);
         shotContainer.position.set(width / 2, height / 2);

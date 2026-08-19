@@ -140,6 +140,12 @@ export interface TemperaShot {
     startTime: number;
     endTime: number;
     slices: TemperaShotSlice[];
+    /**
+     * A bridge shot carries an instrumental gap between paragraphs: it has no lyric slices,
+     * only a composition. Without one the gap has nothing on screen and a translating
+     * transition slides the outgoing paragraph away into the bare shell.
+     */
+    isBridge: boolean;
     /** Camera keyframe at shot start (fractional viewport offsets). */
     camera: TemperaCameraKey;
     /** Camera keyframe at shot end; the runtime interpolates between the two. */

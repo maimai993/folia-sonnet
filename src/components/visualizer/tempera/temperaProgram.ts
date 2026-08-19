@@ -415,6 +415,71 @@ const buildShots = (
                 ? Math.max(chunk.endTime, paragraphEnd)
                 : chunk.endTime,
             slices,
+            isBridge: false,
+            camera: start,
+            cameraEnd: end,
+            flowAngle,
+            decor,
+        };
+    });
+};
+
+/** Gaps shorter than this are already covered by the paragraph transition itself. */
+const BRIDGE_MIN_GAP = 1.2;
+const BRIDGE_MAX_LENGTH = 5;
+
+/**
+ * Fills an instrumental gap with lyric-free shots. They run through the same hand-off, camera
+ * and decor machinery as any other shot, so a long gap keeps moving instead of holding the
+ * last sung composition - and the paragraph transition at the far end has something to carry.
+ */
+const buildBridgeShots = (
+    paragraphKind: TemperaParagraphKind,
+    paragraphIndex: number,
+    seed: string,
+    fragmentPool: string,
+    gapStart: number,
+    gapEnd: number,
+    previousKind: TemperaShotKind | null,
+    previousMotif: TemperaDecorMotif | null,
+    previousFlow: number | null,
+): TemperaShot[] => {
+    const gap = gapEnd - gapStart;
+    if (gap < BRIDGE_MIN_GAP) return [];
+    const count = Math.min(3, Math.max(1, Math.ceil(gap / BRIDGE_MAX_LENGTH)));
+    const step = gap / count;
+    let lastKind = previousKind;
+    let lastMotif = previousMotif;
+    let lastFlow = previousFlow;
+
+    return Array.from({ length: count }, (_, index) => {
+        // An instrumental beat is never the loudest thing in the song.
+        const shotKind = chooseWithoutRepeat(
+            resolveTemperaShotCandidates(['quiet', 'neutral']),
+            `${seed}:${paragraphIndex}:bridge${index}`,
+            lastKind,
+        );
+        lastKind = shotKind;
+        const cameraSeed = hashTemperaSeed(`${seed}:${paragraphIndex}:bridge${index}:camera`);
+        const flowAngle = resolveFlowAngle(lastFlow, cameraSeed);
+        lastFlow = flowAngle;
+        const { start, end } = buildCameraKeys(shotKind, cameraSeed, flowAngle);
+        const decor = buildDecorSpec(
+            paragraphKind,
+            shotKind,
+            `${seed}:${paragraphIndex}:bridge${index}:decor`,
+            fragmentPool,
+            [],
+            lastMotif,
+        );
+        lastMotif = decor.motif;
+        return {
+            id: `p${paragraphIndex}-b${index}`,
+            kind: shotKind,
+            startTime: gapStart + step * index,
+            endTime: gapStart + step * (index + 1),
+            slices: [],
+            isBridge: true,
             camera: start,
             cameraEnd: end,
             flowAngle,
@@ -461,13 +526,31 @@ export const compileTemperaProgram = (lines: Line[], seed: string | number = 'te
     let previousTransition: TemperaTransitionKind | null = null;
     const paragraphs: TemperaParagraph[] = drafts.map((draft, index) => {
         const kind = classifyParagraph(draft.lines, index, drafts.length);
-        const shots = buildShots(draft.lines, kind, index, resolvedSeed, previousShot, previousMotif, previousFlow);
-        previousShot = shots.at(-1)?.kind ?? previousShot;
-        previousMotif = shots.at(-1)?.decor.motif ?? previousMotif;
-        previousFlow = shots.at(-1)?.flowAngle ?? previousFlow;
+        const lyricShots = buildShots(draft.lines, kind, index, resolvedSeed, previousShot, previousMotif, previousFlow);
+        previousShot = lyricShots.at(-1)?.kind ?? previousShot;
+        previousMotif = lyricShots.at(-1)?.decor.motif ?? previousMotif;
+        previousFlow = lyricShots.at(-1)?.flowAngle ?? previousFlow;
         const next = drafts[index + 1];
         const endTime = draft.lines.at(-1)!.renderEndTime;
         const gap = next ? next.lines[0].line.startTime - endTime : 0;
+        // The instrumental gap after this paragraph becomes its own lyric-free shots.
+        const bridgeShots = next
+            ? buildBridgeShots(
+                kind,
+                index,
+                resolvedSeed,
+                draft.lines.map(item => item.line.fullText).join(''),
+                endTime,
+                next.lines[0].line.startTime,
+                previousShot,
+                previousMotif,
+                previousFlow,
+            )
+            : [];
+        const shots = [...lyricShots, ...bridgeShots];
+        previousShot = shots.at(-1)?.kind ?? previousShot;
+        previousMotif = shots.at(-1)?.decor.motif ?? previousMotif;
+        previousFlow = shots.at(-1)?.flowAngle ?? previousFlow;
         const transitionKind = next
             ? chooseWithoutRepeat(TEMPERA_TRANSITION_KINDS, `${resolvedSeed}:${index}:transition`, previousTransition)
             : null;
@@ -490,6 +573,21 @@ export const compileTemperaProgram = (lines: Line[], seed: string | number = 'te
                 endTime: transitionEndTime,
             } : null,
         };
+    });
+
+    // A paragraph's opening composition starts building while the previous one is still
+    // transitioning out. Without this the incoming scene has nothing but its paper ground to
+    // show during a boundary that sits in a lyric gap, and a translating transition slides
+    // away into the bare shell. Glyph timing is untouched: only the shot's own clock moves,
+    // so the type still lands exactly when it is sung.
+    paragraphs.forEach((paragraph, index) => {
+        const incoming = paragraph.shots[0];
+        const transition = paragraphs[index - 1]?.transitionOut;
+        if (!incoming || !transition || transition.kind === 'block-wipe') return;
+        incoming.startTime = Math.min(
+            incoming.startTime,
+            Math.max(transition.startTime, paragraphs[index - 1].endTime),
+        );
     });
 
     return { version: 1, seed: resolvedSeed, paragraphGapThreshold, paragraphs };
