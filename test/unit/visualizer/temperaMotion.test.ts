@@ -22,9 +22,11 @@ const glyph = (overrides: Partial<TemperaGlyphMotionInput> = {}): TemperaGlyphMo
     enterY: -25,
     enterRotation: 0.3,
     enterScale: 0.7,
-    driftPhase: 1.1,
     rotation: 0.05,
     enterStyle: 'slide',
+    releaseTime: 12.8,
+    trackingX: 300,
+    trackingY: -120,
     ...overrides,
 });
 
@@ -80,7 +82,9 @@ describe('Tempera glyph motion', () => {
         expect(singing.scaleX).toBeGreaterThan(after.scaleX);
         // The swell must stay subtle enough to read as weight, not as a pop.
         expect(singing.scaleX).toBeLessThan(1.06);
-        expect(after.scaleX).toBeCloseTo(1, 2);
+        // Afterwards it is back to normal size, minus the slight recede of the release drift.
+        expect(after.scaleX).toBeGreaterThan(0.96);
+        expect(after.scaleX).toBeLessThanOrEqual(1);
     });
 
     it('starts from the full entrance offset and resolves alpha before position', () => {
@@ -107,12 +111,35 @@ describe('Tempera glyph motion', () => {
         });
     });
 
-    it('only drifts after the entrance has settled, and stays tiny', () => {
-        const duringEntrance = resolveTemperaGlyphMotion(glyph(), 10.8, 1);
-        const longAfter = resolveTemperaGlyphMotion(glyph(), 24, 1);
-        expect(Math.hypot(duringEntrance.x, duringEntrance.y)).toBeLessThan(0.5);
-        expect(Math.hypot(longAfter.x, longAfter.y)).toBeGreaterThan(0);
-        expect(Math.hypot(longAfter.x, longAfter.y)).toBeLessThan(2.5);
+    it('opens the tracking of a sung glyph instead of freezing it in place', () => {
+        // The whole point: a line that finished early must not sit dead for the rest of a
+        // long shot.
+        const atRelease = resolveTemperaGlyphMotion(glyph(), 10.8, 1);
+        const midRelease = resolveTemperaGlyphMotion(glyph(), 11.8, 1);
+        const opened = resolveTemperaGlyphMotion(glyph(), 12.8, 1);
+        expect(Math.hypot(atRelease.x, atRelease.y)).toBeLessThan(0.5);
+        expect(Math.hypot(midRelease.x, midRelease.y)).toBeGreaterThan(2);
+        expect(Math.hypot(opened.x, opened.y)).toBeGreaterThan(Math.hypot(midRelease.x, midRelease.y));
+    });
+
+    it('moves strictly along its own lever, never on a wandering path', () => {
+        // Deterministic typesetting: the offset stays exactly parallel to the lever, so the
+        // block only widens - a glyph can never drift somewhere the layout did not put it.
+        [11.5, 12, 12.8, 20, 300].forEach(time => {
+            const frame = resolveTemperaGlyphMotion(glyph(), time, 1);
+            expect(frame.x / 300).toBeCloseTo(frame.y / -120, 9);
+            expect(frame.rotation).toBeCloseTo(0.05, 9);
+            expect(frame.scaleX).toBeCloseTo(1, 6);
+        });
+    });
+
+    it('caps the expansion at a few percent and holds it', () => {
+        [12.8, 20, 60, 300].forEach(time => {
+            const frame = resolveTemperaGlyphMotion(glyph(), time, 1);
+            // 5.5% of a 300px lever, and it stops there rather than accumulating.
+            expect(frame.x).toBeCloseTo(300 * 0.055, 6);
+            expect(frame.alpha).toBeCloseTo(1, 6);
+        });
     });
 
     it('is a pure function of absolute time, so seeking matches playback', () => {

@@ -301,9 +301,12 @@ export class TemperaPixiRuntime {
         // The exit leaves at speed rather than from rest, picking up where anticipation left
         // off, and keeps building - a decelerating exit is what reads as stopping to wait.
         const exit = easeTemperaOutward(this.resolveShotExit(view, time));
+        // The arrival offset must stay inside the compositions' bleed margin, otherwise an
+        // incoming full-bleed shape has not reached the frame edge yet and the shell shows
+        // through. The exit is free to overshoot it: leaving the frame is the intent there.
         const travel = anticipation * span * 0.05
             + exit * span * 0.55
-            - (1 - enter) * span * 0.32;
+            - (1 - enter) * span * 0.14;
         view.container.position.set(
             view.baseX + frame.x * width * camera + Math.cos(view.shot.flowAngle) * travel,
             view.baseY + frame.y * height * camera + Math.sin(view.shot.flowAngle) * travel,

@@ -44,13 +44,15 @@ export const TEMPERA_SHOT_KINDS = [
 ] as const;
 export type TemperaShotKind = typeof TEMPERA_SHOT_KINDS[number];
 /**
- * Every transition is led by the large graphics or the camera; nothing dissolves or cuts
- * hard, because a dissolve reads as an edit and Tempera's compositions should hand off.
+ * Every transition is led by the large graphics; nothing cuts hard, because a cut reads as an
+ * edit and Tempera's compositions should hand off. None of them translates the scene either:
+ * only one paragraph scene is ever drawn, so sliding one out just exposes the empty shell
+ * behind it. Covering, scaling and fading are the only moves available here.
  */
 export const TEMPERA_TRANSITION_KINDS = [
     'block-wipe',
-    'camera-pan',
     'shape-carry',
+    'zoom-through',
 ] as const;
 export type TemperaTransitionKind = typeof TEMPERA_TRANSITION_KINDS[number];
 

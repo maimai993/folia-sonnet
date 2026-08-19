@@ -100,8 +100,6 @@ describe('Tempera collage layout', () => {
         placements.forEach(placement => {
             expect(placement.enterScale).toBeGreaterThan(0.5);
             expect(placement.enterScale).toBeLessThan(1);
-            expect(placement.driftPhase).toBeGreaterThanOrEqual(0);
-            expect(placement.driftPhase).toBeLessThanOrEqual(Math.PI * 2);
         });
     });
 
@@ -223,6 +221,40 @@ describe('Tempera collage layout', () => {
         // Neighbouring words do not all arrive identically.
         const distinct = new Set([...perWord.values()].map(styles => [...styles][0]));
         expect(distinct.size).toBeGreaterThan(1);
+    });
+
+    it('extends each glyph past its sung end, bounded by its own line', () => {
+        const placements = layout();
+        const lineSpan = (lineIndex: number) => {
+            const own = placements.filter(placement => placement.lineIndex === lineIndex);
+            return Math.max(...own.map(p => p.endTime)) - Math.min(...own.map(p => p.startTime));
+        };
+        placements.forEach(placement => {
+            const releaseStart = Math.max(placement.endTime, placement.settleTime);
+            // A sung glyph keeps opening up rather than freezing...
+            expect(placement.releaseTime).toBeGreaterThan(releaseStart);
+            // ...but never for longer than the line it belongs to.
+            expect(placement.releaseTime - releaseStart)
+                .toBeLessThanOrEqual(Math.max(0.5, lineSpan(placement.lineIndex)) + 1e-6);
+        });
+    });
+
+    it('measures the release as a rigid expansion from the block centre', () => {
+        const placements = layout();
+        // The levers are pure offsets from the mean position, so the release can only widen
+        // the block's spacing - it can never move or reshape the layout.
+        const sumX = placements.reduce((sum, placement) => sum + placement.trackingX, 0);
+        const sumY = placements.reduce((sum, placement) => sum + placement.trackingY, 0);
+        expect(Math.abs(sumX)).toBeLessThan(1e-6);
+        expect(Math.abs(sumY)).toBeLessThan(1e-6);
+
+        const centerX = placements.reduce((sum, placement) => sum + placement.x, 0) / placements.length;
+        placements.forEach(placement => {
+            expect(placement.trackingX).toBeCloseTo(placement.x - centerX, 6);
+        });
+        // Glyphs further from the centre have a longer lever, which is what reads as tracking.
+        const outermost = placements.reduce((a, b) => (Math.abs(a.trackingX) > Math.abs(b.trackingX) ? a : b));
+        expect(Math.abs(outermost.trackingX)).toBeGreaterThan(outermost.fontSize);
     });
 
     it('returns nothing for an empty shot', () => {

@@ -192,15 +192,24 @@ export const buildTemperaScene = (
     // A translucent paper wash unifies the block colors with the shell background, and the
     // dot lattice on top gives the whole frame its printed-paper grain. Both are built once
     // per paragraph scene and never touched again during playback.
+    // Both extend past the frame: a paragraph transition may scale or drift the whole scene,
+    // and a ground layer that stopped at the frame edge would let the shell show through.
+    const wash = Math.max(width, height) * 0.15;
     const paperWash = new Graphics()
-        .rect(0, 0, width, height)
+        .rect(-wash, -wash, width + wash * 2, height + wash * 2)
         .fill({ color: pixi.Color.shared.setValue(palette.paper).toNumber(), alpha: 0.35 });
     paperWash.visible = tuning.showBlocks;
     container.addChild(paperWash);
     if (tuning.showBlocks) {
         // Spacing grows with the viewport so the lattice stays around 3k dots on any display.
         const toneSpacing = Math.max(26, Math.sqrt((width * height) / 6000));
-        const screentone = drawSquareMarks(pixi, buildDotGrid(width, height, toneSpacing, 1.6), palette.tone4, 0.05);
+        const screentone = drawSquareMarks(
+            pixi,
+            buildDotGrid(width + wash * 2, height + wash * 2, toneSpacing, 1.6),
+            palette.tone4,
+            0.05,
+        );
+        screentone.position.set(-wash, -wash);
         container.addChild(screentone);
     }
 

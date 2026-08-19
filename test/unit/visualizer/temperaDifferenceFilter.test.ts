@@ -11,6 +11,7 @@ interface StubFilter {
     glProgram: StubProgram;
     blendRequired?: boolean;
     padding?: number;
+    resolution?: number | 'inherit';
     resources: Record<string, unknown>;
 }
 
@@ -46,6 +47,10 @@ describe('Tempera difference filter', () => {
         expect(filter.resources.uBackTexture).toBe(EMPTY_TEXTURE);
         expect(filter.padding).toBe(0);
         expect(filter.glProgram.name).toBe('tempera-difference-inversion');
+        // Pixi's own default is a hard 1. The back texture always follows the render target's
+        // resolution, so anything but 'inherit' makes the two textures different pixel sizes
+        // and the shader reads the backdrop from the wrong place.
+        expect(filter.resolution).toBe('inherit');
     });
 
     it('samples the back texture with the same coordinate as the input texture', () => {

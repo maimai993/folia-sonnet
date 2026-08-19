@@ -58,27 +58,22 @@ export const resolveTemperaTransitionEffectFrame = (
         };
     }
 
-    if (kind === 'camera-pan') {
-        const travel = 0.5;
-        // Alpha is held until the composition is nearly off frame, so the swipe never dips
-        // to an empty screen in the middle of the move.
-        const offset = phase === 'exit' ? eased * travel : -(1 - eased) * travel;
-        const alpha = phase === 'exit'
-            ? 1 - clamp01((linear - 0.72) / 0.28)
-            : clamp01(linear / 0.3);
+    if (kind === 'zoom-through') {
+        // Pushes through the composition rather than past it. Scaling up can only ever cover
+        // more of the frame, which is what keeps this safe with a single drawn scene.
+        const away = phase === 'exit' ? eased : 1 - eased;
         return {
             ...IDLE_TEMPERA_TRANSITION_FRAME,
-            x: flowX * offset,
-            y: flowY * offset,
-            scale: 1 + (phase === 'exit' ? eased : 1 - eased) * 0.03,
-            alpha,
+            scale: 1 + away * (phase === 'exit' ? 0.22 : 0.14),
+            alpha: phase === 'exit' ? 1 - eased : eased,
             wipeAngle: flowAngle,
         };
     }
 
     // shape-carry: the composition keeps drifting on the flow vector while it dilates and
-    // softens, as if the next graphic were pulling it out of focus. No hard cut, no glitch.
-    const drift = (phase === 'exit' ? eased : eased - 1) * 0.09;
+    // softens, as if the next graphic were pulling it out of focus. The drift stays inside the
+    // compositions' own bleed margin, so it never uncovers an edge of the frame.
+    const drift = (phase === 'exit' ? eased : eased - 1) * 0.06;
     const away = phase === 'exit' ? eased : 1 - eased;
     return {
         ...IDLE_TEMPERA_TRANSITION_FRAME,

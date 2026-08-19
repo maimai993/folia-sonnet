@@ -111,5 +111,11 @@ export const createTemperaDifferenceFilter = (
             uBackTexture: pixi.Texture.EMPTY,
         },
         padding: 0,
+        // MUST be 'inherit'. Pixi's Filter default is a hard 1, which allocates the input
+        // texture at a different pixel size than the back texture (that one always follows the
+        // render target's resolution). vTextureCoord then indexes the two textures
+        // differently and the backdrop is read from the wrong place - the inversion picks the
+        // wrong colour in patches, worst over fine hatch.
+        resolution: 'inherit',
     });
 };

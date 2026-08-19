@@ -29,9 +29,16 @@ export interface TemperaGlyphMotionInput {
     enterY: number;
     enterRotation: number;
     enterScale: number;
-    driftPhase: number;
     rotation: number;
     enterStyle: TemperaEnterStyle;
+    /**
+     * When the post-sung release reaches full amplitude. Bounded by the line's own duration,
+     * so a glyph keeps opening up for as long as its line lasts and no longer.
+     */
+    releaseTime: number;
+    /** Offset of this glyph from the block centre; the release scales it to widen tracking. */
+    trackingX: number;
+    trackingY: number;
 }
 
 export interface TemperaGlyphMotionFrame {
@@ -49,12 +56,13 @@ export interface TemperaGlyphMotionFrame {
     echoAlpha: number;
 }
 
-const DRIFT_PIXELS = 1.6;
-const DRIFT_ROTATION = 0.0055;
 const CURRENT_EMPHASIS = 0.05;
 const ECHO_ALPHA = 0.5;
+/** How much wider the sung block gets. Deliberately small: this is tracking, not drift. */
+const RELEASE_TRACKING = 0.055;
 
-// Resolves one glyph's entrance plus the slow settled drift that keeps a finished line alive.
+// Resolves one glyph's entrance plus the post-sung tracking release that keeps a finished
+// line alive without breaking its layout.
 // `motion` is the tuning/theme-scaled amount; 0 pins glyphs to their layout position.
 export const resolveTemperaGlyphMotion = (
     glyph: TemperaGlyphMotionInput,
@@ -76,11 +84,18 @@ export const resolveTemperaGlyphMotion = (
     const emphasis = (1 - easeTemperaInOut(clamp01((time - glyph.startTime) / (sungWindow + 0.18))))
         * easeTemperaInOut(clamp01((time - glyph.startTime) / 0.12));
 
-    const settled = clamp01((time - glyph.settleTime) / 0.9);
-    const phase = glyph.driftPhase;
-    const drift = settled * motion;
-    const driftX = Math.sin(time * 0.62 + phase) * DRIFT_PIXELS * drift;
-    const driftY = Math.cos(time * 0.47 + phase * 1.7) * DRIFT_PIXELS * 0.7 * drift;
+    // Release: once a glyph has been sung the block slowly opens its tracking instead of
+    // freezing. A line that finished early would otherwise sit dead for the rest of a long
+    // shot. This is a rigid, centre-out expansion - no wander, no float, no rotation - because
+    // a drifting glyph would contradict the deterministic typesetting the mode is built on.
+    // The ramp starts at the later of "sung" and "settled" so it never fights the entrance.
+    const releaseStart = Math.max(glyph.endTime, glyph.settleTime);
+    const release = easeTemperaInOut(clamp01(
+        (time - releaseStart) / Math.max(glyph.releaseTime - releaseStart, 0.001),
+    ));
+    const spread = release * clamp01(motion) * RELEASE_TRACKING;
+    const driftX = glyph.trackingX * spread;
+    const driftY = glyph.trackingY * spread;
 
     // A muted motion setting pulls the entrance back toward the resting pose instead of
     // inverting it, so `glyphMotion: 0` pins every style to its layout position.
@@ -91,8 +106,7 @@ export const resolveTemperaGlyphMotion = (
         alpha,
         x: entrance.x * motion + driftX,
         y: entrance.y * motion + driftY,
-        rotation: glyph.rotation + entrance.rotation * motion
-            + Math.sin(time * 0.39 + phase * 2.3) * DRIFT_ROTATION * drift,
+        rotation: glyph.rotation + entrance.rotation * motion,
         scaleX: entrance.scaleX + (1 - entrance.scaleX) * (1 - amount) + swell,
         scaleY: entrance.scaleY + (1 - entrance.scaleY) * (1 - amount) + swell,
         echoX: entrance.x * motion,

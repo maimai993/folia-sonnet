@@ -35,9 +35,12 @@ export interface TemperaGlyphPlacement {
     enterY: number;
     enterRotation: number;
     enterScale: number;
-    driftPhase: number;
     /** How this glyph arrives; picked per word so a word lands as one gesture. */
     enterStyle: TemperaEnterStyle;
+    /** Post-sung release: when the tracking expansion completes, and this glyph's lever arm. */
+    releaseTime: number;
+    trackingX: number;
+    trackingY: number;
 }
 
 interface TemperaLayoutOptions {
@@ -173,8 +176,14 @@ const buildWordUnits = (
  * Derives each glyph's settle duration from how fast the line is actually moving: the window
  * stretches to the gap before the next glyph, so a slow ballad eases in over a full second
  * while a dense line still finishes before the next character lands.
+ *
+ * It also sets the post-sung release: a glyph that stops moving the moment it has been sung
+ * leaves the whole line frozen for the rest of a long shot. The release widens the block's
+ * tracking from its centre outward, so each glyph's lever arm is simply its offset from that
+ * centre. The ramp lasts as long as the glyph's own line and no longer.
  */
-const applySettleTiming = (placements: TemperaGlyphPlacement[]) => {
+const applyGlyphTiming = (placements: TemperaGlyphPlacement[]) => {
+    if (placements.length === 0) return placements;
     const order = placements
         .map((placement, index) => ({ index, startTime: placement.startTime }))
         .sort((a, b) => a.startTime - b.startTime);
@@ -185,6 +194,31 @@ const applySettleTiming = (placements: TemperaGlyphPlacement[]) => {
         const sung = Math.max(placement.endTime - placement.startTime, 0.08);
         const pace = Math.max(Number.isFinite(gap) ? gap : sung, sung);
         placement.settleTime = placement.startTime + Math.min(1.35, Math.max(0.34, pace * 1.5));
+    });
+
+    const lineSpans = new Map<number, number>();
+    placements.forEach(placement => {
+        const current = lineSpans.get(placement.lineIndex) ?? 0;
+        lineSpans.set(placement.lineIndex, Math.max(current, placement.endTime));
+    });
+    const lineStarts = new Map<number, number>();
+    placements.forEach(placement => {
+        const current = lineStarts.get(placement.lineIndex) ?? Number.POSITIVE_INFINITY;
+        lineStarts.set(placement.lineIndex, Math.min(current, placement.startTime));
+    });
+    // Centre of the composed block; the expansion is measured from here, so the layout keeps
+    // its exact shape and only its spacing opens up.
+    const centerX = placements.reduce((sum, placement) => sum + placement.x, 0) / placements.length;
+    const centerY = placements.reduce((sum, placement) => sum + placement.y, 0) / placements.length;
+    placements.forEach(placement => {
+        const span = Math.max(
+            0.5,
+            (lineSpans.get(placement.lineIndex) ?? placement.endTime)
+            - (lineStarts.get(placement.lineIndex) ?? placement.startTime),
+        );
+        placement.releaseTime = Math.max(placement.endTime, placement.settleTime) + span;
+        placement.trackingX = placement.x - centerX;
+        placement.trackingY = placement.y - centerY;
     });
     return placements;
 };
@@ -248,7 +282,7 @@ export const resolveTemperaLayout = ({
         row.words.forEach((word, wordIndex) => {
             const salt = rowIndex * 37 + wordIndex;
             // One entrance style per word: neighbouring words arrive differently, but a word
-            // never breaks apart into seven different gestures.
+            // never breaks apart into several different gestures.
             const enterStyle = TEMPERA_ENTER_STYLES[
                 Math.floor(temperaHash01(seed, salt, 193) * TEMPERA_ENTER_STYLES.length)
                 % TEMPERA_ENTER_STYLES.length
@@ -296,12 +330,14 @@ export const resolveTemperaLayout = ({
                     enterY: Math.sin(angle) * magnitude,
                     enterRotation: (temperaHash01(seed, glyphSalt, 157) - 0.5) * 0.7,
                     enterScale: 0.6 + temperaHash01(seed, glyphSalt, 163) * 0.3,
-                    driftPhase: temperaHash01(seed, glyphSalt, 167) * TAU,
                     enterStyle,
+                    releaseTime: 0,
+                    trackingX: 0,
+                    trackingY: 0,
                 });
             });
         });
     });
 
-    return applySettleTiming(placements);
+    return applyGlyphTiming(placements);
 };

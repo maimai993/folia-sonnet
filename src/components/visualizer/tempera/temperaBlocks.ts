@@ -110,7 +110,9 @@ export const buildTemperaBlocks = (
         height: options.height,
         seed: options.seed,
         showDecor: options.showDecor,
-        bleed: carry + Math.max(options.width, options.height) * 0.08,
+        // Covers the internal creep, the camera pan and the shot's arrival offset, so a
+        // full-bleed shape reaches past the frame edge at every point of the hand-off.
+        bleed: carry + Math.max(options.width, options.height) * 0.17,
         // Gradient mode only: a per-shot axis so neighbouring compositions do not all ramp
         // the cover colours the same way.
         gradient: options.palette.gradient
