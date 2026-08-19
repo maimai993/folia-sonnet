@@ -1072,6 +1072,7 @@ export default {
     "temperaColorMode": "Color Mode",
     "temperaColorModeDuo": "Theme Duo",
     "temperaColorModeMono": "Monochrome",
+    "temperaColorModeGradient": "Cover gradient",
     "temperaTextureResolution": "Texture Resolution",
     "temperaTexturePerformanceWarning": "Higher texture resolution increases GPU memory usage and render load, which may affect performance.",
     "temperaShowBlocks": "Color Blocks",

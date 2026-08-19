@@ -18,6 +18,11 @@ export interface TemperaPalette {
     tone2: string;
     tone3: string;
     tone4: string;
+    /**
+     * Four-colour ramp for `gradient` mode, ordered paper -> ink by luminance. Null in the
+     * flat modes; shape fills read it to build a linear gradient instead of a solid colour.
+     */
+    gradient: string[] | null;
 }
 
 /** Fixed paper -> ink mix positions; the screentone layer maps tone index to hatch density. */
@@ -90,9 +95,27 @@ const buildToneLadder = (paper: string, ink: string, tintA?: string, tintB?: str
     };
 };
 
+/**
+ * Builds the four-colour gradient ramp. Cover-art colours carry the hue, but each one is
+ * pulled onto the paper -> ink brightness ladder first: an unordered ramp would break both
+ * the composition's tonal structure and the text inversion that reads it.
+ */
+const buildGradientRamp = (paper: string, ink: string, sources: string[]) => {
+    const usable = sources.map(color => color.trim()).filter(Boolean);
+    const ranked = [...usable].sort((a, b) => luminanceOf(a) - luminanceOf(b));
+    const towardInk = luminanceOf(ink) < luminanceOf(paper);
+    const ordered = towardInk ? ranked.reverse() : ranked;
+    return TEMPERA_TONE_STOPS.map((stop, index) => {
+        const rung = mixColors(paper, ink, stop);
+        const hue = ordered[index % Math.max(ordered.length, 1)];
+        return hue ? matchLuminance(mixColors(rung, hue, 0.62), rung) : rung;
+    });
+};
+
 export const resolveTemperaPalette = (
     theme: Theme,
     tuning: Pick<TemperaTuning, 'colorMode'>,
+    coverColors: string[] = [],
 ): TemperaPalette => {
     if (tuning.colorMode === 'mono') {
         const paper = toGray(theme.backgroundColor, '#111111');
@@ -111,10 +134,32 @@ export const resolveTemperaPalette = (
             line: colorWithAlpha(mixColors(paper, ink, 0.55), 0.55),
             shadow: colorWithAlpha(mixColors(paper, ink, 0.75), 0.35),
             ...buildToneLadder(paper, ink),
+            gradient: null,
         };
     }
     const paper = theme.backgroundColor;
     const ink = ensureInkContrast(paper, theme.primaryColor);
+    if (tuning.colorMode === 'gradient') {
+        // Cover colours first, theme hues as the fallback when there is no artwork yet.
+        const ramp = buildGradientRamp(paper, ink, coverColors.length >= 2
+            ? coverColors
+            : [theme.accentColor, theme.secondaryColor, theme.primaryColor, theme.backgroundColor]);
+        return {
+            paper,
+            ink,
+            blockA: ramp[0],
+            blockB: ramp[1],
+            blockC: ramp[2],
+            accent: theme.accentColor,
+            line: colorWithAlpha(mixColors(paper, ink, 0.6), 0.5),
+            shadow: colorWithAlpha(mixColors(paper, ink, 0.8), 0.32),
+            tone1: ramp[0],
+            tone2: ramp[1],
+            tone3: ramp[2],
+            tone4: ramp[3],
+            gradient: ramp,
+        };
+    }
     return {
         paper,
         ink,
@@ -127,5 +172,6 @@ export const resolveTemperaPalette = (
         // duo keeps the same brightness ladder but tints the mid steps with the theme hues,
         // so a screentone composition reads identically in both color modes.
         ...buildToneLadder(paper, ink, theme.accentColor, theme.secondaryColor),
+        gradient: null,
     };
 };

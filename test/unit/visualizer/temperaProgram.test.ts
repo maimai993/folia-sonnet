@@ -292,6 +292,42 @@ describe('Tempera program compiler', () => {
         });
     });
 
+    it('draws the decorative watermark from words the shot is not setting', () => {
+        const lines = [
+            line('第一句歌词很长可以撑满一个镜头', 0, 3),
+            line('第二句歌词继续往下走', 3.2, 6),
+            line('第三句换一个分镜收尾', 10, 13),
+        ];
+        const program = compileTemperaProgram(lines, 'watermark');
+        expect(program).toEqual(compileTemperaProgram(lines, 'watermark'));
+
+        const shots = program.paragraphs.flatMap(paragraph => paragraph.shots);
+        const watermarked = shots.filter(shot => shot.decor.watermark);
+        // Not every shot gets one - it is an accent, not a fixture.
+        expect(watermarked.length).toBeGreaterThan(0);
+        expect(watermarked.length).toBeLessThan(shots.length);
+
+        watermarked.forEach(shot => {
+            const watermark = shot.decor.watermark!;
+            const slice = shot.slices[0];
+            const own = program.paragraphs
+                .flatMap(paragraph => paragraph.lines)
+                .find(item => item.sourceIndex === slice.lineIndex)!
+                .segments.slice(slice.segmentStart, slice.segmentEnd)
+                .map(segment => segment.text)
+                .join('');
+            expect(watermark.text.trim()).toBe(watermark.text);
+            expect(own).not.toContain(watermark.text);
+            expect(watermark.scale).toBeGreaterThan(2);
+            expect(watermark.x).toBeGreaterThan(0);
+            expect(watermark.x).toBeLessThan(1);
+            expect(watermark.y).toBeGreaterThan(0);
+            expect(watermark.y).toBeLessThan(1);
+            // A loud composition already carries a dominant shape; a watermark would fight it.
+            expect(TEMPERA_SHOT_PROFILES[shot.kind].mood).not.toBe('loud');
+        });
+    });
+
     it('resolves the active paragraph for any seek target', () => {
         const lines = [
             line('one', 0, 2),

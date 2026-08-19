@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TemperaSegment } from '@/components/visualizer/tempera/types';
 import { resolveTemperaLayout } from '@/components/visualizer/tempera/temperaLayout';
+import { TEMPERA_ENTER_STYLES } from '@/components/visualizer/tempera/temperaEnterStyles';
 
 // test/unit/visualizer/temperaLayout.test.ts
 // Locks the collage typesetter: reading order survives, the composition stays inside its
@@ -203,6 +204,25 @@ describe('Tempera collage layout', () => {
 
     it('leaves every glyph uncoloured when the theme has no keywords', () => {
         expect(layout().every(placement => placement.color === null)).toBe(true);
+    });
+
+    it('picks one entrance style per word, not per glyph', () => {
+        const placements = layout();
+        placements.forEach(placement => {
+            expect(TEMPERA_ENTER_STYLES).toContain(placement.enterStyle);
+        });
+        // Every glyph of a word arrives the same way, so a word lands as one gesture.
+        const perWord = new Map<string, Set<string>>();
+        placements.forEach(placement => {
+            const key = `${placement.lineIndex}:${placement.segmentIndex}`;
+            const styles = perWord.get(key) ?? new Set<string>();
+            styles.add(placement.enterStyle);
+            perWord.set(key, styles);
+        });
+        perWord.forEach(styles => expect(styles.size).toBe(1));
+        // Neighbouring words do not all arrive identically.
+        const distinct = new Set([...perWord.values()].map(styles => [...styles][0]));
+        expect(distinct.size).toBeGreaterThan(1);
     });
 
     it('returns nothing for an empty shot', () => {

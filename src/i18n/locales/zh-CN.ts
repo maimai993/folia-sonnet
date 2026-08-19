@@ -1076,6 +1076,7 @@ export default {
     "temperaColorMode": "色彩模式",
     "temperaColorModeDuo": "主题双色",
     "temperaColorModeMono": "黑白灰",
+    "temperaColorModeGradient": "封面渐变",
     "temperaTextureResolution": "纹理分辨率",
     "temperaTexturePerformanceWarning": "提高纹理分辨率会增加 GPU 显存占用和渲染负载，可能影响性能。",
     "temperaShowBlocks": "色块场景",

@@ -111,6 +111,11 @@ export const buildTemperaBlocks = (
         seed: options.seed,
         showDecor: options.showDecor,
         bleed: carry + Math.max(options.width, options.height) * 0.08,
+        // Gradient mode only: a per-shot axis so neighbouring compositions do not all ramp
+        // the cover colours the same way.
+        gradient: options.palette.gradient
+            ? { colors: options.palette.gradient, angle: temperaHash01(options.seed, 3, 197) * Math.PI * 2 }
+            : null,
         add,
         createGroup,
     };

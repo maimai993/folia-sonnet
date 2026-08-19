@@ -97,6 +97,17 @@ export interface TemperaDecorFragment {
     scale: number;
 }
 
+/** Oversized decorative word set behind the composition, poster-watermark style. */
+export interface TemperaDecorWatermark {
+    text: string;
+    /** Fractional viewport position of the word's centre. */
+    x: number;
+    y: number;
+    rotation: number;
+    /** Multiplier on the shot's base font size. */
+    scale: number;
+}
+
 /**
  * Screentone decor for one shot, fully resolved at compile time so the renderer stays
  * free of randomness and every seek paints the identical frame.
@@ -107,6 +118,7 @@ export interface TemperaDecorSpec {
     crossCount: number;
     scribbleSeed: number;
     fragments: TemperaDecorFragment[];
+    watermark: TemperaDecorWatermark | null;
 }
 
 /**

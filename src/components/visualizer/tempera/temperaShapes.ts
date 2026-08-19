@@ -1,3 +1,4 @@
+import { mixColors } from '../colorMix';
 import {
     buildHatchLines,
     type TemperaDecorMark,
@@ -29,14 +30,46 @@ const boundsCenter = (polygon: number[]) => {
     return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
 };
 
+/** Four-colour ramp plus the axis it runs along, supplied by the gradient colour mode. */
+export interface TemperaGradientFill {
+    colors: string[];
+    angle: number;
+}
+
+/**
+ * In gradient mode a shape is filled with the whole four-colour ramp instead of one tone.
+ * Each stop is pulled halfway toward the tone the composition asked for, so the ramp carries
+ * the cover's hues while the shape keeps the brightness its place in the composition needs.
+ */
+const buildGradientFill = (pixi: PixiModule, gradient: TemperaGradientFill, color: string) => {
+    const half = 0.5;
+    const dx = Math.cos(gradient.angle) * half;
+    const dy = Math.sin(gradient.angle) * half;
+    const stops = gradient.colors.map((stop, index) => ({
+        offset: gradient.colors.length > 1 ? index / (gradient.colors.length - 1) : 0,
+        color: mixColors(stop, color, 0.5),
+    }));
+    return new pixi.FillGradient({
+        type: 'linear',
+        start: { x: half - dx, y: half - dy },
+        end: { x: half + dx, y: half + dy },
+        colorStops: stops,
+        textureSpace: 'local',
+    });
+};
+
 export const drawPolygonFill = (
     pixi: PixiModule,
     polygon: number[],
     color: string,
     alpha = 1,
-): Graphics => new pixi.Graphics()
-    .poly(polygon)
-    .fill({ color: toPixiColor(pixi, color), alpha });
+    gradient?: TemperaGradientFill | null,
+): Graphics => {
+    const node = new pixi.Graphics().poly(polygon);
+    return gradient && gradient.colors.length > 1
+        ? node.fill({ fill: buildGradientFill(pixi, gradient, color), alpha })
+        : node.fill({ color: toPixiColor(pixi, color), alpha });
+};
 
 export const drawPolygonOutline = (
     pixi: PixiModule,

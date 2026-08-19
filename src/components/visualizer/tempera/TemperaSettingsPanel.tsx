@@ -26,6 +26,7 @@ const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     const colorModeOptions: VisualizerPresetOption<TemperaColorMode>[] = useMemo(() => ([
         { value: 'duo', label: t('options.temperaColorModeDuo') || '主题双色' },
         { value: 'mono', label: t('options.temperaColorModeMono') || '黑白灰' },
+        { value: 'gradient', label: t('options.temperaColorModeGradient') || '封面渐变' },
     ]), [t]);
 
     const visibilityControls: Array<{

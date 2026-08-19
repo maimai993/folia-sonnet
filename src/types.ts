@@ -574,7 +574,11 @@ export const DEFAULT_SONNET_TUNING: SonnetTuning = {
   postProcessLensDispersion: 0.6,
 };
 
-export type TemperaColorMode = 'duo' | 'mono';
+/**
+ * `gradient` fills every tone shape with a four-colour ramp built from the cover art's
+ * extracted colours mixed with the theme, instead of a flat tone.
+ */
+export type TemperaColorMode = 'duo' | 'mono' | 'gradient';
 
 export interface TemperaTuning {
   cameraIntensity: number;

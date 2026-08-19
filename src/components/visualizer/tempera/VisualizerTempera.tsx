@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_TEMPERA_TUNING } from '../../../types';
 import type { Line } from '../../../types';
+import { extractRepresentativeColors } from '../../../utils/colorExtractor';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import type { VisualizerSharedProps } from '../definition';
@@ -28,6 +29,7 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
         staticMode = false,
         paused = false,
         seed = 'tempera',
+        coverUrl,
         songTitle,
         songArtist,
         songAlbum,
@@ -56,6 +58,7 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
         artist: songArtist,
         album: songAlbum,
     };
+    const [coverColors, setCoverColors] = useState<string[]>([]);
     const [runtimeFailed, setRuntimeFailed] = useState(false);
     const [isInstrumental, setIsInstrumental] = useState(false);
     const lyricsSig = lines.length === 0 ? '' : `${lines.length}|${lines[0]?.fullText ?? ''}`;
@@ -117,6 +120,25 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
         getLineEndTime: getLineRenderEndTime,
     });
 
+    // Cover-art colours feed the gradient colour mode only; the other modes derive everything
+    // from the theme, so there is no reason to decode the artwork for them.
+    const needsCoverColors = temperaTuning.colorMode === 'gradient';
+    useEffect(() => {
+        if (!needsCoverColors || !coverUrl) {
+            setCoverColors([]);
+            return undefined;
+        }
+        let active = true;
+        void extractRepresentativeColors(coverUrl, 5).then(colors => {
+            if (active) setCoverColors(colors);
+        }).catch(() => {
+            if (active) setCoverColors([]);
+        });
+        return () => {
+            active = false;
+        };
+    }, [coverUrl, needsCoverColors]);
+
     useEffect(() => {
         const host = hostRef.current;
         if (!host) return undefined;
@@ -135,6 +157,7 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
                     currentTime,
                     lyricsFontScale,
                     staticMode,
+                    coverColors,
                     paused: pausedRef.current,
                     songTitle: metadata.title,
                     songArtist: metadata.artist,
@@ -171,6 +194,7 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
             host.replaceChildren();
         };
     }, [
+        coverColors,
         currentTime,
         lyricsFontScale,
         program,

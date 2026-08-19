@@ -1,6 +1,7 @@
 import type { TemperaSegment, TemperaShotKind } from './types';
 import { temperaHash01 } from './temperaRandom';
 import { resolveTemperaShotProfile } from './temperaShotProfiles';
+import { TEMPERA_ENTER_STYLES, type TemperaEnterStyle } from './temperaEnterStyles';
 import {
     buildTemperaWordUnit,
     createTemperaMeasureContext,
@@ -35,6 +36,8 @@ export interface TemperaGlyphPlacement {
     enterRotation: number;
     enterScale: number;
     driftPhase: number;
+    /** How this glyph arrives; picked per word so a word lands as one gesture. */
+    enterStyle: TemperaEnterStyle;
 }
 
 interface TemperaLayoutOptions {
@@ -244,6 +247,12 @@ export const resolveTemperaLayout = ({
         let cursorX = rowLeft;
         row.words.forEach((word, wordIndex) => {
             const salt = rowIndex * 37 + wordIndex;
+            // One entrance style per word: neighbouring words arrive differently, but a word
+            // never breaks apart into seven different gestures.
+            const enterStyle = TEMPERA_ENTER_STYLES[
+                Math.floor(temperaHash01(seed, salt, 193) * TEMPERA_ENTER_STYLES.length)
+                % TEMPERA_ENTER_STYLES.length
+            ];
             const wordRotation = (temperaHash01(seed, salt, 137) - 0.5) * 0.07;
             const wordShiftY = (temperaHash01(seed, salt, 139) - 0.5) * fontSize * 0.09;
             const wordLeft = cursorX + (wordIndex === 0 ? 0 : word.leadingGap);
@@ -288,6 +297,7 @@ export const resolveTemperaLayout = ({
                     enterRotation: (temperaHash01(seed, glyphSalt, 157) - 0.5) * 0.7,
                     enterScale: 0.6 + temperaHash01(seed, glyphSalt, 163) * 0.3,
                     driftPhase: temperaHash01(seed, glyphSalt, 167) * TAU,
+                    enterStyle,
                 });
             });
         });

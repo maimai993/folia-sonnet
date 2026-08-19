@@ -44,8 +44,8 @@ const doubleFrame: TemperaCompositionDrawer = ctx => {
     const offset = width * 0.05;
     const box = rectPolygon(width * 0.16, height * 0.2, width * 0.68, height * 0.6);
     const shifted = rectPolygon(width * 0.16 + offset, height * 0.2 + offset * 0.6, width * 0.68, height * 0.6);
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9), { span: 0.5 });
-    ctx.add(drawPolygonFill(ctx.pixi, shifted, palette.tone3, 0.8), { delay: 0.06, span: 0.55, enterDX: offset * 3 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, shifted, palette.tone3, 0.8, ctx.gradient), { delay: 0.06, span: 0.55, enterDX: offset * 3 });
     ctx.add(drawHatchFill(ctx.pixi, shifted, buildHatchSpec(ctx.seed, 43), palette.tone4, 0.4), { delay: 0.1, span: 0.55, grow: true });
     ctx.add(drawPolygonOutline(ctx.pixi, box, palette.ink, 3.5, 0.9), { delay: 0.14, span: 0.5, enterDY: -height * 0.08 });
 };
@@ -54,10 +54,10 @@ const circleWindow: TemperaCompositionDrawer = ctx => {
     const { width, height, palette, bleed } = ctx;
     const radius = Math.min(width, height) * 0.34;
     const circle = circlePolygon(width / 2, height / 2, radius);
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone3, 0.92), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone3, 0.92, ctx.gradient), { span: 0.5 });
     ctx.add(drawHatchFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), buildHatchSpec(ctx.seed, 47), palette.tone4, 0.4),
         { delay: 0.04, span: 0.6, grow: true });
-    ctx.add(drawPolygonFill(ctx.pixi, circle, palette.paper, 0.95), { delay: 0.08, span: 0.55 });
+    ctx.add(drawPolygonFill(ctx.pixi, circle, palette.paper, 0.95, ctx.gradient), { delay: 0.08, span: 0.55 });
     ctx.add(drawPolygonOutline(ctx.pixi, circle, palette.ink, 3, 0.9), { delay: 0.14, span: 0.5 });
     if (!ctx.showDecor) return;
     ctx.add(drawPolygonOutline(ctx.pixi, circlePolygon(width / 2, height / 2, radius * 1.12), palette.ink, 1.2, 0.55), { delay: 0.2, drift: true });
@@ -67,7 +67,7 @@ const circleWindow: TemperaCompositionDrawer = ctx => {
 const ladderFrame: TemperaCompositionDrawer = ctx => {
     const { width, height, palette, bleed } = ctx;
     const left = width * 0.14;
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
     const steps = 5;
     for (let index = 0; index < steps; index += 1) {
         const y = height * (0.18 + index * 0.14);
@@ -85,7 +85,7 @@ const cornerBrackets: TemperaCompositionDrawer = ctx => {
     const { width, height, palette, bleed } = ctx;
     const inset = Math.min(width, height) * 0.12;
     const arm = Math.min(width, height) * 0.16;
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone2, 0.9), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone2, 0.9, ctx.gradient), { span: 0.5 });
     const corners: Array<[number, number, number, number]> = [
         [inset, inset, 1, 1],
         [width - inset, inset, -1, 1],

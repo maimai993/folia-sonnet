@@ -1,5 +1,6 @@
 import type { TemperaDecorSpec, TemperaShotKind } from './types';
 import type { TemperaPalette } from './temperaPalette';
+import type { TemperaGradientFill } from './temperaShapes';
 
 // src/components/visualizer/tempera/temperaCompositionContext.ts
 // The drawing contract shared by every composition family. Compositions only add finished,
@@ -36,6 +37,8 @@ export interface TemperaCompositionContext {
      * would expose the background as it slides.
      */
     bleed: number;
+    /** Non-null only in gradient colour mode; tone fills become four-colour ramps. */
+    gradient: TemperaGradientFill | null;
     add: (node: Graphics, options?: TemperaBlockOptions, parent?: Container) => void;
     createGroup: (rotation: number, x: number, y: number) => Container;
 }

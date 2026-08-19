@@ -8,6 +8,7 @@ import type {
     TemperaDecorFragment,
     TemperaDecorMotif,
     TemperaDecorSpec,
+    TemperaDecorWatermark,
     TemperaParagraph,
     TemperaParagraphBoundary,
     TemperaParagraphKind,
@@ -282,6 +283,27 @@ const buildDecorFragments = (
     });
 };
 
+/**
+ * Picks the oversized decorative word for a shot. It is drawn from the words this shot is
+ * *not* setting, so the watermark reads as the phrase around the line rather than as a
+ * duplicate of it. Loud compositions skip it: they already carry a dominant shape.
+ */
+const buildDecorWatermark = (
+    pool: string[],
+    seed: number,
+    allowed: boolean,
+): TemperaDecorWatermark | null => {
+    const words = pool.map(word => word.trim()).filter(word => word.length > 0 && word.length <= 12);
+    if (!allowed || words.length === 0 || temperaHash01(seed, 4, 107) > 0.62) return null;
+    return {
+        text: words[Math.floor(temperaHash01(seed, 5, 109) * words.length) % words.length],
+        x: 0.28 + temperaHash01(seed, 6, 113) * 0.44,
+        y: 0.26 + temperaHash01(seed, 7, 127) * 0.48,
+        rotation: (temperaHash01(seed, 8, 131) - 0.5) * 0.5,
+        scale: 2.6 + temperaHash01(seed, 9, 137) * 1.9,
+    };
+};
+
 // Resolves the screentone decor for one shot at compile time: motif, hatch angle, crossing
 // line count and margin fragments are all seed-derived, so the renderer stays deterministic.
 const buildDecorSpec = (
@@ -289,6 +311,7 @@ const buildDecorSpec = (
     shotKind: TemperaShotKind,
     seedKey: string,
     fragmentPool: string,
+    watermarkPool: string[],
     previousMotif: TemperaDecorMotif | null,
 ): TemperaDecorSpec => {
     const seed = hashTemperaSeed(seedKey);
@@ -303,6 +326,7 @@ const buildDecorSpec = (
         crossCount: 1 + Math.floor(temperaHash01(seed, 2, 89) * 3),
         scribbleSeed: mixTemperaSeed(seed, 97),
         fragments: sparse ? buildDecorFragments(fragmentPool, 3 + Math.floor(temperaHash01(seed, 3, 101) * 3), seed) : [],
+        watermark: buildDecorWatermark(watermarkPool, seed, resolveTemperaShotProfile(shotKind).mood !== 'loud'),
     };
 };
 
@@ -360,17 +384,19 @@ const buildShots = (
 
         // Margin fragments come from the rest of the paragraph, never from the words this
         // shot is already showing.
-        const fragmentPool = lines
-            .flatMap(item => (item.sourceIndex === chunk.lineIndex
-                ? item.segments.filter((_, index) => index < chunk.segmentStart || index >= chunk.segmentEnd)
-                : item.segments))
-            .map(segment => segment.text)
-            .join('') || sliceText;
+        const outsideSlice = lines.flatMap(item => (item.sourceIndex === chunk.lineIndex
+            ? item.segments.filter((_, index) => index < chunk.segmentStart || index >= chunk.segmentEnd)
+            : item.segments));
+        const fragmentPool = outsideSlice.map(segment => segment.text).join('') || sliceText;
+        const watermarkPool = outsideSlice
+            .filter(segment => segment.isWordLike)
+            .map(segment => segment.text);
         const decor = buildDecorSpec(
             kind,
             shotKind,
             `${seed}:${paragraphIndex}:${shotIndex}:decor`,
             fragmentPool,
+            watermarkPool,
             lastMotif,
         );
         lastMotif = decor.motif;

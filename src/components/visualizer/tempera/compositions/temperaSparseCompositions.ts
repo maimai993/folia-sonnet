@@ -12,7 +12,7 @@ const quietLine: TemperaCompositionDrawer = ctx => {
     const gridWidth = width * 0.7;
     const gridX = (width - gridWidth) / 2;
     [0.38, 0.5, 0.62].forEach((ratio, index) => {
-        ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(gridX, height * ratio, gridWidth, 1), palette.line, 1),
+        ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(gridX, height * ratio, gridWidth, 1), palette.line, 1, ctx.gradient),
             { delay: index * 0.08, span: 0.6, enterDX: (index % 2 === 0 ? -1 : 1) * width * 0.2 });
     });
     if (!ctx.showDecor) return;

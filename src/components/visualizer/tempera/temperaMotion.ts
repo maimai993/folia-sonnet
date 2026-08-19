@@ -2,6 +2,7 @@ import {
     clamp01,
     easeTemperaEnter,
     easeTemperaInOut,
+    easeTemperaOutward,
     easeTemperaSoftBack,
     resolveCubicBezier,
 } from './temperaMotionEasing';
@@ -10,7 +11,14 @@ import { resolveTemperaEnterFrame, type TemperaEnterStyle } from './temperaEnter
 // src/components/visualizer/tempera/temperaMotion.ts
 // Pure absolute-time motion evaluation for Tempera. Every value is derived from the clock
 // and per-glyph constants, so a seek paints exactly the frame continuous playback would.
-export { clamp01, easeTemperaEnter, easeTemperaInOut, easeTemperaSoftBack, resolveCubicBezier };
+export {
+    clamp01,
+    easeTemperaEnter,
+    easeTemperaInOut,
+    easeTemperaOutward,
+    easeTemperaSoftBack,
+    resolveCubicBezier,
+};
 
 export interface TemperaGlyphMotionInput {
     startTime: number;
@@ -92,18 +100,6 @@ export const resolveTemperaGlyphMotion = (
         echoAlpha: entrance.echo * ECHO_ALPHA * amount,
     };
 };
-
-/**
- * Maps a shot-relative fraction onto seconds, clamped so a very short or very long shot
- * still animates at a watchable speed. Used for hand-off windows, where the absolute
- * duration is what the eye judges.
- */
-export const resolveShotPacedDuration = (
-    shotDuration: number,
-    fraction: number,
-    minSeconds: number,
-    maxSeconds: number,
-) => Math.min(maxSeconds, Math.max(minSeconds, shotDuration * fraction));
 
 export interface TemperaStaggerWindow {
     delay: number;

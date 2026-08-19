@@ -24,7 +24,7 @@ import {
     clamp01,
     easeTemperaEnter,
     easeTemperaInOut,
-    resolveShotPacedDuration,
+    easeTemperaOutward,
     resolveTemperaGlyphMotion,
 } from './temperaMotion';
 
@@ -51,6 +51,7 @@ export interface TemperaRuntimeOptions {
     currentTime: MotionValue<number>;
     lyricsFontScale: number;
     staticMode: boolean;
+    coverColors?: string[];
     paused: boolean;
     songTitle?: string | null;
     songArtist?: string | null;
@@ -247,6 +248,7 @@ export class TemperaPixiRuntime {
             tuning: this.options.tuning,
             lyricsFontScale: this.options.lyricsFontScale,
             staticMode: this.options.staticMode,
+            coverColors: this.options.coverColors ?? [],
         }, this.options.program.paragraphs[index]);
         this.sceneCache.set(index, scene);
         this.sceneContainer.addChild(scene.container);
@@ -261,17 +263,8 @@ export class TemperaPixiRuntime {
         });
     }
 
-    /**
-     * How long a finished shot keeps sliding out while the next one is already sliding in.
-     * The overlap is the whole point: two compositions share the frame and the outgoing one
-     * carries the eye into the incoming one instead of being cut away.
-     */
-    private resolveShotHandoff(view: TemperaShotView) {
-        return resolveShotPacedDuration(view.shot.endTime - view.shot.startTime, 0.3, 0.4, 1.1);
-    }
-
     private resolveShotExit(view: TemperaShotView, time: number) {
-        return clamp01((time - view.shot.endTime) / this.resolveShotHandoff(view));
+        return clamp01((time - view.shot.endTime) / view.handoffDuration);
     }
 
     private updateShot(view: TemperaShotView, time: number, width: number, height: number) {
@@ -297,19 +290,26 @@ export class TemperaPixiRuntime {
         // over, keeps travelling downstream out of frame. Both shots run this at the same
         // time during the overlap, so the outgoing composition visibly pushes past the
         // incoming one rather than being cut away.
-        const handoff = this.resolveShotHandoff(view);
         const span = Math.max(width, height);
         // The arrival is front-loaded on purpose: the glyphs start revealing on the shot's
         // own timeline, so a slow entrance would expose type that is still off frame.
-        const enter = easeTemperaEnter(clamp01((time - view.shot.startTime) / (handoff * 0.8)));
-        const exit = easeTemperaInOut(this.resolveShotExit(view, time));
-        const travel = exit * span * 0.55 - (1 - enter) * span * 0.32;
+        const enter = easeTemperaEnter(clamp01((time - view.shot.startTime) / (view.handoffDuration * 0.8)));
+        // Anticipation: once the type has landed, the frame starts accelerating into its own
+        // exit instead of holding still, so the dead tail of a shot never feels like a wait.
+        const tailWindow = Math.max(view.shot.endTime - view.revealDoneTime, 0.001);
+        const anticipation = Math.pow(clamp01((time - view.revealDoneTime) / tailWindow), 2);
+        // The exit leaves at speed rather than from rest, picking up where anticipation left
+        // off, and keeps building - a decelerating exit is what reads as stopping to wait.
+        const exit = easeTemperaOutward(this.resolveShotExit(view, time));
+        const travel = anticipation * span * 0.05
+            + exit * span * 0.55
+            - (1 - enter) * span * 0.32;
         view.container.position.set(
             view.baseX + frame.x * width * camera + Math.cos(view.shot.flowAngle) * travel,
             view.baseY + frame.y * height * camera + Math.sin(view.shot.flowAngle) * travel,
         );
         // Opaque on the way in: this is a push, not a dissolve. Only the exit fades.
-        view.container.alpha = 1 - exit;
+        view.container.alpha = 1 - easeTemperaInOut(this.resolveShotExit(view, time));
         view.container.scale.set((1 + (frame.scale - 1) * camera) * (1 - exit * 0.08));
         view.container.rotation = frame.rotation * camera;
 
@@ -322,15 +322,29 @@ export class TemperaPixiRuntime {
             glyph.display.alpha = frame.alpha;
             glyph.display.visible = frame.visible;
             glyph.display.position.set(x, y);
-            glyph.display.scale.set(frame.scale);
+            glyph.display.scale.set(frame.scaleX, frame.scaleY);
             glyph.display.rotation = frame.rotation;
             if (glyph.shadow) {
                 glyph.shadow.alpha = frame.alpha * 0.9;
                 glyph.shadow.visible = frame.visible;
                 glyph.shadow.position.set(x + glyph.shadowDX, y + glyph.shadowDY);
-                glyph.shadow.scale.set(frame.scale);
+                glyph.shadow.scale.set(frame.scaleX, frame.scaleY);
                 glyph.shadow.rotation = frame.rotation;
             }
+            // Echoes trail further back along the entrance vector the deeper they sit.
+            const echoVisible = frame.visible && frame.echoAlpha > 0.004;
+            glyph.echoes.forEach((echo, index) => {
+                echo.visible = echoVisible;
+                if (!echoVisible) return;
+                const depth = 1 + index * 0.85;
+                echo.alpha = frame.echoAlpha / (index + 1.4);
+                echo.position.set(
+                    glyph.baseX + frame.echoX * depth,
+                    glyph.baseY + frame.echoY * depth,
+                );
+                echo.scale.set(frame.scaleX, frame.scaleY);
+                echo.rotation = frame.rotation;
+            });
         });
     }
 

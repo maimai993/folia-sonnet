@@ -17,7 +17,7 @@ const posterPanel: TemperaCompositionDrawer = ctx => {
     const poster = ctx.createGroup(-0.06, width / 2, height / 2);
     const solid = diamondPolygon(-width * 0.12, 0, width * 0.42, height * 0.66);
     const hatched = diamondPolygon(width * 0.2, -height * 0.06, width * 0.3, height * 0.48);
-    ctx.add(drawPolygonFill(ctx.pixi, solid, palette.ink, 0.92), { enterDX: -width * 0.6, span: 0.55 }, poster);
+    ctx.add(drawPolygonFill(ctx.pixi, solid, palette.ink, 0.92, ctx.gradient), { enterDX: -width * 0.6, span: 0.55 }, poster);
     ctx.add(drawHatchFill(ctx.pixi, hatched, buildHatchSpec(ctx.seed, 41), palette.tone4, 0.7), { delay: 0.08, grow: true, span: 0.55 }, poster);
     ctx.add(drawPolygonOutline(ctx.pixi, hatched, palette.ink, 2, 0.8), { delay: 0.12, span: 0.55 }, poster);
     ctx.add(drawPolyline(
@@ -32,13 +32,13 @@ const posterPanel: TemperaCompositionDrawer = ctx => {
 // Three solids marching off the frame at descending size; the type rides the largest one.
 const diamondStack: TemperaCompositionDrawer = ctx => {
     const { width, height, palette, bleed } = ctx;
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
     const tones = [palette.ink, palette.tone4, palette.tone3];
     tones.forEach((tone, index) => {
         const scale = 1 - index * 0.28;
         const cx = width * (0.34 + index * 0.24);
         const cy = height * (0.52 - index * 0.14);
-        ctx.add(drawPolygonFill(ctx.pixi, diamondPolygon(cx, cy, width * 0.3 * scale, height * 0.46 * scale), tone, 0.93),
+        ctx.add(drawPolygonFill(ctx.pixi, diamondPolygon(cx, cy, width * 0.3 * scale, height * 0.46 * scale), tone, 0.93, ctx.gradient),
             { delay: index * 0.07, span: 0.55, enterDX: width * 0.25, enterDY: -height * 0.12 });
     });
 };
@@ -53,8 +53,8 @@ const slashPoster: TemperaCompositionDrawer = ctx => {
         width + bleed, height * 0.72 - lean,
         -bleed, height * 0.72 + lean,
     ];
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9), { span: 0.5 });
-    ctx.add(drawPolygonFill(ctx.pixi, band, palette.tone4, 0.94), { delay: 0.05, span: 0.55, enterDX: -width * 0.4 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, band, palette.tone4, 0.94, ctx.gradient), { delay: 0.05, span: 0.55, enterDX: -width * 0.4 });
     ctx.add(drawHatchFill(ctx.pixi, band, { ...buildHatchSpec(ctx.seed, 67), angle: Math.PI / 3 }, palette.paper, 0.3),
         { delay: 0.1, span: 0.55, grow: true });
     ctx.add(drawPolygonOutline(ctx.pixi, band, palette.ink, 2.2, 0.8), { delay: 0.14, span: 0.5 });
@@ -73,8 +73,8 @@ const arrowWedge: TemperaCompositionDrawer = ctx => {
         width * 0.5, apex + thickness,
         -bleed, height + bleed,
     ];
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9), { span: 0.5 });
-    ctx.add(drawPolygonFill(ctx.pixi, [-bleed, height + bleed, width * 0.5, apex, width + bleed, height + bleed], palette.tone4, 0.94),
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, [-bleed, height + bleed, width * 0.5, apex, width + bleed, height + bleed], palette.tone4, 0.94, ctx.gradient),
         { delay: 0.05, span: 0.55, enterDY: height * 0.3 });
     ctx.add(drawHatchFill(ctx.pixi, chevron, { ...buildHatchSpec(ctx.seed, 73), angle: -Math.PI / 4 }, palette.paper, 0.35),
         { delay: 0.1, span: 0.55, grow: true });
@@ -90,8 +90,8 @@ const edgeBleed: TemperaCompositionDrawer = ctx => {
     const mass = fromLeft
         ? rectPolygon(-bleed, -bleed, cover + bleed, height + bleed * 2)
         : rectPolygon(width - cover, -bleed, cover + bleed, height + bleed * 2);
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9), { span: 0.5 });
-    ctx.add(drawPolygonFill(ctx.pixi, mass, palette.ink, 0.93), { delay: 0.05, span: 0.55, enterDX: (fromLeft ? -1 : 1) * width * 0.4 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, mass, palette.ink, 0.93, ctx.gradient), { delay: 0.05, span: 0.55, enterDX: (fromLeft ? -1 : 1) * width * 0.4 });
     ctx.add(drawHatchFill(ctx.pixi, mass, buildHatchSpec(ctx.seed, 83), palette.paper, 0.22), { delay: 0.12, span: 0.55, grow: true });
 };
 

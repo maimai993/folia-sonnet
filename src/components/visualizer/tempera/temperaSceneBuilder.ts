@@ -6,7 +6,12 @@ import { hashTemperaSeed } from './temperaRandom';
 import { resolveTemperaPalette, type TemperaPalette } from './temperaPalette';
 import { buildTemperaBlocks, type TemperaBlocksView } from './temperaBlocks';
 import { isTemperaLayoutSegment, resolveTemperaLayout } from './temperaLayout';
-import { buildTemperaFragmentViews, buildTemperaTextViews, type TemperaGlyphView } from './temperaTextView';
+import {
+    buildTemperaFragmentViews,
+    buildTemperaTextViews,
+    buildTemperaWatermark,
+    type TemperaGlyphView,
+} from './temperaTextView';
 import { createTemperaDifferenceFilter } from './temperaDifferenceFilter';
 import { buildDotGrid } from './temperaHatch';
 import { drawSquareMarks } from './temperaShapes';
@@ -31,6 +36,12 @@ export interface TemperaShotView {
     /** Carries the difference inversion filter; the runtime clears it on destroy. */
     textLayer: import('pixi.js').Container;
     revealDoneTime: number;
+    /**
+     * How long this shot keeps travelling out after its own end. Derived from the dead tail it
+     * has left after the type has landed and from how much room the next shot can spare, so a
+     * shot with time on its hands leaves slowly and a tight one leaves briskly.
+     */
+    handoffDuration: number;
 }
 
 export interface TemperaSceneView {
@@ -50,6 +61,8 @@ export interface TemperaSceneBuildOptions {
     tuning: TemperaTuning;
     lyricsFontScale: number;
     staticMode: boolean;
+    /** Cover-art colours for the gradient colour mode; empty falls back to the theme hues. */
+    coverColors: string[];
 }
 
 export interface TemperaCreditsMetadata {
@@ -171,7 +184,7 @@ export const buildTemperaScene = (
     const height = Math.max(options.host.clientHeight, 240);
     const container = new Container();
     const { tuning } = options;
-    const palette = resolveTemperaPalette(options.theme, tuning);
+    const palette = resolveTemperaPalette(options.theme, tuning, options.coverColors);
     const sceneSeed = hashTemperaSeed(`${options.programSeed}:${paragraph.id}`);
     const fontFamily = resolveThemeFontStack(options.theme);
     const fontWeight = resolveThemeFontWeight(options.theme, 600);
@@ -248,12 +261,16 @@ export const buildTemperaScene = (
         });
         blocks.container.visible = tuning.showBlocks;
 
+        const watermarkLayer = new Container();
         const underLayer = new Container();
         const textLayer = new Container();
+        const echoLayer = new Container();
         const keywordLayer = new Container();
-        // Order matters: everything the inversion filter should read must render before the
-        // text layer, and keyword-coloured glyphs must render after it, unfiltered.
-        shotContainer.addChild(blocks.container, underLayer, textLayer, keywordLayer);
+        // Order matters. Everything the inversion filter should read must render before the
+        // text layer - that includes the decorative watermark, which is the point of it: the
+        // lyric flips colour where it crosses those strokes. Echoes and keyword-coloured
+        // glyphs render after it, unfiltered, so they keep their own colour.
+        shotContainer.addChild(blocks.container, watermarkLayer, underLayer, textLayer, echoLayer, keywordLayer);
 
         const placements = resolveTemperaLayout({
             lines: linesSegments,
@@ -272,10 +289,24 @@ export const buildTemperaScene = (
             fontFamily,
             fontWeight,
             shadowEnabled: tuning.showDecor,
+            echoCount: tuning.showDecor && !options.staticMode ? 2 : 0,
             textLayer,
             underLayer,
+            echoLayer,
             keywordLayer,
         });
+        if (shot.decor.watermark && tuning.showDecor) {
+            buildTemperaWatermark(pixi, {
+                watermark: shot.decor.watermark,
+                palette,
+                fontFamily,
+                fontWeight,
+                baseFontSize,
+                width,
+                height,
+                layer: watermarkLayer,
+            });
+        }
         if (shot.decor.fragments.length > 0 && tuning.showDecor) {
             buildTemperaFragmentViews(pixi, {
                 fragments: shot.decor.fragments,
@@ -297,8 +328,14 @@ export const buildTemperaScene = (
         textLayer.filters = [differenceFilter];
         postProcessFilters.push(differenceFilter);
         const revealDoneTime = glyphs.length > 0
-            ? Math.max(...glyphs.map(glyph => glyph.motion.settleTime))
-            : shot.endTime;
+            ? Math.min(shot.endTime, Math.max(...glyphs.map(glyph => glyph.motion.settleTime)))
+            : shot.startTime;
+        const tail = Math.max(0, shot.endTime - revealDoneTime);
+        const nextShot = paragraph.shots[shotIndex + 1];
+        const nextDuration = nextShot
+            ? nextShot.endTime - nextShot.startTime
+            : shot.endTime - shot.startTime;
+        const handoffDuration = Math.min(1.8, Math.max(0.35, Math.min(tail * 0.9 + 0.35, nextDuration * 0.5)));
 
         shotContainer.pivot.set(width / 2, height / 2);
         shotContainer.position.set(width / 2, height / 2);
@@ -312,6 +349,7 @@ export const buildTemperaScene = (
             baseY: shotContainer.y,
             textLayer,
             revealDoneTime,
+            handoffDuration,
         };
     });
 

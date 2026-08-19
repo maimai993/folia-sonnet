@@ -14,7 +14,7 @@ type Panel = { polygon: number[]; tone: string; enterDX: number; enterDY: number
 const addPanels = (ctx: TemperaCompositionContext, panels: Panel[], hatchIndex: number) => {
     const hatch = buildHatchSpec(ctx.seed, 5);
     panels.forEach((panel, index) => {
-        ctx.add(drawPolygonFill(ctx.pixi, panel.polygon, panel.tone, 0.96), {
+        ctx.add(drawPolygonFill(ctx.pixi, panel.polygon, panel.tone, 0.96, ctx.gradient), {
             delay: index * 0.05,
             span: 0.5,
             enterDX: panel.enterDX,
@@ -30,7 +30,7 @@ const addPanels = (ctx: TemperaCompositionContext, panels: Panel[], hatchIndex: 
 };
 
 const addSeam = (ctx: TemperaCompositionContext, polygon: number[], delay: number) => {
-    ctx.add(drawPolygonFill(ctx.pixi, polygon, ctx.palette.ink, 0.85), { delay, span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, polygon, ctx.palette.ink, 0.85, ctx.gradient), { delay, span: 0.5 });
 };
 
 const duoSplit: TemperaCompositionDrawer = ctx => {
@@ -129,7 +129,7 @@ const crossAxis: TemperaCompositionDrawer = ctx => {
     const { width, height, palette, bleed } = ctx;
     const barX = width * 0.11;
     const barY = height * 0.13;
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.9, ctx.gradient), { span: 0.5 });
     ctx.add(drawPolygonFill(ctx.pixi, rectPolygon((width - barX) / 2, -bleed, barX, height + bleed * 2), palette.tone4, 0.95),
         { delay: 0.06, span: 0.5, enterDY: -height * 0.5 });
     ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, (height - barY) / 2, width + bleed * 2, barY), palette.tone3, 0.95),

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { TEMPERA_ENTER_STYLES } from '@/components/visualizer/tempera/temperaEnterStyles';
 import {
     easeTemperaEnter,
+    easeTemperaOutward,
     easeTemperaInOut,
     easeTemperaSoftBack,
     resolveCubicBezier,
-    resolveShotPacedDuration,
     resolveShotStagger,
     resolveTemperaGlyphMotion,
     type TemperaGlyphMotionInput,
@@ -23,6 +24,7 @@ const glyph = (overrides: Partial<TemperaGlyphMotionInput> = {}): TemperaGlyphMo
     enterScale: 0.7,
     driftPhase: 1.1,
     rotation: 0.05,
+    enterStyle: 'slide',
     ...overrides,
 });
 
@@ -41,7 +43,8 @@ describe('Tempera easing', () => {
     });
 
     it('front-loads the enter curve so glyphs decelerate into place', () => {
-        // Half the visual travel is done well before half the time has passed.
+        // Half the visual travel is done well before half the time has passed. Softening this
+        // was tried and read as sluggish, so the punchy opening is deliberate.
         expect(easeTemperaEnter(0.25)).toBeGreaterThan(0.5);
         expect(easeTemperaEnter(0.9)).toBeLessThan(1);
     });
@@ -66,25 +69,28 @@ describe('Tempera glyph motion', () => {
         const frame = resolveTemperaGlyphMotion(glyph(), 10.8, 1);
         expect(frame.alpha).toBeCloseTo(1, 6);
         expect(Math.hypot(frame.x, frame.y)).toBeLessThan(0.5);
-        expect(frame.scale).toBeCloseTo(1, 2);
+        expect(frame.scaleX).toBeCloseTo(1, 2);
+        expect(frame.scaleY).toBeCloseTo(1, 2);
         expect(frame.rotation).toBeCloseTo(0.05, 3);
     });
 
     it('emphasises the glyph being sung with a small scale swell, never a backing block', () => {
         const singing = resolveTemperaGlyphMotion(glyph({ enterScale: 1 }), 10.2, 1);
         const after = resolveTemperaGlyphMotion(glyph({ enterScale: 1 }), 12, 1);
-        expect(singing.scale).toBeGreaterThan(after.scale);
+        expect(singing.scaleX).toBeGreaterThan(after.scaleX);
         // The swell must stay subtle enough to read as weight, not as a pop.
-        expect(singing.scale).toBeLessThan(1.06);
-        expect(after.scale).toBeCloseTo(1, 2);
+        expect(singing.scaleX).toBeLessThan(1.06);
+        expect(after.scaleX).toBeCloseTo(1, 2);
     });
 
     it('starts from the full entrance offset and resolves alpha before position', () => {
         const start = resolveTemperaGlyphMotion(glyph(), 10, 1);
         expect(start.x).toBeCloseTo(40, 6);
         expect(start.y).toBeCloseTo(-25, 6);
-        expect(start.scale).toBeCloseTo(0.7, 6);
+        expect(start.scaleX).toBeCloseTo(0.7, 6);
 
+        // Alpha is resolved well before the glyph stops travelling: it must be readable
+        // while it is still on the move, not fade in only once it has parked.
         const mid = resolveTemperaGlyphMotion(glyph(), 10.36, 1);
         expect(mid.alpha).toBeCloseTo(1, 3);
         expect(Math.abs(mid.x)).toBeGreaterThan(0.5);
@@ -96,7 +102,8 @@ describe('Tempera glyph motion', () => {
             expect(frame.x).toBeCloseTo(0, 10);
             expect(frame.y).toBeCloseTo(0, 10);
             expect(frame.rotation).toBeCloseTo(0.05, 6);
-            expect(frame.scale).toBeCloseTo(1, 6);
+            expect(frame.scaleX).toBeCloseTo(1, 6);
+            expect(frame.scaleY).toBeCloseTo(1, 6);
         });
     });
 
@@ -116,11 +123,51 @@ describe('Tempera glyph motion', () => {
     });
 });
 
-describe('Shot-paced durations', () => {
-    it('scales with the shot but clamps at both ends', () => {
-        expect(resolveShotPacedDuration(4, 0.25, 0.3, 2)).toBeCloseTo(1, 6);
-        expect(resolveShotPacedDuration(0.4, 0.25, 0.3, 2)).toBeCloseTo(0.3, 6);
-        expect(resolveShotPacedDuration(30, 0.25, 0.3, 2)).toBeCloseTo(2, 6);
+describe('Tempera entrance styles', () => {
+    it('lands every style on the resting pose by the settle time', () => {
+        TEMPERA_ENTER_STYLES.forEach(enterStyle => {
+            const frame = resolveTemperaGlyphMotion(glyph({ enterStyle }), 10.8, 1);
+            expect(Math.hypot(frame.x, frame.y), enterStyle).toBeLessThan(0.6);
+            expect(frame.scaleX, enterStyle).toBeCloseTo(1, 2);
+            expect(frame.scaleY, enterStyle).toBeCloseTo(1, 2);
+            expect(frame.rotation, enterStyle).toBeCloseTo(0.05, 2);
+            expect(frame.echoAlpha, enterStyle).toBeLessThan(0.02);
+        });
+    });
+
+    it('gives the styles genuinely different openings', () => {
+        const openings = TEMPERA_ENTER_STYLES.map(enterStyle => {
+            const frame = resolveTemperaGlyphMotion(glyph({ enterStyle }), 10.05, 1);
+            return `${frame.x.toFixed(2)}:${frame.y.toFixed(2)}:${frame.scaleX.toFixed(2)}:${frame.scaleY.toFixed(2)}:${frame.rotation.toFixed(2)}`;
+        });
+        expect(new Set(openings).size).toBe(TEMPERA_ENTER_STYLES.length);
+    });
+
+    it('trails echoes only for styles that actually travel', () => {
+        const travelling = resolveTemperaGlyphMotion(glyph({ enterStyle: 'slide' }), 10.05, 1);
+        expect(travelling.echoAlpha).toBeGreaterThan(0.1);
+        expect(Math.hypot(travelling.echoX, travelling.echoY)).toBeGreaterThan(1);
+        // A stamp lands in place, so a trail behind it would have nothing to trail from.
+        expect(resolveTemperaGlyphMotion(glyph({ enterStyle: 'stamp' }), 10.05, 1).echoAlpha).toBe(0);
+    });
+
+    it('suppresses echoes entirely when motion is muted', () => {
+        TEMPERA_ENTER_STYLES.forEach(enterStyle => {
+            expect(resolveTemperaGlyphMotion(glyph({ enterStyle }), 10.05, 0).echoAlpha, enterStyle).toBe(0);
+        });
+    });
+});
+
+describe('Outward exit curve', () => {
+    it('leaves at speed and keeps building', () => {
+        expect(easeTemperaOutward(0)).toBeCloseTo(0, 6);
+        expect(easeTemperaOutward(1)).toBeCloseTo(1, 6);
+        // A shot that is already drifting must not restart from rest when its hand-off
+        // begins; an ease-in-out exit is exactly what reads as stopping to wait.
+        const startSpeed = easeTemperaOutward(0.02) / 0.02;
+        const endSpeed = (easeTemperaOutward(1) - easeTemperaOutward(0.98)) / 0.02;
+        expect(startSpeed).toBeGreaterThan(0.5);
+        expect(endSpeed).toBeGreaterThan(startSpeed);
     });
 });
 

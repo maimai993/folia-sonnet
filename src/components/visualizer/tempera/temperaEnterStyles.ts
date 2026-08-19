@@ -1,4 +1,4 @@
-import { easeTemperaEnter, easeTemperaSoftBack } from './temperaMotionEasing';
+import { easeTemperaSoftBack } from './temperaMotionEasing';
 
 // src/components/visualizer/tempera/temperaEnterStyles.ts
 // The ways a glyph can arrive. One style is picked per word at layout time, so a word lands as
@@ -8,9 +8,7 @@ export const TEMPERA_ENTER_STYLES = [
     'slide',
     'drop',
     'stamp',
-    'unfold',
     'swing',
-    'spiral',
     'rise',
 ] as const;
 export type TemperaEnterStyle = typeof TEMPERA_ENTER_STYLES[number];
@@ -45,7 +43,6 @@ export const resolveTemperaEnterFrame = (
 ): TemperaEnterFrame => {
     const settle = easeTemperaSoftBack(linear);
     const uniform = input.enterScale + (1 - input.enterScale) * settle;
-    const magnitude = Math.hypot(input.enterX, input.enterY);
 
     switch (style) {
         case 'drop':
@@ -68,18 +65,6 @@ export const resolveTemperaEnterFrame = (
                 scaleY: 1 + travel * 0.95,
                 echo: 0,
             };
-        case 'unfold': {
-            // Opens horizontally like a folded card; the width curve leads the position.
-            const width = easeTemperaEnter(Math.min(1, linear * 1.25));
-            return {
-                x: input.enterX * 0.25 * travel,
-                y: input.enterY * 0.12 * travel,
-                rotation: input.enterRotation * 0.25 * travel,
-                scaleX: Math.max(0.02, uniform * width),
-                scaleY: uniform,
-                echo: 0,
-            };
-        }
         case 'swing':
             // Rotates in around its own centre from a wide angle.
             return {
@@ -90,18 +75,6 @@ export const resolveTemperaEnterFrame = (
                 scaleY: uniform,
                 echo: travel * 0.8,
             };
-        case 'spiral': {
-            // The approach vector itself rotates, so the glyph curves into place.
-            const angle = Math.atan2(input.enterY, input.enterX) + travel * 1.35;
-            return {
-                x: Math.cos(angle) * magnitude * travel,
-                y: Math.sin(angle) * magnitude * travel,
-                rotation: input.enterRotation * travel,
-                scaleX: uniform,
-                scaleY: uniform,
-                echo: travel,
-            };
-        }
         case 'rise':
             // Grows up out of the baseline from below.
             return {

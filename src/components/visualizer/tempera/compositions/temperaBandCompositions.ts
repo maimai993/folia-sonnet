@@ -18,7 +18,7 @@ const bandStrip: TemperaCompositionDrawer = ctx => {
     const { width, height, palette, bleed } = ctx;
     const bandY = height * 0.37;
     const bandHeight = height * 0.3;
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, bandY, width + bleed * 2, bandHeight), palette.tone3, 0.96),
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, bandY, width + bleed * 2, bandHeight), palette.tone3, 0.96, ctx.gradient),
         { span: 0.55, enterDX: -width * 0.5 });
     // Guide lines hug the band edges; the lyric inverts against the mid tone between them.
     ctx.add(drawLines(ctx.pixi, [
@@ -37,10 +37,10 @@ const bandStrip: TemperaCompositionDrawer = ctx => {
 const horizonBand: TemperaCompositionDrawer = ctx => {
     const { width, height, palette, bleed } = ctx;
     const waterline = height * (0.5 + temperaHash01(ctx.seed, 1, 23) * 0.12);
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, waterline + bleed), palette.tone1, 0.94),
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, waterline + bleed), palette.tone1, 0.94, ctx.gradient),
         { span: 0.55, enterDY: -height * 0.3 });
     const water = rectPolygon(-bleed, waterline, width + bleed * 2, height - waterline + bleed);
-    ctx.add(drawPolygonFill(ctx.pixi, water, palette.tone3, 0.95), { delay: 0.05, span: 0.55, enterDY: height * 0.3 });
+    ctx.add(drawPolygonFill(ctx.pixi, water, palette.tone3, 0.95, ctx.gradient), { delay: 0.05, span: 0.55, enterDY: height * 0.3 });
     ctx.add(drawHatchFill(ctx.pixi, water, { ...buildHatchSpec(ctx.seed, 29), angle: 0 }, palette.tone4, 0.55),
         { delay: 0.1, span: 0.55, grow: true });
     ctx.add(drawPolyline(ctx.pixi, buildWavyPath(ctx.seed, 31, -bleed, width + bleed, waterline, height * 0.012, 30), palette.ink, 2.2, 0.85),
@@ -54,7 +54,7 @@ const deepDive: TemperaCompositionDrawer = ctx => {
     const bandHeight = (height + bleed * 2) / tones.length;
     tones.forEach((tone, index) => {
         const top = -bleed + bandHeight * index;
-        ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, top, width + bleed * 2, bandHeight + 1), tone, 0.95),
+        ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, top, width + bleed * 2, bandHeight + 1), tone, 0.95, ctx.gradient),
             { delay: index * 0.06, span: 0.55, enterDY: height * 0.3 });
         if (index === 0) return;
         ctx.add(drawPolyline(ctx.pixi, buildWavyPath(ctx.seed, 37 + index, -bleed, width + bleed, top, height * 0.008, 24), palette.paper, 1.6, 0.5),
@@ -66,7 +66,7 @@ const deepDive: TemperaCompositionDrawer = ctx => {
 const toneRamp: TemperaCompositionDrawer = ctx => {
     const { width, height, palette, bleed } = ctx;
     const spec = buildHatchSpec(ctx.seed, 41);
-    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.92), { span: 0.5 });
+    ctx.add(drawPolygonFill(ctx.pixi, rectPolygon(-bleed, -bleed, width + bleed * 2, height + bleed * 2), palette.tone1, 0.92, ctx.gradient), { span: 0.5 });
     const steps = 4;
     for (let index = 0; index < steps; index += 1) {
         const columnWidth = (width + bleed * 2) / steps;

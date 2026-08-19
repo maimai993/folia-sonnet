@@ -129,6 +129,45 @@ describe('Tempera palette', () => {
         expect(palette.ink).toBe('#151515');
     });
 
+    it('builds a four-colour cover ramp in gradient mode, ordered paper -> ink', () => {
+        const luminance = (color: string) => {
+            const { r, g, b } = channelsOf(color);
+            return r * 0.2126 + g * 0.7152 + b * 0.0722;
+        };
+        const cover = ['#c94f6d', '#2f6f8f', '#e8c46a', '#3d3a52', '#8fbf7a'];
+        const palette = resolveTemperaPalette(theme({}), { colorMode: 'gradient' }, cover);
+
+        expect(palette.gradient).toHaveLength(4);
+        expect(palette.gradient).toEqual([palette.tone1, palette.tone2, palette.tone3, palette.tone4]);
+        // The ramp still has to climb from paper toward ink, or the composition loses its
+        // tonal structure and the inversion filter loses its reference.
+        const steps = palette.gradient!.map(luminance);
+        const rising = luminance(palette.ink) > luminance(palette.paper);
+        for (let index = 1; index < steps.length; index += 1) {
+            if (rising) expect(steps[index]).toBeGreaterThan(steps[index - 1]);
+            else expect(steps[index]).toBeLessThan(steps[index - 1]);
+        }
+        // Cover hue actually lands: the ramp must not collapse to grey.
+        expect(palette.gradient!.some(color => {
+            const { r, g, b } = channelsOf(color);
+            return new Set([r, g, b]).size > 1;
+        })).toBe(true);
+    });
+
+    it('falls back to theme hues when there is no cover art yet', () => {
+        const withoutCover = resolveTemperaPalette(theme({}), { colorMode: 'gradient' });
+        expect(withoutCover.gradient).toHaveLength(4);
+        expect(withoutCover).toEqual(resolveTemperaPalette(theme({}), { colorMode: 'gradient' }, []));
+        // A single extracted colour is not enough to build a ramp from; theme hues win.
+        expect(resolveTemperaPalette(theme({}), { colorMode: 'gradient' }, ['#ff0000']))
+            .toEqual(withoutCover);
+    });
+
+    it('leaves the flat colour modes without a gradient ramp', () => {
+        expect(resolveTemperaPalette(theme({}), { colorMode: 'duo' }).gradient).toBeNull();
+        expect(resolveTemperaPalette(theme({}), { colorMode: 'mono' }).gradient).toBeNull();
+    });
+
     it('keeps duo anchored to the themed paper and ink', () => {
         const palette = resolveTemperaPalette(theme({}), { colorMode: 'duo' });
         expect(palette.paper).toBe('#101014');
