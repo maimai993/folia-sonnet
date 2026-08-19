@@ -8,6 +8,8 @@ import {
     TEMPERA_SHOT_KINDS,
 } from '@/components/visualizer/tempera/temperaProgram';
 import { TEMPERA_DECOR_MOTIFS, TEMPERA_TRANSITION_KINDS } from '@/components/visualizer/tempera/types';
+import { TEMPERA_SHOT_PROFILES } from '@/components/visualizer/tempera/temperaShotProfiles';
+import { resolveTemperaComposition } from '@/components/visualizer/tempera/temperaCompositions';
 
 // test/unit/visualizer/temperaProgram.test.ts
 // Locks Tempera's lossless segment compiler, deterministic shot direction, and seek-safe lookup.
@@ -20,15 +22,24 @@ const line = (
 ): Line => ({ fullText, startTime, endTime, words, ...extra });
 
 describe('Tempera program compiler', () => {
-    it('registers every block-composition shot kind exactly once', () => {
-        expect(TEMPERA_SHOT_KINDS).toEqual([
-            'duo-split',
-            'band-strip',
-            'frame-window',
-            'poster-panel',
-            'quiet-line',
-        ]);
+    it('gives every shot kind a layout profile and a composition', () => {
+        // A half-phrase shot list has to be long enough that a paragraph rarely repeats one.
+        expect(TEMPERA_SHOT_KINDS.length).toBeGreaterThanOrEqual(20);
         expect(new Set(TEMPERA_SHOT_KINDS).size).toBe(TEMPERA_SHOT_KINDS.length);
+
+        TEMPERA_SHOT_KINDS.forEach(kind => {
+            const profile = TEMPERA_SHOT_PROFILES[kind];
+            expect(profile, kind).toBeDefined();
+            expect(profile.region.w, kind).toBeGreaterThan(0);
+            expect(profile.region.h, kind).toBeGreaterThan(0);
+            expect(profile.camera.travel, kind).toBeGreaterThanOrEqual(0);
+            // A missing drawer would silently fall back to duo-split for that kind.
+            expect(resolveTemperaComposition(kind), kind).toBeTypeOf('function');
+        });
+        // Both mood extremes must exist, otherwise the chorus/breath filters have nothing to pick.
+        const moods = new Set(TEMPERA_SHOT_KINDS.map(kind => TEMPERA_SHOT_PROFILES[kind].mood));
+        expect(moods.has('quiet')).toBe(true);
+        expect(moods.has('loud')).toBe(true);
     });
 
     it('preserves CJK, whitespace, punctuation, and parser timing losslessly', () => {
@@ -163,21 +174,21 @@ describe('Tempera program compiler', () => {
         });
     });
 
-    it('routes short breath paragraphs to quiet-line and chorus away from it', () => {
+    it('routes breath paragraphs to quiet compositions and a chorus away from them', () => {
         // A trailing normal paragraph keeps the short opener from being classified as outro.
         const breath = compileTemperaProgram([
             line('嗯', 0, 2),
             line('后面还有一整段歌词继续唱下去', 10, 14),
         ], 'breath');
         expect(breath.paragraphs[0].kind).toBe('breath');
-        expect(breath.paragraphs[0].shots[0].kind).toBe('quiet-line');
+        expect(TEMPERA_SHOT_PROFILES[breath.paragraphs[0].shots[0].kind].mood).toBe('quiet');
 
         const chorus = compileTemperaProgram([
             line('副歌来了', 0, 2, undefined, { isChorus: true }),
             line('一起唱吧', 2.2, 4, undefined, { isChorus: true }),
         ], 'chorus');
         expect(chorus.paragraphs[0].kind).toBe('chorus');
-        expect(chorus.paragraphs[0].shots[0].kind).not.toBe('quiet-line');
+        expect(TEMPERA_SHOT_PROFILES[chorus.paragraphs[0].shots[0].kind].mood).not.toBe('quiet');
     });
 
     it('compiles deterministic screentone decor for every shot', () => {
@@ -216,7 +227,7 @@ describe('Tempera program compiler', () => {
             line('后面还有一整段歌词继续唱下去', 10, 14),
         ], 'fragments');
         const quiet = program.paragraphs[0].shots[0];
-        expect(quiet.kind).toBe('quiet-line');
+        expect(TEMPERA_SHOT_PROFILES[quiet.kind].mood).toBe('quiet');
         expect(quiet.decor.fragments.length).toBeGreaterThan(0);
 
         const pool = program.paragraphs.flatMap(paragraph => paragraph.lines)

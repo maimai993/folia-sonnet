@@ -30,6 +30,11 @@ interface TemperaTextViewOptions {
     textLayer: import('pixi.js').Container;
     /** Rendered under the inverted text layer, so the filter reads it as backdrop. */
     underLayer: import('pixi.js').Container;
+    /**
+     * Rendered above the inverted layer and never filtered. Keyword glyphs live here so the
+     * theme's `wordColors` hue survives; inverting them would throw the colour away.
+     */
+    keywordLayer: import('pixi.js').Container;
 }
 
 const SHADOW_OFFSET_X = 0.06;
@@ -53,7 +58,7 @@ export const buildTemperaTextViews = (
         };
         const display = new Text({
             text: placement.char,
-            style: new TextStyle({ ...baseStyle, fill: palette.ink }),
+            style: new TextStyle({ ...baseStyle, fill: placement.color ?? palette.ink }),
         });
         display.anchor.set(0.5);
         display.position.set(placement.x, placement.y);
@@ -71,7 +76,7 @@ export const buildTemperaTextViews = (
             options.underLayer.addChildAt(shadow, 0);
         }
 
-        options.textLayer.addChild(display);
+        (placement.color ? options.keywordLayer : options.textLayer).addChild(display);
         views.push({
             display,
             shadow,

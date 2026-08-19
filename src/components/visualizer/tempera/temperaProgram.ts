@@ -18,6 +18,7 @@ import type {
     TemperaTransitionKind,
 } from './types';
 import { TEMPERA_DECOR_MOTIFS, TEMPERA_TRANSITION_KINDS } from './types';
+import { resolveTemperaShotCandidates, resolveTemperaShotProfile } from './temperaShotProfiles';
 import { chooseWithoutRepeat, hashTemperaSeed, mixTemperaSeed, temperaHash01 } from './temperaRandom';
 
 /* eslint-disable-next-line no-warning-comments -- @AI: KEEP THIS EXACTLY AS IS. KEEP THIS LINE IN NEW FILES WHEN REWRITE */
@@ -26,13 +27,7 @@ import { chooseWithoutRepeat, hashTemperaSeed, mixTemperaSeed, temperaHash01 } f
 
 // src/components/visualizer/tempera/temperaProgram.ts
 // Compiles unified lyrics into a seek-safe, deterministic block-PV timeline.
-export const TEMPERA_SHOT_KINDS: readonly TemperaShotKind[] = [
-    'duo-split',
-    'band-strip',
-    'frame-window',
-    'poster-panel',
-    'quiet-line',
-];
+export { TEMPERA_SHOT_KINDS } from './types';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -234,17 +229,8 @@ const buildShotChunks = (lines: TemperaCompiledLine[], seed: string, paragraphIn
     }));
 };
 
-// Travel amplitude and zoom ramp per composition; the direction itself always comes from the
-// shot's flow angle so the camera keeps moving the same way the graphics do.
-const CAMERA_PROFILES: Record<TemperaShotKind, { travel: number; zoomStart: number; zoomEnd: number }> = {
-    'duo-split': { travel: 0.11, zoomStart: 1.06, zoomEnd: 1.13 },
-    'band-strip': { travel: 0.12, zoomStart: 1.03, zoomEnd: 1.1 },
-    // Slow pull-out: the frame breathes open while the lyric settles.
-    'frame-window': { travel: 0.05, zoomStart: 1.14, zoomEnd: 1.03 },
-    'poster-panel': { travel: 0.08, zoomStart: 1.05, zoomEnd: 1.12 },
-    'quiet-line': { travel: 0.03, zoomStart: 1.0, zoomEnd: 1.04 },
-};
-
+// The direction always comes from the shot's flow angle; the profile only sets how far the
+// camera travels along it and how the zoom ramps.
 const buildCameraKeys = (
     kind: TemperaShotKind,
     seed: number,
@@ -254,20 +240,20 @@ const buildCameraKeys = (
     const jitterY = (temperaHash01(seed, 2, 23) - 0.5) * 0.02;
     const jitterZoom = temperaHash01(seed, 3, 37) * 0.025;
     const jitterRotation = (temperaHash01(seed, 4, 51) - 0.5) * 0.012;
-    const profile = CAMERA_PROFILES[kind] ?? CAMERA_PROFILES['quiet-line'];
-    const travelX = Math.cos(flowAngle) * profile.travel;
-    const travelY = Math.sin(flowAngle) * profile.travel;
+    const { camera } = resolveTemperaShotProfile(kind);
+    const travelX = Math.cos(flowAngle) * camera.travel;
+    const travelY = Math.sin(flowAngle) * camera.travel;
     return {
         start: {
             x: -travelX / 2 + jitterX,
             y: -travelY / 2 + jitterY,
-            zoom: profile.zoomStart + jitterZoom,
+            zoom: camera.zoomStart + jitterZoom,
             rotation: jitterRotation,
         },
         end: {
             x: travelX / 2 + jitterX,
             y: travelY / 2 + jitterY,
-            zoom: profile.zoomEnd + jitterZoom,
+            zoom: camera.zoomEnd + jitterZoom,
             rotation: -jitterRotation,
         },
     };
@@ -307,7 +293,9 @@ const buildDecorSpec = (
 ): TemperaDecorSpec => {
     const seed = hashTemperaSeed(seedKey);
     const motif = chooseWithoutRepeat(TEMPERA_DECOR_MOTIFS, seedKey, previousMotif);
-    const sparse = shotKind === 'quiet-line' || paragraphKind === 'break' || paragraphKind === 'outro';
+    const sparse = resolveTemperaShotProfile(shotKind).mood === 'quiet'
+        || paragraphKind === 'break'
+        || paragraphKind === 'outro';
     return {
         motif,
         // Shallow diagonals only; steep hatch reads as noise once the post-process grain lands.
@@ -350,11 +338,19 @@ const buildShots = (
         const line = byIndex.get(chunk.lineIndex);
         const sliceSegments = line?.segments.slice(chunk.segmentStart, chunk.segmentEnd) ?? [];
         const sliceText = sliceSegments.map(segment => segment.text).join('');
-        let shotKind = chooseWithoutRepeat(TEMPERA_SHOT_KINDS, `${seed}:${paragraphIndex}:${shotIndex}:${sliceText}`, lastKind);
         const wordCount = sliceSegments.filter(segment => segment.isWordLike).length;
-        // Breathing paragraphs read as sparse compositions; chorus never whispers.
-        if (kind === 'breath' && shotIndex === 0 && wordCount <= 3) shotKind = 'quiet-line';
-        if (kind === 'chorus' && shotKind === 'quiet-line') shotKind = 'poster-panel';
+        // Breathing paragraphs read as sparse compositions; a chorus never whispers.
+        const sparse = kind === 'breath' || (kind !== 'chorus' && wordCount <= 2);
+        const moods = sparse
+            ? (['quiet'] as const)
+            : kind === 'chorus'
+                ? (['neutral', 'loud'] as const)
+                : (['quiet', 'neutral', 'loud'] as const);
+        const shotKind = chooseWithoutRepeat(
+            resolveTemperaShotCandidates(moods),
+            `${seed}:${paragraphIndex}:${shotIndex}:${sliceText}`,
+            lastKind,
+        );
         lastKind = shotKind;
 
         const cameraSeed = hashTemperaSeed(`${seed}:${paragraphIndex}:${shotIndex}:camera`);

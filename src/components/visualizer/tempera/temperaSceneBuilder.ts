@@ -1,5 +1,6 @@
 import type { TemperaTuning, Theme } from '../../../types';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
+import { buildWordColorRangesFromMatchers, prepareWordColorMatchers } from '../wordColoring';
 import type { TemperaParagraph, TemperaShot } from './types';
 import { hashTemperaSeed } from './temperaRandom';
 import { resolveTemperaPalette, type TemperaPalette } from './temperaPalette';
@@ -199,15 +200,33 @@ export const buildTemperaScene = (
     // false. It now always runs; the flat ink fallback only applies if the renderer itself
     // skips the filter.
 
+    // 关键字着色: the theme's wordColors are matched once per line and handed to the typesetter
+    // as per-segment colours. Matched glyphs opt out of the inversion filter so the hue lands.
+    const wordColorMatchers = prepareWordColorMatchers(options.theme.wordColors);
+    const colorRangesByLine = new Map(paragraph.lines.map(line => [
+        line.sourceIndex,
+        wordColorMatchers.length > 0
+            ? buildWordColorRangesFromMatchers(line.line.fullText, wordColorMatchers)
+            : [],
+    ]));
+
     const shots = paragraph.shots.map((shot, shotIndex) => {
         const shotContainer = new Container();
         // A shot shows one half-phrase slice, so the type can be set much larger than it
         // could when a whole line had to fit.
-        const linesSegments = shot.slices
-            .map(slice => paragraph.lines.find(item => item.sourceIndex === slice.lineIndex)
+        const sliceSegments = shot.slices.map(slice => ({
+            slice,
+            segments: paragraph.lines.find(item => item.sourceIndex === slice.lineIndex)
                 ?.segments.slice(slice.segmentStart, slice.segmentEnd)
-                .filter(isTemperaLayoutSegment) ?? [])
-            .filter(segments => segments.length > 0);
+                .filter(isTemperaLayoutSegment) ?? [],
+        })).filter(entry => entry.segments.length > 0);
+        const linesSegments = sliceSegments.map(entry => entry.segments);
+        const segmentColors = sliceSegments.map(entry => {
+            const ranges = colorRangesByLine.get(entry.slice.lineIndex) ?? [];
+            return entry.segments.map(segment => ranges.find(range => (
+                range.startOffset < segment.endOffset && segment.startOffset < range.endOffset
+            ))?.color ?? null);
+        });
 
         const maxGraphemes = Math.max(3, ...linesSegments.map(
             segments => segments.reduce((sum, segment) => sum + segment.graphemes.length, 0),
@@ -231,9 +250,10 @@ export const buildTemperaScene = (
 
         const underLayer = new Container();
         const textLayer = new Container();
+        const keywordLayer = new Container();
         // Order matters: everything the inversion filter should read must render before the
-        // text layer.
-        shotContainer.addChild(blocks.container, underLayer, textLayer);
+        // text layer, and keyword-coloured glyphs must render after it, unfiltered.
+        shotContainer.addChild(blocks.container, underLayer, textLayer, keywordLayer);
 
         const placements = resolveTemperaLayout({
             lines: linesSegments,
@@ -244,6 +264,7 @@ export const buildTemperaScene = (
             fontFamily,
             fontWeight,
             seed: shotSeed,
+            segmentColors,
         });
         const glyphs = buildTemperaTextViews(pixi, {
             placements,
@@ -253,6 +274,7 @@ export const buildTemperaScene = (
             shadowEnabled: tuning.showDecor,
             textLayer,
             underLayer,
+            keywordLayer,
         });
         if (shot.decor.fragments.length > 0 && tuning.showDecor) {
             buildTemperaFragmentViews(pixi, {

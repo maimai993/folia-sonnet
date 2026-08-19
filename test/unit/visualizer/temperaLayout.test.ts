@@ -181,6 +181,30 @@ describe('Tempera collage layout', () => {
         expect(spaced.span - tight.span).toBeLessThan(tight.size * 0.7);
     });
 
+    it('carries theme keyword colours through to the matching glyphs only', () => {
+        const placements = resolveTemperaLayout({
+            lines: [LINE_A],
+            shotKind: 'duo-split',
+            width: 1280,
+            height: 720,
+            baseFontSize: 54,
+            fontFamily: 'sans-serif',
+            fontWeight: 600,
+            seed: 4242,
+            segmentColors: [[null, '#e1565f', null]],
+        });
+
+        const colored = placements.filter(placement => placement.color !== null);
+        expect(colored.map(placement => placement.char).join('')).toBe('the');
+        colored.forEach(placement => expect(placement.color).toBe('#e1565f'));
+        expect(placements.filter(placement => placement.color === null).length)
+            .toBe(placements.length - colored.length);
+    });
+
+    it('leaves every glyph uncoloured when the theme has no keywords', () => {
+        expect(layout().every(placement => placement.color === null)).toBe(true);
+    });
+
     it('returns nothing for an empty shot', () => {
         expect(layout({ lines: [] })).toEqual([]);
     });

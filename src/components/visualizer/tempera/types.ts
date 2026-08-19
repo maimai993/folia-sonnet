@@ -5,12 +5,44 @@ import type { GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 // Public, renderer-independent contracts for the deterministic Tempera block PV program.
 export type TemperaParagraphKind = 'breath' | 'verse' | 'lift' | 'chorus' | 'break' | 'outro';
 export type TemperaParagraphBoundary = 'song-start' | 'time-gap' | 'metadata' | 'duration-cap' | 'line-cap';
-export type TemperaShotKind =
-    | 'duo-split'
-    | 'band-strip'
-    | 'frame-window'
-    | 'poster-panel'
-    | 'quiet-line';
+/**
+ * Every composition Tempera can cut to. Shots are half-phrase sized, so the list has to be
+ * long enough that a paragraph rarely repeats one; `temperaShotProfiles.ts` carries the
+ * layout region / camera / mood for each, and `temperaCompositions.ts` the drawing.
+ */
+export const TEMPERA_SHOT_KINDS = [
+    // Splits and grids
+    'duo-split',
+    'quad-split',
+    'tri-column',
+    'thirds-stack',
+    'checker-quad',
+    'corner-wedge',
+    'diagonal-halves',
+    'cross-axis',
+    // Bands
+    'band-strip',
+    'horizon-band',
+    'deep-dive',
+    'tone-ramp',
+    // Frames and windows
+    'frame-window',
+    'double-frame',
+    'circle-window',
+    'ladder-frame',
+    'corner-brackets',
+    // Posters and shapes
+    'poster-panel',
+    'diamond-stack',
+    'slash-poster',
+    'arrow-wedge',
+    'edge-bleed',
+    // Sparse fields
+    'quiet-line',
+    'starfield-dots',
+    'ripple-lines',
+] as const;
+export type TemperaShotKind = typeof TEMPERA_SHOT_KINDS[number];
 /**
  * Every transition is led by the large graphics or the camera; nothing dissolves or cuts
  * hard, because a dissolve reads as an edit and Tempera's compositions should hand off.

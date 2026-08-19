@@ -47,6 +47,17 @@ export const rectPolygon = (x: number, y: number, width: number, height: number)
     x, y + height,
 ];
 
+// Convex polygon approximation of a circle, so the hatch clipper can fill round windows too.
+export const circlePolygon = (cx: number, cy: number, radius: number, segments = 28): number[] => {
+    const points: number[] = [];
+    const count = Math.max(6, Math.round(segments));
+    for (let index = 0; index < count; index += 1) {
+        const angle = (index / count) * TAU;
+        points.push(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+    }
+    return points;
+};
+
 export const diamondPolygon = (cx: number, cy: number, rx: number, ry: number): number[] => [
     cx, cy - ry,
     cx + rx, cy,

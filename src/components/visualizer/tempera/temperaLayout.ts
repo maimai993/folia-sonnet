@@ -1,5 +1,6 @@
 import type { TemperaSegment, TemperaShotKind } from './types';
 import { temperaHash01 } from './temperaRandom';
+import { resolveTemperaShotProfile } from './temperaShotProfiles';
 import {
     buildTemperaWordUnit,
     createTemperaMeasureContext,
@@ -27,6 +28,8 @@ export interface TemperaGlyphPlacement {
     endTime: number;
     settleTime: number;
     fontSize: number;
+    /** Keyword colour from the theme; keeps its hue instead of being inverted. */
+    color: string | null;
     enterX: number;
     enterY: number;
     enterRotation: number;
@@ -44,6 +47,8 @@ interface TemperaLayoutOptions {
     fontFamily: string;
     fontWeight: number;
     seed: number;
+    /** Per-segment keyword colours, shaped exactly like `lines`. */
+    segmentColors?: (string | null)[][];
 }
 
 interface LayoutRegion {
@@ -51,7 +56,7 @@ interface LayoutRegion {
     centerY: number;
     width: number;
     height: number;
-    align: 'center' | 'left';
+    align: 'center' | 'left' | 'right';
     rotation: number;
     fontScale: number;
 }
@@ -66,32 +71,23 @@ const TAU = Math.PI * 2;
 
 export const isTemperaLayoutSegment = (segment: TemperaSegment) => segment.text.trim().length > 0;
 
+// Regions and entrance vectors are data, held per composition in temperaShotProfiles.
 const resolveRegion = (shotKind: TemperaShotKind, width: number, height: number): LayoutRegion => {
-    switch (shotKind) {
-        case 'duo-split':
-            return { centerX: width / 2, centerY: height * 0.52, width: width * 0.86, height: height * 0.46, align: 'center', rotation: 0, fontScale: 1 };
-        case 'band-strip':
-            return { centerX: width / 2, centerY: height * 0.52, width: width * 0.78, height: height * 0.26, align: 'center', rotation: 0, fontScale: 0.92 };
-        case 'frame-window':
-            return { centerX: width / 2, centerY: height * 0.5, width: width * 0.64, height: height * 0.5, align: 'center', rotation: 0, fontScale: 0.95 };
-        case 'poster-panel':
-            return { centerX: width * 0.4, centerY: height * 0.5, width: width * 0.58, height: height * 0.62, align: 'left', rotation: -0.045, fontScale: 1 };
-        case 'quiet-line':
-        default:
-            return { centerX: width / 2, centerY: height * 0.5, width: width * 0.6, height: height * 0.28, align: 'center', rotation: 0, fontScale: 0.58 };
-    }
+    const { region } = resolveTemperaShotProfile(shotKind);
+    return {
+        centerX: region.cx * width,
+        centerY: region.cy * height,
+        width: region.w * width,
+        height: region.h * height,
+        align: region.align,
+        rotation: region.rotation,
+        fontScale: region.fontScale,
+    };
 };
 
-// Base direction a glyph flies in from; per-glyph jitter fans out around it.
 const resolveEnterVector = (shotKind: TemperaShotKind, fontSize: number) => {
-    switch (shotKind) {
-        case 'poster-panel': return { x: -fontSize * 1.5, y: fontSize * 0.35 };
-        case 'quiet-line': return { x: 0, y: fontSize * 0.7 };
-        case 'frame-window': return { x: 0, y: fontSize * 0.95 };
-        case 'band-strip': return { x: fontSize * 0.5, y: fontSize * 1.05 };
-        case 'duo-split':
-        default: return { x: 0, y: fontSize * 1.3 };
-    }
+    const { enter } = resolveTemperaShotProfile(shotKind);
+    return { x: enter.x * fontSize, y: enter.y * fontSize };
 };
 
 const rotateAbout = (x: number, y: number, cx: number, cy: number, angle: number) => {
@@ -199,6 +195,7 @@ export const resolveTemperaLayout = ({
     fontFamily,
     fontWeight,
     seed,
+    segmentColors,
 }: TemperaLayoutOptions): TemperaGlyphPlacement[] => {
     const region = resolveRegion(shotKind, width, height);
     const ctx = createTemperaMeasureContext(fontFamily, fontWeight);
@@ -237,9 +234,11 @@ export const resolveTemperaLayout = ({
         // Rows stagger horizontally and tilt slightly; that is the layered collage read.
         const drift = (temperaHash01(seed, rowIndex, 127) - 0.5) * region.width * 0.06;
         const rowRotation = (temperaHash01(seed, rowIndex, 131) - 0.5) * 0.06;
-        const rowLeft = region.align === 'left'
-            ? region.centerX - region.width / 2 + Math.abs(drift) * 0.6
-            : region.centerX - row.width / 2 + drift;
+        const rowLeft = region.align === 'center'
+            ? region.centerX - row.width / 2 + drift
+            : region.align === 'left'
+                ? region.centerX - region.width / 2 + Math.abs(drift) * 0.6
+                : region.centerX + region.width / 2 - row.width - Math.abs(drift) * 0.6;
         const rowCenterX = rowLeft + row.width / 2;
 
         let cursorX = rowLeft;
@@ -283,6 +282,7 @@ export const resolveTemperaLayout = ({
                     endTime: glyph.endTime,
                     settleTime: glyph.endTime,
                     fontSize: glyphSize,
+                    color: segmentColors?.[word.lineIndex]?.[word.segmentIndex] ?? null,
                     enterX: Math.cos(angle) * magnitude,
                     enterY: Math.sin(angle) * magnitude,
                     enterRotation: (temperaHash01(seed, glyphSalt, 157) - 0.5) * 0.7,
