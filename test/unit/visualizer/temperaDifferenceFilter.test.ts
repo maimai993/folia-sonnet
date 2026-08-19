@@ -1,0 +1,88 @@
+import { describe, expect, it } from 'vitest';
+import { createTemperaDifferenceFilter } from '@/components/visualizer/tempera/temperaDifferenceFilter';
+
+// test/unit/visualizer/temperaDifferenceFilter.test.ts
+// The factory takes the Pixi module as an argument, so the filter contract can be locked
+// without a GL context: blendRequired, the uBackTexture placeholder and the color uniforms.
+const EMPTY_TEXTURE = { __empty: true };
+
+interface StubProgram { vertex: string; fragment: string; name: string }
+interface StubFilter {
+    glProgram: StubProgram;
+    blendRequired?: boolean;
+    padding?: number;
+    resources: Record<string, unknown>;
+}
+
+const createStubPixi = () => {
+    const module = {
+        UniformGroup: class {
+            constructor(public readonly uniforms: Record<string, { value: unknown; type: string }>) { }
+        },
+        GlProgram: { from: (program: StubProgram) => program },
+        Filter: class {
+            constructor(options: StubFilter) {
+                Object.assign(this, options);
+            }
+        },
+        Texture: { EMPTY: EMPTY_TEXTURE },
+    };
+    return module as unknown as typeof import('pixi.js');
+};
+
+const buildFilter = (options: Parameters<typeof createTemperaDifferenceFilter>[1]) => (
+    createTemperaDifferenceFilter(createStubPixi(), options) as unknown as StubFilter
+);
+
+const uniformsOf = (filter: StubFilter) => (
+    filter.resources.differenceUniforms as { uniforms: Record<string, { value: unknown; type: string }> }
+).uniforms;
+
+describe('Tempera difference filter', () => {
+    it('declares the blend requirement and the back texture placeholder', () => {
+        const filter = buildFilter({ ink: '#ffffff', paper: '#000000' });
+
+        expect(filter.blendRequired).toBe(true);
+        expect(filter.resources.uBackTexture).toBe(EMPTY_TEXTURE);
+        expect(filter.padding).toBe(0);
+        expect(filter.glProgram.name).toBe('tempera-difference-inversion');
+    });
+
+    it('samples the back texture with the same coordinate as the input texture', () => {
+        const { fragment } = buildFilter({ ink: '#ffffff', paper: '#000000' }).glProgram;
+
+        expect(fragment).toContain('uniform sampler2D uBackTexture;');
+        expect(fragment).toContain('texture(uBackTexture, uv)');
+        expect(fragment).toContain('texture(uTexture, vTextureCoord)');
+        // Premultiplied render targets must be undone before luminance is read.
+        expect(fragment).toContain('back.rgb / max(back.a, 1e-4)');
+    });
+
+    it('normalizes the palette colors and their luminance into uniforms', () => {
+        const uniforms = uniformsOf(buildFilter({ ink: '#ffffff', paper: '#000000' }));
+
+        expect(Array.from(uniforms.uInkColor.value as Float32Array)).toEqual([1, 1, 1]);
+        expect(Array.from(uniforms.uPaperColor.value as Float32Array)).toEqual([0, 0, 0]);
+        expect(uniforms.uInkColor.type).toBe('vec3<f32>');
+        expect(uniforms.uInkLuminance.value).toBeCloseTo(1, 6);
+        expect(uniforms.uPaperLuminance.value).toBeCloseTo(0, 6);
+    });
+
+    it('accepts rgba palette strings produced by colorWithAlpha', () => {
+        const uniforms = uniformsOf(buildFilter({ ink: 'rgba(255, 0, 0, 0.5)', paper: 'rgb(0, 0, 255)' }));
+
+        expect(Array.from(uniforms.uInkColor.value as Float32Array)).toEqual([1, 0, 0]);
+        expect(Array.from(uniforms.uPaperColor.value as Float32Array)).toEqual([0, 0, 1]);
+    });
+
+    it('maps the threshold onto a neutral-at-0.5 bias', () => {
+        expect(uniformsOf(buildFilter({ ink: '#fff', paper: '#000' })).uBias.value).toBeCloseTo(0, 6);
+        expect(uniformsOf(buildFilter({ ink: '#fff', paper: '#000', threshold: 0.7 })).uBias.value).toBeCloseTo(0.2, 6);
+    });
+
+    it('carries no time-varying uniform, so a seek needs no filter update', () => {
+        const uniforms = uniformsOf(buildFilter({ ink: '#fff', paper: '#000' }));
+
+        expect(Object.keys(uniforms).some(name => /time|frame|seed/i.test(name))).toBe(false);
+    });
+});

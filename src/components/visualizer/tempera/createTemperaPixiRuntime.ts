@@ -114,6 +114,9 @@ export class TemperaPixiRuntime {
             sharedTicker: false,
             preference: 'webgl',
             powerPreference: 'high-performance',
+            // The lyric layer's difference filter declares blendRequired; without the back
+            // buffer the WebGL renderer skips the whole filter stack for that container.
+            useBackBuffer: true,
         });
         const runtime = new TemperaPixiRuntime(pixi, options, app);
         runtime.sceneContainer = new pixi.Container();
@@ -231,6 +234,7 @@ export class TemperaPixiRuntime {
         scene.container.filters = null;
         scene.shots.forEach(shot => {
             shot.haloLayer.filters = null;
+            shot.textLayer.filters = null;
         });
         scene.postProcessFilters.forEach(filter => filter.destroy());
         scene.container.destroy({ children: true });
@@ -304,6 +308,12 @@ export class TemperaPixiRuntime {
             glyph.display.position.set(x, y);
             glyph.display.scale.set(scale);
             glyph.display.rotation = glyph.rotation;
+            if (glyph.shadow) {
+                glyph.shadow.alpha = waiting ? 0 : (0.2 + progress * 0.8) * 0.9;
+                glyph.shadow.position.set(x + glyph.shadowDX, y + glyph.shadowDY);
+                glyph.shadow.scale.set(scale);
+                glyph.shadow.rotation = glyph.rotation;
+            }
             if (glyph.halo) {
                 glyph.halo.alpha = waiting ? 0 : 1 - progress * 0.3;
                 glyph.halo.position.set(x, y);
@@ -333,12 +343,23 @@ export class TemperaPixiRuntime {
             return;
         }
         const coverage = clamp01(frameWipe);
+        // The block covers the screen and reveals from the opposite edge on enter. Its
+        // leading edge is a chevron so the cut reads as the same diamond language as the
+        // shot compositions; geometry is rebuilt per frame because it depends on coverage.
+        const notch = width * 0.09;
+        const edge = origin === 'left'
+            ? coverage * (width + notch)
+            : width - coverage * (width + notch);
+        const tip = origin === 'left' ? edge + notch : edge - notch;
         wipe.clear();
-        wipe.rect(0, 0, width, height).fill({ color: this.pixi.Color.shared.setValue(color).toNumber() });
-        // The block covers the screen and reveals from the opposite edge on enter.
-        wipe.pivot.set(origin === 'left' ? 0 : width, 0);
-        wipe.position.set(origin === 'left' ? 0 : width, 0);
-        wipe.scale.set(Math.max(coverage, 0.0001), 1);
+        wipe
+            .poly(origin === 'left'
+                ? [0, 0, edge, 0, tip, height / 2, edge, height, 0, height]
+                : [width, 0, edge, 0, tip, height / 2, edge, height, width, height])
+            .fill({ color: this.pixi.Color.shared.setValue(color).toNumber() });
+        wipe.pivot.set(0, 0);
+        wipe.position.set(0, 0);
+        wipe.scale.set(1, 1);
         wipe.visible = true;
     }
 

@@ -127,6 +127,10 @@ Visualizer 消费已解析的 `LyricData` / `Line` / `Word`，不负责解析 `.
 
 `tempera/VisualizerTempera.tsx` 负责 React shell/subtitle，`createTemperaPixiRuntime.ts` 创建 Pixi runtime（scene cache ±1、绝对时间驱动、无外部纹理）。与 sonnet 同族但视觉路线不同：`temperaProgram.ts` 编译段落/shot（`duo-split`/`band-strip`/`frame-window`/`poster-panel`/`quiet-line`），`temperaLayout.ts` 用 pretext 做确定性区域排版（替代 sonnet 的散布式布局），`temperaBlocks.ts` 绘制大面积色块 MG 并兼作转场引导，`temperaCamera.ts` 只做 shot 级镜头（不追踪逐字），`temperaPalette.ts` 从主题派生 duo/mono 调色板。后处理复用 sonnet 的纯 GLSL filter（`sonnetLensFilter`/`sonnetGlitchFilter`/`sonnetPrintFilters`），其余不交叉引用。
 
+视觉层为「网点图形」语言：`temperaHatch.ts` 是纯函数生成器（斜线 hatch、抖动涂鸦折线、重复符行列、贯穿斜线、纸面点阵），`temperaShapes.ts` 把它们变成静态 Pixi Graphics，`temperaCompositions.ts` 按 shot kind 组合构图，`temperaBlocks.ts` 只保留 enter/exit 运动状态。每个 shot 的 `decor`（motif、hatch 角度、贯穿线数量、碎字）在 `temperaProgram.ts` 编译期由 seed 定死，渲染层零随机。
+
+文字反色由 `temperaDifferenceFilter.ts` 完成：它声明 `blendRequired`，读取 `uBackTexture`（filter 区域下层已渲染像素）的亮度，逐像素在 ink / paper 中选对比更强的一色。因此 filter 只挂在 textLayer 上（bounds 越小拷贝越少），叠影副本与 current-glyph 衬底必须放在它下面的 underLayer 才会被当作底色读到；runtime 的 `app.init` 需要 `useBackBuffer: true`，否则 WebGL 下整个 filter 栈会被 skip（文字退化为静态 ink 色）。开关复用 `postProcessEnabled`。
+
 ## Host surfaces
 
 不要只在主播放器里验证 visualizer。统一 renderer 当前被这些宿主复用：

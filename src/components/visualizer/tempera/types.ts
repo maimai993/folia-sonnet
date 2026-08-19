@@ -43,6 +43,37 @@ export interface TemperaCameraKey {
     rotation: number;
 }
 
+export const TEMPERA_DECOR_MOTIFS = [
+    'diamonds',
+    'hatch-twin',
+    'band-cross',
+    'poster-diamond',
+    'doodle',
+] as const;
+export type TemperaDecorMotif = typeof TEMPERA_DECOR_MOTIFS[number];
+
+/** One stray glyph parked in the margins of a sparse composition. */
+export interface TemperaDecorFragment {
+    char: string;
+    /** Fractional viewport position; the scene builder scales it to pixels. */
+    x: number;
+    y: number;
+    rotation: number;
+    scale: number;
+}
+
+/**
+ * Screentone decor for one shot, fully resolved at compile time so the renderer stays
+ * free of randomness and every seek paints the identical frame.
+ */
+export interface TemperaDecorSpec {
+    motif: TemperaDecorMotif;
+    hatchAngle: number;
+    crossCount: number;
+    scribbleSeed: number;
+    fragments: TemperaDecorFragment[];
+}
+
 export interface TemperaShot {
     id: string;
     kind: TemperaShotKind;
@@ -53,6 +84,8 @@ export interface TemperaShot {
     camera: TemperaCameraKey;
     /** Camera keyframe at shot end; the runtime interpolates between the two. */
     cameraEnd: TemperaCameraKey;
+    /** Deterministic screentone decor description for the MG layer. */
+    decor: TemperaDecorSpec;
 }
 
 export interface TemperaTransition {

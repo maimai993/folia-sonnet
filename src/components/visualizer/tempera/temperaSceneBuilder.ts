@@ -5,7 +5,10 @@ import { hashTemperaSeed } from './temperaRandom';
 import { resolveTemperaPalette, type TemperaPalette } from './temperaPalette';
 import { buildTemperaBlocks, type TemperaBlocksView } from './temperaBlocks';
 import { isTemperaLayoutSegment, resolveTemperaLayout } from './temperaLayout';
-import { buildTemperaTextViews, type TemperaGlyphView } from './temperaTextView';
+import { buildTemperaFragmentViews, buildTemperaTextViews, type TemperaGlyphView } from './temperaTextView';
+import { createTemperaDifferenceFilter } from './temperaDifferenceFilter';
+import { buildDotGrid } from './temperaHatch';
+import { drawSquareMarks } from './temperaShapes';
 import { createSonnetGlitchEffect, type SonnetGlitchEffect } from '../sonnet/sonnetGlitchFilter';
 import { createSonnetLensFilter } from '../sonnet/sonnetLensFilter';
 import { createSonnetPrintFilters } from '../sonnet/sonnetPrintFilters';
@@ -26,6 +29,8 @@ export interface TemperaShotView {
     baseX: number;
     baseY: number;
     haloLayer: import('pixi.js').Container;
+    /** Carries the difference inversion filter; the runtime clears it on destroy. */
+    textLayer: import('pixi.js').Container;
     revealDoneTime: number;
 }
 
@@ -187,16 +192,27 @@ export const buildTemperaScene = (
     const fontFamily = resolveThemeFontStack(options.theme);
     const fontWeight = resolveThemeFontWeight(options.theme, 600);
 
-    // A translucent paper wash unifies the block colors with the shell background.
+    // A translucent paper wash unifies the block colors with the shell background, and the
+    // dot lattice on top gives the whole frame its printed-paper grain. Both are built once
+    // per paragraph scene and never touched again during playback.
     const paperWash = new Graphics()
         .rect(0, 0, width, height)
         .fill({ color: pixi.Color.shared.setValue(palette.paper).toNumber(), alpha: 0.35 });
     paperWash.visible = tuning.showBlocks;
     container.addChild(paperWash);
+    if (tuning.showBlocks) {
+        // Spacing grows with the viewport so the lattice stays around 3k dots on any display.
+        const toneSpacing = Math.max(26, Math.sqrt((width * height) / 6000));
+        const screentone = drawSquareMarks(pixi, buildDotGrid(width, height, toneSpacing, 1.6), palette.tone4, 0.05);
+        container.addChild(screentone);
+    }
 
     const postProcessFilters: import('pixi.js').Filter[] = [];
     const glowStrength = options.staticMode ? 0 : 2.4;
     const glowAlpha = 0.3;
+    // Dynamic text inversion rides the existing post-process switch; when it is off the
+    // glyphs simply stay ink-colored, which stays readable on every composition.
+    const inversionEnabled = tuning.postProcessEnabled && !options.staticMode;
 
     const shots = paragraph.shots.map((shot, shotIndex) => {
         const shotContainer = new Container();
@@ -216,22 +232,24 @@ export const buildTemperaScene = (
         ) * 1.4)) * options.lyricsFontScale;
 
         const shotSeed = sceneSeed + shotIndex * 97;
-        const blocks = buildTemperaBlocks(
-            pixi,
-            shot.kind,
+        const blocks = buildTemperaBlocks(pixi, {
+            kind: shot.kind,
+            decor: shot.decor,
             palette,
             width,
             height,
-            shotSeed,
-            tuning.showDecor,
-        );
+            seed: shotSeed,
+            showDecor: tuning.showDecor,
+        });
         blocks.container.visible = tuning.showBlocks;
-        shotContainer.addChild(blocks.container);
 
         const { layer: haloLayer, filters: haloFilters } = createTemperaHaloLayer(pixi, glowStrength, glowAlpha);
+        const underLayer = new Container();
         const textLayer = new Container();
         haloLayer.visible = glowStrength > 0;
-        shotContainer.addChild(haloLayer, textLayer);
+        // Order matters: everything the inversion filter should read must render before the
+        // text layer, and the halo glow must stay outside it.
+        shotContainer.addChild(blocks.container, underLayer, textLayer, haloLayer);
         postProcessFilters.push(...haloFilters);
 
         const placements = resolveTemperaLayout({
@@ -250,9 +268,32 @@ export const buildTemperaScene = (
             fontWeight,
             glowEnabled: glowStrength > 0,
             highlightEnabled: true,
+            shadowEnabled: tuning.showDecor,
             haloLayer,
             textLayer,
+            underLayer,
         });
+        if (shot.decor.fragments.length > 0 && tuning.showDecor) {
+            buildTemperaFragmentViews(pixi, {
+                fragments: shot.decor.fragments,
+                palette,
+                fontFamily,
+                fontWeight,
+                baseFontSize,
+                width,
+                height,
+                layer: textLayer,
+            });
+        }
+        if (inversionEnabled) {
+            // Scoped to the text layer only: blendRequired copies the pixels under these
+            // bounds every frame, so a full-scene filter here would be a viewport-sized blit.
+            textLayer.filters = [createTemperaDifferenceFilter(pixi, {
+                ink: palette.ink,
+                paper: palette.paper,
+            })];
+            postProcessFilters.push(...textLayer.filters);
+        }
         const revealDoneTime = glyphs.length > 0
             ? Math.max(...glyphs.map(glyph => glyph.startTime))
             : shot.endTime;
@@ -268,6 +309,7 @@ export const buildTemperaScene = (
             baseX: shotContainer.x,
             baseY: shotContainer.y,
             haloLayer,
+            textLayer,
             revealDoneTime,
         };
     });

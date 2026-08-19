@@ -66,6 +66,44 @@ describe('Tempera palette', () => {
         expect(Math.abs(inkL - paperL)).toBeGreaterThanOrEqual(96);
     });
 
+    it('builds a tone ladder that steps monotonically from paper toward ink', () => {
+        const luminance = (color: string) => {
+            const { r, g, b } = channelsOf(color);
+            return r * 0.2126 + g * 0.7152 + b * 0.0722;
+        };
+        // Both a dark-on-light and a light-on-dark theme must keep the ladder ordered.
+        ([
+            theme({}),
+            theme({ backgroundColor: '#fbfbf7', primaryColor: '#151515' }),
+        ] as const).forEach(input => {
+            (['duo', 'mono'] as const).forEach(colorMode => {
+                const palette = resolveTemperaPalette(input, { colorMode });
+                const steps = [palette.paper, palette.tone1, palette.tone2, palette.tone3, palette.tone4, palette.ink]
+                    .map(luminance);
+                const rising = luminance(palette.ink) > luminance(palette.paper);
+                for (let index = 1; index < steps.length; index += 1) {
+                    if (rising) expect(steps[index]).toBeGreaterThan(steps[index - 1]);
+                    else expect(steps[index]).toBeLessThan(steps[index - 1]);
+                }
+            });
+        });
+    });
+
+    it('keeps mono tones grayscale while duo tones carry theme hue', () => {
+        const mono = resolveTemperaPalette(theme({}), { colorMode: 'mono' });
+        [mono.tone1, mono.tone2, mono.tone3, mono.tone4].forEach(color => {
+            const { r, g, b } = channelsOf(color);
+            expect(r).toBe(g);
+            expect(g).toBe(b);
+        });
+
+        const duo = resolveTemperaPalette(theme({}), { colorMode: 'duo' });
+        [duo.tone1, duo.tone2, duo.tone3].forEach(color => {
+            const { r, g, b } = channelsOf(color);
+            expect(new Set([r, g, b]).size).toBeGreaterThan(1);
+        });
+    });
+
     it('keeps duo anchored to the themed paper and ink', () => {
         const palette = resolveTemperaPalette(theme({}), { colorMode: 'duo' });
         expect(palette.paper).toBe('#101014');

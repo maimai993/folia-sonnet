@@ -7,7 +7,7 @@ import {
     resolveTemperaParagraphGapThreshold,
     TEMPERA_SHOT_KINDS,
 } from '@/components/visualizer/tempera/temperaProgram';
-import { TEMPERA_TRANSITION_KINDS } from '@/components/visualizer/tempera/types';
+import { TEMPERA_DECOR_MOTIFS, TEMPERA_TRANSITION_KINDS } from '@/components/visualizer/tempera/types';
 
 // test/unit/visualizer/temperaProgram.test.ts
 // Locks Tempera's lossless segment compiler, deterministic shot direction, and seek-safe lookup.
@@ -156,6 +156,67 @@ describe('Tempera program compiler', () => {
         ], 'chorus');
         expect(chorus.paragraphs[0].kind).toBe('chorus');
         expect(chorus.paragraphs[0].shots[0].kind).not.toBe('quiet-line');
+    });
+
+    it('compiles deterministic screentone decor for every shot', () => {
+        const lines = [
+            line('第一句歌词很长可以撑满一个镜头', 0, 3),
+            line('第二句歌词继续往下走', 3.2, 6),
+            line('第三句换一个分镜', 10, 13),
+            line('第四句收尾', 13.2, 16),
+        ];
+        const first = compileTemperaProgram(lines, 'decor');
+        const second = compileTemperaProgram(lines, 'decor');
+        expect(first).toEqual(second);
+
+        const shots = first.paragraphs.flatMap(paragraph => paragraph.shots);
+        expect(shots.length).toBeGreaterThan(1);
+        shots.forEach(shot => {
+            expect(TEMPERA_DECOR_MOTIFS).toContain(shot.decor.motif);
+            expect(Math.abs(shot.decor.hatchAngle)).toBeLessThanOrEqual(Math.PI / 4);
+            expect(shot.decor.crossCount).toBeGreaterThanOrEqual(1);
+            expect(shot.decor.crossCount).toBeLessThanOrEqual(3);
+            expect(Number.isInteger(shot.decor.scribbleSeed)).toBe(true);
+        });
+        // Neighbouring shots must not repeat a motif, otherwise the MG layer stops reading
+        // as a cut. The guarantee spans paragraph boundaries too.
+        const motifs = shots.map(shot => shot.decor.motif);
+        for (let index = 1; index < motifs.length; index += 1) {
+            expect(motifs[index]).not.toBe(motifs[index - 1]);
+        }
+        expect(compileTemperaProgram(lines, 'other-seed').paragraphs.flatMap(p => p.shots).map(s => s.decor.motif))
+            .not.toEqual(motifs);
+    });
+
+    it('scatters margin fragments taken from the paragraph text on sparse shots', () => {
+        const program = compileTemperaProgram([
+            line('嗯', 0, 2),
+            line('后面还有一整段歌词继续唱下去', 10, 14),
+        ], 'fragments');
+        const quiet = program.paragraphs[0].shots[0];
+        expect(quiet.kind).toBe('quiet-line');
+        expect(quiet.decor.fragments.length).toBeGreaterThan(0);
+
+        const pool = program.paragraphs.flatMap(paragraph => paragraph.lines)
+            .map(item => item.line.fullText).join('');
+        quiet.decor.fragments.forEach(fragment => {
+            expect(pool).toContain(fragment.char);
+            expect(fragment.char.trim()).toBe(fragment.char);
+            expect(fragment.x).toBeGreaterThan(0);
+            expect(fragment.x).toBeLessThan(1);
+            expect(fragment.y).toBeGreaterThan(0);
+            expect(fragment.y).toBeLessThan(1);
+            expect(fragment.scale).toBeGreaterThan(0);
+        });
+    });
+
+    it('leaves dense compositions free of margin fragments', () => {
+        const program = compileTemperaProgram([
+            line('副歌来了要唱得很满', 0, 2, undefined, { isChorus: true }),
+            line('一起唱吧把声音放大', 2.2, 4, undefined, { isChorus: true }),
+        ], 'dense');
+        expect(program.paragraphs[0].kind).toBe('chorus');
+        expect(program.paragraphs[0].shots[0].decor.fragments).toEqual([]);
     });
 
     it('resolves the active paragraph for any seek target', () => {
