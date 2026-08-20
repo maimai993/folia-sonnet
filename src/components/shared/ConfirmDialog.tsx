@@ -40,8 +40,8 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             ? 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-lg shadow-zinc-900/20'
             : 'bg-white hover:bg-zinc-100 text-zinc-900 shadow-lg shadow-white/20';
 
-    const defaultConfirmLabel = t('status.confirm') !== 'status.confirm' ? t('status.confirm') : '确定';
-    const defaultCancelLabel = t('status.cancel') !== 'status.cancel' ? t('status.cancel') : '取消';
+    const defaultConfirmLabel = t('status.confirm') !== 'status.confirm' ? t('status.confirm') : t('ui.confirm');
+    const defaultCancelLabel = t('status.cancel') !== 'status.cancel' ? t('status.cancel') : t('ui.cancel');
 
     return (
         <ThemedDialog

@@ -215,7 +215,7 @@ const ThemePreview: React.FC<{
                     }}
                     className="absolute right-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-zinc-950/40 text-white backdrop-blur-md transition-all hover:bg-zinc-950/60 hover:scale-105 active:scale-95 shadow-sm pointer-events-auto"
                     title={isPaused ? t('ui.play') : t('ui.pause')}
-                    aria-label={isPaused ? "Play preview" : "Pause preview"}
+                    aria-label={isPaused ? t('ui.playPreview') : t('ui.pausePreview')}
                 >
                     {isPaused ? <Play size={16} className="translate-x-[1px]" fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
                 </button>

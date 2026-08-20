@@ -71,7 +71,7 @@ describe('customLyricsFont', () => {
         expect(isSupportedLyricsFontFile(createFileLike('font', 'lyrics.woff2'))).toBe(true);
         expect(isSupportedLyricsFontFile(createFileLike('font', 'lyrics.ttf'))).toBe(true);
         expect(isSupportedLyricsFontFile(createFileLike('font', 'lyrics.png', 'image/png'))).toBe(false);
-        expect(validateUploadedLyricsFontFile(createFileLike('font', 'lyrics.png', 'image/png'))).toBe('仅支持 woff2、woff、ttf、otf 字体文件。');
+        expect(validateUploadedLyricsFontFile(createFileLike('font', 'lyrics.png', 'image/png'))).toBe('Only woff2, woff, ttf, otf font files are supported.');
     });
 
     it('registers a stored uploaded font with FontFace', async () => {

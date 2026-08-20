@@ -2364,7 +2364,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('diorama_tuning', JSON.stringify(DEFAULT_DIORAMA_TUNING));
         }
         set({ dioramaTuning: DEFAULT_DIORAMA_TUNING });
-        notify(get, { type: 'info', text: '镜台参数已重置' });
+        notify(get, { type: 'info', text: i18n.t('notifications.dioramaReset') });
     },
     handleSetMonetBackgroundTuning: (patch) => {
         const prev = get().monetBackgroundTuning;

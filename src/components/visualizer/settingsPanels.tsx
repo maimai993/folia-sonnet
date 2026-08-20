@@ -963,13 +963,13 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         >
             <div>
                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.dioramaSettings') || '镜台参数'}
+                    {t('options.dioramaSettings')}
                 </div>
             </div>
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.dioramaCameraSpeed') || '镜头速度'}</span>
+                    <span>{t('options.dioramaCameraSpeed')}</span>
                     <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
                         {resolvedTuning.cameraSpeed.toFixed(2)}x
                     </span>
@@ -989,7 +989,7 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.dioramaMotionAmount') || '运动幅度'}</span>
+                    <span>{t('options.dioramaMotionAmount')}</span>
                     <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
                         {resolvedTuning.motionAmount.toFixed(2)}x
                     </span>
@@ -1009,7 +1009,7 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.dioramaAudioReactivity') || '点云音频响应'}</span>
+                    <span>{t('options.dioramaAudioReactivity')}</span>
                     <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
                         {Math.round(resolvedTuning.audioReactivity * 100)}%
                     </span>
@@ -1031,7 +1031,7 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 tiers (slider only under 自定义). Their rendering paths are fully separate in
                 DioramaScene, so enabling one never stands in for another. */}
             <DioramaEffectSettings
-                label={t('options.dioramaGlowEffect') || '普通辉光跟唱'}
+                label={t('options.dioramaGlowEffect')}
                 enabled={resolvedTuning.glowEnabled}
                 intensity={resolvedTuning.glowIntensity}
                 onEnabledChange={(next) => handleDioramaTuningChange({ glowEnabled: next })}
@@ -1046,13 +1046,13 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             {/* 灵魂出窍跟唱, with 当前字漂移 as its nested child (same underlying effect, scoped to the word
                 being sung) rendered inside its expanded panel - not a standalone effect in the list. */}
             <DioramaEffectSettings
-                label={t('options.dioramaSoulEffect') || '灵魂出窍跟唱'}
+                label={t('options.dioramaSoulEffect')}
                 enabled={resolvedTuning.soulEnabled}
                 intensity={resolvedTuning.soulIntensity}
                 onEnabledChange={(next) => handleDioramaTuningChange({ soulEnabled: next })}
                 onIntensityChange={(next) => handleDioramaTuningChange({ soulIntensity: next })}
                 subEffect={{
-                    label: t('options.dioramaSoulActiveEffect') || '当前字出窍',
+                    label: t('options.dioramaSoulActiveEffect'),
                     enabled: resolvedTuning.soulActiveEnabled,
                     onEnabledChange: (next) => handleDioramaTuningChange({ soulActiveEnabled: next }),
                 }}
@@ -1064,7 +1064,7 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 onSliderCommit={onSliderCommit}
             />
             <DioramaEffectSettings
-                label={t('options.dioramaGradientEffect') || '渐变跟唱'}
+                label={t('options.dioramaGradientEffect')}
                 enabled={resolvedTuning.gradientEnabled}
                 intensity={resolvedTuning.gradientIntensity}
                 onEnabledChange={(next) => handleDioramaTuningChange({ gradientEnabled: next })}
@@ -1088,11 +1088,11 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 }}
             >
                 <span className="min-w-0 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.dioramaKeywordColoring') || '关键字着色'}
+                    {t('options.dioramaKeywordColoring')}
                 </span>
                 <DioramaSettingsToggle
                     checked={resolvedTuning.keywordColoringEnabled}
-                    label={t('options.dioramaKeywordColoring') || '关键字着色'}
+                    label={t('options.dioramaKeywordColoring')}
                     onChange={(next) => handleDioramaTuningChange({ keywordColoringEnabled: next })}
                     theme={theme}
                     isDaylight={isDaylight}
@@ -1119,7 +1119,7 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             />
 
             <DioramaBackgroundParticleSettings
-                label={t('options.dioramaShowParticles') || '背景粒子'}
+                label={t('options.dioramaShowParticles')}
                 enabled={resolvedTuning.showParticles}
                 circumference={resolvedTuning.backgroundParticleCircumference}
                 radial={resolvedTuning.backgroundParticleRadial}
@@ -1159,8 +1159,8 @@ export const CladdaghSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     };
 
     const axisLineOptions: PresetOption<boolean>[] = useMemo(() => ([
-        { value: true, label: t('options.partitaGuideLinesOn') || '显示' },
-        { value: false, label: t('options.partitaGuideLinesOff') || '隐藏' },
+        { value: true, label: t('options.partitaGuideLinesOn') },
+        { value: false, label: t('options.partitaGuideLinesOff') },
     ]), [t]);
 
     return (
@@ -1238,7 +1238,7 @@ export const CladdaghSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             </div>
 
             <PresetGroup
-                label={t('options.claddaghShowAxisLine') || '中间轴线'}
+                label={t('options.claddaghShowAxisLine')}
                 value={resolvedTuning.showAxisLine}
                 options={axisLineOptions}
                 onChange={(next) => onCladdaghTuningChange?.({ showAxisLine: next })}
@@ -1248,7 +1248,7 @@ export const CladdaghSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.claddaghLetterSpacingOffset') || '字符间距'}</span>
+                    <span>{t('options.claddaghLetterSpacingOffset')}</span>
                     <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
                         {resolvedTuning.letterSpacingOffset > 0 ? '+' : ''}{resolvedTuning.letterSpacingOffset.toFixed(1)}px
                     </span>

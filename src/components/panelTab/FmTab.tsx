@@ -43,7 +43,7 @@ const FmTab: React.FC<FmTabProps> = ({
                 <button
                     onClick={onPrevTrack}
                     className={`p-3 rounded-full transition-colors opacity-50 hover:opacity-100 ${btnBg}`}
-                    title="Previous Track"
+                    title={t('ui.previousTrack')}
                 >
                     <SkipBack size={24} />
                 </button>
@@ -66,7 +66,7 @@ const FmTab: React.FC<FmTabProps> = ({
                 <button
                     onClick={onNextTrack}
                     className={`p-3 rounded-full transition-colors opacity-50 hover:opacity-100 ${btnBg}`}
-                    title="Next Track"
+                    title={t('ui.nextTrack')}
                 >
                     <SkipForward size={24} />
                 </button>
@@ -78,7 +78,7 @@ const FmTab: React.FC<FmTabProps> = ({
                 <button
                     onClick={onTrash}
                     className={`flex flex-col items-center gap-2 group opacity-50 hover:opacity-100 transition-opacity`}
-                    title="Trash / Dislike"
+                    title={t('ui.trashDislike')}
                     style={{ color: 'var(--text-primary)' }}
                 >
                     <div className={`p-3 rounded-full transition-colors ${btnBg} group-hover:bg-red-500/20 group-hover:text-red-500`}>

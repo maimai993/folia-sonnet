@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { Play, Pause, Repeat, Repeat1, RepeatOff,ChartBar } from 'lucide-react';
 import { MotionValue } from 'framer-motion';
@@ -82,6 +83,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     controlsDisabled = false,
     trackNavigation = null,
 }) => {
+    const { t } = useTranslation();
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBgExpanded = isDaylight ? 'bg-white/60 border border-white/20 shadow-xl' : 'bg-black/40 border border-white/5';
     const glassBgCollapsed = isDaylight ? 'bg-white/40 border border-white/20 shadow-lg hover:bg-white/50' : 'bg-black/20 border border-white/5 hover:bg-black/30';
@@ -289,6 +291,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
     controlsDisabled = false,
     trackNavigation = null,
 }) => {
+    const { t } = useTranslation();
     return (
         <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-x-4 gap-y-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
             {/* Desktop Layout - responsive grid positions apply from the sm breakpoint */}
@@ -360,7 +363,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
                     disabled={!hasLyrics}
                     className={`col-start-3 row-start-2 justify-self-start rounded-full p-2 transition-colors sm:justify-self-auto ${!hasLyrics ? 'cursor-not-allowed opacity-20' : `opacity-40 hover:opacity-100 ${isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/10'}`}`}
                     style={{ color: primaryColor }}
-                    title="View Lyrics Timeline"
+                    title={t('ui.viewLyricsTimeline')}
                 >
                     <ChartBar size={20} className="sm:h-[18px] sm:w-[18px]" />
                 </button>

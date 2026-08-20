@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Copy, Minus, Radio, Square, X } from 'lucide-react';
 
 export default function WindowControls({
@@ -10,6 +11,7 @@ export default function WindowControls({
     isDaylight?: boolean;
     isMainWindowClickThroughEnabled?: boolean;
 }) {
+    const { t } = useTranslation();
     const [isMaximized, setIsMaximized] = useState(false);
     const electron = (window as any).electron;
 
@@ -57,7 +59,7 @@ export default function WindowControls({
         >
             <button
                 className={remoteBtnClass}
-                title="Remote control"
+                title={t('ui.remoteControl')}
                 tabIndex={remoteControlVisible ? 0 : -1}
                 onClick={() => void electron.openRemoteControl?.()}
             >

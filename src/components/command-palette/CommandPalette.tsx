@@ -237,7 +237,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                             onActiveIndexChange(0);
                                         }}
                                         className="hover:opacity-100 opacity-60 transition-opacity disabled:opacity-30 disabled:pointer-events-none"
-                                        aria-label="Clear active command"
+                                        aria-label={t('ui.clearActiveCommand')}
                                     >
                                         <X size={12} />
                                     </button>

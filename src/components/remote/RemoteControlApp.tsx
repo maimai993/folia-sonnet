@@ -565,7 +565,7 @@ const RemoteControlApp: React.FC = () => {
 
                                                     {/* Transparent Large Hitbox Input Range */}
                                                     <input
-                                                        aria-label="Seek"
+                                                        aria-label={t('ui.seek')}
                                                         type="range"
                                                         min={0}
                                                         max={duration || 1}

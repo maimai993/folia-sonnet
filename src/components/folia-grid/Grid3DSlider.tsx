@@ -142,7 +142,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     onSelect,
     isInteractive = true,
     isLoading = false,
-    emptyMessage = 'No items found',
+    emptyMessage,
     isDaylight,
     hasFloatingPlayer = false,
 }) => {
@@ -670,7 +670,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                         ))
                     ) : items.length === 0 ? (
                         <div className="opacity-40 text-sm font-sans flex items-center justify-center w-[20vw] shrink-0 text-center">
-                            {emptyMessage}
+                            {emptyMessage || t('ui.noItemsFound')}
                         </div>
                     ) : (
                         <>
