@@ -50,6 +50,17 @@ export interface TemperaGlyphMotionFrame {
 
 const CURRENT_EMPHASIS = 0.05;
 const ECHO_ALPHA = 0.5;
+/**
+ * Longest window the *reveal* - opacity and the motion echo - is allowed to run over.
+ *
+ * The settle window itself is stretched to the end of the glyph's line so the block is still
+ * easing into place as the line finishes. Fading in and trailing ghost copies over that whole
+ * stretch would be a different thing entirely: the type has to be readable while it travels,
+ * and an echo that outlives the opening reads as a smear rather than as motion. This is the
+ * cap the settle window used to carry, so any entrance short enough to predate the stretch
+ * behaves exactly as it did.
+ */
+const MAX_REVEAL_WINDOW = 1.35;
 /** How much wider the sung block gets. Deliberately small: this is tracking, not drift. */
 const RELEASE_TRACKING = 0.055;
 
@@ -65,8 +76,11 @@ export const resolveTemperaGlyphMotion = (
     const linear = clamp01((time - glyph.startTime) / window);
     const travel = 1 - easeTemperaEnter(linear);
     const entrance = resolveTemperaEnterFrame(glyph.enterStyle, glyph, travel, linear);
+    // Opacity and the echo run on their own capped window; position and scale keep the full
+    // stretched one, which is what turns a long line into one continuous move.
+    const reveal = clamp01((time - glyph.startTime) / Math.min(window, MAX_REVEAL_WINDOW));
     // Alpha resolves faster than position, so the glyph is readable while it is still moving.
-    const alpha = easeTemperaInOut(clamp01(linear * 2.4));
+    const alpha = easeTemperaInOut(clamp01(reveal * 2.4));
 
     // Settled drift: a tiny two-frequency float that starts only once the entrance is done.
     // Current-glyph emphasis is a small scale swell, not a painted backing block: anything
@@ -103,7 +117,7 @@ export const resolveTemperaGlyphMotion = (
         scaleY: entrance.scaleY + (1 - entrance.scaleY) * (1 - amount) + swell,
         echoX: entrance.x * motion,
         echoY: entrance.y * motion,
-        echoAlpha: entrance.echo * ECHO_ALPHA * amount,
+        echoAlpha: entrance.echo * (1 - easeTemperaEnter(reveal)) * ECHO_ALPHA * amount,
     };
 };
 

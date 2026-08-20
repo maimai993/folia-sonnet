@@ -141,6 +141,17 @@ describe('Tempera glyph motion', () => {
         });
     });
 
+    it('keeps a stretched entrance readable instead of fading in over the whole line', () => {
+        // A long line hands the glyph a settle window many seconds wide so the block never
+        // stops moving. Position may creep for all of it; opacity and the echo may not, or the
+        // type would be half-transparent and smeared while it is being sung.
+        const frame = resolveTemperaGlyphMotion(glyph({ settleTime: 22, releaseTime: 30 }), 11.4, 1);
+        expect(frame.alpha).toBeCloseTo(1, 3);
+        expect(frame.echoAlpha).toBeLessThan(0.02);
+        // Still visibly on its way in, which is the whole point of the stretch.
+        expect(Math.abs(frame.x)).toBeGreaterThan(1);
+    });
+
     it('is a pure function of absolute time, so seeking matches playback', () => {
         [9.9, 10.1, 10.5, 12, 30].forEach(time => {
             expect(resolveTemperaGlyphMotion(glyph(), time, 1))
