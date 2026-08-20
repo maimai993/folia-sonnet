@@ -75,6 +75,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     monetTuning: store.monetTuning,
     pendoloTuning: store.pendoloTuning,
     sonnetTuning: store.sonnetTuning,
+    temperaTuning: store.temperaTuning,
     urlBackgroundList: store.urlBackgroundList,
     urlBackgroundSelectedId: store.urlBackgroundSelectedId,
   };

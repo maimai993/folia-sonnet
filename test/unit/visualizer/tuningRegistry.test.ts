@@ -20,6 +20,7 @@ describe('visualizer tuning registry', () => {
             'partita',
             'pendolo',
             'sonnet',
+            'tempera',
             'tilt',
         ]);
     });

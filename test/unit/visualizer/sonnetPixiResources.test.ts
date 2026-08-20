@@ -3,6 +3,7 @@ import {
     destroySonnetContainerChildren,
     unloadSonnetDisplayTree,
 } from '@/components/visualizer/sonnet/sonnetPixiResources';
+import { setPixiDisplayTreeVisibility } from '@/components/visualizer/pixiDisplayResources';
 
 describe('Sonnet Pixi resource lifecycle', () => {
     it('unloads every renderable in a retained shot tree', () => {
@@ -27,5 +28,23 @@ describe('Sonnet Pixi resource lifecycle', () => {
 
         expect(unload).toHaveBeenCalledOnce();
         expect(destroy).toHaveBeenCalledWith({ children: true });
+    });
+
+    it('unloads retained descendants only when their tree becomes hidden', () => {
+        const unload = vi.fn();
+        const root = { visible: true, children: [{ unload }] };
+
+        setPixiDisplayTreeVisibility(root, true);
+        expect(unload).not.toHaveBeenCalled();
+
+        setPixiDisplayTreeVisibility(root, false);
+        expect(unload).toHaveBeenCalledOnce();
+
+        setPixiDisplayTreeVisibility(root, false);
+        expect(unload).toHaveBeenCalledOnce();
+
+        setPixiDisplayTreeVisibility(root, true);
+        expect(root.visible).toBe(true);
+        expect(unload).toHaveBeenCalledOnce();
     });
 });

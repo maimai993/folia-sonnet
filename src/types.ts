@@ -574,6 +574,100 @@ export const DEFAULT_SONNET_TUNING: SonnetTuning = {
   postProcessLensDispersion: 0.6,
 };
 
+/**
+ * `gradient` fills every tone shape with a four-colour ramp built from the cover art's
+ * extracted colours mixed with the theme, instead of a flat tone.
+ */
+export type TemperaColorMode = 'duo' | 'mono' | 'gradient';
+
+/** Where an image tends to sit; the exact spot is picked per shot from the seed. */
+export type TemperaLayerImageAlign = 'left' | 'center' | 'right' | 'free';
+
+/**
+ * One image in the user's Tempera pool - character art, a logo, a texture. Each shot picks one
+ * of them and places it itself, so an image carries a *tendency* rather than coordinates:
+ * hand-placing every picture would defeat the point of a pool. The file itself sits in
+ * IndexedDB under the same `id`, keeping the tuning small enough to sync.
+ */
+export interface TemperaLayerImage {
+  id: string;
+  name: string;
+  align: TemperaLayerImageAlign;
+  /** Height as a fraction of the viewport height; width follows the source aspect. */
+  scale: number;
+  opacity: number;
+}
+
+export const DEFAULT_TEMPERA_LAYER_IMAGE: Omit<TemperaLayerImage, 'id' | 'name'> = {
+  align: 'free',
+  scale: 0.7,
+  opacity: 1,
+};
+
+export interface TemperaTuning {
+  cameraIntensity: number;
+  /** Per-glyph entrance motion strength, 0..2. */
+  glyphMotion: number;
+  /**
+   * 逐字入场时序, 0..1. How much of the way to the shot's lyric end each glyph's entrance
+   * stretches, past its 0.34s floor. 0 gives every glyph the same short window - percussive,
+   * and the shot is fully at rest well before it cuts. 1 lands the whole shot exactly on its
+   * lyric end - continuous, but nothing is ever still. See temperaLayout for the measurements.
+   */
+  glyphSettleStretch: number;
+  /** duo derives blocks from theme hues; mono collapses to a grayscale ink/paper ladder. */
+  colorMode: TemperaColorMode;
+  showBlocks: boolean;
+  showDecor: boolean;
+  /**
+   * 文字动态反色: the lyric samples the artwork under it and picks whichever of ink/paper
+   * contrasts more, per pixel. This is how the mode colours type, not a post-process, so it
+   * has its own switch rather than riding `postProcessEnabled`.
+   */
+  textInversion: boolean;
+  /** Pool of user images; each shot picks one. The files themselves live in IndexedDB. */
+  layerImages: TemperaLayerImage[];
+  /** `back` lets the lyric invert against the picture; `front` puts it over the lyric. */
+  layerImageDepth: 'back' | 'front';
+  /** 0..1 chance that a given shot shows an image at all. */
+  layerImageFrequency: number;
+  enableTransitions: boolean;
+  textureResolution: number;
+  /** Master switch for the scene-wide post-process stack (grain + contrast + print passes). */
+  postProcessEnabled: boolean;
+  /** Film grain amount, 0..1. */
+  postProcessGrain: number;
+  /** Contrast boost, 0..1. */
+  postProcessContrast: number;
+  /** RGB shift pass strength, 0..1 (0 disables the pass). */
+  postProcessRgbShift: number;
+  /** Vignette strength, 0..2 (2 = double the base darkening). */
+  postProcessVignette: number;
+  /** Radial lens curvature amount, 0..2. */
+  postProcessLensDistortion: number;
+}
+
+export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
+  cameraIntensity: 1,
+  glyphMotion: 1,
+  glyphSettleStretch: 0.5,
+  colorMode: 'duo',
+  showBlocks: true,
+  showDecor: true,
+  textInversion: true,
+  layerImages: [],
+  layerImageDepth: 'back',
+  layerImageFrequency: 0.6,
+  enableTransitions: true,
+  textureResolution: 1.5,
+  postProcessEnabled: false,
+  postProcessGrain: 0.2,
+  postProcessContrast: 0,
+  postProcessRgbShift: 0,
+  postProcessVignette: 0.85,
+  postProcessLensDistortion: 0.3,
+};
+
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other
 // visualizer it follows theme.animationIntensity (the player-panel intensity chip / AI themes), so
 // the theme system stays the single source of truth. The tuning only carries diorama-specific knobs.

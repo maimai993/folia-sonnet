@@ -12,6 +12,7 @@ import {
     type PartitaTuning,
     type PendoloTuning,
     type SonnetTuning,
+    type TemperaTuning,
     type Theme,
     type SubtitleContentMode,
     type TiltTuning,
@@ -104,6 +105,8 @@ interface VisPlaygroundSettingsPanelProps {
     onPendoloTuningChange?: (patch: Partial<PendoloTuning>) => void;
     sonnetTuning?: SonnetTuning;
     onSonnetTuningChange?: (patch: Partial<SonnetTuning>) => void;
+    temperaTuning?: TemperaTuning;
+    onTemperaTuningChange?: (patch: Partial<TemperaTuning>) => void;
     cappellaTuning: CappellaTuning;
     cappellaCustomEmojiImages: CappellaEmojiImage[];
     onCappellaTuningChange?: (patch: Partial<CappellaTuning>) => void;
@@ -364,6 +367,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onPendoloTuningChange,
         sonnetTuning,
         onSonnetTuningChange,
+        temperaTuning,
+        onTemperaTuningChange,
         monetPortraitImage,
         onUploadMonetPortraitImage,
         onClearMonetPortraitImage,
@@ -481,8 +486,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                         />
 
                         <fieldset
-                            disabled={visualizerMode === 'sonnet'}
-                            className={`space-y-4 transition-opacity ${visualizerMode === 'sonnet' ? 'opacity-40' : ''}`}
+                            disabled={visualizerMode === 'sonnet' || visualizerMode === 'tempera'}
+                            className={`space-y-4 transition-opacity ${visualizerMode === 'sonnet' || visualizerMode === 'tempera' ? 'opacity-40' : ''}`}
                         >
                             <PresetGroup
                                 label={t('options.fontSize')}
@@ -514,7 +519,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             </div>
                         </fieldset>
 
-                        {visualizerMode === 'sonnet' && (
+                        {(visualizerMode === 'sonnet' || visualizerMode === 'tempera') && (
                             <div
                                 className="rounded-2xl border px-3.5 py-3 text-xs leading-relaxed"
                                 style={{
@@ -523,7 +528,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     backgroundColor: colorWithAlpha(theme.accentColor, isDaylight ? 0.06 : 0.1),
                                 }}
                             >
-                                {t('options.sonnetFontSizeAutoNotice')}
+                                {t(visualizerMode === 'tempera' ? 'options.temperaFontSizeAutoNotice' : 'options.sonnetFontSizeAutoNotice')}
                             </div>
                         )}
 
@@ -715,6 +720,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             onPendoloTuningChange,
                             sonnetTuning,
                             onSonnetTuningChange,
+                            temperaTuning,
+                            onTemperaTuningChange,
                             monetPortraitImage,
                             onUploadMonetPortraitImage,
                             onClearMonetPortraitImage,

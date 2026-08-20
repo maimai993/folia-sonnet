@@ -40,6 +40,8 @@ import {
     resolveObsBrowserSourceImageAsset,
     resolveObsBrowserSourceImageAssets,
 } from '../utils/obsBrowserSource';
+import type { TemperaLayerImage } from '../types';
+import { loadTemperaLayerImageBlobs } from '../services/temperaLayerImages';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
 import { getSongAlbumLabel, getSongArtistLabel } from '../services/onlineMusic/songMetadata';
@@ -99,6 +101,29 @@ const getSongArtist = (song: SongResult | null) => getSongArtistLabel(song) || n
 
 const getSongAlbum = (song: SongResult | null) => getSongAlbumLabel(song) || null;
 
+/**
+ * Loads the Tempera pool out of IndexedDB and inlines it as data URLs. The overlay is served
+ * from the local OBS server, a different origin from the main window, so it has no copy of the
+ * store those files live in - the blob has to travel inside the published config.
+ */
+const resolveTemperaLayerAssets = async (
+    pool: TemperaLayerImage[] | undefined,
+): Promise<{ id: string; name: string; url: string }[]> => {
+    if (!pool || pool.length === 0) return [];
+    const blobs = await loadTemperaLayerImageBlobs(pool);
+    const assets = await Promise.all(pool.map(async image => {
+        const blob = blobs.get(image.id);
+        if (!blob) return null;
+        const url = URL.createObjectURL(blob);
+        try {
+            return { id: image.id, name: image.name, url: await resolveObsBrowserSourceCoverUrl(url) ?? url };
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    }));
+    return assets.filter((asset): asset is { id: string; name: string; url: string } => asset !== null);
+};
+
 export const useObsBrowserSourcePublisher = ({
     isElectronWindow,
     activePlaybackContext,
@@ -134,6 +159,9 @@ export const useObsBrowserSourcePublisher = ({
     cappellaCustomAvatarImages,
     monetPortraitImage,
 }: UseObsBrowserSourcePublisherOptions) => {
+    // The pool rides in the tuning bundle that is already published; only the files are missing
+    // on the overlay side, and those are resolved below.
+    const temperaLayerImages = visualizerTunings?.tempera?.layerImages;
     const [status, setStatus] = useState<ObsBrowserSourceStatus>(() => emptyObsStatus());
     const [obsCoverUrl, setObsCoverUrl] = useState<string | null>(coverUrl);
     const [obsCustomImages, setObsCustomImages] = useState<{
@@ -141,7 +169,8 @@ export const useObsBrowserSourcePublisher = ({
         cappellaAvatar: CappellaAvatarImage[];
         monetBackground: MonetBackgroundImage | null;
         monetPortrait: MonetPortraitImage | null;
-    }>({ cappellaEmoji: [], cappellaAvatar: [], monetBackground: null, monetPortrait: null });
+        temperaLayer: { id: string; name: string; url: string }[];
+    }>({ cappellaEmoji: [], cappellaAvatar: [], monetBackground: null, monetPortrait: null, temperaLayer: [] });
     const isExternallyRendering = status.enabled && status.clientCount > 0;
     const lastPublishedClockRef = useRef<ObsBrowserSourceClock | null>(null);
     const lastClockPublishMsRef = useRef(0);
@@ -200,21 +229,26 @@ export const useObsBrowserSourcePublisher = ({
             resolveObsBrowserSourceImageAssets(cappellaCustomAvatarImages),
             background?.customImage ? resolveObsBrowserSourceImageAsset(background.customImage) : null,
             monetPortraitImage ? resolveObsBrowserSourceImageAsset(monetPortraitImage) : null,
-        ]).then(([cappellaEmoji, cappellaAvatar, monetBackground, monetPortrait]) => {
+            // Tempera keeps its pool in IndexedDB rather than in the store, so it is read here
+            // and inlined; the overlay's origin has no copy of it.
+            resolveTemperaLayerAssets(temperaLayerImages),
+        ]).then(([cappellaEmoji, cappellaAvatar, monetBackground, monetPortrait, temperaLayer]) => {
             if (!cancelled) {
-                setObsCustomImages({ cappellaEmoji, cappellaAvatar, monetBackground, monetPortrait });
+                setObsCustomImages({ cappellaEmoji, cappellaAvatar, monetBackground, monetPortrait, temperaLayer });
             }
         }).catch(error => {
             console.warn('[OBS] Failed to resolve custom images for browser source', error);
             if (!cancelled) {
-                setObsCustomImages({ cappellaEmoji: [], cappellaAvatar: [], monetBackground: null, monetPortrait: null });
+                setObsCustomImages({
+                    cappellaEmoji: [], cappellaAvatar: [], monetBackground: null, monetPortrait: null, temperaLayer: [],
+                });
             }
         });
 
         return () => {
             cancelled = true;
         };
-    }, [background?.customImage, cappellaCustomAvatarImages, cappellaCustomEmojiImages, monetPortraitImage]);
+    }, [background?.customImage, cappellaCustomAvatarImages, cappellaCustomEmojiImages, monetPortraitImage, temperaLayerImages]);
 
     const config = useMemo<ObsBrowserSourceConfig>(() => {
         const resolvedBackground = {
@@ -253,6 +287,7 @@ export const useObsBrowserSourcePublisher = ({
             cappellaCustomEmojiImages: obsCustomImages.cappellaEmoji,
             cappellaCustomAvatarImages: obsCustomImages.cappellaAvatar,
             monetPortraitImage: obsCustomImages.monetPortrait,
+            temperaLayerImageAssets: obsCustomImages.temperaLayer,
             updatedAt: Date.now(),
         };
     }, [

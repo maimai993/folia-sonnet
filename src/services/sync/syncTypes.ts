@@ -59,6 +59,7 @@ export type SyncedVisualSettings = {
     monetTuning?: unknown;
     pendoloTuning?: unknown;
     sonnetTuning?: unknown;
+    temperaTuning?: unknown;
     urlBackgroundList?: unknown[];
     urlBackgroundSelectedId?: string | null;
     homeLayoutStyle?: 'carousel' | 'grid';
