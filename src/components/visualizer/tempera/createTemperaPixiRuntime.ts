@@ -1,5 +1,9 @@
 import type { MotionValue } from 'framer-motion';
 import type { TemperaTuning, Theme } from '../../../types';
+import {
+    setPixiDisplayTreeVisibility,
+    unloadPixiDisplayTree,
+} from '../pixiDisplayResources';
 import type { TemperaProgram } from './types';
 import { findTemperaParagraphIndexAtTime } from './temperaProgram';
 import { hashTemperaSeed } from './temperaRandom';
@@ -85,6 +89,10 @@ const decodeImageBlob = async (blob: Blob): Promise<ImageBitmap | HTMLImageEleme
             URL.revokeObjectURL(url);
         }
     }
+};
+
+const closeImageBitmap = (source: unknown) => {
+    if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap) source.close();
 };
 
 const resolveAnimationScale = (theme: Theme) => (
@@ -295,7 +303,10 @@ export class TemperaPixiRuntime {
         await Promise.all([...blobs].map(async ([id, blob]) => {
             try {
                 const source = await decodeImageBlob(blob);
-                if (this.destroyed) return;
+                if (this.destroyed) {
+                    closeImageBitmap(source);
+                    return;
+                }
                 this.imageTextures.set(id, this.pixi.Texture.from(source));
             } catch {
                 // A corrupt or unsupported file simply leaves that placement unrendered.
@@ -322,6 +333,7 @@ export class TemperaPixiRuntime {
 
     private destroyScene(scene: TemperaSceneView) {
         this.sceneContainer.removeChild(scene.container);
+        unloadPixiDisplayTree(scene.container);
         scene.container.filters = null;
         scene.shots.forEach(shot => {
             shot.textLayer.filters = null;
@@ -525,11 +537,16 @@ export class TemperaPixiRuntime {
             const isActive = index === paragraphIndex;
             const isIncoming = preRoll && index === paragraphIndex + 1;
 
-            scene.container.visible = isActive || isIncoming;
+            setPixiDisplayTreeVisibility(scene.container, isActive || isIncoming);
             // The arriving scene has to sit above the one it is replacing; cache insertion
             // order says nothing about paragraph order.
             scene.container.zIndex = index;
             if (!scene.container.visible) {
+                // The scene-level unload already released every descendant. Reset shot
+                // visibility so a later seek only rehydrates the shots it actually shows.
+                scene.shots.forEach(shot => {
+                    shot.container.visible = false;
+                });
                 scene.activeShotIndex = -1;
                 return;
             }
@@ -589,7 +606,7 @@ export class TemperaPixiRuntime {
                 const isShotActive = shotIndex === activeShotIndex;
                 const isHandingOff = shotIndex < activeShotIndex
                     && this.resolveShotExit(shot, time) < 1;
-                shot.container.visible = isShotActive || isHandingOff;
+                setPixiDisplayTreeVisibility(shot.container, isShotActive || isHandingOff);
                 if (!shot.container.visible) return;
                 this.updateShot(shot, time, width, height);
             });
@@ -689,11 +706,15 @@ export class TemperaPixiRuntime {
         this.app.stop();
         this.app.ticker.remove(this.renderFrame);
         this.clearScenes();
-        this.creditsContainer.removeChildren().forEach(child => child.destroy({ children: true }));
+        this.disposeCredits();
         this.wipeGraphics = null;
         // These textures were built here rather than owned by a scene, so they are released
         // here too; app.destroy only walks what is still on the stage.
-        this.imageTextures.forEach(texture => texture.destroy(true));
+        this.imageTextures.forEach(texture => {
+            const source = texture.source.resource;
+            texture.destroy(true);
+            closeImageBitmap(source);
+        });
         this.imageTextures.clear();
         this.app.destroy({ removeView: true }, { children: true, texture: true });
     }

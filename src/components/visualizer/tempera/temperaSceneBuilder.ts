@@ -492,6 +492,8 @@ export const buildTemperaScene = (
 
         shotContainer.pivot.set(width / 2, height / 2);
         shotContainer.position.set(width / 2, height / 2);
+        // The runtime opts shots into rendering from absolute playback time.
+        shotContainer.visible = false;
         container.addChild(shotContainer);
         return {
             shot,
