@@ -1,8 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
+    platform: process.platform,
+    isLinuxX11: process.platform === 'linux' && !process.env.WAYLAND_DISPLAY,
     getSettings: () => ipcRenderer.invoke('get-settings'),
     saveSettings: (key, value) => ipcRenderer.invoke('save-settings', key, value),
+    onWallpaperModeChanged: (callback) => {
+        const listener = (_event, settings) => callback(settings);
+        ipcRenderer.on('wallpaper-mode-changed', listener);
+        return () => ipcRenderer.removeListener('wallpaper-mode-changed', listener);
+    },
     setPlaybackDisplaySleepBlockingActive: (active) => ipcRenderer.invoke('playback-display-sleep-set-active', active),
     setAppLocale: (localeKey) => ipcRenderer.invoke('set-app-locale', localeKey),
     getCacheDirectory: () => ipcRenderer.invoke('get-cache-directory'),

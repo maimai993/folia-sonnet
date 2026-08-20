@@ -60,6 +60,7 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     toggleVoiceInputPause: vi.fn(),
     preventDisplaySleepDuringPlayback: false,
     togglePreventDisplaySleepDuringPlayback: vi.fn(),
+    toggleWallpaperMode: vi.fn(),
     setAppLanguagePreference: vi.fn(async () => undefined),
     runAutoMatchBestLyric: vi.fn(async () => true),
     setIsUserGuideModalOpen: vi.fn(),

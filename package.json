@@ -30,14 +30,16 @@
     "manual:lyrics": "npx tsx test/manual/netease_lyrics_cli.ts",
     "audit:lyrics-sources": "npx tsx test/manual/lyric-audit/index.ts",
     "probe:netease-xeapi": "node test/manual/netease_xeapi_probe.cjs",
+    "manual:wallpaper-watchdog": "npx tsx test/manual/wallpaper-watchdog-sim.ts",
     "stage:client": "vite --open /stage-client.html",
     "dev:electron": "cross-env ELECTRON_DEV=true concurrently -k \"vite\" \"wait-on tcp:3000 && electron .\"",
     "dev:electron:update-preview": "cross-env ELECTRON_DEV=true FOLIA_DEV_UPDATE_PREVIEW=true concurrently -k \"vite\" \"wait-on tcp:3000 && electron .\"",
     "dev:electron:dist": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true vite build && electron .",
     "dev:electron:dist:swiftshader": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=swiftshader vite build && electron .",
     "dev:electron:dist:software": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=software vite build && electron .",
-    "build:electron:dir": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && electron-builder --linux dir",
-    "build:electron": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && electron-builder",
+    "build:electron:dir": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && npm run build:windowtolayer && electron-builder --linux dir",
+    "build:electron": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && npm run build:windowtolayer && electron-builder",
+    "build:windowtolayer": "node packaging/linux/build-windowtolayer.mjs",
     "contributors:add": "npx all-contributors-cli add",
     "contributors:generate": "npx all-contributors-cli generate"
   },
@@ -87,6 +89,14 @@
       {
         "from": "packaging/linux/README-LINUX.txt",
         "to": "linux/README-LINUX.txt"
+      },
+      {
+        "from": "build",
+        "to": ".",
+        "filter": [
+          "windowtolayer",
+          "windowtolayer-COPYING"
+        ]
       }
     ],
     "mac": {
