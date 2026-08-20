@@ -1073,6 +1073,8 @@ export default {
     "temperaFontSizeAutoNotice": "凝彩模式会根据画面尺寸、歌词量和排版区域自动计算字号；通用字体尺寸设置在此模式下无效。",
     "temperaCameraIntensity": "镜头运动强度",
     "temperaGlyphMotion": "逐字动势",
+    "temperaGlyphSettleStretch": "逐字入场时序",
+    "temperaGlyphSettleStretchHint": "0 = 每字用同样的短窗口快速落位，切镜前画面已静止，适合快歌；1 = 整个分镜的字精确落在歌词结束那一刻，全程都在动，适合慢歌。",
     "temperaColorMode": "色彩模式",
     "temperaColorModeDuo": "主题双色",
     "temperaColorModeMono": "黑白灰",

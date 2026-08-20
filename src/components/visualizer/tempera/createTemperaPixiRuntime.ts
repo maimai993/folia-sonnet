@@ -95,12 +95,6 @@ const closeImageBitmap = (source: unknown) => {
     if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap) source.close();
 };
 
-/**
- * How far upstream an arriving shot starts, as a fraction of the viewport's long edge. Small
- * on purpose; see the hand-off comment in `updateShot`.
- */
-const SHOT_ARRIVAL_TRAVEL = 0.16;
-
 const resolveAnimationScale = (theme: Theme) => (
     theme.animationIntensity === 'calm' ? 0.65 : theme.animationIntensity === 'chaotic' ? 1.35 : 1
 );
@@ -126,6 +120,9 @@ const resolveCreditsFrame = (time: number, finalEndTime: number) => {
  */
 const requiresSceneRebuild = (previous: TemperaTuning, next: TemperaTuning) => (
     previous.colorMode !== next.colorMode
+    // Entrance pacing is baked into each glyph's settleTime at layout time, unlike glyphMotion
+    // which the solver reads fresh every frame.
+    || previous.glyphSettleStretch !== next.glyphSettleStretch
     || previous.showBlocks !== next.showBlocks
     || previous.showDecor !== next.showDecor
     || previous.textInversion !== next.textInversion
@@ -413,14 +410,11 @@ export class TemperaPixiRuntime {
         // incoming one rather than being cut away.
         const handoff = this.resolveShotHandoff(view);
         const span = Math.max(width, height);
-        // The arrival stays front-loaded: the first glyph of a shot starts revealing on the
-        // shot's own first frame, so a slow entrance would show type that is still off frame.
-        // The distance is deliberately small - the blocks carry their own staggered entrance,
-        // and a large container travel on top of it collapsed to nothing within ~0.2s, which
-        // read as a lurch at every shot boundary rather than as a move.
-        const enter = easeTemperaEnter(clamp01((time - view.shot.startTime) / handoff));
+        // The arrival is front-loaded on purpose: the glyphs start revealing on the shot's
+        // own timeline, so a slow entrance would expose type that is still off frame.
+        const enter = easeTemperaEnter(clamp01((time - view.shot.startTime) / (handoff * 0.8)));
         const exit = easeTemperaInOut(this.resolveShotExit(view, time));
-        const travel = exit * span * 0.55 - (1 - enter) * span * SHOT_ARRIVAL_TRAVEL;
+        const travel = exit * span * 0.55 - (1 - enter) * span * 0.32;
         view.container.position.set(
             view.baseX + frame.x * width * camera + Math.cos(view.shot.flowAngle) * travel,
             view.baseY + frame.y * height * camera + Math.sin(view.shot.flowAngle) * travel,

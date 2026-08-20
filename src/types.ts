@@ -608,6 +608,13 @@ export interface TemperaTuning {
   cameraIntensity: number;
   /** Per-glyph entrance motion strength, 0..2. */
   glyphMotion: number;
+  /**
+   * 逐字入场时序, 0..1. How much of the way to the shot's lyric end each glyph's entrance
+   * stretches, past its 0.34s floor. 0 gives every glyph the same short window - percussive,
+   * and the shot is fully at rest well before it cuts. 1 lands the whole shot exactly on its
+   * lyric end - continuous, but nothing is ever still. See temperaLayout for the measurements.
+   */
+  glyphSettleStretch: number;
   /** duo derives blocks from theme hues; mono collapses to a grayscale ink/paper ladder. */
   colorMode: TemperaColorMode;
   showBlocks: boolean;
@@ -643,6 +650,7 @@ export interface TemperaTuning {
 export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
   cameraIntensity: 1,
   glyphMotion: 1,
+  glyphSettleStretch: 0.5,
   colorMode: 'duo',
   showBlocks: true,
   showDecor: true,

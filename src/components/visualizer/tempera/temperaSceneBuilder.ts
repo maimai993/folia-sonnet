@@ -483,6 +483,7 @@ export const buildTemperaScene = (
             fontWeight,
             seed: shotSeed,
             segmentColors,
+            settleStretch: tuning.glyphSettleStretch,
         });
         const glyphs = buildTemperaTextViews(pixi, {
             placements,

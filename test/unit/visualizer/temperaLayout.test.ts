@@ -106,29 +106,69 @@ describe('Tempera collage layout', () => {
         });
     });
 
-    it('lands the whole shot on one moment, at or after its lyric end', () => {
-        // Nothing has finished arriving while the shot is still being sung, so the block reads
-        // as one continuous move rather than a run of separate pops.
+    it('settles most of the shot before its lyric ends', () => {
+        // Landing everything exactly on the lyric end leaves a fast, densely cut song with no
+        // moment where the type is actually at rest, which is what made those shots read as
+        // mush. Only a glyph starting within the floor of the end may land after it.
         const placements = layout();
-        const settles = new Set(placements.map(placement => placement.settleTime));
-        expect(settles.size).toBe(1);
-        const [settle] = [...settles];
-        expect(settle).toBeGreaterThanOrEqual(Math.max(...placements.map(p => p.endTime)) - 1e-6);
-        // The last glyph still gets a real window instead of being landed on its own start.
-        expect(settle - Math.max(...placements.map(p => p.startTime))).toBeGreaterThanOrEqual(0.3399);
+        const lyricEnd = Math.max(...placements.map(placement => placement.endTime));
+        expect(placements.filter(placement => placement.settleTime < lyricEnd).length)
+            .toBeGreaterThan(placements.length / 2);
+        placements.forEach(placement => {
+            expect(placement.settleTime - placement.startTime).toBeGreaterThanOrEqual(0.3399);
+            expect(placement.settleTime)
+                .toBeLessThanOrEqual(Math.max(lyricEnd, placement.startTime + 0.34) + 1e-6);
+        });
     });
 
-    it('never gives a later glyph a longer entrance than an earlier one', () => {
-        // The stagger has to shorten smoothly toward the shared landing. Deriving each window
-        // from the gap to the next glyph inverted it: everything got a long window except the
-        // last few, which hit the pace clamp and snapped, so the final word of every phrase
-        // landed harder than the rest of the line.
+    it('reproduces both endpoint behaviours from the settleStretch dial', () => {
+        const windows = (settleStretch: number) => layout({ settleStretch })
+            .map(placement => placement.settleTime - placement.startTime);
+
+        // 0: every glyph gets the same short window - percussive, and the shot is fully at
+        // rest well before it cuts. This is the behaviour fast, densely cut songs want.
+        const tight = windows(0);
+        expect(Math.max(...tight)).toBeCloseTo(0.34, 6);
+        expect(Math.min(...tight)).toBeCloseTo(0.34, 6);
+
+        // 1: the shot lands exactly on its lyric end - continuous, but nothing is ever still.
+        const full = layout({ settleStretch: 1 });
+        const lyricEnd = Math.max(...full.map(placement => placement.endTime));
+        full.forEach(placement => {
+            expect(placement.settleTime)
+                .toBeCloseTo(Math.max(lyricEnd, placement.startTime + 0.34), 6);
+        });
+
+        // The default sits between them, glyph for glyph.
+        const middle = windows(0.5);
+        const wide = full.map(placement => placement.settleTime - placement.startTime);
+        middle.forEach((value, index) => {
+            expect(value).toBeGreaterThanOrEqual(tight[index] - 1e-9);
+            expect(value).toBeLessThanOrEqual(wide[index] + 1e-9);
+        });
+    });
+
+    it('clamps a nonsense settleStretch instead of trusting it', () => {
+        // The value arrives from localStorage and from pasted appearance codes.
+        const sane = layout({ settleStretch: 0.5 }).map(placement => placement.settleTime);
+        expect(layout({ settleStretch: Number.NaN }).map(p => p.settleTime)).toEqual(sane);
+        expect(layout({ settleStretch: 9 }).map(p => p.settleTime))
+            .toEqual(layout({ settleStretch: 1 }).map(p => p.settleTime));
+        expect(layout({ settleStretch: -3 }).map(p => p.settleTime))
+            .toEqual(layout({ settleStretch: 0 }).map(p => p.settleTime));
+    });
+
+    it('shortens the entrance monotonically from the first glyph to the last', () => {
+        // The stagger is a sweep that resolves, so a glyph appearing later can never take
+        // longer to arrive than one before it.
         const ordered = [...layout()].sort((a, b) => a.startTime - b.startTime);
         ordered.forEach((placement, index) => {
             if (index === 0) return;
             const previous = ordered[index - 1];
             expect(placement.settleTime - placement.startTime)
                 .toBeLessThanOrEqual(previous.settleTime - previous.startTime + 1e-9);
+            // Landings stay in reading order too; the sweep never doubles back.
+            expect(placement.settleTime).toBeGreaterThanOrEqual(previous.settleTime - 1e-9);
         });
     });
 
@@ -144,12 +184,16 @@ describe('Tempera collage layout', () => {
         expect(settleEnd([line])).toBeGreaterThan(2.9);
     });
 
-    it('lands two slices shown in the same shot together', () => {
-        // A shot can carry slices from two lines at once; staggering their landings would
-        // read as two separate gestures instead of one composition arriving.
+    it('paces both slices in a shot against the same lyric end', () => {
+        // A shot can carry slices from two lines at once. Pacing each against its own line
+        // would read as two separate gestures instead of one composition arriving.
         const placements = layout();
         expect(new Set(placements.map(placement => placement.lineIndex))).toEqual(new Set([0, 1]));
-        expect(new Set(placements.map(placement => placement.settleTime)).size).toBe(1);
+        const first = placements.filter(placement => placement.lineIndex === 0);
+        const ownEnd = Math.max(...first.map(placement => placement.endTime));
+        expect(ownEnd).toBeLessThan(Math.max(...placements.map(placement => placement.endTime)));
+        // The earlier slice is still arriving past its own line's end, because the shot's is later.
+        expect(Math.max(...first.map(placement => placement.settleTime))).toBeGreaterThan(ownEnd);
     });
 
     it('gives a slow shot a longer entrance than a dense one', () => {

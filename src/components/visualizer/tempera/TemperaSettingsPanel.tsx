@@ -110,6 +110,21 @@ const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                         onPointerUp={onSliderCommit}
                     />
                 ))}
+                <TemperaRangeControl
+                    label={t('options.temperaGlyphSettleStretch') || '逐字入场时序'}
+                    value={temperaTuning.glyphSettleStretch}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    rangeInputClass={rangeInputClass}
+                    onChange={glyphSettleStretch => onTemperaTuningChange?.({ glyphSettleStretch })}
+                    onPointerDown={onSliderPointerDown}
+                    onPointerUp={onSliderCommit}
+                />
+                <p className="text-xs leading-relaxed opacity-55" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.temperaGlyphSettleStretchHint')
+                        || '0 = 每字用同样的短窗口快速落位，切镜前画面已静止，适合快歌；1 = 整个分镜的字精确落在歌词结束那一刻，全程都在动，适合慢歌。'}
+                </p>
                 <VisualizerPresetGroup
                     label={t('options.temperaColorMode')}
                     value={temperaTuning.colorMode}

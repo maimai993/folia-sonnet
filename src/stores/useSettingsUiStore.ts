@@ -581,6 +581,7 @@ const readStoredTemperaTuning = (): TemperaTuning => {
         return {
             cameraIntensity: resolvePendoloNumber(parsed.cameraIntensity, DEFAULT_TEMPERA_TUNING.cameraIntensity, 0, 2),
             glyphMotion: resolvePendoloNumber(parsed.glyphMotion, DEFAULT_TEMPERA_TUNING.glyphMotion, 0, 2),
+            glyphSettleStretch: resolvePendoloNumber(parsed.glyphSettleStretch, DEFAULT_TEMPERA_TUNING.glyphSettleStretch, 0, 1),
             colorMode: parsed.colorMode === 'mono' || parsed.colorMode === 'gradient' ? parsed.colorMode : DEFAULT_TEMPERA_TUNING.colorMode,
             textInversion: typeof parsed.textInversion === 'boolean' ? parsed.textInversion : DEFAULT_TEMPERA_TUNING.textInversion,
             layerImages: sanitizeTemperaLayerImages(parsed.layerImages),
@@ -2357,6 +2358,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         const next: TemperaTuning = {
             cameraIntensity: resolvePendoloNumber(patch.cameraIntensity, prev.cameraIntensity, 0, 2),
             glyphMotion: resolvePendoloNumber(patch.glyphMotion, prev.glyphMotion, 0, 2),
+            glyphSettleStretch: resolvePendoloNumber(patch.glyphSettleStretch, prev.glyphSettleStretch, 0, 1),
             colorMode: patch.colorMode === 'duo' || patch.colorMode === 'mono' || patch.colorMode === 'gradient' ? patch.colorMode : prev.colorMode,
             textInversion: typeof patch.textInversion === 'boolean' ? patch.textInversion : prev.textInversion,
             layerImages: patch.layerImages ? sanitizeTemperaLayerImages(patch.layerImages) : prev.layerImages,

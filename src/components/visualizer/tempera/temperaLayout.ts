@@ -55,6 +55,8 @@ interface TemperaLayoutOptions {
     seed: number;
     /** Per-segment keyword colours, shaped exactly like `lines`. */
     segmentColors?: (string | null)[][];
+    /** 0..1 entrance pacing; see SETTLE_STRETCH. Defaults to the balanced middle. */
+    settleStretch?: number;
 }
 
 interface LayoutRegion {
@@ -172,28 +174,40 @@ const buildWordUnits = (
     });
 });
 
-/** Shortest entrance the last glyph of a shot is guaranteed, which sets the shared landing. */
+/** Shortest entrance any glyph gets, whatever else the shot's pace says. */
 const MIN_SETTLE_SECONDS = 0.34;
+/**
+ * Default for how much of the way to the shot's lyric end an entrance stretches, past the
+ * floor. Exposed as a tuning (`glyphSettleStretch`); this is the single dial between the two
+ * behaviours that were tried on their own:
+ *
+ * - 0 gives every glyph the same short window regardless of where it sits in the shot. Dense,
+ *   quickly cut songs read percussively that way - each glyph snaps in ~0.09s and then holds -
+ *   but a slow phrase lands everything in the first second and then nothing moves.
+ * - 1 lands the whole shot exactly on its lyric end. That keeps a slow phrase alive the whole
+ *   way through, but leaves a fast shot with no moment at rest at all: the mean dwell before
+ *   the cut goes to zero, every glyph is still travelling, and the type reads as mush.
+ *
+ * Half keeps most of the shot settled before it cuts while still giving a long phrase an
+ * entrance that runs deep into it.
+ */
+const DEFAULT_SETTLE_STRETCH = 0.5;
 
 /**
- * Gives the whole shot a single landing moment, then sets the post-sung release.
+ * Paces every entrance against the end of the lyric *this shot* carries, then sets the
+ * post-sung release.
  *
- * Every glyph starts on its own lyric time and they all finish arriving together, at the end
- * of the lyric this shot carries. A glyph's window is therefore just its distance to that
- * moment: the earlier it appears the longer it eases in, decreasing smoothly to the floor for
- * the last one. The block is still settling while the shot is being sung, which is what makes
- * it read as one gesture rather than a run of separate pops - and because the curve is heavily
- * front-loaded, a long shot is a decisive opening followed by a slow creep, not a slow arrival.
+ * A glyph starts on its own lyric time and its window is the floor plus a share of whatever
+ * distance is left to that end, so the stagger shortens smoothly from the first glyph to the
+ * last and the shot arrives as one sweep rather than as a row of independent pops. Because the
+ * curve is heavily front-loaded, a long window is a decisive opening followed by a slow creep,
+ * not a slow arrival.
  *
- * Deriving the window per glyph from the gap to the next one (what this used to do) inverted
- * the stagger: everything got a long window except the last few, which hit the pace clamp and
- * snapped, so the final word of every phrase landed harder than the rest.
- *
- * The landing is the shot's own lyric end, *not* the source line's. A shot shows a half-phrase
+ * The target is the shot's own lyric end, *not* the source line's. A shot shows a half-phrase
  * slice and one line commonly runs across several shots, so `lines` here is already the set of
  * slices this shot carries: aiming at the source line's end would leave a shot's type still
- * arriving long after that shot had handed off. Slices shown together therefore land together.
- * The floor keeps the landing from ever being at or before the last glyph's own start.
+ * arriving long after that shot had handed off. Slices shown together are therefore paced
+ * together. Only a glyph that starts within the floor of the end lands after it.
  *
  * The alpha and echo ramps do not follow this window (see temperaMotion): a glyph that stayed
  * half-transparent for the length of a shot would not be readable.
@@ -203,8 +217,9 @@ const MIN_SETTLE_SECONDS = 0.34;
  * its centre outward and each glyph's lever arm is simply its offset from that centre. That
  * ramp lasts as long as the glyph's own line and no longer.
  */
-const applyGlyphTiming = (placements: TemperaGlyphPlacement[]) => {
+const applyGlyphTiming = (placements: TemperaGlyphPlacement[], settleStretch: number) => {
     if (placements.length === 0) return placements;
+    const stretch = Number.isFinite(settleStretch) ? Math.min(1, Math.max(0, settleStretch)) : DEFAULT_SETTLE_STRETCH;
     const lineSpans = new Map<number, number>();
     placements.forEach(placement => {
         const current = lineSpans.get(placement.lineIndex) ?? 0;
@@ -218,9 +233,10 @@ const applyGlyphTiming = (placements: TemperaGlyphPlacement[]) => {
 
     // Every placement here belongs to the one shot being laid out.
     const shotLyricEnd = placements.reduce((latest, p) => Math.max(latest, p.endTime), 0);
-    const lastStart = placements.reduce((latest, p) => Math.max(latest, p.startTime), 0);
-    const settleTime = Math.max(shotLyricEnd, lastStart + MIN_SETTLE_SECONDS);
-    placements.forEach(placement => { placement.settleTime = settleTime; });
+    placements.forEach(placement => {
+        const reach = Math.max(0, shotLyricEnd - placement.startTime - MIN_SETTLE_SECONDS);
+        placement.settleTime = placement.startTime + MIN_SETTLE_SECONDS + reach * stretch;
+    });
     // Centre of the composed block; the expansion is measured from here, so the layout keeps
     // its exact shape and only its spacing opens up.
     const centerX = placements.reduce((sum, placement) => sum + placement.x, 0) / placements.length;
@@ -249,6 +265,7 @@ export const resolveTemperaLayout = ({
     fontWeight,
     seed,
     segmentColors,
+    settleStretch = DEFAULT_SETTLE_STRETCH,
 }: TemperaLayoutOptions): TemperaGlyphPlacement[] => {
     const region = resolveRegion(shotKind, width, height);
     const ctx = createTemperaMeasureContext(fontFamily, fontWeight);
@@ -355,5 +372,5 @@ export const resolveTemperaLayout = ({
         });
     });
 
-    return applyGlyphTiming(placements);
+    return applyGlyphTiming(placements, settleStretch);
 };

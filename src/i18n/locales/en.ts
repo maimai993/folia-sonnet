@@ -1069,6 +1069,8 @@ export default {
     "temperaFontSizeAutoNotice": "Tempera computes font sizes from the viewport, lyric volume and layout region; the generic font size setting has no effect in this mode.",
     "temperaCameraIntensity": "Camera Intensity",
     "temperaGlyphMotion": "Glyph Motion",
+    "temperaGlyphSettleStretch": "Entrance pacing",
+    "temperaGlyphSettleStretchHint": "0 gives every glyph the same short window, so the shot is at rest before it cuts - good for fast songs. 1 lands the whole shot exactly on its lyric end, so it never stops moving - good for slow ones.",
     "temperaColorMode": "Color Mode",
     "temperaColorModeDuo": "Theme Duo",
     "temperaColorModeMono": "Monochrome",
