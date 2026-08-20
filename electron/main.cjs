@@ -132,9 +132,9 @@ function isWallpaperWrapped() {
 }
 
 // The binary ships as resources/windowtolayer (built by packaging/linux/build-windowtolayer.mjs).
-// FOLIA_WINDOWTOLAYER_PATH overrides it for non-packaged (dev) runs: point it at a locally built
-// windowtolayer (e.g. build/windowtolayer after `npm run build:windowtolayer`) so wallpaper mode
-// also works outside an electron-builder package.
+// FOLIA_WINDOWTOLAYER_PATH overrides it for non-packaged (dev) runs; the dev:electron* scripts
+// inject `build/windowtolayer` (produced by `npm run build:windowtolayer`) so wallpaper mode also
+// works outside an electron-builder package. A missing binary just disables wallpaper mode.
 function resolveWindowToLayerPath() {
   const override = process.env.FOLIA_WINDOWTOLAYER_PATH;
   if (override) {
@@ -3081,6 +3081,20 @@ function sendRemoteControlSnapshot(snapshot) {
   return true;
 }
 
+// Wallpaper mode (Wayland): windowtolayer turns the first window it sees into the layer
+// surface and passes every later one through to xdg-shell as an ordinary window. The main
+// window claims that slot at startup, but a hidden window has no surface at all, so show it
+// again before building a secondary window — otherwise the secondary window would become the
+// wallpaper. No-op outside a wrapped session.
+function ensureWallpaperLayerHeldByMainWindow() {
+  if (!isWallpaperWrapped() || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+}
+
 function createRemoteControlWindow() {
   if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
     remoteControlWindow.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
@@ -3091,6 +3105,8 @@ function createRemoteControlWindow() {
     broadcastPlaybackSyncBridgeStatus();
     return remoteControlWindow;
   }
+
+  ensureWallpaperLayerHeldByMainWindow();
 
   const win = new BrowserWindow({
     modal: false,
@@ -3326,6 +3342,17 @@ function recreateMainWindowWithTransparencyMode(enabled, handoff = null) {
   const previousWindow = mainWindow;
   saveWindowState(previousWindow);
   mainWindow = null;
+
+  // Wallpaper mode: windowtolayer only hands the layer surface to a window created while no
+  // other window holds it (see ensureWallpaperLayerHeldByMainWindow), so the old wallpaper
+  // window must be gone before the replacement is built — otherwise the rebuilt main window
+  // comes back as an ordinary window and the wallpaper disappears with the old one.
+  if (isWallpaperWrapped()) {
+    previousWindow.destroy();
+    const createdWindow = createWindow();
+    focusMainWindow();
+    return createdWindow;
+  }
 
   const nextWindow = createWindow({ showImmediately: false });
   nextWindow.once('ready-to-show', () => {

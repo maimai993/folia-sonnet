@@ -20,6 +20,11 @@ const OUT_COPYING = path.join(OUT_DIR, 'windowtolayer-COPYING');
 const UPSTREAM_URL = 'https://gitlab.freedesktop.org/mstoeckl/windowtolayer.git';
 // Pinned upstream revision; keep in sync with patches/README.md.
 const PINNED_REV = '618a482d791e90f4977d643c206417f6aee73936';
+// Patches applied on top of PINNED_REV, documented in patches/README.md.
+const PATCHES = [
+  'windowtolayer-popup-resilience.patch',
+  'windowtolayer-single-layer-window.patch',
+];
 
 const force = process.argv.includes('--force');
 
@@ -55,12 +60,15 @@ if (!existsSync(path.join(SRC_DIR, '.git'))) {
   run('git', ['clone', UPSTREAM_URL, SRC_DIR]);
 }
 // -f discards any state a previous patch application left behind, so every build starts from
-// the exact pinned revision before the patch is applied again.
+// the exact pinned revision before the patches are applied again.
 run('git', ['-C', SRC_DIR, 'fetch', 'origin', PINNED_REV]);
 run('git', ['-C', SRC_DIR, 'checkout', '-f', '--detach', PINNED_REV]);
-// The source is reset to the pinned revision above, so the unified diff applies
-// deterministically; git apply fails loudly (non-zero exit) if the revision drifts.
-run('git', ['-C', SRC_DIR, 'apply', path.join(ROOT, 'packaging', 'linux', 'patches', 'windowtolayer-popup-resilience.patch')]);
+// The source is reset to the pinned revision above, so the unified diffs apply
+// deterministically; git apply fails loudly (non-zero exit) if the revision drifts. The
+// patches touch different files, so their order does not matter.
+for (const patch of PATCHES) {
+  run('git', ['-C', SRC_DIR, 'apply', path.join(ROOT, 'packaging', 'linux', 'patches', patch)]);
+}
 run('cargo', ['build', '--release', '--manifest-path', path.join(SRC_DIR, 'Cargo.toml')]);
 
 copyFileSync(path.join(SRC_DIR, 'target', 'release', 'windowtolayer'), OUT_BIN);
