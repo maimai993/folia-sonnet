@@ -74,7 +74,8 @@ export interface TemperaImageLayerView {
     back: import('pixi.js').Container;
     /** Over the lyric. */
     front: import('pixi.js').Container;
-    updateTime: (time: number, shotStart: number, shotEnd: number) => void;
+    /** `lyricEnd` paces the entrance; `shotEnd` drives the creep. See TemperaBlocksView. */
+    updateTime: (time: number, shotStart: number, shotEnd: number, lyricEnd?: number) => void;
     /**
      * Re-applies the pool's size and opacity without rebuilding. Dragging a slider must not
      * cost a scene rebuild, let alone a renderer restart.
@@ -144,13 +145,14 @@ export const buildTemperaImageLayer = (
         if (next) place(next);
     };
 
-    const updateTime = (time: number, shotStart: number, shotEnd: number) => {
+    const updateTime = (time: number, shotStart: number, shotEnd: number, lyricEnd?: number) => {
         const duration = Math.max(shotEnd - shotStart, 0.2);
+        const paceDuration = Math.max((lyricEnd ?? shotEnd) - shotStart, 0.2);
         const progress = clamp01((time - shotStart) / duration);
         // Images creep a little slower than the blocks, which reads as depth rather than as
         // the whole frame sliding as one slab.
         const creep = easeTemperaInOut(progress) * carry * 0.35 * creepScale;
-        const enter = easeTemperaEnter((time - shotStart - duration * 0.1) / (duration * 0.5));
+        const enter = easeTemperaEnter((time - shotStart - paceDuration * 0.1) / (paceDuration * 0.5));
         sprite.alpha = baseAlpha * enter;
         sprite.visible = enter > 0.001;
         sprite.position.set(baseX + flowX * creep, baseY + flowY * creep);

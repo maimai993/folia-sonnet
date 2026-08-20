@@ -86,6 +86,27 @@ describe('Tempera glyph motion', () => {
         expect(after.scaleX).toBeLessThanOrEqual(1);
     });
 
+    it('tracks the sung window rather than counting down from the start', () => {
+        // Rises over a short attack, holds while the glyph is sung, decays after it ends.
+        const during = resolveTemperaGlyphMotion(glyph({ enterScale: 1 }), 10.3, 1).scaleX;
+        const justAfter = resolveTemperaGlyphMotion(glyph({ enterScale: 1 }), 10.55, 1).scaleX;
+        const later = resolveTemperaGlyphMotion(glyph({ enterScale: 1 }), 10.7, 1).scaleX;
+        expect(during).toBeGreaterThan(justAfter);
+        expect(justAfter).toBeGreaterThan(later);
+        expect(later).toBeCloseTo(1, 3);
+    });
+
+    it('gives a glyph that is never sung no swell at all', () => {
+        // Punctuation carries no timing of its own, so it merges in as a zero-length glyph.
+        // Counting the emphasis down from `startTime` over a synthetic floor made every one
+        // of those pop on its own.
+        const mark = glyph({ enterScale: 1, startTime: 10, endTime: 10, settleTime: 10.8 });
+        [10, 10.05, 10.2, 10.5].forEach(time => {
+            expect(resolveTemperaGlyphMotion(mark, time, 1).scaleX, `${time}`)
+                .toBeLessThanOrEqual(1 + 1e-9);
+        });
+    });
+
     it('starts from the full entrance offset and resolves alpha before position', () => {
         const start = resolveTemperaGlyphMotion(glyph(), 10, 1);
         expect(start.x).toBeCloseTo(40, 6);

@@ -68,9 +68,8 @@ const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     depth={temperaTuning.layerImageDepth}
                     frequency={temperaTuning.layerImageFrequency}
                     rangeInputClass={rangeInputClass}
-                    onChange={layerImages => onTemperaTuningChange?.({ layerImages })}
-                    onDepthChange={layerImageDepth => onTemperaTuningChange?.({ layerImageDepth })}
-                    onFrequencyChange={layerImageFrequency => onTemperaTuningChange?.({ layerImageFrequency })}
+                    isDaylight={isDaylight}
+                    onCommit={patch => onTemperaTuningChange?.(patch)}
                 />
             </TemperaSettingsSection>
 

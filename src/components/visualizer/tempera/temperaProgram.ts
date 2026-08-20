@@ -119,8 +119,19 @@ export const buildTemperaSegments = (line: Line): TemperaSegment[] => {
         if (previous && !segment.isWordLike && !/^\s+$/u.test(segment.text)) {
             previous.text += segment.text;
             previous.endOffset = segment.endOffset;
-            previous.endTime = Math.max(previous.endTime, segment.endTime);
-            previous.graphemes.push(...segment.graphemes);
+            // A punctuation mark has no timing of its own: the parser's words never cover it,
+            // so the grapheme timeline pins it zero-length to the *next* word's start. Merging
+            // it here without re-timing makes a comma arrive with the word after the one it is
+            // attached to, and drags this segment's end forward to that word's start with it.
+            // Only the timing-less ones are moved; a mark the parser did cover keeps its own.
+            const tail = previous.endTime;
+            const merged = segment.graphemes.map(grapheme => (
+                grapheme.endTime > grapheme.startTime
+                    ? grapheme
+                    : { ...grapheme, startTime: tail, endTime: tail }
+            ));
+            previous.graphemes.push(...merged);
+            previous.endTime = Math.max(previous.endTime, ...merged.map(grapheme => grapheme.endTime));
         } else {
             sticky.push({ ...segment, graphemes: [...segment.graphemes] });
         }
@@ -177,6 +188,8 @@ interface ShotChunk {
     segmentEnd: number;
     startTime: number;
     endTime: number;
+    /** Survives the tiling pass below; see TemperaShot.lyricEndTime. */
+    lyricEndTime: number;
 }
 
 const isRenderableSegment = (segment: TemperaSegment) => (
@@ -213,6 +226,7 @@ const buildShotChunks = (lines: TemperaCompiledLine[], seed: string, paragraphIn
                 segmentEnd: entry.index + 1,
                 startTime,
                 endTime: Math.max(entry.segment.endTime, startTime + 0.2),
+                lyricEndTime: Math.max(entry.segment.endTime, startTime + 0.2),
             });
             const next = usable[order + 1];
             if (next) {
@@ -223,7 +237,9 @@ const buildShotChunks = (lines: TemperaCompiledLine[], seed: string, paragraphIn
         });
     });
     // Tile the timeline: every shot runs until the next one opens, so the runtime's
-    // "last shot whose startTime has passed" lookup never lands in a hole.
+    // "last shot whose startTime has passed" lookup never lands in a hole. `lyricEndTime`
+    // deliberately survives untiled - it is when this chunk's last grapheme stops, which is
+    // what the entrance stagger has to be paced against.
     return chunks.map((chunk, index) => ({
         ...chunk,
         endTime: Math.max(chunk.startTime + 0.2, chunks[index + 1]?.startTime ?? chunk.endTime),
@@ -414,6 +430,7 @@ const buildShots = (
             endTime: shotIndex === chunks.length - 1
                 ? Math.max(chunk.endTime, paragraphEnd)
                 : chunk.endTime,
+            lyricEndTime: chunk.lyricEndTime,
             slices,
             isBridge: false,
             camera: start,
@@ -478,6 +495,8 @@ const buildBridgeShots = (
             kind: shotKind,
             startTime: gapStart + step * index,
             endTime: gapStart + step * (index + 1),
+            // A bridge carries no lyric, so its graphics pace over the whole gap.
+            lyricEndTime: gapStart + step * (index + 1),
             slices: [],
             isBridge: true,
             camera: start,

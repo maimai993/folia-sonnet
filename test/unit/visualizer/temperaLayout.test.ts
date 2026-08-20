@@ -106,20 +106,29 @@ describe('Tempera collage layout', () => {
         });
     });
 
-    it('carries every entrance through to the end of the shot\'s lyric', () => {
-        // The point of the stretch: nothing has finished arriving while the shot is still
-        // being sung, so the block reads as one continuous move rather than a run of pops.
+    it('lands the whole shot on one moment, at or after its lyric end', () => {
+        // Nothing has finished arriving while the shot is still being sung, so the block reads
+        // as one continuous move rather than a run of separate pops.
         const placements = layout();
-        const lyricEnd = Math.max(...placements.map(placement => placement.endTime));
-        placements.forEach(placement => {
-            expect(placement.settleTime).toBeGreaterThanOrEqual(lyricEnd - 1e-6);
-            // The pace-derived window is a floor, never a ceiling...
-            expect(placement.settleTime - placement.startTime).toBeGreaterThanOrEqual(0.3399);
-            // ...and the only glyphs allowed past that end are the ones that start so late
-            // that their own short window would not fit inside it.
-            expect(placement.settleTime).toBeLessThanOrEqual(
-                Math.max(lyricEnd, placement.startTime + 1.35) + 1e-6,
-            );
+        const settles = new Set(placements.map(placement => placement.settleTime));
+        expect(settles.size).toBe(1);
+        const [settle] = [...settles];
+        expect(settle).toBeGreaterThanOrEqual(Math.max(...placements.map(p => p.endTime)) - 1e-6);
+        // The last glyph still gets a real window instead of being landed on its own start.
+        expect(settle - Math.max(...placements.map(p => p.startTime))).toBeGreaterThanOrEqual(0.3399);
+    });
+
+    it('never gives a later glyph a longer entrance than an earlier one', () => {
+        // The stagger has to shorten smoothly toward the shared landing. Deriving each window
+        // from the gap to the next glyph inverted it: everything got a long window except the
+        // last few, which hit the pace clamp and snapped, so the final word of every phrase
+        // landed harder than the rest of the line.
+        const ordered = [...layout()].sort((a, b) => a.startTime - b.startTime);
+        ordered.forEach((placement, index) => {
+            if (index === 0) return;
+            const previous = ordered[index - 1];
+            expect(placement.settleTime - placement.startTime)
+                .toBeLessThanOrEqual(previous.settleTime - previous.startTime + 1e-9);
         });
     });
 
@@ -139,16 +148,11 @@ describe('Tempera collage layout', () => {
         // A shot can carry slices from two lines at once; staggering their landings would
         // read as two separate gestures instead of one composition arriving.
         const placements = layout();
-        const lyricEnd = Math.max(...placements.map(placement => placement.endTime));
-        const together = placements.filter(placement => Math.abs(placement.settleTime - lyricEnd) < 1e-6);
-        // Both slices are represented among the glyphs landing on that single moment...
-        expect(new Set(together.map(placement => placement.lineIndex))).toEqual(new Set([0, 1]));
-        // ...and they are the bulk of the shot; only the last few keep their own short window.
-        expect(together.length).toBeGreaterThan(placements.length / 2);
+        expect(new Set(placements.map(placement => placement.lineIndex))).toEqual(new Set([0, 1]));
+        expect(new Set(placements.map(placement => placement.settleTime)).size).toBe(1);
     });
 
-    it('paces the settle window from the gap to the next glyph', () => {
-        // A slow line stretches the entrance; a dense one keeps it tight.
+    it('gives a slow shot a longer entrance than a dense one', () => {
         const slow = resolveTemperaLayout({
             lines: [[segment('slow', 0, 6)]],
             shotKind: 'duo-split',

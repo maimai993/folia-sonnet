@@ -49,6 +49,8 @@ export interface TemperaGlyphMotionFrame {
 }
 
 const CURRENT_EMPHASIS = 0.05;
+/** How long the sung swell takes to fall away once the glyph is done. */
+const EMPHASIS_DECAY = 0.26;
 const ECHO_ALPHA = 0.5;
 /**
  * Longest window the *reveal* - opacity and the motion echo - is allowed to run over.
@@ -82,13 +84,20 @@ export const resolveTemperaGlyphMotion = (
     // Alpha resolves faster than position, so the glyph is readable while it is still moving.
     const alpha = easeTemperaInOut(clamp01(reveal * 2.4));
 
-    // Settled drift: a tiny two-frequency float that starts only once the entrance is done.
     // Current-glyph emphasis is a small scale swell, not a painted backing block: anything
     // drawn behind the glyph would become the backdrop the inversion filter reads, which is
     // exactly what turns the effect into a colored box instead of a reaction to the artwork.
-    const sungWindow = Math.max(glyph.endTime - glyph.startTime, 0.08);
-    const emphasis = (1 - easeTemperaInOut(clamp01((time - glyph.startTime) / (sungWindow + 0.18))))
-        * easeTemperaInOut(clamp01((time - glyph.startTime) / 0.12));
+    //
+    // It tracks the sung window itself - rise, hold, decay - rather than counting down from
+    // the start over a synthetic length. The old form gave every glyph a pulse whether or not
+    // it was ever sung, so each merged punctuation mark (zero-length by construction, since
+    // the parser's words do not cover it) popped on its own.
+    const sungWindow = glyph.endTime - glyph.startTime;
+    const attack = Math.min(0.12, sungWindow * 0.5);
+    const emphasis = sungWindow <= 0
+        ? 0
+        : easeTemperaInOut(clamp01((time - glyph.startTime) / Math.max(attack, 0.02)))
+            * (1 - easeTemperaInOut(clamp01((time - glyph.endTime) / EMPHASIS_DECAY)));
 
     // Release: once a glyph has been sung the block slowly opens its tracking instead of
     // freezing. A line that finished early would otherwise sit dead for the rest of a long

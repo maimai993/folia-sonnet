@@ -178,6 +178,13 @@ export interface TemperaShot {
     kind: TemperaShotKind;
     startTime: number;
     endTime: number;
+    /**
+     * When this shot's last grapheme stops singing. `endTime` is tiled up to the next shot's
+     * start (and the closing shot holds to the paragraph's tail), so it can sit seconds past
+     * the lyric; anything paced against the words - the block and image entrance stagger -
+     * has to use this instead, or the graphics are still arriving long after the type landed.
+     */
+    lyricEndTime: number;
     slices: TemperaShotSlice[];
     /**
      * A bridge shot carries an instrumental gap between paragraphs: it has no lyric slices,

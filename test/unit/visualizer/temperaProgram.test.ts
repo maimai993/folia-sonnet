@@ -69,6 +69,55 @@ describe('Tempera program compiler', () => {
         expect(segments.at(-1)?.endTime).toBeLessThanOrEqual(source.endTime);
     });
 
+    it('times sticky punctuation with the word it merges into', () => {
+        // The parser's words never cover a comma, so the grapheme timeline pins it zero-length
+        // to the *next* word's start. Merging it forward without re-timing made it arrive with
+        // the word after the one it is attached to, and dragged its segment's end there too.
+        const source = line('hello, world', 0, 2, [
+            { text: 'hello', startTime: 0, endTime: 1 },
+            { text: 'world', startTime: 1.2, endTime: 2 },
+        ]);
+        const [first] = buildTemperaSegments(source);
+
+        expect(first.text).toBe('hello,');
+        expect(first.endTime).toBeCloseTo(1, 6);
+        const comma = first.graphemes.at(-1)!;
+        expect(comma.char).toBe(',');
+        expect(comma.startTime).toBeCloseTo(1, 6);
+        expect(comma.endTime).toBeCloseTo(1, 6);
+    });
+
+    it('reports each shot\'s lyric end separately from its tiled end', () => {
+        // Shot ends are tiled up to the next shot's start, so the closing shot of a paragraph
+        // runs seconds past its last word. Anything paced against the words needs the real end.
+        const lines = [
+            line('one two three', 0, 1.5, [
+                { text: 'one', startTime: 0, endTime: 0.5 },
+                { text: 'two', startTime: 0.5, endTime: 1 },
+                { text: 'three', startTime: 1, endTime: 1.5 },
+            ]),
+            // The 1.5s rest before this line is what a shot ends up holding through.
+            line('four five six', 3, 4.5, [
+                { text: 'four', startTime: 3, endTime: 3.5 },
+                { text: 'five', startTime: 3.5, endTime: 4 },
+                { text: 'six', startTime: 4, endTime: 4.5 },
+            ]),
+        ];
+        const program = compileTemperaProgram(lines, 'lyric-end');
+        const shots = program.paragraphs.flatMap(paragraph => paragraph.shots);
+        expect(shots.length).toBeGreaterThan(0);
+        shots.forEach(shot => {
+            expect(shot.lyricEndTime).toBeGreaterThan(shot.startTime);
+            expect(shot.lyricEndTime).toBeLessThanOrEqual(shot.endTime + 1e-6);
+        });
+        // A bridge has no words of its own, so it paces over the whole gap.
+        shots.filter(shot => shot.isBridge).forEach(shot => {
+            expect(shot.lyricEndTime).toBeCloseTo(shot.endTime, 6);
+        });
+        // And at least one lyric shot really does hold well past its last word.
+        expect(shots.some(shot => !shot.isBridge && shot.endTime - shot.lyricEndTime > 1)).toBe(true);
+    });
+
     it('keeps repeated Latin words and contractions in source order', () => {
         const source = line("It's time, time.", 0, 3, [
             { text: "It's", startTime: 0, endTime: 0.8 },

@@ -18,7 +18,13 @@ type Graphics = import('pixi.js').Graphics;
 
 export interface TemperaBlocksView {
     container: import('pixi.js').Container;
-    updateTime: (time: number, shotStart: number, shotEnd: number) => void;
+    /**
+     * `shotEnd` is when the shot stops being shown; `lyricEnd` is when its last grapheme stops.
+     * The two differ because shot ends are tiled up to the next shot's start. The stagger is
+     * paced against the lyric so the graphics land with the words, while the creep runs for the
+     * whole visible life so a shot with a long instrumental tail never freezes.
+     */
+    updateTime: (time: number, shotStart: number, shotEnd: number, lyricEnd?: number) => void;
 }
 
 export interface TemperaBlocksOptions {
@@ -109,17 +115,18 @@ export const buildTemperaBlocks = (
     // Drives block motion from absolute time so seeks render the same frame. There is no exit
     // ramp here: the shot container owns the hand-off slide, so the outgoing composition
     // leaves as one piece with its own type still attached to it.
-    const updateTime = (time: number, shotStart: number, shotEnd: number) => {
+    const updateTime = (time: number, shotStart: number, shotEnd: number, lyricEnd?: number) => {
         const duration = Math.max(shotEnd - shotStart, 0.2);
+        const paceDuration = Math.max((lyricEnd ?? shotEnd) - shotStart, 0.2);
         const progress = clamp01((time - shotStart) / duration);
         // A steady creep along the flow vector for the whole shot; the camera rides the same
         // axis, so the frame is always already moving when the next composition arrives.
         const creep = easeTemperaInOut(progress) * carry * 0.35;
-        const budget = Math.max(0.5, duration);
+        const budget = Math.max(0.5, paceDuration);
 
         for (const item of items) {
-            const rawDelay = resolveShotPacedDuration(duration, item.delayFraction, 0, 1.4);
-            const rawSpan = resolveShotPacedDuration(duration, item.spanFraction, 0.7, 2.6);
+            const rawDelay = resolveShotPacedDuration(paceDuration, item.delayFraction, 0, 1.4);
+            const rawSpan = resolveShotPacedDuration(paceDuration, item.spanFraction, 0.7, 2.6);
             // Short shots compress the whole stagger instead of dropping the late items.
             const compress = Math.min(1, budget / (rawDelay + rawSpan));
             const enter = easeTemperaEnter((time - shotStart - rawDelay * compress) / (rawSpan * compress));

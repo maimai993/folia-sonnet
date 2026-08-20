@@ -172,33 +172,36 @@ const buildWordUnits = (
     });
 });
 
-/** Shortest and longest entrance the per-glyph pace on its own is allowed to ask for. */
+/** Shortest entrance the last glyph of a shot is guaranteed, which sets the shared landing. */
 const MIN_SETTLE_SECONDS = 0.34;
-const MAX_PACED_SETTLE_SECONDS = 1.35;
 
 /**
- * Derives each glyph's settle duration, then stretches it to the end of the lyric this shot
- * carries.
+ * Gives the whole shot a single landing moment, then sets the post-sung release.
  *
- * The pace-derived window (the gap before the next glyph) is only a *floor*: on a dense line
- * it bottoms out at a third of a second, which used to land every glyph almost as soon as it
- * appeared and made the shot read as a string of separate pops. Carrying every entrance
- * through to the end instead means the whole block is still easing into place as the shot's
- * lyric finishes, so the movement is continuous. The curve is heavily front-loaded, so a long
- * shot is a decisive opening followed by a slow creep, not a slow arrival - and the alpha and
- * echo ramps stay on the short window (see temperaMotion), because a glyph that stayed
- * half-transparent for that whole stretch would not be readable.
+ * Every glyph starts on its own lyric time and they all finish arriving together, at the end
+ * of the lyric this shot carries. A glyph's window is therefore just its distance to that
+ * moment: the earlier it appears the longer it eases in, decreasing smoothly to the floor for
+ * the last one. The block is still settling while the shot is being sung, which is what makes
+ * it read as one gesture rather than a run of separate pops - and because the curve is heavily
+ * front-loaded, a long shot is a decisive opening followed by a slow creep, not a slow arrival.
  *
- * The target is the shot's own lyric end, *not* the source line's. A shot shows a half-phrase
+ * Deriving the window per glyph from the gap to the next one (what this used to do) inverted
+ * the stagger: everything got a long window except the last few, which hit the pace clamp and
+ * snapped, so the final word of every phrase landed harder than the rest.
+ *
+ * The landing is the shot's own lyric end, *not* the source line's. A shot shows a half-phrase
  * slice and one line commonly runs across several shots, so `lines` here is already the set of
  * slices this shot carries: aiming at the source line's end would leave a shot's type still
- * arriving long after that shot had handed off. Slices shown together land together, which is
- * what makes a two-slice shot read as one gesture rather than two.
+ * arriving long after that shot had handed off. Slices shown together therefore land together.
+ * The floor keeps the landing from ever being at or before the last glyph's own start.
  *
- * It also sets the post-sung release: a glyph that stops moving the moment it has been sung
- * leaves the whole line frozen for the rest of a long shot. The release widens the block's
- * tracking from its centre outward, so each glyph's lever arm is simply its offset from that
- * centre. The ramp lasts as long as the glyph's own line and no longer.
+ * The alpha and echo ramps do not follow this window (see temperaMotion): a glyph that stayed
+ * half-transparent for the length of a shot would not be readable.
+ *
+ * The release is separate: a glyph that stops moving the moment it has been sung leaves the
+ * whole line frozen for the rest of a long shot, so the block slowly widens its tracking from
+ * its centre outward and each glyph's lever arm is simply its offset from that centre. That
+ * ramp lasts as long as the glyph's own line and no longer.
  */
 const applyGlyphTiming = (placements: TemperaGlyphPlacement[]) => {
     if (placements.length === 0) return placements;
@@ -213,25 +216,11 @@ const applyGlyphTiming = (placements: TemperaGlyphPlacement[]) => {
         lineStarts.set(placement.lineIndex, Math.min(current, placement.startTime));
     });
 
-    // Every placement here belongs to the one shot being laid out, so this is that shot's
-    // lyric end - the moment the entrance has to be finished by.
-    const shotLyricEnd = placements.reduce((latest, placement) => Math.max(latest, placement.endTime), 0);
-
-    const order = placements
-        .map((placement, index) => ({ index, startTime: placement.startTime }))
-        .sort((a, b) => a.startTime - b.startTime);
-    order.forEach((entry, position) => {
-        const placement = placements[entry.index];
-        const nextStart = order[position + 1]?.startTime;
-        const gap = nextStart !== undefined ? nextStart - placement.startTime : Number.POSITIVE_INFINITY;
-        const sung = Math.max(placement.endTime - placement.startTime, 0.08);
-        const pace = Math.max(Number.isFinite(gap) ? gap : sung, sung);
-        const paced = placement.startTime
-            + Math.min(MAX_PACED_SETTLE_SECONDS, Math.max(MIN_SETTLE_SECONDS, pace * 1.5));
-        // Never shortens an entrance: a glyph that starts near the end of the shot keeps the
-        // window its own pace asked for and simply lands a little after the lyric does.
-        placement.settleTime = Math.max(paced, shotLyricEnd);
-    });
+    // Every placement here belongs to the one shot being laid out.
+    const shotLyricEnd = placements.reduce((latest, p) => Math.max(latest, p.endTime), 0);
+    const lastStart = placements.reduce((latest, p) => Math.max(latest, p.startTime), 0);
+    const settleTime = Math.max(shotLyricEnd, lastStart + MIN_SETTLE_SECONDS);
+    placements.forEach(placement => { placement.settleTime = settleTime; });
     // Centre of the composed block; the expansion is measured from here, so the layout keeps
     // its exact shape and only its spacing opens up.
     const centerX = placements.reduce((sum, placement) => sum + placement.x, 0) / placements.length;

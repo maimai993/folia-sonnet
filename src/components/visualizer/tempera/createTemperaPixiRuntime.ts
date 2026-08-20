@@ -95,6 +95,12 @@ const closeImageBitmap = (source: unknown) => {
     if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap) source.close();
 };
 
+/**
+ * How far upstream an arriving shot starts, as a fraction of the viewport's long edge. Small
+ * on purpose; see the hand-off comment in `updateShot`.
+ */
+const SHOT_ARRIVAL_TRAVEL = 0.16;
+
 const resolveAnimationScale = (theme: Theme) => (
     theme.animationIntensity === 'calm' ? 0.65 : theme.animationIntensity === 'chaotic' ? 1.35 : 1
 );
@@ -407,11 +413,14 @@ export class TemperaPixiRuntime {
         // incoming one rather than being cut away.
         const handoff = this.resolveShotHandoff(view);
         const span = Math.max(width, height);
-        // The arrival is front-loaded on purpose: the glyphs start revealing on the shot's
-        // own timeline, so a slow entrance would expose type that is still off frame.
-        const enter = easeTemperaEnter(clamp01((time - view.shot.startTime) / (handoff * 0.8)));
+        // The arrival stays front-loaded: the first glyph of a shot starts revealing on the
+        // shot's own first frame, so a slow entrance would show type that is still off frame.
+        // The distance is deliberately small - the blocks carry their own staggered entrance,
+        // and a large container travel on top of it collapsed to nothing within ~0.2s, which
+        // read as a lurch at every shot boundary rather than as a move.
+        const enter = easeTemperaEnter(clamp01((time - view.shot.startTime) / handoff));
         const exit = easeTemperaInOut(this.resolveShotExit(view, time));
-        const travel = exit * span * 0.55 - (1 - enter) * span * 0.32;
+        const travel = exit * span * 0.55 - (1 - enter) * span * SHOT_ARRIVAL_TRAVEL;
         view.container.position.set(
             view.baseX + frame.x * width * camera + Math.cos(view.shot.flowAngle) * travel,
             view.baseY + frame.y * height * camera + Math.sin(view.shot.flowAngle) * travel,
@@ -421,8 +430,11 @@ export class TemperaPixiRuntime {
         view.container.scale.set((1 + (frame.scale - 1) * camera) * (1 - exit * 0.08));
         view.container.rotation = frame.rotation * camera;
 
-        view.blocks.updateTime(time, view.shot.startTime, view.shot.endTime);
-        view.images.updateTime(time, view.shot.startTime, view.shot.endTime);
+        // Two ends on purpose. The graphics' entrance stagger is paced against the lyric this
+        // shot carries; the steady flow creep runs for the shot's whole visible life, which is
+        // tiled up to the next shot's start and can be seconds longer.
+        view.blocks.updateTime(time, view.shot.startTime, view.shot.endTime, view.shot.lyricEndTime);
+        view.images.updateTime(time, view.shot.startTime, view.shot.endTime, view.shot.lyricEndTime);
 
         view.glyphs.forEach(glyph => {
             const frame = resolveTemperaGlyphMotion(glyph.motion, time, motion);
