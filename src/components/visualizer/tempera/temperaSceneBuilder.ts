@@ -15,8 +15,23 @@ import {
 } from './temperaTextView';
 import { createTemperaDifferenceFilter } from './temperaDifferenceFilter';
 import { buildTemperaImageLayer, type TemperaImageLayerView } from './temperaImageLayer';
-import { buildDotGrid, buildHatchSpec, circlePolygon, rectPolygon } from './temperaHatch';
-import { drawHatchFill, drawPolygonFill, drawPolygonOutline, drawSquareMarks } from './temperaShapes';
+import {
+    buildCrossRow,
+    buildCrossingLines,
+    buildDotGrid,
+    buildHatchSpec,
+    circlePolygon,
+    rectPolygon,
+} from './temperaHatch';
+import {
+    drawCrossMarks,
+    drawHatchFill,
+    drawLines,
+    drawPolygonFill,
+    drawPolygonOutline,
+    drawSquareMarks,
+    type TemperaGradientFill,
+} from './temperaShapes';
 import { createSonnetLensFilter } from '../sonnet/sonnetLensFilter';
 import { createSonnetPrintFilters } from '../sonnet/sonnetPrintFilters';
 
@@ -77,9 +92,14 @@ export const hasTemperaCreditsMetadata = (metadata: TemperaCreditsMetadata) => B
 );
 
 /**
- * Closing card. Oversized opaque discs press in from beyond the edges, a light panel holds the
- * middle, and the title crosses the boundary between them so the inversion filter flips it
- * mid-word - the same trick the lyrics use, applied to the outro.
+ * Closing card. It is assembled from the same vocabulary as the shot compositions - a flat
+ * tone ground, opaque tone masses with hard ink seams, one screentone hatch pass, and the
+ * shared crossing lines and corner motif - so the outro reads as one more shot rather than as
+ * a separate title screen bolted onto the end of the song.
+ *
+ * The masses are partial discs whose centres all sit outside the frame: each sweeps in from
+ * its own edge and the arcs cross over the middle, so the title straddles two or three tone
+ * boundaries at once and the inversion filter flips it mid-word.
  *
  * Everything is drawn around the container's own origin, so the runtime centres it by position
  * alone; giving this container a viewport pivot as well is what once parked the whole poster
@@ -106,6 +126,7 @@ interface CreditsItem {
     node: import('pixi.js').Container;
     baseX: number;
     baseY: number;
+    baseAlpha: number;
     enterDX: number;
     enterDY: number;
     delay: number;
@@ -116,6 +137,9 @@ interface CreditsItem {
 
 /** Asymptotic: always moving, never running away. */
 const creditsCreep = (elapsed: number) => 1 - Math.exp(-Math.max(0, elapsed) / 7);
+
+/** How many masses press in. Three is enough to cross over the type without muddying it. */
+const CREDITS_DISC_COUNT = 3;
 
 export const buildTemperaCreditsPoster = (
     pixi: PixiModule,
@@ -133,6 +157,11 @@ export const buildTemperaCreditsPoster = (
     const halfHeight = height / 2;
     // One seeded bit mirrors the whole layout, so the card is not always the same picture.
     const flip = temperaHash01(seed, 1, 229) > 0.5 ? 1 : -1;
+    // Gradient mode ramps every shot's fills; without this the card would be the one flat
+    // frame in the song, which is exactly what reads as a foreign design.
+    const gradient: TemperaGradientFill | null = palette.gradient
+        ? { colors: palette.gradient, angle: temperaHash01(seed, 3, 197) * Math.PI * 2 }
+        : null;
 
     const add = (
         node: import('pixi.js').Container,
@@ -142,6 +171,7 @@ export const buildTemperaCreditsPoster = (
             node,
             baseX: node.x,
             baseY: node.y,
+            baseAlpha: item.baseAlpha ?? 1,
             enterDX: item.enterDX ?? 0,
             enterDY: item.enterDY ?? 0,
             delay: item.delay ?? 0,
@@ -152,63 +182,79 @@ export const buildTemperaCreditsPoster = (
         container.addChild(node);
     };
 
+    // The tone ground, exactly as a composition lays it: full bleed, no motion of its own.
     container.addChild(drawPolygonFill(
         pixi,
         rectPolygon(-halfWidth - bleed, -halfHeight - bleed, width + bleed * 2, height + bleed * 2),
-        palette.paper,
+        palette.tone1,
         1,
+        gradient,
     ));
 
-    // A disc is pivoted on its own centre so it can drift and breathe as one piece.
-    const addDisc = (cx: number, cy: number, radius: number, tone: string, item: Partial<CreditsItem>) => {
-        const disc = drawPolygonFill(pixi, circlePolygon(0, 0, radius, 72), tone, 1);
-        disc.position.set(cx, cy);
-        add(disc, item);
-        const outline = drawPolygonOutline(pixi, circlePolygon(0, 0, radius, 72), palette.ink, 1.4, 0.35);
-        outline.position.set(cx, cy);
-        add(outline, item);
-    };
+    // The masses climb the tone ladder as they stack, so the last one in is the brightest and
+    // the type has a real edge to cross rather than three near-identical greys.
+    const tones = [palette.tone2, palette.tone3, palette.tone4];
+    const baseAngle = temperaHash01(seed, 4, 241) * Math.PI * 2;
+    const hatchIndex = Math.floor(temperaHash01(seed, 5, 251) * CREDITS_DISC_COUNT) % CREDITS_DISC_COUNT;
 
-    // Mid-tone disc pressing down from the top edge.
-    addDisc(
-        halfWidth * 0.4 * flip,
-        -halfHeight * 1.5,
-        diagonal * (0.34 + temperaHash01(seed, 2, 233) * 0.05),
-        palette.tone2,
-        { enterDY: -diagonal * 0.14, driftY: diagonal * 0.035, delay: 0.1 },
-    );
-    // Smaller one rolling in from the bottom corner.
-    addDisc(
-        -halfWidth * 0.8 * flip,
-        halfHeight * 1.2,
-        diagonal * (0.27 + temperaHash01(seed, 3, 239) * 0.05),
-        palette.tone2,
-        { enterDX: -diagonal * 0.12 * flip, driftX: diagonal * 0.03 * flip, delay: 0.22 },
-    );
+    for (let index = 0; index < CREDITS_DISC_COUNT; index += 1) {
+        // Spread around the frame, then jittered inside its own share of the circle.
+        const angle = baseAngle
+            + (index * Math.PI * 2) / CREDITS_DISC_COUNT
+            + (temperaHash01(seed, index, 257) - 0.5) * 0.7;
+        const distance = diagonal * (0.58 + temperaHash01(seed, index, 263) * 0.14);
+        // The near edge lands past the middle, which is what makes the arcs cross the type.
+        const radius = distance + diagonal * (0.06 + temperaHash01(seed, index, 269) * 0.1);
+        const polygon = circlePolygon(0, 0, radius, 72);
+        const cx = Math.cos(angle) * distance;
+        const cy = Math.sin(angle) * distance;
+        const delay = 0.08 + index * 0.16;
+        // Enters along its own inward vector and keeps creeping the same way afterwards.
+        const travel = {
+            enterDX: Math.cos(angle) * diagonal * 0.16,
+            enterDY: Math.sin(angle) * diagonal * 0.16,
+            driftX: -Math.cos(angle) * diagonal * 0.024,
+            driftY: -Math.sin(angle) * diagonal * 0.024,
+        };
+        const place = (node: import('pixi.js').Graphics, itemDelay: number) => {
+            node.position.set(cx, cy);
+            add(node, { ...travel, delay: itemDelay });
+        };
 
-    // The light plate the title sits on.
-    const panel = drawPolygonFill(
-        pixi,
-        rectPolygon(-halfWidth * 0.58 * flip, -halfHeight * 0.3, halfWidth * 0.86, halfHeight * 0.72),
-        palette.tone4,
-        1,
-    );
-    add(panel, { enterDX: -diagonal * 0.1 * flip, driftX: diagonal * 0.018 * flip, delay: 0.04 });
+        place(drawPolygonFill(pixi, polygon, tones[index], 1, gradient), delay);
+        if (index === hatchIndex) {
+            // The one screentone pass. Without it the card is flat vector art, which is the
+            // single thing none of the shot compositions ever are.
+            place(drawHatchFill(pixi, polygon, buildHatchSpec(seed, 271), palette.paper, 0.28), delay + 0.06);
+        }
+        // Seam weight matches addSeam in the split compositions: hard ink, not a hairline.
+        place(drawPolygonOutline(pixi, polygon, palette.ink, 2.4, 0.8), delay + 0.04);
+    }
 
-    // The big near-ground disc: it reads only where it bites into the plate, and its edge is
-    // what the title crosses.
-    addDisc(
-        halfWidth * flip,
-        halfHeight,
-        diagonal * 0.5,
-        palette.tone1,
-        { enterDX: diagonal * 0.16 * flip, enterDY: diagonal * 0.1, driftX: -diagonal * 0.03 * flip, delay: 0.34 },
-    );
+    // The two layers every shot carries: full-bleed guide lines, then a corner motif.
+    const lines = buildCrossingLines(seed, 31, width, height, 2)
+        .map(line => ({
+            x1: line.x1 - halfWidth,
+            y1: line.y1 - halfHeight,
+            x2: line.x2 - halfWidth,
+            y2: line.y2 - halfHeight,
+        }));
+    add(drawLines(pixi, lines, palette.tone4, 1.3, 0.6), { delay: 0.5, enterDX: width * 0.2 });
 
-    // A stroke-only ring, slowly opening.
-    const ring = drawPolygonOutline(pixi, circlePolygon(0, 0, diagonal * 0.21, 72), palette.ink, 1.5, 0.5);
-    ring.position.set(-halfWidth * 0.2 * flip, -halfHeight * 0.08);
-    add(ring, { delay: 0.5, grow: 0.09, driftY: diagonal * 0.02 });
+    if (options.tuning.showDecor) {
+        const cornerX = halfWidth * 0.66 * flip;
+        const cornerY = halfHeight * 0.62;
+        add(drawCrossMarks(
+            pixi,
+            buildCrossRow(seed, 71, cornerX - width * 0.1, cornerY, 5, width * 0.05, 8),
+            palette.tone4,
+            2,
+            0.8,
+        ), { delay: 0.62, enterDX: -width * 0.06 });
+        const box = rectPolygon(-cornerX - 19, -cornerY - 19, 38, 38);
+        add(drawHatchFill(pixi, box, buildHatchSpec(seed, 67), palette.tone4, 0.7), { delay: 0.68, grow: 0.06 });
+        add(drawPolygonOutline(pixi, box, palette.tone4, 1.2, 0.6), { delay: 0.72 });
+    }
 
     const fontFamily = resolveThemeFontStack(options.theme);
     const fontWeight = String(resolveThemeFontWeight(options.theme, 600)) as import('pixi.js').TextStyleFontWeight;
@@ -250,12 +296,14 @@ export const buildTemperaCreditsPoster = (
         titleLayer.filters = [filter];
         filters.push(filter);
     }
-    add(titleLayer, { enterDY: diagonal * 0.03, delay: 0.6 });
+    add(titleLayer, { enterDY: diagonal * 0.03, delay: 0.78 });
 
     const updateTime = (elapsed: number) => {
         const creep = creditsCreep(elapsed);
         for (const item of items) {
             const enter = easeTemperaEnter((elapsed - item.delay) / 1.1);
+            item.node.alpha = item.baseAlpha * enter;
+            item.node.visible = enter > 0.001;
             item.node.position.set(
                 item.baseX + item.enterDX * (1 - enter) + item.driftX * creep,
                 item.baseY + item.enterDY * (1 - enter) + item.driftY * creep,
