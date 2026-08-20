@@ -234,34 +234,51 @@ function scheduleWallpaperModeRelaunch(nextEnabled) {
 }
 
 // Startup wrapper: only the main process reaches main.cjs (GPU/renderer children start with
-// --type=... and exit before this), and it must run before the single-instance lock so a
-// re-exec jumpboard does not fight the real instance for the lock.
+// --type=... and exit before this). The jumpboard takes the single-instance lock before spawning
+// windowtolayer; the wrapped child uses FOLIA_RELAUNCH to retry after the jumpboard exits.
 const wallpaperMode = isWallpaperModeEnabled();
 const onWayland = Boolean(process.env.WAYLAND_DISPLAY);
-let wallpaperStartupPromise = null;
-if (wallpaperMode && onWayland && !isWallpaperWrapped()) {
+
+// Serializes ownership, wrapper launch, and crash-loop accounting.
+async function prepareMainProcessStartup() {
+  const gotSingleInstanceLock = await acquireSingleInstanceLock();
+  if (!gotSingleInstanceLock) {
+    return 'duplicate';
+  }
+
+  app.on('second-instance', () => {
+    focusMainWindow();
+  });
+
+  if (isWallpaperWrapped()) {
+    wallpaperWatchdog.recordWrappedLaunch();
+    wallpaperWatchdog.startParentLivenessProbe({ parentPid: process.ppid });
+    return 'ready';
+  }
+
+  if (!wallpaperMode || !onWayland) {
+    wallpaperWatchdog.resetWrappedCrashCount();
+    return 'ready';
+  }
+
   if (wallpaperWatchdog.shouldDisableWallpaperMode()) {
     // Repeated wrapped sessions crashed before the watchdog could fire; turn the mode off and
     // run as a plain window this time instead of re-entering the wrap loop.
     console.warn('[Wallpaper] repeated wrapped crashes, disabling wallpaper mode');
     store.set(WALLPAPER_MODE_SETTING_KEY, false);
-  } else {
-    // Keep the normal startup registration below alive while the jumpboard waits for the wrapper.
-    // A failed spawn resolves this promise and lets the same startup path continue normally.
-    wallpaperStartupPromise = launchWrappedSelf();
+    wallpaperWatchdog.resetWrappedCrashCount();
+    return 'fallback';
   }
+
+  const wrapperResult = await launchWrappedSelf();
+  if (wrapperResult !== 'spawned') {
+    wallpaperWatchdog.resetWrappedCrashCount();
+    return 'fallback';
+  }
+  return wrapperResult;
 }
 
-// (trigger point 2): while wrapped, the parent is windowtolayer. Probe its liveness every ~2s
-// and recover to a normal window if it died. The pid is captured once at startup: on Linux an
-// orphan is reparented to a subreaper, so re-reading process.ppid would return a live pid and
-// the ESRCH probe would never fire.
-if (isWallpaperWrapped()) {
-  wallpaperWatchdog.recordWrappedLaunch();
-  wallpaperWatchdog.startParentLivenessProbe({ parentPid: process.ppid });
-} else {
-  wallpaperWatchdog.resetWrappedCrashCount();
-}
+const mainProcessStartupPromise = prepareMainProcessStartup();
 
 // --- Electron main process locale map ---
 const APP_LOCALE_KEY = 'APP_LOCALE';
@@ -3341,27 +3358,17 @@ async function setMainWindowTransparentModeFromRemote(enabled) {
 }
 
 app.whenReady().then(async () => {
-  if (wallpaperStartupPromise) {
-    const startupResult = await wallpaperStartupPromise;
-    if (startupResult === 'spawned') {
-      return;
-    }
-    // A failed wrapper launch falls through to the normal window in this process. The initial
-    // click-through flag was derived before the async spawn result arrived, so clear it here before
-    // createWindow initializes the mouse-ignore state.
-    mainWindowClickThroughEnabled = false;
-  }
-
-  // Acquire the single-instance lock before building any window; a relaunch race
-  // (FOLIA_RELAUNCH=1) retries briefly instead of quitting like a plain second launch.
-  const gotSingleInstanceLock = await acquireSingleInstanceLock();
-  if (!gotSingleInstanceLock) {
+  const startupResult = await mainProcessStartupPromise;
+  if (startupResult === 'duplicate') {
     app.quit();
     return;
   }
-  app.on('second-instance', () => {
-    focusMainWindow();
-  });
+  if (startupResult === 'spawned') {
+    return;
+  }
+  if (startupResult === 'fallback') {
+    mainWindowClickThroughEnabled = false;
+  }
 
   if (process.platform === 'win32') {
     app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
