@@ -1515,6 +1515,29 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
+    "v0_6_20": {
+      "intro": "Here are the new features and improvements in version 0.6.20.",
+      "temperaVisualizer": {
+        "title": "Tempera Lyric PV",
+        "description": "A new screen-tone lyric visualizer with word-level motion, flowing shot handoffs, cover gradients, and an optional pool of canvas images."
+      },
+      "themeParkEditor": {
+        "title": "Full Theme Park Editor",
+        "description": "Edit light and dark theme colors, names, descriptions, word colors, and lyric icons with a live visualizer preview; import or export theme JSON when you want to use an AI-generated theme."
+      },
+      "coverDrivenThemes": {
+        "title": "Cover-Driven Theme Generation",
+        "description": "Built-in themes now derive their palettes from the current cover instead of relying on fixed presets, and cover-only generation can create a theme without an AI key."
+      },
+      "wallpaperMode": {
+        "title": "Linux Lyrics Wallpaper",
+        "description": "Linux desktop builds can sink Folia to the desktop layer and keep lyrics visible as a wallpaper, with recovery safeguards when the wallpaper wrapper fails."
+      },
+      "linuxCredentialStorage": {
+        "title": "More Reliable Linux Credentials",
+        "description": "Linux desktops such as Hyprland and sway now use the available encrypted credential store, so KuGou and QQ Music logins can persist across restarts."
+      }
+    },
     "v0_6_19": {
       "intro": "Here are the new features and improvements in version 0.6.19.",
       "audioEffectChain": {

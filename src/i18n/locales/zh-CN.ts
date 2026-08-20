@@ -1515,6 +1515,29 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
+    "v0_6_20": {
+      "intro": "以下是 0.6.20 的新功能与改进",
+      "temperaVisualizer": {
+        "title": "凝彩歌词 PV",
+        "description": "新增网点色块风格的歌词可视化，支持逐字动效、连续镜头交接、封面渐变，以及可选的画布图片池。"
+      },
+      "themeParkEditor": {
+        "title": "完整 Theme Park 主题编辑器",
+        "description": "可在实时可视化预览中编辑亮色与暗色主题的颜色、名称、描述、逐字颜色和歌词图标，也可以导入或导出主题 JSON 来处理 AI 生成的主题。"
+      },
+      "coverDrivenThemes": {
+        "title": "根据封面生成主题",
+        "description": "内置主题现在会从当前歌曲封面提取配色，不再依赖固定预设；封面取色模式也可以在没有 AI 密钥时直接生成主题。"
+      },
+      "wallpaperMode": {
+        "title": "Linux 歌词壁纸模式",
+        "description": "Linux 桌面端可以将 Folia 沉到桌面层，作为常驻的歌词壁纸显示；壁纸包装器异常时还会自动提供恢复保护。"
+      },
+      "linuxCredentialStorage": {
+        "title": "更可靠的 Linux 凭据保存",
+        "description": "Hyprland、sway 等 Linux 桌面环境现在会使用可用的加密凭据存储，让酷狗和 QQ 音乐登录状态能够跨重启保留。"
+      }
+    },
     "v0_6_19": {
       "intro": "以下是 0.6.19 的新功能与改进",
       "audioEffectChain": {

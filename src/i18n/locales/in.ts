@@ -1465,6 +1465,29 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia"
   },
   "releaseNotes": {
+    "v0_6_20": {
+      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.20.",
+      "temperaVisualizer": {
+        "title": "PV Lirik Tempera",
+        "description": "Visualizer lirik baru bergaya screen-tone dengan gerakan per kata, perpindahan shot yang mengalir, gradien sampul, dan kumpulan gambar kanvas opsional."
+      },
+      "themeParkEditor": {
+        "title": "Editor Theme Park Lengkap",
+        "description": "Edit warna, nama, deskripsi, warna kata, dan ikon lirik untuk tema terang maupun gelap dengan pratinjau visualizer langsung; impor atau ekspor JSON tema untuk tema yang dibuat AI."
+      },
+      "coverDrivenThemes": {
+        "title": "Pembuatan Tema dari Sampul",
+        "description": "Tema bawaan kini mengambil palet dari sampul saat ini alih-alih mengandalkan preset tetap, dan mode khusus sampul dapat membuat tema tanpa kunci AI."
+      },
+      "wallpaperMode": {
+        "title": "Wallpaper Lirik Linux",
+        "description": "Build desktop Linux dapat menempatkan Folia di lapisan desktop dan menampilkan lirik sebagai wallpaper, dengan perlindungan pemulihan saat pembungkus wallpaper gagal."
+      },
+      "linuxCredentialStorage": {
+        "title": "Kredensial Linux yang Lebih Andal",
+        "description": "Desktop Linux seperti Hyprland dan sway kini menggunakan penyimpanan kredensial terenkripsi yang tersedia, sehingga login KuGou dan QQ Music dapat bertahan setelah dimulai ulang."
+      }
+    },
     "v0_6_19": {
       "intro": "Berikut fitur baru dan peningkatan di versi 0.6.19.",
       "audioEffectChain": {
