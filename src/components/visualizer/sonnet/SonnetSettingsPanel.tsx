@@ -19,27 +19,27 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     onSliderCommit,
 }) => {
     const booleanOptions: VisualizerPresetOption<boolean>[] = useMemo(() => ([
-        { value: true, label: t('options.sonnetToggleOn') || '开启' },
-        { value: false, label: t('options.sonnetToggleOff') || '关闭' },
+        { value: true, label: t('options.sonnetToggleOn') },
+        { value: false, label: t('options.sonnetToggleOff') },
     ]), [t]);
 
     const outerFrameOptions: VisualizerPresetOption<SonnetOuterFrameMode>[] = useMemo(() => ([
-        { value: 'none', label: t('options.sonnetOuterFrameNone') || '完全隐藏' },
-        { value: 'frame', label: t('options.sonnetOuterFrameFrame') || '仅显示框架' },
-        { value: 'full', label: t('options.sonnetOuterFrameFull') || '完全显示' },
+        { value: 'none', label: t('options.sonnetOuterFrameNone') },
+        { value: 'frame', label: t('options.sonnetOuterFrameFrame') },
+        { value: 'full', label: t('options.sonnetOuterFrameFull') },
     ]), [t]);
 
     const visibilityControls: Array<{
         key: Extract<keyof SonnetTuning, 'showOnlyText' | 'showGuide' | 'showBackgroundMg' | 'showFixedGeo' | 'showGiantDecorativeText' | 'showBackgroundDecor' | 'enableTransitions'>;
         label: string;
     }> = [
-        { key: 'showOnlyText', label: t('options.sonnetShowOnlyText') || '仅显示文字' },
-        { key: 'showGuide', label: t('options.sonnetShowGuide') || '轨迹线' },
-        { key: 'showBackgroundMg', label: t('options.sonnetShowBackgroundMg') || '主场景' },
-        { key: 'showFixedGeo', label: t('options.sonnetShowFixedGeo') || '文字浮标' },
-        { key: 'showGiantDecorativeText', label: t('options.sonnetShowGiantDecorativeText') || '巨型装饰镂空文字' },
-        { key: 'showBackgroundDecor', label: t('options.sonnetShowBackgroundDecor') || '背景装饰' },
-        { key: 'enableTransitions', label: t('options.sonnetEnableTransitions') || '场景转场' },
+        { key: 'showOnlyText', label: t('options.sonnetShowOnlyText') },
+        { key: 'showGuide', label: t('options.sonnetShowGuide') },
+        { key: 'showBackgroundMg', label: t('options.sonnetShowBackgroundMg') },
+        { key: 'showFixedGeo', label: t('options.sonnetShowFixedGeo') },
+        { key: 'showGiantDecorativeText', label: t('options.sonnetShowGiantDecorativeText') },
+        { key: 'showBackgroundDecor', label: t('options.sonnetShowBackgroundDecor') },
+        { key: 'enableTransitions', label: t('options.sonnetEnableTransitions') },
     ];
 
     const motionControls: Array<{
@@ -104,9 +104,9 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 ))}
             </SonnetSettingsSection>
 
-            <SonnetSettingsSection title={t('options.sonnetPostProcessSection') || '后处理'}>
+            <SonnetSettingsSection title={t('options.sonnetPostProcessSection')}>
                 <VisualizerPresetGroup
-                    label={t('options.sonnetPostProcessEnabled') || '整体后处理滤镜'}
+                    label={t('options.sonnetPostProcessEnabled')}
                     value={sonnetTuning.postProcessEnabled}
                     options={booleanOptions}
                     onChange={postProcessEnabled => onSonnetTuningChange?.({ postProcessEnabled })}
@@ -116,7 +116,7 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 {sonnetTuning.postProcessEnabled && (
                     <>
                         <SonnetRangeControl
-                            label={t('options.sonnetPostProcessGrain') || '胶片颗粒'}
+                            label={t('options.sonnetPostProcessGrain')}
                             value={sonnetTuning.postProcessGrain}
                             min={0}
                             max={1}
@@ -127,7 +127,7 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                             onPointerUp={onSliderCommit}
                         />
                         <SonnetRangeControl
-                            label={t('options.sonnetPostProcessContrast') || '对比度增强'}
+                            label={t('options.sonnetPostProcessContrast')}
                             value={sonnetTuning.postProcessContrast}
                             min={0}
                             max={1}
@@ -149,7 +149,7 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                             onPointerUp={onSliderCommit}
                         />
                         <SonnetRangeControl
-                            label={t('options.sonnetPostProcessLensDistortion') || '透镜扭曲'}
+                            label={t('options.sonnetPostProcessLensDistortion')}
                             value={sonnetTuning.postProcessLensDistortion}
                             min={0}
                             max={2}
@@ -160,7 +160,7 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                             onPointerUp={onSliderCommit}
                         />
                         <SonnetRangeControl
-                            label={t('options.sonnetPostProcessLensDispersion') || '透镜色散'}
+                            label={t('options.sonnetPostProcessLensDispersion')}
                             value={sonnetTuning.postProcessLensDispersion}
                             min={0}
                             max={1}
@@ -171,7 +171,7 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                             onPointerUp={onSliderCommit}
                         />
                         <SonnetRangeControl
-                            label={t('options.sonnetPostProcessHalftone') || '半调网点'}
+                            label={t('options.sonnetPostProcessHalftone')}
                             value={sonnetTuning.postProcessHalftone}
                             min={0}
                             max={1}
@@ -182,7 +182,7 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                             onPointerUp={onSliderCommit}
                         />
                         <SonnetRangeControl
-                            label={t('options.sonnetPostProcessVignette') || '暗角'}
+                            label={t('options.sonnetPostProcessVignette')}
                             value={sonnetTuning.postProcessVignette}
                             min={0}
                             max={2}

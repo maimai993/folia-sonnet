@@ -98,7 +98,7 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
     items,
     onSelect,
     isLoading = false,
-    emptyMessage = "No items",
+    emptyMessage,
     textBottomClass = "bottom-24",
     initialFocusedIndex = 0,
     onFocusedIndexChange,
@@ -363,7 +363,7 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                             })
                         ) : (
                             <div className="opacity-50 flex flex-col items-center gap-4">
-                                <span>{emptyMessage}</span>
+                                <span>{emptyMessage || t('ui.noItems')}</span>
                             </div>
                         )}
                     </div>

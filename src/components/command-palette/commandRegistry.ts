@@ -1,4 +1,5 @@
 import { PlayerState, type HomeViewTab, type ReplayGainMode, type SongResult, type VisualizerMode, type VisualizerBackgroundMode, type MonetBackgroundTuning } from '../../types';
+import i18n from '../../i18n/config';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import { syncNow } from '../../services/sync/syncCoordinator';
@@ -137,7 +138,7 @@ const createQueueSearchCommand = (): CommandPaletteCommand => ({
     description: 'Search the current play queue',
     keywords: ['queue', '播放队列', '队列搜索', 'duilie', 'duiliesousuo', 'dl', 'dlss'],
     icon: ListMusic,
-    placeholder: '输入歌曲名 / 艺术家 / 索引',
+    placeholder: i18n.t('commandPalette.previewQueueSearchEmpty'),
     requiresInput: true,
     getPreview: (input, context) => {
         const trimmedInput = input.trim();

@@ -406,9 +406,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
             const fmItem = {
                 id: 'personal_fm',
-                name: '私人FM',
+                name: t('home.personalFm'),
                 coverUrl: fmCoverUrl,
-                description: 'Personal FM',
+                description: t('home.personalFm'),
                 isFm: true,
             };
 
@@ -648,7 +648,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     ? 'opacity-90 hover:opacity-100'
                                     : 'opacity-40 hover:opacity-100'
                                 }`}
-                            title="Help & Options"
+                            title={t('ui.options')}
                         >
                             <Settings size={20} style={{ color: 'var(--text-primary)' }} />
                             {showUpdateIndicator && (
@@ -697,7 +697,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                                 {t('options.scanProgressDesc')}
                                             </div>
                                             <div className="mt-3 flex items-center justify-between text-xs font-mono">
-                                                <span>进度</span>
+                                                <span>{t('ui.progress')}</span>
                                                 <span>{Math.min(scanProgress.completedSongs, scanProgress.totalSongs)} / {scanProgress.totalSongs}</span>
                                             </div>
                                             <div className={`mt-2 w-full h-2 rounded-full overflow-hidden ${isDaylight ? 'bg-black/10' : 'bg-white/10'}`}>

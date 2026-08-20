@@ -527,7 +527,7 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
                                                 e.currentTarget.style.borderColor = borderColor;
                                                 e.currentTarget.style.boxShadow = 'none';
                                             }}
-                                            placeholder="Enter theme name..."
+                                            placeholder={t('ui.enterThemeName')}
                                             spellCheck={false}
                                         />
                                     </label>

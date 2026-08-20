@@ -126,10 +126,10 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                 setSyncConfig(getSyncConfig());
                 setSyncStatus({ state: 'success', lastSyncAt: new Date().toISOString(), lastError: null });
                 setTestResult('success');
-                setSyncSummaryMsg('测试成功 (Test Successful)');
+                setSyncSummaryMsg(t('ui.storage.syncTestSuccess'));
             } else {
                 setTestResult('error');
-                setSyncSummaryMsg('连接失败或凭证无效 (Connection Failed)');
+                setSyncSummaryMsg(t('ui.storage.syncTestFailed'));
             }
         } catch (error) {
             setTestResult('error');
@@ -150,7 +150,7 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
         try {
             const summary = await syncNow({ syncThemes: true, applyRemoteSettings: false, pushSettings: false });
             if (summary) {
-                setSyncSummaryMsg(`主题同步完成。上传 ${summary.uploadedThemeCount} 个，下载 ${summary.downloadedThemeCount} 个，本地 ${summary.checkedLocalThemeCount} 个，共处理 ${summary.diffBucketCount} 个差异桶。`);
+                setSyncSummaryMsg(t('ui.storage.syncThemesComplete', { uploaded: summary.uploadedThemeCount, downloaded: summary.downloadedThemeCount, local: summary.checkedLocalThemeCount, diff: summary.diffBucketCount }));
             }
         } finally {
             setSyncAction('idle');
@@ -167,9 +167,9 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
             const summary = await syncNow({ syncThemes: false, applyRemoteSettings: true, pushSettings: true });
             if (summary) {
                 const parts = [];
-                if (summary.appliedRemoteSettings) parts.push('已拉取并应用云端设置');
-                if (summary.pushedLocalSettings) parts.push('已向云端推送本地最新设置');
-                setSyncSummaryMsg(parts.length > 0 ? `视觉设置同步完成。${parts.join('，')}。` : '视觉设置与云端一致，无需同步。');
+                if (summary.appliedRemoteSettings) parts.push(t('ui.storage.syncAppliedRemote'));
+                if (summary.pushedLocalSettings) parts.push(t('ui.storage.syncPushedLocal'));
+                setSyncSummaryMsg(parts.length > 0 ? t('ui.storage.syncSettingsComplete', { details: parts.join(', ') }) : t('ui.storage.syncSettingsNoChange'));
             }
         } finally {
             setSyncAction('idle');
@@ -254,7 +254,7 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                                 onClick={() => onClear(item.id)}
                                 disabled={isCleaning === item.id}
                                 className={`p-2 hover:bg-white/10 rounded-lg ${errorTextColor} opacity-60 hover:opacity-100 transition-all disabled:opacity-20`}
-                                title="Clear"
+                                title={t('ui.clear')}
                             >
                                 {isCleaning === item.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                             </button>
@@ -386,7 +386,7 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                                 className="flex-1 px-3 py-2.5 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg text-xs font-medium transition-colors flex justify-center items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed text-purple-400"
                             >
                                 {syncAction === 'syncingSettings' ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />}
-                                {t('options.syncVisualSettings') || '同步视觉设置'}
+                                {t('options.syncVisualSettings')}
                             </button>
                         </div>
 

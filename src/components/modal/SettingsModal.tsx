@@ -1338,9 +1338,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 onClick={handleAuthorLabelClick}
                                                 className="hover:opacity-100 transition-opacity"
                                                 style={{ color: 'inherit' }}
-                                                aria-label="meow"
+                                                aria-label={t('help.madeBy')}
                                             >
-                                                {t('help.madeBy') || "Made by"}
+                                                {t('help.madeBy')}
                                             </button>{' '}
                                             <a href="https://github.com/chthollyphile/folia-major" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors underline decoration-white/30 hover:decoration-white">chthollyphile/folia-major</a>
                                         </p>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react';
+import i18n from '../i18n/config';
 import { omni } from '../services/onlineMusic/omni';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
@@ -125,7 +126,7 @@ export const useKugouLibrary = () => {
             }
             if (omni.getProviderCapabilities('kugou').userCloud) {
                 collections.push({
-                    providerId: 'kugou', id: 'cloud', name: '音乐云盘', type: 'cloud',
+                    providerId: 'kugou', id: 'cloud', name: i18n.t('ui.cloudDrive'), type: 'cloud',
                     coverUrl: user.avatarUrl,
                 });
             }
