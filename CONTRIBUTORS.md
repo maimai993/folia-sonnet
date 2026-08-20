@@ -70,6 +70,9 @@ Thanks goes to these wonderful people. Issue reports, bug reports, ideas, docs, 
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/KurumizawaRio"><img src="https://avatars.githubusercontent.com/u/71334741?v=4?s=100" width="100px;" alt="KurumizawaRio"/><br /><sub><b>KurumizawaRio</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3AKurumizawaRio" title="Bug reports">🐛</a> <a href="#ideas-KurumizawaRio" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/yoser-s"><img src="https://avatars.githubusercontent.com/u/123047804?v=4?s=100" width="100px;" alt="yoser-s"/><br /><sub><b>yoser-s</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/issues?q=author%3Ayoser-s" title="Bug reports">🐛</a></td>
     </tr>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/CrKcel"><img src="https://avatars.githubusercontent.com/u/140730205?v=4?s=100" width="100px;" alt="CrKcel"/><br /><sub><b>CrKcel</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/commits?author=CrKcel" title="Code">💻</a></td>
+    </tr>
   </tbody>
 </table>
 
