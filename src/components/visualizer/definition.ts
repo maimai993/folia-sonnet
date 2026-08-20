@@ -43,6 +43,12 @@ export interface VisualizerSharedProps {
     songArtist?: string | null;
     songAlbum?: string | null;
     coverUrl?: string | null;
+    /**
+     * Tempera canvas images shipped inline by the OBS overlay. That page is a separate browsing
+     * context with no access to the app's IndexedDB, so when this is present the visualizer uses
+     * it instead of reading the pool from storage.
+     */
+    temperaLayerImageAssets?: { id: string; name: string; url: string }[];
     seed?: string | number;
     staticMode?: boolean;
     backgroundStaticMode?: boolean;

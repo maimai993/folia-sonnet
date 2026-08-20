@@ -218,6 +218,7 @@ const ObsBrowserSourceApp: React.FC = () => {
                 cappellaCustomEmojiImages={config.cappellaCustomEmojiImages}
                 cappellaCustomAvatarImages={config.cappellaCustomAvatarImages}
                 monetPortraitImage={config.monetPortraitImage}
+                temperaLayerImageAssets={config.temperaLayerImageAssets}
             />
         </div>
     );

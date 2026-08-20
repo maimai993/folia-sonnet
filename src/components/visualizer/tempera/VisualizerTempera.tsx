@@ -31,6 +31,7 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
         paused = false,
         seed = 'tempera',
         coverUrl,
+        temperaLayerImageAssets,
         songTitle,
         songArtist,
         songAlbum,
@@ -149,23 +150,37 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
     const layerImages = temperaTuning.layerImages;
     const layerImagesRef = useRef(layerImages);
     layerImagesRef.current = layerImages;
-    // Keyed on the id set, not the array: dragging a placement slider hands down a new array
-    // every pointer move, and re-reading IndexedDB for each of those would be pure waste.
+    const injectedAssetsRef = useRef(temperaLayerImageAssets);
+    injectedAssetsRef.current = temperaLayerImageAssets;
+    // Keyed on the id set, not the array: dragging a slider hands down a new array every
+    // pointer move, and re-reading storage for each of those would be pure waste.
     const layerImageIds = layerImages.map(image => image.id).join('|');
+    const injectedAssetIds = (temperaLayerImageAssets ?? []).map(asset => asset.id).join('|');
     useEffect(() => {
         const placements = layerImagesRef.current;
+        const injected = injectedAssetsRef.current;
         if (placements.length === 0) {
             setImageBlobs(new Map());
             return undefined;
         }
         let active = true;
-        void loadTemperaLayerImageBlobs(placements).then(blobs => {
+        // The OBS overlay ships the pool inline because that page has no access to the app's
+        // IndexedDB; when it does, storage is not consulted at all.
+        const load = injected && injected.length > 0
+            ? Promise.all(injected.map(async asset => [
+                asset.id,
+                await fetch(asset.url).then(response => response.blob()),
+            ] as const)).then(entries => new Map(entries))
+            : loadTemperaLayerImageBlobs(placements);
+        void load.then(blobs => {
             if (active) setImageBlobs(blobs);
+        }).catch(() => {
+            if (active) setImageBlobs(new Map());
         });
         return () => {
             active = false;
         };
-    }, [layerImageIds]);
+    }, [layerImageIds, injectedAssetIds]);
 
     // Tuning is pushed into the live renderer rather than rebuilding it. A rebuild per pointer
     // move re-initialises WebGL, re-decodes every placed image and re-measures every line.

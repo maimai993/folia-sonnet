@@ -90,6 +90,12 @@ export interface ObsBrowserSourceConfig {
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
     monetPortraitImage?: MonetPortraitImage | null;
+    /**
+     * Tempera's canvas image pool, inlined as data URLs. The overlay is served from the local
+     * OBS server and is therefore a different origin from the main window, so it cannot read
+     * the IndexedDB these files actually live in.
+     */
+    temperaLayerImageAssets?: { id: string; name: string; url: string }[];
     updatedAt: number;
 }
 
