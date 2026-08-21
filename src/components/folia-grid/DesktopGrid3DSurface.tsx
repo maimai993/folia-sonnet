@@ -6,6 +6,7 @@ import { Theme } from '../../types';
 import { Grid3DSlider, Grid3DSliderItem } from './Grid3DSlider';
 import { ChevronDown } from 'lucide-react';
 import type { GridMapBatchConfig } from './gridMapBatch';
+import { isHideableGridItem } from './gridItemVisibility';
 
 // src/components/folia-grid/DesktopGrid3DSurface.tsx
 // Shared desktop home surface that keeps Grid3D slider and GridMap controls visually consistent.
@@ -88,7 +89,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
         [hiddenPlaylistsByScope, playlistVisibilityScope],
     );
     const visibleItems = useMemo(
-        () => items.filter(item => item.type !== 'playlist' || !hiddenPlaylistIds.has(String(item.id))),
+        () => items.filter(item => !isHideableGridItem(item) || !hiddenPlaylistIds.has(String(item.id))),
         [hiddenPlaylistIds, items],
     );
     const visibleFocusedIndex = useMemo(() => {
@@ -108,7 +109,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     };
 
     const togglePlaylistHidden = (item: Grid3DSliderItem) => {
-        if (item.type !== 'playlist') return;
+        if (!isHideableGridItem(item)) return;
 
         const id = String(item.id);
         setHiddenPlaylistsByScope(previous => {

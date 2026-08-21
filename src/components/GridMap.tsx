@@ -18,6 +18,7 @@ import {
 } from './folia-grid/gridMapNavigation';
 import { formatGridMapFolderTitle } from '../utils/gridMapFolderPath';
 import { getSizedCoverUrl } from '../utils/coverUrl';
+import { isHideableGridItem } from './folia-grid/gridItemVisibility';
 
 // src/components/GridMap.tsx
 // Hexagonal honeycomb layout showing all collections (playlists, albums, radios).
@@ -87,7 +88,7 @@ const MapCard = React.memo<{
         cardHeight,
     }) => {
         const { t } = useTranslation();
-        const isPlaylistSelectionDisabled = isPlaylistEditMode && item.type === 'playlist';
+        const isPlaylistSelectionDisabled = isPlaylistEditMode && isHideableGridItem(item);
         const displayName = item.type === 'folder' && item.path
             ? formatGridMapFolderTitle(item.path)
             : item.name;
@@ -148,7 +149,7 @@ const MapCard = React.memo<{
                             <Disc size={48} className="opacity-20" style={{ color: 'var(--text-primary)' }} />
                         </div>
                     )}
-                    {isPlaylistEditMode && item.type === 'playlist' && onTogglePlaylistHidden && (
+                    {isPlaylistEditMode && isHideableGridItem(item) && onTogglePlaylistHidden && (
                         <button
                             type="button"
                             onClick={(event) => {
@@ -259,8 +260,8 @@ export const GridMap: React.FC<GridMapProps> = ({
     const [isPlaylistEditMode, setIsPlaylistEditMode] = useState(false);
     const [showHiddenPlaylistsOnly, setShowHiddenPlaylistsOnly] = useState(false);
     const [selectedBatchItemIds, setSelectedBatchItemIds] = useState<Set<string>>(new Set());
-    const hasPlaylistItems = useMemo(() => items.some(item => item.type === 'playlist'), [items]);
-    const hasCutInPanel = hasPlaylistItems || Boolean(batchConfig);
+    const hasHideableItems = useMemo(() => items.some(isHideableGridItem), [items]);
+    const hasCutInPanel = hasHideableItems || Boolean(batchConfig);
 
     const selectDisplayedItem = useCallback((item: GridMapItem, displayIndex: number) => {
         const sourceIndex = resolveGridMapSourceIndex(items, item, displayIndex);
@@ -315,12 +316,12 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     const visibleItems = useMemo(() => {
         if (isPlaylistEditMode && showHiddenPlaylistsOnly) {
-            return items.filter(item => item.type === 'playlist' && isPlaylistHidden(item));
+            return items.filter(item => isHideableGridItem(item) && isPlaylistHidden(item));
         }
 
         return isPlaylistEditMode
             ? items
-            : items.filter(item => item.type !== 'playlist' || !isPlaylistHidden(item));
+            : items.filter(item => !isHideableGridItem(item) || !isPlaylistHidden(item));
     }, [isPlaylistEditMode, isPlaylistHidden, items, showHiddenPlaylistsOnly]);
 
     const displayItems = useMemo(() => {
@@ -632,7 +633,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                         isHidden={isPlaylistHidden(item)}
                         isBatchMode={Boolean(batchConfig && showCutInPanel)}
                         isBatchSelected={selectedBatchItemIds.has(String(item.id))}
-                        onTogglePlaylistHidden={item.type === 'playlist' && onTogglePlaylistHidden
+                        onTogglePlaylistHidden={isHideableGridItem(item) && onTogglePlaylistHidden
                             ? () => onTogglePlaylistHidden(item)
                             : undefined}
                         cardWidth={layoutConfig.cardWidth}
@@ -649,7 +650,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                                 });
                                 return;
                             }
-                            if (isPlaylistEditMode && item.type === 'playlist') return;
+                            if (isPlaylistEditMode && isHideableGridItem(item)) return;
                             selectDisplayedItem(item, idx);
                         }}
                     />
