@@ -3,15 +3,17 @@ import type { RefObject } from 'react';
 import { PlayerState } from '../types';
 import type { SongResult } from '../types';
 import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from '../services/onlineMusic/songMetadata';
+import { isMediaSessionSourceReady, publishMediaSessionTrack } from '../utils/mediaSessionSync';
 
 // Bridges Folia playback state to the browser Media Session API.
 type UseMediaSessionBridgeOptions = {
     audioRef: RefObject<HTMLAudioElement | null>;
+    audioSrc: string | null;
     currentSong: SongResult | null;
     cachedCoverUrl: string | null;
     playerState: PlayerState;
     isNowPlayingStageActive: boolean;
-    t: (key: string) => string;
+    unknownArtistLabel: string;
     mediaSessionPlayRef: RefObject<() => Promise<void>>;
     mediaSessionPauseRef: RefObject<() => void>;
     mediaSessionPrevRef: RefObject<() => void>;
@@ -21,11 +23,12 @@ type UseMediaSessionBridgeOptions = {
 
 export const useMediaSessionBridge = ({
     audioRef,
+    audioSrc,
     currentSong,
     cachedCoverUrl,
     playerState,
     isNowPlayingStageActive,
-    t,
+    unknownArtistLabel,
     mediaSessionPlayRef,
     mediaSessionPauseRef,
     mediaSessionPrevRef,
@@ -93,34 +96,52 @@ export const useMediaSessionBridge = ({
             return;
         }
 
-        const mediaSession = navigator.mediaSession;
-
         if (!currentSong) {
             try {
-                mediaSession.metadata = null;
+                navigator.mediaSession.setPositionState();
+                navigator.mediaSession.metadata = null;
             } catch (e) {
                 console.warn('[MediaSession] Failed to clear metadata', e);
             }
             return;
         }
 
-        const artistName = getSongArtistLabel(currentSong) || t('ui.unknownArtist');
-        const albumName = getSongAlbumLabel(currentSong);
-        const cover = cachedCoverUrl || getSongCoverUrl(currentSong) || '';
-
-        try {
-            mediaSession.metadata = new MediaMetadata({
-                title: currentSong.name,
-                artist: artistName,
-                album: albumName,
-                artwork: cover ? [
-                    { src: cover, sizes: '512x512', type: 'image/jpeg' }
-                ] : []
-            });
-        } catch (e) {
-            console.warn('[MediaSession] Failed to update metadata', e);
+        const audio = audioRef.current;
+        if (!audio || !audioSrc) {
+            return;
         }
-    }, [cachedCoverUrl, currentSong, t]);
+
+        let disposed = false;
+        const publish = () => {
+            if (disposed || !isMediaSessionSourceReady(audio, audioSrc, document.baseURI)) {
+                return;
+            }
+
+            try {
+                publishMediaSessionTrack(navigator.mediaSession, audio, {
+                    title: currentSong.name,
+                    artist: getSongArtistLabel(currentSong) || unknownArtistLabel,
+                    album: getSongAlbumLabel(currentSong),
+                    artworkUrl: cachedCoverUrl || getSongCoverUrl(currentSong) || '',
+                });
+            } catch (e) {
+                console.warn('[MediaSession] Failed to update metadata', e);
+            }
+        };
+
+        audio.addEventListener('loadedmetadata', publish);
+        audio.addEventListener('durationchange', publish);
+        // Re-publish after playback starts in case Chromium delivered a late clear from the old source.
+        audio.addEventListener('playing', publish);
+        publish();
+
+        return () => {
+            disposed = true;
+            audio.removeEventListener('loadedmetadata', publish);
+            audio.removeEventListener('durationchange', publish);
+            audio.removeEventListener('playing', publish);
+        };
+    }, [audioRef, audioSrc, cachedCoverUrl, currentSong, unknownArtistLabel]);
 
     useEffect(() => {
         if (!('mediaSession' in navigator)) {

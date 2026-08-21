@@ -1491,11 +1491,12 @@ export default function App() {
 
     useMediaSessionBridge({
         audioRef,
+        audioSrc,
         currentSong,
         cachedCoverUrl,
         playerState,
         isNowPlayingStageActive,
-        t: (key) => t(key),
+        unknownArtistLabel: t('ui.unknownArtist'),
         mediaSessionPlayRef,
         mediaSessionPauseRef,
         mediaSessionPrevRef,
