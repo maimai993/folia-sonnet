@@ -44,6 +44,26 @@ import { createSonnetPrintFilters } from '../sonnet/sonnetPrintFilters';
 // Builds one bounded paragraph scene; playback-time mutation remains in the runtime controller.
 type PixiModule = typeof import('pixi.js');
 
+/**
+ * The lyric's colour filter. In gradient mode the ramp only exists as this filter's tint, so
+ * switching `textInversion` off must not take the filter with it - that would drop the whole
+ * colour mode back to flat ink. Without a ramp and without the inversion there is nothing left
+ * to do, and the layer stays unfiltered.
+ */
+const createTemperaTextFilter = (
+    pixi: PixiModule,
+    palette: TemperaPalette,
+    inversion: boolean,
+): import('pixi.js').Filter | null => {
+    if (!inversion && !palette.textGradient) return null;
+    return createTemperaDifferenceFilter(pixi, {
+        ink: palette.ink,
+        paper: palette.paper,
+        tint: palette.textGradient,
+        inversion,
+    });
+};
+
 export interface TemperaShotView {
     shot: TemperaShot;
     container: import('pixi.js').Container;
@@ -288,14 +308,10 @@ export const buildTemperaCreditsPoster = (
     if (subtitle) buildLine(subtitle, Math.max(14, titleSize * 0.34), title.height / 2 + titleSize * 0.22, 0.75);
 
     // The title stays put while the shapes move under it, so the inversion keeps re-cutting it.
-    if (options.tuning.textInversion) {
-        const filter = createTemperaDifferenceFilter(pixi, {
-            ink: palette.ink,
-            paper: palette.paper,
-            tint: palette.textGradient,
-        });
-        titleLayer.filters = [filter];
-        filters.push(filter);
+    const titleFilter = createTemperaTextFilter(pixi, palette, options.tuning.textInversion);
+    if (titleFilter) {
+        titleLayer.filters = [titleFilter];
+        filters.push(titleFilter);
     }
     add(titleLayer, { enterDY: diagonal * 0.03, delay: 0.78 });
 
@@ -524,15 +540,12 @@ export const buildTemperaScene = (
         // Scoped to the text layer only: blendRequired copies the pixels under these bounds
         // every frame, so a full-scene filter here would be a viewport-sized blit. In gradient
         // colour mode the ramp rides along as a tint - the filter still decides the luminance,
-        // which is the only thing keeping the lyric readable over arbitrary artwork.
-        if (tuning.textInversion) {
-            const differenceFilter = createTemperaDifferenceFilter(pixi, {
-                ink: palette.ink,
-                paper: palette.paper,
-                tint: palette.textGradient,
-            });
-            textLayer.filters = [differenceFilter];
-            postProcessFilters.push(differenceFilter);
+        // which is the only thing keeping the lyric readable over arbitrary artwork. With the
+        // inversion switched off the same ramp is applied on its own, with no backdrop read.
+        const textFilter = createTemperaTextFilter(pixi, palette, tuning.textInversion);
+        if (textFilter) {
+            textLayer.filters = [textFilter];
+            postProcessFilters.push(textFilter);
         }
         // A bridge shot has no type to reveal, so the camera breath may start immediately -
         // an instrumental gap should not hold a rigid frame.

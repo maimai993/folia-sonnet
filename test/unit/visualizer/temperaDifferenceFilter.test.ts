@@ -108,6 +108,30 @@ describe('Tempera difference filter', () => {
         expect(fragment).toContain('toneLuminance / tintLuminance');
     });
 
+    it('keeps the ramp when the inversion is switched off', () => {
+        // Gradient mode's lyric colour only exists as this filter's tint, so `textInversion:
+        // false` must fall back to a tint-only pass rather than to no filter at all - the
+        // latter left the text flat ink and lost the colour mode.
+        const filter = buildFilter({
+            ink: '#ffffff',
+            paper: '#000000',
+            tint: ['#ff0000', '#00ff00', '#0000ff', '#ffff00'],
+            inversion: false,
+        });
+
+        expect(filter.glProgram.name).toBe('tempera-text-tint');
+        expect(uniformsOf(filter).uTintAmount.value).toBe(1);
+        expect(filter.glProgram.fragment).toContain('sampleTint(tintPosition(vTextureCoord))');
+        // Same ramp geometry as the inverted form: swept across the filter's own bounds.
+        expect(filter.glProgram.fragment).toContain('uv.x * uInputSize.x / max(uOutputFrame.z, 1.0)');
+        // No backdrop is read, so the pass must not ask Pixi to copy one every frame.
+        expect(filter.blendRequired).toBe(false);
+        expect(filter.resources.uBackTexture).toBeUndefined();
+        expect(filter.glProgram.fragment).not.toContain('uBackTexture');
+        // A hard 1 here would rasterize the type below the canvas resolution.
+        expect(filter.resolution).toBe('inherit');
+    });
+
     it('carries no time-varying uniform, so a seek needs no filter update', () => {
         const uniforms = uniformsOf(buildFilter({ ink: '#fff', paper: '#000' }));
 
