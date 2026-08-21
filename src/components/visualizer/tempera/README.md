@@ -14,7 +14,7 @@
 - 拼贴排版与测量：`temperaLayout.ts`、`temperaMeasure.ts`
 - 运动求解：`temperaMotion.ts`、`temperaMotionEasing.ts`、`temperaEnterStyles.ts`
 - 图形语汇：`temperaHatch.ts`（纯生成器）、`temperaShapes.ts`（Pixi Graphics 工厂）、`temperaBlocks.ts`（运动状态）
-- 文字反色：`temperaDifferenceFilter.ts`；调色板：`temperaPalette.ts`；镜头：`temperaCamera.ts`
+- 文字反色：`temperaDifferenceFilter.ts`；scene 级 filter 挂载：`temperaSceneFilters.ts`；调色板：`temperaPalette.ts`；镜头：`temperaCamera.ts`
 - 画布图片池：`temperaImageLayer.ts`、`TemperaImageLayerControls.tsx`、`TemperaImageLayerDialog.tsx`、`useTemperaLayerImageThumbnails.ts`、`src/services/temperaLayerImages.ts`
 
 ## 编译期：段落、shot、slice
@@ -59,7 +59,7 @@
 
 ## 文字反色
 
-文字反色由 `temperaDifferenceFilter.ts` 完成：它声明 `blendRequired`，读取 `uBackTexture`（filter 区域下层已渲染像素）的亮度，逐像素在 ink / paper 中选对比更强的一色。filter 必须显式设 `resolution: 'inherit'`——pixi 的 `Filter` 默认是硬编码的 `1`，而 back texture 永远跟随渲染目标的 resolution，两张纹理经 `nextPow2` 池化后逻辑尺寸不同，同一个 `vTextureCoord` 会采到偏移位置（偏移随离原点距离线性增大），表现为文字成片反色错误、细 hatch 上尤其明显。filter 只挂在 textLayer 上（bounds 越小拷贝越少），叠影副本必须放在**被 filter 的那一层里面**，不能放在它下面——放下面它就成了 filter 要读的底色，每个字会对着自己的重影反色、沿笔画碎成硬斑块；放在层内则重影和字被同一次判定统一上色，读作套版偏移的第二次印刷。换句话说 filter 之下的层里不能出现任何字形状的东西（装饰大字是例外，它就是要让歌词跨过它翻色）；Tempera 没有 halo 泛光层——screen 混合的辉光会把字洗白，而且无论放在字上还是字下都会变成 filter 要读的底色；current-glyph 不画任何衬底块（衬底会变成 filter 读到的底色，结果就是一个纯色方块而不是对画面的反应），改用极小的缩放起伏表示当前字；runtime 的 `app.init` 需要 `useBackBuffer: true`，否则 WebGL 下整个 filter 栈会被 skip（文字退化为静态 ink 色）。反色有自己的开关 `textInversion`（**默认开**），不挂在 `postProcessEnabled` 下——那个设置默认 false，挂上去等于整个效果对绝大多数用户是死的。gradient 色彩模式下反色自动关闭：那时每个字自带彩色 ramp，反色会把所有文字像素刷成单一 ink/paper，渐变就没了。`temperaPalette.ts` 的 `ensureInkContrast` 保证 ink 与 paper 的亮度差 ≥96，否则（主题把浅色 primary 配浅色背景时）反色只是在两个几乎相同的浅色之间二选一。
+文字反色由 `temperaDifferenceFilter.ts` 完成：它声明 `blendRequired`，读取 `uBackTexture`（filter 区域下层已渲染像素）的亮度，逐像素在 ink / paper 中选对比更强的一色。filter 必须显式设 `resolution: 'inherit'`——pixi 的 `Filter` 默认是硬编码的 `1`，而 back texture 永远跟随渲染目标的 resolution，两张纹理经 `nextPow2` 池化后逻辑尺寸不同，同一个 `vTextureCoord` 会采到偏移位置（偏移随离原点距离线性增大），表现为文字成片反色错误、细 hatch 上尤其明显。filter 只挂在 textLayer 上（bounds 越小拷贝越少），叠影副本必须放在**被 filter 的那一层里面**，不能放在它下面——放下面它就成了 filter 要读的底色，每个字会对着自己的重影反色、沿笔画碎成硬斑块；放在层内则重影和字被同一次判定统一上色，读作套版偏移的第二次印刷。换句话说 filter 之下的层里不能出现任何字形状的东西（装饰大字是例外，它就是要让歌词跨过它翻色）；Tempera 没有 halo 泛光层——screen 混合的辉光会把字洗白，而且无论放在字上还是字下都会变成 filter 要读的底色；current-glyph 不画任何衬底块（衬底会变成 filter 读到的底色，结果就是一个纯色方块而不是对画面的反应），改用极小的缩放起伏表示当前字；runtime 的 `app.init` 需要 `useBackBuffer: true`，否则 WebGL 下整个 filter 栈会被 skip（文字退化为静态 ink 色）。**反色层之上不能停放任何「挂着但 disabled」的 filter**：pixi 复制 `uBackTexture` 时是按 filter 栈上*外层*那个 filter 的 bounds 取原点的，而 disabled 的 filter 仍然会被 push 成一条 skip 记录，`_getPreviousFilterData` 又会把这条 skip 记录返回回来（它的 `bounds` 还停在初始的 `Infinity`），于是拷贝原点塌成 (0,0)——每个字都对着画面**左上角**那块像素反色，而不是自己底下的画面。段落 scene 上的转场模糊以前就是这么停着的，只有开了后处理时外层才换成一条有效记录，所以「不开后处理反色就读错纹理」。现在模糊只在真的模糊时才挂到 scene 容器上（`temperaSceneFilters.ts` 的 `setTemperaTransitionBlur`，不模糊时把 `container.filters` 置空数组让 pixi 摘掉整个 effect），不再用 `filter.enabled` 停放。反色有自己的开关 `textInversion`（**默认开**），不挂在 `postProcessEnabled` 下——后处理是一条用户随时会关掉的观感开关（它现在默认开，但早先默认 false，挂上去等于整个效果对绝大多数用户是死的），而反色是这个模式给文字上色的方式，两者不能绑在一起。gradient 色彩模式下反色自动关闭：那时每个字自带彩色 ramp，反色会把所有文字像素刷成单一 ink/paper，渐变就没了。`temperaPalette.ts` 的 `ensureInkContrast` 保证 ink 与 paper 的亮度差 ≥96，否则（主题把浅色 primary 配浅色背景时）反色只是在两个几乎相同的浅色之间二选一。
 
 ## 片尾卡
 

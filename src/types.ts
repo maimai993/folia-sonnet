@@ -660,7 +660,7 @@ export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
   layerImageFrequency: 0.6,
   enableTransitions: true,
   textureResolution: 1.5,
-  postProcessEnabled: false,
+  postProcessEnabled: true,
   postProcessGrain: 0.2,
   postProcessContrast: 0,
   postProcessRgbShift: 0,

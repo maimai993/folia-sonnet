@@ -14,6 +14,7 @@ import {
     type TemperaGlyphView,
 } from './temperaTextView';
 import { createTemperaDifferenceFilter } from './temperaDifferenceFilter';
+import type { TemperaSceneFilterTarget } from './temperaSceneFilters';
 import { buildTemperaImageLayer, type TemperaImageLayerView } from './temperaImageLayer';
 import {
     buildCrossRow,
@@ -56,13 +57,13 @@ export interface TemperaShotView {
     revealDoneTime: number;
 }
 
-export interface TemperaSceneView {
+export interface TemperaSceneView extends TemperaSceneFilterTarget {
     paragraph: TemperaParagraph;
     container: import('pixi.js').Container;
     shots: TemperaShotView[];
     palette: TemperaPalette;
+    /** Everything the runtime has to destroy with the scene, blur included. */
     postProcessFilters: import('pixi.js').Filter[];
-    transitionBlurFilter: import('pixi.js').BlurFilter | null;
     activeShotIndex: number;
 }
 
@@ -557,11 +558,13 @@ export const buildTemperaScene = (
         };
     });
 
+    const baseFilters: import('pixi.js').Filter[] = [];
     if (tuning.postProcessEnabled && !options.staticMode) {
         const sceneFilters = applyTemperaScenePostProcess(pixi, container, tuning, sceneSeed);
         if (sceneFilters.length > 0) {
             // Keep full-scene shaders in viewport space even when visible bounds are smaller.
             container.filterArea = new pixi.Rectangle(0, 0, width, height);
+            baseFilters.push(...sceneFilters);
             postProcessFilters.push(...sceneFilters);
         }
     }
@@ -572,8 +575,9 @@ export const buildTemperaScene = (
     if (transitionBlurFilter) {
         // Pins padding at 0 so ramping blur never rescales the shared vignette pass.
         transitionBlurFilter.repeatEdgePixels = true;
-        transitionBlurFilter.enabled = false;
-        container.filters = [...(container.filters ?? []), transitionBlurFilter];
+        // Left attached-but-disabled it becomes a skipped stack entry that misplaces the
+        // inversion's backdrop copy, so the runtime attaches it per transition instead -
+        // see `temperaSceneFilters.ts`.
         postProcessFilters.push(transitionBlurFilter);
     }
     container.visible = false;
@@ -583,7 +587,9 @@ export const buildTemperaScene = (
         shots,
         palette,
         postProcessFilters,
+        baseFilters,
         transitionBlurFilter,
+        transitionBlurAttached: false,
         activeShotIndex: -1,
     };
 };
