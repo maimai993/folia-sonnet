@@ -403,6 +403,7 @@ const decompressSonnet = (o: any): any => ({
 const compressTempera = (t: any): any => ({
     ci: t.cameraIntensity,
     gm: t.glyphMotion,
+    gss: t.glyphSettleStretch,
     cm: t.colorMode,
     sb: t.showBlocks,
     sd: t.showDecor,
@@ -413,6 +414,7 @@ const compressTempera = (t: any): any => ({
     et: t.enableTransitions,
     tr: t.textureResolution,
     ppe: t.postProcessEnabled,
+    pptc: t.postProcessTextureCompression,
     ppg: t.postProcessGrain,
     ppc: t.postProcessContrast,
     ppr: t.postProcessRgbShift,
@@ -422,6 +424,7 @@ const compressTempera = (t: any): any => ({
 const decompressTempera = (o: any): any => ({
     cameraIntensity: o.ci !== undefined ? o.ci : DEFAULT_TEMPERA_TUNING.cameraIntensity,
     glyphMotion: o.gm !== undefined ? o.gm : DEFAULT_TEMPERA_TUNING.glyphMotion,
+    glyphSettleStretch: o.gss !== undefined ? o.gss : DEFAULT_TEMPERA_TUNING.glyphSettleStretch,
     colorMode: o.cm !== undefined ? o.cm : DEFAULT_TEMPERA_TUNING.colorMode,
     showBlocks: o.sb !== undefined ? o.sb : DEFAULT_TEMPERA_TUNING.showBlocks,
     showDecor: o.sd !== undefined ? o.sd : DEFAULT_TEMPERA_TUNING.showDecor,
@@ -432,6 +435,9 @@ const decompressTempera = (o: any): any => ({
     enableTransitions: o.et !== undefined ? o.et : DEFAULT_TEMPERA_TUNING.enableTransitions,
     textureResolution: o.tr !== undefined ? o.tr : DEFAULT_TEMPERA_TUNING.textureResolution,
     postProcessEnabled: o.ppe !== undefined ? o.ppe : DEFAULT_TEMPERA_TUNING.postProcessEnabled,
+    postProcessTextureCompression: o.pptc !== undefined
+        ? o.pptc
+        : DEFAULT_TEMPERA_TUNING.postProcessTextureCompression,
     postProcessGrain: o.ppg !== undefined ? o.ppg : DEFAULT_TEMPERA_TUNING.postProcessGrain,
     postProcessContrast: o.ppc !== undefined ? o.ppc : DEFAULT_TEMPERA_TUNING.postProcessContrast,
     postProcessRgbShift: o.ppr !== undefined ? o.ppr : DEFAULT_TEMPERA_TUNING.postProcessRgbShift,

@@ -20,6 +20,48 @@
 // container was the parked transition blur, which is exactly such a skipped entry. So the blur
 // goes on for the length of the transition and comes off again; it is never parked disabled.
 
+import type { TemperaTuning } from '../../../types';
+
+type TemperaResolutionTuning = Pick<TemperaTuning, 'postProcessTextureCompression' | 'textureResolution'>;
+
+/**
+ * The resolution every filter on the scene container runs at.
+ *
+ * Pixi's `Filter` default is a hard `resolution: 1`, and none of the shared sonnet passes
+ * override it, so switching post-processing on used to rasterize the whole composition at one
+ * device pixel per CSS pixel and stretch it back up to the canvas (`textureResolution`, 1.5 by
+ * default). Fine hatch, the screentone lattice and the type all softened - the sharpest thing
+ * in the mode paid for the grain. 'inherit' keeps the pass at the canvas resolution instead,
+ * and the compression switch keeps the old downscale available for weak GPUs.
+ *
+ * This is safe for the lyric inversion, which is otherwise very sensitive to resolution: Pixi
+ * takes the *minimum* resolution across the filters in one array, so a container's whole pass
+ * lands on a single value; the difference filter one level down asks for `'inherit'`, which
+ * resolves to the resolution of the surface it is rendering into - that same pass - and its
+ * `uBackTexture` is copied from that same surface at that same resolution. Input and backdrop
+ * therefore keep identical pooled (pow2) sizes and one `vTextureCoord` indexes both. The rule
+ * to preserve: never give the text layer's own filter a fixed resolution, and never mix fixed
+ * resolutions inside one array expecting them to survive - the minimum wins.
+ */
+export const resolveTemperaPassResolution = (
+    tuning: TemperaResolutionTuning,
+): number | 'inherit' => (
+    tuning.postProcessTextureCompression ? compressedPassResolution(tuning) : 'inherit'
+);
+
+/** Compression never *raises* the pass above the canvas it will be stretched onto. */
+const compressedPassResolution = (tuning: TemperaResolutionTuning) => Math.min(1, tuning.textureResolution);
+
+/**
+ * The transition blur has always run at half the pass around it - it is blurring anyway, and it
+ * only exists during a transition. Deriving it from the pass keeps that ratio when the pass is
+ * no longer pinned to 1: a hard 0.5 would drop a 1.5x scene by three quarters the moment the
+ * blur attaches, while its strength is still imperceptible.
+ */
+export const resolveTemperaTransitionBlurResolution = (tuning: TemperaResolutionTuning) => (
+    (tuning.postProcessTextureCompression ? compressedPassResolution(tuning) : tuning.textureResolution) * 0.5
+);
+
 export interface TemperaSceneFilterTarget {
     container: import('pixi.js').Container;
     /** Filters that live for the whole scene (the post-process chain); may be empty. */

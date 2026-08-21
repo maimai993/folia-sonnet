@@ -1134,6 +1134,8 @@ export default {
     "temperaEnableTransitions": "Scene Transitions",
     "temperaPostProcessSection": "Post-processing",
     "temperaPostProcessEnabled": "Master Post-process Filters",
+    "temperaPostProcessTextureCompression": "Post-process Texture Compression",
+    "temperaPostProcessTextureCompressionHint": "Runs the post-process pass on a 1x texture and stretches it onto the canvas, saving fill rate at the cost of softer screentone, hairlines and type. Off keeps the pass at the texture resolution.",
     "temperaPostProcessGrain": "Film Grain",
     "temperaPostProcessContrast": "Contrast Boost",
     "temperaPostProcessRgbShift": "RGB Shift",

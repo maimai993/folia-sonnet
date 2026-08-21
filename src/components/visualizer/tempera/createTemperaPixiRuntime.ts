@@ -129,6 +129,8 @@ const requiresSceneRebuild = (previous: TemperaTuning, next: TemperaTuning) => (
     || previous.textInversion !== next.textInversion
     || previous.enableTransitions !== next.enableTransitions
     || previous.postProcessEnabled !== next.postProcessEnabled
+    // Baked into every filter on the scene at build time, so it cannot be pushed in place.
+    || previous.postProcessTextureCompression !== next.postProcessTextureCompression
     || previous.postProcessGrain !== next.postProcessGrain
     || previous.postProcessContrast !== next.postProcessContrast
     || previous.postProcessRgbShift !== next.postProcessRgbShift

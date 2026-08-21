@@ -601,6 +601,9 @@ const readStoredTemperaTuning = (): TemperaTuning => {
             postProcessEnabled: typeof parsed.postProcessEnabled === 'boolean'
                 ? parsed.postProcessEnabled
                 : DEFAULT_TEMPERA_TUNING.postProcessEnabled,
+            postProcessTextureCompression: typeof parsed.postProcessTextureCompression === 'boolean'
+                ? parsed.postProcessTextureCompression
+                : DEFAULT_TEMPERA_TUNING.postProcessTextureCompression,
             postProcessGrain: resolvePendoloNumber(parsed.postProcessGrain, DEFAULT_TEMPERA_TUNING.postProcessGrain, 0, 1),
             postProcessContrast: resolvePendoloNumber(parsed.postProcessContrast, DEFAULT_TEMPERA_TUNING.postProcessContrast, 0, 1),
             postProcessRgbShift: resolvePendoloNumber(parsed.postProcessRgbShift, DEFAULT_TEMPERA_TUNING.postProcessRgbShift, 0, 1),
@@ -2393,6 +2396,9 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             postProcessEnabled: typeof patch.postProcessEnabled === 'boolean'
                 ? patch.postProcessEnabled
                 : prev.postProcessEnabled,
+            postProcessTextureCompression: typeof patch.postProcessTextureCompression === 'boolean'
+                ? patch.postProcessTextureCompression
+                : prev.postProcessTextureCompression,
             postProcessGrain: resolvePendoloNumber(patch.postProcessGrain, prev.postProcessGrain, 0, 1),
             postProcessContrast: resolvePendoloNumber(patch.postProcessContrast, prev.postProcessContrast, 0, 1),
             postProcessRgbShift: resolvePendoloNumber(patch.postProcessRgbShift, prev.postProcessRgbShift, 0, 1),

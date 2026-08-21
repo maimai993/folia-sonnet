@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
-import { DEFAULT_NOMAND_BACKGROUND_TUNING, DEFAULT_SONNET_TUNING } from '@/types';
+import { DEFAULT_NOMAND_BACKGROUND_TUNING, DEFAULT_SONNET_TUNING, DEFAULT_TEMPERA_TUNING } from '@/types';
 
 // test/unit/visualizer/visualSettingsImportExport.test.ts
 // Verifies visual settings configuration compression, base64 encoding, and decompression/restoration.
@@ -356,6 +356,37 @@ describe('Visual Settings Import and Export', () => {
         const decoded = decompressConfig(code);
 
         expect(decoded.dioramaTuning).toEqual(sampleConfig.dioramaTuning);
+    });
+
+    it('round-trips every Tempera tuning field through the short code', () => {
+        // A field that never got a short key silently reverts to its default on import, and the
+        // only symptom is "my shared look came back wrong". Round-tripping non-default values
+        // for the whole object is what catches the next one that gets forgotten.
+        const temperaTuning = {
+            ...DEFAULT_TEMPERA_TUNING,
+            cameraIntensity: 1.4,
+            glyphMotion: 0.6,
+            glyphSettleStretch: 0.85,
+            colorMode: 'gradient' as const,
+            showBlocks: false,
+            showDecor: false,
+            textInversion: false,
+            layerImages: [{ id: 'img-1', name: 'stand.png', align: 'right' as const, scale: 0.42, opacity: 0.8 }],
+            layerImageDepth: 'front' as const,
+            layerImageFrequency: 0.25,
+            enableTransitions: false,
+            textureResolution: 2,
+            postProcessEnabled: false,
+            postProcessTextureCompression: true,
+            postProcessGrain: 0.45,
+            postProcessContrast: 0.35,
+            postProcessRgbShift: 0.55,
+            postProcessVignette: 1.4,
+            postProcessLensDistortion: 1.1,
+        };
+        const decoded = decompressConfig(compressConfig({ temperaTuning }));
+
+        expect(decoded.temperaTuning).toEqual(temperaTuning);
     });
 
     it('gracefully throws error on invalid configuration input strings', () => {

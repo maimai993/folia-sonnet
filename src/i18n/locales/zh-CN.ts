@@ -1136,6 +1136,8 @@ export default {
     "temperaEnableTransitions": "场景转场",
     "temperaPostProcessSection": "后处理",
     "temperaPostProcessEnabled": "整体后处理滤镜",
+    "temperaPostProcessTextureCompression": "后处理纹理压缩",
+    "temperaPostProcessTextureCompressionHint": "开启后后处理在 1x 纹理上运算再拉伸到画布，省显存和填充率，但网点、细线和文字会变软；关闭则按纹理分辨率原样运算。",
     "temperaPostProcessGrain": "胶片颗粒",
     "temperaPostProcessContrast": "对比度增强",
     "temperaPostProcessRgbShift": "RGB 色差",

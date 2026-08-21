@@ -14,7 +14,11 @@ import {
     type TemperaGlyphView,
 } from './temperaTextView';
 import { createTemperaDifferenceFilter } from './temperaDifferenceFilter';
-import type { TemperaSceneFilterTarget } from './temperaSceneFilters';
+import {
+    resolveTemperaPassResolution,
+    resolveTemperaTransitionBlurResolution,
+    type TemperaSceneFilterTarget,
+} from './temperaSceneFilters';
 import { buildTemperaImageLayer, type TemperaImageLayerView } from './temperaImageLayer';
 import {
     buildCrossRow,
@@ -365,6 +369,14 @@ const applyTemperaScenePostProcess = (
         vignette: tuning.postProcessVignette,
     });
     if (printFilters.length > 0) filters.push(...printFilters);
+    // Every pass in the array has to carry the same resolution - Pixi keeps the minimum for the
+    // whole container - and none of the shared sonnet factories set one, so they would each
+    // default to a hard 1. See `resolveTemperaPassResolution` for why that softened the scene
+    // and why it is safe for the inversion nested below.
+    const resolution = resolveTemperaPassResolution(tuning);
+    filters.forEach(filter => {
+        filter.resolution = resolution;
+    });
     if (filters.length > 0) container.filters = filters;
     return filters;
 };
@@ -583,7 +595,12 @@ export const buildTemperaScene = (
     }
 
     const transitionBlurFilter = tuning.enableTransitions && !options.staticMode
-        ? new pixi.BlurFilter({ strength: 0, quality: 1, kernelSize: 5, resolution: 0.5 })
+        ? new pixi.BlurFilter({
+            strength: 0,
+            quality: 1,
+            kernelSize: 5,
+            resolution: resolveTemperaTransitionBlurResolution(tuning),
+        })
         : null;
     if (transitionBlurFilter) {
         // Pins padding at 0 so ramping blur never rescales the shared vignette pass.

@@ -635,6 +635,12 @@ export interface TemperaTuning {
   textureResolution: number;
   /** Master switch for the scene-wide post-process stack (grain + contrast + print passes). */
   postProcessEnabled: boolean;
+  /**
+   * 后处理纹理压缩: renders the post-process pass at 1x and stretches it onto the canvas
+   * instead of running it at `textureResolution`. Costs sharpness on hatch, screentone and
+   * type; buys back the fill rate a full-resolution full-screen pass costs.
+   */
+  postProcessTextureCompression: boolean;
   /** Film grain amount, 0..1. */
   postProcessGrain: number;
   /** Contrast boost, 0..1. */
@@ -661,6 +667,7 @@ export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
   enableTransitions: true,
   textureResolution: 1.5,
   postProcessEnabled: true,
+  postProcessTextureCompression: false,
   postProcessGrain: 0.2,
   postProcessContrast: 0,
   postProcessRgbShift: 0,
