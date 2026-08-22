@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_TEMPERA_LAYER_IMAGE, DEFAULT_TEMPERA_TUNING } from '@/types';
+import { DEFAULT_TEMPERA_LAYER_IMAGE, DEFAULT_TEMPERA_TUNING, TEMPERA_MAX_LAYER_IMAGES } from '@/types';
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 
 // test/unit/visualizer/temperaSettings.test.ts
@@ -70,7 +70,7 @@ describe('Tempera canvas images', () => {
 
     it('caps the number of placements and survives a non-array', () => {
         expect(setImages(Array.from({ length: 30 }, (_, index) => ({ id: `i${index}`, name: 'x' }))))
-            .toHaveLength(8);
+            .toHaveLength(TEMPERA_MAX_LAYER_IMAGES);
         expect(setImages('not an array')).toEqual([]);
     });
 });

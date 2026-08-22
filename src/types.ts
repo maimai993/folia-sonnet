@@ -598,6 +598,8 @@ export interface TemperaLayerImage {
   opacity: number;
 }
 
+export const TEMPERA_MAX_LAYER_IMAGES = 16;
+
 export const DEFAULT_TEMPERA_LAYER_IMAGE: Omit<TemperaLayerImage, 'id' | 'name'> = {
   align: 'free',
   scale: 0.7,
