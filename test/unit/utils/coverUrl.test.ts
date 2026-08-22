@@ -15,6 +15,24 @@ describe('coverUrl utilities', () => {
             .toBe('https://p1.music.126.net/abc/109951.jpg?param=50y50');
     });
 
+    it('uses exact KuGou CDN sizes for official album cover hosts', () => {
+        const imgeCover = 'https://imge.kugou.com/stdmusic/400/20251014/cover.jpg';
+        const kgimgCover = 'https://c1.kgimg.com/stdmusic/1024/20251014/cover.jpg';
+
+        expect(getSizedCoverUrl(imgeCover, 120))
+            .toBe('https://imge.kugou.com/stdmusic/120/20251014/cover.jpg');
+        expect(getSizedCoverUrl(imgeCover, 512))
+            .toBe('https://imge.kugou.com/stdmusic/512/20251014/cover.jpg');
+        expect(getSizedCoverUrl(kgimgCover, 1024))
+            .toBe('https://c1.kgimg.com/stdmusic/1024/20251014/cover.jpg');
+    });
+
+    it('does not rewrite KuGou-shaped paths from unrelated hosts', () => {
+        const coverUrl = 'https://example.test/stdmusic/400/20251014/cover.jpg';
+
+        expect(getSizedCoverUrl(coverUrl, 1024)).toBe(coverUrl);
+    });
+
     it('uses QQ Music CDN size buckets for album covers', () => {
         const coverUrl = 'https://y.gtimg.cn/music/photo_new/T002R300x300M000album-mid.jpg?max_age=2592000';
 

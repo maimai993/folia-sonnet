@@ -123,6 +123,22 @@ describe('kugouProvider', () => {
         expect(song.album.catalogRef).toEqual({ providerId: 'kugou', kind: 'album', id: 9 });
     });
 
+    it('keeps a high-resolution canonical KuGou cover for templates and sized CDN URLs', () => {
+        const templateSong = normalizeKugouSong({
+            FileHash: 'template-cover',
+            Image: 'http://imge.kugou.com/stdmusic/{size}/20251014/cover.jpg',
+        });
+        const sizedSong = normalizeKugouSong({
+            FileHash: 'sized-cover',
+            Image: 'https://c1.kgimg.com/stdmusic/400/20251014/cover.jpg',
+        });
+
+        expect(templateSong.album.coverUrl)
+            .toBe('https://imge.kugou.com/stdmusic/1024/20251014/cover.jpg');
+        expect(sizedSong.album.coverUrl)
+            .toBe('https://c1.kgimg.com/stdmusic/1024/20251014/cover.jpg');
+    });
+
     it('normalizes KuGou climax ranges from millisecond strings', async () => {
         requestMock.mockResolvedValue({
             status: 1,
@@ -181,7 +197,7 @@ describe('kugouProvider', () => {
             fmt: 'krc',
             decode: true,
         });
-        expect(song.album.coverUrl).toBe('https://imge.kugou.com/stdmusic/400/cover.jpg');
+        expect(song.album.coverUrl).toBe('https://imge.kugou.com/stdmusic/1024/cover.jpg');
     });
 
     it('reads canonical song metadata without normalizing it a second time', () => {
@@ -623,7 +639,7 @@ describe('kugouProvider', () => {
             isOwned: true,
             trackCount: 4,
             tracksUpdatedAt: expect.any(Number),
-            coverUrl: 'https://c1.kgimg.com/stdmusic/400/20251014/20251014001841327327.jpg',
+            coverUrl: 'https://c1.kgimg.com/stdmusic/1024/20251014/20251014001841327327.jpg',
             providerData: { listId: 12345, globalCollectionId: 'collection_3_1863870844_4_0' },
         });
     });
@@ -657,7 +673,7 @@ describe('kugouProvider', () => {
         expect(page?.items[0]).toMatchObject({
             id: 'collection_3_user_2_0',
             name: '我喜欢',
-            coverUrl: 'https://imge.kugou.com/stdmusic/400/20260720/newest.jpg',
+            coverUrl: 'https://imge.kugou.com/stdmusic/1024/20260720/newest.jpg',
         });
         expect(requestMock).toHaveBeenNthCalledWith(2, 'playlist_track_all', {
             id: 'collection_3_user_2_0', page: 1, pagesize: 1,
@@ -822,7 +838,7 @@ describe('kugouProvider', () => {
 
         expect(requestMock).toHaveBeenCalledWith('playlist_detail', { ids: 'collection_3_1863870844_4_0' });
         expect(detail).toMatchObject({
-            coverUrl: 'https://c1.kgimg.com/stdmusic/400/20251014/20251014001841327327.jpg',
+            coverUrl: 'https://c1.kgimg.com/stdmusic/1024/20251014/20251014001841327327.jpg',
             description: 'Playlist introduction',
             trackCount: 28,
             providerData: { listId: 12345, globalCollectionId: 'collection_3_1863870844_4_0' },
@@ -896,7 +912,7 @@ describe('kugouProvider', () => {
             album: {
                 id: 10729818,
                 name: '小心思',
-                coverUrl: 'https://imge.kugou.com/stdmusic/400/cover.jpg',
+                coverUrl: 'https://imge.kugou.com/stdmusic/1024/cover.jpg',
                 catalogRef: { providerId: 'kugou', kind: 'album', id: 10729818 },
             },
             sourceRef: {
@@ -969,14 +985,14 @@ describe('kugouProvider', () => {
         expect(detail).toMatchObject({
             id: 6539,
             name: '郁可唯',
-            coverUrl: 'https://img/400/artist.jpg',
+            coverUrl: 'https://img/1024/artist.jpg',
             providerData: { musicSize: 100, albumSize: 20 },
         });
         expect(albums?.items[0]).toMatchObject({
             id: 194920827,
             name: '见幸福',
             type: 'album',
-            coverUrl: 'https://img/400/album.jpg',
+            coverUrl: 'https://img/1024/album.jpg',
             artists: [{ id: 6539, name: '郁可唯' }],
             publishedAt: Date.UTC(2020, 0, 1),
         });
@@ -1027,7 +1043,7 @@ describe('kugouProvider', () => {
             id: '164446399',
             name: '原神-幽暮衬映之月 Outside It Is Growing Dark',
             description: 'Album introduction',
-            coverUrl: 'https://c1.kgimg.com/stdmusic/400/20251014/20251014001841327327.jpg',
+            coverUrl: 'https://imge.kugou.com/stdmusic/1024/20251014/20251014001841327327.jpg',
             artists: [{ id: '789658', name: 'HOYO-MiX' }],
         });
     });
@@ -1056,7 +1072,7 @@ describe('kugouProvider', () => {
             artists: [{ id: '9469705', name: '十明' }],
             album: {
                 id: '75475669',
-                coverUrl: 'https://imge.kugou.com/stdmusic/400/20230705/20230705082802161869.jpg',
+                coverUrl: 'https://imge.kugou.com/stdmusic/1024/20230705/20230705082802161869.jpg',
             },
             durationMs: 220_000,
         });
@@ -1237,7 +1253,7 @@ describe('kugouProvider', () => {
 
         expect(collection).toMatchObject({
             name: '小众宝藏佳作',
-            coverUrl: 'https://imge.kugou.com/stdmusic/400/20240621/20240621175302755566.jpg',
+            coverUrl: 'https://imge.kugou.com/stdmusic/1024/20240621/20240621175302755566.jpg',
             trackCount: 1,
         });
         expect(tracks?.items[0]).toMatchObject({
@@ -1246,7 +1262,7 @@ describe('kugouProvider', () => {
             album: {
                 id: '96920808',
                 name: '晴天的乐章（芙宁娜原创曲）',
-                coverUrl: 'https://imge.kugou.com/stdmusic/400/20240621/20240621175302755566.jpg',
+                coverUrl: 'https://imge.kugou.com/stdmusic/1024/20240621/20240621175302755566.jpg',
             },
             durationMs: 206654,
         });

@@ -11,6 +11,7 @@ import type {
     ProviderPage,
     ProviderUser,
 } from '../../types/onlineMusic';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 import { parseLyricsByFormat } from '../../utils/lyrics/parserCore';
 import { isPureMusicLyricText } from '../../utils/lyrics/pureMusic';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
@@ -36,6 +37,8 @@ const valueOf = (raw: any, ...keys: string[]) => {
     }
     return undefined;
 };
+
+const KUGOU_CANONICAL_COVER_SIZE = 1024;
 
 // Selects one playable URL without coercing KuGou's candidate URL arrays into a comma-joined path.
 const audioUrlOf = (raw: unknown): string | undefined => {
@@ -89,14 +92,14 @@ const coverOf = (raw: any): string | undefined => {
         ?? valueOf(raw?.audio_info?.trans_param, 'union_cover')
         ?? valueOf(raw?.audioInfo?.transParam, 'union_cover')
         ?? valueOf(raw?.trans_param, 'union_cover')
-        ?? valueOf(raw, 'Image', 'image', 'img', 'pic', 'picUrl', 'cover', 'coverUrl', 'sizable_cover', 'sizable_avatar');
+        ?? valueOf(raw, 'sizable_cover', 'Image', 'image', 'img', 'pic', 'picUrl', 'cover', 'coverUrl', 'sizable_avatar');
     if (!value) return undefined;
-    const cover = String(value).trim().replace('{size}', '400');
+    const cover = String(value).trim().replace('{size}', String(KUGOU_CANONICAL_COVER_SIZE));
     if (/^\d{8,}\.(?:jpe?g|png|webp)$/i.test(cover)) {
-        return `https://c1.kgimg.com/stdmusic/400/${cover.slice(0, 8)}/${cover}`;
+        return `https://c1.kgimg.com/stdmusic/${KUGOU_CANONICAL_COVER_SIZE}/${cover.slice(0, 8)}/${cover}`;
     }
-    if (cover.startsWith('//')) return `https:${cover}`;
-    return cover.replace(/^http:/i, 'https:');
+    const secureCover = cover.startsWith('//') ? `https:${cover}` : cover.replace(/^http:/i, 'https:');
+    return getSizedCoverUrl(secureCover, KUGOU_CANONICAL_COVER_SIZE);
 };
 
 const hashOf = (raw: any): string => String(
