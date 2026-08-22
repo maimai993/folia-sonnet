@@ -218,7 +218,7 @@ export interface OnlineSongMetadataProvider {
 
 // provider 自行声明它支持哪几种扫码登录方式；不声明即代表只有单一方式，UI 维持单步流程。
 export interface QrLoginMethod {
-    id: string;          // 传给后端的识别值（QQ: 'mobile' | 'wechat'）
+    id: string;          // 传给后端的识别值（QQ: 'qq' | 'wechat'）
     labelKey: string;    // i18n key，由 UI 层翻译
     iconKey: string;     // 图标识别值，由 UI 层映射到静态资源
 }

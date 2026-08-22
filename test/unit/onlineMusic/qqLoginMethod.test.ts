@@ -33,7 +33,7 @@ describe('QQ login method selection', () => {
         const methods = omni.getQrLoginMethods('qq');
 
         expect(methods).toEqual([
-            { id: 'mobile', labelKey: 'home.qqLoginMethodMobile', iconKey: 'qq' },
+            { id: 'qq', labelKey: 'home.qqLoginMethodMobile', iconKey: 'qq' },
             { id: 'wechat', labelKey: 'home.qqLoginMethodWechat', iconKey: 'wechat' },
         ]);
         // services 层不 import .svg：iconKey 只是字符串，映射留在 UI 层。
@@ -71,18 +71,18 @@ describe('QQ login method selection', () => {
     it('falls back to the App channel when no method is given', async () => {
         await omni.createQrLogin('qq');
 
-        expect(requestMock).toHaveBeenNthCalledWith(1, 'login_qr_key', { channel: 'mobile' });
+        expect(requestMock).toHaveBeenNthCalledWith(1, 'login_qr_key', { channel: 'qq' });
     });
 
     it('starts a fresh session per switch instead of reusing the previous choice', async () => {
-        await omni.createQrLogin('qq', 'mobile');
+        await omni.createQrLogin('qq', 'qq');
         await omni.createQrLogin('qq', 'wechat');
-        await omni.createQrLogin('qq', 'mobile');
+        await omni.createQrLogin('qq', 'qq');
 
         const channels = requestMock.mock.calls
             .filter(([operation]) => operation === 'login_qr_key')
             .map(([, params]) => params.channel);
         // 模块单例已删除：每次都由调用方明确指定，切换回来不会拿到上一次的残留值。
-        expect(channels).toEqual(['mobile', 'wechat', 'mobile']);
+        expect(channels).toEqual(['qq', 'wechat', 'qq']);
     });
 });

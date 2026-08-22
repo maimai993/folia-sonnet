@@ -166,7 +166,7 @@ describe('useOnlineProviderQrLogin', () => {
             .mockResolvedValueOnce({ key: 'qr-key-2', imageUrl: 'qr-2.png' });
         const hook = render('qq');
 
-        await hook.start('qq', 'mobile');
+        await hook.start('qq', 'qq');
         await hook.start('qq', 'wechat');
 
         expect(omniMock.cancelQrLogin).toHaveBeenCalledExactlyOnceWith('qq', 'qr-key-1');

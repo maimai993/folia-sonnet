@@ -7,7 +7,7 @@
 | 项 | 内容 |
 | --- | --- |
 | npm 包 | [`@yakult-green-tea/qq-music-api`](https://www.npmjs.com/package/@yakult-green-tea/qq-music-api) |
-| 版本 | `2.2.1`，锁定在 [`package.json`](./package.json) 与 `package-lock.json` |
+| 版本 | `3.0.0`，锁定在 [`package.json`](./package.json) 与 `package-lock.json` |
 | 原始上游 | [Rain120/qq-music-api](https://github.com/Rain120/qq-music-api)，作者 Rain120 |
 | 许可证 | MIT；全文随包安装在 `node_modules/@yakult-green-tea/qq-music-api/LICENSE` |
 | 镜像定义 | [`images/qq-api.Dockerfile`](../images/qq-api.Dockerfile) |
@@ -61,7 +61,10 @@ mkdir qq-api && cd qq-api
 npm init -y
 npm i @yakult-green-tea/qq-music-api
 
-PORT=3200 QQ_AUTH_STATE_PATH=./.auth-state/qq-device.json \
+PORT=3200 \
+  QQ_AUTH_STATE_PATH=./.auth-state/qq-device.json \
+  QQ_AUTH_SESSION_PATH=./.auth-state/qq-session.enc \
+  QQ_SESSION_SECRET='<至少 32 字节的随机密钥>' \
   node node_modules/@yakult-green-tea/qq-music-api/dist/src/app.js
 ```
 
@@ -83,6 +86,8 @@ VITE_QQ_API_BASE=http://localhost:3200
 | --- | --- | --- |
 | `PORT` | `3200`（镜像内设为 `3000`） | HTTP 监听端口 |
 | `QQ_AUTH_STATE_PATH` | 相对工作目录的 `.auth-state/qq-device.json` | 装置标识的持久化路径；设为 `memory` 则完全不落盘 |
+| `QQ_AUTH_SESSION_PATH` | 未设置 | 加密登录态文件路径；必须与 `QQ_SESSION_SECRET` 同时设置 |
+| `QQ_SESSION_SECRET` | 未设置 | 登录态加密密钥；至少使用 32 字节随机值，不得提交到仓库或写进镜像 |
 | `QQ_ENABLE_UPDATE_CHECK` | 未设置 | 设为 `true` 时启动会向 npm registry 查询新版本；默认不查 |
 | `QQ_DISABLE_UPDATE_CHECK` | 未设置 | 设为 `true` 强制关闭版本检查，优先级高于上一项 |
 | `AUTO_OPEN_EXPLORER` | 未设置 | 设为 `true` 时启动自动打开内置 API Explorer；存在 `CI` 环境变量时永不打开 |
@@ -90,11 +95,20 @@ VITE_QQ_API_BASE=http://localhost:3200
 
 版本检查默认关闭：这个包会被当作依赖 `require()` 进宿主进程（Docker 镜像、Electron 主进程），在 import 期 spawn `npm` 是不受欢迎的副作用。已经在部署里写了 `QQ_DISABLE_UPDATE_CHECK=true` 的不必改，它仍然有效。
 
-## 装置状态与持久化
+## 装置状态与登录态持久化
 
 QQ 音乐的原生扫码协议要求 QIMEI 引导和后续调用跑在同一个稳定的装置身份上，因此该身份需要跨进程重启保留。
 
 Compose 里它挂在具名卷 `qq-api-state` 上（容器内 `/app/.auth-state/qq-device.json`，文件权限 `0600`）。该文件**只存 Android device 识别值，不含 `musickey`、MQTT token 或任何账号凭证**；写入失败时上游代码会降级成进程内状态而不阻断登录。
+
+3.0.0 起还可以把登录态加密写入同一个卷。默认配置保持内存模式；要跨容器重启恢复登录，在 `deploy/docker/.env` 同时填写：
+
+```env
+QQ_AUTH_SESSION_PATH=/app/.auth-state/qq-session.enc
+QQ_SESSION_SECRET=<至少 32 字节的随机密钥>
+```
+
+可用 `openssl rand -base64 32` 生成密钥。服务使用 HKDF-SHA256 与 AES-256-GCM 加密会话文件，并以临时文件加原子替换写入。不要轮换或丢失密钥；旧文件无法用新密钥解开，但服务仍会允许用户重新扫码并写入新会话。
 
 需要更换装置身份时删除该卷：
 
@@ -104,25 +118,36 @@ docker volume rm folia_qq-api-state
 docker compose up -d --wait
 ```
 
-登录凭证与二维码会话只存在于单进程内存中，不写盘。服务重启会清除全部会话，客户端需要重新扫码。
+二维码扫码过程仍只存在于当前进程中，重启后需要重新开始尚未完成的扫码。已确认的登录态在启用上述两个变量后可以恢复；未启用时仍会在重启后清除。
 
 ## Serverless 支持情况
 
-**结论：当前不支持 Cloudflare Workers 与 Vercel Serverless Functions，需要一个常驻的 Node 进程。** 这不是打包方式的问题，三条阻碍都在协议实现本身：
+3.0.0 新增 `@yakult-green-tea/qq-music-api/serverless`，提供 Web 标准的 `handleRequest(request, env)`，可以接到 Cloudflare Workers 或 Vercel Edge。它覆盖 Folia 使用的登录、用户集合、播放、歌单、歌曲、专辑和歌手路由，并用加密 sealed token 在请求间携带登录态。
 
-1. **长连线**。QQ 音乐 App 的原生扫码靠 MQTT over WebSocket（`wss://mu.y.qq.com`，subprotocol `mqtt`），一条连线要活到用户扫完码，二维码 TTL 是 3 分钟。Vercel serverless function 的执行时长远短于此；Cloudflare Workers 没有 Node 的 `ws`。
-2. **跨请求状态**。二维码会话与登录会话是进程内的 `Map`。serverless 每次调用都可能落在不同实例上，`/login/qr/key` 与随后的 `/login/qr/check` 会分别看到两个互不相识的内存。
-3. **可写文件系统**。装置身份持久化依赖同步读写文件（`QQ_AUTH_STATE_PATH`）。虽然可以设成 `memory` 关闭落盘，但那样每个实例都会注册出一个新装置身份，等于把第 2 条的问题换个位置再出现一次。
+Serverless 模式有两项明确限制：
 
-值得说明的是**只读曲库子集本身是无状态的**：`/getSearchByKey`、`/getLyric`、`/getAlbumInfo`、`/getSingerAlbum`、`/getSingerHotsong` 这些接口不碰会话也不碰装置状态，理论上可以单独 serverless 化。真正需要常驻进程的只有扫码登录与登录后的播放链接。
+1. 只支持微信扫码。QQ 音乐 App 扫码依赖 MQTT over WebSocket 长连接，request-scoped runtime 无法维持；`GET /login/channels` 会返回 `channels: ['wechat']`。
+2. 登录相关路由必须设置 `QQ_SESSION_SECRET`，未设置时返回 `501`；曲库路由仍可用。
 
-要完整支持 Cloudflare Workers，需要用 **Durable Objects** 承载二维码会话与 WebSocket、用 **KV 或 R2** 存装置身份，并把 `ws` 换成 Workers 的 WebSocket API。那是 `qq-music-api` 仓库的一次独立重构，不在本仓库的改动范围内。
+最小入口示例：
+
+```ts
+import { handleRequest } from '@yakult-green-tea/qq-music-api/serverless';
+
+export default {
+  fetch(request: Request, env: { QQ_SESSION_SECRET: string }) {
+    return handleRequest(request, env);
+  },
+};
+```
+
+Folia 当前 Docker 与 Electron 仍使用常驻 Node 入口。若以后切换到 serverless，前端还需要读取 `/login/channels` 隐藏不受支持的 QQ App 扫码，并优先通过 `X-QQ-Session` 请求头传递 sealed token，避免把较长的加密凭证放进 URL 日志。
 
 ## 多实例部署
 
-不要让多个实例共用同一份装置状态。Compose 之外自行编排时，各实例应各自指定 `QQ_AUTH_STATE_PATH`（或各挂各的卷）。
+不要让多个常驻 Node 实例共用同一份装置或登录态文件。Compose 之外自行编排时，各实例应各自指定 `QQ_AUTH_STATE_PATH`、`QQ_AUTH_SESSION_PATH` 和存储卷。
 
-会话只在单进程内存里，因此实例之间不共享登录态：多实例前面有负载均衡时，扫码登录的整个流程必须落在同一个实例上，否则轮询会读不到刚创建的二维码会话。
+二维码扫码过程只存在于发起它的进程：多实例前面有负载均衡时，整个扫码流程仍必须落在同一个实例上。文件仓库解决的是单实例跨重启恢复，不是多实例实时会话同步。
 
 ## 常见错误
 

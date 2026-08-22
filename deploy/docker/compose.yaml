@@ -116,6 +116,8 @@ services:
     environment:
       PORT: "3000"
       QQ_AUTH_STATE_PATH: /app/.auth-state/qq-device.json
+      QQ_AUTH_SESSION_PATH: ${QQ_AUTH_SESSION_PATH:-}
+      QQ_SESSION_SECRET: ${QQ_SESSION_SECRET:-}
     expose:
       - "3000"
     volumes:

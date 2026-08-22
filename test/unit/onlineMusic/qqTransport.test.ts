@@ -63,7 +63,7 @@ describe('QQ Music Web transport', () => {
         vi.stubGlobal('fetch', fetchMock);
         const { requestQq } = await import('@/services/onlineMusic/qqTransport');
 
-        await requestQq('login_qr_key', { channel: 'mobile' });
+        await requestQq('login_qr_key', { channel: 'qq' });
         await requestQq('login_qr_key', { channel: 'wechat' });
         // No module-level default: an unspecified channel stays unspecified, so a stale choice
         // can never leak from one login dialog into the next.
@@ -71,7 +71,7 @@ describe('QQ Music Web transport', () => {
         await requestQq('login_status');
 
         const urls = fetchMock.mock.calls.map(call => new URL(call[0]));
-        expect(urls[0].searchParams.get('channel')).toBe('mobile');
+        expect(urls[0].searchParams.get('channel')).toBe('qq');
         expect(urls[1].searchParams.get('channel')).toBe('wechat');
         expect(urls[2].searchParams.get('channel')).toBeNull();
         expect(urls[3].searchParams.get('channel')).toBeNull();

@@ -193,7 +193,7 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
     const response = await fetch(`${base}${endpoint.path}?${query}`, { credentials: 'omit' });
     if (!response.ok) {
         const failure = await readJsonBody(response);
-        // The backend session lives in one Node process, so 401 also covers a restart or an expired 24h TTL.
+        // A missing, expired, rejected, or non-persisted backend session is surfaced uniformly as 401.
         if (response.status === 401) {
             clearQqSession();
             throw new OnlineProviderError('auth-required', 'QQMusicApi login required', 'qq', failure);

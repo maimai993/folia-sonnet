@@ -256,7 +256,7 @@ const getLoginStatus = async (): Promise<ProviderUser | null> => {
         });
         return user;
     } catch (error) {
-        // The backend keeps auth sessions in one process, so a restart or the 24h TTL also arrives as 401.
+        // Missing, expired, rejected, or non-persisted backend sessions all arrive as 401.
         if (error instanceof OnlineProviderError && error.code === 'auth-required') {
             console.info('[QQProvider] login-status:auth-required');
             return null;
@@ -278,7 +278,7 @@ const logout = async (): Promise<void> => {
 // 扫码登录方式：`id` 就是后端 `?channel=` 的取值，UI 层只认 labelKey 与 iconKey。
 // services 层不 import 任何 .svg，图标由 UI 层按 iconKey 映射到静态资源。
 const QQ_LOGIN_METHODS: QrLoginMethod[] = [
-    { id: 'mobile', labelKey: 'home.qqLoginMethodMobile', iconKey: 'qq' },
+    { id: 'qq', labelKey: 'home.qqLoginMethodMobile', iconKey: 'qq' },
     { id: 'wechat', labelKey: 'home.qqLoginMethodWechat', iconKey: 'wechat' },
 ];
 
