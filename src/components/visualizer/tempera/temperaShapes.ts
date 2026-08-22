@@ -72,6 +72,37 @@ export const drawPolygonFill = (
         : node.fill({ color: toPixiColor(pixi, color), alpha });
 };
 
+/**
+ * A filled polygon with holes punched through it. The holes are genuinely transparent: the
+ * Pixi canvas runs on `backgroundAlpha: 0`, so what shows through is the shell's live
+ * background layer (veiled by the scene's paper wash, which is per-paragraph and cannot be
+ * cut per shot).
+ *
+ * The node must hold exactly one fill instruction. `GraphicsContext.cut` walks back over the
+ * last two instructions and, once the first hole is attached, keeps going - a second fill or
+ * a stroke on the same node would silently collect the holes as well. Outlines for the holes
+ * are therefore separate nodes.
+ */
+export const drawPolygonFillWithHoles = (
+    pixi: PixiModule,
+    polygon: number[],
+    holes: number[][],
+    color: string,
+    alpha = 1,
+    gradient?: TemperaGradientFill | null,
+): Graphics => {
+    const node = new pixi.Graphics().poly(polygon);
+    if (gradient && gradient.colors.length > 1) {
+        node.fill({ fill: buildGradientFill(pixi, gradient, color), alpha });
+    } else {
+        node.fill({ color: toPixiColor(pixi, color), alpha });
+    }
+    holes.forEach(hole => {
+        if (hole.length >= 6) node.poly(hole).cut();
+    });
+    return node;
+};
+
 export const drawPolygonOutline = (
     pixi: PixiModule,
     polygon: number[],

@@ -173,6 +173,33 @@ export const heartPolygon = (
     return points;
 };
 
+/**
+ * Concave. One segment of a ring, from `startAngle` to `endAngle`. A ring of these leaves the
+ * spokes between them and the hub inside them standing - which is how a ring gets punched out
+ * of a plate without the middle falling out of it.
+ */
+export const annularSectorPolygon = (
+    cx: number,
+    cy: number,
+    innerRadius: number,
+    outerRadius: number,
+    startAngle: number,
+    endAngle: number,
+    segments = 10,
+): number[] => {
+    const steps = Math.max(2, Math.round(segments));
+    const points: number[] = [];
+    for (let step = 0; step <= steps; step += 1) {
+        const angle = startAngle + ((endAngle - startAngle) * step) / steps;
+        points.push(cx + Math.cos(angle) * outerRadius, cy + Math.sin(angle) * outerRadius);
+    }
+    for (let step = steps; step >= 0; step -= 1) {
+        const angle = startAngle + ((endAngle - startAngle) * step) / steps;
+        points.push(cx + Math.cos(angle) * innerRadius, cy + Math.sin(angle) * innerRadius);
+    }
+    return points;
+};
+
 /** Concave. Four tips with a tight waist is the VN sparkle; more tips read as a star. */
 export const starPolygon = (
     cx: number,

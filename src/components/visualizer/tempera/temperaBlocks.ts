@@ -101,6 +101,7 @@ export const buildTemperaBlocks = (
         height: options.height,
         seed: options.seed,
         showDecor: options.showDecor,
+        flowAngle: options.flowAngle,
         bleed: carry + Math.max(options.width, options.height) * 0.08,
         // Gradient mode only: a per-shot axis so neighbouring compositions do not all ramp
         // the cover colours the same way.

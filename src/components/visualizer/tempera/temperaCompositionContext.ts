@@ -37,6 +37,12 @@ export interface TemperaCompositionContext {
      * would expose the background as it slides.
      */
     bleed: number;
+    /**
+     * Direction the whole shot travels in, shared with the camera and the hand-off. Cutout
+     * families align their channels to it: a slot parallel to the flow stays a slot while the
+     * shot slides, so two neighbouring shots read as one continuous corridor instead of a cut.
+     */
+    flowAngle: number;
     /** Non-null only in gradient colour mode; tone fills become four-colour ramps. */
     gradient: TemperaGradientFill | null;
     add: (node: Graphics, options?: TemperaBlockOptions, parent?: Container) => void;
