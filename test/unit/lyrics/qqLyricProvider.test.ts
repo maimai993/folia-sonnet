@@ -92,7 +92,7 @@ describe('QQ lyric provider', () => {
         expect(result).toMatchObject({
             durationMs: 60_000,
             album: {
-                coverUrl: 'https://y.gtimg.cn/music/photo_new/T002R300x300M000album-mid.jpg?max_age=2592000',
+                coverUrl: 'https://y.gtimg.cn/music/photo_new/T002M000album-mid.jpg?max_age=2592000',
             },
         });
     });

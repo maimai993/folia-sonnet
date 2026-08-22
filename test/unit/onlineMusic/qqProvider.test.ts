@@ -207,7 +207,7 @@ describe('qqProvider', () => {
         expect(song.album).toEqual({
             id: '0016l2F430zMux',
             name: '乐与怒',
-            coverUrl: 'https://y.gtimg.cn/music/photo_new/T002R300x300M0000016l2F430zMux.jpg?max_age=2592000',
+            coverUrl: 'https://y.gtimg.cn/music/photo_new/T002M0000016l2F430zMux.jpg?max_age=2592000',
             catalogRef: { providerId: 'qq', kind: 'album', id: '0016l2F430zMux' },
         });
         expect(song.artists).toEqual([{
@@ -412,7 +412,7 @@ describe('qqProvider', () => {
             id: '000MkMni19ClKG',
             type: 'album',
             name: '范特西',
-            coverUrl: FAVORITE_ALBUM.pic,
+            coverUrl: 'https://y.qq.com/music/photo_new/T002M000000MkMni19ClKG.jpg',
             trackCount: 12,
             publishedAt: 1419609600000,
         });
@@ -585,7 +585,7 @@ describe('qqProvider', () => {
             id: '0016l2F430zMux',
             name: '乐与怒',
             type: 'album',
-            coverUrl: 'https://y.gtimg.cn/music/photo_new/T002R300x300M0000016l2F430zMux.jpg?max_age=2592000',
+            coverUrl: 'https://y.gtimg.cn/music/photo_new/T002M0000016l2F430zMux.jpg?max_age=2592000',
             trackCount: 10,
             artists: [{
                 id: '0025NhlN2yWrP4',
@@ -601,7 +601,7 @@ describe('qqProvider', () => {
             name: 'Beyond',
             type: 'artist',
             // 歌手头像与专辑封面同一套规则，只差 T001 / T002 前缀。
-            coverUrl: 'https://y.gtimg.cn/music/photo_new/T001R300x300M0000025NhlN2yWrP4.jpg?max_age=2592000',
+            coverUrl: 'https://y.gtimg.cn/music/photo_new/T001M0000025NhlN2yWrP4.jpg?max_age=2592000',
             description: '香港摇滚乐队。',
             trackCount: 810,
             albumCount: 31,
@@ -617,7 +617,7 @@ describe('qqProvider', () => {
             id: '0016l2F430zMux',
             name: '乐与怒',
             type: 'album',
-            coverUrl: 'https://y.gtimg.cn/music/photo_new/T002R300x300M0000016l2F430zMux.jpg?max_age=2592000',
+            coverUrl: 'https://y.gtimg.cn/music/photo_new/T002M0000016l2F430zMux.jpg?max_age=2592000',
             // `totalNum` 恒为 0，不在 trackCount 的取值清单里；宁可缺字段也不要写入一个假的 0，
             // 打开专辑页时 getAlbumDetail 会用 total_song_num 补齐。
             artists: [{ id: 0, name: 'Beyond' }],
@@ -660,7 +660,7 @@ describe('qqProvider', () => {
             id: '0016l2F430zMux',
             name: '乐与怒',
             type: 'album',
-            coverUrl: 'https://y.gtimg.cn/music/photo_new/T002R300x300M0000016l2F430zMux.jpg?max_age=2592000',
+            coverUrl: 'https://y.gtimg.cn/music/photo_new/T002M0000016l2F430zMux.jpg?max_age=2592000',
             description: '专辑简介',
             trackCount: 3,
             publisher: '华纳音乐',
@@ -770,7 +770,7 @@ describe('qqProvider', () => {
             id: '0025NhlN2yWrP4',
             name: 'Beyond',
             type: 'artist',
-            coverUrl: 'https://y.gtimg.cn/music/photo_new/T001R300x300M0000025NhlN2yWrP4.jpg?max_age=2592000',
+            coverUrl: 'https://y.gtimg.cn/music/photo_new/T001M0000025NhlN2yWrP4.jpg?max_age=2592000',
             description: '香港摇滚乐队。',
             trackCount: 810,
             albumCount: 31,
