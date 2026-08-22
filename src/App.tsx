@@ -70,7 +70,6 @@ import { usePlaybackVisualizerBridge } from './hooks/usePlaybackVisualizerBridge
 import { useRandomVisualizerMode } from './hooks/useRandomVisualizerMode';
 import { useObsBrowserSourcePublisher } from './hooks/useObsBrowserSourcePublisher';
 import { useLyricApiPublisher } from './hooks/useLyricApiPublisher';
-import { ObsBrowserSourceLyrics } from './components/obs/ObsBrowserSourceLyrics';
 import { useSessionRestoreController } from './hooks/useSessionRestoreController';
 import { useStagePlaybackController } from './hooks/useStagePlaybackController';
 import { useSongThemeAutoGeneration } from './hooks/useSongThemeAutoGeneration';
@@ -3229,79 +3228,63 @@ export default function App() {
                 className="absolute inset-0 z-0"
                 onClick={handleContainerClick}
             >
-                {!isObsBrowserSourceRendering && (
-                    <VisualizerRenderer
-                        mode={visualizerMode}
-                        currentTime={lyricCurrentTime}
-                        currentLineIndex={currentLineIndex}
-                        lines={lyrics?.lines || []}
-                        theme={visualizerTheme}
-                        subtitleTheme={visualizerSubtitleTheme}
-                        isDaylight={isDaylight}
-                        audioPower={audioPower}
-                        audioBands={audioBands}
-                        songTitle={currentSong?.name}
-                        songArtist={currentSongArtist}
-                        songAlbum={currentSongAlbum}
-                        coverUrl={getCoverUrl()}
-                        showText={currentView === 'player' && !isSettingsModalOpen}
-                        seed={visualizerGeometrySeed}
-                        staticMode={staticMode}
-                        backgroundStaticMode={
-                            shouldPauseVisualizerBackground
-                            || (
-                                visualizerBackgroundConfig.mode === 'latent'
-                                && latentBackgroundTuning.dynamicOnlyInPlayer
-                                && currentView !== 'player'
-                            )
-                        }
-                        paused={playerState !== PlayerState.PLAYING}
-                        visualizerOpacity={visualizerOpacity}
-                        background={{
-                            ...visualizerBackgroundConfig,
-                            transparent: currentView === 'player' && isPlayerPageTransparent && !isSettingsModalOpen,
-                            common: {
-                                ...visualizerBackgroundConfig.common,
-                                disableGeometricBackground: disableVisualizerGeometricBackground || isSettingsSubviewOpen,
-                            },
-                        }}
-                        lyricsFontScale={lyricsFontScale}
-                        subtitleFontScale={subtitleFontScale}
-                        subtitleOverlayOpacity={subtitleOverlayOpacity}
-                        subtitleOverlayBackground={subtitleOverlayBackground}
-                        showHarmonySubtitle={showHarmonySubtitle}
-                        harmonySubtitleBackground={harmonySubtitleBackground}
-                        isPlayerChromeHidden={isPlayerChromeHidden}
-                        hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
-                        showSubtitleTranslation={showSubtitleTranslation}
-                        subtitleContentMode={subtitleContentMode}
-                        visualizerTunings={visualizerTunings}
-                        onMonetTuningChange={handleSetMonetTuning}
-                        cappellaCustomEmojiImages={cappellaCustomEmojiImages}
-                        cappellaCustomAvatarImages={cappellaCustomAvatarImages}
-                        monetPortraitImage={monetPortraitImage}
-                        onLyricLineSeek={['monet', 'pendolo'].includes(visualizerMode) ? handleMonetLyricLineSeek : undefined}
-                        onBack={navigateBackFromPlayer}
-                        isPanelOpen={isPanelOpen}
-                        alwaysShowBackButton={alwaysShowPlayerBackButton || isPanelOpen}
-                        onPlayerPanelGuideHotspotChange={setIsPlayerPanelGuideHotspotActive}
-                    />
-                )}
-            </div>
-
-            {currentView === 'player' && isObsBrowserSourceRendering && (
-                <ObsBrowserSourceLyrics
-                    lyrics={lyrics}
+                <VisualizerRenderer
+                    mode={isObsBrowserSourceRendering ? 'still' : visualizerMode}
+                    currentTime={lyricCurrentTime}
                     currentLineIndex={currentLineIndex}
-                    visualizerTheme={visualizerTheme}
+                    lines={lyrics?.lines || []}
+                    theme={visualizerTheme}
                     subtitleTheme={visualizerSubtitleTheme}
+                    isDaylight={isDaylight}
+                    audioPower={audioPower}
+                    audioBands={audioBands}
+                    songTitle={currentSong?.name}
+                    songArtist={currentSongArtist}
+                    songAlbum={currentSongAlbum}
+                    coverUrl={getCoverUrl()}
+                    showText={currentView === 'player' && !isSettingsModalOpen}
+                    seed={visualizerGeometrySeed}
+                    staticMode={staticMode}
+                    backgroundStaticMode={
+                        shouldPauseVisualizerBackground
+                        || (
+                            visualizerBackgroundConfig.mode === 'latent'
+                            && latentBackgroundTuning.dynamicOnlyInPlayer
+                            && currentView !== 'player'
+                        )
+                    }
+                    paused={playerState !== PlayerState.PLAYING}
+                    visualizerOpacity={visualizerOpacity}
+                    background={{
+                        ...visualizerBackgroundConfig,
+                        transparent: currentView === 'player' && isPlayerPageTransparent && !isSettingsModalOpen,
+                        common: {
+                            ...visualizerBackgroundConfig.common,
+                            disableGeometricBackground: disableVisualizerGeometricBackground || isSettingsSubviewOpen,
+                        },
+                    }}
                     lyricsFontScale={lyricsFontScale}
                     subtitleFontScale={subtitleFontScale}
-                    shouldHidePlayerTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
-                    isDaylight={isDaylight}
-                    navigateToHome={navigateBackFromPlayer}
+                    subtitleOverlayOpacity={subtitleOverlayOpacity}
+                    subtitleOverlayBackground={subtitleOverlayBackground}
+                    showHarmonySubtitle={showHarmonySubtitle}
+                    harmonySubtitleBackground={harmonySubtitleBackground}
+                    isPlayerChromeHidden={isPlayerChromeHidden}
+                    hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
+                    showSubtitleTranslation={showSubtitleTranslation}
+                    subtitleContentMode={subtitleContentMode}
+                    visualizerTunings={visualizerTunings}
+                    onMonetTuningChange={handleSetMonetTuning}
+                    cappellaCustomEmojiImages={cappellaCustomEmojiImages}
+                    cappellaCustomAvatarImages={cappellaCustomAvatarImages}
+                    monetPortraitImage={monetPortraitImage}
+                    onLyricLineSeek={['monet', 'pendolo'].includes(visualizerMode) ? handleMonetLyricLineSeek : undefined}
+                    onBack={navigateBackFromPlayer}
+                    isPanelOpen={isPanelOpen}
+                    alwaysShowBackButton={alwaysShowPlayerBackButton || isPanelOpen}
+                    onPlayerPanelGuideHotspotChange={setIsPlayerPanelGuideHotspotActive}
                 />
-            )}
+            </div>
 
             {currentView === 'player' && activePlaybackContext === 'stage' && (!stageActiveEntryKind || stageSource === 'now-playing') && !currentSong && (
                 <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center px-6">

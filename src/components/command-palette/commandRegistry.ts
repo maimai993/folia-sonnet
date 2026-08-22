@@ -648,6 +648,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
         execute: (_input, context) => context.runAutoMatchBestLyric(),
     },
 
+    createVisualizerCommand('still', 'Visualizer: Still', 'Switch to the static low-resource visualizer', ['visualizer still', 'still', 'static', 'low resource', '静止', '静态', '低占用', 'jingzhi', 'jingtai', 'jz']),
     createVisualizerCommand('classic', 'Visualizer: Luminous', 'Switch to classic visualizer', ['visualizer classic', 'classic', '流光', 'liuguang', 'lg']),
     createVisualizerCommand('cadenza', 'Visualizer: Mindscape', 'Switch to cadenza visualizer', ['visualizer cadenza', 'cadenza', 'mindscape', '心象', 'xinxiang', 'xx']),
     createVisualizerCommand('partita', 'Visualizer: Partita', 'Switch to partita visualizer', ['visualizer partita', 'partita', '云阶', 'yunjie', 'yj']),

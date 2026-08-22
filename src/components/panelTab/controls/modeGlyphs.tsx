@@ -23,6 +23,14 @@ const FALLBACK_GLYPH = (
 );
 
 const VISUALIZER_MODE_GLYPHS: Record<string, React.ReactNode> = {
+    // 静止：三行静态歌词
+    still: (
+        <>
+            <path d="M5 7.5h14" opacity="0.35" />
+            <path d="M3 12h18" />
+            <path d="M6 16.5h12" opacity="0.35" />
+        </>
+    ),
     // 流光：单行居中歌词，逐字点亮
     classic: (
         <>

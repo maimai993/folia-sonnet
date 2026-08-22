@@ -368,6 +368,7 @@ export default {
     "visualizerWorkbench": "歌词动画实验台",
     "visualizerTemporary": "临时工作台",
     "visualizerMode": "模式",
+    "visualizerStill": "静止",
     "visualizerClassic": "流光",
     "visualizerCadenze": "心象",
     "visualizerPartita": "云阶",

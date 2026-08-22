@@ -32,6 +32,7 @@ App / ThemePark / VisPlayground / OBS source
 
 | mode | 显示名 | 主要 renderer / 辅助文件 |
 | --- | --- | --- |
+| `still` | 静止 | `still/VisualizerStill.tsx`（不挂载共享背景层） |
 | `classic` | Luminous | `classic/Visualizer.tsx`、`classic/tuning.ts` |
 | `cadenza` | Mindscape | `cadenza/VisualizerCadenza.tsx`、`cadenza/tuning.ts` |
 | `partita` | 云阶 | `partita/VisualizerPartita.tsx`、`partita/tuning.ts` |

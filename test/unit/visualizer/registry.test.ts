@@ -12,6 +12,7 @@ import {
 describe('visualizer registry', () => {
     it('auto-loads the built-in visualizer entries in stable order', () => {
         expect(VISUALIZER_REGISTRY.map(entry => entry.mode)).toEqual([
+            'still',
             'classic',
             'cadenza',
             'partita',
@@ -35,6 +36,7 @@ describe('visualizer registry', () => {
 
     it('recognizes registered modes and rejects unknown modes', () => {
         expect(hasVisualizerMode('classic')).toBe(true);
+        expect(hasVisualizerMode('still')).toBe(true);
         expect(hasVisualizerMode('fume')).toBe(true);
         expect(hasVisualizerMode('missing-mode')).toBe(false);
         expect(DEFAULT_VISUALIZER_MODE).toBe('classic');

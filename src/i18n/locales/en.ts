@@ -368,6 +368,7 @@ export default {
     "visualizerWorkbench": "Lyrics Animation Lab",
     "visualizerTemporary": "Temporary Workbench",
     "visualizerMode": "Mode",
+    "visualizerStill": "Still",
     "visualizerClassic": "Luminous",
     "visualizerCadenze": "Mindscape",
     "visualizerPartita": "Partita",
