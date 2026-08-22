@@ -7,6 +7,7 @@ import type { CommandPaletteMatch, CommandPaletteCommand } from './types';
 import { getCommandDescription, getCommandTitle } from './commandText';
 import PinnedCommandRow from './PinnedCommandRow';
 import CommandPaletteQueueList from './CommandPaletteQueueList';
+import CommandPaletteVolumeControl from './CommandPaletteVolumeControl';
 
 // src/components/command-palette/CommandPalette.tsx
 // Full-screen command input overlay with autocomplete and keyboard execution.
@@ -18,6 +19,7 @@ type CommandPaletteProps = {
     availableCommands: CommandPaletteCommand[];
     currentSong: SongResult | null;
     isDaylight: boolean;
+    isMuted: boolean;
     isComposing: boolean;
     isExecuting: boolean;
     isOpen: boolean;
@@ -25,6 +27,7 @@ type CommandPaletteProps = {
     pinnedCommands: Array<CommandPaletteCommand | null>;
     query: string;
     theme: Theme;
+    volume: number;
     onActiveCommandChange: (command: CommandPaletteCommand | null) => void;
     onActiveIndexChange: (index: number) => void;
     onClose: () => void;
@@ -37,6 +40,8 @@ type CommandPaletteProps = {
     onMoveSongToNext: (index: number) => void;
     onQueryChange: (query: string) => void;
     onRemoveSong: (index: number) => void;
+    onVolumeChange: (volume: number) => void;
+    onVolumePreview: (volume: number) => void;
 };
 
 const groupLabelKey: Record<string, string> = {
@@ -63,6 +68,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     availableCommands,
     currentSong,
     isDaylight,
+    isMuted,
     isComposing,
     isExecuting,
     isOpen,
@@ -70,6 +76,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     pinnedCommands,
     query,
     theme,
+    volume,
     onActiveCommandChange,
     onActiveIndexChange,
     onClose,
@@ -82,6 +89,8 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     onMoveSongToNext,
     onQueryChange,
     onRemoveSong,
+    onVolumeChange,
+    onVolumePreview,
 }) => {
     const { t } = useTranslation();
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -245,7 +254,11 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                             )}
                             <input
                                 ref={inputRef}
-                                type="text"
+                                type={activeCommand?.id === 'playback-volume' ? 'number' : 'text'}
+                                inputMode={activeCommand?.id === 'playback-volume' ? 'decimal' : undefined}
+                                min={activeCommand?.id === 'playback-volume' ? 0 : undefined}
+                                max={activeCommand?.id === 'playback-volume' ? 100 : undefined}
+                                step={activeCommand?.id === 'playback-volume' ? 1 : undefined}
                                 value={query}
                                 onChange={(event) => {
                                     setIsShowingAllCommands(false);
@@ -346,6 +359,17 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                         );
                                     })}
                                 </div>
+                            ) : activeCommand?.id === 'playback-volume' ? (
+                                <CommandPaletteVolumeControl
+                                    isDaylight={isDaylight}
+                                    isMuted={isMuted}
+                                    query={query}
+                                    theme={theme}
+                                    volume={volume}
+                                    onQueryChange={onQueryChange}
+                                    onVolumeChange={onVolumeChange}
+                                    onVolumePreview={onVolumePreview}
+                                />
                             ) : matches.length === 0 ? (
                                 <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center opacity-50">
                                     <Command size={26} />

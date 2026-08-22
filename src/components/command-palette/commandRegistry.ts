@@ -15,7 +15,7 @@ import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata
 import { buildObsCustomCss } from '../../utils/obsCustomCss';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import { hasUploadedObsAsset } from '../../utils/visualSettingsConfig';
-import { ListMusic, ListX, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward } from 'lucide-react';
+import { ListMusic, ListX, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward, Volume2 } from 'lucide-react';
 
 // src/components/command-palette/commandRegistry.ts
 // Defines command palette entries and the lightweight matching used for autocomplete.
@@ -151,6 +151,50 @@ const createQueueSearchCommand = (): CommandPaletteCommand => ({
     execute: () => false,
 });
 
+const parseVolumePercent = (input: string) => {
+    const trimmedInput = input.trim();
+    if (!trimmedInput) {
+        return null;
+    }
+    const value = Number(trimmedInput);
+    return Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+};
+
+const createVolumeCommand = (): CommandPaletteCommand => ({
+    id: 'playback-volume',
+    group: 'playback',
+    title: 'Volume',
+    description: 'Adjust playback volume',
+    keywords: ['volume', 'volume slider', '音量', '音量条', 'yinliang', 'yinliangtiao', 'yl', 'ylt'],
+    icon: Volume2,
+    placeholder: i18n.t('commandPalette.volumeInputPlaceholder'),
+    requiresInput: true,
+    getInitialInput: context => String(Math.round(context.volume * 100)),
+    getPreview: (input, context) => {
+        if (!input.trim()) {
+            return context.t('commandPalette.volumeCurrent', 'Current volume: {{value}}%')
+                .replace('{{value}}', String(Math.round(context.volume * 100)));
+        }
+
+        const value = parseVolumePercent(input);
+        if (value === null) {
+            return context.t('commandPalette.volumeInvalid', 'Enter a number from 0 to 100');
+        }
+
+        return context.t('commandPalette.volumeSetPreview', 'Set volume to {{value}}%')
+            .replace('{{value}}', String(value));
+    },
+    execute: (input, context) => {
+        const value = parseVolumePercent(input);
+        if (value === null) {
+            return false;
+        }
+
+        context.setVolume(value / 100);
+        return true;
+    },
+});
+
 const createSettingsCommand = (
     id: string,
     title: string,
@@ -284,6 +328,7 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
     createSearchCommand('search-navidrome', 'Search Navidrome songs', 'Search Navidrome library', ['navi', 'navidrome', 'search navidrome', '导航', '服务器', 'fuwuqi', 'fwq'], () => 'navidrome'),
     createSearchCommand('search-netease', 'Search NetEase songs', 'Search NetEase Cloud Music', ['netease', 'cloud', 'search netease', '网易云', '网抑云', 'wangyiyun', 'wyy'], () => 'netease'),
     createQueueSearchCommand(),
+    createVolumeCommand(),
 
     createSettingsCommand('settings-help', 'Open Help', 'Open help and shortcuts', ['help', '帮助', 'bangzhu', 'bz'], 'help'),
     {

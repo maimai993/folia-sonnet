@@ -47,6 +47,7 @@ export const useCommandPalette = ({
     );
 
     const matches = useMemo(() => {
+        const activeInput = activeCommand?.id === 'playback-volume' ? query : matchQuery;
         let list: CommandPaletteMatch[];
         if (!activeCommand) {
             list = getCommandPaletteMatches(matchQuery, context, recentCommandIds);
@@ -57,7 +58,7 @@ export const useCommandPalette = ({
             const activeMatch: CommandPaletteMatch = {
                 command: activeCommand,
                 score: 100,
-                input: matchQuery,
+                input: activeInput,
             };
             const otherMatches: CommandPaletteMatch[] = inputCommands
                 .filter(cmd => cmd.id !== activeCommand.id)
@@ -68,7 +69,7 @@ export const useCommandPalette = ({
                 .map((cmd, idx) => ({
                     command: cmd,
                     score: 90 - idx,
-                    input: matchQuery,
+                    input: activeInput,
                 }));
             list = [activeMatch, ...otherMatches];
         }
@@ -83,7 +84,7 @@ export const useCommandPalette = ({
                 previewText,
             };
         });
-    }, [activeCommand, matchQuery, context, recentCommandIds]);
+    }, [activeCommand, matchQuery, query, context, recentCommandIds]);
 
     const activePreview = useMemo(() => {
         const match = matches[activeIndex];
@@ -108,11 +109,20 @@ export const useCommandPalette = ({
         setIsExecuting(false);
     }, []);
 
-    const recordExecutedCommand = useCallback((command: CommandPaletteCommand) => {
+    const recordRecentCommand = useCallback((command: CommandPaletteCommand) => {
         if (isRecordableRecentCommand(command, COMMAND_PALETTE_COMMANDS)) {
             setRecentCommandIds(currentCommandIds => recordRecentCommandId(command.id, currentCommandIds));
         }
     }, []);
+
+    const activateInputCommand = useCallback((command: CommandPaletteCommand) => {
+        const initialInput = command.getInitialInput?.(context) ?? '';
+        recordRecentCommand(command);
+        setActiveCommand(command);
+        setQuery(initialInput);
+        setMatchQuery(initialInput);
+        setActiveIndex(0);
+    }, [context, recordRecentCommand]);
 
     const executeMatch = useCallback(async (index: number) => {
         if (isExecuting) {
@@ -127,10 +137,7 @@ export const useCommandPalette = ({
         const input = match.input;
         if (match.command.requiresInput && !activeCommand) {
             if (!input) {
-                setActiveCommand(match.command);
-                setQuery('');
-                setMatchQuery('');
-                setActiveIndex(0);
+                activateInputCommand(match.command);
                 return false;
             }
         }
@@ -143,14 +150,14 @@ export const useCommandPalette = ({
         try {
             const didExecute = await match.command.execute(input, context);
             if (didExecute) {
-                recordExecutedCommand(resolveRecentCommandToRecord(match.command, activeCommand));
+                recordRecentCommand(resolveRecentCommandToRecord(match.command, activeCommand));
                 close();
             }
             return didExecute;
         } finally {
             setIsExecuting(false);
         }
-    }, [close, context, activeCommand, matches, isExecuting, recordExecutedCommand]);
+    }, [activateInputCommand, close, context, activeCommand, matches, isExecuting, recordRecentCommand]);
 
     const executeActive = useCallback(() => executeMatch(activeIndex), [activeIndex, executeMatch]);
 
@@ -159,10 +166,7 @@ export const useCommandPalette = ({
             return false;
         }
         if (command.requiresInput) {
-            setActiveCommand(command);
-            setQuery('');
-            setMatchQuery('');
-            setActiveIndex(0);
+            activateInputCommand(command);
             return false;
         }
 
@@ -170,14 +174,14 @@ export const useCommandPalette = ({
         try {
             const didExecute = await command.execute('', context);
             if (didExecute) {
-                recordExecutedCommand(command);
+                recordRecentCommand(command);
                 close();
             }
             return didExecute;
         } finally {
             setIsExecuting(false);
         }
-    }, [close, context, isExecuting, recordExecutedCommand]);
+    }, [activateInputCommand, close, context, isExecuting, recordRecentCommand]);
 
     useEffect(() => {
         setActiveIndex(0);
@@ -197,14 +201,11 @@ export const useCommandPalette = ({
                     cmd.keywords.some(kw => kw.toLowerCase() === trimmed.toLowerCase())
                 );
                 if (matchedCmd) {
-                    setActiveCommand(matchedCmd);
-                    setQuery('');
-                    setMatchQuery('');
-                    setActiveIndex(0);
+                    activateInputCommand(matchedCmd);
                 }
             }
         }
-    }, [query, isComposing, isOpen, activeCommand]);
+    }, [activateInputCommand, query, isComposing, isOpen, activeCommand]);
 
     useEffect(() => {
         if (!isOpen || isComposing) {

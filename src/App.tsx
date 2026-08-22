@@ -1966,6 +1966,8 @@ export default function App() {
         submitSearch,
         togglePlay,
         toggleLoop,
+        volume,
+        setVolume: handleSetVolume,
         onReplayGainModeChange: handleChangeReplayGainMode,
         openAudioEqualizer,
         applyAudioSoundPreset,
@@ -2040,6 +2042,7 @@ export default function App() {
         generateCurrentSongTheme,
         handleAutoMatchBestLyricForCurrentSong,
         handleSetAppLanguagePreference,
+        handleSetVolume,
         handleNextTrack,
         handlePrevTrack,
         handleSetVisualizerMode,
@@ -2072,6 +2075,7 @@ export default function App() {
         toggleMainWindowAlwaysOnTop,
         toggleLoop,
         togglePlay,
+        volume,
         handleChangeReplayGainMode,
         openAudioEqualizer,
         applyAudioSoundPreset,
@@ -3328,6 +3332,7 @@ export default function App() {
                 activeCommand={commandPalette.activeCommand}
                 availableCommands={commandPalette.availableCommands}
                 isDaylight={isDaylight}
+                isMuted={isMuted}
                 isComposing={commandPalette.isComposing}
                 isExecuting={commandPalette.isExecuting}
                 isOpen={commandPalette.isOpen}
@@ -3336,6 +3341,7 @@ export default function App() {
                 pinnedCommands={commandPalette.pinnedCommands}
                 query={commandPalette.query}
                 theme={theme}
+                volume={volume}
                 onActiveCommandChange={commandPalette.setActiveCommand}
                 onActiveIndexChange={commandPalette.setActiveIndex}
                 onClose={commandPalette.close}
@@ -3352,6 +3358,8 @@ export default function App() {
                 onMoveSongToNext={moveQueueSongToNext}
                 onQueryChange={commandPalette.setQuery}
                 onRemoveSong={removeQueueSong}
+                onVolumeChange={handleSetVolume}
+                onVolumePreview={handlePreviewVolume}
             />
 
             <AppDialogs model={appDialogsModel} />

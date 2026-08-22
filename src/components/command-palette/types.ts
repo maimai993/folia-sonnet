@@ -26,6 +26,7 @@ export type CommandPaletteCommand = {
     keywords: string[];
     placeholder?: string;
     requiresInput?: boolean;
+    getInitialInput?: (context: CommandPaletteContext) => string;
     getPreview?: (input: string, context: CommandPaletteContext) => string | null;
     queueIndex?: number;
     queueSong?: SongResult;
@@ -68,6 +69,8 @@ export type CommandPaletteContext = {
     }) => Promise<boolean>;
     togglePlay: () => void;
     toggleLoop: () => void;
+    volume: number;
+    setVolume: (volume: number) => void;
     onReplayGainModeChange: (mode: ReplayGainMode) => void;
     openAudioEqualizer: () => void;
     applyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;

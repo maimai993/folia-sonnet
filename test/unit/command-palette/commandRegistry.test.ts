@@ -23,6 +23,8 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     submitSearch: vi.fn(async () => true),
     togglePlay: vi.fn(),
     toggleLoop: vi.fn(),
+    volume: 0.5,
+    setVolume: vi.fn(),
     onReplayGainModeChange: vi.fn(),
     openAudioEqualizer: vi.fn(),
     applyAudioSoundPreset: vi.fn(),
@@ -151,6 +153,22 @@ describe('command palette registry', () => {
         expect(context.setPanelTab).toHaveBeenCalledWith('controls');
         expect(context.setIsPanelOpen).toHaveBeenCalledWith(true);
         expect(context.openAudioEqualizer).toHaveBeenCalled();
+    });
+
+    it('opens the volume control command and accepts only values from 0 to 100', () => {
+        const context = createContext({ volume: 0.42 });
+        const [match] = getCommandPaletteMatches('音量条');
+
+        expect(match.command.id).toBe('playback-volume');
+        expect(match.command.requiresInput).toBe(true);
+        expect(match.command.getInitialInput?.(context)).toBe('42');
+        expect(match.command.execute('75', context)).toBe(true);
+        expect(context.setVolume).toHaveBeenCalledWith(0.75);
+
+        expect(match.command.execute('-1', context)).toBe(false);
+        expect(match.command.execute('101', context)).toBe(false);
+        expect(match.command.execute('loud', context)).toBe(false);
+        expect(context.setVolume).toHaveBeenCalledTimes(1);
     });
 
     it('applies a full sound preset from the command palette', () => {
