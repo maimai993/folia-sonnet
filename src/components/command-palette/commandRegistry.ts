@@ -21,6 +21,16 @@ import { ListMusic, ListX, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipF
 // Defines command palette entries and the lightweight matching used for autocomplete.
 
 const MAX_COMMAND_MATCHES = 10;
+const MATCH_QUALITY = {
+    contains: 1,
+    prefix: 2,
+    input: 3,
+    exact: 4,
+} as const;
+
+type RankedCommandPaletteMatch = CommandPaletteMatch & {
+    matchQuality: number;
+};
 
 const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -1140,29 +1150,55 @@ export const getCommandPaletteMatches = (
         }));
     }
 
+    const recentCommandRanks = new Map<string, number>();
+    recentCommandIds.forEach((commandId, index) => {
+        if (!recentCommandRanks.has(commandId)) {
+            recentCommandRanks.set(commandId, index);
+        }
+    });
+
     const matches = filteredCommands
         .map(command => {
             let bestScore = 0;
             let bestInput = '';
+            let matchQuality = 0;
 
             for (const keyword of command.keywords) {
                 const normalizedKeyword = normalize(keyword);
                 if (normalizedQuery === normalizedKeyword) {
                     bestScore = Math.max(bestScore, 120);
+                    matchQuality = Math.max(matchQuality, MATCH_QUALITY.exact);
                 } else if (normalizedKeyword.startsWith(normalizedQuery)) {
                     bestScore = Math.max(bestScore, 100 - normalizedKeyword.length);
+                    matchQuality = Math.max(matchQuality, MATCH_QUALITY.prefix);
                 } else if (normalizedQuery.startsWith(`${normalizedKeyword} `)) {
                     bestScore = Math.max(bestScore, 90 + normalizedKeyword.length + (command.requiresInput ? 20 : 0));
                     bestInput = query.trim().slice(keyword.length).trim();
+                    matchQuality = Math.max(matchQuality, MATCH_QUALITY.input);
                 } else if (normalizedKeyword.includes(normalizedQuery)) {
                     bestScore = Math.max(bestScore, 60 - normalizedKeyword.indexOf(normalizedQuery));
+                    matchQuality = Math.max(matchQuality, MATCH_QUALITY.contains);
                 }
             }
 
-            return bestScore > 0 ? { command, score: bestScore, input: bestInput } : null;
+            return bestScore > 0 ? { command, score: bestScore, input: bestInput, matchQuality } : null;
         })
-        .filter((match): match is CommandPaletteMatch => Boolean(match))
-        .sort((a, b) => b.score - a.score || a.command.title.localeCompare(b.command.title));
+        .filter((match): match is RankedCommandPaletteMatch => Boolean(match))
+        .sort((a, b) => {
+            if (a.matchQuality !== b.matchQuality) {
+                return b.matchQuality - a.matchQuality;
+            }
+
+            const aRecentRank = recentCommandRanks.get(a.command.id);
+            const bRecentRank = recentCommandRanks.get(b.command.id);
+            if (aRecentRank !== undefined || bRecentRank !== undefined) {
+                if (aRecentRank === undefined) return 1;
+                if (bRecentRank === undefined) return -1;
+                if (aRecentRank !== bRecentRank) return aRecentRank - bRecentRank;
+            }
+
+            return b.score - a.score || a.command.title.localeCompare(b.command.title);
+        });
 
     return matches.slice(0, MAX_COMMAND_MATCHES);
 };

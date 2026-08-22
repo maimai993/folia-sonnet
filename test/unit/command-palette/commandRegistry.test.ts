@@ -516,6 +516,41 @@ describe('command palette registry', () => {
             .toEqual(recentIds);
     });
 
+    it('prioritizes remembered commands within the same search match quality', () => {
+        const matches = getCommandPaletteMatches(
+            'panel',
+            createContext(),
+            ['panel-controls', 'panel-queue'],
+        );
+        const panelCommandIds = matches
+            .map(match => match.command.id)
+            .filter(commandId => commandId.startsWith('panel-'));
+
+        expect(panelCommandIds.slice(0, 2)).toEqual(['panel-controls', 'panel-queue']);
+    });
+
+    it('uses MRU order when remembered commands are equally strong exact matches', () => {
+        const matches = getCommandPaletteMatches(
+            'local',
+            undefined,
+            ['home-local', 'search-local'],
+        );
+
+        expect(matches.slice(0, 2).map(match => match.command.id))
+            .toEqual(['home-local', 'search-local']);
+    });
+
+    it('keeps an exact non-remembered match above a fuzzy remembered match', () => {
+        const matches = getCommandPaletteMatches(
+            'queue',
+            createContext(),
+            ['panel-queue'],
+        );
+
+        expect(matches[0].command.id).toBe('queue');
+        expect(matches.findIndex(match => match.command.id === 'panel-queue')).toBeGreaterThan(0);
+    });
+
     it('matches and executes background and visualizer monet switching commands', () => {
         const context = createContext();
 
