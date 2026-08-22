@@ -21,7 +21,7 @@ import { useTemperaLayerImageThumbnails } from './useTemperaLayerImageThumbnails
 // dialog closes. Editing the live tuning instead meant a synchronous localStorage write and a
 // global store update on every pointermove of a slider, which pinned a core; the card preview
 // is what gives feedback during the edit, so nothing is lost by holding the commit back.
-const MAX_IMAGES = 8;
+const MAX_IMAGES = 16;
 
 export interface TemperaImageLayerCommit {
     layerImages: TemperaLayerImage[];
