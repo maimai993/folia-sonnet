@@ -32,6 +32,15 @@ function run(command, args) {
   execFileSync(command, args, { stdio: 'inherit' });
 }
 
+function succeeds(command, args) {
+  try {
+    execFileSync(command, args, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function requireTool(command, hint) {
   try {
     execFileSync(command, ['--version'], { stdio: 'ignore' });
@@ -56,8 +65,16 @@ requireTool('cargo', 'Install a Rust toolchain to build windowtolayer.');
 
 mkdirSync(OUT_DIR, { recursive: true });
 
+// Rust caches may restore target/ into this workspace without restoring the Git checkout.
+// Initialize in place so the cached build artifacts survive and the fetch remains re-runnable.
 if (!existsSync(path.join(SRC_DIR, '.git'))) {
-  run('git', ['clone', UPSTREAM_URL, SRC_DIR]);
+  mkdirSync(SRC_DIR, { recursive: true });
+  run('git', ['-C', SRC_DIR, 'init']);
+}
+if (succeeds('git', ['-C', SRC_DIR, 'remote', 'get-url', 'origin'])) {
+  run('git', ['-C', SRC_DIR, 'remote', 'set-url', 'origin', UPSTREAM_URL]);
+} else {
+  run('git', ['-C', SRC_DIR, 'remote', 'add', 'origin', UPSTREAM_URL]);
 }
 // -f discards any state a previous patch application left behind, so every build starts from
 // the exact pinned revision before the patches are applied again.

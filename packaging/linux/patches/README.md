@@ -8,9 +8,10 @@ implement desktop wallpaper mode (`wlr-layer-shell` bottom layer).
 **Base revision**: `618a482d791e90f4977d643c206417f6aee73936`
 **License**: GPL-3.0 (the program's `COPYING` is shipped as `resources/windowtolayer-COPYING`)
 
-Applied by `packaging/linux/build-windowtolayer.mjs`: it clones the pinned revision and
-`git apply`s the patches listed in its `PATCHES` array, in order. To refresh after an upstream
-rework, bump `PINNED_REV` in that file, re-apply the fixes by hand, regenerate each patch with
+Applied by `packaging/linux/build-windowtolayer.mjs`: it initializes or reuses the cached source
+workspace, fetches the pinned revision, and `git apply`s the patches listed in its `PATCHES` array,
+in order. To refresh after an upstream rework, bump `PINNED_REV` in that file, re-apply the fixes
+by hand, regenerate each patch with
 `git diff <file>`, and update the base revision here.
 
 ### `windowtolayer-popup-resilience.patch` (popup/menu resilience fix)
