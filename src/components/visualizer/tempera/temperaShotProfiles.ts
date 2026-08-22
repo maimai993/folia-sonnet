@@ -400,6 +400,64 @@ export const TEMPERA_SHOT_PROFILES: Record<TemperaShotKind, TemperaShotProfile> 
         camera: { travel: 0.08, zoomStart: 1.06, zoomEnd: 1.13 },
         mood: 'neutral',
     },
+    // Rounded family. The type sits inside a curved shape rather than across a seam, so the
+    // regions track that shape and the camera stays gentler than the poster family's.
+    'bubble-drift': {
+        region: region(0.5, 0.5, 0.72, 0.36, { fontScale: 0.92 }),
+        enter: { x: 0.5, y: 1 },
+        camera: { travel: 0.09, zoomStart: 1.05, zoomEnd: 1.12 },
+        mood: 'neutral',
+    },
+    'cloud-window': {
+        // Inside the medallion, which the composition centres slightly below the frame centre.
+        region: region(0.5, 0.52, 0.46, 0.3, { fontScale: 0.84 }),
+        enter: { x: 0, y: 0.8 },
+        camera: { travel: 0.05, zoomStart: 1.14, zoomEnd: 1.03 },
+        mood: 'quiet',
+    },
+    'heart-burst': {
+        region: region(0.5, 0.52, 0.5, 0.3, { fontScale: 0.95 }),
+        enter: { x: 0.8, y: 0.8 },
+        camera: { travel: 0.1, zoomStart: 1.08, zoomEnd: 1.16 },
+        mood: 'loud',
+    },
+    'sparkle-field': {
+        region: region(0.5, 0.48, 0.64, 0.26, { fontScale: 0.7 }),
+        enter: { x: 0.4, y: 0.6 },
+        camera: { travel: 0.04, zoomStart: 1.02, zoomEnd: 1.08 },
+        mood: 'quiet',
+    },
+    'petal-arc': {
+        // Low in the frame: the petal fan owns the top corner it swings out of.
+        region: region(0.5, 0.6, 0.7, 0.3, { fontScale: 0.9 }),
+        enter: { x: 0, y: 1.1 },
+        camera: { travel: 0.1, zoomStart: 1.04, zoomEnd: 1.12 },
+        mood: 'neutral',
+    },
+    'scallop-band': {
+        region: region(0.5, 0.5, 0.76, 0.24, { fontScale: 0.88 }),
+        enter: { x: 0.7, y: 0 },
+        camera: { travel: 0.12, zoomStart: 1.03, zoomEnd: 1.1 },
+        mood: 'neutral',
+    },
+    'ribbon-loop': {
+        region: region(0.5, 0.5, 0.68, 0.22, { rotation: 0.04, fontScale: 0.86 }),
+        enter: { x: -1.1, y: 0.6 },
+        camera: { travel: 0.11, zoomStart: 1.07, zoomEnd: 1.15 },
+        mood: 'loud',
+    },
+    'round-plate': {
+        region: region(0.5, 0.5, 0.56, 0.36, { fontScale: 0.86 }),
+        enter: { x: 0, y: 0.7 },
+        camera: { travel: 0.05, zoomStart: 1.1, zoomEnd: 1.02 },
+        mood: 'quiet',
+    },
+    'halo-burst': {
+        region: region(0.5, 0.5, 0.46, 0.3, { fontScale: 0.95 }),
+        enter: { x: 0, y: 0.9 },
+        camera: { travel: 0.08, zoomStart: 1.12, zoomEnd: 1.02 },
+        mood: 'loud',
+    },
     // Monogatari interstitials: one flat field and the type *is* the picture, so the regions
     // are large and the type runs big.
     'monogatari-card': {

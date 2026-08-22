@@ -19,7 +19,7 @@
 
 ## 编译期：段落、shot、slice
 
-`tempera/VisualizerTempera.tsx` 负责 React shell/subtitle，`createTemperaPixiRuntime.ts` 创建 Pixi runtime（scene cache ±1、绝对时间驱动、无外部纹理）。与 sonnet 同族但视觉路线不同：`temperaProgram.ts` 编译段落/shot；镜头共 62 种，分七族：分割/色带/框窗/海报/稀疏，加上 **cinema-shot**（各种画幅比例的遮幅窗口，中间镂空、按真实像素比例 aspect-fit，所以「正方形」在任何显示比例下都是方的）和 **monogatari-blank**（物语系过场卡：整屏单色平涂 + 大字，profile 上标 `sharedDecor: false` 跳过贯穿线与 motif 叠加，否则那层装饰会毁掉「留白卡」本身），定义在 `types.ts` 的 `TEMPERA_SHOT_KINDS`，排版区域/入场向量/镜头位移/mood 在 `temperaShotProfiles.ts`（纯数据、无 pixi），绘制在 `compositions/*` 按族分文件、由 `temperaCompositions.ts` 注册聚合；mood（quiet/neutral/loud）决定换气段只取安静构图、副歌不取安静构图；**一个 shot 只放半句**——每行按词边界切成 2~4 词或 ~2.2s 的 `TemperaShotSlice`，所以一句歌词会横跨多个 shot，shot 之间由 runtime 直接交接（上一个 shot 沿 flowAngle 继续推出画面、下一个从上游推进来，两者在 handoff 窗口内同屏重叠）；handoff 时长为 shot 时长的 0.3（钳在 0.4~1.1s），不再有 shot 级的场景转场；flowAngle 以垂直为主轴，交接因此读作纵向长镜头而非切换。段落转场为 `block-wipe`/`camera-pan`/`shape-carry`。间隙（≥1.2s）会被编译成 **bridge shot**：无歌词、只有构图的 shot，按 ≤5s 切成 1~3 个，走和普通 shot 完全相同的交接/镜头/装饰机制，所以器乐段落一直在动，段落转场的出画侧也始终有内容。此外平移类转场需要「另一头」有东西接：段落边界经常落在没有歌词的间隙里，所以转场窗口内会**预卷**下一个段落的 scene（`block-wipe` 除外——它的 enter 阶段是揭开遮罩，必须在边界之后），同时 `compileTemperaProgram` 把每段首个 shot 的 startTime 提前到上一段的转场起点（不越过上一段的 endTime），让新构图在间隙里就开始搭建；逐字时序完全不受影响。scene 容器开 `sortableChildren` 并按段落序号排 zIndex。转场边缘仍可能短暂露出 shell 背景，这是已知且**接受**的取舍，运动感优先于边缘覆盖，不要为了补边去掉平移。
+`tempera/VisualizerTempera.tsx` 负责 React shell/subtitle，`createTemperaPixiRuntime.ts` 创建 Pixi runtime（scene cache ±1、绝对时间驱动、无外部纹理）。与 sonnet 同族但视觉路线不同：`temperaProgram.ts` 编译段落/shot；镜头共 71 种，分八族：分割/色带/框窗/海报/稀疏，加上 **cinema-shot**（各种画幅比例的遮幅窗口，中间镂空、按真实像素比例 aspect-fit，所以「正方形」在任何显示比例下都是方的）、**charm**（圆滑族，见下面「圆滑构图族」）和 **monogatari-blank**（物语系过场卡：整屏单色平涂 + 大字，profile 上标 `sharedDecor: false` 跳过贯穿线与 motif 叠加，否则那层装饰会毁掉「留白卡」本身），定义在 `types.ts` 的 `TEMPERA_SHOT_KINDS`，排版区域/入场向量/镜头位移/mood 在 `temperaShotProfiles.ts`（纯数据、无 pixi），绘制在 `compositions/*` 按族分文件、由 `temperaCompositions.ts` 注册聚合；mood（quiet/neutral/loud）决定换气段只取安静构图、副歌不取安静构图；**一个 shot 只放半句**——每行按词边界切成 2~4 词或 ~2.2s 的 `TemperaShotSlice`，所以一句歌词会横跨多个 shot，shot 之间由 runtime 直接交接（上一个 shot 沿 flowAngle 继续推出画面、下一个从上游推进来，两者在 handoff 窗口内同屏重叠）；handoff 时长为 shot 时长的 0.3（钳在 0.4~1.1s），不再有 shot 级的场景转场；flowAngle 以垂直为主轴，交接因此读作纵向长镜头而非切换。段落转场为 `block-wipe`/`camera-pan`/`shape-carry`。间隙（≥1.2s）会被编译成 **bridge shot**：无歌词、只有构图的 shot，按 ≤5s 切成 1~3 个，走和普通 shot 完全相同的交接/镜头/装饰机制，所以器乐段落一直在动，段落转场的出画侧也始终有内容。此外平移类转场需要「另一头」有东西接：段落边界经常落在没有歌词的间隙里，所以转场窗口内会**预卷**下一个段落的 scene（`block-wipe` 除外——它的 enter 阶段是揭开遮罩，必须在边界之后），同时 `compileTemperaProgram` 把每段首个 shot 的 startTime 提前到上一段的转场起点（不越过上一段的 endTime），让新构图在间隙里就开始搭建；逐字时序完全不受影响。scene 容器开 `sortableChildren` 并按段落序号排 zIndex。转场边缘仍可能短暂露出 shell 背景，这是已知且**接受**的取舍，运动感优先于边缘覆盖，不要为了补边去掉平移。
 
 ## 排版
 
@@ -56,6 +56,10 @@
 ## 网点图形层
 
 视觉层为「网点图形」语言：`temperaHatch.ts` 是纯函数生成器（斜线 hatch、抖动涂鸦折线、重复符行列、贯穿斜线、纸面点阵），`temperaShapes.ts` 把它们变成静态 Pixi Graphics，`temperaCompositions.ts` 按 shot kind 组合构图，`temperaBlocks.ts` 只保留 enter/exit 运动状态。每个 shot 的 `decor`（motif、hatch 角度、贯穿线数量、碎字）在 `temperaProgram.ts` 编译期由 seed 定死，渲染层零随机。
+
+## 圆滑构图族（charm）
+
+气泡、云朵窗、心形、kirakira 四芒星、花瓣扇、蕾丝波边、缎带 + 蝴蝶结、圆角贴纸板、柔光放射（`bubble-drift`/`cloud-window`/`heart-burst`/`sparkle-field`/`petal-arc`/`scallop-band`/`ribbon-loop`/`round-plate`/`halo-burst`，绘制在 `compositions/temperaCharmCompositions.ts`）。**其他族都是用直边切开画面，这一族相反：底面保持整块平涂，圆形放在上面**，所以字读作印在贴纸上而不是跨在分割缝上；也因此每个形状都保留 ink 描边——没有描边的柔和形状会化进底色，反色 filter 就没有边可切。曲线几何在 `temperaCurves.ts`（和 `temperaHatch.ts` 同一套纯函数约定：无 pixi、无 `Math.random`，一律输出扁平多边形），**凸性是硬约束**：`buildHatchLines` 靠半平面裁剪，只有 `ellipsePolygon` / `roundedRectPolygon` 能进 `drawHatchFill`，心形、星形、波边、缎带都是凹多边形，只能填充和描边（pixi 用 earcut 三角化，填充是安全的）。圆的集合走 `drawDiscs` / `drawRings`：**一整片气泡是一个 Graphics 节点**（否则十几个节点会各自进 block 动画器），节点 pivot 落在自身包围盒中心，`drift` 才是原地呼吸。同理，凡是要 `drift` 又不在画面中心的形状（散落的小心、星、花蕊），必须用 `ctx.createGroup(0, x, y)` 放到定位组里、几何按局部坐标画——`drift` 是绕节点自身原点缩放和旋转的，直接按绝对坐标画会让它绕画面原点公转。
 
 ## 文字反色
 

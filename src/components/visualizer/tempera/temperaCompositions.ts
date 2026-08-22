@@ -17,6 +17,7 @@ import { TEMPERA_FRAME_COMPOSITIONS } from './compositions/temperaFrameCompositi
 import { TEMPERA_POSTER_COMPOSITIONS } from './compositions/temperaPosterCompositions';
 import { TEMPERA_SPARSE_COMPOSITIONS } from './compositions/temperaSparseCompositions';
 import { TEMPERA_CINEMA_COMPOSITIONS } from './compositions/temperaCinemaCompositions';
+import { TEMPERA_CHARM_COMPOSITIONS } from './compositions/temperaCharmCompositions';
 import { TEMPERA_MONOGATARI_COMPOSITIONS } from './compositions/temperaMonogatariCompositions';
 import { resolveTemperaShotProfile } from './temperaShotProfiles';
 
@@ -33,6 +34,7 @@ const COMPOSITIONS: Partial<Record<TemperaShotKind, TemperaCompositionDrawer>> =
     ...TEMPERA_POSTER_COMPOSITIONS,
     ...TEMPERA_SPARSE_COMPOSITIONS,
     ...TEMPERA_CINEMA_COMPOSITIONS,
+    ...TEMPERA_CHARM_COMPOSITIONS,
     ...TEMPERA_MONOGATARI_COMPOSITIONS,
 };
 

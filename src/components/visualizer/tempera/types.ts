@@ -74,6 +74,17 @@ export const TEMPERA_SHOT_KINDS = [
     'cinema-portrait',
     'cinema-tall',
     'cinema-twin',
+    // Rounded shapes laid on a flat field, after visual novel promo PVs. Every other family
+    // cuts the frame with straight edges; these keep the field whole and put curves on it.
+    'bubble-drift',
+    'cloud-window',
+    'heart-burst',
+    'sparkle-field',
+    'petal-arc',
+    'scallop-band',
+    'ribbon-loop',
+    'round-plate',
+    'halo-burst',
     // Monogatari-style interstitials: one flat field, type as the whole picture.
     'monogatari-card',
     'monogatari-rule',
