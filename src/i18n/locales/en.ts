@@ -1526,6 +1526,29 @@ export default {
     "noDescription": "No description available",
   },
   "releaseNotes": {
+    "v0_6_22": {
+      "intro": "Here are the new features and improvements in version 0.6.22.",
+      "stillVisualizer": {
+        "title": "Still Lyric Visualizer",
+        "description": "Use a low-resource static three-line lyric view without an animated visualizer background, including for OBS browser-source lyrics."
+      },
+      "commandPaletteEnhancements": {
+        "title": "A Smarter Command Palette",
+        "description": "Set playback volume with a slider or a 0–100 value, while frequently used commands rise to the top of matching results."
+      },
+      "gridVisibility": {
+        "title": "Hide More Grid Collections",
+        "description": "GridMap can now hide playlists, cloud collections, radios, and daily recommendations so the home view stays focused."
+      },
+      "temperaPerformance": {
+        "title": "Tempera Performance Controls",
+        "description": "Tempera now supports up to 16 custom images and an optional 1x post-process pass to reduce GPU and VRAM use at the cost of some sharpness."
+      },
+      "playbackCompatibility": {
+        "title": "More Reliable Playback Metadata",
+        "description": "Media Session updates now wait for the new track's duration, and QQ Music and KuGou cover URLs use more appropriate image sizes."
+      }
+    },
     "v0_6_20": {
       "intro": "Here are the new features and improvements in version 0.6.20.",
       "temperaVisualizer": {

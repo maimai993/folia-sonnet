@@ -1473,6 +1473,29 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia"
   },
   "releaseNotes": {
+    "v0_6_22": {
+      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.22.",
+      "stillVisualizer": {
+        "title": "Visualizer Lirik Statis",
+        "description": "Gunakan tampilan lirik tiga baris yang statis dan hemat sumber daya tanpa latar visualizer animasi, termasuk untuk lirik Browser Source OBS."
+      },
+      "commandPaletteEnhancements": {
+        "title": "Palet Perintah yang Lebih Cerdas",
+        "description": "Atur volume pemutaran dengan slider atau angka 0–100; perintah yang sering digunakan muncul lebih dulu di hasil pencarian."
+      },
+      "gridVisibility": {
+        "title": "Sembunyikan Lebih Banyak Koleksi Grid",
+        "description": "GridMap kini dapat menyembunyikan playlist, koleksi cloud, radio, dan rekomendasi harian agar tampilan beranda tetap fokus."
+      },
+      "temperaPerformance": {
+        "title": "Kontrol Performa Tempera",
+        "description": "Tempera kini mendukung hingga 16 gambar kustom dan opsi pass pasca-pemrosesan 1x untuk mengurangi penggunaan GPU dan VRAM dengan sedikit kompromi pada ketajaman."
+      },
+      "playbackCompatibility": {
+        "title": "Metadata Pemutaran yang Lebih Andal",
+        "description": "Pembaruan Media Session menunggu durasi trek baru siap; URL sampul QQ Music dan Kugou kini menggunakan ukuran gambar yang lebih sesuai."
+      }
+    },
     "v0_6_20": {
       "intro": "Berikut fitur baru dan peningkatan di versi 0.6.20.",
       "temperaVisualizer": {

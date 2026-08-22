@@ -1526,6 +1526,29 @@ export default {
     "noDescription": "暂无详细介绍",
   },
   "releaseNotes": {
+    "v0_6_22": {
+      "intro": "以下是 0.6.22 的新功能与改进",
+      "stillVisualizer": {
+        "title": "静止/still 歌词可视化",
+        "description": "新增低占用的静止/still 歌词可视化模式"
+      },
+      "commandPaletteEnhancements": {
+        "title": "更聪明的命令面板",
+        "description": "命令面板支持通过滑块或数值调整音量，并会优先显示常用命令。"
+      },
+      "gridVisibility": {
+        "title": "隐藏更多 GridMap 集合",
+        "description": "隐藏歌单功能扩展支持到云盘、广播和每日推荐。"
+      },
+      "temperaPerformance": {
+        "title": "凝彩/Tempera 性能控制",
+        "description": "凝彩/Tempera 自定义图片池提升至 16 张，并新增后处理纹理压缩选项。"
+      },
+      "playbackCompatibility": {
+        "title": "更可靠的播放元数据",
+        "description": "修复媒体会话切歌时序问题，并优化 QQ 音乐和酷狗封面尺寸处理。"
+      }
+    },
     "v0_6_20": {
       "intro": "以下是 0.6.20 的新功能与改进",
       "temperaVisualizer": {
