@@ -69,7 +69,9 @@ const LocalTab: React.FC<LocalTabProps> = ({
             }
         });
         return () => { active = false; };
-    }, [localSongId]);
+    // Source changes keep the same local song id, but the controller refreshes the current-song
+    // snapshot after persisting them. Re-read the record so this panel does not keep stale source UI.
+    }, [localSongId, currentSong]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isTranslation: boolean) => {
         const file = e.target.files?.[0];
