@@ -1,0 +1,66 @@
+name: Notify Discord about published release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Notify Discord
+    if: >-
+      github.event.release.prerelease == false &&
+      startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send release notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK_URL }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          RELEASE_AUTHOR: ${{ github.event.release.author.login }}
+          RELEASE_AUTHOR_URL: ${{ github.event.release.author.html_url }}
+          RELEASE_PUBLISHED_AT: ${{ github.event.release.published_at }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${DISCORD_WEBHOOK_URL}" ]]; then
+            echo "DISCORD_RELEASE_WEBHOOK_URL is not configured; skipping notification."
+            exit 0
+          fi
+
+          jq -n \
+            --arg name "${RELEASE_NAME:-${RELEASE_TAG}}" \
+            --arg tag "${RELEASE_TAG}" \
+            --arg url "${RELEASE_URL}" \
+            --arg body "${RELEASE_BODY}" \
+            --arg author "${RELEASE_AUTHOR}" \
+            --arg authorUrl "${RELEASE_AUTHOR_URL}" \
+            --arg publishedAt "${RELEASE_PUBLISHED_AT}" \
+            '{
+              "username": "Folia Releases",
+              "allowed_mentions": {"parse": []},
+              "embeds": [{
+                "title": ("Folia " + $name),
+                "url": $url,
+                "description": (if ($body | length) > 0 then $body[0:4000] else "A new stable version is available." end),
+                "color": 5814783,
+                "fields": [
+                  {"name": "Version", "value": $tag, "inline": true},
+                  {"name": "Published by", "value": ("[" + $author + "](" + $authorUrl + ")"), "inline": true}
+                ],
+                "timestamp": $publishedAt,
+                "footer": {"text": "Folia stable release"}
+              }]
+            }' |
+            curl --fail-with-body --silent --show-error \
+              --retry 3 --retry-delay 2 \
+              -H 'Content-Type: application/json' \
+              --data-binary @- \
+              "${DISCORD_WEBHOOK_URL}"
