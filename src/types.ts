@@ -583,6 +583,9 @@ export type TemperaColorMode = 'duo' | 'mono' | 'gradient';
 /** Where an image tends to sit; the exact spot is picked per shot from the seed. */
 export type TemperaLayerImageAlign = 'left' | 'center' | 'right' | 'free';
 
+/** Vertical counterpart to `TemperaLayerImageAlign`; `free` lets each shot choose a band. */
+export type TemperaLayerImageVerticalAlign = 'top' | 'center' | 'bottom' | 'free';
+
 /**
  * One image in the user's Tempera pool - character art, a logo, a texture. Each shot picks one
  * of them and places it itself, so an image carries a *tendency* rather than coordinates:
@@ -593,6 +596,7 @@ export interface TemperaLayerImage {
   id: string;
   name: string;
   align: TemperaLayerImageAlign;
+  verticalAlign: TemperaLayerImageVerticalAlign;
   /** Height as a fraction of the viewport height; width follows the source aspect. */
   scale: number;
   opacity: number;
@@ -602,6 +606,8 @@ export const TEMPERA_MAX_LAYER_IMAGES = 16;
 
 export const DEFAULT_TEMPERA_LAYER_IMAGE: Omit<TemperaLayerImage, 'id' | 'name'> = {
   align: 'free',
+  // Preserve the original character-art composition, which placed images low in the frame.
+  verticalAlign: 'bottom',
   scale: 0.7,
   opacity: 1,
 };

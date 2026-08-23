@@ -8,6 +8,7 @@ interface ThemedDialogProps {
     isDaylight?: boolean;
     title: string;
     description?: string;
+    headerActions?: React.ReactNode;
     children: React.ReactNode;
     footer?: React.ReactNode;
     maxWidthClass?: string;
@@ -19,6 +20,7 @@ const ThemedDialog: React.FC<ThemedDialogProps> = ({
     isDaylight = false,
     title,
     description,
+    headerActions,
     children,
     footer,
     maxWidthClass = 'max-w-md',
@@ -68,7 +70,12 @@ const ThemedDialog: React.FC<ThemedDialogProps> = ({
                         </button>
 
                         <div className="mb-5 pr-10">
-                            <h2 className={`text-xl font-bold ${textPrimary}`}>{title}</h2>
+                            <div className="flex items-center justify-between gap-3">
+                                <h2 className={`min-w-0 text-xl font-bold ${textPrimary}`}>{title}</h2>
+                                {headerActions && (
+                                    <div className="shrink-0">{headerActions}</div>
+                                )}
+                            </div>
                             {description && (
                                 // pre-line so a description can break where its meaning does rather
                                 // than wherever the width happens to run out.

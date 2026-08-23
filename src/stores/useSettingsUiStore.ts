@@ -559,12 +559,19 @@ const sanitizeTemperaLayerImages = (value: unknown): TemperaLayerImage[] => {
         const record = entry as Partial<TemperaLayerImage>;
         if (typeof record.id !== 'string' || !record.id) return [];
         const align = record.align;
+        const verticalAlign = record.verticalAlign;
         return [{
             id: record.id,
             name: typeof record.name === 'string' ? record.name : record.id,
             align: align === 'left' || align === 'center' || align === 'right' || align === 'free'
                 ? align
                 : DEFAULT_TEMPERA_LAYER_IMAGE.align,
+            verticalAlign: verticalAlign === 'top'
+                || verticalAlign === 'center'
+                || verticalAlign === 'bottom'
+                || verticalAlign === 'free'
+                ? verticalAlign
+                : DEFAULT_TEMPERA_LAYER_IMAGE.verticalAlign,
             scale: typeof record.scale === 'number' && Number.isFinite(record.scale)
                 ? Math.min(2, Math.max(0.05, record.scale))
                 : DEFAULT_TEMPERA_LAYER_IMAGE.scale,

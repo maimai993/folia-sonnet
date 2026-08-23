@@ -41,6 +41,7 @@ const sameImages = (a: TemperaLayerImage[], b: TemperaLayerImage[]) => (
     a.length === b.length && a.every((image, index) => (
         image.id === b[index].id
         && image.align === b[index].align
+        && image.verticalAlign === b[index].verticalAlign
         && image.scale === b[index].scale
         && image.opacity === b[index].opacity
     ))
@@ -127,6 +128,14 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
         setRemovedIds(current => (current.includes(id) ? current : [...current, id]));
     }, []);
 
+    const clearAll = useCallback(() => {
+        setDraft(current => ({ ...current, layerImages: [] }));
+        setRemovedIds(current => Array.from(new Set([
+            ...current,
+            ...draft.layerImages.map(image => image.id),
+        ])));
+    }, [draft.layerImages]);
+
     return (
         <div className="space-y-3">
             {/* The hint gets the panel's full width. Inside the button it had to share the row
@@ -194,6 +203,7 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
                 onAddFiles={files => void handleFiles(files)}
                 onPatch={patch}
                 onRemove={remove}
+                onClearAll={clearAll}
                 onDepthChange={layerImageDepth => setDraft(current => ({ ...current, layerImageDepth }))}
                 onFrequencyChange={layerImageFrequency => setDraft(current => ({ ...current, layerImageFrequency }))}
             />

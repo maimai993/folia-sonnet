@@ -142,7 +142,9 @@ const requiresSceneRebuild = (previous: TemperaTuning, next: TemperaTuning) => (
     || previous.layerImageFrequency !== next.layerImageFrequency
     || previous.layerImages.length !== next.layerImages.length
     || previous.layerImages.some((image, index) => (
-        image.id !== next.layerImages[index]?.id || image.align !== next.layerImages[index]?.align
+        image.id !== next.layerImages[index]?.id
+        || image.align !== next.layerImages[index]?.align
+        || image.verticalAlign !== next.layerImages[index]?.verticalAlign
     ))
 );
 

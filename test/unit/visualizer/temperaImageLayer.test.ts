@@ -12,6 +12,7 @@ const image = (id: string, overrides: Partial<TemperaLayerImage> = {}): TemperaL
     id,
     name: `${id}.png`,
     align: 'free',
+    verticalAlign: 'bottom',
     scale: 0.7,
     opacity: 1,
     ...overrides,
@@ -91,12 +92,28 @@ describe('Tempera image placement', () => {
         expect(spots.size).toBeGreaterThan(20);
     });
 
-    it('sits the picture low in the frame and barely tilts it', () => {
+    it('keeps each vertical alignment inside its own band', () => {
+        const bands: Record<string, [number, number]> = {
+            top: [0.14, 0.32],
+            center: [0.4, 0.6],
+            bottom: [0.68, 0.86],
+            free: [0.12, 0.88],
+        };
+        (['top', 'center', 'bottom', 'free'] as const).forEach(verticalAlign => {
+            const [from, to] = bands[verticalAlign];
+            for (let seed = 0; seed < 200; seed += 1) {
+                const placement = resolveTemperaImagePlacement(image('a', { verticalAlign }), seed);
+                expect(placement.y, verticalAlign).toBeGreaterThanOrEqual(from);
+                expect(placement.y, verticalAlign).toBeLessThanOrEqual(to);
+            }
+        });
+    });
+
+    it('keeps the default image low in the frame and barely tilts it', () => {
         for (let seed = 0; seed < 200; seed += 1) {
             const placement = resolveTemperaImagePlacement(image('a'), seed);
-            // Character art should read as standing in the shot, not hovering mid-frame.
-            expect(placement.y).toBeGreaterThanOrEqual(0.54);
-            expect(placement.y).toBeLessThanOrEqual(0.7);
+            expect(placement.y).toBeGreaterThanOrEqual(0.68);
+            expect(placement.y).toBeLessThanOrEqual(0.86);
             expect(Math.abs(placement.rotation)).toBeLessThanOrEqual(0.04);
         }
     });

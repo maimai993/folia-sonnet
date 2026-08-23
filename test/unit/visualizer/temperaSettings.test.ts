@@ -45,7 +45,14 @@ describe('Tempera canvas images', () => {
         expect(DEFAULT_TEMPERA_TUNING.layerImages).toEqual([]);
         const images = setImages([{ id: 'a', name: 'art.png', align: 'left', scale: 0.9, opacity: 0.8 }]);
         expect(images).toHaveLength(1);
-        expect(images[0]).toEqual({ id: 'a', name: 'art.png', align: 'left', scale: 0.9, opacity: 0.8 });
+        expect(images[0]).toEqual({
+            id: 'a',
+            name: 'art.png',
+            align: 'left',
+            verticalAlign: DEFAULT_TEMPERA_LAYER_IMAGE.verticalAlign,
+            scale: 0.9,
+            opacity: 0.8,
+        });
     });
 
     it('clamps scale and opacity into range', () => {
@@ -67,6 +74,13 @@ describe('Tempera canvas images', () => {
         expect(images[0].scale).toBe(DEFAULT_TEMPERA_LAYER_IMAGE.scale);
         // An unknown alignment must resolve to a known tendency, not be passed through.
         expect(images[0].align).toBe(DEFAULT_TEMPERA_LAYER_IMAGE.align);
+        expect(images[0].verticalAlign).toBe(DEFAULT_TEMPERA_LAYER_IMAGE.verticalAlign);
+    });
+
+    it('accepts vertical alignment and rejects unknown values', () => {
+        expect(setImages([{ id: 'top', verticalAlign: 'top' }])[0].verticalAlign).toBe('top');
+        expect(setImages([{ id: 'bad', verticalAlign: 'sideways' }])[0].verticalAlign)
+            .toBe(DEFAULT_TEMPERA_LAYER_IMAGE.verticalAlign);
     });
 
     it('caps the number of placements and survives a non-array', () => {

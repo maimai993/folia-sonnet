@@ -1,4 +1,8 @@
-import type { TemperaLayerImage, TemperaLayerImageAlign } from '../../../types';
+import type {
+    TemperaLayerImage,
+    TemperaLayerImageAlign,
+    TemperaLayerImageVerticalAlign,
+} from '../../../types';
 import { clamp01, easeTemperaEnter, easeTemperaInOut } from './temperaMotion';
 import { temperaHash01 } from './temperaRandom';
 
@@ -19,6 +23,14 @@ const ALIGN_BANDS: Record<TemperaLayerImageAlign, { from: number; to: number }> 
     free: { from: 0.12, to: 0.88 },
 };
 
+/** Vertical bands mirror the horizontal grid so fixed positions read as a true 3x3 layout. */
+const VERTICAL_ALIGN_BANDS: Record<TemperaLayerImageVerticalAlign, { from: number; to: number }> = {
+    top: { from: 0.14, to: 0.32 },
+    center: { from: 0.4, to: 0.6 },
+    bottom: { from: 0.68, to: 0.86 },
+    free: { from: 0.12, to: 0.88 },
+};
+
 export interface TemperaImagePlacement {
     x: number;
     y: number;
@@ -36,12 +48,13 @@ export const resolveTemperaImagePlacement = (
     image: TemperaLayerImage,
     seed: number,
 ): TemperaImagePlacement => {
-    const band = ALIGN_BANDS[image.align] ?? ALIGN_BANDS.free;
+    const horizontalBand = ALIGN_BANDS[image.align] ?? ALIGN_BANDS.free;
+    const verticalBand = VERTICAL_ALIGN_BANDS[image.verticalAlign] ?? VERTICAL_ALIGN_BANDS.bottom;
     return {
-        x: band.from + (band.to - band.from) * temperaHash01(seed, 1, 251),
-        // Pictures sit low in the frame: character art reads as standing in the shot rather
-        // than hovering in the middle of it.
-        y: 0.54 + temperaHash01(seed, 2, 257) * 0.16,
+        x: horizontalBand.from
+            + (horizontalBand.to - horizontalBand.from) * temperaHash01(seed, 1, 251),
+        y: verticalBand.from
+            + (verticalBand.to - verticalBand.from) * temperaHash01(seed, 2, 257),
         scale: image.scale * (0.9 + temperaHash01(seed, 3, 263) * 0.2),
         rotation: (temperaHash01(seed, 4, 269) - 0.5) * 0.08,
         opacity: image.opacity,
