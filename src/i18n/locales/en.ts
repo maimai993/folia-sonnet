@@ -764,6 +764,7 @@ export default {
     "r2Sync": "Sync Server",
     "r2SyncEnable": "Enable sync server",
     "r2SyncEnableDesc": "Sync appearance settings and AI themes through your own Cloudflare D1 Worker or self-hosted sync service.",
+    "r2SyncDeployDocs": "Deployment guide",
     "r2SyncWorkerUrl": "Sync Server URL",
     "r2SyncToken": "Bearer Token",
     "r2SyncTokenPlaceholder": "Worker SYNC_TOKEN",

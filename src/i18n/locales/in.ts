@@ -760,6 +760,7 @@ export default {
     "r2Sync": "Server Sinkronisasi",
     "r2SyncEnable": "Aktifkan server sinkronisasi",
     "r2SyncEnableDesc": "Sinkronkan pengaturan tampilan dan tema AI melalui Cloudflare D1 Worker Anda sendiri atau layanan sinkronisasi self-hosted.",
+    "r2SyncDeployDocs": "Panduan penerapan",
     "r2SyncWorkerUrl": "URL Server Sinkronisasi",
     "r2SyncToken": "Token Bearer",
     "r2SyncTokenPlaceholder": "SYNC_TOKEN Worker",

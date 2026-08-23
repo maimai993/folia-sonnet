@@ -764,6 +764,7 @@ export default {
     "r2Sync": "同步服务",
     "r2SyncEnable": "启用同步服务",
     "r2SyncEnableDesc": "通过你自己的 Cloudflare D1 Worker 或自托管同步服务同步外观设置与 AI 主题。",
+    "r2SyncDeployDocs": "部署文档",
     "r2SyncWorkerUrl": "Sync Server 地址",
     "r2SyncToken": "Bearer Token",
     "r2SyncTokenPlaceholder": "Worker 中的 SYNC_TOKEN",

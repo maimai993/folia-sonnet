@@ -274,7 +274,15 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                                 {t('options.r2SyncEnable') || 'Enable sync server'}
                             </div>
                             <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.r2SyncEnableDesc') || 'Sync appearance settings and AI themes through your own Cloudflare D1 Worker or self-hosted sync service.'}
+                                {t('options.r2SyncEnableDesc') || 'Sync appearance settings and AI themes through your own Cloudflare D1 Worker or self-hosted sync service.'}{' '}
+                                <a
+                                    href="https://folia-site.cielaniska.top/guide/deploy-sync"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline underline-offset-2 hover:opacity-80"
+                                >
+                                    {t('options.r2SyncDeployDocs') || 'Deployment guide'}
+                                </a>
                             </div>
                         </div>
                         <button
