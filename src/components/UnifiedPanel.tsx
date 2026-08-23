@@ -20,6 +20,7 @@ import type { ThemeSourceModel } from '../hooks/themeControllerState';
 import { getPlaybackSourceRef, getPlaybackSongSource, hasMixedPlaybackSources } from '../utils/appPlaybackGuards';
 import { getSizedCoverUrl } from '../utils/coverUrl';
 import { omni } from '../services/onlineMusic/omni';
+import { usePlayerPanelTabShortcut } from '../hooks/usePlayerPanelTabShortcut';
 
 const TOUCH_GUIDE_DISPLAY_MS = 1400;
 
@@ -351,6 +352,13 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     } else if (isOnline) {
         tabs.splice(1, 0, { id: 'onlineLyrics' as PanelTab, label: t('localMusic.lyrics'), icon: FileText });
     }
+
+    usePlayerPanelTabShortcut({
+        isOpen,
+        currentTab,
+        availableTabs: tabs.map(tab => tab.id),
+        onTabChange,
+    });
 
     // Theme Helper
     // const isDaylight = theme.name === 'Daylight Default'; // Deprecated
@@ -814,6 +822,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                         <button
                                             key={tab.id}
                                             onClick={() => onTabChange(tab.id)}
+                                            aria-pressed={currentTab === tab.id}
                                             className={`flex-1 py-2 flex items-center justify-center transition-all rounded-lg
                                                 ${currentTab === tab.id ? `${activeTabBg} shadow-sm` : 'opacity-40 hover:opacity-100'}`}
                                             title={tab.label}

@@ -87,3 +87,32 @@ test('closes the audio effect dialog with Escape', async ({ page }) => {
     await page.keyboard.press('Escape');
     await expect(equalizerTitle).toBeHidden();
 });
+
+test('cycles the open panel tabs with Tab and wraps around', async ({ page }) => {
+    await openControlsTab(page);
+
+    const coverTab = page.getByTitle('封面', { exact: true });
+    const controlsTab = page.getByTitle('控制', { exact: true });
+    const queueTab = page.getByTitle('播放列表', { exact: true });
+    const accountTab = page.getByTitle('账户', { exact: true });
+
+    await expect(controlsTab).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Tab');
+    await expect(queueTab).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Tab');
+    await expect(accountTab).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Tab');
+    await expect(coverTab).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Shift+Tab');
+    await expect(accountTab).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('opens the command palette directly in queue mode with Control+P', async ({ page }) => {
+    await openControlsTab(page);
+
+    await page.keyboard.press('Control+P');
+
+    await expect(page.getByTestId('command-palette-panel')).toBeVisible();
+    await expect(page.getByRole('combobox')).toHaveAttribute('placeholder', '输入歌名、歌手、专辑或队列序号');
+    await expect(page.getByText('队列', { exact: true })).toBeVisible();
+});

@@ -23,6 +23,13 @@ export const PLAYER_PAGE_SHORTCUTS: UserGuideShortcut[] = [
         keys: ['S'],
     },
     {
+        id: 'open-command-palette-queue',
+        titleKey: 'help.openCommandPaletteQueue',
+        fallback: 'Open queue in command palette',
+        keys: ['Ctrl', 'P'],
+        separator: '+',
+    },
+    {
         id: 'play-pause',
         titleKey: 'help.playPause',
         fallback: 'Play / Pause',
@@ -59,6 +66,12 @@ export const PLAYER_PAGE_SHORTCUTS: UserGuideShortcut[] = [
         titleKey: 'help.toggleRightPanel',
         fallback: 'Toggle right panel',
         keys: ['P'],
+    },
+    {
+        id: 'cycle-right-panel-tabs',
+        titleKey: 'help.cycleRightPanelTabs',
+        fallback: 'Cycle open right panel tabs',
+        keys: ['Tab'],
     },
     {
         id: 'hide-player-chrome',

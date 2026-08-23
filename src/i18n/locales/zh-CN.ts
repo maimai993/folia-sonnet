@@ -646,7 +646,9 @@ export default {
     "seekBackward": "倒退 5 秒",
     "hidePlayerChrome": "隐藏进度条和右下角按钮",
     "toggleRightPanel": "切换右侧面板",
+    "cycleRightPanelTabs": "循环切换已打开右侧面板的标签页",
     "openCommandPalette": "打开命令面板",
+    "openCommandPaletteQueue": "直接打开命令面板队列",
     "browserFullscreen": "全屏",
     "madeBy": "Project:",
     "version": "版本"

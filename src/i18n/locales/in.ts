@@ -642,7 +642,9 @@ export default {
     "seekBackward": "Mundur 5d",
     "hidePlayerChrome": "Sembunyikan bilah progres dan tombol kanan bawah",
     "toggleRightPanel": "Alihkan panel kanan",
+    "cycleRightPanelTabs": "Gilir tab panel kanan yang terbuka",
     "openCommandPalette": "Buka palette perintah",
+    "openCommandPaletteQueue": "Buka antrean di palette perintah",
     "browserFullscreen": "Layar penuh",
     "madeBy": "Proyek:",
     "version": "versi"

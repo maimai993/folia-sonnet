@@ -124,6 +124,21 @@ export const useCommandPalette = ({
         setActiveIndex(0);
     }, [context, recordRecentCommand]);
 
+    const openQueue = useCallback(() => {
+        if (currentView !== 'player' || isBlocked || isExecuting) {
+            return;
+        }
+
+        const queueCommand = COMMAND_PALETTE_COMMANDS.find(command => command.id === 'queue');
+        if (!queueCommand) {
+            return;
+        }
+
+        setIsOpen(true);
+        setIsComposing(false);
+        activateInputCommand(queueCommand);
+    }, [activateInputCommand, currentView, isBlocked, isExecuting]);
+
     const executeMatch = useCallback(async (index: number) => {
         if (isExecuting) {
             return false;
@@ -227,6 +242,22 @@ export const useCommandPalette = ({
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
+            if (
+                event.code === 'KeyP'
+                && event.ctrlKey
+                && !event.altKey
+                && !event.metaKey
+                && !event.shiftKey
+            ) {
+                if (currentView !== 'player' || isBlocked) {
+                    return;
+                }
+
+                event.preventDefault();
+                openQueue();
+                return;
+            }
+
             if (event.code !== 'KeyS') {
                 return;
             }
@@ -246,7 +277,7 @@ export const useCommandPalette = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentView, isBlocked, open]);
+    }, [currentView, isBlocked, open, openQueue]);
 
     return {
         activeIndex,
