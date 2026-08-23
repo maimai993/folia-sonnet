@@ -173,6 +173,12 @@ Folia 会读取音频文件元数据、同目录歌词和封面，并可通过�
 
 完整的导入、重扫、匹配、实体编辑、歌单、缓存和故障排查说明见 [本地音乐库管理](docs/local-library-management.md)。
 
+## Community
+
+加入discord社群，共同交流，获得帮助
+
+[![Discord](https://img.shields.io/discord/1541051241822687232?logo=discord&logoColor=white&label=Join%20our%20Discord)](https://discord.gg/dMDBTHxeKd)
+
 ## 贡献者
 
 感谢所有为本项目进行 Issue 提交、Bug 报告、想法建议、测试与代码编写的贡献者，均依据 all-contributors 规范进行统计
