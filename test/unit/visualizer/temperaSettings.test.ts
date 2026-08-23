@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TEMPERA_LAYER_IMAGE, DEFAULT_TEMPERA_TUNING, TEMPERA_MAX_LAYER_IMAGES } from '@/types';
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { TemperaPixiRuntime } from '@/components/visualizer/tempera/createTemperaPixiRuntime';
 
 // test/unit/visualizer/temperaSettings.test.ts
 // Verifies the Tempera canvas-image pool at the store boundary. Those records arrive from
@@ -72,5 +73,28 @@ describe('Tempera canvas images', () => {
         expect(setImages(Array.from({ length: 30 }, (_, index) => ({ id: `i${index}`, name: 'x' }))))
             .toHaveLength(TEMPERA_MAX_LAYER_IMAGES);
         expect(setImages('not an array')).toEqual([]);
+    });
+});
+
+describe('Tempera live texture resolution', () => {
+    it('updates the mounted Pixi renderer when committed tuning changes', () => {
+        const renderer = { resolution: DEFAULT_TEMPERA_TUNING.textureResolution };
+        const runtime = Object.create(TemperaPixiRuntime.prototype) as TemperaPixiRuntime;
+        Object.assign(runtime, {
+            destroyed: false,
+            options: {
+                tuning: { ...DEFAULT_TEMPERA_TUNING },
+                paused: false,
+            },
+            app: { renderer },
+            sceneCache: new Map(),
+            activeParagraphIndex: -1,
+            lastWidth: 0,
+            lastHeight: 0,
+        });
+
+        runtime.setTuning({ ...DEFAULT_TEMPERA_TUNING, textureResolution: 2.25 });
+
+        expect(renderer.resolution).toBe(2.25);
     });
 });

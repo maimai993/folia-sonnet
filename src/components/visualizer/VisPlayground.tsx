@@ -527,6 +527,12 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             draftCladdaghTuning.letterSpacingOffset ?? DEFAULT_CLADDAGH_TUNING.letterSpacingOffset
         ),
     }), [draftCladdaghTuning]);
+    // Renderer resolution reallocates the Pixi backing surface, so keep the preview on the
+    // persisted value while the slider is moving and apply the draft only after release.
+    const previewTemperaTuning = useMemo<TemperaTuning>(() => ({
+        ...draftTemperaTuning,
+        textureResolution: temperaTuning.textureResolution,
+    }), [draftTemperaTuning, temperaTuning.textureResolution]);
     const draftVisualizerTunings = useMemo(() => ({
         classic: draftClassicTuning,
         cadenza: cadenzaTuning,
@@ -539,8 +545,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         monet: draftMonetTuning,
         pendolo: draftPendoloTuning,
         sonnet: draftSonnetTuning,
-        tempera: draftTemperaTuning,
-    }), [cadenzaTuning, cappellaTuning, draftClassicTuning, draftDioramaTuning, draftMonetTuning, draftPendoloTuning, draftSonnetTuning, draftTemperaTuning, draftTiltTuning, resolvedCladdaghTuning, resolvedFumeTuning, resolvedPartitaTuning]);
+        tempera: previewTemperaTuning,
+    }), [cadenzaTuning, cappellaTuning, draftClassicTuning, draftDioramaTuning, draftMonetTuning, draftPendoloTuning, draftSonnetTuning, draftTiltTuning, previewTemperaTuning, resolvedCladdaghTuning, resolvedFumeTuning, resolvedPartitaTuning]);
     const currentFontLabel = customFontLabel || customFontFamily || t('options.customFont');
     const fontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[] = useMemo(() => ([
         ...builtinFontOptions,

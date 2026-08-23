@@ -121,6 +121,8 @@ const resolveCreditsFrame = (time: number, finalEndTime: number) => {
  */
 const requiresSceneRebuild = (previous: TemperaTuning, next: TemperaTuning) => (
     previous.colorMode !== next.colorMode
+    // Renderer resolution and fixed-resolution filter passes must change together.
+    || previous.textureResolution !== next.textureResolution
     // Entrance pacing is baked into each glyph's settleTime at layout time, unlike glyphMotion
     // which the solver reads fresh every frame.
     || previous.glyphSettleStretch !== next.glyphSettleStretch
@@ -679,6 +681,12 @@ export class TemperaPixiRuntime {
         const previous = this.options.tuning;
         if (previous === tuning) return;
         this.options.tuning = tuning;
+        if (previous.textureResolution !== tuning.textureResolution) {
+            // Pixi can resize the backing surface without recreating the WebGL application or
+            // decoding the shared image pool again. The scene rebuild below refreshes text and
+            // fixed-resolution filters against that new surface.
+            this.app.renderer.resolution = tuning.textureResolution;
+        }
         if (requiresSceneRebuild(previous, tuning)) {
             this.clearScenes();
             // Before the first resize pass there is nothing sized to redraw; the install pass
