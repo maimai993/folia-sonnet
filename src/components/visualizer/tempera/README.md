@@ -19,7 +19,7 @@
 
 ## 编译期：段落、shot、slice
 
-`tempera/VisualizerTempera.tsx` 负责 React shell/subtitle，`createTemperaPixiRuntime.ts` 创建 Pixi runtime（scene cache ±1、绝对时间驱动、无外部纹理）。与 sonnet 同族但视觉路线不同：`temperaProgram.ts` 编译段落/shot；镜头共 101 种，分十一族：分割/色带/框窗/海报/稀疏，加上 **cinema-shot**（各种画幅比例的遮幅窗口，中间镂空、按真实像素比例 aspect-fit，所以「正方形」在任何显示比例下都是方的）、**charm**（圆滑族，见下面「圆滑构图族」）、**aperture / signal / corridor**（镂空与几何构架三族，见下面「镂空族」）和 **monogatari-blank**（物语系过场卡：整屏单色平涂 + 大字，profile 上标 `sharedDecor: false` 跳过贯穿线与 motif 叠加，否则那层装饰会毁掉「留白卡」本身），定义在 `types.ts` 的 `TEMPERA_SHOT_KINDS`，排版区域/入场向量/镜头位移/mood 在 `temperaShotProfiles.ts`（纯数据、无 pixi），绘制在 `compositions/*` 按族分文件、由 `temperaCompositions.ts` 注册聚合；mood（quiet/neutral/loud）决定换气段只取安静构图、副歌不取安静构图；**一个 shot 只放半句**——每行按词边界切成 2~4 词或 ~2.2s 的 `TemperaShotSlice`，所以一句歌词会横跨多个 shot，shot 之间由 runtime 直接交接（上一个 shot 沿 flowAngle 继续推出画面、下一个从上游推进来，两者在 handoff 窗口内同屏重叠）；handoff 时长为 shot 时长的 0.3（钳在 0.4~1.1s），不再有 shot 级的场景转场；flowAngle 以垂直为主轴，交接因此读作纵向长镜头而非切换。段落转场为 `block-wipe`/`camera-pan`/`shape-carry`。间隙（≥1.2s）会被编译成 **bridge shot**：无歌词、只有构图的 shot，按 ≤5s 切成 1~3 个，走和普通 shot 完全相同的交接/镜头/装饰机制，所以器乐段落一直在动，段落转场的出画侧也始终有内容。此外平移类转场需要「另一头」有东西接：段落边界经常落在没有歌词的间隙里，所以转场窗口内会**预卷**下一个段落的 scene（`block-wipe` 除外——它的 enter 阶段是揭开遮罩，必须在边界之后），同时 `compileTemperaProgram` 把每段首个 shot 的 startTime 提前到上一段的转场起点（不越过上一段的 endTime），让新构图在间隙里就开始搭建；逐字时序完全不受影响。scene 容器开 `sortableChildren` 并按段落序号排 zIndex。转场边缘仍可能短暂露出 shell 背景，这是已知且**接受**的取舍，运动感优先于边缘覆盖，不要为了补边去掉平移。
+`tempera/VisualizerTempera.tsx` 负责 React shell/subtitle，`createTemperaPixiRuntime.ts` 创建 Pixi runtime（scene cache ±1、绝对时间驱动、无外部纹理）。与 sonnet 同族但视觉路线不同：`temperaProgram.ts` 编译段落/shot；镜头共 121 种，分十三族：分割/色带/框窗/海报/稀疏，加上 **cinema-shot**（各种画幅比例的遮幅窗口，中间镂空、按真实像素比例 aspect-fit，所以「正方形」在任何显示比例下都是方的）、**charm**（圆滑族，见下面「圆滑构图族」）、**aperture / signal / corridor**（镂空与几何构架三族，见下面「镂空族」）、**monolith / terrain**（粗野主义巨构两族，见下面「巨构族」）和 **monogatari-blank**（物语系过场卡：整屏单色平涂 + 大字，profile 上标 `sharedDecor: false` 跳过贯穿线与 motif 叠加，否则那层装饰会毁掉「留白卡」本身），定义在 `types.ts` 的 `TEMPERA_SHOT_KINDS`，排版区域/入场向量/镜头位移/mood 在 `temperaShotProfiles.ts`（纯数据、无 pixi），绘制在 `compositions/*` 按族分文件、由 `temperaCompositions.ts` 注册聚合；mood（quiet/neutral/loud）决定换气段只取安静构图、副歌不取安静构图；**一个 shot 只放半句**——每行按词边界切成 2~4 词或 ~2.2s 的 `TemperaShotSlice`，所以一句歌词会横跨多个 shot，shot 之间由 runtime 直接交接（上一个 shot 沿 flowAngle 继续推出画面、下一个从上游推进来，两者在 handoff 窗口内同屏重叠）；handoff 时长为 shot 时长的 0.3（钳在 0.4~1.1s），不再有 shot 级的场景转场；flowAngle 以垂直为主轴，交接因此读作纵向长镜头而非切换。段落转场为 `block-wipe`/`camera-pan`/`shape-carry`。间隙（≥1.2s）会被编译成 **bridge shot**：无歌词、只有构图的 shot，按 ≤5s 切成 1~3 个，走和普通 shot 完全相同的交接/镜头/装饰机制，所以器乐段落一直在动，段落转场的出画侧也始终有内容。此外平移类转场需要「另一头」有东西接：段落边界经常落在没有歌词的间隙里，所以转场窗口内会**预卷**下一个段落的 scene（`block-wipe` 除外——它的 enter 阶段是揭开遮罩，必须在边界之后），同时 `compileTemperaProgram` 把每段首个 shot 的 startTime 提前到上一段的转场起点（不越过上一段的 endTime），让新构图在间隙里就开始搭建；逐字时序完全不受影响。scene 容器开 `sortableChildren` 并按段落序号排 zIndex。转场边缘仍可能短暂露出 shell 背景，这是已知且**接受**的取舍，运动感优先于边缘覆盖，不要为了补边去掉平移。
 
 ## 排版
 
@@ -75,6 +75,19 @@
 2. **洞要打穿到底才是窗。** 只在上层形状上 `cut` 出来的洞露的是下面的底板，不是背景（`axis-caps` 的轴孔、`offset-plate` 的套准孔因此**底板和每块板打同一个洞**）。反过来，`dial-scale` 的表圈不能用「圆盘挖洞」做——轮毂要托字，必须是实心底板，所以那圈用 `annularSectorPolygon` 画成实心环。
 3. **一个挖洞节点只能有一条 fill 指令。** pixi 的 `cut()` 会往回找最近两条指令挂洞，第一个洞挂上以后那条分支**没有 break**，于是第二个洞会顺带挂到再上一条 fill/stroke 上。`drawPolygonFillWithHoles` 因此自己新建 Graphics、只画一次 fill，洞的描边一律另起节点（`addHoleLip`）。
 4. **通道角度取 flow 的一半。** 原始 flowAngle 最多偏离垂直 ~14°，一条贯穿画面的通道两端会因此横向走 ±90px，足以把开口挪到字底下；而 region 是写死的数据。`channelAxis()` 把倾角朝自身垂直轴收一半，方向还在、横移减半，一次交接位移下的残差只有几个像素。同理 `acrossFlow()` 会把法向统一到 +x 半边——flow 有时朝上有时朝下，不归一化的话「向右偏移」会随 shot 翻面。
+
+## 巨构族（monolith / terrain）
+
+粗野主义：**一个大到画框装不下的哑光体量**，被画框裁掉一部分，字压在它的轮廓线上。共用语汇在 `compositions/temperaMonolithKit.ts`——体量本体、贯穿全画的细测量线、体量某一面的密排肋线、两个对角的角标、一段游离的线框轮廓。
+
+- `monolith`（10 种）：物件式体量——`apex-mass` 大三角、`ziggurat` 阶梯塔、`slab-wall` 墙板、`cantilever` 悬挑梁、`pylon-pair` 双柱门（柱间镂空）、`bunker-slit` 掩体观察缝（镂空）、`plinth-stack` 基座垒叠、`buttress-run` 扶壁列（间隙镂空）、`void-core` 巨块掏空、`shear-block` 斜切错位。
+- `terrain`（10 种）：结构与地形——`ridge-line` 山脊、`chasm` 裂隙（镂空）、`overhang` 压顶、`step-well` 阶梯井（井口镂空）、`pier-row` 桥墩列（水面镂空）、`revetment` 护坡、`tower-crop` 塔身局部、`lintel` 过梁、`rubble-fan` 碎块扇、`gnomon` 方尖与投影。
+
+### 三条约束
+
+1. **每个体量至少有一侧伸出画外。** 四条边都在画内的实体读作「纸上的一个图形」，同一个实体被画框裁掉才读作「大到装不下」——这就是这一族的全部效果。
+2. **字压在轮廓上，不是躲开它。** 底面是实心的构图，`region` 一律骑在体量的轮廓线上（`apex-mass` 的三角顶尖正好顶进字框下沿、`ridge-line` 跨山脊、`slab-wall` 跨墙边）——半个字在体量上半个字在外，正是反色 filter 最出效果的地方。只有当构图把底面开给背景时（`pylon-pair`/`buttress-run`/`pier-row`/`step-well` 等），region 才整体挪到体量上，理由见「镂空族」。
+3. **装饰必须细。** 测量线 1px/0.45、角标 1.6px、肋线是 hatch——巨构一旦被装饰围起来就不再巨大。肋线只画在体量的**一个面**上（两面就成了材质而不是受光面），而且 `addFaceRuling` 收的必须是**凸**多边形（`buildHatchLines` 靠半平面裁剪），所以阶梯状体量要单独传一块凸的切片进去。
 
 ## 文字反色
 

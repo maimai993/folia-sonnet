@@ -651,6 +651,132 @@ export const TEMPERA_SHOT_PROFILES: Record<TemperaShotKind, TemperaShotProfile> 
         camera: { travel: 0.09, zoomStart: 1.02, zoomEnd: 1.09 },
         mood: 'quiet',
     },
+    // Brutalist monoliths. Where the ground behind the type is solid, the region is placed to
+    // straddle the mass's silhouette - a glyph half on the mass and half off it is the whole
+    // point of the inversion filter. Where the composition opens the ground to the background
+    // instead, the region moves fully onto the mass.
+    'apex-mass': {
+        // Sits just above the apex, which pushes into the bottom of the box.
+        region: region(0.5, 0.3, 0.62, 0.2, { fontScale: 0.9 }),
+        enter: { x: 0, y: -1 },
+        camera: { travel: 0.12, zoomStart: 1.04, zoomEnd: 1.13 },
+        mood: 'loud',
+    },
+    'ziggurat': {
+        region: region(0.5, 0.32, 0.5, 0.18, { fontScale: 0.85 }),
+        enter: { x: 0, y: -0.9 },
+        camera: { travel: 0.1, zoomStart: 1.06, zoomEnd: 1.15 },
+        mood: 'loud',
+    },
+    'slab-wall': {
+        region: region(0.36, 0.5, 0.5, 0.24, { fontScale: 0.88 }),
+        enter: { x: 1.2, y: 0 },
+        camera: { travel: 0.11, zoomStart: 1.05, zoomEnd: 1.12 },
+        mood: 'neutral',
+    },
+    'cantilever': {
+        region: region(0.42, 0.42, 0.6, 0.14, { fontScale: 0.8 }),
+        enter: { x: -1.3, y: 0 },
+        camera: { travel: 0.13, zoomStart: 1.04, zoomEnd: 1.12 },
+        mood: 'loud',
+    },
+    'pylon-pair': {
+        // On the lintel; the bay below it is open to the background.
+        region: region(0.5, 0.22, 0.7, 0.12, { fontScale: 0.75 }),
+        enter: { x: 0, y: -0.8 },
+        camera: { travel: 0.09, zoomStart: 1.08, zoomEnd: 1.02 },
+        mood: 'loud',
+    },
+    'bunker-slit': {
+        region: region(0.5, 0.48, 0.72, 0.2, { fontScale: 0.86 }),
+        enter: { x: 0.9, y: 0.4 },
+        camera: { travel: 0.08, zoomStart: 1.06, zoomEnd: 1.13 },
+        mood: 'neutral',
+    },
+    'plinth-stack': {
+        region: region(0.5, 0.32, 0.44, 0.16, { fontScale: 0.82 }),
+        enter: { x: 0, y: -0.8 },
+        camera: { travel: 0.1, zoomStart: 1.05, zoomEnd: 1.13 },
+        mood: 'neutral',
+    },
+    'buttress-run': {
+        region: region(0.5, 0.26, 0.7, 0.2, { fontScale: 0.86 }),
+        enter: { x: 0.8, y: -0.8 },
+        camera: { travel: 0.12, zoomStart: 1.03, zoomEnd: 1.11 },
+        mood: 'loud',
+    },
+    'void-core': {
+        region: region(0.5, 0.2, 0.66, 0.18, { fontScale: 0.84 }),
+        enter: { x: 0, y: -1.1 },
+        camera: { travel: 0.11, zoomStart: 1.07, zoomEnd: 1.15 },
+        mood: 'loud',
+    },
+    'shear-block': {
+        region: region(0.5, 0.5, 0.56, 0.2, { fontScale: 0.88 }),
+        enter: { x: 1, y: 0.5 },
+        camera: { travel: 0.12, zoomStart: 1.06, zoomEnd: 1.14 },
+        mood: 'neutral',
+    },
+    'ridge-line': {
+        region: region(0.5, 0.42, 0.72, 0.2, { fontScale: 0.9 }),
+        enter: { x: 0, y: -1 },
+        camera: { travel: 0.14, zoomStart: 1.03, zoomEnd: 1.12 },
+        mood: 'neutral',
+    },
+    'chasm': {
+        region: region(0.25, 0.5, 0.38, 0.24, { fontScale: 0.82 }),
+        enter: { x: -1.2, y: 0.4 },
+        camera: { travel: 0.1, zoomStart: 1.06, zoomEnd: 1.14 },
+        mood: 'loud',
+    },
+    'overhang': {
+        region: region(0.44, 0.58, 0.6, 0.22, { fontScale: 0.88 }),
+        enter: { x: 0, y: 1.1 },
+        camera: { travel: 0.11, zoomStart: 1.08, zoomEnd: 1.02 },
+        mood: 'loud',
+    },
+    'step-well': {
+        region: region(0.5, 0.26, 0.66, 0.2, { fontScale: 0.85 }),
+        enter: { x: 0, y: -0.9 },
+        camera: { travel: 0.09, zoomStart: 1.04, zoomEnd: 1.12 },
+        mood: 'neutral',
+    },
+    'pier-row': {
+        region: region(0.5, 0.4, 0.76, 0.14, { fontScale: 0.82 }),
+        enter: { x: 1.1, y: 0 },
+        camera: { travel: 0.13, zoomStart: 1.03, zoomEnd: 1.1 },
+        mood: 'neutral',
+    },
+    'revetment': {
+        region: region(0.46, 0.3, 0.6, 0.2, { fontScale: 0.86 }),
+        enter: { x: -1, y: -0.6 },
+        camera: { travel: 0.12, zoomStart: 1.05, zoomEnd: 1.13 },
+        mood: 'neutral',
+    },
+    'tower-crop': {
+        region: region(0.28, 0.5, 0.44, 0.24, { align: 'left', fontScale: 0.74 }),
+        enter: { x: -0.8, y: 0.3 },
+        camera: { travel: 0.06, zoomStart: 1.02, zoomEnd: 1.09 },
+        mood: 'quiet',
+    },
+    'lintel': {
+        region: region(0.5, 0.5, 0.76, 0.16, { fontScale: 0.9 }),
+        enter: { x: -1.1, y: 0 },
+        camera: { travel: 0.1, zoomStart: 1.02, zoomEnd: 1.08 },
+        mood: 'quiet',
+    },
+    'rubble-fan': {
+        region: region(0.56, 0.4, 0.5, 0.22, { fontScale: 0.84 }),
+        enter: { x: 1.2, y: -0.5 },
+        camera: { travel: 0.13, zoomStart: 1.07, zoomEnd: 1.16 },
+        mood: 'loud',
+    },
+    'gnomon': {
+        region: region(0.66, 0.34, 0.46, 0.2, { fontScale: 0.78 }),
+        enter: { x: 0.9, y: -0.4 },
+        camera: { travel: 0.07, zoomStart: 1.03, zoomEnd: 1.1 },
+        mood: 'quiet',
+    },
     // Monogatari interstitials: one flat field and the type *is* the picture, so the regions
     // are large and the type runs big.
     'monogatari-card': {

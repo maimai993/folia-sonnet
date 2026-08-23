@@ -21,6 +21,8 @@ import { TEMPERA_CHARM_COMPOSITIONS } from './compositions/temperaCharmCompositi
 import { TEMPERA_APERTURE_COMPOSITIONS } from './compositions/temperaApertureCompositions';
 import { TEMPERA_SIGNAL_COMPOSITIONS } from './compositions/temperaSignalCompositions';
 import { TEMPERA_CORRIDOR_COMPOSITIONS } from './compositions/temperaCorridorCompositions';
+import { TEMPERA_MONOLITH_COMPOSITIONS } from './compositions/temperaMonolithCompositions';
+import { TEMPERA_TERRAIN_COMPOSITIONS } from './compositions/temperaTerrainCompositions';
 import { TEMPERA_MONOGATARI_COMPOSITIONS } from './compositions/temperaMonogatariCompositions';
 import { resolveTemperaShotProfile } from './temperaShotProfiles';
 
@@ -41,6 +43,8 @@ const COMPOSITIONS: Partial<Record<TemperaShotKind, TemperaCompositionDrawer>> =
     ...TEMPERA_APERTURE_COMPOSITIONS,
     ...TEMPERA_SIGNAL_COMPOSITIONS,
     ...TEMPERA_CORRIDOR_COMPOSITIONS,
+    ...TEMPERA_MONOLITH_COMPOSITIONS,
+    ...TEMPERA_TERRAIN_COMPOSITIONS,
     ...TEMPERA_MONOGATARI_COMPOSITIONS,
 };
 
