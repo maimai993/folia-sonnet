@@ -133,18 +133,6 @@ const RemoteControlApp: React.FC = () => {
     }, [selectedPresetId, presetValues, exportPresets]);
 
     useEffect(() => {
-        if (!widthFocusedRef.current) {
-            setDraftWidth(String(snapshot.mainWindowWidth ?? 1920));
-        }
-    }, [snapshot.mainWindowWidth]);
-
-    useEffect(() => {
-        if (!heightFocusedRef.current) {
-            setDraftHeight(String(snapshot.mainWindowHeight ?? 1080));
-        }
-    }, [snapshot.mainWindowHeight]);
-
-    useEffect(() => {
         if (isHovered) {
             setShowLyricsOverlay(false);
             return;
@@ -952,12 +940,6 @@ const RemoteControlApp: React.FC = () => {
                                                     onFocus={() => { widthFocusedRef.current = true; }}
                                                     onBlur={() => {
                                                         widthFocusedRef.current = false;
-                                                        const currentWidth = snapshot.mainWindowWidth ?? 1920;
-                                                        setTimeout(() => {
-                                                            if (!widthFocusedRef.current && !isSavingRef.current) {
-                                                                setDraftWidth(String(currentWidth));
-                                                            }
-                                                        }, 150);
                                                     }}
                                                     onChange={(event) => setDraftWidth(event.currentTarget.value.replace(/[^\d]/g, ''))}
                                                     className="bg-transparent text-[11px] font-semibold outline-none w-full"
@@ -978,12 +960,6 @@ const RemoteControlApp: React.FC = () => {
                                                     onFocus={() => { heightFocusedRef.current = true; }}
                                                     onBlur={() => {
                                                         heightFocusedRef.current = false;
-                                                        const currentHeight = snapshot.mainWindowHeight ?? 1080;
-                                                        setTimeout(() => {
-                                                            if (!heightFocusedRef.current && !isSavingRef.current) {
-                                                                setDraftHeight(String(currentHeight));
-                                                            }
-                                                        }, 150);
                                                     }}
                                                     onChange={(event) => setDraftHeight(event.currentTarget.value.replace(/[^\d]/g, ''))}
                                                     className="bg-transparent text-[11px] font-semibold outline-none w-full"
