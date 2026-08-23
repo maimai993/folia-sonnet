@@ -129,7 +129,7 @@ Visualizer 消费已解析的 `LyricData` / `Line` / `Word`，不负责解析 `.
 完整说明见 [`tempera/README.md`](tempera/README.md)——编译期分镜、拼贴排版、逐字时序、网点图形语汇、文字反色 filter、渐变调色、片尾卡、画布图片池都在那里。快速定位：
 
 - `tempera/VisualizerTempera.tsx`：React shell / subtitle；`createTemperaPixiRuntime.ts`：Pixi runtime（scene cache ±1、绝对时间驱动）
-- `temperaProgram.ts` + `types.ts`：段落 / shot / slice 编译，62 种 shot kind
+- `temperaProgram.ts` + `types.ts`：段落 / shot / slice 编译，121 种 shot kind
 - `temperaLayout.ts` + `temperaMotion.ts`：拼贴排版与逐字入场求解
 - `temperaDifferenceFilter.ts`：文字对背景逐像素反色，改动前务必先读那份说明里的约束
 - Tempera 渲染层不消费音频（`audioPower`/`audioBands` 只传给共享背景层）。

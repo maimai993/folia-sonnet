@@ -1,4 +1,5 @@
 import { mixColors } from '../colorMix';
+import type { TemperaDisc } from './temperaCurves';
 import {
     buildHatchLines,
     type TemperaDecorMark,
@@ -71,6 +72,37 @@ export const drawPolygonFill = (
         : node.fill({ color: toPixiColor(pixi, color), alpha });
 };
 
+/**
+ * A filled polygon with holes punched through it. The holes are genuinely transparent: the
+ * Pixi canvas runs on `backgroundAlpha: 0`, so what shows through is the shell's live
+ * background layer (veiled by the scene's paper wash, which is per-paragraph and cannot be
+ * cut per shot).
+ *
+ * The node must hold exactly one fill instruction. `GraphicsContext.cut` walks back over the
+ * last two instructions and, once the first hole is attached, keeps going - a second fill or
+ * a stroke on the same node would silently collect the holes as well. Outlines for the holes
+ * are therefore separate nodes.
+ */
+export const drawPolygonFillWithHoles = (
+    pixi: PixiModule,
+    polygon: number[],
+    holes: number[][],
+    color: string,
+    alpha = 1,
+    gradient?: TemperaGradientFill | null,
+): Graphics => {
+    const node = new pixi.Graphics().poly(polygon);
+    if (gradient && gradient.colors.length > 1) {
+        node.fill({ fill: buildGradientFill(pixi, gradient, color), alpha });
+    } else {
+        node.fill({ color: toPixiColor(pixi, color), alpha });
+    }
+    holes.forEach(hole => {
+        if (hole.length >= 6) node.poly(hole).cut();
+    });
+    return node;
+};
+
 export const drawPolygonOutline = (
     pixi: PixiModule,
     polygon: number[],
@@ -102,6 +134,69 @@ export const drawHatchFill = (
     node.pivot.set(center.x, center.y);
     node.position.set(center.x, center.y);
     return node;
+};
+
+// Bounds centre of a disc field, so the node can be pivoted on itself like the hatch fills.
+const discsCenter = (discs: TemperaDisc[]) => {
+    if (discs.length === 0) return { x: 0, y: 0 };
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    discs.forEach(disc => {
+        minX = Math.min(minX, disc.x - disc.radius);
+        maxX = Math.max(maxX, disc.x + disc.radius);
+        minY = Math.min(minY, disc.y - disc.radius);
+        maxY = Math.max(maxY, disc.y + disc.radius);
+    });
+    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+};
+
+// A whole disc field is one node: a bubble cluster has to enter and breathe as a single item,
+// and a Graphics per bubble would put a dozen entries into the block animator instead of one.
+// Pivoted on the field centre so `drift` reads as a breath rather than as a slide.
+const buildDiscNode = (pixi: PixiModule, discs: TemperaDisc[]): Graphics => {
+    const node = new pixi.Graphics();
+    discs.forEach(disc => {
+        node.circle(disc.x, disc.y, Math.max(0.5, disc.radius));
+    });
+    return node;
+};
+
+const pivotOnSelf = (node: Graphics, center: { x: number; y: number }) => {
+    node.pivot.set(center.x, center.y);
+    node.position.set(center.x, center.y);
+    return node;
+};
+
+export const drawDiscs = (
+    pixi: PixiModule,
+    discs: TemperaDisc[],
+    color: string,
+    alpha = 1,
+    gradient?: TemperaGradientFill | null,
+): Graphics => {
+    const node = buildDiscNode(pixi, discs);
+    if (discs.length > 0) {
+        node.fill(gradient && gradient.colors.length > 1
+            ? { fill: buildGradientFill(pixi, gradient, color), alpha }
+            : { color: toPixiColor(pixi, color), alpha });
+    }
+    return pivotOnSelf(node, discsCenter(discs));
+};
+
+export const drawRings = (
+    pixi: PixiModule,
+    discs: TemperaDisc[],
+    color: string,
+    width: number,
+    alpha = 1,
+): Graphics => {
+    const node = buildDiscNode(pixi, discs);
+    if (discs.length > 0) {
+        node.stroke({ color: toPixiColor(pixi, color), width, alpha });
+    }
+    return pivotOnSelf(node, discsCenter(discs));
 };
 
 export const drawLines = (
