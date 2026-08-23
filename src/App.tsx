@@ -1268,7 +1268,7 @@ export default function App() {
         setStatusMsg,
     });
 
-    const { addNavidromeSongsToQueue, removeQueueSong, moveQueueSongToEnd, moveQueueSongToNext } = createQueueMutations({
+    const { addNavidromeSongsToQueue, applyQueueBatchOperation, removeQueueSong, moveQueueSongToEnd, moveQueueSongToNext } = createQueueMutations({
         currentSong,
         playQueue,
         setPlayQueue,
@@ -1947,6 +1947,7 @@ export default function App() {
         return true;
     }, []);
     const commandPaletteContext = useMemo(() => ({
+        currentSong,
         currentSearchSourceTab: currentSearchSourceTabInPalette,
         localSongs,
         localLibraryCatalog,
@@ -1975,6 +1976,7 @@ export default function App() {
         handlePrevTrack,
         shuffleQueue,
         clearQueue,
+        applyQueueBatchOperation,
         playQueue,
         playSong,
         canGenerateAITheme,
@@ -2038,6 +2040,7 @@ export default function App() {
         themeGenerationSource,
         setThemeGenerationSource: handleThemeGenerationSourceChange,
     }), [
+        applyQueueBatchOperation,
         enablePlayerPageNativeBlur,
         generateCurrentSongTheme,
         handleAutoMatchBestLyricForCurrentSong,
@@ -2064,6 +2067,7 @@ export default function App() {
         playerState,
         randomVisualizerModePerSong,
         canGenerateAITheme,
+        currentSong,
         currentSearchSourceTabInPalette,
         setHomeViewTab,
         shuffleQueue,
@@ -3340,6 +3344,7 @@ export default function App() {
                 currentSong={currentSong}
                 pinnedCommands={commandPalette.pinnedCommands}
                 query={commandPalette.query}
+                queueSearch={commandPalette.queueSearch}
                 theme={theme}
                 volume={volume}
                 onActiveCommandChange={commandPalette.setActiveCommand}
@@ -3351,9 +3356,13 @@ export default function App() {
                     commandPalette.setMatchQuery(value);
                 }}
                 onCompositionStart={() => commandPalette.setIsComposing(true)}
+                onAcceptQueueSuggestion={commandPalette.acceptQueueSuggestion}
+                onClearQueueAction={commandPalette.clearQueueAction}
+                onClearQueueFacet={commandPalette.clearQueueFacet}
                 onExecuteActive={commandPalette.executeActive}
                 onExecuteMatch={commandPalette.executeMatch}
                 onExecutePinnedCommand={commandPalette.executePinnedCommand}
+                onExecuteQueueBatch={commandPalette.executeQueueBatch}
                 onMoveSongToEnd={moveQueueSongToEnd}
                 onMoveSongToNext={moveQueueSongToNext}
                 onQueryChange={commandPalette.setQuery}

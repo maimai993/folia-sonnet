@@ -8,6 +8,7 @@ import type { PanelTab } from '../UnifiedPanel';
 import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/useSettingsUiStore';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
+import type { QueueBatchAction, QueueFacetKind } from './queueQuery';
 
 // src/components/command-palette/types.ts
 // Shared command palette contracts used by the registry, hook, and UI shell.
@@ -38,9 +39,11 @@ export type CommandPaletteMatch = {
     score: number;
     input: string;
     previewText?: string | null;
+    queueReasons?: QueueFacetKind[];
 };
 
 export type CommandPaletteContext = {
+    currentSong: SongResult | null;
     currentSearchSourceTab: SearchSource;
     localSongs: LocalSong[];
     localLibraryCatalog: LocalLibraryDisplayCatalog;
@@ -78,6 +81,7 @@ export type CommandPaletteContext = {
     handlePrevTrack: () => void;
     shuffleQueue: () => void;
     clearQueue: () => void;
+    applyQueueBatchOperation: (action: QueueBatchAction, targetIndices: number[]) => boolean;
     playQueue: SongResult[];
     playSong: (song: SongResult, queue?: SongResult[]) => void | Promise<void>;
     canGenerateAITheme: boolean;

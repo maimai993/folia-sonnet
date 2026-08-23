@@ -4,6 +4,7 @@ import { COMMAND_PALETTE_COMMANDS, getCommandPaletteMatches, getQueueSongMatches
 import type { CommandPaletteContext } from '../../../src/components/command-palette/types';
 
 const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandPaletteContext => ({
+    currentSong: null,
     currentSearchSourceTab: 'netease',
     localSongs: [],
     localLibraryCatalog: { entities: [], assignments: [] },
@@ -32,6 +33,7 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     handlePrevTrack: vi.fn(),
     shuffleQueue: vi.fn(),
     clearQueue: vi.fn(),
+    applyQueueBatchOperation: vi.fn(() => true),
     canGenerateAITheme: true,
     isGeneratingTheme: false,
     generateAITheme: vi.fn(),

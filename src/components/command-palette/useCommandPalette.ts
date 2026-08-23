@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getAvailableCommandPaletteCommands, getCommandPaletteMatches, getQueueSongMatches, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
+import { getAvailableCommandPaletteCommands, getCommandPaletteMatches, getQueueSongMatchesFromEvaluation, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
 import { isRecordableRecentCommand, readRecentCommandIds, recordRecentCommandId, resolveRecentCommandToRecord } from './recentCommands';
 import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch } from './types';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { resolvePinnedCommandSlots } from './pinnedCommandPreferences';
+import { useCommandPaletteQueue } from './useCommandPaletteQueue';
 
 // src/components/command-palette/useCommandPalette.ts
 // Manages palette state, keyboard opening, and selected autocomplete item.
@@ -39,20 +40,46 @@ export const useCommandPalette = ({
     const [activeCommand, setActiveCommand] = useState<CommandPaletteCommand | null>(null);
     const [isExecuting, setIsExecuting] = useState(false);
     const [recentCommandIds, setRecentCommandIds] = useState<string[]>(() => readRecentCommandIds());
+    const close = useCallback(() => {
+        setIsOpen(false);
+        setQuery('');
+        setMatchQuery('');
+        setIsComposing(false);
+        setActiveIndex(0);
+        setActiveCommand(null);
+        setIsExecuting(false);
+    }, []);
     const pinnedCommandIds = useSettingsUiStore(state => state.pinnedCommandIds);
     const availableCommands = useMemo(() => getAvailableCommandPaletteCommands(context), [context]);
     const pinnedCommands = useMemo(
         () => resolvePinnedCommandSlots(pinnedCommandIds, availableCommands),
         [availableCommands, pinnedCommandIds],
     );
+    const {
+        search: queueSearch,
+        acceptSuggestion: acceptQueueSuggestion,
+        clearAction: clearQueueAction,
+        clearFacet: clearQueueFacet,
+        executeBatch: executeQueueBatch,
+    } = useCommandPaletteQueue({
+        activeCommandId: activeCommand?.id ?? null,
+        context,
+        isExecuting,
+        query,
+        close,
+        setActiveIndex,
+        setIsExecuting,
+        setMatchQuery,
+        setQuery,
+    });
 
     const matches = useMemo(() => {
         const activeInput = activeCommand?.id === 'playback-volume' ? query : matchQuery;
         let list: CommandPaletteMatch[];
         if (!activeCommand) {
             list = getCommandPaletteMatches(matchQuery, context, recentCommandIds);
-        } else if (activeCommand.id === 'queue') {
-            list = getQueueSongMatches(matchQuery, context);
+        } else if (activeCommand.id === 'queue' && queueSearch) {
+            list = getQueueSongMatchesFromEvaluation(queueSearch, query, context);
         } else {
             const inputCommands = COMMAND_PALETTE_COMMANDS.filter(cmd => cmd.requiresInput);
             const activeMatch: CommandPaletteMatch = {
@@ -84,7 +111,7 @@ export const useCommandPalette = ({
                 previewText,
             };
         });
-    }, [activeCommand, matchQuery, query, context, recentCommandIds]);
+    }, [activeCommand, matchQuery, query, context, recentCommandIds, queueSearch]);
 
     const activePreview = useMemo(() => {
         const match = matches[activeIndex];
@@ -98,16 +125,6 @@ export const useCommandPalette = ({
         setIsOpen(true);
         setActiveIndex(0);
     }, [currentView, isBlocked]);
-
-    const close = useCallback(() => {
-        setIsOpen(false);
-        setQuery('');
-        setMatchQuery('');
-        setIsComposing(false);
-        setActiveIndex(0);
-        setActiveCommand(null);
-        setIsExecuting(false);
-    }, []);
 
     const recordRecentCommand = useCallback((command: CommandPaletteCommand) => {
         if (isRecordableRecentCommand(command, COMMAND_PALETTE_COMMANDS)) {
@@ -174,7 +191,19 @@ export const useCommandPalette = ({
         }
     }, [activateInputCommand, close, context, activeCommand, matches, isExecuting, recordRecentCommand]);
 
-    const executeActive = useCallback(() => executeMatch(activeIndex), [activeIndex, executeMatch]);
+    const executeActive = useCallback(() => {
+        if (activeCommand?.id === 'queue' && queueSearch) {
+            const [suggestion] = queueSearch.suggestions;
+            if (suggestion) {
+                acceptQueueSuggestion(suggestion);
+                return Promise.resolve(false);
+            }
+            if (queueSearch.parsed.action) {
+                return executeQueueBatch();
+            }
+        }
+        return executeMatch(activeIndex);
+    }, [acceptQueueSuggestion, activeCommand?.id, activeIndex, executeMatch, executeQueueBatch, queueSearch]);
 
     const executePinnedCommand = useCallback(async (command: CommandPaletteCommand) => {
         if (isExecuting) {
@@ -295,6 +324,11 @@ export const useCommandPalette = ({
         open,
         pinnedCommands,
         query,
+        queueSearch,
+        acceptQueueSuggestion,
+        clearQueueAction,
+        clearQueueFacet,
+        executeQueueBatch,
         setActiveIndex,
         setIsComposing,
         setMatchQuery,

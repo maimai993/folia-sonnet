@@ -16,6 +16,7 @@ import { buildObsCustomCss } from '../../utils/obsCustomCss';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import { hasUploadedObsAsset } from '../../utils/visualSettingsConfig';
 import { ListMusic, ListX, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward, Volume2 } from 'lucide-react';
+import { buildQueueSearchIndex, evaluateQueueSearch, type QueueSearchEvaluation } from './queueSearch';
 
 // src/components/command-palette/commandRegistry.ts
 // Defines command palette entries and the lightweight matching used for autocomplete.
@@ -39,15 +40,6 @@ const getSongArtistLabel = (song: SongResult) => {
 };
 
 const getSongAlbumLabel = (song: SongResult) => getProviderSongMetadata(song).album?.name || '';
-
-const buildQueueSearchText = (song: SongResult, index: number) => [
-    String(index + 1),
-    song.name,
-    getSongArtistLabel(song),
-    getSongAlbumLabel(song),
-    ...getProviderSongMetadata(song).aliases,
-    ...getProviderSongMetadata(song).translatedNames,
-].filter(Boolean).join(' ');
 
 const buildQueueSongDescription = (song: SongResult, index: number, context: CommandPaletteContext) => {
     const metadata = [getSongArtistLabel(song), getSongAlbumLabel(song)].filter(Boolean).join(' · ');
@@ -1076,37 +1068,24 @@ export const getAvailableCommandPaletteCommands = (context?: CommandPaletteConte
     return true;
 });
 
-export const getQueueSongMatches = (query: string, context: CommandPaletteContext): CommandPaletteMatch[] => {
-    const normalizedQuery = normalize(query);
+export const getQueueSongMatchesFromEvaluation = (
+    evaluation: QueueSearchEvaluation,
+    query: string,
+    context: CommandPaletteContext,
+): CommandPaletteMatch[] => evaluation.matches.map(match => ({
+    command: createQueueSongCommand(match.entry.song, match.entry.queueIndex, context),
+    score: match.score,
+    input: query,
+    queueReasons: match.reasons,
+}));
 
-    if (!normalizedQuery) {
-        return context.playQueue.map((song, index) => ({
-            command: createQueueSongCommand(song, index, context),
-            score: 100 - index,
-            input: '',
-        }));
-    }
-
-    return context.playQueue
-        .map((song, index) => {
-            const normalizedSearchText = normalize(buildQueueSearchText(song, index));
-            if (!normalizedSearchText.includes(normalizedQuery)) {
-                return null;
-            }
-
-            const startsWithQuery = normalizedSearchText.startsWith(normalizedQuery)
-                || normalize(song.name).startsWith(normalizedQuery)
-                || String(index + 1).startsWith(normalizedQuery);
-
-            return {
-                command: createQueueSongCommand(song, index, context),
-                score: startsWithQuery ? 120 - index : 80 - index,
-                input: query,
-            };
-        })
-        .filter((match): match is CommandPaletteMatch => Boolean(match))
-        .sort((a, b) => b.score - a.score);
-};
+export const getQueueSongMatches = (query: string, context: CommandPaletteContext): CommandPaletteMatch[] => (
+    getQueueSongMatchesFromEvaluation(
+        evaluateQueueSearch(buildQueueSearchIndex(context.playQueue), context.currentSong, query),
+        query,
+        context,
+    )
+);
 
 const createQueueSongCommand = (
     song: SongResult,

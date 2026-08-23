@@ -6,8 +6,9 @@ import type { SongResult, Theme } from '../../types';
 import type { CommandPaletteMatch, CommandPaletteCommand } from './types';
 import { getCommandDescription, getCommandTitle } from './commandText';
 import PinnedCommandRow from './PinnedCommandRow';
-import CommandPaletteQueueList from './CommandPaletteQueueList';
+import CommandPaletteQueueView from './CommandPaletteQueueView';
 import CommandPaletteVolumeControl from './CommandPaletteVolumeControl';
+import type { QueueSearchEvaluation, QueueSearchSuggestion } from './queueSearch';
 
 // src/components/command-palette/CommandPalette.tsx
 // Full-screen command input overlay with autocomplete and keyboard execution.
@@ -26,6 +27,7 @@ type CommandPaletteProps = {
     matches: CommandPaletteMatch[];
     pinnedCommands: Array<CommandPaletteCommand | null>;
     query: string;
+    queueSearch: QueueSearchEvaluation | null;
     theme: Theme;
     volume: number;
     onActiveCommandChange: (command: CommandPaletteCommand | null) => void;
@@ -33,9 +35,13 @@ type CommandPaletteProps = {
     onClose: () => void;
     onCompositionEnd: (query: string) => void;
     onCompositionStart: () => void;
+    onAcceptQueueSuggestion: (suggestion: QueueSearchSuggestion) => void;
+    onClearQueueAction: () => void;
+    onClearQueueFacet: () => void;
     onExecuteActive: () => Promise<boolean>;
     onExecuteMatch: (index: number) => Promise<boolean>;
     onExecutePinnedCommand: (command: CommandPaletteCommand) => Promise<boolean>;
+    onExecuteQueueBatch: () => Promise<boolean>;
     onMoveSongToEnd: (index: number) => void;
     onMoveSongToNext: (index: number) => void;
     onQueryChange: (query: string) => void;
@@ -75,6 +81,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     matches,
     pinnedCommands,
     query,
+    queueSearch,
     theme,
     volume,
     onActiveCommandChange,
@@ -82,9 +89,13 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     onClose,
     onCompositionEnd,
     onCompositionStart,
+    onAcceptQueueSuggestion,
+    onClearQueueAction,
+    onClearQueueFacet,
     onExecuteActive,
     onExecuteMatch,
     onExecutePinnedCommand,
+    onExecuteQueueBatch,
     onMoveSongToEnd,
     onMoveSongToNext,
     onQueryChange,
@@ -138,6 +149,18 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                     setIsShowingAllCommands(false);
                     return;
                 }
+                if (
+                    activeCommand?.id === 'queue'
+                    && queueSearch
+                    && (queueSearch.parsed.action || queueSearch.parsed.actionDraft !== null)
+                ) {
+                    onClearQueueAction();
+                    return;
+                }
+                if (activeCommand?.id === 'queue' && queueSearch?.parsed.facetDraft !== null) {
+                    onClearQueueFacet();
+                    return;
+                }
                 onClose();
                 return;
             }
@@ -178,12 +201,22 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             if (event.key === 'Enter') {
                 event.preventDefault();
                 void onExecuteActive();
+                return;
+            }
+
+            if (
+                event.key === 'Tab'
+                && activeCommand?.id === 'queue'
+                && queueSearch?.suggestions[0]
+            ) {
+                event.preventDefault();
+                onAcceptQueueSuggestion(queueSearch.suggestions[0]);
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeIndex, isOpen, isShowingAllCommands, matches.length, onActiveIndexChange, onClose, onExecuteActive, query, activeCommand, onActiveCommandChange, onQueryChange, isExecuting, isComposing]);
+    }, [activeIndex, activeCommand, isComposing, isExecuting, isOpen, isShowingAllCommands, matches.length, onAcceptQueueSuggestion, onActiveCommandChange, onActiveIndexChange, onClearQueueAction, onClearQueueFacet, onClose, onExecuteActive, onQueryChange, query, queueSearch]);
 
     return (
         <AnimatePresence>
@@ -278,7 +311,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                 name="folia-command-palette-query"
                                 role="combobox"
                                 aria-autocomplete="list"
-                                aria-expanded={matches.length > 0}
+                                aria-expanded={matches.length > 0 || Boolean(queueSearch?.suggestions.length)}
                                 disabled={isExecuting}
                                 className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:opacity-45 disabled:opacity-50"
                                 style={{ color: 'var(--text-primary)' }}
@@ -370,25 +403,33 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                     onVolumeChange={onVolumeChange}
                                     onVolumePreview={onVolumePreview}
                                 />
-                            ) : matches.length === 0 ? (
-                                <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center opacity-50">
-                                    <Command size={26} />
-                                    <div className="text-sm">{t('commandPalette.empty') || 'No matching command'}</div>
-                                </div>
-                            ) : activeCommand?.id === 'queue' ? (
-                                <CommandPaletteQueueList
+                            ) : activeCommand?.id === 'queue' && queueSearch ? (
+                                <CommandPaletteQueueView
                                     activeIndex={activeIndex}
                                     currentSong={currentSong}
+                                    evaluation={queueSearch}
                                     isDaylight={isDaylight}
                                     isExecuting={isExecuting}
                                     matches={matches}
                                     query={query}
+                                    onAcceptSuggestion={(suggestion) => {
+                                        onAcceptQueueSuggestion(suggestion);
+                                        window.requestAnimationFrame(() => inputRef.current?.focus());
+                                    }}
                                     onActiveIndexChange={onActiveIndexChange}
+                                    onClearAction={onClearQueueAction}
+                                    onClearFacet={onClearQueueFacet}
+                                    onExecuteBatch={onExecuteQueueBatch}
                                     onExecuteMatch={onExecuteMatch}
                                     onMoveSongToEnd={onMoveSongToEnd}
                                     onMoveSongToNext={onMoveSongToNext}
                                     onRemoveSong={onRemoveSong}
                                 />
+                            ) : matches.length === 0 ? (
+                                <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center opacity-50">
+                                    <Command size={26} />
+                                    <div className="text-sm">{t('commandPalette.empty') || 'No matching command'}</div>
+                                </div>
                             ) : (
                                 matches.map((match, index) => {
                                     const isActive = index === activeIndex;

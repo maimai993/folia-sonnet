@@ -12,7 +12,7 @@ import CommandPaletteQueueRow, { type CommandPaletteQueueRowProps } from './Comm
 const ROW_HEIGHT = 60;
 const DEFAULT_VISIBLE_ROWS = 8;
 
-type CommandPaletteQueueListProps = {
+export type CommandPaletteQueueListProps = {
     activeIndex: number;
     currentSong: SongResult | null;
     isDaylight: boolean;
@@ -101,6 +101,8 @@ const CommandPaletteQueueList: React.FC<CommandPaletteQueueListProps> = ({
             playNext: t('queue.playNext'),
             remove: t('queue.remove'),
             unavailable: t('status.songUnavailableTag'),
+            artist: t('commandPalette.queueFacetArtist'),
+            album: t('commandPalette.queueFacetAlbum'),
         },
         matches,
         onActiveIndexChange,
