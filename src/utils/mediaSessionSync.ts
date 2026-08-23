@@ -9,11 +9,28 @@ export type MediaSessionTrackMetadata = {
 
 type MediaSessionMetadataFactory = (init: MediaMetadataInit) => MediaMetadata;
 
+const MEDIA_SESSION_ARTWORK_PROTOCOLS = new Set(['http:', 'https:', 'data:', 'blob:']);
+
 const normalizeSourceUrl = (source: string, baseUrl?: string) => {
     try {
         return new URL(source, baseUrl).href;
     } catch {
         return source;
+    }
+};
+
+export const getSupportedMediaSessionArtworkUrl = (source: string, baseUrl?: string): string => {
+    const trimmedSource = source.trim();
+    if (!trimmedSource) return '';
+
+    try {
+        const url = baseUrl ? new URL(trimmedSource, baseUrl) : new URL(trimmedSource);
+        return MEDIA_SESSION_ARTWORK_PROTOCOLS.has(url.protocol)
+            ? (baseUrl ? url.href : trimmedSource)
+            : '';
+    } catch {
+        // Relative URLs are valid MediaImage sources; callers can provide baseUrl for strict resolution.
+        return baseUrl ? '' : trimmedSource;
     }
 };
 
@@ -68,11 +85,12 @@ export const publishMediaSessionTrack = (
     }
 
     mediaSession.setPositionState(positionState);
+    const artworkUrl = getSupportedMediaSessionArtworkUrl(track.artworkUrl);
     mediaSession.metadata = createMetadata({
         title: track.title,
         artist: track.artist,
         album: track.album,
-        artwork: track.artworkUrl ? [{ src: track.artworkUrl }] : [],
+        artwork: artworkUrl ? [{ src: artworkUrl }] : [],
     });
     return true;
 };

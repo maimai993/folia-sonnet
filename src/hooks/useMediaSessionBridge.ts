@@ -3,7 +3,11 @@ import type { RefObject } from 'react';
 import { PlayerState } from '../types';
 import type { SongResult } from '../types';
 import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from '../services/onlineMusic/songMetadata';
-import { isMediaSessionSourceReady, publishMediaSessionTrack } from '../utils/mediaSessionSync';
+import {
+    getSupportedMediaSessionArtworkUrl,
+    isMediaSessionSourceReady,
+    publishMediaSessionTrack,
+} from '../utils/mediaSessionSync';
 
 // Bridges Folia playback state to the browser Media Session API.
 type UseMediaSessionBridgeOptions = {
@@ -112,6 +116,9 @@ export const useMediaSessionBridge = ({
         }
 
         let disposed = false;
+        const sourceArtworkUrl = cachedCoverUrl || getSongCoverUrl(currentSong) || '';
+        let artworkUrl = getSupportedMediaSessionArtworkUrl(sourceArtworkUrl, document.baseURI);
+        let disposableArtworkUrl: string | null = null;
         const publish = () => {
             if (disposed || !isMediaSessionSourceReady(audio, audioSrc, document.baseURI)) {
                 return;
@@ -122,10 +129,36 @@ export const useMediaSessionBridge = ({
                     title: currentSong.name,
                     artist: getSongArtistLabel(currentSong) || unknownArtistLabel,
                     album: getSongAlbumLabel(currentSong),
-                    artworkUrl: cachedCoverUrl || getSongCoverUrl(currentSong) || '',
+                    artworkUrl,
                 });
             } catch (e) {
                 console.warn('[MediaSession] Failed to update metadata', e);
+            }
+        };
+
+        // MediaMetadata rejects Electron's custom protocol, so expose that image through a
+        // short-lived blob URL while this track owns the platform media session.
+        const prepareUnsupportedArtwork = async () => {
+            if (!sourceArtworkUrl || artworkUrl) return;
+
+            try {
+                const response = await fetch(sourceArtworkUrl);
+                if (!response.ok) throw new Error(`Artwork request failed: ${response.status}`);
+                const artworkBlob = await response.blob();
+                if (artworkBlob.size <= 0 || !artworkBlob.type.startsWith('image/')) {
+                    throw new Error('Artwork response is not a valid image');
+                }
+
+                const objectUrl = URL.createObjectURL(artworkBlob);
+                if (disposed) {
+                    URL.revokeObjectURL(objectUrl);
+                    return;
+                }
+                disposableArtworkUrl = objectUrl;
+                artworkUrl = objectUrl;
+                publish();
+            } catch (e) {
+                if (!disposed) console.warn('[MediaSession] Failed to prepare artwork', e);
             }
         };
 
@@ -134,12 +167,14 @@ export const useMediaSessionBridge = ({
         // Re-publish after playback starts in case Chromium delivered a late clear from the old source.
         audio.addEventListener('playing', publish);
         publish();
+        void prepareUnsupportedArtwork();
 
         return () => {
             disposed = true;
             audio.removeEventListener('loadedmetadata', publish);
             audio.removeEventListener('durationchange', publish);
             audio.removeEventListener('playing', publish);
+            if (disposableArtworkUrl) URL.revokeObjectURL(disposableArtworkUrl);
         };
     }, [audioRef, audioSrc, cachedCoverUrl, currentSong, unknownArtistLabel]);
 
