@@ -3,16 +3,19 @@ import { ListX, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward } from 'luci
 import { executeModeCommand } from './executeModeCommand';
 import { queueCommand } from './queueCommand';
 import { volumeCommand } from './volumeCommand';
+import { fmModeCommand } from './fmModeCommand';
 import type { CommandPaletteCommand } from '../types';
 import { createToggleCommand, createReplayGainCommand, createSoundPresetCommand } from '../commandFactories';
 
 // src/components/command-palette/commands/playbackCommands.ts
-// Commands in the `playback` group: transport, queue, volume, ReplayGain, and sound presets.
+// Commands in the `playback` group: transport, queue, volume, Personal FM mode, ReplayGain, and
+// sound presets.
 
 export const playbackCommands: CommandPaletteCommand[] = [
     executeModeCommand,
     queueCommand,
     volumeCommand,
+    fmModeCommand,
     createReplayGainCommand('off', 'Disable ReplayGain', 'Play audio without ReplayGain adjustment', ['replaygain off', 'disable replaygain', 'audio gain off', '关闭音频增益', '关闭 replaygain', 'guanbiyinpinzengyi', 'gbyyzy']),
     createReplayGainCommand('track', 'ReplayGain: Track mode', 'Apply per-track ReplayGain adjustment', ['replaygain track', 'track gain', 'single track gain', '单曲增益', '单曲 replaygain', 'danquzengyi', 'dqzy']),
     createReplayGainCommand('album', 'ReplayGain: Album mode', 'Apply album ReplayGain adjustment', ['replaygain album', 'album gain', '专辑增益', '专辑 replaygain', 'zhuanjizengyi', 'zjzy']),

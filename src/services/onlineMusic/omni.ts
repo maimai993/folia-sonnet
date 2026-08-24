@@ -15,6 +15,7 @@ import type {
     OmniSongReplacement,
     OmniUser,
     OnlineMusicProvider,
+    PersonalFmRequestOptions,
     ProviderCatalogEntityKind,
     QrLoginMethod,
     QrLoginState,
@@ -370,8 +371,8 @@ export const omni = {
         });
     },
 
-    async getPersonalFm(): Promise<UnifiedSong[]> {
-        return withActiveProvider(async provider => provider.recommendations?.getPersonalFm?.() ?? []);
+    async getPersonalFm(options?: PersonalFmRequestOptions): Promise<UnifiedSong[]> {
+        return withActiveProvider(async provider => provider.recommendations?.getPersonalFm?.(options) ?? []);
     },
 
     async getDailySongs(refresh?: boolean): Promise<UnifiedSong[]> {

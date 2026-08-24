@@ -1,5 +1,6 @@
 import { NeteaseUser, NeteasePlaylist, NoCopyrightRecommendation, SongPrivilege, SongResult } from "../types";
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './onlineMusic/providerStorage';
+import type { PersonalFmRequestOptions } from '../types/onlineMusic';
 
 type UnavailableSongReplacement = {
   replacementSong: SongResult;
@@ -726,8 +727,32 @@ export const neteaseApi = {
   },
 
   // --- Radio ---
-  getPersonalFm: async () => {
-    return fetchWithCreds(`/personal_fm?timestamp=${Date.now()}`);
+  // `/personal/fm/mode` only exists on newer NeteaseCloudMusicApi builds, and this app talks to
+  // whatever instance the user configured. The default mode keeps using the long-standing
+  // `/personal_fm`, and an instance that cannot serve a mode falls back to it instead of leaving
+  // the radio empty.
+  getPersonalFm: async (options?: PersonalFmRequestOptions) => {
+    const fetchDefaultFm = () => fetchWithCreds(`/personal_fm?timestamp=${Date.now()}`);
+    const mode = options?.mode;
+    if (!mode || mode === 'DEFAULT') {
+      return fetchDefaultFm();
+    }
+
+    const params = new URLSearchParams({ mode });
+    if (mode === 'SCENE_RCMD' && options?.submode) {
+      params.set('submode', options.submode);
+    }
+
+    try {
+      const res = await fetchWithCreds(`/personal/fm/mode?${params.toString()}&timestamp=${Date.now()}`);
+      if (Array.isArray(res?.data) && res.data.length > 0) {
+        return res;
+      }
+      console.warn('[Netease] personal fm mode unsupported, falling back', { mode, code: res?.code });
+    } catch (error) {
+      console.warn('[Netease] personal fm mode request failed, falling back', { mode, error });
+    }
+    return fetchDefaultFm();
   },
 
   getDailyRecommendedSongs: async (afresh = false) => {

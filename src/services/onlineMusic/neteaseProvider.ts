@@ -10,6 +10,7 @@ import type {
     ProviderArtistSummary,
     ProviderUser,
 } from '../../types/onlineMusic';
+import { getPersonalFmRequestOptions } from '../../stores/usePersonalFmModeStore';
 import { parseNeteaseChorusRanges, processNeteaseLyrics } from '../../utils/lyrics/neteaseProcessing';
 import { toFiniteNumber } from '../../utils/replayGain';
 import { createProviderSongMetadata } from '../../utils/songMetadata';
@@ -227,6 +228,7 @@ export const neteaseProvider: OnlineMusicProvider = {
         artists: true,
         recommendations: true,
         mutations: true,
+        personalFmModes: true,
         wordByWordLyrics: true,
         userCloud: true,
         historyRecommendations: true,
@@ -442,8 +444,10 @@ export const neteaseProvider: OnlineMusicProvider = {
             const response = await neteaseApi.getDailyRecommendedSongs(refresh);
             return (response?.songs || []).map(normalizeNeteaseSong);
         },
-        async getPersonalFm() {
-            const response = await neteaseApi.getPersonalFm();
+        async getPersonalFm(options) {
+            // Falling back to the stored selection keeps callers that predate FM modes — the home
+            // card, the radio grid, the queue refill — on whatever mode the user picked.
+            const response = await neteaseApi.getPersonalFm(options ?? getPersonalFmRequestOptions());
             return (response?.data || []).map(normalizeNeteaseSong);
         },
         async getRecommendedCollections(limit) {

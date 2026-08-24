@@ -8,6 +8,7 @@ import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/us
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
+import type { PersonalFmSelection } from '../../services/onlineMusic/fmModes';
 import type { QueueBatchAction } from '../command-palette/queueQuery';
 
 // src/components/app/buildCommandPaletteContext.ts
@@ -43,6 +44,9 @@ export type CommandPaletteContextDeps = {
     moveQueueSongToNext: (index: number) => void;
     moveQueueSongToEnd: (index: number) => void;
     setReplayGainMode: (mode: ReplayGainMode) => void;
+    personalFmSelection: PersonalFmSelection;
+    isPersonalFmModeSupported: boolean;
+    setPersonalFmSelection: (selection: PersonalFmSelection) => Promise<void> | void;
     openAudioEqualizer: () => void;
     applyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;
     runAutoMatchBestLyric: () => Promise<boolean>;
@@ -133,6 +137,9 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         moveQueueSongToNext: deps.moveQueueSongToNext,
         moveQueueSongToEnd: deps.moveQueueSongToEnd,
         setReplayGainMode: deps.setReplayGainMode,
+        personalFmSelection: deps.personalFmSelection,
+        isPersonalFmModeSupported: deps.isPersonalFmModeSupported,
+        setPersonalFmSelection: deps.setPersonalFmSelection,
         openAudioEqualizer: deps.openAudioEqualizer,
         applyAudioSoundPreset: deps.applyAudioSoundPreset,
         runAutoMatchBestLyric: deps.runAutoMatchBestLyric,

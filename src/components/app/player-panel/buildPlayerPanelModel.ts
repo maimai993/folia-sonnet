@@ -55,6 +55,8 @@ type BuildPlayerPanelModelParams = {
     replayGainMode: UnifiedPanelProps['playback']['replayGainMode'];
     handleChangeReplayGainMode: UnifiedPanelProps['playback']['onChangeReplayGainMode'];
     isFmMode: boolean;
+    fmModeLabel: string;
+    handleOpenFmModePicker?: () => void;
     handleFmTrash: UnifiedPanelProps['playback']['onFmTrash'];
     handleNextTrack: UnifiedPanelProps['playback']['onNextTrack'];
     handlePrevTrack: UnifiedPanelProps['playback']['onPrevTrack'];
@@ -153,6 +155,8 @@ export const buildPlayerPanelModel = ({
     replayGainMode,
     handleChangeReplayGainMode,
     isFmMode,
+    fmModeLabel,
+    handleOpenFmModePicker,
     handleFmTrash,
     handleNextTrack,
     handlePrevTrack,
@@ -250,6 +254,8 @@ export const buildPlayerPanelModel = ({
             replayGainMode,
             onChangeReplayGainMode: handleChangeReplayGainMode,
             isFmMode,
+            fmModeLabel,
+            onOpenFmModePicker: handleOpenFmModePicker,
             onFmTrash: handleFmTrash,
             onNextTrack: handleNextTrack,
             onPrevTrack: handlePrevTrack,

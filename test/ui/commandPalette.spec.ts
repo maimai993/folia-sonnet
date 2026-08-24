@@ -180,3 +180,60 @@ test('execute mode reports an unknown key instead of guessing', async ({ page })
     await expect(palette(page).getByText(/没有命令使用/)).toBeVisible();
     await expect(palette(page)).toBeVisible();
 });
+
+const readPersonalFmSelection = (page: import('@playwright/test').Page) => page.evaluate(async () => {
+    const storeModulePath = '/src/stores/usePersonalFmModeStore.ts';
+    const { usePersonalFmModeStore } = await import(storeModulePath);
+    return usePersonalFmModeStore.getState().selection;
+});
+
+const openFmModeSurface = async (page: import('@playwright/test').Page) => {
+    await page.keyboard.press('s');
+    await paletteInput(page).fill('私人 FM 模式');
+    // 匹配走 120ms 防抖，回车必须等列表刷新后再按。
+    await page.waitForTimeout(400);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(600);
+};
+
+test('fm mode picker selects scene mode straight from a scene pill', async ({ page }) => {
+    await openPlayerPage(page);
+    expect(await readPersonalFmSelection(page)).toEqual({ mode: 'DEFAULT', scene: null });
+
+    await openFmModeSurface(page);
+    // 模式行 5 个 + 场景 42 个，全部是同一种 pill。
+    await expect(palette(page).locator('[data-fm-option]')).toHaveCount(47);
+    await expect(palette(page).locator('[data-fm-option="fm-mode-pick-DEFAULT"][data-fm-selected="true"]')).toBeVisible();
+
+    await palette(page).locator('[data-fm-option="fm-scene-pick-SLEEP_HELP"]').click();
+    await page.waitForTimeout(600);
+
+    expect(await readPersonalFmSelection(page)).toEqual({ mode: 'SCENE_RCMD', scene: 'SLEEP_HELP' });
+});
+
+test('fm mode picker filters to one section and walks it with arrows', async ({ page }) => {
+    await openPlayerPage(page);
+    await openFmModeSurface(page);
+
+    await paletteInput(page).fill('语');
+    await page.waitForTimeout(300);
+    const filtered = palette(page).locator('[data-fm-option]');
+    await expect(filtered).toHaveCount(await filtered.count());
+    expect(await filtered.count()).toBeGreaterThan(0);
+
+    await paletteInput(page).fill('');
+    await page.waitForTimeout(300);
+
+    const activeOption = () => palette(page).locator('[data-fm-active="true"]').getAttribute('data-fm-option');
+    expect(await activeOption()).toBe('fm-mode-pick-DEFAULT');
+
+    // 左右一次一格；上下跨分区，并保留分区内的偏移。
+    await page.keyboard.press('ArrowRight');
+    expect(await activeOption()).toBe('fm-mode-pick-FAMILIAR');
+
+    await page.keyboard.press('ArrowDown');
+    expect(await activeOption()).toBe('fm-scene-pick-CURE');
+
+    await page.keyboard.press('ArrowUp');
+    expect(await activeOption()).toBe('fm-mode-pick-FAMILIAR');
+});

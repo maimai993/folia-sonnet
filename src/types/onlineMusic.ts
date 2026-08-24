@@ -39,6 +39,8 @@ export interface ProviderCapabilities {
     artists: boolean;
     recommendations: boolean;
     mutations: boolean;
+    /** Personal FM can be steered by mode/scene, i.e. `getPersonalFm` honours PersonalFmRequestOptions. */
+    personalFmModes?: boolean;
     wordByWordLyrics: boolean;
     userCloud?: boolean;
     historyRecommendations?: boolean;
@@ -259,9 +261,18 @@ export interface OnlineCatalogProvider {
     getSubscriptionStatus?(type: 'playlist' | 'album', id: MediaId, collection?: ProviderCollection): Promise<boolean>;
 }
 
+/**
+ * Personal FM tuning, provider-neutral on purpose: only NetEase's `/personal/fm/mode` understands
+ * these, and a provider without the concept ignores them rather than failing the call.
+ */
+export interface PersonalFmRequestOptions {
+    mode?: string;
+    submode?: string | null;
+}
+
 export interface OnlineRecommendationProvider {
     getDailySongs?(refresh?: boolean): Promise<UnifiedSong[]>;
-    getPersonalFm?(): Promise<UnifiedSong[]>;
+    getPersonalFm?(options?: PersonalFmRequestOptions): Promise<UnifiedSong[]>;
     getRecommendedCollections?(limit: number): Promise<ProviderCollection[]>;
     getHistoryEntries?(): Promise<ProviderHistoryEntry[]>;
     getHistoryDates?(): Promise<string[]>;

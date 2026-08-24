@@ -8,6 +8,7 @@ import type { PanelTab } from '../UnifiedPanel';
 import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/useSettingsUiStore';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
+import type { PersonalFmSelection } from '../../services/onlineMusic/fmModes';
 import type { QueueBatchAction, QueueFacetKind } from './queueQuery';
 import type { CommandPlatform } from './availability';
 import type { CommandPaletteSurface } from './surfaces/types';
@@ -103,6 +104,10 @@ export type CommandPalettePlaybackContext = {
     moveQueueSongToNext: (index: number) => void;
     moveQueueSongToEnd: (index: number) => void;
     setReplayGainMode: (mode: ReplayGainMode) => void;
+    personalFmSelection: PersonalFmSelection;
+    /** Only the providers that actually implement FM modes offer the picker. */
+    isPersonalFmModeSupported: boolean;
+    setPersonalFmSelection: (selection: PersonalFmSelection) => Promise<void> | void;
     openAudioEqualizer: () => void;
     applyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;
     runAutoMatchBestLyric: () => Promise<boolean>;

@@ -69,6 +69,8 @@ type UnifiedPanelPlaybackProps = {
     replayGainMode: ReplayGainMode;
     onChangeReplayGainMode: (mode: ReplayGainMode) => void;
     isFmMode: boolean;
+    fmModeLabel: string;
+    onOpenFmModePicker?: () => void;
     onFmTrash: () => void;
     onNextTrack: () => void;
     onPrevTrack: () => void;
@@ -188,6 +190,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         replayGainMode,
         onChangeReplayGainMode,
         isFmMode,
+        fmModeLabel,
+        onOpenFmModePicker,
         onFmTrash,
         onNextTrack,
         onPrevTrack,
@@ -906,6 +910,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                         isFmMode ? (
                                             <FmTab
                                                 playerState={playerState}
+                                                modeLabel={fmModeLabel}
+                                                onOpenModePicker={onOpenFmModePicker}
                                                 onTogglePlay={onTogglePlay}
                                                 onNextTrack={onNextTrack}
                                                 onPrevTrack={onPrevTrack}

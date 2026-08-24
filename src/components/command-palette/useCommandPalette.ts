@@ -142,6 +142,15 @@ export const useCommandPalette = ({
         activateInputCommand(command);
     }, [activateInputCommand, currentView, isBlocked, isExecuting]);
 
+    // Lets a UI surface outside the palette jump straight into one command, without having to
+    // import the registry or know how a command is activated.
+    const openCommandById = useCallback((commandId: string) => {
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === commandId);
+        if (command) {
+            openCommand(command);
+        }
+    }, [openCommand]);
+
     const executeMatch = useCallback(async (index: number) => {
         if (isExecuting) {
             return false;
@@ -334,6 +343,7 @@ export const useCommandPalette = ({
         activeIndex,
         activePreview,
         activeCommand,
+        openCommandById,
         availableCommands,
         setActiveCommand,
         isExecuting,

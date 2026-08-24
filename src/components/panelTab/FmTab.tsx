@@ -1,11 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, SkipBack, SkipForward, Heart, Trash2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Heart, Trash2, Radio } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PlayerState } from '../../types';
 
 interface FmTabProps {
     playerState: PlayerState;
+    modeLabel: string;
+    /** Absent when the active provider has no FM modes, which hides the entry entirely. */
+    onOpenModePicker?: () => void;
     onTogglePlay: () => void;
     onNextTrack: () => void;
     onPrevTrack: () => void;
@@ -20,6 +23,8 @@ interface FmTabProps {
 
 const FmTab: React.FC<FmTabProps> = ({
     playerState,
+    modeLabel,
+    onOpenModePicker,
     onTogglePlay,
     onNextTrack,
     onPrevTrack,
@@ -37,6 +42,19 @@ const FmTab: React.FC<FmTabProps> = ({
 
     return (
         <div className="flex flex-col items-center justify-center p-6 space-y-6 h-full min-h-[160px]">
+            {/* Opens the command palette's FM mode picker: the same surface the palette offers, so
+                the mode lives in one place instead of being reimplemented inside the panel. */}
+            {onOpenModePicker && (
+                <button
+                    onClick={onOpenModePicker}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors ${btnBg}`}
+                    title={t('personalFmMode.openPicker', 'Switch the Personal FM mode')}
+                >
+                    <Radio size={13} />
+                    <span>{modeLabel}</span>
+                </button>
+            )}
+
             <div className="flex items-center justify-center gap-6 w-full max-w-sm">
 
                 {/* Previous (Disabled by default typically for FM, but requested) */}

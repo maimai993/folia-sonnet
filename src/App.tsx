@@ -61,6 +61,8 @@ import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { usePlaybackInteractionBridge } from './hooks/usePlaybackInteractionBridge';
+import { usePersonalFmModeController } from './hooks/usePersonalFmModeController';
+import { PERSONAL_FM_MODE_COMMAND_ID } from './components/command-palette/commands/fmModeCommand';
 import { usePlaybackUiEffects } from './hooks/usePlaybackUiEffects';
 import { useLibraryPlaybackController } from './hooks/useLibraryPlaybackController';
 import { useNavidromeScrobbleReporter } from './hooks/useNavidromeScrobbleReporter';
@@ -1640,6 +1642,14 @@ export default function App() {
         syncStageLyricsClock,
     });
 
+    const { personalFmSelection, personalFmSelectionLabel, isPersonalFmModeSupported, setPersonalFmSelection } = usePersonalFmModeController({
+        isFmMode,
+        currentSong,
+        playSong,
+        setStatusMsg,
+        t: (key: string, fallback?: string) => t(key, fallback ?? ''),
+    });
+
     const usesCustomWindowChrome = isElectronWindow;
     const isPlayerPageTransparent = transparentPlayerBackground || enablePlayerPageNativeBlur;
     const shouldUseTransparentAppBackground = currentView === 'player' && isPlayerPageTransparent;
@@ -1976,6 +1986,9 @@ export default function App() {
         moveQueueSongToNext,
         moveQueueSongToEnd,
         setReplayGainMode: handleChangeReplayGainMode,
+        personalFmSelection,
+        isPersonalFmModeSupported,
+        setPersonalFmSelection,
         openAudioEqualizer,
         applyAudioSoundPreset,
         runAutoMatchBestLyric: handleAutoMatchBestLyricForCurrentSong,
@@ -2068,6 +2081,7 @@ export default function App() {
         hidePlayerTranslationSubtitle,
         isGeneratingTheme,
         isMuted,
+        isPersonalFmModeSupported,
         localLibraryCatalog,
         localSongs,
         moveQueueSongToEnd,
@@ -2078,6 +2092,7 @@ export default function App() {
         openAudioEqualizer,
         openSettings,
         openThemeQuickEditor,
+        personalFmSelection,
         playQueue,
         playSong,
         playerState,
@@ -2086,6 +2101,7 @@ export default function App() {
         removeQueueSong,
         setHomeViewTab,
         setIsUserGuideModalOpen,
+        setPersonalFmSelection,
         shuffleQueue,
         submitSearch,
         subtitleContentMode,
@@ -2114,6 +2130,11 @@ export default function App() {
             || Boolean(pendingUnavailableReplacement),
         context: commandPaletteContext,
     });
+    // The FM tab reuses the palette's picker instead of carrying its own copy of the mode list.
+    const openCommandById = commandPalette.openCommandById;
+    const handleOpenFmModePicker = useMemo(() => (
+        isPersonalFmModeSupported ? () => openCommandById(PERSONAL_FM_MODE_COMMAND_ID) : undefined
+    ), [isPersonalFmModeSupported, openCommandById]);
     const nowPlayingDebugSnapshot = useMemo(() => (
         stageSource === 'now-playing'
             ? {
@@ -2560,6 +2581,8 @@ export default function App() {
         replayGainMode,
         handleChangeReplayGainMode,
         isFmMode,
+        fmModeLabel: personalFmSelectionLabel,
+        handleOpenFmModePicker,
         handleFmTrash,
         handleNextTrack,
         handlePrevTrack,
@@ -2727,11 +2750,13 @@ export default function App() {
         playerDisplayQueue,
         effectiveLoopMode,
         generateCurrentSongTheme,
+        personalFmSelectionLabel,
         localLibraryCatalog,
         handleBgModeChange,
         handleChangeOnlineLyricsSource,
         handleChangeLyricsSource,
         handleClearCache,
+        handleOpenFmModePicker,
         handleImportOnlineLyrics,
         handleLike,
         handleLogout,
