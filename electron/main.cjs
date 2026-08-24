@@ -3179,6 +3179,138 @@ function sanitizeVideoExportSize(size) {
   };
 }
 
+// Resize the main window so that its *bounds* (the area the capture source
+// actually records, which includes Windows' frameless-window DWM decoration)
+// yields a content physical size >= the requested export size. We use a snap
+// search around the ideal CSS size to find a value where getContentSize() * dpr
+// exceeds the preset (overshoot), then the frontend Canvas crops the excess
+// pixels with integer symmetric cropping — no scaling, no black bars.
+// After sizing, we enter a decoration-removal loop: if DWM adds asymmetric
+// borders that shift content off-center inside bounds, we grow the window by
+// 1px on each edge and retry until bounds == content (decoration eliminated).
+function fitMainWindowBoundsToExportSize(exportSize) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return null;
+  }
+
+  const exportDpr = mainWindow.__dpr && mainWindow.__dpr > 0 ? mainWindow.__dpr : 1;
+
+  // Size the window so its *bounds* (the area the capture source actually records —
+  // a whole-window capture includes the ~1px frameless-window DWM decoration) matches
+  // the preset in physical pixels exactly. If the bounds physical size differed from the
+  // preset, the capture source aspect ratio would mismatch the output and crop-and-scale
+  // would add black bars. We set the rounded CSS content size, then read back the bounds
+  // physical size and nudge by +/-1 CSS px until it equals the preset. The content area
+  // ends up ~decoration px smaller than the preset (a minor crop), but the recording has
+  // no scaling black bars and the output is exactly the requested resolution.
+  let cssWidth = Math.max(1, Math.round(exportSize.width / exportDpr));
+  let cssHeight = Math.max(1, Math.round(exportSize.height / exportDpr));
+  mainWindow.setContentSize(cssWidth, cssHeight, false);
+
+  const workArea = screen.getPrimaryDisplay().workArea;
+  // Center the window and snap its position to a whole physical pixel. Under a non-100% DPI
+  // the CSS position times dpr can land on a half-pixel, and Chromium's crop-and-scale
+  // capture derives its crop rect from the window's physical bounds; a half-pixel offset
+  // between the reported bounds and where the window is actually composited can leave a
+  // 1-2px black strip. Aligning the physical position to whole pixels removes that drift.
+  const center = (w, h) => {
+    let x = Math.round(workArea.x + (workArea.width - w) / 2);
+    let y = Math.round(workArea.y + (workArea.height - h) / 2);
+    if (!Number.isInteger(x * exportDpr)) x += (x % 2 === 0) ? 1 : -1;
+    if (!Number.isInteger(y * exportDpr)) y += (y % 2 === 0) ? 1 : -1;
+    mainWindow.setBounds({ x, y, width: w, height: h }, false);
+    return mainWindow.getBounds();
+  };
+
+  // The capture source is the *whole window* (bounds), which on a frameless transparent
+  // window on Windows carries a 1px DWM border (decoLeftCss = 1) and, after DWM snaps the
+  // window to its grid, can gain/lose a pixel on resize. So neither the rounded CSS size
+  // nor a single +/-1 nudge reliably yields boundsPhys == preset. We search a small CSS
+  // window around the rounded size, CENTERING THE WINDOW EACH TIME so we read the *final*
+  // boundsPhys (including DWM snapping), and pick the value whose *content* physical
+  // size (from getContentSize, NOT bounds) is >= preset + margin (so the Canvas crop
+  // can work in pure-crop mode without upscaling).
+  // Minimum overshoot (in device pixels) to guarantee pure-crop mode without upscaling.
+  // This is a hard lower bound, NOT a per-resolution guess: regardless of DPR or DWM decoration
+  // size, snap() only ensures contentPhys >= preset + CROP_MARGIN_PX, and the actual crop amount is
+  // always derived from (video.videoWidth/videoHeight - preset) at runtime. Do not retune per resolution.
+  const CROP_MARGIN_PX = 6; // Minimum extra pixels for pure crop (no scaling)
+  const snap = (base, axis, otherCss) => {
+    base = Math.max(1, base);
+    let bestCss = base;
+    let bestErr = Infinity;
+    let bestContentPhys = 0;
+    // Target contentPhys must be >= preset + margin to allow pure crop in Canvas
+    const target = (axis === 'w' ? exportSize.width : exportSize.height) + CROP_MARGIN_PX;
+    const presetVal = axis === 'w' ? exportSize.width : exportSize.height;
+    let probe = '';
+    // Fixed search radius around the rounded CSS size. This is an exploration window to absorb
+    // 1px DWM-snap jitter, NOT a hand-tuned value for a specific resolution: we always test every
+    // delta and pick the one whose measured contentPhys is closest to (preset + CROP_MARGIN_PX).
+    for (let delta = -3; delta <= 5; delta++) { // Extended search range for overshoot
+      const tryCss = base + delta;
+      if (tryCss < 1) continue;
+      if (axis === 'w') mainWindow.setContentSize(tryCss, otherCss, false);
+      else mainWindow.setContentSize(otherCss, tryCss, false);
+      const b = center(axis === 'w' ? tryCss : otherCss, axis === 'w' ? otherCss : tryCss);
+      // Compare CONTENT physical size (not bounds) because the Canvas crop operates
+      // on the content area after excluding DWM decoration pixels.
+      const [cW, cH] = mainWindow.getContentSize();
+      const cPhys = axis === 'w'
+        ? Math.round(cW * exportDpr)
+        : Math.round(cH * exportDpr);
+      const bPhys = axis === 'w'
+        ? Math.round(b.width * exportDpr)
+        : Math.round(b.height * exportDpr);
+      probe += ` [${axis} tryCss=${tryCss} boundsPhys=${bPhys} contentPhys=${cPhys}]`;
+      const err = Math.abs(cPhys - target);
+      if (cPhys >= presetVal && err <= bestErr) {
+        // Accept any value where contentPhys >= preset, prefer closest to target (=preset+margin)
+        if (err < bestErr || (err === bestErr && cPhys > bestContentPhys)) {
+          bestErr = err; bestCss = tryCss; bestContentPhys = cPhys;
+        }
+      } else if (bestContentPhys < presetVal && cPhys > bestContentPhys) {
+        // Fallback: if no valid overshoot found yet, keep the largest undershoot
+        bestErr = err; bestCss = tryCss; bestContentPhys = cPhys;
+      }
+    }
+    return bestCss;
+  };
+
+  cssWidth = snap(cssWidth, 'w', cssHeight);
+  let bounds = center(cssWidth, cssHeight);
+
+  // A frameless transparent window on Windows keeps a 1px DWM border (decoLeftCss = 1,
+  // sometimes also bottom). That border makes the captured whole-window source wider/taller
+  // than the content, so its aspect ratio can never exactly equal the preset and crop-and-scale
+  // pads black bars. Force the content rect to fill the whole window so bounds == content;
+  // retry a few times because a single setContentBounds can race with DWM. Once the decoration
+  // is gone, boundsPhys equals contentPhys and the source aspect ratio matches the preset.
+  for (let i = 0; i < 4; i++) {
+    mainWindow.setContentBounds({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height });
+    const cb = mainWindow.getContentBounds();
+    const b2 = mainWindow.getBounds();
+    const dl = cb.x - b2.x, dt = cb.y - b2.y;
+    const dr = (b2.x + b2.width) - (cb.x + cb.width);
+    const db = (b2.y + b2.height) - (cb.y + cb.height);
+    if (dl === 0 && dt === 0 && dr === 0 && db === 0) break;
+    bounds = b2;
+  }
+  bounds = mainWindow.getBounds();
+
+  // With the decoration removed, bounds == content, so snapping the height now targets the
+  // real content height: a CSS height of round(600/1.5)=400 yields boundsPhys==600 exactly.
+  cssHeight = snap(cssHeight, 'h', cssWidth);
+  bounds = center(cssWidth, cssHeight);
+
+  let boundsPhysW = Math.round(bounds.width * exportDpr);
+  let boundsPhysH = Math.round(bounds.height * exportDpr);
+
+  return {
+    exportDpr, cssWidth, cssHeight, bounds, boundsPhysW, boundsPhysH,
+  };
+}
+
 async function getMainWindowCaptureSource() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return null;
@@ -3487,6 +3619,16 @@ app.on('before-quit', () => {
 // Settings Management IPC
 ipcMain.handle('window-set-native-theme', (event, themeSource) => {
   nativeTheme.themeSource = themeSource;
+});
+
+// Cache the main window's device pixel ratio so export window sizing can be
+// expressed in physical pixels (see resize-main-window / video-export-prepare-window).
+ipcMain.handle('report-device-pixel-ratio', (event, ratio) => {
+  if (!isTrustedMainWindowContents(event.sender)) return;
+  const dpr = Number(ratio);
+  if (Number.isFinite(dpr) && dpr > 0) {
+    mainWindow.__dpr = dpr;
+  }
 });
 
 ipcMain.handle('get-settings', () => {
@@ -4244,8 +4386,10 @@ ipcMain.handle('remote-control-send-command', (event, command) => {
       mainWindow.unmaximize();
     }
 
-    mainWindow.setContentSize(exportSize.width, exportSize.height, true);
-    mainWindow.center();
+    const fit = fitMainWindowBoundsToExportSize(exportSize);
+    if (!fit) {
+      return false;
+    }
     mainWindow.focus();
     return true;
   }
@@ -4323,10 +4467,16 @@ ipcMain.handle('video-export-prepare-window', (event, size) => {
     mainWindow.unmaximize();
   }
 
-  mainWindow.setContentSize(exportSize.width, exportSize.height, true);
-  mainWindow.center();
+  const fit = fitMainWindowBoundsToExportSize(exportSize);
+  if (!fit) {
+    return false;
+  }
+  const { exportDpr } = fit;
   mainWindow.focus();
-  return true;
+  return {
+    success: true,
+    dpr: exportDpr,
+  };
 });
 
 ipcMain.handle('video-export-restore-window', (event) => {

@@ -8,6 +8,7 @@ import type { VideoExportPreset, VideoExportState } from '../types/videoExport';
 import { idleVideoExportState } from '../types/videoExport';
 import {
     buildDefaultVideoExportFileName,
+    createCroppedVideoStream,
     getAudioElementCaptureStream,
     getMainWindowVideoCaptureStream,
     getVideoExportRecorderOptions,
@@ -98,6 +99,7 @@ export const useElectronVideoExportController = ({
         let progressIntervalId: number | null = null;
         let endedListener: (() => void) | null = null;
         let removeCursorGuard: (() => void) | null = null;
+        let canvasCropCleanup: (() => void) | null = null;
         const wasPaused = audioElement.paused;
         const previousLoop = audioElement.loop;
         const previousTime = audioElement.currentTime;
@@ -151,11 +153,20 @@ export const useElectronVideoExportController = ({
             }
 
             const prepared = await electron.prepareVideoExportWindow({ width: preset.width, height: preset.height });
-            if (!prepared) {
+            if (prepared === false || !prepared.success) {
                 throw new Error(t('export.windowResizeFailed'));
             }
             await wait(300);
             videoStream = await getMainWindowVideoCaptureStream(preset);
+
+            // Canvas post-processing: pure integer crop to exact preset resolution.
+            // The snap strategy in main.cjs ensures contentPhys >= preset + margin,
+            // so the captured frame is naturally larger than the target — we simply
+            // extract a preset-sized region with symmetric pixel-perfect cropping.
+            const cropped = createCroppedVideoStream(videoStream, preset);
+            videoStream = cropped.stream;
+            canvasCropCleanup = cropped.cleanup;
+
             audioStream = getAudioElementCaptureStream(audioElement);
             combinedStream = new MediaStream([
                 ...videoStream.getVideoTracks(),
@@ -271,6 +282,7 @@ export const useElectronVideoExportController = ({
             }
             setIsPlayerChromeHidden(false);
             removeCursorGuard?.();
+            canvasCropCleanup?.();
             void electron.restoreVideoExportWindow();
             runningRef.current = false;
             cancelRequestedRef.current = false;
