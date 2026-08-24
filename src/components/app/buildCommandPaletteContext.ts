@@ -98,6 +98,8 @@ export type CommandPaletteContextDeps = {
     themeGenerationSource: ThemeGenerationSource;
     setThemeGenerationSource: (source: ThemeGenerationSource) => void;
 
+    visualizerMode: VisualizerMode;
+    visualizerBackgroundMode: VisualizerBackgroundMode | null;
     setVisualizerMode: (mode: VisualizerMode) => void;
     randomVisualizerModePerSong: boolean;
     setRandomVisualizerModePerSong: (next: boolean) => void;
@@ -186,6 +188,8 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         setThemeGenerationSource: deps.setThemeGenerationSource,
     },
     visualizer: {
+        visualizerMode: deps.visualizerMode,
+        visualizerBackgroundMode: deps.visualizerBackgroundMode,
         setVisualizerMode: deps.setVisualizerMode,
         toggleRandomVisualizerModePerSong: () => deps.setRandomVisualizerModePerSong(!deps.randomVisualizerModePerSong),
         setVisualizerBackgroundMode: deps.setVisualizerBackgroundMode,

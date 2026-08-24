@@ -2,11 +2,8 @@ import { expect, test } from '@playwright/test';
 import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from './helpers/appState';
 
 // test/ui/commandPalette.spec.ts
-// 覆盖命令面板的三类入口：默认匹配列表、surface 接管（音量 / 队列 / 图标选择器），
+// 覆盖命令面板的三类入口：默认匹配列表、surface 接管（音量 / 队列 / 模式选择器），
 // 以及执行模式的单键立即执行。这些路径在重构后不再有按 id 硬编码的分支，需要真实浏览器验证。
-
-// 与 src/components/command-palette/surfaces/pickerSurface.ts 的 PICKER_GRID_COLUMNS 一致。
-const PICKER_COLUMNS = 3;
 
 const QUEUE_FIXTURE = [
     { id: 1, name: 'Current', artists: [{ id: 10, name: 'Alpha' }], album: { id: 20, name: 'Shared Album' }, durationMs: 180_000 },
@@ -87,7 +84,7 @@ test('queue command parses the batch syntax and stages a preview', async ({ page
     await expect(palette(page)).toBeVisible();
 });
 
-test('visualizer picker switches the mode from the icon grid', async ({ page }) => {
+test('visualizer picker switches the mode from the list', async ({ page }) => {
     await openPlayerPage(page);
     expect(await readStore(page, 'visualizerMode')).toBe('classic');
 
@@ -107,7 +104,7 @@ test('visualizer picker switches the mode from the icon grid', async ({ page }) 
     await expect(palette(page)).toBeHidden();
 });
 
-test('visualizer picker navigates the grid with all four arrows', async ({ page }) => {
+test('visualizer picker walks the mode list and marks the live mode', async ({ page }) => {
     await openPlayerPage(page);
     await page.keyboard.press('s');
     await paletteInput(page).fill('选择可视化');
@@ -115,38 +112,32 @@ test('visualizer picker navigates the grid with all four arrows', async ({ page 
     await page.keyboard.press('Enter');
     await page.waitForTimeout(600);
 
-    const tiles = palette(page).locator('[data-picker-mode]');
-    const modes = await tiles.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-picker-mode')));
-    expect(modes.length).toBeGreaterThan(PICKER_COLUMNS * 2);
+    const rows = palette(page).locator('[data-picker-mode]');
+    const modes = await rows.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-picker-mode')));
+    expect(modes.length).toBeGreaterThan(2);
+
+    // 当前生效的模式带勾选标记，且只有一个。
+    await expect(palette(page).locator('[data-picker-selected="true"]')).toHaveCount(1);
+    expect(await palette(page).locator('[data-picker-selected="true"]').getAttribute('data-picker-mode')).toBe('classic');
 
     const activeMode = () => palette(page).locator('[data-picker-active="true"]').getAttribute('data-picker-mode');
     expect(await activeMode()).toBe(modes[0]);
 
-    // 左右一次一格，上下一次一行；网格是 3 列。
-    await page.keyboard.press('ArrowRight');
+    // 单列列表，上下一次一行；首行再往上停在边界。
+    await page.keyboard.press('ArrowDown');
     expect(await activeMode()).toBe(modes[1]);
 
-    await page.keyboard.press('ArrowDown');
-    expect(await activeMode()).toBe(modes[1 + PICKER_COLUMNS]);
-
-    await page.keyboard.press('ArrowLeft');
-    expect(await activeMode()).toBe(modes[PICKER_COLUMNS]);
+    await page.keyboard.press('ArrowUp');
+    expect(await activeMode()).toBe(modes[0]);
 
     await page.keyboard.press('ArrowUp');
     expect(await activeMode()).toBe(modes[0]);
 
-    // 首行再往上、末格再往右都应停在边界而不是跳格。
-    await page.keyboard.press('ArrowUp');
-    expect(await activeMode()).toBe(modes[0]);
-    await page.keyboard.press('ArrowLeft');
-    expect(await activeMode()).toBe(modes[0]);
-
-    // 走到第一个不是初始模式的格子再回车，避免断言被「本来就是 classic」蒙混过去。
+    // 走到第一个不是初始模式的行再回车，避免断言被「本来就是 classic」蒙混过去。
     const targetIndex = modes.findIndex(mode => mode !== 'classic');
     expect(targetIndex).toBeGreaterThanOrEqual(0);
-    expect(targetIndex).toBeLessThan(PICKER_COLUMNS);
     for (let step = 0; step < targetIndex; step += 1) {
-        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('ArrowDown');
     }
     expect(await activeMode()).toBe(modes[targetIndex]);
 

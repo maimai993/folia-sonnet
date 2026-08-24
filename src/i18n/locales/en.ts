@@ -227,7 +227,7 @@ export default {
     "pickerFilterPlaceholder": "Type to filter, then click or press Enter",
     "executeMode": {
       "title": "Execute mode",
-      "placeholder": "Press a shortcut key",
+      "placeholder": "Press a shortcut key to run it instantly",
       "unknown": "No command uses \"{{keys}}\"",
       "unknownHint": "Press Esc to clear and try another key"
     },

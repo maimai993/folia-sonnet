@@ -18,27 +18,67 @@ export const readPickerMode = (kind: 'visualizer' | 'background', commandId: str
     commandId.startsWith(PICKER_ID_PREFIX[kind]) ? commandId.slice(PICKER_ID_PREFIX[kind].length) : ''
 );
 
+// The picker header states the mode that is live right now, which may well be filtered out of the
+// visible grid, so the label is read from the registry rather than from the match list.
+export const getPickerModeLabel = (
+    kind: 'visualizer' | 'background',
+    mode: string,
+    t: (key: string, fallback?: string) => string,
+): string => {
+    const entry = kind === 'visualizer'
+        ? VISUALIZER_REGISTRY.find(candidate => candidate.mode === mode)
+        : VISUALIZER_BACKGROUND_REGISTRY.find(candidate => String(candidate.mode) === mode);
+    return entry ? t(entry.labelKey, entry.labelFallback) : mode;
+};
+
 type PickerOption = {
     id: string;
     mode: string;
     label: string;
+    description: string;
     apply: (mode: string, context: CommandPaletteContext) => void;
+};
+
+/**
+ * Each row states what the mode does, and that sentence is already written and translated once —
+ * as the description of the flat switch command for the same mode. Ids follow `<kind>-<mode>`
+ * except Monet's background, whose only command is its full-overlay variant.
+ */
+const MODE_COMMAND_ID_OVERRIDES: Record<string, string> = { 'background-monet': 'background-monet-full-overlay' };
+
+const readModeDescription = (
+    kind: 'visualizer' | 'background',
+    mode: string,
+    label: string,
+    t: (key: string, fallback?: string) => string,
+) => {
+    const commandId = MODE_COMMAND_ID_OVERRIDES[`${kind}-${mode}`] ?? `${kind}-${mode}`;
+    // Falls back to the label rather than to the key, so an unlisted mode reads as a bare name.
+    return t(`commandPalette.commands.${commandId}.description`, label);
 };
 
 const buildOptions = (kind: 'visualizer' | 'background', context: CommandPaletteContext): PickerOption[] => (
     kind === 'visualizer'
-        ? VISUALIZER_REGISTRY.map(entry => ({
-            id: `${PICKER_ID_PREFIX.visualizer}${entry.mode}`,
-            mode: entry.mode,
-            label: context.shared.t(entry.labelKey, entry.labelFallback),
-            apply: (mode: string, ctx: CommandPaletteContext) => ctx.visualizer.setVisualizerMode(mode as VisualizerMode),
-        }))
-        : VISUALIZER_BACKGROUND_REGISTRY.map(entry => ({
-            id: `${PICKER_ID_PREFIX.background}${entry.mode}`,
-            mode: String(entry.mode),
-            label: context.shared.t(entry.labelKey, entry.labelFallback),
-            apply: (mode: string, ctx: CommandPaletteContext) => ctx.visualizer.setVisualizerBackgroundMode(mode as VisualizerBackgroundMode),
-        }))
+        ? VISUALIZER_REGISTRY.map(entry => {
+            const label = context.shared.t(entry.labelKey, entry.labelFallback);
+            return {
+                id: `${PICKER_ID_PREFIX.visualizer}${entry.mode}`,
+                mode: entry.mode,
+                label,
+                description: readModeDescription('visualizer', entry.mode, label, context.shared.t),
+                apply: (mode: string, ctx: CommandPaletteContext) => ctx.visualizer.setVisualizerMode(mode as VisualizerMode),
+            };
+        })
+        : VISUALIZER_BACKGROUND_REGISTRY.map(entry => {
+            const label = context.shared.t(entry.labelKey, entry.labelFallback);
+            return {
+                id: `${PICKER_ID_PREFIX.background}${entry.mode}`,
+                mode: String(entry.mode),
+                label,
+                description: readModeDescription('background', String(entry.mode), label, context.shared.t),
+                apply: (mode: string, ctx: CommandPaletteContext) => ctx.visualizer.setVisualizerBackgroundMode(mode as VisualizerBackgroundMode),
+            };
+        })
 );
 
 const toCommand = (option: PickerOption, kind: 'visualizer' | 'background'): CommandPaletteCommand => ({
@@ -47,7 +87,7 @@ const toCommand = (option: PickerOption, kind: 'visualizer' | 'background'): Com
     title: option.label,
     // Labels come from the visualizer registry, not from commandPalette.commands.<id>.
     textSource: 'runtime',
-    description: option.label,
+    description: option.description,
     keywords: [option.mode],
     execute: (_input, context) => {
         option.apply(option.mode, context);

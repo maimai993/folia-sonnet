@@ -156,6 +156,10 @@ export type CommandPaletteSettingsContext = {
 };
 
 export type CommandPaletteVisualizerContext = {
+    /** The pickers state the current mode in their header, the way volume states its percent. */
+    visualizerMode: VisualizerMode;
+    /** Null means "no stored choice"; the picker resolves it against the registry default. */
+    visualizerBackgroundMode: VisualizerBackgroundMode | null;
     setVisualizerMode: (mode: VisualizerMode) => void;
     toggleRandomVisualizerModePerSong: () => void;
     setVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;

@@ -88,6 +88,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             setThemeGenerationSource: vi.fn(),
         },
         visualizer: {
+            visualizerMode: 'classic',
+            visualizerBackgroundMode: 'latent',
             setVisualizerMode: vi.fn(),
             toggleRandomVisualizerModePerSong: vi.fn(),
             setVisualizerBackgroundMode: vi.fn(),

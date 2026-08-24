@@ -2039,6 +2039,8 @@ export default function App() {
         themeGenerationSource,
         setThemeGenerationSource: handleThemeGenerationSourceChange,
 
+        visualizerMode,
+        visualizerBackgroundMode,
         setVisualizerMode: handleSetVisualizerMode,
         randomVisualizerModePerSong,
         setRandomVisualizerModePerSong: handleToggleRandomVisualizerModePerSong,
@@ -2118,6 +2120,8 @@ export default function App() {
         toggleRemoteControlWindow,
         toggleTransparentModeWithHandoff,
         transparentPlayerBackground,
+        visualizerBackgroundMode,
+        visualizerMode,
         voiceInputPauseEnabled,
         volume,
         wallpaperMode,

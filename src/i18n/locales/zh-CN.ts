@@ -227,7 +227,7 @@ export default {
     "pickerFilterPlaceholder": "输入以筛选，然后点击或按回车",
     "executeMode": {
       "title": "执行模式",
-      "placeholder": "按下快捷键",
+      "placeholder": "按下快捷键，立即执行",
       "unknown": "没有命令使用 \"{{keys}}\"",
       "unknownHint": "按 Esc 清空后再试"
     },
@@ -343,8 +343,8 @@ export default {
       "theme-source-ai": { "title": "主题来源：AI 推断", "description": "由 AI 读取歌词推断歌曲主题配色" },
       "theme-source-cover": { "title": "主题来源：封面取色", "description": "直接从封面配色生成歌曲主题" },
       "playback-auto-match-best-lyric": { "title": "匹配最佳歌词", "description": "为当前歌曲运行自动最佳歌词匹配" },
-      "visualizer-picker": { "title": "选择可视化", "description": "浏览歌词动画模式，点击图标切换" },
-      "background-picker": { "title": "选择背景", "description": "浏览背景布局，点击图标切换" },
+      "visualizer-picker": { "title": "选择可视化", "description": "浏览歌词动画模式，点击即可切换" },
+      "background-picker": { "title": "选择背景", "description": "浏览背景布局，点击即可切换" },
       "visualizer-still": { "title": "可视化：静止", "description": "切换到低占用的静态可视化" },
       "visualizer-classic": { "title": "可视化：流光", "description": "切换到经典可视化" },
       "visualizer-cadenza": { "title": "可视化：心象", "description": "切换到心象可视化" },

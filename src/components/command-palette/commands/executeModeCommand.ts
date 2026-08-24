@@ -16,6 +16,6 @@ export const executeModeCommand: CommandPaletteCommand = defineCommand({
     requiresInput: true,
     openHotkey: { key: ':' },
     surface: executeModeSurface,
-    placeholder: context => context.shared.t('commandPalette.executeMode.placeholder', 'Press a shortcut key'),
+    placeholder: context => context.shared.t('commandPalette.executeMode.placeholder', 'Press a shortcut key to run it instantly'),
     execute: () => false,
 });

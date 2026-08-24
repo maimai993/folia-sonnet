@@ -226,7 +226,7 @@ export default {
     "pickerFilterPlaceholder": "Ketik untuk menyaring, lalu klik atau tekan Enter",
     "executeMode": {
       "title": "Mode eksekusi",
-      "placeholder": "Tekan tombol pintasan",
+      "placeholder": "Tekan tombol pintasan untuk langsung menjalankan",
       "unknown": "Tidak ada perintah yang memakai \"{{keys}}\"",
       "unknownHint": "Tekan Esc untuk menghapus lalu coba tombol lain"
     },
