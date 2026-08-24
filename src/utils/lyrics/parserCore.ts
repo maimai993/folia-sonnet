@@ -48,8 +48,10 @@ const GLOBAL_ANGLE_TIME_REGEX = /<(\d{2}):(\d{2})[.:](\d{2,3})>/g;
 const LRC_LINE_TIME_REGEX = /^\[(\d{2}):(\d{2})[.:](\d{2,3})\]/;
 const LEADING_LRC_TAGS_REGEX = /^((?:\[(?:\d{2}):(?:\d{2})[.:](?:\d{2,3})\])+)(.*)$/;
 const LRC_METADATA_REGEX = /^\[(ti|ar):([^\]]*)\]$/i;
-// The awlrc track keeps KuGou's one-digit fractions (`[00:00.0]`), so its line head is looser than LRC's.
-const AWLRC_LINE_REGEX = /^\[(\d{1,2}):(\d{2})[.:](\d{1,3})\](.*)$/;
+// Mirrors LX Music's own `timeExp` (lrc-file-parser): 1..3 colon-separated fields plus a fraction,
+// so `[ss.ms]`, `[mm:ss.ms]` and `[hh:mm:ss.ms]` all parse.
+const AWLRC_LINE_REGEX = /^\[(\d{1,3}(?::\d{1,3}){0,2})\.(\d{1,3})\](.*)$/;
+// LX normalises KRC's three-field syllable tag down to two fields, but accept the original as well.
 const AWLRC_WORD_REGEX = /<(\d+),(\d+)(?:,\d+)?>([^<]*)/g;
 export const INTERLUDE_FULL_TEXT = '......';
 
@@ -1051,6 +1053,42 @@ export const parseKRC = (
 };
 
 /**
+ * Converts an awlrc line head to seconds.
+ *
+ * LX Music builds these stamps as `${mm}:${ss}.${ms}` where `ms` is the raw `time % 1000` remainder,
+ * and its KuGou and Migu adapters emit it without zero padding (only the QQ adapter pads to three
+ * digits). So the fraction is a verbatim millisecond count, not a decimal fraction: `[02:43.97]` is
+ * 43s 97ms, not 43s 970ms. Reading it as an LRC centisecond fraction shifts those lines by up to
+ * 900ms and pushes them past the following line.
+ */
+const parseAwlrcTimestamp = (fields: string, fraction: string): number => {
+    const parts = fields.split(':').map(part => parseInt(part, 10));
+    while (parts.length < 3) {
+        parts.unshift(0);
+    }
+
+    const [hours, minutes, seconds] = parts;
+    return (hours * 3600) + (minutes * 60) + seconds + (parseInt(fraction, 10) / 1000);
+};
+
+/** Reads a plain (non word-by-word) container track using awlrc timestamp semantics. */
+const parseAwlrcAlternateTrack = (content: string): TimedTextEntry[] => {
+    const entries: TimedTextEntry[] = [];
+
+    for (const rawLine of content.replace(/^﻿/, '').split(/\r?\n/)) {
+        const match = rawLine.trim().match(AWLRC_LINE_REGEX);
+        const text = match?.[3]?.trim();
+        if (!match || !text) {
+            continue;
+        }
+
+        entries.push({ startTime: parseAwlrcTimestamp(match[1], match[2]), text });
+    }
+
+    return entries;
+};
+
+/**
  * Resolves an alternate track against line start times.
  *
  * KuGou's container tracks are timestamp-identical to the awlrc track, so a single exact hit proves
@@ -1108,7 +1146,7 @@ export const parseAwlrc = (
             continue;
         }
 
-        const startTime = parseTimestamp(lineMatch[1], lineMatch[2], lineMatch[3]);
+        const startTime = parseAwlrcTimestamp(lineMatch[1], lineMatch[2]);
         const words: Word[] = [];
         let fullText = '';
         // Cursor repairs the zero-duration and backwards syllable markers KuGou occasionally emits.
@@ -1116,7 +1154,7 @@ export const parseAwlrc = (
 
         AWLRC_WORD_REGEX.lastIndex = 0;
         let wordMatch: RegExpExecArray | null;
-        while ((wordMatch = AWLRC_WORD_REGEX.exec(lineMatch[4])) !== null) {
+        while ((wordMatch = AWLRC_WORD_REGEX.exec(lineMatch[3])) !== null) {
             const offsetMs = Math.max(parseInt(wordMatch[1], 10), cursorMs);
             const durationMs = Math.max(parseInt(wordMatch[2], 10), 1);
 
@@ -1139,9 +1177,11 @@ export const parseAwlrc = (
     // Some exports order the credit lines by fraction digits rather than by value (`.79` before `.181`).
     drafts.sort((left, right) => left.startTime - right.startTime);
 
+    // The container's tracks are all stamped by the same LX writer, so they must be read with the
+    // same timestamp semantics as the awlrc track or the exact-match alignment below falls apart.
     const startTimes = drafts.map(draft => draft.startTime);
-    const translations = resolveAlternateTracks(startTimes, parseTimedTextEntries(translationString).entries);
-    const romanizations = resolveAlternateTracks(startTimes, parseTimedTextEntries(romanizationString).entries);
+    const translations = resolveAlternateTracks(startTimes, parseAwlrcAlternateTrack(translationString));
+    const romanizations = resolveAlternateTracks(startTimes, parseAwlrcAlternateTrack(romanizationString));
 
     const lines: Line[] = drafts.map((draft, index) => {
         const next = drafts[index + 1];

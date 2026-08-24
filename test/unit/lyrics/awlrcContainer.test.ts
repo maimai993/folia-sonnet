@@ -100,6 +100,54 @@ describe('parseLyricsByFormat("awlrc")', () => {
         expect(parse().lines.some(entry => entry.fullText === '标题行')).toBe(true);
     });
 
+    it('reads the fraction as a verbatim millisecond count rather than an LRC fraction', () => {
+        // LX writes `time % 1000` without padding, so `.97` is 97ms and `.5` is 5ms.
+        // Reading them as `.970` / `.500` would shift the lines by nearly a second.
+        const track = [
+            '[00:01.97]<0,100>甲',
+            '[00:02.5]<0,100>乙',
+            '[00:03.120]<0,100>丙',
+        ].join('\n');
+        const lines = parseLyricsByFormat('awlrc', track, '', { includeInterludes: false }).lines;
+
+        expect(lines[0].startTime).toBeCloseTo(1.097);
+        expect(lines[1].startTime).toBeCloseTo(2.005);
+        expect(lines[2].startTime).toBeCloseTo(3.12);
+    });
+
+    it('accepts the one-, two- and three-field line heads LX can emit', () => {
+        const track = [
+            '[09.500]<0,100>秒',
+            '[01:02.250]<0,100>分',
+            '[01:02:03.750]<0,100>时',
+        ].join('\n');
+        const lines = parseLyricsByFormat('awlrc', track, '', { includeInterludes: false }).lines;
+
+        expect(lines.map(entry => entry.startTime)).toEqual([9.5, 62.25, 3723.75]);
+    });
+
+    it('normalises the three-field syllable tag KRC sources still carry', () => {
+        const lines = parseLyricsByFormat('awlrc', '[00:01.000]<0,400,0>原<400,600,0>文', '', { includeInterludes: false }).lines;
+
+        expect(lines[0].fullText).toBe('原文');
+        expect(lines[0].words.map(word => word.text)).toEqual(['原', '文']);
+        expect(lines[0].endTime).toBeCloseTo(2);
+    });
+
+    it('reads alternate tracks with awlrc timestamp semantics so exact alignment holds', () => {
+        const data = parseLyricsByFormat(
+            'awlrc',
+            '[00:01.97]<0,100>原文',
+            '[00:01.97]翻译',
+            { includeInterludes: false },
+            '[00:01.97]romaji',
+        );
+
+        expect(data.lines[0].startTime).toBeCloseTo(1.097);
+        expect(data.lines[0].translation).toBe('翻译');
+        expect(data.lines[0].romanization).toBe('romaji');
+    });
+
     it('keeps alternate tracks on their exact timestamp instead of the nearest one', () => {
         // The `[00:00.0]` rows of both alternate tracks are blank, so the title line must stay bare
         // rather than borrowing the 1.0s translation through a nearest-neighbour match.

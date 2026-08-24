@@ -1,20 +1,24 @@
 // src/utils/lyrics/awlrcContainer.ts
-// 解析酷狗/洛雪导出 LRC 末尾的 `[awlrc:lrc:B64,tlrc:B64,rlrc:B64,awlrc:B64]` 容器。
-// 正文里的分块布局（原文、翻译、音译各占一整块且时间戳各自从头重来）只是冗余的显示层，
-// 逐字时轴、翻译和罗马音都在容器里，因此命中容器时直接取容器、跳过正文。
+// 解析洛雪音乐（LX Music）写在 LRC 末尾的 `[awlrc:lrc:B64,tlrc:B64,rlrc:B64,awlrc:B64]` 容器。
+// 四个键对应洛雪内部的 lyric / tlyric / rlyric / lxlyric，其中 lxlyric 是逐字歌词。
+// 洛雪导出时会把原文、翻译、罗马音按 `\n\n` 依次拼成正文分块（各块时间戳都从头重来）再附上本容器，
+// 正文只是给不认识容器的播放器看的降级视图，容器才是权威数据，因此命中容器时直接取容器、跳过正文。
+// 参考：lx-music-desktop src/renderer/worker/download/lrcTool.ts
 
-const AWLRC_CONTAINER_REGEX = /^\[awlrc:(.+)\]\s*$/m;
+// Matches LX Music's own container probe (`/\[awlrc:(.+)\]/`) — unanchored, so the tag is found
+// wherever the writer put it. Base64 payloads contain no `]`, so the greedy group stays inside the tag.
+const AWLRC_CONTAINER_REGEX = /\[awlrc:(.+)\]/;
 const CJK_SCRIPT_REGEX = /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/gu;
 const LATIN_LETTER_REGEX = /[A-Za-z]/g;
 
 export interface AwlrcContainerTracks {
-    /** 逐行原文，无逐字时轴。 */
+    /** 洛雪 `lyric`：逐行原文，无逐字时轴。 */
     lrc?: string;
-    /** 翻译轨。 */
+    /** 洛雪 `tlyric`：翻译轨。 */
     tlrc?: string;
-    /** 罗马音轨；汉字音译会在提取阶段被丢弃，不会出现在这里。 */
+    /** 洛雪 `rlyric`：罗马音轨；汉字音译会在提取阶段被丢弃，不会出现在这里。 */
     rlrc?: string;
-    /** 逐字时轴轨，`[mm:ss.fff]<offsetMs,durationMs>text` 形式。 */
+    /** 洛雪 `lxlyric`：逐字时轴轨，`[mm:ss.ms]<相对行首偏移ms,时长ms>text` 形式。 */
     awlrc?: string;
 }
 
