@@ -14,10 +14,15 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = ALL_COMMAND_PAL
 
 // Availability is declared on each command: `platform` gates the environment, `isAvailable`
 // gates the current state, and `hidden` keeps mode-carrier commands out of every listing.
+// `hidden` is about listing only, so key-driven entry points check enablement without it —
+// execute mode's `:` carrier is hidden yet must still answer its key.
+export const isCommandPaletteCommandEnabled = (
+    command: CommandPaletteCommand,
+    context?: CommandPaletteContext,
+) => matchesCommandPlatform(command.platform) && (command.isAvailable?.(context) ?? true);
+
 export const getAvailableCommandPaletteCommands = (context?: CommandPaletteContext) => (
     COMMAND_PALETTE_COMMANDS.filter(command => (
-        !command.hidden
-        && matchesCommandPlatform(command.platform)
-        && (command.isAvailable?.(context) ?? true)
+        !command.hidden && isCommandPaletteCommandEnabled(command, context)
     ))
 );

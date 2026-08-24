@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getAvailableCommandPaletteCommands, getCommandPaletteMatches, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
+import { getAvailableCommandPaletteCommands, getCommandPaletteMatches, isCommandPaletteCommandEnabled, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
 import { isRecordableRecentCommand, readRecentCommandIds, recordRecentCommandId, resolveRecentCommandToRecord } from './recentCommands';
 import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch } from './types';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
@@ -270,14 +270,15 @@ export const useCommandPalette = ({
             if (trimmed) {
                 const matchedCmd = COMMAND_PALETTE_COMMANDS.find(cmd =>
                     cmd.requiresInput &&
-                    cmd.keywords.some(kw => kw.toLowerCase() === trimmed.toLowerCase())
+                    cmd.keywords.some(kw => kw.toLowerCase() === trimmed.toLowerCase()) &&
+                    isCommandPaletteCommandEnabled(cmd, context)
                 );
                 if (matchedCmd) {
                     activateInputCommand(matchedCmd);
                 }
             }
         }
-    }, [activateInputCommand, query, isComposing, isOpen, activeCommand]);
+    }, [activateInputCommand, context, query, isComposing, isOpen, activeCommand]);
 
     useEffect(() => {
         if (!isOpen || isComposing) {
@@ -300,12 +301,15 @@ export const useCommandPalette = ({
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             // Commands declare their own entry shortcut; the palette just dispatches them.
+            // Availability is honoured here too, or a hotkey would still reach a command the
+            // current state has withdrawn — the queue's ctrl+p during Personal FM, say.
             const hotkeyCommand = COMMAND_PALETTE_COMMANDS.find(command => (
                 command.openHotkey
                 && command.openHotkey.key.toLowerCase() === event.key.toLowerCase()
                 && Boolean(command.openHotkey.ctrl) === event.ctrlKey
                 && !event.altKey
                 && !event.metaKey
+                && isCommandPaletteCommandEnabled(command, context)
             ));
             if (hotkeyCommand) {
                 const needsIdleFocus = !hotkeyCommand.openHotkey?.ctrl;
@@ -337,7 +341,7 @@ export const useCommandPalette = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentView, isBlocked, open, openCommand]);
+    }, [context, currentView, isBlocked, open, openCommand]);
 
     return {
         activeIndex,

@@ -731,6 +731,10 @@ export const neteaseApi = {
   // whatever instance the user configured. The default mode keeps using the long-standing
   // `/personal_fm`, and an instance that cannot serve a mode falls back to it instead of leaving
   // the radio empty.
+  //
+  // Do not add `limit`: the module accepts one and forwards it, but the upstream radio ignores it
+  // and returns 3 tracks either way (measured). The queue controller's near-end refill is what
+  // keeps the stream going, exactly as it does for the plain FM endpoint.
   getPersonalFm: async (options?: PersonalFmRequestOptions) => {
     const fetchDefaultFm = () => fetchWithCreds(`/personal_fm?timestamp=${Date.now()}`);
     const mode = options?.mode;

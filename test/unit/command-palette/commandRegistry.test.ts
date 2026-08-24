@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PlayerState, type SongResult } from '../../../src/types';
-import { COMMAND_PALETTE_COMMANDS, getCommandPaletteMatches, getQueueSongMatches } from '../../../src/components/command-palette/commandRegistry';
+import { COMMAND_PALETTE_COMMANDS, getAvailableCommandPaletteCommands, getCommandPaletteMatches, getQueueSongMatches } from '../../../src/components/command-palette/commandRegistry';
 import type { CommandPaletteContext } from '../../../src/components/command-palette/types';
 
 type CommandPaletteContextOverrides = {
@@ -29,6 +29,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             isMuted: false,
             setVolume: vi.fn(),
             previewVolume: vi.fn(),
+            isFmMode: false,
             personalFmSelection: { mode: 'DEFAULT' as const, scene: null },
             isPersonalFmModeSupported: true,
             setPersonalFmSelection: vi.fn(),
@@ -687,6 +688,32 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('visualizer-toggle-random-per-song');
         match.command.execute('', context);
         expect(context.visualizer.toggleRandomVisualizerModePerSong).toHaveBeenCalled();
+    });
+});
+
+describe('personal FM withdraws the queue commands', () => {
+    // 队列面板里的每个操作最终都会走普通 playSong 或改队列，而私人 FM 只在播放停留在 FM 路径上
+    // 才活着——所以 FM 播放期间这些命令整体下线，而不是让用户操作完才发现掉出了电台。
+    const QUEUE_COMMAND_IDS = ['queue', 'playback-shuffle', 'playback-clear-queue'];
+
+    const availableIds = (isFmMode: boolean) => getAvailableCommandPaletteCommands(createContext({
+        playback: { isFmMode, queue: [{ id: 1, name: 'Song' } as unknown as SongResult] },
+    })).map(command => command.id);
+
+    it('offers them while Personal FM is off', () => {
+        const ids = availableIds(false);
+        QUEUE_COMMAND_IDS.forEach(id => expect(ids).toContain(id));
+    });
+
+    it('withdraws them while Personal FM is on air', () => {
+        const ids = availableIds(true);
+        QUEUE_COMMAND_IDS.forEach(id => expect(ids).not.toContain(id));
+    });
+
+    it('keeps the FM mode picker and transport reachable', () => {
+        const ids = availableIds(true);
+        expect(ids).toContain('playback-fm-mode');
+        expect(ids).toContain('playback-next');
     });
 });
 

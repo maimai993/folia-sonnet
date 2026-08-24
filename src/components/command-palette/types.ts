@@ -104,6 +104,8 @@ export type CommandPalettePlaybackContext = {
     moveQueueSongToNext: (index: number) => void;
     moveQueueSongToEnd: (index: number) => void;
     setReplayGainMode: (mode: ReplayGainMode) => void;
+    /** Personal FM owns the queue while it is on air; queue commands stand down. */
+    isFmMode: boolean;
     personalFmSelection: PersonalFmSelection;
     /** Only the providers that actually implement FM modes offer the picker. */
     isPersonalFmModeSupported: boolean;

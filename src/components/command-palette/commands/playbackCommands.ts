@@ -72,10 +72,10 @@ export const playbackCommands: CommandPaletteCommand[] = [
     createToggleCommand('playback-next', 'playback', 'Next track', 'Play the next track', ['next', '下一首', 'xiayishou', 'xys'], context => context.playback.next(), { icon: SkipForward, executeShortcut: 'n' }),
     createToggleCommand('playback-prev', 'playback', 'Previous track', 'Play the previous track', ['prev', 'previous', '上一首', 'shangyishou', 'sys'], context => context.playback.prev(), { icon: SkipBack, executeShortcut: 'b' }),
     createToggleCommand('playback-loop', 'playback', 'Toggle loop', 'Change loop mode', ['loop', '循环', 'xunhuan', 'xh'], context => context.playback.toggleLoop(), { icon: Repeat, executeShortcut: 'l' }),
-    createToggleCommand('playback-shuffle', 'playback', 'Shuffle queue', 'Shuffle current play queue', ['shuffle queue', 'shuffle', '打乱', '打乱队列', 'daluan', 'daluanduilie', 'dl'], context => context.playback.shuffleQueue(), { icon: Shuffle, executeShortcut: 'r' }),
+    createToggleCommand('playback-shuffle', 'playback', 'Shuffle queue', 'Shuffle current play queue', ['shuffle queue', 'shuffle', '打乱', '打乱队列', 'daluan', 'daluanduilie', 'dl'], context => context.playback.shuffleQueue(), { icon: Shuffle, executeShortcut: 'r', isAvailable: context => !context?.playback.isFmMode }),
     {
         id: 'playback-clear-queue',
-        isAvailable: context => (context ? context.playback.queue.length > 0 : true),
+        isAvailable: context => (context ? !context.playback.isFmMode && context.playback.queue.length > 0 : true),
         group: 'playback',
         title: 'Clear queue',
         description: 'Remove all songs from the current play queue',

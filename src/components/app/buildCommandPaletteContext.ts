@@ -44,6 +44,7 @@ export type CommandPaletteContextDeps = {
     moveQueueSongToNext: (index: number) => void;
     moveQueueSongToEnd: (index: number) => void;
     setReplayGainMode: (mode: ReplayGainMode) => void;
+    isFmMode: boolean;
     personalFmSelection: PersonalFmSelection;
     isPersonalFmModeSupported: boolean;
     setPersonalFmSelection: (selection: PersonalFmSelection) => Promise<void> | void;
@@ -137,6 +138,7 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         moveQueueSongToNext: deps.moveQueueSongToNext,
         moveQueueSongToEnd: deps.moveQueueSongToEnd,
         setReplayGainMode: deps.setReplayGainMode,
+        isFmMode: deps.isFmMode,
         personalFmSelection: deps.personalFmSelection,
         isPersonalFmModeSupported: deps.isPersonalFmModeSupported,
         setPersonalFmSelection: deps.setPersonalFmSelection,
