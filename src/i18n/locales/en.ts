@@ -224,6 +224,13 @@ export default {
     "previewSearch": "Search {{source}} songs: {{query}}",
     "previewQueueSearch": "Search current queue: {{query}}",
     "previewQueueSearchEmpty": "Type a song name, artist, album, or queue index",
+    "pickerFilterPlaceholder": "Type to filter, then click or press Enter",
+    "executeMode": {
+      "title": "Execute mode",
+      "placeholder": "Press a shortcut key",
+      "unknown": "No command uses \"{{keys}}\"",
+      "unknownHint": "Press Esc to clear and try another key"
+    },
     "queueIndex": "Queue #{{index}}",
     "queueFacet": "Metadata",
     "queueFacetArtist": "Artist",
@@ -294,6 +301,7 @@ export default {
       "settings-r2-sync": { "title": "Sync server settings", "description": "Open sync server settings" },
       "sync-now": { "title": "Sync now", "description": "Sync AI themes" },
       "settings-desktop": { "title": "Desktop settings", "description": "Open desktop app settings" },
+      "settings-update-channel": { "title": "Update channel", "description": "Choose the desktop app release channel" },
       "desktop-toggle-voice-input-pause": { "title": "Voice input pause", "description": "Toggle pausing playback during voice input" },
       "desktop-toggle-prevent-display-sleep": { "title": "Prevent display sleep during playback", "description": "Keep the display awake while music is playing" },
       "settings-lab": { "title": "Lab settings", "description": "Open experimental settings" },
@@ -331,6 +339,9 @@ export default {
       "theme-source-ai": { "title": "Theme source: AI inference", "description": "Generate song themes by having AI read the lyrics" },
       "theme-source-cover": { "title": "Theme source: cover colors", "description": "Generate song themes from the cover artwork palette" },
       "playback-auto-match-best-lyric": { "title": "Match best lyrics", "description": "Run automatic best lyric matching for the current song" },
+      "visualizer-picker": { "title": "Pick a visualizer", "description": "Browse lyric animation modes and click one to switch" },
+      "background-picker": { "title": "Pick a background", "description": "Browse background layouts and click one to switch" },
+      "visualizer-still": { "title": "Visualizer: Still", "description": "Switch to the static low-resource visualizer" },
       "visualizer-classic": { "title": "Visualizer: Luminous", "description": "Switch to classic visualizer" },
       "visualizer-cadenza": { "title": "Visualizer: Mindscape", "description": "Switch to cadenza visualizer" },
       "visualizer-partita": { "title": "Visualizer: Partita", "description": "Switch to partita visualizer" },
@@ -2087,6 +2098,10 @@ export default {
     "commandPalette": {
       "title": "Command Palette",
       "desc": "Press the \"s\" key on the playback page to open the Command Palette and access commands quickly."
+    },
+    "executeMode": {
+      "title": "Execute mode",
+      "desc": "Press \":\" on the playback page, then a single key such as n or v, to run a command immediately."
     },
     "typeToSearch": {
       "title": "Instant Search",

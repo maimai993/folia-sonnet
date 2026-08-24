@@ -6,7 +6,7 @@ import VisualizerStill from './VisualizerStill';
 // Registers the static low-resource visualizer mode.
 export default defineVisualizer({
     mode: 'still',
-    order: 0,
+    order: 130,
     labelKey: 'ui.visualizerStill',
     labelFallback: 'Still',
     previewSeed: 'still',

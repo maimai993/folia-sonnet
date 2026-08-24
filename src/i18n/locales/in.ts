@@ -223,6 +223,13 @@ export default {
     "previewSearch": "Cari lagu {{source}}: {{query}}",
     "previewQueueSearch": "Cari antrean saat ini: {{query}}",
     "previewQueueSearchEmpty": "Ketik nama lagu, artis, album, atau indeks antrean",
+    "pickerFilterPlaceholder": "Ketik untuk menyaring, lalu klik atau tekan Enter",
+    "executeMode": {
+      "title": "Mode eksekusi",
+      "placeholder": "Tekan tombol pintasan",
+      "unknown": "Tidak ada perintah yang memakai \"{{keys}}\"",
+      "unknownHint": "Tekan Esc untuk menghapus lalu coba tombol lain"
+    },
     "queueIndex": "Antrean #{{index}}",
     "queueFacet": "Metadata",
     "queueFacetArtist": "Artis",
@@ -293,6 +300,7 @@ export default {
       "settings-r2-sync": { "title": "Pengaturan server sinkronisasi", "description": "Buka pengaturan server sinkronisasi" },
       "sync-now": { "title": "Sinkronkan sekarang", "description": "Sinkronkan tema AI" },
       "settings-desktop": { "title": "Pengaturan desktop", "description": "Buka pengaturan aplikasi desktop" },
+      "settings-update-channel": { "title": "Saluran pembaruan", "description": "Pilih saluran rilis aplikasi desktop" },
       "desktop-toggle-voice-input-pause": { "title": "Jeda input suara", "description": "Alihkan jeda pemutaran saat input suara aktif" },
       "desktop-toggle-prevent-display-sleep": { "title": "Cegah layar tidur saat pemutaran", "description": "Jaga layar tetap menyala selama musik diputar" },
       "settings-lab": { "title": "Pengaturan lab", "description": "Buka pengaturan eksperimental" },
@@ -330,6 +338,9 @@ export default {
       "theme-source-ai": { "title": "Sumber tema: Inferensi AI", "description": "Buat tema lagu dengan AI membaca lirik" },
       "theme-source-cover": { "title": "Sumber tema: Warna sampul", "description": "Buat tema lagu dari palet warna sampul" },
       "playback-auto-match-best-lyric": { "title": "Cocokkan lirik terbaik", "description": "Jalankan pencocokan lirik terbaik otomatis untuk lagu saat ini" },
+      "visualizer-picker": { "title": "Pilih visualizer", "description": "Telusuri mode animasi lirik lalu klik untuk beralih" },
+      "background-picker": { "title": "Pilih latar", "description": "Telusuri tata letak latar lalu klik untuk beralih" },
+      "visualizer-still": { "title": "Visualizer: Still", "description": "Alihkan ke visualizer statis yang hemat sumber daya" },
       "visualizer-classic": { "title": "Visualizer: Luminous", "description": "Alihkan ke visualizer classic" },
       "visualizer-cadenza": { "title": "Visualizer: Mindscape", "description": "Alihkan ke visualizer cadenza" },
       "visualizer-partita": { "title": "Visualizer: Partita", "description": "Alihkan ke visualizer partita" },
@@ -341,6 +352,7 @@ export default {
       "visualizer-diorama": { "title": "Visualizer: Diorama", "description": "Alihkan ke visualizer Diorama" },
       "visualizer-pendolo": { "title": "Visualizer: Pendolo", "description": "Alihkan ke visualizer Pendolo" },
       "visualizer-sonnet": { "title": "Visualizer: Sonnet", "description": "Alihkan ke PV lirik Jepang Sonnet" },
+      "visualizer-tempera": { "title": "Visualizer: Tempera", "description": "Alihkan ke PV lirik blok warna Tempera" },
       "desktop-toggle-remote-control": { "title": "Alihkan jendela remote control", "description": "Buka atau tutup jendela remote control" },
       "desktop-toggle-main-window-always-on-top": { "title": "Alihkan jendela utama selalu di atas", "description": "Sematkan atau lepas jendela utama di atas jendela lain" },
       "background-monet-full-overlay": { "title": "Latar: Overlay Layar Penuh Monet", "description": "Alihkan latar ke tata letak overlay layar penuh Monet" },
@@ -2026,6 +2038,10 @@ export default {
     "commandPalette": {
       "title": "Palette Perintah",
       "desc": "Tekan tombol \"s\" di halaman pemutaran untuk membuka Palette Perintah dan mengakses perintah dengan cepat."
+    },
+    "executeMode": {
+      "title": "Mode eksekusi",
+      "desc": "Tekan \":\" di halaman pemutar, lalu satu tombol seperti n atau v, untuk langsung menjalankan perintah."
     },
     "typeToSearch": {
       "title": "Pencarian Instan",

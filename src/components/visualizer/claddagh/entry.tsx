@@ -8,7 +8,7 @@ import VisualizerCladdagh from './VisualizerCladdagh';
 
 export default defineVisualizer({
     mode: 'claddagh',
-    order: 45,
+    order: 80,
     labelKey: 'ui.visualizerCladdagh',
     labelFallback: 'Claddagh',
     previewSeed: 'claddagh',

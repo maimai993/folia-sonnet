@@ -8,7 +8,7 @@ import VisualizerSonnet from './VisualizerSonnet';
 // Registers 商籁, the deterministic Japanese MG lyric-PV director.
 export default defineVisualizer({
     mode: 'sonnet',
-    order: 70,
+    order: 10,
     labelKey: 'ui.visualizerSonnet',
     labelFallback: '商籁',
     previewSeed: 'sonnet',

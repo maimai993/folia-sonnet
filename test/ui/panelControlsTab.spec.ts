@@ -84,16 +84,24 @@ test('steps lyric modes with the arrows and opens the full list from the name', 
 
 test('steps straight through sonnet without an interstitial dialog', async ({ page }) => {
     await openControlsTab(page);
-    await page.evaluate(async () => {
+    // 停在商籁的相邻格。相邻是哪一个由注册表顺序决定，所以在页面里现算，
+    // 不要写死模式名——重排 order 时这个用例应当继续有效。
+    const stepDirection = await page.evaluate(async () => {
+        const registryModulePath = '/src/components/visualizer/registry.tsx';
         const storeModulePath = '/src/stores/useSettingsUiStore.ts';
+        const { VISUALIZER_REGISTRY } = await import(registryModulePath);
         const { useSettingsUiStore } = await import(storeModulePath);
-        // 停在商籁前一格（注册表顺序里是镜台）。
-        useSettingsUiStore.getState().handleSetVisualizerMode('diorama', { notify: false });
+        const modes = (VISUALIZER_REGISTRY as Array<{ mode: string }>).map(entry => entry.mode);
+        const sonnetIndex = modes.indexOf('sonnet');
+        // 商籁排在首位时没有前一格，改成从后一格往回步进。
+        const forward = sonnetIndex > 0;
+        useSettingsUiStore.getState().handleSetVisualizerMode(modes[sonnetIndex + (forward ? -1 : 1)], { notify: false });
+        return forward ? '+' : '−';
     });
     await page.waitForTimeout(300);
 
     const lyricRow = page.locator('div.space-y-1 > div').first();
-    await lyricRow.getByRole('button', { name: '歌词样式 +' }).click();
+    await lyricRow.getByRole('button', { name: `歌词样式 ${stepDirection}` }).click();
     await page.waitForTimeout(400);
 
     expect(await readVisualizerMode(page)).toBe('sonnet');

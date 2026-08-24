@@ -8,7 +8,7 @@ import { MonetSettingsPanel } from './MonetSettingsPanel';
 // Registers the Monet poster visualizer and its mode-owned settings panel.
 export default defineVisualizer({
     mode: 'monet',
-    order: 45,
+    order: 90,
     labelKey: 'ui.visualizerMonet',
     labelFallback: 'Monet',
     previewSeed: 'monet',

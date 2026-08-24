@@ -13,7 +13,7 @@ import { useVisualizerModeStepper } from '../../../hooks/useVisualizerModeSteppe
 import { QuickControlChip } from '../../shared/QuickControlChip';
 import ModeStepperRow from './ModeStepperRow';
 import ThemeSourceRow from './ThemeSourceRow';
-import { BackgroundModeGlyph, VisualizerModeGlyph } from './modeGlyphs';
+import { BackgroundModeGlyph, VisualizerModeGlyph } from '../../visualizer/modeGlyphs';
 
 // src/components/panelTab/controls/AppearanceSection.tsx
 // 外观区：歌词样式、背景、主题来源三件事放在一起。

@@ -1,11 +1,13 @@
 import type { SongResult } from '../../types';
 import {
-    formatQueueQuery,
     parseQueueQuery,
+    QUEUE_SYNTAX_SPEC,
     type ParsedQueueQuery,
     type QueueBatchAction,
     type QueueFacetKind,
 } from './queueQuery';
+import { buildFacetSuggestions, buildFlagSuggestions, type SyntaxFacetCandidate, type SyntaxSuggestion } from './syntax/suggest';
+import type { ParsedCommandQuery } from './syntax/types';
 import {
     getCurrentQueueIndex,
     getSongQueueFacets,
@@ -44,87 +46,58 @@ export type QueueSearchEvaluation = {
     hasMeaningfulFilter: boolean;
 };
 
-const buildFacetSuggestions = (
+// The parsed queue query is the generic parsed shape under queue-specific field names.
+const toParsedCommandQuery = (parsed: ParsedQueueQuery): ParsedCommandQuery => ({
+    flag: parsed.action,
+    flagDraft: parsed.actionDraft,
+    facetKind: parsed.facetKind,
+    facetValue: parsed.facetValue,
+    facetDraft: parsed.facetDraft,
+    isBareFacet: parsed.isBareFacet,
+    text: parsed.text,
+    filterInput: parsed.filterInput,
+});
+
+const toQueueSuggestion = (suggestion: SyntaxSuggestion): QueueSearchSuggestion => ({
+    id: suggestion.type === 'flag' ? `action:${suggestion.flag}` : suggestion.id,
+    type: suggestion.type === 'flag' ? 'action' : 'facet',
+    replacement: suggestion.replacement,
+    action: suggestion.flag as QueueBatchAction | undefined,
+    facetKind: suggestion.facetKind as QueueFacetKind | undefined,
+    label: suggestion.label,
+    count: suggestion.count,
+    isCurrent: suggestion.isPreferred,
+});
+
+// Collapses the queue index into one completion candidate per distinct artist / album.
+const collectFacetCandidates = (
     index: QueueSearchEntry[],
     currentSong: SongResult | null,
-    parsed: ParsedQueueQuery,
-): QueueSearchSuggestion[] => {
-    if (parsed.facetDraft === null) return [];
-
+): SyntaxFacetCandidate[] => {
     const currentFacetKeys = new Set(currentSong ? getSongQueueFacets(currentSong).map(facet => facet.key) : []);
-    const groups = new Map<string, { kind: QueueFacetKind; label: string; keys: Set<string>; indices: Set<number>; isCurrent: boolean; }>();
+    const groups = new Map<string, { kind: QueueFacetKind; label: string; indices: Set<number>; isPreferred: boolean; }>();
+
     for (const entry of index) {
         for (const facet of entry.facets) {
-            if (parsed.facetKind && facet.kind !== parsed.facetKind) continue;
             const groupKey = `${facet.kind}:${facet.normalizedLabel}`;
             const group = groups.get(groupKey) ?? {
                 kind: facet.kind,
                 label: facet.label,
-                keys: new Set<string>(),
                 indices: new Set<number>(),
-                isCurrent: false,
+                isPreferred: false,
             };
-            group.keys.add(facet.key);
             group.indices.add(entry.queueIndex);
-            group.isCurrent ||= currentFacetKeys.has(facet.key);
+            group.isPreferred ||= currentFacetKeys.has(facet.key);
             groups.set(groupKey, group);
         }
     }
 
-    const draft = normalize(parsed.facetDraft);
-    const groupedFacets = [...groups.values()];
-    if (
-        parsed.facetKind
-        && parsed.facetValue
-        && groupedFacets.some(group => group.kind === parsed.facetKind && normalize(group.label) === draft)
-    ) {
-        return [];
-    }
-
-    return groupedFacets
-        .filter(group => parsed.isBareFacet ? group.isCurrent : normalize(group.label).includes(draft))
-        .sort((left, right) => {
-            if (left.isCurrent !== right.isCurrent) return left.isCurrent ? -1 : 1;
-            const leftPrefix = normalize(left.label).startsWith(draft);
-            const rightPrefix = normalize(right.label).startsWith(draft);
-            if (leftPrefix !== rightPrefix) return leftPrefix ? -1 : 1;
-            return right.indices.size - left.indices.size || left.label.localeCompare(right.label);
-        })
-        .slice(0, 6)
-        .map(group => ({
-            id: `facet:${group.kind}:${normalize(group.label)}`,
-            type: 'facet' as const,
-            facetKind: group.kind,
-            label: group.label,
-            count: group.indices.size,
-            isCurrent: group.isCurrent,
-            replacement: formatQueueQuery({
-                action: parsed.action,
-                facetKind: group.kind,
-                facetValue: group.label,
-                text: parsed.text,
-            }),
-        }));
-};
-
-const buildActionSuggestions = (parsed: ParsedQueueQuery): QueueSearchSuggestion[] => {
-    if (parsed.actionDraft === null) return [];
-    const draft = normalize(parsed.actionDraft);
-    return (['remove', 'next', 'end'] as QueueBatchAction[])
-        .filter(action => action.startsWith(draft))
-        .map(action => ({
-            id: `action:${action}`,
-            type: 'action' as const,
-            action,
-            replacement: formatQueueQuery({
-                action,
-                facetKind: parsed.facetKind,
-                facetValue: parsed.facetValue,
-                text: parsed.facetDraft !== null && !parsed.facetKind
-                    ? `${parsed.isBareFacet ? '@' : `@${parsed.facetDraft}`} ${parsed.text}`
-                    : parsed.text,
-            }),
-        }));
+    return [...groups.values()].map(group => ({
+        kind: group.kind,
+        label: group.label,
+        weight: group.indices.size,
+        isPreferred: group.isPreferred,
+    }));
 };
 
 export const evaluateQueueSearch = (
@@ -133,7 +106,11 @@ export const evaluateQueueSearch = (
     input: string,
 ): QueueSearchEvaluation => {
     const parsed = parseQueueQuery(input);
-    const facetSuggestions = buildFacetSuggestions(index, currentSong, parsed);
+    const parsedCommandQuery = toParsedCommandQuery(parsed);
+    const facetSuggestions = buildFacetSuggestions(
+        parsedCommandQuery,
+        collectFacetCandidates(index, currentSong),
+    ).map(toQueueSuggestion);
     const currentFacets = currentSong ? getSongQueueFacets(currentSong) : [];
     const currentFacetKeys = new Set(currentFacets.map(facet => facet.key));
     const facetDraft = normalize(parsed.facetValue || parsed.facetDraft || '');
@@ -175,7 +152,7 @@ export const evaluateQueueSearch = (
     return {
         parsed,
         matches,
-        suggestions: [...buildActionSuggestions(parsed), ...facetSuggestions],
+        suggestions: [...buildFlagSuggestions(QUEUE_SYNTAX_SPEC, parsedCommandQuery).map(toQueueSuggestion), ...facetSuggestions],
         eligibleTargetIndices,
         skippedCurrentCount: targetIndices.length - eligibleTargetIndices.length,
         hasMeaningfulFilter: Boolean(normalizedText || parsed.facetDraft !== null),

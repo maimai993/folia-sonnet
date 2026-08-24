@@ -7,7 +7,7 @@ import Visualizer from './Visualizer';
 // Registers the classic visualizer mode.
 export default defineVisualizer({
     mode: 'classic',
-    order: 10,
+    order: 30,
     labelKey: 'ui.visualizerClassic',
     labelFallback: 'Luminous',
     previewSeed: 'classic',

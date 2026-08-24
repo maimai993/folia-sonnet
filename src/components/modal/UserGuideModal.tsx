@@ -37,7 +37,7 @@ export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) =>
     const keyBg = isDaylight ? 'bg-white border border-zinc-200' : 'bg-white/10';
     const tipCardBg = isDaylight ? 'bg-zinc-50/90 border-zinc-100' : 'bg-white/[0.04] border-white/10';
     const iconTileBg = isDaylight ? 'bg-white shadow-sm' : 'bg-white/10';
-    const guideCommands = COMMAND_PALETTE_COMMANDS.filter(c => c.id !== 'queue' && !c.id.startsWith('navigate'));
+    const guideCommands = COMMAND_PALETTE_COMMANDS.filter(c => !c.hidden && c.id !== 'queue' && !c.id.startsWith('navigate'));
 
     const goToPage = (nextPage: GuidePage) => {
         setPage(nextPage);

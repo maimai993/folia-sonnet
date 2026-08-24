@@ -8,7 +8,7 @@ import VisualizerPendolo from './VisualizerPendolo';
 
 export default defineVisualizer({
     mode: 'pendolo',
-    order: 48,
+    order: 100,
     labelKey: 'ui.visualizerPendolo',
     labelFallback: 'Pendolo',
     previewSeed: 'pendolo',

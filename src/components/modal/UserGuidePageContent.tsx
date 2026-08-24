@@ -166,6 +166,13 @@ export const UserGuidePageContent: React.FC<UserGuidePageContentProps> = ({
                     title={t('userGuide.commandPalette.title', 'Command Palette')}
                     description={t('userGuide.commandPalette.desc', 'Press the "s" key on the playback page to open the Command Palette and access commands quickly.')}
                 />
+                <UserGuideTipCard
+                    {...tipCardClasses}
+                    icon={Keyboard}
+                    iconClassName={isDaylight ? 'text-blue-500' : 'text-blue-400'}
+                    title={t('userGuide.executeMode.title', 'Execute mode')}
+                    description={t('userGuide.executeMode.desc', 'Press ":" on the playback page, then a single key such as n or v, to run a command immediately.')}
+                />
                 <div className="mt-5">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {guideCommands.map(cmd => (

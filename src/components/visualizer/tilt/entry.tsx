@@ -7,7 +7,7 @@ import VisualizerTilt from './VisualizerTilt';
 // Registers Tilt and its preview tuning panel.
 export default defineVisualizer({
     mode: 'tilt',
-    order: 40,
+    order: 70,
     labelKey: 'ui.visualizerTilt',
     labelFallback: 'Tilt',
     previewSeed: 'tilt',

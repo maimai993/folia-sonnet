@@ -8,7 +8,7 @@ import VisualizerFume from './VisualizerFume';
 // Registers Fume and its preview tuning panel.
 export default defineVisualizer({
     mode: 'fume',
-    order: 40,
+    order: 60,
     labelKey: 'ui.visualizerFume',
     labelFallback: 'Fume',
     previewSeed: 'fume',

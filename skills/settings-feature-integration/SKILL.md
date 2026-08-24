@@ -43,11 +43,16 @@ description: Use when adding, changing, refactoring, or reviewing user-facing se
 
 功能性设置（如 Electron 更新通道 `updateChannel`选择、桌面端 Acrylic 背景确认防护、实验室设置）或可执行动作必须评估并注册到 command palette：
 
-- 文件：`src/components/command-palette/commandRegistry.ts`
-- 命令类型：优先复用 `createSettingsCommand`、`createPanelCommand`、`createHomeTabCommand`、`createVisualizerCommand`
-- 如果需要新上下文能力，先扩展 `src/components/command-palette/types.ts` 的 `CommandPaletteContext`
-- 命令文案：同步 `src/i18n/locales/en.ts` 和 `src/i18n/locales/zh-CN.ts` 的 `commandPalette.commands`
-- 关键词：至少包含英文、中文和常用拼音缩写
+- 文件：按命令的 `group` 落到 `src/components/command-palette/commands/<group>Commands.ts`（`search` / `playback` / `settings` / `navigation` / `panel` / `visualizer`）。不要再往 `commandRegistry.ts` 里加命令，它只负责拼接和过滤。
+- 构造入口：一律经 `src/components/command-palette/commandFactories.ts` 的 `defineCommand`；「调一个 context 方法后返回 true」用 `createToggleCommand`，其余优先复用 `createSettingsCommand`、`createPanelCommand`、`createHomeTabCommand`、`createVisualizerCommand`。
+- 上下文：`CommandPaletteContext` 按 group 分成 `shared` / `search` / `playback` / `navigation` / `panel` / `settings` / `visualizer` 七个命名空间，命令归哪个 group 就先在同名命名空间里找依赖。需要新能力时同时改 `src/components/command-palette/types.ts` 和 `src/components/app/buildCommandPaletteContext.ts`。
+- 平台可见性：只在部分平台可用的功能写 `platform: ['electron' | 'win' | 'mac' | 'linux' | 'web']`，不要在过滤函数里加 id 判断。状态可见性用 `isAvailable`，两者职责分开。
+- 面板内界面：需要在命令面板里直接出控件（滑块、图标网格等）时写 `surface`，组件用 `load: () => import(...)` 惰性加载，不要在 `CommandPalette.tsx` 里加 `activeCommand.id` 分支。参考 `surfaces/volumeSurface.ts` 与 `surfaces/pickerSurface.ts`。
+- 复杂语法：需要 `--flag` / `@facet:value` 时声明 `syntax`，解析复用 `src/components/command-palette/syntax/`，不要另写正则。
+- 执行模式：明确判断要不要给 `executeShortcut`。危险、不可撤销、要花钱或需要确认的操作不给；给了就必须与现有快捷键保持 prefix-free，冲突会在构建时抛错。
+- 命令文案：同步 `src/i18n/locales/en.ts`、`zh-CN.ts` 和 `in.ts` 的 `commandPalette.commands.<id>`，缺任何一份都会让 `test/unit/command-palette/commandRegistryContract.test.ts` 失败。
+- 关键词：至少包含英文、中文和常用拼音缩写，同样由上面的契约测试校验。
+- 落地列表：命令是否出现在面板刚打开时的首屏，由 `commands/index.ts` 的 `DEFAULT_LANDING_COMMAND_IDS` 显式决定，不取决于它在数组里的位置。
 
 当前同步服务已经有两类命令入口：`settings-r2-sync` 打开存储设置中的同步服务区域，`sync-now` 触发 AI 主题同步；新增同步动作时优先复用 `src/services/sync/syncCoordinator.ts`，不要在命令里直接发请求。
 
@@ -76,8 +81,10 @@ description: Use when adding, changing, refactoring, or reviewing user-facing se
 
 - 这个设置是视觉相关、功能性，还是两者都是？
 - 视觉设置是否进入 `buildCurrentConfig`、`compressConfig`、`decompressConfig`、`validKeys` 和 `handleImportConfig`？
-- 功能性设置或动作是否进入 `COMMAND_PALETTE_COMMANDS`？
-- 命令是否有中英文 i18n、中文关键词和拼音缩写？
+- 功能性设置或动作是否进入对应的 `commands/<group>Commands.ts`？
+- 平台限定用了 `platform` 而不是 id 判断？需要界面的用了 `surface` 而不是外壳里的特例？
+- 是否明确决定过要不要给 `executeShortcut`？
+- 命令是否有 en / zh-CN / in 三份 i18n、中文关键词和拼音缩写？
 - store、localStorage key、默认值、resetter、导入恢复是否一致？
 - 同步相关设置是否同时接入 `sync/settingsSnapshot.ts`、`StorageSettingsSection.tsx` 和对应 command palette 命令？
 - 新增用户可见文案是否同步中英文？

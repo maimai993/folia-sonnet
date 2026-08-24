@@ -7,7 +7,7 @@ import VisualizerCappella from './VisualizerCappella';
 // Registers the Cappella chat visualizer mode.
 export default defineVisualizer({
     mode: 'cappella',
-    order: 50,
+    order: 110,
     labelKey: 'ui.visualizerCappella',
     labelFallback: 'Cappella',
     previewSeed: 'cappella',

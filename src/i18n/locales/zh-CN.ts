@@ -224,6 +224,13 @@ export default {
     "previewSearch": "搜索{{source}}歌曲：{{query}}",
     "previewQueueSearch": "搜索当前队列：{{query}}",
     "previewQueueSearchEmpty": "输入歌名、歌手、专辑或队列序号",
+    "pickerFilterPlaceholder": "输入以筛选，然后点击或按回车",
+    "executeMode": {
+      "title": "执行模式",
+      "placeholder": "按下快捷键",
+      "unknown": "没有命令使用 \"{{keys}}\"",
+      "unknownHint": "按 Esc 清空后再试"
+    },
     "queueIndex": "队列 #{{index}}",
     "queueFacet": "元数据",
     "queueFacetArtist": "歌手",
@@ -294,6 +301,7 @@ export default {
       "settings-r2-sync": { "title": "同步服务设置", "description": "打开同步服务设置" },
       "sync-now": { "title": "立即同步", "description": "同步 AI 主题" },
       "settings-desktop": { "title": "桌面端设置", "description": "打开桌面应用设置" },
+      "settings-update-channel": { "title": "更新通道", "description": "选择桌面端发布通道" },
       "desktop-toggle-voice-input-pause": { "title": "语音输入时暂停", "description": "切换语音输入时自动暂停播放" },
       "desktop-toggle-prevent-display-sleep": { "title": "播放时阻止休眠", "description": "播放音乐时保持显示器唤醒" },
       "settings-lab": { "title": "实验设置", "description": "打开实验功能设置" },
@@ -331,6 +339,9 @@ export default {
       "theme-source-ai": { "title": "主题来源：AI 推断", "description": "由 AI 读取歌词推断歌曲主题配色" },
       "theme-source-cover": { "title": "主题来源：封面取色", "description": "直接从封面配色生成歌曲主题" },
       "playback-auto-match-best-lyric": { "title": "匹配最佳歌词", "description": "为当前歌曲运行自动最佳歌词匹配" },
+      "visualizer-picker": { "title": "选择可视化", "description": "浏览歌词动画模式，点击图标切换" },
+      "background-picker": { "title": "选择背景", "description": "浏览背景布局，点击图标切换" },
+      "visualizer-still": { "title": "可视化：静止", "description": "切换到低占用的静态可视化" },
       "visualizer-classic": { "title": "可视化：流光", "description": "切换到经典可视化" },
       "visualizer-cadenza": { "title": "可视化：心象", "description": "切换到心象可视化" },
       "visualizer-partita": { "title": "可视化：云阶", "description": "切换到云阶可视化" },
@@ -2087,6 +2098,10 @@ export default {
     "commandPalette": {
       "title": "命令面板",
       "desc": "在播放页面按下 S键 即可打开命令面板，快速访问功能与设置。"
+    },
+    "executeMode": {
+      "title": "执行模式",
+      "desc": "在播放页按 \":\"，再敲一个字母（例如 n 或 v）即可立即执行对应命令。"
     },
     "typeToSearch": {
       "title": "全局搜索",

@@ -8,7 +8,7 @@ import VisualizerDiorama from './VisualizerDiorama';
 // its tuning panel (camera speed / motion amount / geometry visibility and response / particles).
 export default defineVisualizer({
     mode: 'diorama',
-    order: 60,
+    order: 120,
     labelKey: 'ui.visualizerDiorama',
     labelFallback: '镜台',
     previewSeed: 'diorama',

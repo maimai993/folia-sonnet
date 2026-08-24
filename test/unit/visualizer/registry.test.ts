@@ -12,7 +12,8 @@ import {
 describe('visualizer registry', () => {
     it('auto-loads the built-in visualizer entries in stable order', () => {
         expect(VISUALIZER_REGISTRY.map(entry => entry.mode)).toEqual([
-            'still',
+            'sonnet',
+            'tempera',
             'classic',
             'cadenza',
             'partita',
@@ -23,8 +24,7 @@ describe('visualizer registry', () => {
             'pendolo',
             'cappella',
             'diorama',
-            'sonnet',
-            'tempera',
+            'still',
         ]);
     });
 

@@ -3,77 +3,102 @@ import { PlayerState, type SongResult } from '../../../src/types';
 import { COMMAND_PALETTE_COMMANDS, getCommandPaletteMatches, getQueueSongMatches } from '../../../src/components/command-palette/commandRegistry';
 import type { CommandPaletteContext } from '../../../src/components/command-palette/types';
 
-const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandPaletteContext => ({
-    currentSong: null,
-    currentSearchSourceTab: 'netease',
-    localSongs: [],
-    localLibraryCatalog: { entities: [], assignments: [] },
-    playerState: PlayerState.PAUSED,
-    t: (_key, fallback) => fallback ?? '',
-    setStatusMsg: vi.fn(),
-    openSettings: vi.fn(),
-    navigateToHome: vi.fn(),
-    navigateToPlayer: vi.fn(),
-    navigateToSearch: vi.fn(),
-    toggleBrowserFullscreen: vi.fn(async () => true),
-    toggleRemoteControlWindow: vi.fn(async () => true),
-    toggleMainWindowAlwaysOnTop: vi.fn(async () => true),
-    setHomeViewTab: vi.fn(),
-    setPanelTab: vi.fn(),
-    setIsPanelOpen: vi.fn(),
-    submitSearch: vi.fn(async () => true),
-    togglePlay: vi.fn(),
-    toggleLoop: vi.fn(),
-    volume: 0.5,
-    setVolume: vi.fn(),
-    onReplayGainModeChange: vi.fn(),
-    openAudioEqualizer: vi.fn(),
-    applyAudioSoundPreset: vi.fn(),
-    handleNextTrack: vi.fn(),
-    handlePrevTrack: vi.fn(),
-    shuffleQueue: vi.fn(),
-    clearQueue: vi.fn(),
-    applyQueueBatchOperation: vi.fn(() => true),
-    canGenerateAITheme: true,
-    isGeneratingTheme: false,
-    generateAITheme: vi.fn(),
-    themeGenerationSource: 'ai',
-    setThemeGenerationSource: vi.fn(),
-    setVisualizerMode: vi.fn(),
-    randomVisualizerModePerSong: false,
-    toggleRandomVisualizerModePerSong: vi.fn(),
-    setVisualizerBackgroundMode: vi.fn(),
-    setMonetBackgroundTuning: vi.fn(),
-    setLatentBackgroundTuning: vi.fn(),
-    toggleTransparentBackground: vi.fn(),
-    hideBottomSubtitleOverlay: false,
-    toggleBottomSubtitleOverlay: vi.fn(),
-    subtitleContentMode: 'translation',
-    cycleSubtitleContentMode: vi.fn(),
-    subtitleOverlayBackground: false,
-    toggleSubtitleOverlayBackground: vi.fn(),
-    alwaysShowPlayerBackButton: false,
-    toggleAlwaysShowPlayerBackButton: vi.fn(),
-    alwaysShowTrackSwitchButtons: false,
-    toggleAlwaysShowTrackSwitchButtons: vi.fn(),
-    alwaysShowMainWindowTitlebar: false,
-    toggleAlwaysShowMainWindowTitlebar: vi.fn(),
-    toggleDaylightMode: vi.fn(),
-    voiceInputPauseEnabled: false,
-    voiceInputPauseSupported: false,
-    toggleVoiceInputPause: vi.fn(),
-    preventDisplaySleepDuringPlayback: false,
-    togglePreventDisplaySleepDuringPlayback: vi.fn(),
-    toggleWallpaperMode: vi.fn(),
-    setAppLanguagePreference: vi.fn(async () => undefined),
-    runAutoMatchBestLyric: vi.fn(async () => true),
-    setIsUserGuideModalOpen: vi.fn(),
-    openThemeQuickEditor: vi.fn(),
-    canOpenThemeQuickEditor: true,
-    playQueue: [],
-    playSong: vi.fn(),
-    ...overrides,
-});
+type CommandPaletteContextOverrides = {
+    [Namespace in keyof CommandPaletteContext]?: Partial<CommandPaletteContext[Namespace]>;
+};
+
+// Merges per-namespace overrides onto a fully stubbed context so a test only states the
+// fields it actually cares about.
+const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandPaletteContext => {
+    const base: CommandPaletteContext = {
+        shared: {
+            t: (_key: string, fallback?: string) => fallback ?? '',
+            setStatusMsg: vi.fn(),
+            currentSong: null,
+            playerState: PlayerState.PAUSED,
+        },
+        search: {
+            currentSearchSourceTab: 'netease',
+            localSongs: [],
+            localLibraryCatalog: { entities: [], assignments: [] },
+            navigateToSearch: vi.fn(),
+            submitSearch: vi.fn(async () => true),
+        },
+        playback: {
+            volume: 0.5,
+            isMuted: false,
+            setVolume: vi.fn(),
+            previewVolume: vi.fn(),
+            togglePlay: vi.fn(),
+            toggleLoop: vi.fn(),
+            next: vi.fn(),
+            prev: vi.fn(),
+            queue: [],
+            playSong: vi.fn(),
+            shuffleQueue: vi.fn(),
+            clearQueue: vi.fn(),
+            applyQueueBatchOperation: vi.fn(() => true),
+            removeQueueSong: vi.fn(),
+            moveQueueSongToNext: vi.fn(),
+            moveQueueSongToEnd: vi.fn(),
+            setReplayGainMode: vi.fn(),
+            openAudioEqualizer: vi.fn(),
+            applyAudioSoundPreset: vi.fn(),
+            runAutoMatchBestLyric: vi.fn(async () => true),
+        },
+        navigation: {
+            navigateToHome: vi.fn(),
+            navigateToPlayer: vi.fn(),
+            setHomeViewTab: vi.fn(),
+            toggleBrowserFullscreen: vi.fn(async () => true),
+            toggleRemoteControlWindow: vi.fn(async () => true),
+            toggleMainWindowAlwaysOnTop: vi.fn(async () => true),
+        },
+        panel: {
+            setPanelTab: vi.fn(),
+            setIsPanelOpen: vi.fn(),
+        },
+        settings: {
+            openSettings: vi.fn(),
+            setIsUserGuideModalOpen: vi.fn(),
+            setAppLanguagePreference: vi.fn(async () => undefined),
+            toggleTransparentBackground: vi.fn(),
+            toggleDaylightMode: vi.fn(),
+            toggleBottomSubtitleOverlay: vi.fn(),
+            subtitleContentMode: 'translation',
+            cycleSubtitleContentMode: vi.fn(),
+            toggleSubtitleOverlayBackground: vi.fn(),
+            toggleAlwaysShowPlayerBackButton: vi.fn(),
+            toggleAlwaysShowTrackSwitchButtons: vi.fn(),
+            toggleAlwaysShowMainWindowTitlebar: vi.fn(),
+            voiceInputPauseSupported: false,
+            toggleVoiceInputPause: vi.fn(),
+            togglePreventDisplaySleepDuringPlayback: vi.fn(),
+            toggleWallpaperMode: vi.fn(),
+            canGenerateAITheme: true,
+            isGeneratingTheme: false,
+            generateAITheme: vi.fn(),
+            openThemeQuickEditor: vi.fn(),
+            canOpenThemeQuickEditor: true,
+            themeGenerationSource: 'ai',
+            setThemeGenerationSource: vi.fn(),
+        },
+        visualizer: {
+            setVisualizerMode: vi.fn(),
+            toggleRandomVisualizerModePerSong: vi.fn(),
+            setVisualizerBackgroundMode: vi.fn(),
+            setMonetBackgroundTuning: vi.fn(),
+            setLatentBackgroundTuning: vi.fn(),
+        },
+    };
+
+    return Object.fromEntries(
+        Object.entries(base).map(([namespace, values]) => [
+            namespace,
+            { ...values, ...overrides[namespace as keyof CommandPaletteContext] },
+        ]),
+    ) as CommandPaletteContext;
+};
 
 describe('command palette registry', () => {
     it('cycles the subtitle content mode via the unified command', async () => {
@@ -82,7 +107,7 @@ describe('command palette registry', () => {
 
         expect(command).toBeDefined();
         await command!.execute('', context);
-        expect(context.cycleSubtitleContentMode).toHaveBeenCalled();
+        expect(context.settings.cycleSubtitleContentMode).toHaveBeenCalled();
     });
 
     it('parses source-specific search input', async () => {
@@ -94,12 +119,12 @@ describe('command palette registry', () => {
 
         await match.command.execute(match.input, context);
 
-        expect(context.submitSearch).toHaveBeenCalledWith(expect.objectContaining({
+        expect(context.search.submitSearch).toHaveBeenCalledWith(expect.objectContaining({
             query: 'touhou',
             sourceTab: 'local',
             returnView: 'player',
         }));
-        expect(context.navigateToSearch).toHaveBeenCalledWith(expect.objectContaining({
+        expect(context.search.navigateToSearch).toHaveBeenCalledWith(expect.objectContaining({
             query: 'touhou',
             sourceTab: 'local',
             returnView: 'player',
@@ -113,7 +138,7 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('settings-integration');
         match.command.execute(match.input, context);
 
-        expect(context.openSettings).toHaveBeenCalledWith('options', 'integration');
+        expect(context.settings.openSettings).toHaveBeenCalledWith('options', 'integration');
     });
 
     it('opens the local lyrics priority setting from the command palette', () => {
@@ -123,7 +148,7 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('settings-local-lyrics-priority');
         match.command.execute(match.input, context);
 
-        expect(context.openSettings).toHaveBeenCalledWith('options', 'playback');
+        expect(context.settings.openSettings).toHaveBeenCalledWith('options', 'playback');
     });
 
     it('switches ReplayGain modes from the command palette', () => {
@@ -132,17 +157,17 @@ describe('command palette registry', () => {
         const [trackMatch] = getCommandPaletteMatches('单曲增益');
         expect(trackMatch.command.id).toBe('playback-replaygain-track');
         trackMatch.command.execute(trackMatch.input, context);
-        expect(context.onReplayGainModeChange).toHaveBeenCalledWith('track');
+        expect(context.playback.setReplayGainMode).toHaveBeenCalledWith('track');
 
         const [albumMatch] = getCommandPaletteMatches('album gain');
         expect(albumMatch.command.id).toBe('playback-replaygain-album');
         albumMatch.command.execute(albumMatch.input, context);
-        expect(context.onReplayGainModeChange).toHaveBeenCalledWith('album');
+        expect(context.playback.setReplayGainMode).toHaveBeenCalledWith('album');
 
         const [offMatch] = getCommandPaletteMatches('关闭音频增益');
         expect(offMatch.command.id).toBe('playback-replaygain-off');
         offMatch.command.execute(offMatch.input, context);
-        expect(context.onReplayGainModeChange).toHaveBeenCalledWith('off');
+        expect(context.playback.setReplayGainMode).toHaveBeenCalledWith('off');
     });
 
     it('opens the controls panel and ten-band equalizer', () => {
@@ -152,25 +177,25 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('playback-equalizer');
         match.command.execute(match.input, context);
 
-        expect(context.setPanelTab).toHaveBeenCalledWith('controls');
-        expect(context.setIsPanelOpen).toHaveBeenCalledWith(true);
-        expect(context.openAudioEqualizer).toHaveBeenCalled();
+        expect(context.panel.setPanelTab).toHaveBeenCalledWith('controls');
+        expect(context.panel.setIsPanelOpen).toHaveBeenCalledWith(true);
+        expect(context.playback.openAudioEqualizer).toHaveBeenCalled();
     });
 
     it('opens the volume control command and accepts only values from 0 to 100', () => {
-        const context = createContext({ volume: 0.42 });
+        const context = createContext({ playback: { volume: 0.42 } });
         const [match] = getCommandPaletteMatches('音量条');
 
         expect(match.command.id).toBe('playback-volume');
         expect(match.command.requiresInput).toBe(true);
         expect(match.command.getInitialInput?.(context)).toBe('42');
         expect(match.command.execute('75', context)).toBe(true);
-        expect(context.setVolume).toHaveBeenCalledWith(0.75);
+        expect(context.playback.setVolume).toHaveBeenCalledWith(0.75);
 
         expect(match.command.execute('-1', context)).toBe(false);
         expect(match.command.execute('101', context)).toBe(false);
         expect(match.command.execute('loud', context)).toBe(false);
-        expect(context.setVolume).toHaveBeenCalledTimes(1);
+        expect(context.playback.setVolume).toHaveBeenCalledTimes(1);
     });
 
     it('applies a full sound preset from the command palette', () => {
@@ -180,7 +205,7 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('playback-sound-preset-lofi');
         match.command.execute(match.input, context);
 
-        expect(context.applyAudioSoundPreset).toHaveBeenCalledWith('lofi');
+        expect(context.playback.applyAudioSoundPreset).toHaveBeenCalledWith('lofi');
     });
 
     it('matches sync server settings and manual sync commands', () => {
@@ -194,7 +219,7 @@ describe('command palette registry', () => {
 
         await match.command.execute(match.input, context);
 
-        expect(context.setStatusMsg).toHaveBeenCalledWith({
+        expect(context.shared.setStatusMsg).toHaveBeenCalledWith({
             type: 'info',
             text: 'Sync is not enabled. Configure and enable it in Storage settings first.',
         });
@@ -206,17 +231,17 @@ describe('command palette registry', () => {
         const [generalMatch] = getCommandPaletteMatches('通用');
         expect(generalMatch.command.id).toBe('settings-general');
         generalMatch.command.execute(generalMatch.input, context);
-        expect(context.openSettings).toHaveBeenCalledWith('options', 'general');
+        expect(context.settings.openSettings).toHaveBeenCalledWith('options', 'general');
 
         const [systemLanguageMatch] = getCommandPaletteMatches('跟随系统');
         expect(systemLanguageMatch.command.id).toBe('settings-language-system');
         await systemLanguageMatch.command.execute(systemLanguageMatch.input, context);
-        expect(context.setAppLanguagePreference).toHaveBeenCalledWith('system');
+        expect(context.settings.setAppLanguagePreference).toHaveBeenCalledWith('system');
 
         const [englishMatch] = getCommandPaletteMatches('english');
         expect(englishMatch.command.id).toBe('settings-language-en');
         await englishMatch.command.execute(englishMatch.input, context);
-        expect(context.setAppLanguagePreference).toHaveBeenCalledWith('en');
+        expect(context.settings.setAppLanguagePreference).toHaveBeenCalledWith('en');
     });
 
     it('previews recognized search commands with parsed input', () => {
@@ -225,7 +250,7 @@ describe('command palette registry', () => {
             'commandPalette.sourceCurrent': '当前来源',
         };
         const context = createContext({
-            t: (key, fallback) => translations[key] ?? fallback ?? '',
+            shared: { t: (key: string, fallback?: string) => translations[key] ?? fallback ?? '' },
         });
         const [match] = getCommandPaletteMatches('search 你好世界');
 
@@ -251,7 +276,7 @@ describe('command palette registry', () => {
             album: { id: index + 1, name: `Album ${index + 1}` },
             durationMs: 180_000,
         }));
-        const context = createContext({ playQueue });
+        const context = createContext({ playback: { queue: playQueue } });
 
         const fullQueue = getQueueSongMatches('', context);
         const filteredQueue = getQueueSongMatches('needle', context);
@@ -271,12 +296,12 @@ describe('command palette registry', () => {
             album: { id: 1, name: 'Album 1' },
             durationMs: 180_000,
         }];
-        const context = createContext({ playQueue });
+        const context = createContext({ playback: { queue: playQueue } });
 
         const [match] = getCommandPaletteMatches('清空队列', context);
         expect(match.command.id).toBe('playback-clear-queue');
         expect(match.command.execute(match.input, context)).toBe(true);
-        expect(context.clearQueue).toHaveBeenCalled();
+        expect(context.playback.clearQueue).toHaveBeenCalled();
 
         expect(getCommandPaletteMatches('清空队列', createContext())
             .some(entry => entry.command.id === 'playback-clear-queue')).toBe(false);
@@ -297,37 +322,37 @@ describe('command palette registry', () => {
         const [matchTransparent] = getCommandPaletteMatches('透明化');
         expect(matchTransparent.command.id).toBe('settings-toggle-transparent');
         matchTransparent.command.execute(matchTransparent.input, context);
-        expect(context.toggleTransparentBackground).toHaveBeenCalled();
+        expect(context.settings.toggleTransparentBackground).toHaveBeenCalled();
 
         const [matchDaylight] = getCommandPaletteMatches('切换明暗');
         expect(matchDaylight.command.id).toBe('settings-toggle-daylight');
         matchDaylight.command.execute(matchDaylight.input, context);
-        expect(context.toggleDaylightMode).toHaveBeenCalled();
+        expect(context.settings.toggleDaylightMode).toHaveBeenCalled();
 
         const [matchBottomSubtitleOverlay] = getCommandPaletteMatches('隐藏底部字幕层');
         expect(matchBottomSubtitleOverlay.command.id).toBe('settings-toggle-bottom-subtitle-overlay');
         matchBottomSubtitleOverlay.command.execute(matchBottomSubtitleOverlay.input, context);
-        expect(context.toggleBottomSubtitleOverlay).toHaveBeenCalled();
+        expect(context.settings.toggleBottomSubtitleOverlay).toHaveBeenCalled();
 
         const [playerBackButtonMatch] = getCommandPaletteMatches('始终显示返回按钮');
         expect(playerBackButtonMatch.command.id).toBe('settings-toggle-player-back-button');
         playerBackButtonMatch.command.execute(playerBackButtonMatch.input, context);
-        expect(context.toggleAlwaysShowPlayerBackButton).toHaveBeenCalled();
+        expect(context.settings.toggleAlwaysShowPlayerBackButton).toHaveBeenCalled();
 
         const [mainWindowTitlebarMatch] = getCommandPaletteMatches('始终显示标题栏');
         expect(mainWindowTitlebarMatch.command.id).toBe('settings-toggle-main-window-titlebar');
         mainWindowTitlebarMatch.command.execute(mainWindowTitlebarMatch.input, context);
-        expect(context.toggleAlwaysShowMainWindowTitlebar).toHaveBeenCalled();
+        expect(context.settings.toggleAlwaysShowMainWindowTitlebar).toHaveBeenCalled();
 
         const [matchSubtitleCycle] = getCommandPaletteMatches('字幕翻译');
         expect(matchSubtitleCycle.command.id).toBe('settings-cycle-subtitle-content-mode');
         matchSubtitleCycle.command.execute(matchSubtitleCycle.input, context);
-        expect(context.cycleSubtitleContentMode).toHaveBeenCalled();
+        expect(context.settings.cycleSubtitleContentMode).toHaveBeenCalled();
 
         const [matchSubtitleBackground] = getCommandPaletteMatches('字幕背景');
         expect(matchSubtitleBackground.command.id).toBe('settings-toggle-subtitle-background');
         matchSubtitleBackground.command.execute(matchSubtitleBackground.input, context);
-        expect(context.toggleSubtitleOverlayBackground).toHaveBeenCalled();
+        expect(context.settings.toggleSubtitleOverlayBackground).toHaveBeenCalled();
     });
 
     it('executes the current song AI theme generation command', () => {
@@ -337,16 +362,16 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('theme-generate-current');
 
         match.command.execute(match.input, context);
-        expect(context.generateAITheme).toHaveBeenCalled();
+        expect(context.settings.generateAITheme).toHaveBeenCalled();
     });
 
     it('hides the AI theme generation command when unavailable or already running', () => {
         expect(getCommandPaletteMatches('生成AI主题', createContext({
-            canGenerateAITheme: false,
+            settings: { canGenerateAITheme: false },
         })).some(match => match.command.id === 'theme-generate-current')).toBe(false);
 
         expect(getCommandPaletteMatches('生成AI主题', createContext({
-            isGeneratingTheme: true,
+            settings: { isGeneratingTheme: true },
         })).some(match => match.command.id === 'theme-generate-current')).toBe(false);
     });
 
@@ -357,17 +382,17 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('theme-quick-editor');
 
         match.command.execute(match.input, context);
-        expect(context.openThemeQuickEditor).toHaveBeenCalled();
+        expect(context.settings.openThemeQuickEditor).toHaveBeenCalled();
     });
 
     it('hides the theme quick editor command when no editable theme is available', () => {
         expect(getCommandPaletteMatches('快速主题编辑器', createContext({
-            canOpenThemeQuickEditor: false,
+            settings: { canOpenThemeQuickEditor: false },
         })).some(match => match.command.id === 'theme-quick-editor')).toBe(false);
     });
 
     it('filters out non-current search commands when context is provided', () => {
-        const context = createContext({ currentSearchSourceTab: 'local' });
+        const context = createContext({ search: { currentSearchSourceTab: 'local' } });
 
         const matches = getCommandPaletteMatches('search touhou', context);
         const searchMatches = matches.filter(m => m.command.group === 'search');
@@ -396,7 +421,7 @@ describe('command palette registry', () => {
         expect(matchesZhuti[0].command.id).toBe('settings-theme-park');
 
         matchesColor[0].command.execute('', context);
-        expect(context.openSettings).toHaveBeenCalledWith('options', 'themePark');
+        expect(context.settings.openSettings).toHaveBeenCalledWith('options', 'themePark');
     });
 
     it('executes navigation commands', async () => {
@@ -405,17 +430,17 @@ describe('command palette registry', () => {
         const [matchHome] = getCommandPaletteMatches('home');
         expect(matchHome.command.id).toBe('navigate-home');
         matchHome.command.execute('', context);
-        expect(context.navigateToHome).toHaveBeenCalled();
+        expect(context.navigation.navigateToHome).toHaveBeenCalled();
 
         const [matchPlayer] = getCommandPaletteMatches('player');
         expect(matchPlayer.command.id).toBe('navigate-player');
         matchPlayer.command.execute('', context);
-        expect(context.navigateToPlayer).toHaveBeenCalled();
+        expect(context.navigation.navigateToPlayer).toHaveBeenCalled();
 
         const [matchFullscreen] = getCommandPaletteMatches('浏览器全屏');
         expect(matchFullscreen.command.id).toBe('browser-fullscreen');
         await matchFullscreen.command.execute('', context);
-        expect(context.toggleBrowserFullscreen).toHaveBeenCalled();
+        expect(context.navigation.toggleBrowserFullscreen).toHaveBeenCalled();
     });
 
     it('executes home tab navigation commands', () => {
@@ -424,43 +449,43 @@ describe('command palette registry', () => {
         const [matchLocalTab] = getCommandPaletteMatches('local music');
         expect(matchLocalTab.command.id).toBe('home-local');
         matchLocalTab.command.execute('', context);
-        expect(context.setHomeViewTab).toHaveBeenCalledWith('local');
-        expect(context.navigateToHome).toHaveBeenCalled();
+        expect(context.navigation.setHomeViewTab).toHaveBeenCalledWith('local');
+        expect(context.navigation.navigateToHome).toHaveBeenCalled();
     });
 
     it('executes playback controls', () => {
-        const context = createContext({ playerState: PlayerState.PAUSED });
+        const context = createContext({ shared: { playerState: PlayerState.PAUSED } });
         
         const [matchPlay] = getCommandPaletteMatches('play');
         expect(matchPlay.command.id).toBe('playback-play');
         matchPlay.command.execute('', context);
-        expect(context.togglePlay).toHaveBeenCalled();
+        expect(context.playback.togglePlay).toHaveBeenCalled();
 
-        const contextPlaying = createContext({ playerState: PlayerState.PLAYING });
+        const contextPlaying = createContext({ shared: { playerState: PlayerState.PLAYING } });
         const [matchPause] = getCommandPaletteMatches('pause');
         expect(matchPause.command.id).toBe('playback-pause');
         matchPause.command.execute('', contextPlaying);
-        expect(contextPlaying.togglePlay).toHaveBeenCalled();
+        expect(contextPlaying.playback.togglePlay).toHaveBeenCalled();
         
         const [matchNext] = getCommandPaletteMatches('next');
         expect(matchNext.command.id).toBe('playback-next');
         matchNext.command.execute('', context);
-        expect(context.handleNextTrack).toHaveBeenCalled();
+        expect(context.playback.next).toHaveBeenCalled();
 
         const [matchPrev] = getCommandPaletteMatches('prev');
         expect(matchPrev.command.id).toBe('playback-prev');
         matchPrev.command.execute('', context);
-        expect(context.handlePrevTrack).toHaveBeenCalled();
+        expect(context.playback.prev).toHaveBeenCalled();
 
         const [matchLoop] = getCommandPaletteMatches('loop');
         expect(matchLoop.command.id).toBe('playback-loop');
         matchLoop.command.execute('', context);
-        expect(context.toggleLoop).toHaveBeenCalled();
+        expect(context.playback.toggleLoop).toHaveBeenCalled();
 
         const [matchShuffle] = getCommandPaletteMatches('shuffle');
         expect(matchShuffle.command.id).toBe('playback-shuffle');
         matchShuffle.command.execute('', context);
-        expect(context.shuffleQueue).toHaveBeenCalled();
+        expect(context.playback.shuffleQueue).toHaveBeenCalled();
     });
 
     it('always exposes the best lyric auto-match command', async () => {
@@ -469,7 +494,7 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('playback-auto-match-best-lyric');
 
         await match.command.execute(match.input, context);
-        expect(context.runAutoMatchBestLyric).toHaveBeenCalled();
+        expect(context.playback.runAutoMatchBestLyric).toHaveBeenCalled();
     });
 
     it('filters out settings-desktop command in a web browser environment without electron', () => {
@@ -559,39 +584,39 @@ describe('command palette registry', () => {
         const [matchMonet] = getCommandPaletteMatches('切换到可视化：莫奈');
         expect(matchMonet.command.id).toBe('visualizer-monet');
         matchMonet.command.execute('', context);
-        expect(context.setVisualizerMode).toHaveBeenCalledWith('monet');
+        expect(context.visualizer.setVisualizerMode).toHaveBeenCalledWith('monet');
 
         const [matchFullOverlay] = getCommandPaletteMatches('全屏叠色');
         expect(matchFullOverlay.command.id).toBe('background-monet-full-overlay');
         matchFullOverlay.command.execute('', context);
-        expect(context.setVisualizerBackgroundMode).toHaveBeenCalledWith('monet');
-        expect(context.setMonetBackgroundTuning).toHaveBeenCalledWith({ backgroundLayout: 'full-overlay' });
+        expect(context.visualizer.setVisualizerBackgroundMode).toHaveBeenCalledWith('monet');
+        expect(context.visualizer.setMonetBackgroundTuning).toHaveBeenCalledWith({ backgroundLayout: 'full-overlay' });
 
         const [matchHalfGradient] = getCommandPaletteMatches('半屏渐变');
         expect(matchHalfGradient.command.id).toBe('background-monet-half-gradient');
         matchHalfGradient.command.execute('', context);
-        expect(context.setVisualizerBackgroundMode).toHaveBeenCalledWith('monet');
-        expect(context.setMonetBackgroundTuning).toHaveBeenCalledWith({ backgroundLayout: 'half-pane-gradient' });
+        expect(context.visualizer.setVisualizerBackgroundMode).toHaveBeenCalledWith('monet');
+        expect(context.visualizer.setMonetBackgroundTuning).toHaveBeenCalledWith({ backgroundLayout: 'half-pane-gradient' });
 
         const [matchCommon] = getCommandPaletteMatches('通用背景');
         expect(matchCommon.command.id).toBe('background-common');
         matchCommon.command.execute('', context);
-        expect(context.setVisualizerBackgroundMode).toHaveBeenCalledWith('common');
+        expect(context.visualizer.setVisualizerBackgroundMode).toHaveBeenCalledWith('common');
 
         const [matchNomand] = getCommandPaletteMatches('像素画');
         expect(matchNomand.command.id).toBe('background-nomand');
         matchNomand.command.execute('', context);
-        expect(context.setVisualizerBackgroundMode).toHaveBeenCalledWith('nomand');
+        expect(context.visualizer.setVisualizerBackgroundMode).toHaveBeenCalledWith('nomand');
 
         const [matchLatent] = getCommandPaletteMatches('隐现背景');
         expect(matchLatent.command.id).toBe('background-latent');
         matchLatent.command.execute('', context);
-        expect(context.setVisualizerBackgroundMode).toHaveBeenCalledWith('latent');
+        expect(context.visualizer.setVisualizerBackgroundMode).toHaveBeenCalledWith('latent');
 
         const [matchLatentFluid] = getCommandPaletteMatches('隐现流体');
         expect(matchLatentFluid.command.id).toBe('background-latent-mesh');
         matchLatentFluid.command.execute('', context);
-        expect(context.setLatentBackgroundTuning).toHaveBeenCalledWith({ displayMode: 'mesh' });
+        expect(context.visualizer.setLatentBackgroundTuning).toHaveBeenCalledWith({ displayMode: 'mesh' });
     });
 
     it('matches and executes the Diorama visualizer command', () => {
@@ -600,7 +625,7 @@ describe('command palette registry', () => {
 
         expect(match.command.id).toBe('visualizer-diorama');
         match.command.execute('', context);
-        expect(context.setVisualizerMode).toHaveBeenCalledWith('diorama');
+        expect(context.visualizer.setVisualizerMode).toHaveBeenCalledWith('diorama');
     });
 
     it('matches and executes desktop window toggle commands', async () => {
@@ -611,12 +636,12 @@ describe('command palette registry', () => {
             const [remoteMatch] = getCommandPaletteMatches('切换遥控窗口', context);
             expect(remoteMatch.command.id).toBe('desktop-toggle-remote-control');
             await remoteMatch.command.execute('', context);
-            expect(context.toggleRemoteControlWindow).toHaveBeenCalled();
+            expect(context.navigation.toggleRemoteControlWindow).toHaveBeenCalled();
 
             const [topMatch] = getCommandPaletteMatches('主窗口置顶', context);
             expect(topMatch.command.id).toBe('desktop-toggle-main-window-always-on-top');
             await topMatch.command.execute('', context);
-            expect(context.toggleMainWindowAlwaysOnTop).toHaveBeenCalled();
+            expect(context.navigation.toggleMainWindowAlwaysOnTop).toHaveBeenCalled();
         } finally {
             vi.unstubAllGlobals();
         }
@@ -633,7 +658,7 @@ describe('command palette registry', () => {
             expect(match.command.id).toBe('desktop-toggle-lyric-api');
             await match.command.execute('', context);
             expect(setLyricApiEnabled).toHaveBeenCalledWith(true);
-            expect(context.setStatusMsg).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+            expect(context.shared.setStatusMsg).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
         } finally {
             vi.unstubAllGlobals();
         }
@@ -646,7 +671,7 @@ describe('command palette registry', () => {
             const [match] = getCommandPaletteMatches('播放时阻止休眠', context);
             expect(match.command.id).toBe('desktop-toggle-prevent-display-sleep');
             await match.command.execute('', context);
-            expect(context.togglePreventDisplaySleepDuringPlayback).toHaveBeenCalled();
+            expect(context.settings.togglePreventDisplaySleepDuringPlayback).toHaveBeenCalled();
         } finally {
             vi.unstubAllGlobals();
         }
@@ -658,33 +683,33 @@ describe('command palette registry', () => {
 
         expect(match.command.id).toBe('visualizer-toggle-random-per-song');
         match.command.execute('', context);
-        expect(context.toggleRandomVisualizerModePerSong).toHaveBeenCalled();
+        expect(context.visualizer.toggleRandomVisualizerModePerSong).toHaveBeenCalled();
     });
 });
 
 describe('theme generation source commands', () => {
     it('offers only the source that is not already active', () => {
-        const aiContext = createContext({ themeGenerationSource: 'ai' });
+        const aiContext = createContext({ settings: { themeGenerationSource: 'ai' } });
         const aiIds = getCommandPaletteMatches('theme source', aiContext).map(match => match.command.id);
         expect(aiIds).toContain('theme-source-cover');
         expect(aiIds).not.toContain('theme-source-ai');
 
-        const coverContext = createContext({ themeGenerationSource: 'cover' });
+        const coverContext = createContext({ settings: { themeGenerationSource: 'cover' } });
         const coverIds = getCommandPaletteMatches('theme source', coverContext).map(match => match.command.id);
         expect(coverIds).toContain('theme-source-ai');
         expect(coverIds).not.toContain('theme-source-cover');
     });
 
     it('switches the source when executed', () => {
-        const context = createContext({ themeGenerationSource: 'ai' });
+        const context = createContext({ settings: { themeGenerationSource: 'ai' } });
         const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === 'theme-source-cover');
 
         expect(command?.execute('', context)).toBe(true);
-        expect(context.setThemeGenerationSource).toHaveBeenCalledWith('cover');
+        expect(context.settings.setThemeGenerationSource).toHaveBeenCalledWith('cover');
     });
 
     it('is findable by its Chinese name', () => {
-        const ids = getCommandPaletteMatches('封面取色', createContext({ themeGenerationSource: 'ai' }))
+        const ids = getCommandPaletteMatches('封面取色', createContext({ settings: { themeGenerationSource: 'ai' } }))
             .map(match => match.command.id);
         expect(ids).toContain('theme-source-cover');
     });

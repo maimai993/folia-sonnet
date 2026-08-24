@@ -246,7 +246,7 @@ vercel dev
 | App 顶层装配、overlay、dialog、播放器面板参数组装 | `src/components/app/*` |
 | 设置中心 UI | `src/components/modal/settings/*` |
 | 设置持久化、visualizer tuning、偏好 store | `src/stores/useSettingsUiStore.ts` |
-| 命令面板命令 | `src/components/command-palette/commandRegistry.ts` |
+| 命令面板命令 | `src/components/command-palette/commands/<group>Commands.ts`（`commandRegistry.ts` 只做拼接与过滤） |
 | visualizer 共享契约和注册 | `src/components/visualizer/definition.ts`、`src/components/visualizer/registry.tsx` |
 | visualizer 预览和设置面板 | `src/components/visualizer/VisPlayground.tsx`、`src/components/visualizer/VisPlaygroundSettingsPanel.tsx` |
 | visualizer 模式实现 | `src/components/visualizer/<mode>/*` |

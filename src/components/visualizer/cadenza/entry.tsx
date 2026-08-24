@@ -22,7 +22,7 @@ const renderCadenza = ({
 
 export default defineVisualizer({
     mode: 'cadenza',
-    order: 20,
+    order: 40,
     labelKey: 'ui.visualizerCadenze',
     labelFallback: 'Mindscape',
     previewSeed: 'cadenza',

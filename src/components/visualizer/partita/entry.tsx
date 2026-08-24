@@ -7,7 +7,7 @@ import VisualizerPartita from './VisualizerPartita';
 // Registers Partita and its preview tuning panel.
 export default defineVisualizer({
     mode: 'partita',
-    order: 30,
+    order: 50,
     labelKey: 'ui.visualizerPartita',
     labelFallback: '云阶',
     previewSeed: 'partita',
