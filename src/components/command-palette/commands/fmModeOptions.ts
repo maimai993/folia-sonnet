@@ -34,6 +34,8 @@ type PersonalFmOption = {
     id: string;
     label: string;
     matchId: string;
+    /** Pinyin from the catalogue, so a Latin keyboard reaches the Chinese labels. */
+    keywords: string[];
     selection: PersonalFmSelection;
 };
 
@@ -44,6 +46,7 @@ const buildOptions = (context: CommandPaletteContext): PersonalFmOption[] => {
             id: `${MODE_ID_PREFIX}${entry.id}`,
             label: t(entry.labelKey, entry.labelFallback),
             matchId: entry.id,
+            keywords: entry.keywords,
             // Picking SCENE_RCMD from the mode row keeps the scene already in effect, so the row
             // acts as a label for the scene below it rather than a dead end.
             selection: entry.id === 'SCENE_RCMD'
@@ -55,6 +58,7 @@ const buildOptions = (context: CommandPaletteContext): PersonalFmOption[] => {
             id: `${SCENE_ID_PREFIX}${entry.id}`,
             label: t(entry.labelKey, entry.labelFallback),
             matchId: entry.id,
+            keywords: entry.keywords,
             selection: { mode: 'SCENE_RCMD' as const, scene: entry.id },
         })),
     ];
@@ -67,7 +71,7 @@ const toCommand = (option: PersonalFmOption): CommandPaletteCommand => ({
     // Labels come from the FM catalogue, not from commandPalette.commands.<id>.
     textSource: 'runtime',
     description: option.label,
-    keywords: [option.matchId],
+    keywords: [option.matchId, ...option.keywords],
     hidden: true,
     execute: (_input, context) => {
         void context.playback.setPersonalFmSelection(option.selection);
@@ -75,8 +79,8 @@ const toCommand = (option: PersonalFmOption): CommandPaletteCommand => ({
     },
 });
 
-// Ranked by how early the query hits the label or the API id; an empty query keeps catalogue order
-// so the grid stays still while the user is only looking.
+// Ranked by how early the query hits the label, the API id or a pinyin keyword; an empty query
+// keeps catalogue order so the grid stays still while the user is only looking.
 export const buildPersonalFmMatches = (
     context: CommandPaletteContext,
     query: string,
@@ -87,7 +91,7 @@ export const buildPersonalFmMatches = (
             if (!normalizedQuery) {
                 return { option, score: 1000 - index };
             }
-            const best = [normalize(option.label), normalize(option.matchId)]
+            const best = [option.label, option.matchId, ...option.keywords].map(normalize)
                 .map(haystack => haystack.indexOf(normalizedQuery))
                 .filter(position => position >= 0)
                 .sort((left, right) => left - right)[0];

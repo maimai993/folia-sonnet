@@ -12,6 +12,8 @@ export type PersonalFmModeEntry = {
     id: PersonalFmModeId;
     labelKey: string;
     labelFallback: string;
+    /** Pinyin, full and initials, so the picker answers to a keyboard that types no Chinese. */
+    keywords: string[];
 };
 
 export type PersonalFmSceneEntry = {
@@ -19,6 +21,7 @@ export type PersonalFmSceneEntry = {
     category: PersonalFmSceneCategory;
     labelKey: string;
     labelFallback: string;
+    keywords: string[];
 };
 
 export type PersonalFmSelection = {
@@ -29,27 +32,34 @@ export type PersonalFmSelection = {
 
 export const DEFAULT_PERSONAL_FM_SELECTION: PersonalFmSelection = { mode: 'DEFAULT', scene: null };
 
-const mode = (id: PersonalFmModeId, labelFallback: string): PersonalFmModeEntry => ({
+const mode = (id: PersonalFmModeId, labelFallback: string, ...keywords: string[]): PersonalFmModeEntry => ({
     id,
     labelKey: `personalFmMode.mode.${id}`,
     labelFallback,
+    keywords,
 });
 
 // SCENE_RCMD sits last: it is the only mode the scene row can select on the user's behalf, so the
 // row below it reads as its continuation.
 export const PERSONAL_FM_MODES: PersonalFmModeEntry[] = [
-    mode('DEFAULT', 'Default'),
-    mode('FAMILIAR', 'Familiar'),
-    mode('EXPLORE', 'Explore'),
-    mode('PUZZLE_MODE_RCMD', 'Puzzle'),
-    mode('SCENE_RCMD', 'Scene'),
+    mode('DEFAULT', 'Default', 'moren', 'mr'),
+    mode('FAMILIAR', 'Familiar', 'shuxi', 'sx'),
+    mode('EXPLORE', 'Explore', 'tansuo', 'ts'),
+    mode('PUZZLE_MODE_RCMD', 'Puzzle', 'pintu', 'pt'),
+    mode('SCENE_RCMD', 'Scene', 'changjing', 'cj'),
 ];
 
-const scene = (id: string, category: PersonalFmSceneCategory, labelFallback: string): PersonalFmSceneEntry => ({
+const scene = (
+    id: string,
+    category: PersonalFmSceneCategory,
+    labelFallback: string,
+    ...keywords: string[]
+): PersonalFmSceneEntry => ({
     id,
     category,
     labelKey: `personalFmMode.scene.${id}`,
     labelFallback,
+    keywords,
 });
 
 export const PERSONAL_FM_SCENE_CATEGORIES: { id: PersonalFmSceneCategory; labelKey: string; labelFallback: string }[] = [
@@ -60,51 +70,51 @@ export const PERSONAL_FM_SCENE_CATEGORIES: { id: PersonalFmSceneCategory; labelK
 ];
 
 export const PERSONAL_FM_SCENES: PersonalFmSceneEntry[] = [
-    scene('NIGHT_EMO', 'mood', 'Melancholy'),
-    scene('CURE', 'mood', 'Healing'),
-    scene('CHEERFUL', 'mood', 'Cheerful'),
-    scene('LYRICAL', 'mood', 'Lyrical'),
-    scene('INSPIRATIONAL', 'mood', 'Inspirational'),
-    scene('RELAX', 'mood', 'Relax'),
-    scene('SWEET', 'mood', 'Love Songs'),
+    scene('NIGHT_EMO', 'mood', 'Melancholy', 'shanggan', 'sg'),
+    scene('CURE', 'mood', 'Healing', 'zhiyu', 'zy'),
+    scene('CHEERFUL', 'mood', 'Cheerful', 'huankuai', 'hk'),
+    scene('LYRICAL', 'mood', 'Lyrical', 'shuqing', 'sq'),
+    scene('INSPIRATIONAL', 'mood', 'Inspirational', 'lizhi', 'lz'),
+    scene('RELAX', 'mood', 'Relax', 'fangsong', 'fs'),
+    scene('SWEET', 'mood', 'Love Songs', 'qingge', 'qg'),
 
-    scene('EXERCISE', 'activity', 'Workout'),
-    scene('FOCUS', 'activity', 'Focus'),
-    scene('SLEEP_HELP', 'activity', 'Sleep'),
-    scene('TAKE_SHOWER', 'activity', 'Shower'),
-    scene('COMMUTE', 'activity', 'Commute'),
-    scene('COFFEE_SHOP', 'activity', 'Coffee Shop'),
-    scene('GAMES', 'activity', 'Gaming'),
-    scene('DANCE', 'activity', 'Dance'),
-    scene('RAINY', 'activity', 'Rainy Day'),
+    scene('EXERCISE', 'activity', 'Workout', 'yundong', 'yd'),
+    scene('FOCUS', 'activity', 'Focus', 'zhuanzhu', 'zz'),
+    scene('SLEEP_HELP', 'activity', 'Sleep', 'zhumian', 'zm'),
+    scene('TAKE_SHOWER', 'activity', 'Shower', 'xizao', 'xz'),
+    scene('COMMUTE', 'activity', 'Commute', 'chuxing', 'cx'),
+    scene('COFFEE_SHOP', 'activity', 'Coffee Shop', 'kafeiguan', 'kfg'),
+    scene('GAMES', 'activity', 'Gaming', 'youxi', 'yx'),
+    scene('DANCE', 'activity', 'Dance', 'wudao', 'wd'),
+    scene('RAINY', 'activity', 'Rainy Day', 'yutian', 'yt'),
 
-    scene('RHYTHM_BLUES', 'genre', 'R&B'),
-    scene('RAP', 'genre', 'Rap'),
-    scene('K_POP', 'genre', 'K-Pop'),
-    scene('ELECTRONIC', 'genre', 'Electronic'),
-    scene('ROCK', 'genre', 'Rock'),
-    scene('FOLK', 'genre', 'Folk'),
-    scene('GUDIAN', 'genre', 'Classical'),
-    scene('JAZZ', 'genre', 'Jazz'),
-    scene('BLUE', 'genre', 'Blues'),
-    scene('PUNK', 'genre', 'Funk'),
-    scene('COUNTRY', 'genre', 'Country'),
-    scene('LIGHT', 'genre', 'Light Music'),
-    scene('GUOFENG', 'genre', 'Guofeng'),
-    scene('MANYAO', 'genre', 'Slow DJ'),
-    scene('MUSICAL', 'genre', 'Musical'),
-    scene('ACG', 'genre', 'ACG'),
-    scene('JINGDIAN', 'genre', 'Classics'),
-    scene('ORIGINAL_MUSICIAL', 'genre', 'Indie Original'),
-    scene('YINGSHI', 'genre', 'Soundtrack'),
+    scene('RHYTHM_BLUES', 'genre', 'R&B', 'rb', 'randb'),
+    scene('RAP', 'genre', 'Rap', 'shuochang', 'sc'),
+    scene('K_POP', 'genre', 'K-Pop', 'kpop'),
+    scene('ELECTRONIC', 'genre', 'Electronic', 'dianyin', 'dy'),
+    scene('ROCK', 'genre', 'Rock', 'yaogun', 'yg'),
+    scene('FOLK', 'genre', 'Folk', 'minyao', 'my'),
+    scene('GUDIAN', 'genre', 'Classical', 'gudian', 'gd'),
+    scene('JAZZ', 'genre', 'Jazz', 'jueshi', 'js'),
+    scene('BLUE', 'genre', 'Blues', 'landiao', 'ld'),
+    scene('PUNK', 'genre', 'Funk', 'fangke', 'fk'),
+    scene('COUNTRY', 'genre', 'Country', 'xiangcunyue', 'xcy'),
+    scene('LIGHT', 'genre', 'Light Music', 'qingyinyue', 'qyy'),
+    scene('GUOFENG', 'genre', 'Guofeng', 'guofeng', 'gf'),
+    scene('MANYAO', 'genre', 'Slow DJ', 'manyao', 'manyaodj', 'my'),
+    scene('MUSICAL', 'genre', 'Musical', 'yinyueju', 'yyj'),
+    scene('ACG', 'genre', 'ACG', 'erciyuan', 'ecy'),
+    scene('JINGDIAN', 'genre', 'Classics', 'jingdian', 'jd'),
+    scene('ORIGINAL_MUSICIAL', 'genre', 'Indie Original', 'baozangyuanchuang', 'bzyc'),
+    scene('YINGSHI', 'genre', 'Soundtrack', 'yingshi', 'ys'),
 
-    scene('CHINESE', 'language', 'Mandarin'),
-    scene('ENGLISH', 'language', 'Western'),
-    scene('YUEYU', 'language', 'Cantonese'),
-    scene('JAPANESE', 'language', 'Japanese'),
-    scene('FRANCH', 'language', 'French'),
-    scene('LATIN', 'language', 'Latin'),
-    scene('GLOBAL', 'language', 'Global'),
+    scene('CHINESE', 'language', 'Mandarin', 'huayu', 'hy'),
+    scene('ENGLISH', 'language', 'Western', 'oumei', 'om'),
+    scene('YUEYU', 'language', 'Cantonese', 'yueyu', 'yy'),
+    scene('JAPANESE', 'language', 'Japanese', 'riyu', 'ry'),
+    scene('FRANCH', 'language', 'French', 'fayu', 'fy'),
+    scene('LATIN', 'language', 'Latin', 'lading', 'ld'),
+    scene('GLOBAL', 'language', 'Global', 'quanqiu', 'qq'),
 ];
 
 const MODE_IDS = new Set<string>(PERSONAL_FM_MODES.map(entry => entry.id));

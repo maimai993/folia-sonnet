@@ -227,13 +227,30 @@ test('fm mode picker filters to one section and walks it with arrows', async ({ 
     const activeOption = () => palette(page).locator('[data-fm-active="true"]').getAttribute('data-fm-option');
     expect(await activeOption()).toBe('fm-mode-pick-DEFAULT');
 
-    // 左右一次一格；上下跨分区，并保留分区内的偏移。
+    // 左右一次一格。
     await page.keyboard.press('ArrowRight');
     expect(await activeOption()).toBe('fm-mode-pick-FAMILIAR');
+    await page.keyboard.press('ArrowLeft');
+    expect(await activeOption()).toBe('fm-mode-pick-DEFAULT');
 
-    await page.keyboard.press('ArrowDown');
-    expect(await activeOption()).toBe('fm-scene-pick-CURE');
+    // 上下走的是实际渲染出来的行。分类内部会折行（场景 2 行、曲风 3 行），按分类跳会漏掉
+    // 折下来的那几行，只能靠左右键够到——这里逐行断言，防止再退回按分类跳。
+    const rowHeads = await palette(page).locator('[data-fm-option]').evaluateAll(nodes => {
+        const rows = new Map<number, string>();
+        nodes.forEach(node => {
+            const top = Math.round(node.getBoundingClientRect().top);
+            if (!rows.has(top)) rows.set(top, (node as HTMLElement).dataset.fmOption ?? '');
+        });
+        return [...rows.entries()].sort((left, right) => left[0] - right[0]).map(([, id]) => id);
+    });
+    expect(rowHeads.length).toBeGreaterThan(5);
 
-    await page.keyboard.press('ArrowUp');
-    expect(await activeOption()).toBe('fm-mode-pick-FAMILIAR');
+    for (const head of rowHeads.slice(1)) {
+        await page.keyboard.press('ArrowDown');
+        expect(await activeOption()).toBe(head);
+    }
+    for (const head of [...rowHeads].reverse().slice(1)) {
+        await page.keyboard.press('ArrowUp');
+        expect(await activeOption()).toBe(head);
+    }
 });

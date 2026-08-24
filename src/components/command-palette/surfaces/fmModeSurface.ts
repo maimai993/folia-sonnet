@@ -5,8 +5,9 @@ import type { CommandPaletteSurface, CommandSurfaceArgs } from './types';
 
 // src/components/command-palette/surfaces/fmModeSurface.ts
 // Personal FM mode picker: the input filters, arrows move, Enter or a click applies. Pills wrap
-// freely, so visual rows cannot be predicted here the way the fixed-column icon picker does;
-// left/right walks the flat list instead, and up/down hops between sections.
+// freely and each category wraps a different number of times, so — unlike the fixed-column icon
+// picker — rows can only be known by measuring what was actually laid out. Left/right walks the
+// flat list, which already runs in visual order; up/down reads the rendered rows.
 
 export type PersonalFmSection = {
     key: string;
@@ -53,7 +54,66 @@ export const buildPersonalFmSections = (matches: CommandPaletteMatch[]): Persona
 const HORIZONTAL_STEPS: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1 };
 const VERTICAL_STEPS: Record<string, number> = { ArrowUp: -1, ArrowDown: 1 };
 
-const navigate = (event: KeyboardEvent, { matches, activeIndex, setActiveIndex }: CommandSurfaceArgs) => {
+const PILL_SELECTOR = '[data-fm-option]';
+// Pills in one flex row share a top to the pixel; the tolerance only absorbs sub-pixel layout.
+const ROW_TOLERANCE_PX = 4;
+
+type PillRow = { indices: number[]; centers: number[] };
+
+/**
+ * Groups the rendered pills into their real rows. Returns null when there is nothing measurable
+ * (no DOM, or the view has not painted yet), so the caller can fall back to the section hop.
+ */
+const readVisualRows = (matches: CommandPaletteMatch[]): PillRow[] | null => {
+    if (typeof document === 'undefined') {
+        return null;
+    }
+
+    const indexByCommandId = new Map(matches.map((match, index) => [match.command.id, index]));
+    const pills = Array.from(document.querySelectorAll<HTMLElement>(PILL_SELECTOR))
+        .map(node => ({ index: indexByCommandId.get(node.dataset.fmOption ?? ''), rect: node.getBoundingClientRect() }))
+        .filter((pill): pill is { index: number; rect: DOMRect } => pill.index !== undefined)
+        .sort((left, right) => left.rect.top - right.rect.top || left.rect.left - right.rect.left);
+
+    if (pills.length === 0) {
+        return null;
+    }
+
+    const rows: PillRow[] = [];
+    let rowTop = Number.NEGATIVE_INFINITY;
+    pills.forEach(pill => {
+        const center = pill.rect.left + pill.rect.width / 2;
+        if (rows.length === 0 || pill.rect.top - rowTop > ROW_TOLERANCE_PX) {
+            rows.push({ indices: [pill.index], centers: [center] });
+            rowTop = pill.rect.top;
+            return;
+        }
+        const row = rows[rows.length - 1];
+        row.indices.push(pill.index);
+        row.centers.push(center);
+    });
+    return rows;
+};
+
+/** Section hop, used only when the rows cannot be measured. */
+const navigateSections = (step: number, { matches, activeIndex, setActiveIndex }: CommandSurfaceArgs) => {
+    const sections = buildPersonalFmSections(matches);
+    const currentSection = sections.findIndex(section => section.indices.includes(activeIndex));
+    if (currentSection < 0) {
+        setActiveIndex(0);
+        return;
+    }
+
+    const nextSection = sections[currentSection + step];
+    if (!nextSection) {
+        return;
+    }
+    const offset = sections[currentSection].indices.indexOf(activeIndex);
+    setActiveIndex(nextSection.indices[Math.min(offset, nextSection.indices.length - 1)]);
+};
+
+const navigate = (event: KeyboardEvent, args: CommandSurfaceArgs) => {
+    const { matches, activeIndex, setActiveIndex } = args;
     if (matches.length === 0) {
         return false;
     }
@@ -71,22 +131,34 @@ const navigate = (event: KeyboardEvent, { matches, activeIndex, setActiveIndex }
         return false;
     }
 
-    const sections = buildPersonalFmSections(matches);
-    const currentSection = sections.findIndex(section => section.indices.includes(activeIndex));
-    if (currentSection < 0) {
+    const rows = readVisualRows(matches);
+    if (!rows) {
+        navigateSections(verticalStep, args);
+        return true;
+    }
+
+    const rowIndex = rows.findIndex(row => row.indices.includes(activeIndex));
+    if (rowIndex < 0) {
         setActiveIndex(0);
         return true;
     }
 
-    const nextSection = sections[currentSection + verticalStep];
-    if (!nextSection) {
+    const targetRow = rows[rowIndex + verticalStep];
+    if (!targetRow) {
         return true;
     }
 
-    // Keeping the offset within the section makes vertical movement feel like a column walk even
-    // though the pills below are a different width than the ones above.
-    const offset = sections[currentSection].indices.indexOf(activeIndex);
-    setActiveIndex(nextSection.indices[Math.min(offset, nextSection.indices.length - 1)]);
+    // Landing on the horizontally nearest pill keeps the movement reading as a column walk even
+    // though every row has a different pill count and different pill widths.
+    const currentRow = rows[rowIndex];
+    const currentCenter = currentRow.centers[currentRow.indices.indexOf(activeIndex)];
+    let nearest = 0;
+    targetRow.centers.forEach((center, position) => {
+        if (Math.abs(center - currentCenter) < Math.abs(targetRow.centers[nearest] - currentCenter)) {
+            nearest = position;
+        }
+    });
+    setActiveIndex(targetRow.indices[nearest]);
     return true;
 };
 

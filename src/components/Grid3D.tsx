@@ -21,6 +21,8 @@ import { importLocalPlaylistFile } from '../services/localPlaylistFileService';
 import { useOnlineProviderQrLogin } from '../hooks/useOnlineProviderQrLogin';
 import type { OnlineProviderPlatformState } from '../hooks/useOnlineProviderPlatform';
 import { omni } from '../services/onlineMusic/omni';
+import { getPersonalFmSelectionLabel } from '../services/onlineMusic/fmModes';
+import { usePersonalFmModeStore } from '../stores/usePersonalFmModeStore';
 import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import OnlineProviderSwitcher from './app/home/OnlineProviderSwitcher';
 import OnlineProviderConnectPanel from './app/home/OnlineProviderConnectPanel';
@@ -179,6 +181,12 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const activeProviderId = onlineProviderPlatform?.activeProviderId || 'netease';
     const activeProviderSummary = onlineProviderPlatform?.activeProvider;
     const activeProviderCapabilities = omni.getProviderCapabilities(activeProviderId);
+    // The FM card doubles as the mode readout: the card is the only place the current mode shows
+    // up outside the player, and the picker can change it while this grid stays mounted.
+    const personalFmSelection = usePersonalFmModeStore(state => state.selection);
+    const personalFmModeLabel = activeProviderCapabilities.personalFmModes
+        ? getPersonalFmSelectionLabel(personalFmSelection, (key, fallback) => t(key, fallback ?? ''))
+        : '';
     const activeProviderLabel = activeProviderSummary?.shortName
         || activeProviderSummary?.displayName
         || omni.getProviderLabel(activeProviderId);
@@ -472,7 +480,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
             name: r.name,
             coverUrl: r.coverUrl,
             trackCount: r.trackCount,
-            description: r.description || t('home.radio'),
+            description: (r.isFm && personalFmModeLabel) || r.description || t('home.radio'),
             summary: r.summary || '',
             type: r.isFm
                 ? 'radio' as const
@@ -481,7 +489,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     : 'playlist' as const,
             raw: r
         }));
-    }, [radioItems]);
+    }, [personalFmModeLabel, radioItems, t]);
 
     // Active tab list items mapping
     const currentDesktopItems = useMemo(() => {

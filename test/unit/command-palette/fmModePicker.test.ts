@@ -70,6 +70,23 @@ describe('personal FM matches', () => {
             .toEqual(['fm-scene-pick-SLEEP_HELP']);
     });
 
+    it('filters on full pinyin and on initials', () => {
+        // The stub translator returns the English fallback, so these only match through keywords.
+        expect(buildPersonalFmMatches(createContext(), 'zhumian').map(match => match.command.id))
+            .toEqual(['fm-scene-pick-SLEEP_HELP']);
+        expect(buildPersonalFmMatches(createContext(), 'zm').map(match => match.command.id))
+            .toEqual(['fm-scene-pick-SLEEP_HELP']);
+        expect(buildPersonalFmMatches(createContext(), 'changjing').map(match => match.command.id))
+            .toEqual(['fm-mode-pick-SCENE_RCMD']);
+    });
+
+    it('filters on the Chinese label the user actually sees', () => {
+        const zhContext = createContext();
+        zhContext.shared.t = (key: string) => (key.endsWith('SLEEP_HELP') ? '助眠' : key);
+        expect(buildPersonalFmMatches(zhContext, '助眠').map(match => match.command.id))
+            .toEqual(['fm-scene-pick-SLEEP_HELP']);
+    });
+
     it('applies scene mode when a scene is picked', () => {
         setPersonalFmSelection.mockClear();
         const context = createContext();

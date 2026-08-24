@@ -17,7 +17,7 @@ const omniMock = vi.hoisted(() => ({
 vi.mock('../../../src/services/onlineMusic/omni', () => ({ omni: omniMock }));
 
 const storeMock = vi.hoisted(() => ({
-    selection: { mode: 'DEFAULT' as const, scene: null as string | null },
+    selection: { mode: 'DEFAULT', scene: null } as { mode: string; scene: string | null },
     setSelection: vi.fn(),
 }));
 vi.mock('../../../src/stores/usePersonalFmModeStore', () => ({
