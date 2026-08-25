@@ -73,6 +73,7 @@ Thanks goes to these wonderful people. Issue reports, bug reports, ideas, docs, 
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/CrKcel"><img src="https://avatars.githubusercontent.com/u/140730205?v=4?s=100" width="100px;" alt="CrKcel"/><br /><sub><b>CrKcel</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/commits?author=CrKcel" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/Seven97-k"><img src="https://avatars.githubusercontent.com/u/320319183?v=4?s=100" width="100px;" alt="Seven97"/><br /><sub><b>Seven97</b></sub></a><br /><a href="#ideas-Seven97-k" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://www.focalors.ltd"><img src="https://avatars.githubusercontent.com/u/222616389?v=4?s=100" width="100px;" alt="Takanashi Hoshino"/><br /><sub><b>Takanashi Hoshino</b></sub></a><br /><a href="#ideas-MoeFurina" title="Ideas, Planning, & Feedback">🤔</a></td>
     </tr>
   </tbody>
 </table>
