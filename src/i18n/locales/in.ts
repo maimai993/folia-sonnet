@@ -224,6 +224,32 @@ export default {
     "previewQueueSearch": "Cari antrean saat ini: {{query}}",
     "previewQueueSearchEmpty": "Ketik nama lagu, artis, album, atau indeks antrean",
     "pickerFilterPlaceholder": "Ketik untuk menyaring, lalu klik atau tekan Enter",
+    "pickerCurrent": "Saat ini: {{mode}}",
+    "pickerDescription": {
+      "visualizer": {
+        "still": "Satu baris lirik diam di tengah — tanpa animasi, tanpa latar, paling ringan",
+        "classic": "Satu baris besar di tengah; tiap aksara berputar dan menyala saat dinyanyikan",
+        "cadenza": "Baris pecah jadi aksara tunggal yang melayang ke seluruh layar",
+        "partita": "Lirik menurun blok demi blok di sepanjang garis pandu, bagai tangga di awan",
+        "fume": "Lapisan lirik memenuhi layar sementara kamera mengikuti baris yang sedang dinyanyikan",
+        "cappella": "Lirik muncul sebagai gelembung obrolan kiri-kanan, lengkap dengan avatar dan stiker",
+        "tilt": "Baris panjang memecah sendiri dan miring jadi italic, seperti orang berbisik dekat",
+        "claddagh": "Lirik mengelilingi lintasan cincin miring, kontras ukuran memberi kedalaman",
+        "monet": "Tata letak poster — rel lirik di kiri, potret di kanan, spektrum di bawah",
+        "diorama": "Teks titik-titik melintasi ruang 3D dengan kamera mengikuti lirik",
+        "pendolo": "Sampul duduk di muka jam; lirik berdetak sepanjang busur, satu gigi demi satu",
+        "sonnet": "Garis halus, bingkai, dan huruf raksasa berongga bergantian terbuka; tiap baris tertata bagai halaman sajak",
+        "tempera": "Bidang warna luas dan raster halus menyusun ulang perlahan; kata-kata membalik warna saat melintasi cat"
+      },
+      "background": {
+        "common": "Cahaya fluida dari warna sampul, dengan bentuk geometris melayang di belakang",
+        "latent": "Shader piksel dan fluida bernuansa sampul, mengembang mengikuti audio",
+        "monet": "Sampul atau gambarmu sebagai latar penuh, dengan tata letak, blur, dan drift",
+        "nomand": "Efek tekstur kertas ala Paper di atas sampul atau gambarmu",
+        "sora": "Hamparan bintang yang bergerak pelan — latar paling tenang",
+        "url": "Menyematkan halaman web apa pun sebagai latar pemutar"
+      }
+    },
     "executeMode": {
       "title": "Mode eksekusi",
       "placeholder": "Tekan tombol pintasan untuk langsung menjalankan",

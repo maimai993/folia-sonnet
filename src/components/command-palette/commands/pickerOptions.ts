@@ -40,8 +40,9 @@ type PickerOption = {
 };
 
 /**
- * Each row states what the mode does, and that sentence is already written and translated once —
- * as the description of the flat switch command for the same mode. Ids follow `<kind>-<mode>`
+ * A picker row gets its own sentence about how the mode looks, which is longer and more visual
+ * than the one-line description its flat switch command carries. A mode with no picker copy yet
+ * falls back to that command description, then to the bare label — ids follow `<kind>-<mode>`
  * except Monet's background, whose only command is its full-overlay variant.
  */
 const MODE_COMMAND_ID_OVERRIDES: Record<string, string> = { 'background-monet': 'background-monet-full-overlay' };
@@ -53,8 +54,8 @@ const readModeDescription = (
     t: (key: string, fallback?: string) => string,
 ) => {
     const commandId = MODE_COMMAND_ID_OVERRIDES[`${kind}-${mode}`] ?? `${kind}-${mode}`;
-    // Falls back to the label rather than to the key, so an unlisted mode reads as a bare name.
-    return t(`commandPalette.commands.${commandId}.description`, label);
+    const commandDescription = t(`commandPalette.commands.${commandId}.description`, label);
+    return t(`commandPalette.pickerDescription.${kind}.${mode}`, commandDescription);
 };
 
 const buildOptions = (kind: 'visualizer' | 'background', context: CommandPaletteContext): PickerOption[] => (

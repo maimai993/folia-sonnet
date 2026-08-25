@@ -225,6 +225,32 @@ export default {
     "previewQueueSearch": "Search current queue: {{query}}",
     "previewQueueSearchEmpty": "Type a song name, artist, album, or queue index",
     "pickerFilterPlaceholder": "Type to filter, then click or press Enter",
+    "pickerCurrent": "Current: {{mode}}",
+    "pickerDescription": {
+      "visualizer": {
+        "still": "One line held still — no animation, no background, lowest load",
+        "classic": "One big centred line; each character turns and lights up as it is sung",
+        "cadenza": "The line breaks into single characters that drift across the screen",
+        "partita": "Lyrics step down block by block along guide lines, like stairs through cloud",
+        "fume": "Layers of lyrics fill the frame while the camera drifts after the line being sung",
+        "cappella": "Lyrics arrive as chat bubbles, left and right, with avatars and stickers",
+        "tilt": "Long lines break themselves up and lean into italics, like someone speaking close up",
+        "claddagh": "Lyrics circle a tilted ring track, size contrast pulling the loop into depth",
+        "monet": "A poster layout — lyric rail left, portrait right, spectrum along the bottom",
+        "diorama": "Dot-matrix text flies through a 3D scene, the camera cut to the lyrics",
+        "pendolo": "The cover sits in a clock face; lyrics tick along an arc, escapement by escapement",
+        "sonnet": "Thin rules, frames and hollow giant letters unfold in turn, each line set like a page of verse",
+        "tempera": "Broad fields of colour and fine halftone recompose slowly; the words invert wherever they cross the paint"
+      },
+      "background": {
+        "common": "Fluid glow drawn from the cover's colours, geometric shapes drifting behind it",
+        "latent": "Pixel and fluid shaders tinted from the cover, swelling with the audio",
+        "monet": "The cover or your own image as a full background, with layout, blur and drift",
+        "nomand": "A Paper-style paper texture pass over the cover or your own image",
+        "sora": "A slow-moving starfield — the quietest background there is",
+        "url": "Embeds any web page into the player as its background"
+      }
+    },
     "executeMode": {
       "title": "Execute mode",
       "placeholder": "Press a shortcut key to run it instantly",
