@@ -1,4 +1,5 @@
 import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
+import { measureRichInlineStats, prepareRichInline, type RichInlineItem } from '@chenglou/pretext/rich-inline';
 import type { Line } from '../../../types';
 import { buildLineGraphemeTimeline, buildWordGraphemeTimings, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
@@ -121,8 +122,33 @@ export const splitMonetGraphemes = (text: string): string[] => {
     return Array.from(text);
 };
 
+/**
+ * Counts the wrapped lines the rail will actually render for a lyric line.
+ * Timed words render as `inline-block` spans (see MonetWordSweep), so the browser may only break
+ * between tokens, never inside one. Measuring `fullText` as a plain string breaks anywhere and
+ * disagrees with the DOM — most visibly on CJK lyrics, whose phrase tokens carry no spaces.
+ * `break: 'never'` reproduces those atomic boxes, so the reserved height matches what is painted.
+ */
+const measureLyricLineCount = (line: Line, fontSpec: string, maxWidthPx: number): number => {
+    const tokens = buildMonetDisplayTokens(line);
+    if (tokens.length === 0) {
+        return 1;
+    }
+
+    const items: RichInlineItem[] = tokens.map(token => ({
+        text: token.text,
+        font: fontSpec,
+        break: token.timed ? 'never' : 'normal',
+    }));
+    const { lineCount } = measureRichInlineStats(
+        prepareRichInline(items),
+        Math.max(maxWidthPx, MONET_MIN_MEASURE_WIDTH_PX),
+    );
+    return Math.max(lineCount, 1);
+};
+
 const measureTextLineCount = (text: string, fontSpec: string, maxWidthPx: number, lineHeightPx: number): number => {
-    const prepared = prepareWithSegments(text || ' ', fontSpec);
+    const prepared = prepareWithSegments(text || ' ', fontSpec, { whiteSpace: 'pre-wrap' });
     const layout = layoutWithLines(prepared, Math.max(maxWidthPx, MONET_MIN_MEASURE_WIDTH_PX), lineHeightPx);
     return Math.max(layout.lines.length, 1);
 };
@@ -431,7 +457,7 @@ export const measureMonetLineLayout = ({
     const textPaddingBottomPx = Math.max(fontPx * 0.34, 14);
     const translationPaddingTopPx = Math.max(translationFontPx * 0.45, 7);
     const translationPaddingBottomPx = Math.max(translationFontPx * 0.18, 5);
-    const textLineCount = measureTextLineCount(line.fullText, fontSpec, maxWidthPx, lineHeightPx);
+    const textLineCount = measureLyricLineCount(line, fontSpec, maxWidthPx);
     const textLimit = status === 'active' ? MONET_ACTIVE_TEXT_LINE_LIMIT : MONET_INACTIVE_TEXT_LINE_LIMIT;
     const visibleTextLineCount = Math.min(textLineCount, textLimit);
     const hasActiveTranslation = showSubtitleTranslation && status === 'active' && Boolean(line.translation?.trim());

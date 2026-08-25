@@ -33,6 +33,20 @@ vi.mock('@chenglou/pretext', () => ({
     },
 }));
 
+// Monet measures lyric text through the rich-inline helper so timed words stay atomic like the
+// `inline-block` spans the rail renders. Mirror the plain mock's per-character heuristic here.
+vi.mock('@chenglou/pretext/rich-inline', () => ({
+    prepareRichInline: (items: { text: string; }[]) => ({ text: items.map(item => item.text).join('') }),
+    measureRichInlineStats: (prepared: { text?: string; }, maxWidth: number) => {
+        const text = prepared.text || ' ';
+        const charsPerLine = Math.max(1, Math.floor(maxWidth / 10));
+        return {
+            lineCount: Math.max(1, Math.ceil(text.length / charsPerLine)),
+            maxLineWidth: Math.min(text.length, charsPerLine) * 10,
+        };
+    },
+}));
+
 describe('Monet tuning and lyric helpers', () => {
     it('keeps bright wash targets bright in daylight themes instead of pulling them toward dark text color', () => {
         const washColor = resolveWashColor(
