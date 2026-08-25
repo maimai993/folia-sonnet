@@ -14,6 +14,7 @@ import { resolveLyricAlternateText, resolveSubtitleContentMode } from '../../../
 import AudioOverlay from './AudioOverlay';
 import MonetFloatingDecor from './MonetFloatingDecor';
 import MonetLyricsRail from './MonetLyricsRail';
+import MonetPortraitImage from './MonetPortraitImage';
 import {
     MONET_PORTRAIT_BASE_MAX_PX,
     MONET_PORTRAIT_INNER_BASE_MAX_PX,
@@ -460,14 +461,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                                     backgroundColor: colorWithAlpha(theme.primaryColor, 0.08),
                                                 }}
                                             >
-                                                <img
-                                                    src={portraitUrl || ''}
-                                                    decoding="async"
-                                                    alt=""
-                                                    className="w-full h-full object-cover"
-                                                    style={{ opacity: portraitUrl ? 1 : 0, transition: 'opacity 1s ease' }}
-                                                    draggable={false}
-                                                />
+                                                <MonetPortraitImage src={portraitUrl} />
                                             </div>
                                         ) : (
                                             <div
@@ -484,14 +478,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                                         backgroundColor: colorWithAlpha(theme.primaryColor, 0.08),
                                                     }}
                                                 >
-                                                    <img
-                                                        src={portraitUrl || ''}
-                                                        decoding="async"
-                                                        alt=""
-                                                        className="w-full h-full object-cover"
-                                                        style={{ opacity: portraitUrl ? 1 : 0, transition: 'opacity 1s ease' }}
-                                                        draggable={false}
-                                                    />
+                                                    <MonetPortraitImage src={portraitUrl} />
                                                 </div>
                                             </div>
                                         )}
