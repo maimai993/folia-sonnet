@@ -227,7 +227,9 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
         workbox: {
           maximumFileSizeToCacheInBytes: 5000000,
           // Docker serves this file dynamically; it must never be pinned in the PWA precache.
-          globIgnores: ['**/runtime-config.js']
+          globIgnores: ['**/runtime-config.js'],
+          // API navigations must reach the deployment platform instead of the SPA shell.
+          navigateFallbackDenylist: [/^\/api(?:\/|$)/]
         },
         manifest: {
           name: 'Folia Music',

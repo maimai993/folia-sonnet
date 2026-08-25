@@ -163,7 +163,7 @@ services:
       - no-new-privileges:true
 
 volumes:
-  # QQ 原生扫码登录的 Android device context；只存装置识别值，不存用户凭证。
+  # QQ 扫码登录的 Android device context；只存装置识别值，不存用户凭证。
   qq-api-state:
 
 networks:
