@@ -1602,201 +1602,23 @@ export default {
     "noDescription": "Tidak ada deskripsi tersedia"
   },
   "releaseNotes": {
-    "v0_6_22": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.22.",
-      "stillVisualizer": {
-        "title": "Visualizer Lirik Statis",
-        "description": "Gunakan tampilan lirik tiga baris yang statis dan hemat sumber daya tanpa latar visualizer animasi, termasuk untuk lirik Browser Source OBS."
+    "v0_7_0": {
+      "intro": "Berikut fitur baru dan peningkatan di versi 0.7.0.",
+      "temperaVisualExpansion": {
+        "title": "Bahasa Visual Tempera yang Lebih Luas",
+        "description": "Tempera berkembang dari 62 menjadi 121 komposisi shot dengan keluarga baru yang lembut, berlubang, dan monumental, serta penyelarasan dan pratinjau resolusi gambar kustom yang lebih baik."
       },
-      "commandPaletteEnhancements": {
-        "title": "Palet Perintah yang Lebih Cerdas",
-        "description": "Atur volume pemutaran dengan slider atau angka 0–100; perintah yang sering digunakan muncul lebih dulu di hasil pencarian."
+      "commandPaletteWorkflows": {
+        "title": "Alur Kerja Palet Perintah Tingkat Lanjut",
+        "description": "Cari dan kelola antrean dengan sintaks batch, ganti mode Personal FM melalui pencarian pinyin, serta gunakan pintasan antrean atau siklus Tab dari halaman pemutar."
       },
-      "gridVisibility": {
-        "title": "Sembunyikan Lebih Banyak Koleksi Grid",
-        "description": "GridMap kini dapat menyembunyikan playlist, koleksi cloud, radio, dan rekomendasi harian agar tampilan beranda tetap fokus."
+      "awlrcLyrics": {
+        "title": "Lirik AWLRC dengan Waktu per Kata",
+        "description": "Lirik lokal kini dapat memuat kontainer AWLRC sambil mempertahankan waktu per kata, terjemahan, dan trek romanisasi."
       },
-      "temperaPerformance": {
-        "title": "Kontrol Performa Tempera",
-        "description": "Tempera kini mendukung hingga 16 gambar kustom dan opsi pass pasca-pemrosesan 1x untuk mengurangi penggunaan GPU dan VRAM dengan sedikit kompromi pada ketajaman."
-      },
-      "playbackCompatibility": {
-        "title": "Metadata Pemutaran yang Lebih Andal",
-        "description": "Pembaruan Media Session menunggu durasi trek baru siap; URL sampul QQ Music dan Kugou kini menggunakan ukuran gambar yang lebih sesuai."
-      }
-    },
-    "v0_6_20": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.20.",
-      "temperaVisualizer": {
-        "title": "PV Lirik Tempera",
-        "description": "Visualizer lirik baru bergaya screen-tone dengan gerakan per kata, perpindahan shot yang mengalir, gradien sampul, dan kumpulan gambar kanvas opsional."
-      },
-      "themeParkEditor": {
-        "title": "Editor Theme Park Lengkap",
-        "description": "Edit warna, nama, deskripsi, warna kata, dan ikon lirik untuk tema terang maupun gelap dengan pratinjau visualizer langsung; impor atau ekspor JSON tema untuk tema yang dibuat AI."
-      },
-      "coverDrivenThemes": {
-        "title": "Pembuatan Tema dari Sampul",
-        "description": "Tema bawaan kini mengambil palet dari sampul saat ini alih-alih mengandalkan preset tetap, dan mode khusus sampul dapat membuat tema tanpa kunci AI."
-      },
-      "wallpaperMode": {
-        "title": "Wallpaper Lirik Linux",
-        "description": "Build desktop Linux dapat menempatkan Folia di lapisan desktop dan menampilkan lirik sebagai wallpaper, dengan perlindungan pemulihan saat pembungkus wallpaper gagal."
-      },
-      "linuxCredentialStorage": {
-        "title": "Kredensial Linux yang Lebih Andal",
-        "description": "Desktop Linux seperti Hyprland dan sway kini menggunakan penyimpanan kredensial terenkripsi yang tersedia, sehingga login KuGou dan QQ Music dapat bertahan setelah dimulai ulang."
-      }
-    },
-    "v0_6_19": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.19.",
-      "audioEffectChain": {
-        "title": "Efek Audio Pasca-pemrosesan",
-        "description": "Equalizer kini mendukung rantai pasca-pemrosesan setelah pita frekuensi, dengan pembentukan nada, saturasi, bit crush, wow, noise vinyl, lebar stereo, ruang, dan kontrol dinamika yang dapat disimpan dalam preset suara."
-      },
-      "globalLyricOffset": {
-        "title": "Offset Waktu Lirik Global",
-        "description": "Geser lirik untuk setiap lagu di perangkat ini untuk mengkompensasi latensi Bluetooth atau output lain, dengan pratinjau langsung untuk penyetelan halus."
-      },
-      "obsCustomCssAssets": {
-        "title": "CSS Kustom OBS untuk Aset yang Diunggah",
-        "description": "Salin cuplikan CSS Kustom siap-tempel untuk latar belakang, potret, dan aset lain yang diunggah di Sumber Browser OBS. GIF mempertahankan animasinya jika sesuai batas ukuran; GIF yang terlalu besar disalin sebagai frame statis."
-      },
-      "trackSwitchPreview": {
-        "title": "Penggantian Trek yang Lebih Jelas",
-        "description": "Arahkan kursor ke kontrol sebelumnya dan berikutnya di pemutar mengambang untuk melihat pratinjau judul trek tetangga, pertahankan panah navigasi tetap terlihat, dan kosongkan antrean saat ini dari Palette Perintah."
-      },
-      "visualizerBackgroundEffects": {
-        "title": "Efek Latar Belakang Visualizer yang Lebih Kaya",
-        "description": "Latar belakang Monet dapat hanyut perlahan dengan garis vertikal opsional, sedangkan Nomand menambahkan kontrol dithering, kaca bergelombang, tekstur kertas, titik halftone, dan distorsi lensa."
-      }
-    },
-    "v0_6_18": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.18.",
-      "m3uPlaylists": {
-        "title": "Playlist M3U8 Portabel",
-        "description": "Impor file .m3u8 ke perpustakaan lokal Anda dan ekspor playlist Folia sebagai file M3U8 UTF-8 dengan path portabel. Path yang tidak cocok atau ambigu dilaporkan alih-alih ditambahkan diam-diam."
-      },
-      "gridMapBatchTools": {
-        "title": "Cari dan Kelola Koleksi Lokal",
-        "description": "Pencarian GridMap kini mendukung beberapa istilah di nama, path, dan metadata. Pilih folder, album, atau artis secara batch untuk memutar, mengantrekan, membuat playlist, atau menghapus entri perpustakaan; folder juga dapat dipindai ulang tanpa menyentuh file di disk."
-      },
-      "foliaIgnore": {
-        "title": "Aturan .foliaignore yang Fleksibel",
-        "description": "Tambahkan file .foliaignore ke root atau subfolder yang diimpor untuk mengecualikan file sementara, direktori cache, dan audio yang tidak diinginkan dengan pola bergaya gitignore yang familiar. Perubahan diterapkan pada impor ulang berikutnya."
-      },
-      "incrementalLocalScans": {
-        "title": "Pemindaian Perpustakaan Lokal Bertahap yang Lebih Cepat",
-        "description": "Impor ulang kini menggunakan kembali file yang tidak berubah, mendeteksi penambahan dan penghapusan, serta memuat metadata di latar belakang, membuat perpustakaan lokal besar lebih cepat diperbarui."
-      },
-      "localCoverAssets": {
-        "title": "Karya Seni Lokal yang Lebih Efisien",
-        "description": "Sampul lokal dideduplikasi ke aset persisten dan disajikan dalam thumbnail yang peka ukuran, mengurangi penyimpanan berulang dan pekerjaan gambar resolusi penuh yang tidak perlu di seluruh perpustakaan."
-      }
-    },
-    "v0_6_17": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.17.",
-      "sonnetSceneVariants": {
-        "title": "Lebih Banyak Varian Adegan Sonnet",
-        "description": "Sonnet kini mengambil dari 100 komposisi latar belakang, dengan tema langit, laut, musik, kerajinan, dan kinetik baru plus variasi bingkai dan geometri lebih banyak."
-      },
-      "sonnetDrawingMotion": {
-        "title": "Gerakan Menggambar Berlapis",
-        "description": "Garis, isian, dan elemen dekoratif Sonnet kini terungkap dalam urutan menggambar bertahap untuk transisi adegan yang lebih kaya dan organik."
-      },
-      "equalizerDaylight": {
-        "title": "Equalizer Siang Hari yang Lebih Jelas",
-        "description": "Kontras, permukaan, kontrol, dan warna aksen yang ditingkatkan membuat equalizer audio lebih mudah dibaca dan dioperasikan dalam tema terang."
-      }
-    },
-    "v0_6_16": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.16.",
-      "qqMusicProvider": {
-        "title": "Integrasi QQ Music Awal",
-        "description": "Login akun dasar, pencarian online, dan pemutaran kini tersedia. Dukungan fitur masih terbatas dan akan diperluas di rilis mendatang."
-      },
-      "audioEqualizer": {
-        "title": "Equalizer Audio",
-        "description": "Sesuaikan dan simpan pengaturan equalizer dari kontrol pemutaran untuk suara yang lebih sesuai perangkat Anda."
-      },
-      "lyricApi": {
-        "title": "API Lirik Desktop",
-        "description": "API lokal baru memungkinkan aplikasi eksternal membaca trek saat ini dan lirik tersinkronisasi."
-      },
-      "localSongCovers": {
-        "title": "Sampul Trek Lokal",
-        "description": "Anda kini dapat mengimpor, menampilkan, dan mempertahankan karya seni kustom untuk trek lokal individual."
-      }
-    },
-    "v0_6_15": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.15.",
-      "sonnetLensEffects": {
-        "title": "Efek Lensa Sonnet",
-        "description": "Kontrol distorsi lensa dan dispersi kromatik baru memberikan tampilan optik yang lebih kaya pada visualizer Sonnet."
-      },
-      "sonnetPostProcess": {
-        "title": "Pasca-pemrosesan Sonnet yang Lebih Halus",
-        "description": "Default yang ditingkatkan, transisi stabil, dan rendering Pergeseran RGB yang lebih bersih menjaga efek Sonnet tetap ekspresif tanpa mengorbankan kejelasan lirik."
-      }
-    },
-    "v0_6_12": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.14.",
-      "sonnetLayout": {
-        "title": "Mesin Tata Letak Sonnet yang Dibangun Ulang",
-        "description": "Mesin tata letak visualizer Sonnet telah dibangun ulang untuk tipografi lirik yang lebih halus, seimbang, dan stabil."
-      },
-      "followSystemTheme": {
-        "title": "Ikuti Tampilan Sistem",
-        "description": "Aktifkan opsi ini di Pengaturan untuk secara otomatis beralih antara tema terang dan gelap mengikuti sistem Anda."
-      }
-    },
-    "v0_6_8": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.8.",
-      "navidromeRecent": {
-        "title": "Musik Terbaru di Navidrome",
-        "description": "Halaman Baru Ditambahkan dan Baru Diputar memudahkan melanjutkan mendengarkan atau menemukan tambahan baru di perpustakaan Anda."
-      },
-      "cappellaSafeArea": {
-        "title": "Tata Letak Lirik Cappella yang Ditingkatkan",
-        "description": "Area aman lirik bawah kini menyesuaikan dengan tinggi baris aktual, mengurangi tumpang tindih di berbagai ukuran font dan tata letak lirik."
-      },
-      "kugouPlayback": {
-        "title": "Kompatibilitas Pemutaran Kugou",
-        "description": "Penanganan URL media Kugou yang ditingkatkan di aplikasi desktop untuk memperbaiki kegagalan pemutaran yang memengaruhi beberapa trek."
-      }
-    },
-    "v0_6_5": {
-      "intro": "Berikut fitur baru dan peningkatan di versi 0.6.7.",
-      "lyricPreview": {
-        "title": "Pratinjau Animasi Lirik yang Ditingkatkan",
-        "description": "Pengaturan gaya animasi lirik kini mencakup kontrol jeda untuk pratinjau dan set lirik placeholder baru."
-      },
-      "responseSmoothness": {
-        "title": "Responsivitas yang Lebih Halus",
-        "description": "Responsivitas yang ditingkatkan di berbagai komponen untuk interaksi dan pembaruan dinamis yang lebih lancar."
-      },
-      "commandPaletteV2": {
-        "title": "Palette Perintah v2",
-        "description": "Sematkan fitur yang sering digunakan di pengaturan Tampilan dan manfaatkan memori perintah yang diperluas."
-      },
-      "commandPaletteQueue": {
-        "title": "Antrean Pemutaran di Palette Perintah",
-        "description": "Kelola antrean pemutaran langsung di Palette Perintah dengan perintah Antrean."
-      }
-    },
-    "v0_6_3": {
-      "intro": "Berikut fitur baru dan peningkatan di versi terbaru.",
-      "pendoloTheme": {
-        "title": "Visualizer Baru: Pendolo Clockwork",
-        "description": "Memperkenalkan visualizer Pendolo baru dengan roda gigi mekanis dinamis, tipografi lirik radial, dan lirik yang dapat diklik untuk melompat."
-      },
-      "obsDynamicAi": {
-        "title": "Tema AI Dinamis OBS",
-        "description": "Overlay AI Dinamis OBS kini secara otomatis menghasilkan ulang tema berbasis AI yang sesuai lagu saat ini saat pergantian trek."
-      },
-      "playerCapEnhance": {
-        "title": "Lapisan Data PlayerCap & Sinkronisasi",
-        "description": "Merefactor lapisan data PlayerCap untuk meningkatkan sinkronisasi tema dan propagasi pengaturan dengan klien Web untuk pengalaman pemutaran yang mulus."
+      "desktopWindowTools": {
+        "title": "Overlay dan Ekspor Desktop yang Lebih Mulus",
+        "description": "Preset tray mengaktifkan mode terkunci, transparan, dan selalu di atas sekaligus; ekspor video juga lebih andal pada layar DPI tinggi, banyak monitor, dan pemotongan resolusi."
       }
     }
   },
