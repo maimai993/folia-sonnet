@@ -79,6 +79,14 @@ const MONET_RAIL_WIDTH_FALLBACK_PX = 680;
 const MONET_RAIL_HEIGHT_FALLBACK_PX = 340;
 const MONET_ACTIVE_GAP_PX = 18;
 const MONET_INACTIVE_GAP_PX = 14;
+// Ratios reproduce the fixed gaps above at the default 36.5px lyric font, so nothing changes at
+// normal sizes; past that the gaps grow with the text instead of collapsing into it.
+// The height cap must clear the active block at large font scales, where a narrow column pushes
+// a normal lyric past four rows. Seven rows stays below the base cap at default sizes, so this
+// only ever raises the ceiling for oversized text on a tall display.
+const MONET_RAIL_MIN_ROWS = 7;
+const MONET_ACTIVE_GAP_RATIO = 0.49;
+const MONET_INACTIVE_GAP_RATIO = 0.38;
 const MONET_GLOW_RISE_DURATION_SCALE = 1.18;
 const MONET_GLOW_PASS_TAIL_SECONDS = 1.05;
 const MONET_SCROLL_IDLE_RESET_MS = 1800;
@@ -144,10 +152,14 @@ const resolveLineTone = (
     };
 };
 
-const resolveLineGap = (previous: PositionedMonetLineEntry, next: PositionedMonetLineEntry): number => (
+const resolveLineGap = (
+    previous: PositionedMonetLineEntry,
+    next: PositionedMonetLineEntry,
+    lyricFontPx: number,
+): number => (
     previous.status === 'active' || next.status === 'active'
-        ? MONET_ACTIVE_GAP_PX
-        : MONET_INACTIVE_GAP_PX
+        ? Math.max(MONET_ACTIVE_GAP_PX, lyricFontPx * MONET_ACTIVE_GAP_RATIO)
+        : Math.max(MONET_INACTIVE_GAP_PX, lyricFontPx * MONET_INACTIVE_GAP_RATIO)
 );
 
 const resolveRailLineStatus = (lineIndex: number, activeLineIndex: number): MonetLineStatus => {
@@ -352,13 +364,13 @@ const buildPositionedEntries = (
     for (let index = anchorIndex + 1; index < measuredEntries.length; index += 1) {
         const previous = measuredEntries[index - 1];
         const current = measuredEntries[index];
-        current.y = previous.y + previous.scaledHeight + resolveLineGap(previous, current);
+        current.y = previous.y + previous.scaledHeight + resolveLineGap(previous, current, lyricFontPx);
     }
 
     for (let index = anchorIndex - 1; index >= 0; index -= 1) {
         const current = measuredEntries[index];
         const next = measuredEntries[index + 1];
-        current.y = next.y - current.scaledHeight - resolveLineGap(current, next);
+        current.y = next.y - current.scaledHeight - resolveLineGap(current, next, lyricFontPx);
     }
 
     return measuredEntries;
@@ -369,6 +381,25 @@ const getLineMask = (isClipped: boolean, fadePx: number) => (
         ? `linear-gradient(180deg, black 0%, black calc(100% - ${fadePx}px), transparent 100%)`
         : undefined
 );
+
+/**
+ * Cuts a truncated context line at its last visible text row rather than at the box edge.
+ * `overflow: hidden` clips at the padding box, and that padding carries `vGlowBufferPx`
+ * (1.2x the lyric font) of glow headroom — at large font scales that is more than a whole line,
+ * so the clipped row stays visible and lands on top of the neighbouring lyric.
+ */
+const getClippedTextMask = (
+    isClipped: boolean,
+    contentBottomPx: number,
+    fadePx: number,
+) => {
+    if (!isClipped) {
+        return undefined;
+    }
+
+    const solidEndPx = Math.max(contentBottomPx - fadePx, 0);
+    return `linear-gradient(180deg, black 0px, black ${solidEndPx}px, transparent ${contentBottomPx}px)`;
+};
 
 /** Softens the right edge so a token wider than the column fades out instead of being sliced mid-glyph. */
 const getEdgeFadeMask = (isOverflowing: boolean, fadePx: number) => (
@@ -667,7 +698,11 @@ const MonetRailLine: React.FC<{
     const isActiveLine = entry.status === 'active';
     const textMask = isActiveLine
         ? undefined
-        : getLineMask(entry.layout.isTextClipped, Math.max(lyricFontPx * 0.55, 12));
+        : getClippedTextMask(
+            entry.layout.isTextClipped,
+            vGlowBufferPx + entry.layout.textPaddingTopPx + entry.layout.textContentHeightPx,
+            Math.max(lyricFontPx * 0.55, 12),
+        );
     const textEdgeMask = getEdgeFadeMask(entry.layout.isTextOverflowingWidth, Math.max(lyricFontPx * 0.9, 24));
     const textMaskStyle = composeLineMasks(textMask, textEdgeMask);
     const translationMask = getLineMask(entry.layout.isTranslationClipped, Math.max(translationFontPx * 0.65, 10));
@@ -849,7 +884,10 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     const vGlowBufferPx = Math.round(lyricFontPx * 1.2);
     // Grows with the same factor as the font, so the column-to-font ratio — and the wrapping — holds.
     const railMaxWidthPx = Math.round(MONET_RAIL_BASE_MAX_WIDTH_PX * layoutScale);
-    const railMaxHeightPx = Math.round(MONET_RAIL_BASE_MAX_HEIGHT_PX * layoutScale);
+    const railMaxHeightPx = Math.round(Math.max(
+        MONET_RAIL_BASE_MAX_HEIGHT_PX * layoutScale,
+        lyricFontPx * 1.18 * MONET_RAIL_MIN_ROWS,
+    ));
     const canSeek = Boolean(onLyricLineSeek) && !seekDisabled;
     const lyricFontWeight = resolveThemeFontWeight(theme, 600);
     const translationFontWeight = resolveThemeFontWeight(subtitleTheme ?? theme, 500);
