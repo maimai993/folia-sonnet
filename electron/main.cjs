@@ -287,6 +287,7 @@ const mainLocale = {
     trayShowHide: '显示/隐藏主窗口',
     trayOpenRemote: '打开 遥控窗口',
     trayToggleClickThrough: '切换点击穿透',
+    trayOverlayPreset: '锁定 + 透明 + 置顶',
     trayHideTaskbar: '隐藏任务栏图标',
     trayQuit: '退出',
     dialogImportTitle: '无法导入此文件夹',
@@ -298,6 +299,7 @@ const mainLocale = {
     trayShowHide: 'Show/Hide Main Window',
     trayOpenRemote: 'Open Remote Window',
     trayToggleClickThrough: 'Toggle Click-Through',
+    trayOverlayPreset: 'Locked + Transparent + On Top',
     trayHideTaskbar: 'Hide Taskbar Icon',
     trayQuit: 'Quit',
     dialogImportTitle: 'Cannot import this folder',
@@ -309,6 +311,7 @@ const mainLocale = {
     trayShowHide: 'Tampilkan/Sembunyikan Jendela Utama',
     trayOpenRemote: 'Buka Jendela Remote',
     trayToggleClickThrough: 'Alihkan Click-Through',
+    trayOverlayPreset: 'Terkunci + Transparan + Di Atas',
     trayHideTaskbar: 'Sembunyikan Ikon Taskbar',
     trayQuit: 'Keluar',
     dialogImportTitle: 'Tidak dapat mengimpor folder ini',
@@ -996,6 +999,33 @@ function setMainWindowAlwaysOnTop(enabled) {
   return mainWindowAlwaysOnTop;
 }
 
+// Tray preset: click-through, a transparent window, and always-on-top switched as one thing, for
+// the overlay setup where Folia sits on top of whatever else is on screen and takes no clicks.
+function isMainWindowOverlayPresetActive() {
+  return mainWindowClickThroughEnabled
+    && mainWindowAlwaysOnTop
+    && isTransparentPlayerBackgroundEnabled();
+}
+
+// Order is forced by the transparency switch: it rebuilds the main window, and the rebuild reads
+// mainWindowAlwaysOnTop for the new window's options while resetting click-through to off. So the
+// on-top flag has to be set before the rebuild and click-through re-applied after it.
+async function setMainWindowOverlayPreset(enabled) {
+  const nextEnabled = Boolean(enabled);
+  // Click-through is refused in X11 wallpaper mode, which would leave the preset half applied.
+  if (nextEnabled && isX11WallpaperMode()) {
+    return false;
+  }
+
+  setMainWindowAlwaysOnTop(nextEnabled);
+  if (isTransparentPlayerBackgroundEnabled() !== nextEnabled) {
+    await setMainWindowTransparentModeFromRemote(nextEnabled);
+  }
+  // setMainWindowClickThroughEnabled refreshes the tray itself, so the checkbox is already correct.
+  setMainWindowClickThroughEnabled(nextEnabled);
+  return nextEnabled;
+}
+
 function refreshTrayMenu() {
   if (!appTray) {
     return;
@@ -1022,6 +1052,14 @@ function refreshTrayMenu() {
       enabled: Boolean(mainWindow && !mainWindow.isDestroyed()),
       click: () => {
         setMainWindowClickThroughEnabled(!mainWindowClickThroughEnabled);
+      },
+    }, {
+      label: locale.trayOverlayPreset,
+      type: 'checkbox',
+      checked: isMainWindowOverlayPresetActive(),
+      enabled: Boolean(mainWindow && !mainWindow.isDestroyed()),
+      click: () => {
+        void setMainWindowOverlayPreset(!isMainWindowOverlayPresetActive());
       },
     }] : []),
     {
