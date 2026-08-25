@@ -634,6 +634,13 @@ const MonetWordSweep: React.FC<{
             return `0 0 ${radiusOne}px ${glowColor}, 0 0 ${radiusTwo}px ${glowColor}`;
         }) as unknown as MotionValue<string>;
 
+        // Glyphs with deep descenders (g, j, p, y, and many CJK forms) sit below the line box
+        // whenever the font's em box is taller than `line-height`, which drives half-leading
+        // negative. `background-clip: text` paints no background outside the fill box and the mask
+        // clips at the overlay's border box, so the sweep used to stop mid-glyph — more visibly the
+        // larger the font. Grow both boxes, then pull the text back so its position is unchanged.
+        const sweepOverflowPx = Math.round(fontPx * 0.5);
+
         return (
             <span className="relative inline-block whitespace-pre-wrap break-words">
                 <motion.span style={{ color: resolvedBaseColor, textShadow: glowShadow }}>
@@ -642,8 +649,13 @@ const MonetWordSweep: React.FC<{
                 {isLineActive ? (
                     <motion.span
                         aria-hidden
-                        className="pointer-events-none absolute inset-0 block whitespace-pre-wrap break-words"
+                        className="pointer-events-none absolute left-0 right-0 block whitespace-pre-wrap break-words"
                         style={{
+                            top: -sweepOverflowPx,
+                            bottom: -sweepOverflowPx,
+                            paddingTop: sweepOverflowPx,
+                            paddingBottom: sweepOverflowPx,
+                            boxSizing: 'border-box',
                             WebkitMaskImage: maskImage,
                             maskImage,
                             WebkitMaskSize: '100% 100%',
@@ -656,6 +668,9 @@ const MonetWordSweep: React.FC<{
                         <motion.span
                             className="block whitespace-pre-wrap break-words"
                             style={{
+                                marginTop: -sweepOverflowPx,
+                                paddingTop: sweepOverflowPx,
+                                paddingBottom: sweepOverflowPx,
                                 color: 'transparent',
                                 WebkitTextFillColor: 'transparent',
                                 backgroundImage: fillGradient,
