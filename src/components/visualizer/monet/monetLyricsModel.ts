@@ -78,7 +78,10 @@ interface MeasureMonetLineLayoutOptions {
 
 const ROOT_FONT_PX = 16;
 const VIEWPORT_WIDTH_FALLBACK_PX = 1280;
-const MONET_ACTIVE_TEXT_LINE_LIMIT = 3;
+// The active lyric is never truncated: its box is content-driven at render time.
+// This cap only bounds the vertical track height the rail reserves for positioning,
+// so a mis-parsed multi-hundred-character line cannot blow up the whole rail geometry.
+const MONET_ACTIVE_TEXT_LINE_LIMIT = 8;
 const MONET_INACTIVE_TEXT_LINE_LIMIT = 2;
 const MONET_TRANSLATION_LINE_LIMIT = 2;
 const MONET_MIN_MEASURE_WIDTH_PX = 180;

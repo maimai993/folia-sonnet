@@ -630,7 +630,13 @@ const MonetRailLine: React.FC<{
 }> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, translationFontStack, translationFontWeight, glowBufferPx, vGlowBufferPx, wordColorMatchers, showSubtitleTranslation, audioPower, onLineSeek, canSeek = false, disableEntryMotion = false, renderStaticPassed = false }) => {
     const initialOffset = entry.offset >= 0 ? 34 : -34;
     const exitOffset = entry.status === 'passed' || entry.offset < 0 ? -38 : 38;
-    const textMask = getLineMask(entry.layout.isTextClipped, Math.max(lyricFontPx * 0.55, 12));
+    // The active lyric must never be truncated, so its box is sized by its own wrapped
+    // content instead of the pre-measured height, and it carries no truncation fade.
+    // Context lines keep the fixed two-line box that keeps the rail compact.
+    const isActiveLine = entry.status === 'active';
+    const textMask = isActiveLine
+        ? undefined
+        : getLineMask(entry.layout.isTextClipped, Math.max(lyricFontPx * 0.55, 12));
     const translationMask = getLineMask(entry.layout.isTranslationClipped, Math.max(translationFontPx * 0.65, 10));
     const handleSeek = (event: React.MouseEvent | React.KeyboardEvent) => {
         if (!canSeek) {
@@ -711,7 +717,9 @@ const MonetRailLine: React.FC<{
                     marginBottom: `-${vGlowBufferPx}px`,
                     paddingTop: `${entry.layout.textPaddingTopPx + vGlowBufferPx}px`,
                     paddingBottom: `${entry.layout.textPaddingBottomPx + vGlowBufferPx}px`,
-                    height: `${entry.layout.textHeightPx + vGlowBufferPx * 2}px`,
+                    height: isActiveLine
+                        ? undefined
+                        : `${entry.layout.textHeightPx + vGlowBufferPx * 2}px`,
                     boxSizing: 'border-box',
                     fontFamily: fontStack,
                     fontSize: lyricFontPx,
@@ -993,7 +1001,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     return (
         <div
             ref={railRef}
-            className="relative h-[clamp(260px,42vh,400px)] max-w-[720px] select-none overflow-hidden"
+            className="relative h-[clamp(280px,52vh,520px)] max-w-[720px] select-none overflow-hidden"
             style={{
                 marginLeft: `-${glowBufferPx}px`,
                 marginRight: `-${glowBufferPx}px`,
