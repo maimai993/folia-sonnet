@@ -293,10 +293,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const [loginProviderId, setLoginProviderId] = useState(activeProviderId);
     // 泛型：provider 声明了多种扫码登录方式才走两步式，没声明的回空数组、维持单步流程。
     const [selectedLoginMethodId, setSelectedLoginMethodId] = useState<string | null>(null);
-    const loginMethodOptions = useMemo(
-        () => omni.getQrLoginMethods(loginProviderId),
-        [loginProviderId],
-    );
+    const [loginMethodOptions, setLoginMethodOptions] = useState(() => omni.getQrLoginMethods(activeProviderId));
+    const loginAttemptIdRef = useRef(0);
     const {
         qrCodeImg,
         qrState,
@@ -319,11 +317,16 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const initLogin = async (providerId = activeProviderId) => {
         const summary = onlineProviderPlatform?.providers.find(provider => provider.providerId === providerId);
         if (summary && !summary.availability.configured) return;
+        const attemptId = ++loginAttemptIdRef.current;
+        // 等待远端能力发现，并把同一份结果同时用于流程分支与弹窗，避免异步结果让两者错位。
+        const methods = await omni.resolveQrLoginMethods(providerId);
+        if (attemptId !== loginAttemptIdRef.current) return;
         setLoginProviderId(providerId);
+        setLoginMethodOptions(methods);
         setShowLoginModal(true);
         setSelectedLoginMethodId(null);
         // 有多种登录方式时先停在步骤一，选定之前不向后端要二维码。
-        if (omni.getQrLoginMethods(providerId).length > 0) return;
+        if (methods.length > 0) return;
         await startQrLogin(providerId);
     };
 

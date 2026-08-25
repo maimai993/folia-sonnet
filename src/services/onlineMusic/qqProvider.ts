@@ -290,33 +290,48 @@ const DEFAULT_QQ_LOGIN_METHOD_ID = QQ_LOGIN_METHODS[0].id;
 // 所以没有 /login/channels 的旧后端行为完全不变。
 let declaredChannels: string[] | null = null;
 let channelProbe: Promise<void> | null = null;
+let channelProbeRetryAt = 0;
+
+const CHANNEL_PROBE_RETRY_DELAY_MS = 30_000;
 
 /**
- * 只问一次的 fire-and-forget 探测：失败或 404 都保留硬编码数组，属于预期的向后兼容路径。
+ * 后台探测成功后缓存结果；失败或 404 都先保留硬编码数组，普通渲染按冷却时间重试，登录动作可立即重试。
  * 包一层 `Promise.resolve()` 是因为调用方 `getAvailability` 是同步的、渲染期就会被读到 ——
  * 探测无论如何都不该把异常抛回渲染路径。
  */
-const refreshDeclaredChannels = (): void => {
-    if (channelProbe) return;
+const refreshDeclaredChannels = (forceRetry = false): Promise<void> => {
+    if (channelProbe) return channelProbe;
+    if (!forceRetry && Date.now() < channelProbeRetryAt) return Promise.resolve();
     channelProbe = Promise.resolve()
         .then(() => requestQq<any>('login_channels'))
         .then(response => {
             const channels = response?.data?.channels;
-            if (Array.isArray(channels) && channels.length > 0) declaredChannels = channels.map(String);
+            if (!Array.isArray(channels) || channels.length === 0) throw new Error('Invalid QQ login channels');
+            declaredChannels = channels.map(String);
+            channelProbeRetryAt = 0;
         })
         .catch(() => {
-            // 旧后端没有这条路由，保持硬编码数组即可。
+            // 旧后端或暂时性网络错误都先回落到硬编码数组；清掉 Promise 才能在稍后或打开登录时重试。
+            channelProbe = null;
+            channelProbeRetryAt = Date.now() + CHANNEL_PROBE_RETRY_DELAY_MS;
         });
+    return channelProbe;
 };
 
 // 前端只显示该 runtime 真正支持的通道：serverless 只有微信，不该显示点进去必定失败的 QQ。
 // 后端只宣告一个通道时回空数组 —— Grid3D 的既有逻辑会直接进单步流程，
 // serverless 用户连选择器都看不到，比多一次无意义的点击更好，且一行 UI 都不用改。
 const getQrLoginMethods = (): QrLoginMethod[] => {
-    refreshDeclaredChannels();
+    void refreshDeclaredChannels();
     if (!declaredChannels) return QQ_LOGIN_METHODS;
     const supported = QQ_LOGIN_METHODS.filter(method => declaredChannels?.includes(method.id));
     return supported.length > 1 ? supported : [];
+};
+
+/** 登录动作必须等能力发现完成，避免启动的二维码通道与弹窗显示的选项来自两个时刻。 */
+const resolveQrLoginMethods = async (): Promise<QrLoginMethod[]> => {
+    await refreshDeclaredChannels(true);
+    return getQrLoginMethods();
 };
 
 const resolveQrLoginMethodId = (methodId?: string): string => {
@@ -331,13 +346,14 @@ const resolveQrLoginMethodId = (methodId?: string): string => {
 export const resetQqLoginChannelCache = (): void => {
     declaredChannels = null;
     channelProbe = null;
+    channelProbeRetryAt = 0;
 };
 
 // provider 摘要在应用启动时就会被读到，把探测挂在这里，等用户真的打开登录弹窗时结果早已落地，
 // UI 不会先显示两个通道再缩成一个。
 const getAvailability = (): ReturnType<typeof getQqTransportAvailability> => {
     const availability = getQqTransportAvailability();
-    if (availability.configured) refreshDeclaredChannels();
+    if (availability.configured) void refreshDeclaredChannels();
     return availability;
 };
 
@@ -609,6 +625,7 @@ export const qqProvider: OnlineMusicProvider = {
         getLoginStatus,
         logout,
         getQrLoginMethods,
+        resolveQrLoginMethods,
         async getQrKey(methodId) {
             const response = await requestQq<any>('login_qr_key', {
                 channel: resolveQrLoginMethodId(methodId),

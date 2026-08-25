@@ -110,10 +110,10 @@ describe('QQ login channels declared by the backend', () => {
     it('hides the selector entirely when the backend serves a single channel', async () => {
         declare(['wechat']);
 
-        omni.getQrLoginMethods('qq');
-        await vi.waitFor(() => expect(requestMock).toHaveBeenCalledWith('login_channels'));
+        const methods = await omni.resolveQrLoginMethods('qq');
 
-        // 只剩一个通道时回空数组：既有 UI 逻辑会直接进单步流程，用户连选择器都看不到。
+        // 登录流程等待能力发现，用这同一份结果决定是否显示选择器与是否直接创建二维码。
+        expect(methods).toEqual([]);
         expect(omni.getQrLoginMethods('qq')).toEqual([]);
     });
 
@@ -145,11 +145,43 @@ describe('QQ login channels declared by the backend', () => {
     it('keeps the hardcoded methods when the route is missing on an older backend', async () => {
         requestMock.mockRejectedValue(new Error('404'));
 
-        omni.getQrLoginMethods('qq');
-        await vi.waitFor(() => expect(requestMock).toHaveBeenCalledWith('login_channels'));
+        const methods = await omni.resolveQrLoginMethods('qq');
 
         // 旧后端没有这条路由，向后兼容的定义就是「行为和今天完全一样」。
-        expect(omni.getQrLoginMethods('qq').map(method => method.id)).toEqual(['qq', 'wechat']);
+        expect(methods.map(method => method.id)).toEqual(['qq', 'wechat']);
+    });
+
+    it('waits for delayed channel discovery before deriving the login flow', async () => {
+        let finishProbe: ((value: unknown) => void) | undefined;
+        requestMock.mockImplementation((operation: string) => (
+            operation === 'login_channels'
+                ? new Promise(resolve => { finishProbe = resolve; })
+                : Promise.resolve({ code: 200, data: {} })
+        ));
+
+        let settled = false;
+        const resolving = omni.resolveQrLoginMethods('qq').then(methods => {
+            settled = true;
+            return methods;
+        });
+        await vi.waitFor(() => expect(requestMock).toHaveBeenCalledWith('login_channels'));
+        expect(settled).toBe(false);
+
+        finishProbe?.({ code: 200, data: { channels: ['wechat'] } });
+
+        await expect(resolving).resolves.toEqual([]);
+    });
+
+    it('retries a failed discovery when the user opens login later', async () => {
+        requestMock
+            .mockRejectedValueOnce(new Error('temporary network failure'))
+            .mockResolvedValueOnce({ code: 200, data: { channels: ['wechat'] } });
+
+        await expect(omni.resolveQrLoginMethods('qq')).resolves.toHaveLength(2);
+        await expect(omni.resolveQrLoginMethods('qq')).resolves.toEqual([]);
+
+        const probes = requestMock.mock.calls.filter(([operation]) => operation === 'login_channels');
+        expect(probes).toHaveLength(2);
     });
 
     it('probes the backend only once however often the methods are read', async () => {
