@@ -89,6 +89,26 @@ if (process.platform === 'linux') {
   }
 }
 
+// Chromium starts the video capture service to enumerate video inputs whenever the renderer calls
+// enumerateDevices() -- which the playback settings panel must do to list audio outputs -- and does
+// not release it afterwards (crbug 377749384), leaving a utility process and an OS privacy
+// indicator behind. This feature adds an idle timer that shuts the video source provider down about
+// a minute after the last use. The timer only fires while nothing keeps the provider subscribed, so
+// the renderer must never register a `devicechange` listener (see src/hooks/useAudioOutputDevices.ts).
+function appendChromiumFeature(featureName) {
+  // base::CommandLine keeps one value per switch, so a plain appendSwitch would drop features the
+  // user passed on the command line, or any appended earlier here.
+  const enabledFeatures = app.commandLine.getSwitchValue('enable-features');
+  app.commandLine.appendSwitch(
+    'enable-features',
+    enabledFeatures ? `${enabledFeatures},${featureName}` : featureName,
+  );
+}
+
+if (process.platform === 'win32' || process.platform === 'darwin') {
+  appendChromiumFeature('ReleaseVideoSourceProviderIfNotInUse');
+}
+
 // macOS: GPU 加速优化，解决 Intel Mac + AMD 独显在 Retina 屏幕下的渲染卡顿
 if (process.platform === 'darwin' && process.arch === 'x64') {
   app.commandLine.appendSwitch('ignore-gpu-blocklist');

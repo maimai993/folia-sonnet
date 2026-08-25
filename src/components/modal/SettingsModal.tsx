@@ -1588,7 +1588,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         )}
                                         {activeSettingsSection === 'playback' && (
                                             <PlaybackSettingsSubview
-                                                isOpen={true}
                                                 isDaylight={isDaylight}
                                                 onAudioOutputDeviceChange={onAudioOutputDeviceChange}
                                                 onOpenGlobalLyricOffsetSettings={() => setShowGlobalLyricOffset(true)}
