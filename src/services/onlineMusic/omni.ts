@@ -177,6 +177,12 @@ export const omni = {
         return requireOnlineMusicProvider(providerId).auth?.getQrLoginMethods?.() ?? [];
     },
 
+    async resolveQrLoginMethods(providerId: OmniProviderId): Promise<QrLoginMethod[]> {
+        const auth = requireOnlineMusicProvider(providerId).auth;
+        if (!auth) return [];
+        return auth.resolveQrLoginMethods?.() ?? auth.getQrLoginMethods?.() ?? [];
+    },
+
     async createQrLogin(providerId: OmniProviderId, methodId?: string): Promise<{ key: string; imageUrl: string }> {
         const provider = requireOnlineMusicProvider(providerId);
         const auth = provider.auth;

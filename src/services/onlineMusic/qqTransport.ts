@@ -5,6 +5,7 @@ import { readProviderSessionValue, removeProviderSessionValue, writeProviderSess
 
 export const QQ_OPERATIONS = [
     'login_qr_key', 'login_qr_create', 'login_qr_check', 'login_qr_cancel', 'login_status', 'logout',
+    'login_channels',
     'user_detail', 'user_playlist', 'user_albums', 'user_liked_songs', 'music_play', 'song_list_detail', 'song_info',
     'album_info', 'artist_albums', 'artist_songs',
 ] as const;
@@ -19,6 +20,8 @@ const ENDPOINTS: Record<QqOperation, string> = {
     login_qr_cancel: '/login/qr/cancel',
     login_status: '/login/status',
     logout: '/logout',
+    // 只有 3.0.0 之后的后端有这条路由，旧后端回 404，调用方要把它当成「没有声明」而不是错误。
+    login_channels: '/login/channels',
     user_detail: '/user/detail',
     user_playlist: '/user/playlist',
     user_albums: '/user/albums',
@@ -81,6 +84,25 @@ const resolveApiBase = async (): Promise<string> => {
 
 // The stored value is the backend's opaque `qqmusic_session=<token>` string, never a QQ credential.
 const getWebSessionCookie = (): string => readProviderSessionValue('qq', 'cookie') || '';
+
+const SESSION_COOKIE_NAME = 'qqmusic_session';
+const SESSION_HEADER_NAME = 'X-QQ-Session';
+
+// 后端两个入口的语义不同，不能互换：header 收的是裸 token，`?cookie=` 收的是整串 cookie。
+const tokenFromCookieString = (cookie: string): string => {
+    for (const entry of cookie.split(';')) {
+        const separator = entry.indexOf('=');
+        if (separator <= 0) continue;
+        if (entry.slice(0, separator).trim() === SESSION_COOKIE_NAME) return entry.slice(separator + 1).trim();
+    }
+    return '';
+};
+
+// 同源部署（`/api/qq`、`/qq`）改走 header：sealed token 是密文本身，query 是它唯一会被 CDN 与
+// edge access log 完整记下来的地方 —— 那是 sealed 相对不透明 token 唯一真正新增的泄漏面。
+// 外部 URL 与 Electron 维持 `?cookie=`：跨源发自定义头会触发 preflight，而后端是
+// `Access-Control-Allow-Origin: *`，按规范不允许搭配 credentials。
+const isSameOriginBase = (base: string): boolean => base.startsWith('/');
 
 export const hasQqSession = (): boolean => Boolean(getWebSessionCookie());
 
@@ -185,12 +207,23 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
         if (value !== undefined) query.set(key, String(value));
     });
     const cookie = getWebSessionCookie();
-    if (cookie) query.set('cookie', cookie);
+    const headers: Record<string, string> = {};
+    if (cookie) {
+        if (isSameOriginBase(base)) {
+            const token = tokenFromCookieString(cookie);
+            // 同源请求不允许把未知格式的 session 放回 URL；清掉无效值，交给后端按未登录处理。
+            if (token) headers[SESSION_HEADER_NAME] = token;
+            else clearQqSession();
+        } else {
+            query.set('cookie', cookie);
+        }
+    }
     query.set('timestamp', String(Date.now()));
 
-    // qq-music-api answers with `Access-Control-Allow-Origin: *` and no credentials, so a cross-origin browser
-    // can neither receive nor replay its HttpOnly cookie; the session is carried by the `cookie` query instead.
-    const response = await fetch(`${base}${endpoint.path}?${query}`, { credentials: 'omit' });
+    // Same-origin serverless calls must retain deployment-protection cookies; external qq-music-api instances
+    // answer with `Access-Control-Allow-Origin: *`, so those requests still omit browser credentials.
+    const credentials: RequestCredentials = isSameOriginBase(base) ? 'same-origin' : 'omit';
+    const response = await fetch(`${base}${endpoint.path}?${query}`, { credentials, headers });
     if (!response.ok) {
         const failure = await readJsonBody(response);
         // A missing, expired, rejected, or non-persisted backend session is surfaced uniformly as 401.

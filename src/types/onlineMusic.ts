@@ -229,6 +229,8 @@ export interface OnlineAuthProvider {
     getLoginStatus(): Promise<ProviderUser | null>;
     logout(): Promise<void>;
     getQrLoginMethods?(): QrLoginMethod[];
+    // 需要远端能力发现的 provider 在这里等待结果；UI 用同一份返回值决定单步或多步流程。
+    resolveQrLoginMethods?(): Promise<QrLoginMethod[]>;
     getQrKey?(methodId?: string): Promise<string>;
     createQr?(key: string): Promise<string>;
     checkQr?(key: string): Promise<QrLoginState>;

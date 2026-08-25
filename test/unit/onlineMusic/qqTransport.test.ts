@@ -122,6 +122,57 @@ describe('QQ Music Web transport', () => {
         expect(playlistUrl.searchParams.get('uid')).toBe('123');
         // The backend serves `Access-Control-Allow-Origin: *` without credentials, so cookies must not ride the request.
         expect(fetchMock.mock.calls[1][1]).toMatchObject({ credentials: 'omit' });
+        // 外部实例是跨源的：自定义头会触发 preflight，所以这条路径不带 header。
+        expect(fetchMock.mock.calls[1][1]?.headers).toEqual({});
+    });
+
+    it('sends the session as a header when the base is same-origin, and as a query when it is not', async () => {
+        // 同源部署（`VITE_QQ_API_BASE=/api/qq`）改走 header：sealed token 是密文本身，
+        // query 是它唯一会被 CDN / edge access log 完整记下来的地方。
+        vi.stubEnv('VITE_QQ_API_BASE', '/api/qq');
+        const fetchMock = vi.fn().mockImplementation(async () => Response.json({ code: 200 }));
+        vi.stubGlobal('fetch', fetchMock);
+        storage.set('online_provider:qq:cookie', CONFIRMED_COOKIE);
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await requestQq('login_status');
+
+        const [target, init] = fetchMock.mock.calls[0];
+        // 相对 URL 要原样保留，前端不该替后端拼出一个绝对地址。
+        expect(String(target).startsWith('/api/qq/login/status?')).toBe(true);
+        // 后端 header 只收裸 token，`?cookie=` 收的才是整串 cookie —— 两者语义不同。
+        expect(init?.headers).toEqual({ 'X-QQ-Session': 'opaque-token' });
+        // 同源请求必须带上浏览器已取得的 Vercel protection cookie，否则 Preview 会被 SSO redirect。
+        expect(init?.credentials).toBe('same-origin');
+        expect(new URLSearchParams(String(target).split('?')[1]).get('cookie')).toBeNull();
+    });
+
+    it('drops an unrecognised same-origin session instead of putting it in the URL', async () => {
+        vi.stubEnv('VITE_QQ_API_BASE', '/api/qq');
+        const fetchMock = vi.fn().mockImplementation(async () => Response.json({ code: 200 }));
+        vi.stubGlobal('fetch', fetchMock);
+        storage.set('online_provider:qq:cookie', 'not-a-session-cookie');
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await requestQq('login_status');
+
+        const [target, init] = fetchMock.mock.calls[0];
+        expect(init?.headers).toEqual({});
+        expect(new URLSearchParams(String(target).split('?')[1]).get('cookie')).toBeNull();
+        expect(storage.has('online_provider:qq:cookie')).toBe(false);
+    });
+
+    it('exposes the backend channel declaration route', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({
+            code: 200,
+            data: { channels: ['wechat'], sessionMode: 'sealed', configured: true },
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await requestQq('login_channels');
+
+        expect(new URL(fetchMock.mock.calls[0][0]).pathname).toBe('/login/channels');
     });
 
     it('puts playback, playlist, and song identifiers in documented path segments', async () => {

@@ -1,20 +1,22 @@
 # QQ 音乐 API 服务（`qq-api`）
 
-`qq-api` 是 Web 堆栈里的 QQ 音乐后端，提供搜索、歌词、专辑、歌手、原生扫码登录，以及登录后的账号歌单、我喜欢、收藏的专辑与播放链接。
+`qq-api` 是 Web 堆栈里的 QQ 音乐后端，提供搜索、歌词、专辑、歌手、微信扫码和 QQ 扫码登录，以及登录后的账号歌单、我喜欢、收藏的专辑与播放链接。
+
+本文只说明 Docker 镜像、常驻 Node 服务、卷和状态文件。Vercel、Cloudflare、Durable Object 与面向普通用户的完整步骤见 [QQ 音乐部署指南](../../../docs/qq-music-deployment.md)。
 
 服务本体来自 npm 包，本目录只有一份锁定版本的 `package.json` 与 `package-lock.json`，与 `netease-api`、`kugou-api` 的做法一致，仓库里不放任何后端源码。
 
 | 项 | 内容 |
 | --- | --- |
 | npm 包 | [`@yakult-green-tea/qq-music-api`](https://www.npmjs.com/package/@yakult-green-tea/qq-music-api) |
-| 版本 | `3.0.0`，锁定在 [`package.json`](./package.json) 与 `package-lock.json` |
+| 版本 | `3.1.0`，锁定在 [`package.json`](./package.json) 与 `package-lock.json` |
 | 原始上游 | [Rain120/qq-music-api](https://github.com/Rain120/qq-music-api)，作者 Rain120 |
 | 许可证 | MIT；全文随包安装在 `node_modules/@yakult-green-tea/qq-music-api/LICENSE` |
 | 镜像定义 | [`images/qq-api.Dockerfile`](../images/qq-api.Dockerfile) |
 | 启动入口 | `dist/src/app.js`（包的 `main`），Koa 服务 |
 | Node 要求 | `>=20`；镜像用 `node:24-alpine` |
 
-该包是上游的 fork，相对上游增加了原生扫码登录、二维码会话的取消与抢占、账号歌单 / 我喜欢 / 收藏的专辑等接口，并把编译产物发布成可直接 `require()` 的 npm 包。完整差异见包自带 README 的「关于本 fork」一节。
+该包是上游的 fork，相对上游增加了微信扫码和 QQ 扫码登录、二维码会话的取消与抢占、账号歌单 / 我喜欢 / 收藏的专辑等接口，并把编译产物发布成可直接 `require()` 的 npm 包。完整差异见包自带 README 的「关于本 fork」一节。
 
 后端改动一律先在 `qq-music-api` 仓库完成并发布新版本，再回到本目录升级版本号并重新生成 lockfile。
 
@@ -97,7 +99,7 @@ VITE_QQ_API_BASE=http://localhost:3200
 
 ## 装置状态与登录态持久化
 
-QQ 音乐的原生扫码协议要求 QIMEI 引导和后续调用跑在同一个稳定的装置身份上，因此该身份需要跨进程重启保留。
+QQ 扫码协议要求 QIMEI 引导和后续调用跑在同一个稳定的装置身份上，因此该身份需要跨进程重启保留。
 
 Compose 里它挂在具名卷 `qq-api-state` 上（容器内 `/app/.auth-state/qq-device.json`，文件权限 `0600`）。该文件**只存 Android device 识别值，不含 `musickey`、MQTT token 或任何账号凭证**；写入失败时上游代码会降级成进程内状态而不阻断登录。
 
@@ -122,26 +124,57 @@ docker compose up -d --wait
 
 ## Serverless 支持情况
 
-3.0.0 新增 `@yakult-green-tea/qq-music-api/serverless`，提供 Web 标准的 `handleRequest(request, env)`，可以接到 Cloudflare Workers 或 Vercel Edge。它覆盖 Folia 使用的登录、用户集合、播放、歌单、歌曲、专辑和歌手路由，并用加密 sealed token 在请求间携带登录态。
+**从 `@yakult-green-tea/qq-music-api` 3.0.0 起，Cloudflare Workers 与 Vercel 都可以用，不再需要常驻 Node 进程。** 本仓库已经内置两个平台的入口（`worker/qq.ts` / `api-ts/qq.ts`），部署时不需要自己写路由。
 
-Serverless 模式有两项明确限制：
+该包的 `./serverless` 导出提供 Web 标准的 `handleRequest(request, env)`，运行时不含 Koa、不含长连线、不含文件系统依赖，覆盖 Folia 使用的登录、用户集合、播放、歌单、歌曲、专辑和歌手路由，并用加密 sealed token 在请求之间携带登录态——服务端不保存任何凭证。
 
-1. 只支持微信扫码。QQ 音乐 App 扫码依赖 MQTT over WebSocket 长连接，request-scoped runtime 无法维持；`GET /login/channels` 会返回 `channels: ['wechat']`。
-2. 登录相关路由必须设置 `QQ_SESSION_SECRET`，未设置时返回 `501`；曲库路由仍可用。
+### 怎么配
 
-最小入口示例：
+| 平台 | 要做的事 |
+| --- | --- |
+| Cloudflare | 把 `QQ_SESSION_SECRET` 设成 Worker secret（`wrangler secret put QQ_SESSION_SECRET`）。路由已由 `wrangler.jsonc` 的 `run_worker_first: ["/api/*"]` 覆盖 |
+| Vercel | 在项目环境变量里加 `QQ_SESSION_SECRET`。路由已由仓库根的 `vercel.json` rewrite 覆盖 |
+| 两者共同 | 前端 `VITE_QQ_API_BASE` 填 `/api/qq` |
 
-```ts
-import { handleRequest } from '@yakult-green-tea/qq-music-api/serverless';
+`QQ_SESSION_SECRET` 用一段足够长的随机字符串，例如 `openssl rand -base64 32`。可选的 `QQ_SESSION_SECRET_PREVIOUS` 只用于验证旧令牌，轮换 secret 时填上它可以避免把所有人一次性登出。
 
-export default {
-  fetch(request: Request, env: { QQ_SESSION_SECRET: string }) {
-    return handleRequest(request, env);
+两个变量都是服务端密钥，**不加 `VITE_` 前缀**——加了会被编进前端资产。改动其中任何一个都要重新部署才生效。
+
+### QQ 扫码登录（Cloudflare，可选）
+
+默认的 serverless 部署只有微信扫码登录方式。QQ 扫码走 MQTT over WebSocket，CONNECT 请求的是 clean session、订阅是 unicast，断连期间上游既不保留也不补送，一次 request-scoped 的调用握不住这条连接。
+
+Cloudflare 上可以用 Durable Object 补上它——DO 能跨调用持有那条连接。**这是可选的，要自己加绑定**：仓库里的 `wrangler.jsonc` 刻意不带它，因为那个文件是 README 上「Deploy to Cloudflare」按钮消费的，DO migration 一旦入库就会套用到每一个点按钮的人，而且 migration 有黏性（日后想去掉还得再写一条 delete migration）。
+
+想要这条通道，在 `wrangler.jsonc` 里加上这两段再部署：
+
+```jsonc
+  "durable_objects": {
+    "bindings": [{ "name": "QQ_QR_CHANNEL", "class_name": "QqQrChannel" }]
   },
-};
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QqQrChannel"] }]
 ```
 
-Folia 当前 Docker 与 Electron 仍使用常驻 Node 入口。若以后切换到 serverless，前端还需要读取 `/login/channels` 隐藏不受支持的 QQ App 扫码，并优先通过 `X-QQ-Session` 请求头传递 sealed token，避免把较长的加密凭证放进 URL 日志。
+绑定名必须是 `QQ_QR_CHANNEL`，类名必须是 `QqQrChannel`（`worker/index.ts` 导出的就是它）。加完之后 `GET /login/channels` 会宣告 `["qq", "wechat"]`，前端自动显示通道选择器；没加就还是只有微信——**这是能力声明，不是错误**，两种情况都不会报错。
+
+几件需要知道的事：
+
+- **DO 里不存凭证。** 它只搬运登录阶段的暂态：`qrcodeID`、二维码图，以及到目前为止收到的 MQTT 事件。凭证交换在请求侧完成，登录态仍旧封在 sealed token 里。
+- **按 wall-clock 计费。** 出向 WebSocket 不支持 hibernation，二维码活着的时候（最多 3 分钟）DO 一直算在线。单次登录上限约 23 GB-s，Workers 付费方案每月含 400,000 GB-s，个人部署基本可以忽略。取消扫码、二维码过期和登录完成都会立刻释放连接。
+- **Vercel 上没有这个选项**，Vercel Functions 没有能跨调用持有长连接的原语。
+- 二维码在两次轮询之间由 DO 持有，所以关掉登录弹窗时前端发出的取消请求是有意义的——它会真的把连接关掉。
+
+### 与常驻 Node 形态的逐条差异
+
+| | 常驻 Node / Docker / Electron | Serverless |
+| --- | --- | --- |
+| 登录方式 | QQ 扫码、微信扫码 | 微信扫码；Cloudflare 绑定 DO 后增加 QQ 扫码 |
+| 登录态 | 服务端进程内持有，token 只是查找键 | 加密封装在 token 里，服务端不存 |
+| 登出 | 服务端真正删除会话 | 只能由客户端丢弃 token，旧 token 在到期前仍有效 |
+| 未登录播放 | 回退到匿名链接 | `/getMusicPlay` 直接回 `401` |
+| 未设 secret | 不影响 | 登录路由回 `501`，曲库路由照常 |
+
+`GET /login/channels` 会如实声明当前 runtime 支持哪些通道，前端据此决定是否显示通道选择器。
 
 ## 多实例部署
 

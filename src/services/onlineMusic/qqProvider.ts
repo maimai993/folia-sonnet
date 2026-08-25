@@ -277,12 +277,85 @@ const logout = async (): Promise<void> => {
 
 // 扫码登录方式：`id` 就是后端 `?channel=` 的取值，UI 层只认 labelKey 与 iconKey。
 // services 层不 import 任何 .svg，图标由 UI 层按 iconKey 映射到静态资源。
+// `qq` 是 QQ 扫码登录通道的 canonical 名字（旧名 `mobile`，后端仍在入口归一，
+// 所以新版 Folia 配旧后端也不会断）。协议本身没变：仍送 tmeLoginType 6、收回 loginType 2。
 const QQ_LOGIN_METHODS: QrLoginMethod[] = [
     { id: 'qq', labelKey: 'home.qqLoginMethodMobile', iconKey: 'qq' },
     { id: 'wechat', labelKey: 'home.qqLoginMethodWechat', iconKey: 'wechat' },
 ];
 
 const DEFAULT_QQ_LOGIN_METHOD_ID = QQ_LOGIN_METHODS[0].id;
+
+// 后端声明的通道集合。初值 null 表示「还没问到」，此时沿用上面的硬编码数组，
+// 所以没有 /login/channels 的旧后端行为完全不变。
+let declaredChannels: string[] | null = null;
+let channelProbe: Promise<void> | null = null;
+let channelProbeRetryAt = 0;
+
+const CHANNEL_PROBE_RETRY_DELAY_MS = 30_000;
+
+/**
+ * 后台探测成功后缓存结果；失败或 404 都先保留硬编码数组，普通渲染按冷却时间重试，登录动作可立即重试。
+ * 包一层 `Promise.resolve()` 是因为调用方 `getAvailability` 是同步的、渲染期就会被读到 ——
+ * 探测无论如何都不该把异常抛回渲染路径。
+ */
+const refreshDeclaredChannels = (forceRetry = false): Promise<void> => {
+    if (channelProbe) return channelProbe;
+    if (!forceRetry && Date.now() < channelProbeRetryAt) return Promise.resolve();
+    channelProbe = Promise.resolve()
+        .then(() => requestQq<any>('login_channels'))
+        .then(response => {
+            const channels = response?.data?.channels;
+            if (!Array.isArray(channels) || channels.length === 0) throw new Error('Invalid QQ login channels');
+            declaredChannels = channels.map(String);
+            channelProbeRetryAt = 0;
+        })
+        .catch(() => {
+            // 旧后端或暂时性网络错误都先回落到硬编码数组；清掉 Promise 才能在稍后或打开登录时重试。
+            channelProbe = null;
+            channelProbeRetryAt = Date.now() + CHANNEL_PROBE_RETRY_DELAY_MS;
+        });
+    return channelProbe;
+};
+
+// 前端只显示该 runtime 真正支持的通道：serverless 只有微信，不该显示点进去必定失败的 QQ。
+// 后端只宣告一个通道时回空数组 —— Grid3D 的既有逻辑会直接进单步流程，
+// serverless 用户连选择器都看不到，比多一次无意义的点击更好，且一行 UI 都不用改。
+const getQrLoginMethods = (): QrLoginMethod[] => {
+    void refreshDeclaredChannels();
+    if (!declaredChannels) return QQ_LOGIN_METHODS;
+    const supported = QQ_LOGIN_METHODS.filter(method => declaredChannels?.includes(method.id));
+    return supported.length > 1 ? supported : [];
+};
+
+/** 登录动作必须等能力发现完成，避免启动的二维码通道与弹窗显示的选项来自两个时刻。 */
+const resolveQrLoginMethods = async (): Promise<QrLoginMethod[]> => {
+    await refreshDeclaredChannels(true);
+    return getQrLoginMethods();
+};
+
+const resolveQrLoginMethodId = (methodId?: string): string => {
+    if (methodId) return methodId;
+    const supported = declaredChannels
+        ? QQ_LOGIN_METHODS.filter(method => declaredChannels?.includes(method.id))
+        : [];
+    return supported.length === 1 ? supported[0].id : DEFAULT_QQ_LOGIN_METHOD_ID;
+};
+
+/** 测试用：通道缓存是模块级单例，跨用例必须能清掉。 */
+export const resetQqLoginChannelCache = (): void => {
+    declaredChannels = null;
+    channelProbe = null;
+    channelProbeRetryAt = 0;
+};
+
+// provider 摘要在应用启动时就会被读到，把探测挂在这里，等用户真的打开登录弹窗时结果早已落地，
+// UI 不会先显示两个通道再缩成一个。
+const getAvailability = (): ReturnType<typeof getQqTransportAvailability> => {
+    const availability = getQqTransportAvailability();
+    if (availability.configured) void refreshDeclaredChannels();
+    return availability;
+};
 
 // 后端的会话寿命是 180 秒（qq-music-api 的 `QR_TTL_MS`），前端早 5 秒收手：
 // 二维码失效时用户看到的是可重试的「已过期」，而不是一个还在轮询的死码。
@@ -521,7 +594,7 @@ export const qqProvider: OnlineMusicProvider = {
     id: 'qq',
     displayName: 'QQ Music',
     shortName: 'QQ音乐',
-    getAvailability: getQqTransportAvailability,
+    getAvailability,
     capabilities: {
         search: true,
         playback: true,
@@ -551,10 +624,11 @@ export const qqProvider: OnlineMusicProvider = {
     auth: {
         getLoginStatus,
         logout,
-        getQrLoginMethods: () => QQ_LOGIN_METHODS,
+        getQrLoginMethods,
+        resolveQrLoginMethods,
         async getQrKey(methodId) {
             const response = await requestQq<any>('login_qr_key', {
-                channel: methodId ?? DEFAULT_QQ_LOGIN_METHOD_ID,
+                channel: resolveQrLoginMethodId(methodId),
             });
             return String(response?.data?.unikey || '');
         },

@@ -10,5 +10,5 @@
     "rootDir": ".",
     "outDir": "../api"
   },
-  "include": ["./*.ts"]
+  "include": ["./**/*.ts"]
 }
