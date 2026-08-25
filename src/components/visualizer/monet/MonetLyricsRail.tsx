@@ -13,6 +13,8 @@ import {
     type WordColorMatcher,
 } from '../wordColoring';
 import {
+    MONET_RAIL_BASE_MAX_HEIGHT_PX,
+    MONET_RAIL_BASE_MAX_WIDTH_PX,
     buildMonetDisplayTokens,
     measureMonetGraphemeOffsets,
     measureMonetLineLayout,
@@ -46,6 +48,8 @@ interface MonetLyricsRailProps {
     audioBands?: AudioBands;
     onLyricLineSeek?: (lyricTimeSec: number) => void;
     seekDisabled?: boolean;
+    /** Shared large-screen factor. Owned by VisualizerMonet so the column and the font scale together. */
+    layoutScale?: number;
 }
 
 interface MonetRailSize {
@@ -366,6 +370,33 @@ const getLineMask = (isClipped: boolean, fadePx: number) => (
         : undefined
 );
 
+/** Softens the right edge so a token wider than the column fades out instead of being sliced mid-glyph. */
+const getEdgeFadeMask = (isOverflowing: boolean, fadePx: number) => (
+    isOverflowing
+        ? `linear-gradient(90deg, black 0%, black calc(100% - ${fadePx}px), transparent 100%)`
+        : undefined
+);
+
+/** Intersects the vertical clip fade with the horizontal edge fade, so a line can carry both. */
+const composeLineMasks = (...masks: (string | undefined)[]) => {
+    const layers = masks.filter((mask): mask is string => Boolean(mask));
+    if (layers.length === 0) {
+        return undefined;
+    }
+
+    return {
+        WebkitMaskImage: layers.join(', '),
+        maskImage: layers.join(', '),
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskSize: '100% 100%',
+        maskSize: '100% 100%',
+        ...(layers.length > 1
+            ? { WebkitMaskComposite: 'source-in', maskComposite: 'intersect' }
+            : {}),
+    } as const;
+};
+
 const MonetTimedTokenSpan: React.FC<{
     entry: PositionedMonetLineEntry;
     currentTime: MotionValue<number>;
@@ -637,6 +668,8 @@ const MonetRailLine: React.FC<{
     const textMask = isActiveLine
         ? undefined
         : getLineMask(entry.layout.isTextClipped, Math.max(lyricFontPx * 0.55, 12));
+    const textEdgeMask = getEdgeFadeMask(entry.layout.isTextOverflowingWidth, Math.max(lyricFontPx * 0.9, 24));
+    const textMaskStyle = composeLineMasks(textMask, textEdgeMask);
     const translationMask = getLineMask(entry.layout.isTranslationClipped, Math.max(translationFontPx * 0.65, 10));
     const handleSeek = (event: React.MouseEvent | React.KeyboardEvent) => {
         if (!canSeek) {
@@ -726,12 +759,7 @@ const MonetRailLine: React.FC<{
                     fontWeight: entry.tone.fontWeight,
                     lineHeight: `${entry.layout.lineHeightPx}px`,
                     letterSpacing: 0,
-                    WebkitMaskImage: textMask,
-                    maskImage: textMask,
-                    WebkitMaskRepeat: 'no-repeat',
-                    maskRepeat: 'no-repeat',
-                    WebkitMaskSize: '100% 100%',
-                    maskSize: '100% 100%',
+                    ...textMaskStyle,
                     textShadow: entry.status === 'active'
                         ? `0 14px 34px ${colorWithAlpha(theme.backgroundColor, 0.22)}`
                         : 'none',
@@ -805,6 +833,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     audioBands,
     onLyricLineSeek,
     seekDisabled = false,
+    layoutScale = 1,
 }) => {
     const railRef = useRef<HTMLDivElement | null>(null);
     const layoutCacheRef = useRef<MonetLayoutCache>(new Map());
@@ -818,6 +847,9 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     const railSize = useMonetRailSize(railRef);
     const glowBufferPx = Math.round(lyricFontPx * 1.2);
     const vGlowBufferPx = Math.round(lyricFontPx * 1.2);
+    // Grows with the same factor as the font, so the column-to-font ratio — and the wrapping — holds.
+    const railMaxWidthPx = Math.round(MONET_RAIL_BASE_MAX_WIDTH_PX * layoutScale);
+    const railMaxHeightPx = Math.round(MONET_RAIL_BASE_MAX_HEIGHT_PX * layoutScale);
     const canSeek = Boolean(onLyricLineSeek) && !seekDisabled;
     const lyricFontWeight = resolveThemeFontWeight(theme, 600);
     const translationFontWeight = resolveThemeFontWeight(subtitleTheme ?? theme, 500);
@@ -1001,8 +1033,10 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     return (
         <div
             ref={railRef}
-            className="relative h-[clamp(280px,52vh,520px)] max-w-[720px] select-none overflow-hidden"
+            className="relative select-none overflow-hidden"
             style={{
+                height: `clamp(280px, 52vh, ${railMaxHeightPx}px)`,
+                maxWidth: `${railMaxWidthPx}px`,
                 marginLeft: `-${glowBufferPx}px`,
                 marginRight: `-${glowBufferPx}px`,
                 paddingLeft: `${glowBufferPx}px`,
