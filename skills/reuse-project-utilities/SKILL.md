@@ -66,6 +66,47 @@ const width = layout.lines[0]?.width ?? fallbackWidth;
 
 不要手写 `text.length * fontSize` 作为主测量逻辑；只能作为 fallback。
 
+#### 测量必须和真实渲染结构一致
+
+`prepareWithSegments(fullText, fontSpec)` 把整行当成一个可任意断开的字符串。只有当 DOM 里这行文本
+也是一个普通的 inline 文本流时，这个假设才成立。
+
+如果渲染时把每个词/token 包成了 `display: inline-block`（逐字扫光、per-word 上色、chip、mention 都会这么做），
+那它就是**原子行内盒，内部不允许断行**，浏览器只能在 token 之间断。中日文尤其明显：词间没有空格，
+pretext 会在任意字之间断，浏览器只能在 token 边界断，实测行数可以差 1~2 行。行数算少了，
+预留高度就不够，多出来的行会从 padding 里漏出去压到下一个区块（Monet 歌词压到翻译行就是这么来的）。
+
+这种情况用 rich-inline helper，把原子 token 标成 `break: 'never'`：
+
+```ts
+import { measureRichInlineStats, prepareRichInline, type RichInlineItem } from '@chenglou/pretext/rich-inline';
+
+const items: RichInlineItem[] = tokens.map(token => ({
+    text: token.text,
+    font: fontSpec,
+    break: token.timed ? 'never' : 'normal',   // 'never' == inline-block 原子盒
+}));
+const { lineCount } = measureRichInlineStats(prepareRichInline(items), maxWidthPx);
+```
+
+实测（Chromium，对照真实 DOM 行数）：token 都放得进列宽时，`break: 'never'` 154 组用例**零误差**，
+而按整串测量错 14 组。参考实现见 `measureLyricLineCount`（`src/components/visualizer/monet/monetLyricsModel.ts`）。
+
+其它容易踩的对齐点：
+
+- **`whiteSpace`**：`prepare()` / `prepareWithSegments()` 默认按 `white-space: normal` 处理。DOM 上写了
+  `whitespace-pre-wrap` 就必须传 `{ whiteSpace: 'pre-wrap' }`，否则连续空格被折叠，行数算少。
+- **`letterSpacing` / `wordBreak`**：CSS 上有 `letter-spacing`、`word-break: keep-all` 时，同样要作为 options 传进去。
+- **零宽字符不是断行控制手段**：U+2060 WORD JOINER、U+FEFF 都不会阻止 pretext 断行（宽度为 0，断点照旧），
+  别指望靠插入零宽字符来表达"不可断"。要原子性就用 rich-inline 的 `break: 'never'`。
+- **超宽 token 仍不精确**：token 自然宽度超过列宽时，Blink 对 `inline-block` 的 shrink-to-fit 行为
+  （`overflow-wrap: break-word` 不参与 min-content 计算，结果是溢出而不是内部换行）rich-inline 没有建模，
+  实测仍有偏差。这种极端情形不要依赖测量值兜底，改用内容自撑高度。
+- **`system-ui` 在 macOS 上不可靠**：pretext README 明确说明 `layout()` 精度对 `system-ui` 不保证，字体栈里
+  优先落到具名字体。
+- **单测要 mock 子路径**：`vi.mock('@chenglou/pretext')` 不会覆盖 `@chenglou/pretext/rich-inline`，
+  两个都要 mock，否则 node 环境下会抛 `Text measurement requires OffscreenCanvas or a DOM canvas context.`。
+
 ### Visualizer Runtime
 
 visualizer 当前行、上一行、下一行、预热窗口已有共享入口：
@@ -239,6 +280,7 @@ const { t } = useTranslation();
 - 是否新增固定颜色却没有从 `Theme` / `DualTheme` 动态派生并检查明暗两套表现？
 - 是否硬编码歌词或字幕字重，而没有使用 `resolveThemeFontWeight` 和模式 fallback？
 - DOM、Canvas、pretext、光栅化的最终字重以及布局缓存键是否一致？
+- pretext 测量的文本结构是否和实际渲染结构一致？渲染成 `inline-block` token 时要用 rich-inline 的 `break: 'never'`，DOM 上是 `whitespace-pre-wrap` 时要传 `{ whiteSpace: 'pre-wrap' }`。
 - 是否创建了相似 helper，却没有搜索已有实现或测试？
 
 ## Validation

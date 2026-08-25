@@ -1,4 +1,5 @@
-import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
+import { clearCache, layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
+import { measureRichInlineStats, prepareRichInline, type RichInlineItem } from '@chenglou/pretext/rich-inline';
 import type { Line } from '../../../types';
 import { buildLineGraphemeTimeline, buildWordGraphemeTimings, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
@@ -49,6 +50,7 @@ export interface MonetMeasuredLineLayout {
     lineHeightPx: number;
     translationLineHeightPx: number;
     isTextClipped: boolean;
+    isTextOverflowingWidth: boolean;
     isTranslationClipped: boolean;
 }
 
@@ -78,13 +80,27 @@ interface MeasureMonetLineLayoutOptions {
 
 const ROOT_FONT_PX = 16;
 const VIEWPORT_WIDTH_FALLBACK_PX = 1280;
-const MONET_ACTIVE_TEXT_LINE_LIMIT = 3;
+// The active lyric is never truncated: its box is content-driven at render time.
+// This cap only bounds the vertical track height the rail reserves for positioning,
+// so a mis-parsed multi-hundred-character line cannot blow up the whole rail geometry.
+// Reserving too few rows makes the active block overlap its neighbours, and large font scales
+// on a narrow column reach high row counts legitimately, so keep the guard well clear of them.
+const MONET_ACTIVE_TEXT_LINE_LIMIT = 14;
 const MONET_INACTIVE_TEXT_LINE_LIMIT = 2;
 const MONET_TRANSLATION_LINE_LIMIT = 2;
 const MONET_MIN_MEASURE_WIDTH_PX = 180;
 const MONET_GRAPHEME_OFFSETS_CACHE_LIMIT = 420;
 const MONET_VERTICAL_METRICS_CACHE_LIMIT = 420;
 const MONET_GLYPH_VERTICAL_SAFETY_PX = 2;
+// Below 2xl nothing scales, so every existing viewport keeps its current layout exactly.
+const MONET_LARGE_SCREEN_MIN_PX = 1536;
+const MONET_LARGE_SCREEN_FULL_PX = 2200;
+const MONET_LARGE_SCREEN_MAX_SCALE = 1.16;
+export const MONET_RAIL_BASE_MAX_WIDTH_PX = 780;
+export const MONET_RAIL_BASE_MAX_HEIGHT_PX = 520;
+export const MONET_ROW_BASE_MAX_WIDTH_PX = 1520;
+export const MONET_PORTRAIT_BASE_MAX_PX = 430;
+export const MONET_PORTRAIT_INNER_BASE_MAX_PX = 380;
 
 const monetGraphemeOffsetsCache = new Map<string, number[]>();
 const monetVerticalMetricsCache = new Map<string, number>();
@@ -103,6 +119,31 @@ export {
     type WordColorRange as MonetWordColorRange,
 } from '../wordColoring';
 
+/**
+ * Every Monet clamp tops out between a ~1200px and ~1600px viewport, so anything wider leaves the
+ * whole composition stranded as a small island in the middle of the screen. Past 2xl the layout
+ * scales up as one piece instead of sitting at its cap.
+ *
+ * Font sizes and the lyric column share this factor, so the column-width to font-size ratio — and
+ * therefore how much text fits on a line — stays constant. Scaling up must not change wrapping.
+ */
+export const resolveMonetLargeScreenScale = (containerWidthPx?: number): number => {
+    // Prefer the renderer's own width: an embedded preview on a large display must not scale itself
+    // up as if it owned the screen. Falls back to the viewport before the first measurement lands.
+    const referenceWidth = containerWidthPx && containerWidthPx > 0
+        ? containerWidthPx
+        : typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_WIDTH_FALLBACK_PX;
+    if (referenceWidth <= MONET_LARGE_SCREEN_MIN_PX) {
+        return 1;
+    }
+
+    const progress = Math.min(
+        1,
+        (referenceWidth - MONET_LARGE_SCREEN_MIN_PX) / (MONET_LARGE_SCREEN_FULL_PX - MONET_LARGE_SCREEN_MIN_PX),
+    );
+    return 1 + (MONET_LARGE_SCREEN_MAX_SCALE - 1) * progress;
+};
+
 export const resolveClampFontPx = (minRem: number, preferredVw: number, maxRem: number): number => {
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_WIDTH_FALLBACK_PX;
     return Math.min(maxRem * ROOT_FONT_PX, Math.max(minRem * ROOT_FONT_PX, viewportWidth * (preferredVw / 100)));
@@ -118,8 +159,33 @@ export const splitMonetGraphemes = (text: string): string[] => {
     return Array.from(text);
 };
 
+/**
+ * Measures the wrapped line count and widest line the rail will actually render for a lyric line.
+ * Timed words render as `inline-block` spans (see MonetWordSweep), so the browser may only break
+ * between tokens, never inside one. Measuring `fullText` as a plain string breaks anywhere and
+ * disagrees with the DOM — most visibly on CJK lyrics, whose phrase tokens carry no spaces.
+ * `break: 'never'` reproduces those atomic boxes, so the reserved height matches what is painted.
+ */
+const measureLyricLineStats = (line: Line, fontSpec: string, maxWidthPx: number): { lineCount: number; maxLineWidthPx: number; } => {
+    const tokens = buildMonetDisplayTokens(line);
+    if (tokens.length === 0) {
+        return { lineCount: 1, maxLineWidthPx: 0 };
+    }
+
+    const items: RichInlineItem[] = tokens.map(token => ({
+        text: token.text,
+        font: fontSpec,
+        break: token.timed ? 'never' : 'normal',
+    }));
+    const { lineCount, maxLineWidth } = measureRichInlineStats(
+        prepareRichInline(items),
+        Math.max(maxWidthPx, MONET_MIN_MEASURE_WIDTH_PX),
+    );
+    return { lineCount: Math.max(lineCount, 1), maxLineWidthPx: maxLineWidth };
+};
+
 const measureTextLineCount = (text: string, fontSpec: string, maxWidthPx: number, lineHeightPx: number): number => {
-    const prepared = prepareWithSegments(text || ' ', fontSpec);
+    const prepared = prepareWithSegments(text || ' ', fontSpec, { whiteSpace: 'pre-wrap' });
     const layout = layoutWithLines(prepared, Math.max(maxWidthPx, MONET_MIN_MEASURE_WIDTH_PX), lineHeightPx);
     return Math.max(layout.lines.length, 1);
 };
@@ -166,6 +232,19 @@ const measureMonetLineHeight = (text: string, fontSpec: string, fontPx: number, 
     }
     monetVerticalMetricsCache.set(cacheKey, measuredLineHeightPx);
     return measuredLineHeightPx;
+};
+
+/**
+ * Drops every cached text measurement.
+ *
+ * Metrics measured while a web font was still loading came from a fallback face, and the cache keys
+ * (the font shorthand string) are identical before and after the load, so they never expire on their
+ * own. Call this when `useFontsEpoch` advances.
+ */
+export const clearMonetMeasurementCaches = () => {
+    monetVerticalMetricsCache.clear();
+    monetGraphemeOffsetsCache.clear();
+    clearCache();
 };
 
 const measureTextWidthAtPx = (text: string, fontPx: number, fontSpec: string): number => {
@@ -428,7 +507,7 @@ export const measureMonetLineLayout = ({
     const textPaddingBottomPx = Math.max(fontPx * 0.34, 14);
     const translationPaddingTopPx = Math.max(translationFontPx * 0.45, 7);
     const translationPaddingBottomPx = Math.max(translationFontPx * 0.18, 5);
-    const textLineCount = measureTextLineCount(line.fullText, fontSpec, maxWidthPx, lineHeightPx);
+    const { lineCount: textLineCount, maxLineWidthPx } = measureLyricLineStats(line, fontSpec, maxWidthPx);
     const textLimit = status === 'active' ? MONET_ACTIVE_TEXT_LINE_LIMIT : MONET_INACTIVE_TEXT_LINE_LIMIT;
     const visibleTextLineCount = Math.min(textLineCount, textLimit);
     const hasActiveTranslation = showSubtitleTranslation && status === 'active' && Boolean(line.translation?.trim());
@@ -459,6 +538,9 @@ export const measureMonetLineLayout = ({
         lineHeightPx,
         translationLineHeightPx,
         isTextClipped: textLineCount > visibleTextLineCount,
+        // A token wider than the column (a long compound word) overruns the text box and would be
+        // sliced mid-glyph by `overflow: hidden`. The rail fades that edge out instead.
+        isTextOverflowingWidth: maxLineWidthPx > maxWidthPx,
         isTranslationClipped: rawTranslationLineCount > translationLineCount,
     };
 };
