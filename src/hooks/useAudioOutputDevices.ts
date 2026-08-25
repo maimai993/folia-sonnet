@@ -72,17 +72,16 @@ const writeSelectedDeviceLabel = (deviceId: string, label: string) => {
  * Device list state for the audio output picker.
  *
  * `enumerateDevices()` is the only web API that lists audio outputs, but Chromium enumerates video
- * inputs in the same call and spins up the video capture service to do it, historically without ever
- * releasing it (crbug 377749384). Electron enables `ReleaseVideoSourceProviderIfNotInUse` on Windows
- * and macOS so the service shuts down on an idle timer — but that timer only fires while nothing is
- * subscribed to device changes, and it does not exist in browsers or on Linux. The same call also
- * opens the microphone to reveal device labels, which registers this app in the OS "recently used
- * microphone" lists.
+ * inputs in the same call and spins up the video capture service to do it, without releasing it
+ * afterwards (crbug 377749384). Electron enables `ReleaseVideoSourceProviderIfNotInUse` on Windows
+ * and macOS so the service can shut down on an idle timer; browsers and Linux have no such escape.
+ * The same call also opens the microphone to reveal device labels, which registers this app in the
+ * OS "recently used microphone" lists.
  *
  * Two rules follow, and both are load-bearing:
  *   1. never enumerate on mount — only when the user actually reaches for the device picker;
- *   2. never register a `devicechange` listener, which would pin the capture service for the
- *      lifetime of the process. Users get the refresh button instead of hot-plug detection.
+ *   2. subscribe to `devicechange` only for as long as the picker is on screen, and never before the
+ *      first enumeration — see the subscription effect below for why both halves matter.
  */
 export const useAudioOutputDevices = (selectedDeviceId: string) => {
     const isSupported = isAudioOutputSelectionSupported();
@@ -177,6 +176,32 @@ export const useAudioOutputDevices = (selectedDeviceId: string) => {
 
         setSelectedDeviceLabel(readSelectedDeviceLabel(selectedDeviceId));
     }, [devices, selectedDeviceId]);
+
+    // Chromium only re-evaluates whether the video capture service is still needed when a
+    // device-change subscription goes away. Enumerating alone never schedules that check, so the
+    // service that `enumerateDevices()` started would live until the process exits even with
+    // `ReleaseVideoSourceProviderIfNotInUse` on (electron/main.cjs). Subscribing while the picker is
+    // on screen and unsubscribing on unmount gives that idle timer the edge it waits for, and pays
+    // for itself with hot-plug refresh in the meantime.
+    //
+    // The `hasLoaded` guard is the load-bearing half: subscribing also starts device monitoring, so
+    // subscribing before the user has asked for the list would drag the cost this hook avoids on
+    // mount back in through another door.
+    useEffect(() => {
+        if (!isSupported || !hasLoaded) {
+            return;
+        }
+
+        const handleDeviceChange = () => {
+            cachedDevices = null;
+            void load();
+        };
+
+        navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+        return () => {
+            navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+        };
+    }, [hasLoaded, isSupported, load]);
 
     return {
         devices,

@@ -93,8 +93,13 @@ if (process.platform === 'linux') {
 // enumerateDevices() -- which the playback settings panel must do to list audio outputs -- and does
 // not release it afterwards (crbug 377749384), leaving a utility process and an OS privacy
 // indicator behind. This feature adds an idle timer that shuts the video source provider down about
-// a minute after the last use. The timer only fires while nothing keeps the provider subscribed, so
-// the renderer must never register a `devicechange` listener (see src/hooks/useAudioOutputDevices.ts).
+// a minute after the last use.
+//
+// The flag alone is inert: Chromium only re-checks whether the provider is still needed when a
+// device-change subscription is dropped, and enumerating never schedules that check. The renderer
+// therefore subscribes to `devicechange` while the device picker is open and unsubscribes when it
+// closes, purely to trigger the timer -- see src/hooks/useAudioOutputDevices.ts. Removing that
+// subscription re-pins the capture service for the lifetime of the process.
 function appendChromiumFeature(featureName) {
   // base::CommandLine keeps one value per switch, so a plain appendSwitch would drop features the
   // user passed on the command line, or any appended earlier here.
