@@ -4,6 +4,7 @@ import type { Theme, AudioBands, Line } from '../../../types';
 import { resolveThemeFontWeight } from '../../../utils/fontStacks';
 import type { GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
+import { useFontsEpoch } from '../../../hooks/useFontsEpoch';
 import { colorWithAlpha, mixColors } from '../colorMix';
 import {
     buildWordColorRangesFromMatchers,
@@ -16,6 +17,7 @@ import {
     MONET_RAIL_BASE_MAX_HEIGHT_PX,
     MONET_RAIL_BASE_MAX_WIDTH_PX,
     buildMonetDisplayTokens,
+    clearMonetMeasurementCaches,
     measureMonetGraphemeOffsets,
     measureMonetLineLayout,
     resolveMonetSweepEdgeSoftness,
@@ -531,9 +533,11 @@ const MonetWordSweep: React.FC<{
 }) => {
         const isLineActive = lineStatus === 'active';
         const canRenderGlow = lineStatus === 'active' || lineStatus === 'passed';
+        const fontsEpoch = useFontsEpoch();
         const graphemeOffsets = useMemo(
             () => measureMonetGraphemeOffsets(text, fontPx, fontSpec),
-            [text, fontPx, fontSpec],
+            // eslint-disable-next-line react-hooks/exhaustive-deps -- fontsEpoch re-measures once the real face loads
+            [text, fontPx, fontSpec, fontsEpoch],
         );
 
         const wordStatus = useTransform(currentTime, latest => (
@@ -895,6 +899,8 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     const touchDirectionRef = useRef(0);
     const [manualScrollAnchorIndex, setManualScrollAnchorIndex] = useState<number | null>(null);
     const railSize = useMonetRailSize(railRef);
+    const fontsEpoch = useFontsEpoch();
+    const handledFontsEpochRef = useRef(0);
     const glowBufferPx = Math.round(lyricFontPx * 1.2);
     const vGlowBufferPx = Math.round(lyricFontPx * 1.2);
     // Grows with the same factor as the font, so the column-to-font ratio — and the wrapping — holds.
@@ -916,22 +922,33 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
     const isManualScrolling = manualScrollAnchorIndex !== null;
 
     const positionedEntries = useMemo(
-        () => buildPositionedEntries(
-            visibleEntries,
-            railSize,
-            theme,
-            lyricFontPx,
-            inactiveFontPx,
-            translationFontPx,
-            fontStack,
-            translationFontStack,
-            lyricFontWeight,
-            translationFontWeight,
-            glowBufferPx,
-            showSubtitleTranslation,
-            layoutCacheRef.current,
-        ),
-        [visibleEntries, railSize, theme, lyricFontPx, inactiveFontPx, translationFontPx, fontStack, translationFontStack, lyricFontWeight, translationFontWeight, glowBufferPx, showSubtitleTranslation],
+        () => {
+            // A line measured against a fallback face wraps differently from what is painted, which
+            // under-reserves its height and drops the translation onto the next lyric. Invalidate
+            // here rather than in an effect, so the recompute below already sees fresh metrics.
+            if (handledFontsEpochRef.current !== fontsEpoch) {
+                handledFontsEpochRef.current = fontsEpoch;
+                clearMonetMeasurementCaches();
+                layoutCacheRef.current.clear();
+            }
+
+            return buildPositionedEntries(
+                visibleEntries,
+                railSize,
+                theme,
+                lyricFontPx,
+                inactiveFontPx,
+                translationFontPx,
+                fontStack,
+                translationFontStack,
+                lyricFontWeight,
+                translationFontWeight,
+                glowBufferPx,
+                showSubtitleTranslation,
+                layoutCacheRef.current,
+            );
+        },
+        [visibleEntries, railSize, theme, lyricFontPx, inactiveFontPx, translationFontPx, fontStack, translationFontStack, lyricFontWeight, translationFontWeight, glowBufferPx, showSubtitleTranslation, fontsEpoch],
     );
     const wordColorMatchers = useMemo(
         () => prepareWordColorMatchers(theme.wordColors, keywordColoringEnabled),

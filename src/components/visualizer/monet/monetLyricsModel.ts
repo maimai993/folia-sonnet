@@ -1,4 +1,4 @@
-import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
+import { clearCache, layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
 import { measureRichInlineStats, prepareRichInline, type RichInlineItem } from '@chenglou/pretext/rich-inline';
 import type { Line } from '../../../types';
 import { buildLineGraphemeTimeline, buildWordGraphemeTimings, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
@@ -228,6 +228,19 @@ const measureMonetLineHeight = (text: string, fontSpec: string, fontPx: number, 
     }
     monetVerticalMetricsCache.set(cacheKey, measuredLineHeightPx);
     return measuredLineHeightPx;
+};
+
+/**
+ * Drops every cached text measurement.
+ *
+ * Metrics measured while a web font was still loading came from a fallback face, and the cache keys
+ * (the font shorthand string) are identical before and after the load, so they never expire on their
+ * own. Call this when `useFontsEpoch` advances.
+ */
+export const clearMonetMeasurementCaches = () => {
+    monetVerticalMetricsCache.clear();
+    monetGraphemeOffsetsCache.clear();
+    clearCache();
 };
 
 const measureTextWidthAtPx = (text: string, fontPx: number, fontSpec: string): number => {
