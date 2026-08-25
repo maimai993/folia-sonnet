@@ -3207,7 +3207,10 @@ function fitMainWindowBoundsToExportSize(exportSize) {
   let cssHeight = Math.max(1, Math.round(exportSize.height / exportDpr));
   mainWindow.setContentSize(cssWidth, cssHeight, false);
 
-  const workArea = screen.getPrimaryDisplay().workArea;
+  // Keep the window on whichever display it already lives on instead of forcing
+  // it to the primary display. getDisplayMatching resolves the display containing
+  // the window's current bounds, so the export stays put (no surprise jump).
+  const workArea = screen.getDisplayMatching(mainWindow.getBounds()).workArea;
   // Center the window and snap its position to a whole physical pixel. Under a non-100% DPI
   // the CSS position times dpr can land on a half-pixel, and Chromium's crop-and-scale
   // capture derives its crop rect from the window's physical bounds; a half-pixel offset

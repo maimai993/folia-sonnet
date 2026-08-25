@@ -143,6 +143,10 @@ export const createCroppedVideoStream = (
             cancelAnimationFrame(animFrameId);
             animFrameId = null;
         }
+        // Stop the original source tracks (e.g. desktop/window capture) so they
+        // aren't left active after export. stopMediaStream on the cropped canvas
+        // stream cannot reach these tracks — they only live on sourceStream.
+        stopMediaStream(sourceStream);
         video.pause();
         video.srcObject = null;
         video.remove();
