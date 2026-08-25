@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, useMotionValueEvent, useDragControls, useMotionValue } from 'framer-motion';
 import { RotateCcw } from 'lucide-react';
+import { useElementWidth } from '../../../hooks/useElementWidth';
 import { DEFAULT_MONET_TUNING } from '../../../types';
 import { colorWithAlpha } from '../colorMix';
 import { type VisualizerSharedProps } from '../definition';
@@ -80,6 +81,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
 
     const dragControls = useDragControls();
     const isDraggingRef = useRef(false);
+    const shellRef = useRef<HTMLDivElement | null>(null);
 
     const [introKey, setIntroKey] = useState(0);
     const lastTimeRef = useRef(0);
@@ -129,6 +131,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         upcomingLine,
     ]);
 
+    const shellWidth = useElementWidth(shellRef);
     const lyricFontStack = useMemo(() => resolveThemeFontStack(theme), [theme]);
     const translationFontStack = useMemo(
         () => resolveThemeTranslationFontStack(subtitleTheme ?? theme),
@@ -136,7 +139,9 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
     );
     const fontScale = monetTuning.fontScale;
     // Scales the whole composition up on very wide displays; 1 below 2xl, so nothing else changes.
-    const largeScreenScale = resolveMonetLargeScreenScale();
+    // Driven by the observed shell width so a resize re-lays the scene out instead of keeping the
+    // width read at mount, and so an embedded preview scales by its own box, not by the display.
+    const largeScreenScale = resolveMonetLargeScreenScale(shellWidth);
     const lyricFontPx = resolveClampFontPx(
         1.34,
         2.75,
@@ -178,7 +183,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                 </motion.div>
             )}
 
-            <div className="relative z-10 flex h-full w-full items-center justify-center overflow-hidden">
+            <div ref={shellRef} className="relative z-10 flex h-full w-full items-center justify-center overflow-hidden">
                 <div
                     className="flex h-full w-full flex-row items-center overflow-hidden"
                     style={{ maxWidth: `${rowMaxWidthPx}px` }}

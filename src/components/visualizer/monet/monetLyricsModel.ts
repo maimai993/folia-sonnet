@@ -127,15 +127,19 @@ export {
  * Font sizes and the lyric column share this factor, so the column-width to font-size ratio — and
  * therefore how much text fits on a line — stays constant. Scaling up must not change wrapping.
  */
-export const resolveMonetLargeScreenScale = (): number => {
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_WIDTH_FALLBACK_PX;
-    if (viewportWidth <= MONET_LARGE_SCREEN_MIN_PX) {
+export const resolveMonetLargeScreenScale = (containerWidthPx?: number): number => {
+    // Prefer the renderer's own width: an embedded preview on a large display must not scale itself
+    // up as if it owned the screen. Falls back to the viewport before the first measurement lands.
+    const referenceWidth = containerWidthPx && containerWidthPx > 0
+        ? containerWidthPx
+        : typeof window !== 'undefined' ? window.innerWidth : VIEWPORT_WIDTH_FALLBACK_PX;
+    if (referenceWidth <= MONET_LARGE_SCREEN_MIN_PX) {
         return 1;
     }
 
     const progress = Math.min(
         1,
-        (viewportWidth - MONET_LARGE_SCREEN_MIN_PX) / (MONET_LARGE_SCREEN_FULL_PX - MONET_LARGE_SCREEN_MIN_PX),
+        (referenceWidth - MONET_LARGE_SCREEN_MIN_PX) / (MONET_LARGE_SCREEN_FULL_PX - MONET_LARGE_SCREEN_MIN_PX),
     );
     return 1 + (MONET_LARGE_SCREEN_MAX_SCALE - 1) * progress;
 };

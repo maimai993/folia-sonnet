@@ -436,12 +436,13 @@ const MonetTimedTokenSpan: React.FC<{
     accentColor: string;
     fontPx: number;
     fontStack: string;
+    fontsEpoch: number;
     wordColorMatchers: WordColorMatcher[];
     isChorus?: boolean;
     chorusAccentColor?: string;
     audioPower?: MotionValue<number>;
     renderStaticPassed?: boolean;
-}> = ({ entry, currentTime, accentColor, fontPx, fontStack, wordColorMatchers, isChorus, chorusAccentColor, audioPower, renderStaticPassed = false }) => {
+}> = ({ entry, currentTime, accentColor, fontPx, fontStack, fontsEpoch, wordColorMatchers, isChorus, chorusAccentColor, audioPower, renderStaticPassed = false }) => {
     const lineRenderEndTime = useMemo(() => getLineRenderEndTime(entry.line), [entry.line]);
     const tokens = useMemo(() => buildMonetDisplayTokens(entry.line), [entry.line]);
     const wordColorRanges = useMemo(
@@ -489,6 +490,7 @@ const MonetTimedTokenSpan: React.FC<{
                         baseColor={entry.tone.baseColor}
                         fontPx={fontPx}
                         fontSpec={fontSpec}
+                        fontsEpoch={fontsEpoch}
                         isChorus={isChorus}
                         audioPower={audioPower}
                     />
@@ -514,6 +516,8 @@ const MonetWordSweep: React.FC<{
     baseColor: string;
     fontPx: number;
     fontSpec: string;
+    /** Bumped when web fonts load; measured offsets are stale until then. */
+    fontsEpoch: number;
     isChorus?: boolean;
     audioPower?: MotionValue<number>;
 }> = ({
@@ -528,12 +532,12 @@ const MonetWordSweep: React.FC<{
     baseColor,
     fontPx,
     fontSpec,
+    fontsEpoch,
     isChorus,
     audioPower,
 }) => {
         const isLineActive = lineStatus === 'active';
         const canRenderGlow = lineStatus === 'active' || lineStatus === 'passed';
-        const fontsEpoch = useFontsEpoch();
         const graphemeOffsets = useMemo(
             () => measureMonetGraphemeOffsets(text, fontPx, fontSpec),
             // eslint-disable-next-line react-hooks/exhaustive-deps -- fontsEpoch re-measures once the real face loads
@@ -701,6 +705,7 @@ const MonetRailLine: React.FC<{
     translationFontWeight: number;
     glowBufferPx: number;
     vGlowBufferPx: number;
+    fontsEpoch: number;
     wordColorMatchers: WordColorMatcher[];
     showSubtitleTranslation: boolean;
     audioPower?: MotionValue<number>;
@@ -708,7 +713,7 @@ const MonetRailLine: React.FC<{
     canSeek?: boolean;
     disableEntryMotion?: boolean;
     renderStaticPassed?: boolean;
-}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, translationFontStack, translationFontWeight, glowBufferPx, vGlowBufferPx, wordColorMatchers, showSubtitleTranslation, audioPower, onLineSeek, canSeek = false, disableEntryMotion = false, renderStaticPassed = false }) => {
+}> = ({ entry, currentTime, theme, lyricFontPx, translationFontPx, fontStack, translationFontStack, translationFontWeight, glowBufferPx, vGlowBufferPx, fontsEpoch, wordColorMatchers, showSubtitleTranslation, audioPower, onLineSeek, canSeek = false, disableEntryMotion = false, renderStaticPassed = false }) => {
     const initialOffset = entry.offset >= 0 ? 34 : -34;
     const exitOffset = entry.status === 'passed' || entry.offset < 0 ? -38 : 38;
     // The active lyric must never be truncated, so its box is sized by its own wrapped
@@ -825,6 +830,7 @@ const MonetRailLine: React.FC<{
                     accentColor={colorWithAlpha(theme.primaryColor, 0.98)}
                     fontPx={lyricFontPx}
                     fontStack={fontStack}
+                    fontsEpoch={fontsEpoch}
                     wordColorMatchers={wordColorMatchers}
                     isChorus={entry.line.isChorus}
                     chorusAccentColor={theme.accentColor}
@@ -1133,6 +1139,7 @@ const MonetLyricsRail: React.FC<MonetLyricsRailProps> = ({
                             translationFontWeight={translationFontWeight}
                             glowBufferPx={glowBufferPx}
                             vGlowBufferPx={vGlowBufferPx}
+                            fontsEpoch={fontsEpoch}
                             wordColorMatchers={wordColorMatchers}
                             showSubtitleTranslation={showSubtitleTranslation}
                             audioPower={audioPower}
