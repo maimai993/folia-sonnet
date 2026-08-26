@@ -6,6 +6,8 @@ import type { TemperaLayerImage } from '../../../types';
 import ThemedDialog from '../../shared/ThemedDialog';
 import TemperaImagePlacementEditor from './TemperaImagePlacementEditor';
 import { TemperaRangeControl } from './TemperaSettingsControls';
+import type { TemperaDialogTokens } from './temperaDialogTokens';
+import { temperaDialogTextVars, temperaDialogTokens } from './temperaDialogTokens';
 
 // src/components/visualizer/tempera/TemperaImageLayerDialog.tsx
 // The one place canvas images are managed: upload, preview, per-image tendency and size, and
@@ -38,18 +40,19 @@ interface TemperaImageLayerDialogProps {
 interface ChipProps {
     label: string;
     active: boolean;
+    tokens: TemperaDialogTokens;
     onClick: () => void;
 }
 
-const Chip: React.FC<ChipProps> = ({ label, active, onClick }) => (
+const Chip: React.FC<ChipProps> = ({ label, active, tokens, onClick }) => (
     <button
         type="button"
         onClick={onClick}
         aria-pressed={active}
         className="rounded-full border px-3 py-1.5 text-xs transition-colors"
         style={{
-            borderColor: active ? 'var(--text-primary)' : 'rgba(255,255,255,0.15)',
-            color: 'var(--text-primary)',
+            borderColor: active ? tokens.textPrimary : tokens.line,
+            color: tokens.textPrimary,
             opacity: active ? 1 : 0.55,
         }}
     >
@@ -78,6 +81,7 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
     const inputRef = useRef<HTMLInputElement>(null);
     const [dragging, setDragging] = useState(false);
     const full = images.length >= maxImages;
+    const tokens = temperaDialogTokens(isDaylight);
 
     const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
         event.preventDefault();
@@ -103,8 +107,8 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
                     type="button"
                     disabled={images.length === 0}
                     onClick={onClearAll}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-1.5 text-xs transition-colors hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent"
-                    style={{ color: 'var(--text-primary)' }}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-35 disabled:hover:bg-transparent ${tokens.hoverSurfaceClass}`}
+                    style={{ color: tokens.textPrimary, borderColor: tokens.line }}
                 >
                     <Trash2 size={13} />
                     {t('options.temperaClearLayerImages')}
@@ -114,17 +118,20 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
                 <button
                     type="button"
                     onClick={onClose}
-                    className="rounded-full border border-white/15 px-5 py-2 text-sm transition-colors hover:bg-white/10"
-                    style={{ color: 'var(--text-primary)' }}
+                    className={`rounded-full border px-5 py-2 text-sm transition-colors ${tokens.hoverSurfaceClass}`}
+                    style={{ color: tokens.textPrimary, borderColor: tokens.line }}
                 >
                     {t('options.temperaLayerImageSave') || '保存'}
                 </button>
             )}
         >
-            <div className="max-h-[62vh] space-y-5 overflow-y-auto pr-1">
-                <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="max-h-[62vh] space-y-5 overflow-y-auto pr-1" style={temperaDialogTextVars(tokens)}>
+                <div
+                    className="space-y-3 rounded-2xl border p-4"
+                    style={{ borderColor: tokens.line, backgroundColor: tokens.surface }}
+                >
                     <div className="space-y-2">
-                        <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                        <span className="text-sm" style={{ color: tokens.textPrimary }}>
                             {t('options.temperaLayerImageDepth') || '图层位置'}
                         </span>
                         <div className="flex flex-wrap gap-2">
@@ -136,6 +143,7 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
                                     key={value}
                                     label={label}
                                     active={depth === value}
+                                    tokens={tokens}
                                     onClick={() => onDepthChange(value)}
                                 />
                             ))}
@@ -169,28 +177,28 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
                     onDrop={handleDrop}
                     className="flex flex-col items-center gap-2 rounded-2xl border border-dashed p-5 text-center transition-colors"
                     style={{
-                        borderColor: dragging ? 'var(--text-primary)' : 'rgba(255,255,255,0.18)',
-                        backgroundColor: dragging ? 'rgba(255,255,255,0.06)' : 'transparent',
+                        borderColor: dragging ? tokens.textPrimary : tokens.lineStrong,
+                        backgroundColor: dragging ? tokens.surface : 'transparent',
                     }}
                 >
-                    <ImagePlus size={20} style={{ color: 'var(--text-secondary)' }} className="opacity-60" />
+                    <ImagePlus size={20} style={{ color: tokens.textSecondary }} className="opacity-60" />
                     <button
                         type="button"
                         disabled={full}
                         onClick={() => inputRef.current?.click()}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-xs transition-colors hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent"
-                        style={{ color: 'var(--text-primary)' }}
+                        className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs transition-colors disabled:opacity-40 disabled:hover:bg-transparent ${tokens.hoverSurfaceClass}`}
+                        style={{ color: tokens.textPrimary, borderColor: tokens.line }}
                     >
                         <Upload size={14} />
                         {t('options.temperaAddLayerImage') || '添加图片'}
                     </button>
-                    <span className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                    <span className="text-xs opacity-50" style={{ color: tokens.textSecondary }}>
                         {t('options.temperaLayerImageDropHint') || '也可以把文件拖到这里'} · {images.length} / {maxImages}
                     </span>
                 </div>
 
                 {images.length === 0 ? (
-                    <p className="py-6 text-center text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                    <p className="py-6 text-center text-xs opacity-50" style={{ color: tokens.textSecondary }}>
                         {t('options.temperaLayerImageEmpty') || '还没有图片。加入立绘、logo 或纹理后，每个分镜会随机取用。'}
                     </p>
                 ) : (
@@ -201,6 +209,7 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
                                 image={image}
                                 thumbnail={thumbnails.get(image.id)}
                                 t={t}
+                                tokens={tokens}
                                 rangeInputClass={rangeInputClass}
                                 onPatch={onPatch}
                                 onRemove={onRemove}
