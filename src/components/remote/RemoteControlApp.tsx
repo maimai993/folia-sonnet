@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { ChevronLeft, Heart, Lock, LockOpen, Pause, Pin, PinOff, Play, SkipBack, SkipForward, Video, MirrorRectangular, X, Check, Sliders, Palette } from 'lucide-react';
+import { ChevronLeft, Heart, Lock, LockOpen, Pause, Pin, PinOff, Play, Repeat, Repeat1, RepeatOff, SkipBack, SkipForward, Video, MirrorRectangular, X, Check, Sliders, Palette } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayerState } from '../../types';
 import RemoteVideoExportPanel from './RemoteVideoExportPanel';
@@ -70,6 +70,7 @@ const emptySnapshot: RemoteControlSnapshot = {
     currentTime: 0,
     duration: 0,
     playerState: PlayerState.IDLE,
+    loopMode: 'off',
     canGoPrevious: false,
     canGoNext: false,
     controlsDisabled: true,
@@ -650,6 +651,18 @@ const RemoteControlApp: React.FC = () => {
                                                                     </button>
                                                                 </div>
                                                                 <div className="flex items-center gap-1.5">
+                                                                    <button
+                                                                        type="button"
+                                                                        title={snapshot.loopMode === 'off' ? t('remote.loopOff') : snapshot.loopMode === 'one' ? t('remote.loopOne') : t('remote.loopAll')}
+                                                                        disabled={primaryDisabled}
+                                                                        onClick={() => sendCommand({ type: 'cycle-loop-mode' })}
+                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${snapshot.loopMode !== 'off'
+                                                                            ? (isDaylight ? 'bg-zinc-900 text-white hover:bg-zinc-800' : 'bg-white text-zinc-950 hover:bg-white/90')
+                                                                            : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
+                                                                            }`}
+                                                                    >
+                                                                        {snapshot.loopMode === 'off' ? <RepeatOff size={16} strokeWidth={2} /> : snapshot.loopMode === 'one' ? <Repeat1 size={16} strokeWidth={2} /> : <Repeat size={16} strokeWidth={2} />}
+                                                                    </button>
                                                                     <span title={likeUnavailableReason || (snapshot.isLiked ? t('remote.unlike') : t('remote.like'))}>
                                                                         <button
                                                                             type="button"

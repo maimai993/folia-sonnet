@@ -1567,6 +1567,7 @@ export default function App() {
         lyricTimelineOffsetMs: effectiveLyricTimelineOffsetMs,
         onRemoteExportCommand: handleExportCommand,
         onExternalPlayRequest: handleStageExternalPlayRequest,
+        onRemoteCycleLoopMode: handleToggleLoopMode,
         isLiked: (() => {
             if (!currentSong) return false;
             if (isLocalPlaybackSong(currentSong)) {

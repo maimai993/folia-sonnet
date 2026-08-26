@@ -78,6 +78,7 @@ declare global {
     | { type: 'previous' }
     | { type: 'next' }
     | { type: 'seek'; time: number }
+    | { type: 'cycle-loop-mode' }
     | { type: 'resize-main-window'; width: number; height: number }
     | { type: 'set-main-window-border-visible'; visible: boolean }
     | { type: 'set-main-window-click-through'; enabled: boolean }
@@ -139,6 +140,7 @@ declare global {
     currentTime: number;
     duration: number;
     playerState: string;
+    loopMode: 'off' | 'all' | 'one';
     canGoPrevious: boolean;
     canGoNext: boolean;
     controlsDisabled: boolean;

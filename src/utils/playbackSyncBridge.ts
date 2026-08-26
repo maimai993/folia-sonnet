@@ -22,6 +22,7 @@ export interface PlaybackSyncBridgeModel {
     durationSec: number;
     stageDurationSec: number;
     playerState: PlayerState;
+    loopMode: 'off' | 'all' | 'one';
     canGoPrevious: boolean;
     canGoNext: boolean;
     controlsDisabled: boolean;
@@ -170,6 +171,7 @@ export const buildPlaybackSyncBridgeModel = ({
         durationSec: safeDurationSec,
         stageDurationSec: Math.max(0, clampFiniteNumber(stageDurationSec ?? safeDurationSec)),
         playerState,
+        loopMode: effectiveLoopMode,
         canGoPrevious,
         canGoNext,
         controlsDisabled: controlsDisabled || !hasTrack,
@@ -200,6 +202,7 @@ export const buildRemoteControlSnapshotFromPlaybackSyncBridge = (
     currentTime: model.currentTimeSec,
     duration: model.durationSec,
     playerState: model.playerState,
+    loopMode: model.loopMode,
     canGoPrevious: model.canGoPrevious,
     canGoNext: model.canGoNext,
     controlsDisabled: model.controlsDisabled,

@@ -69,6 +69,7 @@ describe('playbackSyncBridge', () => {
             artist: 'Artist 2',
             currentTime: 42,
             duration: 180,
+            loopMode: 'off',
             canGoPrevious: true,
             canGoNext: true,
             playerChromeVisibilityMode: 'auto-hide',

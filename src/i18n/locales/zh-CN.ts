@@ -2122,6 +2122,9 @@ export default {
     "pause": "暂停",
     "transparentControls": "透明控制",
     "videoExport": "视频导出",
+    "loopOff": "关闭循环",
+    "loopAll": "列表循环",
+    "loopOne": "单曲循环",
   },
   "aiHelp": {
     "openButton": "遇到问题？",
