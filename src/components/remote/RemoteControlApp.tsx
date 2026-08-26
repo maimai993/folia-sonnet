@@ -245,6 +245,27 @@ const RemoteControlApp: React.FC = () => {
     const baseColor = isDaylight ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.35)';
     const activeColor = isDaylight ? '#1c1917' : '#ffffff';
 
+    // Ghost icon buttons: no resting chip, background only on hover. The filled
+    // play button stays the single anchor so the row reads as one primary action
+    // plus quiet satellites instead of seven competing pills.
+    const transportButtonClass = `flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-30 ${isDaylight
+        ? 'text-black/70 hover:bg-black/[0.06] hover:text-black'
+        : 'text-white/75 hover:bg-white/10 hover:text-white'
+        }`;
+    const secondaryButtonBase = 'flex h-7 w-7 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-30';
+    // Every button in the row shares one hover response: the same chip, and text
+    // arriving at full contrast. Only the resting level encodes state, so an "on"
+    // button rests just below full to keep the hover headroom the idle ones have.
+    const secondaryIdleClass = isDaylight
+        ? 'text-black/40 hover:bg-black/[0.06] hover:text-black'
+        : 'text-white/45 hover:bg-white/10 hover:text-white';
+    const secondaryActiveClass = isDaylight
+        ? 'text-black/85 hover:bg-black/[0.06] hover:text-black'
+        : 'text-white/90 hover:bg-white/10 hover:text-white';
+    const secondaryAlertClass = isDaylight
+        ? 'text-red-600/85 hover:bg-black/[0.06] hover:text-red-600'
+        : 'text-red-400/90 hover:bg-white/10 hover:text-red-400';
+
     const lastStatusRef = React.useRef(exportState.status);
     useEffect(() => {
         if (exportState.status !== 'idle' && lastStatusRef.current === 'idle') {
@@ -631,7 +652,8 @@ const RemoteControlApp: React.FC = () => {
 
                                                             {/* Playback Actions */}
                                                             <div className="flex w-full items-center justify-between">
-                                                                <div className="flex items-center gap-1.5">
+                                                                {/* Playback domain: transport with loop mode trailing it */}
+                                                                <div className="flex items-center gap-0.5">
                                                                     <button
                                                                         type="button"
                                                                         title={t('remote.previous')}
@@ -639,19 +661,16 @@ const RemoteControlApp: React.FC = () => {
                                                                         onMouseEnter={() => setHoverNavSide('prev')}
                                                                         onMouseLeave={() => setHoverNavSide(null)}
                                                                         onClick={() => sendCommand({ type: 'previous' })}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${isDaylight
-                                                                            ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
-                                                                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                                                                            }`}
+                                                                        className={transportButtonClass}
                                                                     >
-                                                                        <SkipBack size={16} strokeWidth={2} />
+                                                                        <SkipBack size={17} strokeWidth={2} />
                                                                     </button>
                                                                     <button
-                                                                       type="button"
+                                                                        type="button"
                                                                         title={isPlaying ? t('remote.pause') : t('remote.play')}
-                                                                       disabled={primaryDisabled}
+                                                                        disabled={primaryDisabled}
                                                                         onClick={() => sendCommand({ type: 'play-pause' })}
-                                                                        className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${isDaylight
+                                                                        className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-30 ${isDaylight
                                                                             ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                                                                             : 'bg-white text-zinc-950 hover:bg-white/90'
                                                                             }`}
@@ -665,64 +684,55 @@ const RemoteControlApp: React.FC = () => {
                                                                         onMouseEnter={() => setHoverNavSide('next')}
                                                                         onMouseLeave={() => setHoverNavSide(null)}
                                                                         onClick={() => sendCommand({ type: 'next' })}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${isDaylight
-                                                                            ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
-                                                                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                                                                            }`}
+                                                                        className={transportButtonClass}
                                                                     >
-                                                                        <SkipForward size={16} strokeWidth={2} />
+                                                                        <SkipForward size={17} strokeWidth={2} />
                                                                     </button>
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5">
                                                                     <button
                                                                         type="button"
                                                                         title={snapshot.loopMode === 'off' ? t('remote.loopOff') : snapshot.loopMode === 'one' ? t('remote.loopOne') : t('remote.loopAll')}
+                                                                        aria-pressed={snapshot.loopMode !== 'off'}
                                                                         disabled={primaryDisabled}
                                                                         onClick={() => sendCommand({ type: 'cycle-loop-mode' })}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${snapshot.loopMode !== 'off'
-                                                                            ? (isDaylight ? 'bg-zinc-900 text-white hover:bg-zinc-800' : 'bg-white text-zinc-950 hover:bg-white/90')
-                                                                            : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
-                                                                            }`}
+                                                                        className={`${secondaryButtonBase} ml-2 ${snapshot.loopMode !== 'off' ? secondaryActiveClass : secondaryIdleClass}`}
                                                                     >
-                                                                        {snapshot.loopMode === 'off' ? <RepeatOff size={16} strokeWidth={2} /> : snapshot.loopMode === 'one' ? <Repeat1 size={16} strokeWidth={2} /> : <Repeat size={16} strokeWidth={2} />}
+                                                                        {snapshot.loopMode === 'off' ? <RepeatOff size={15} strokeWidth={2} /> : snapshot.loopMode === 'one' ? <Repeat1 size={15} strokeWidth={2} /> : <Repeat size={15} strokeWidth={2} />}
                                                                     </button>
-                                                                    <span title={likeUnavailableReason || (snapshot.isLiked ? t('remote.unlike') : t('remote.like'))}>
+                                                                </div>
+
+                                                                {/* Track reaction, then window tools */}
+                                                                <div className="flex items-center gap-0.5">
+                                                                    <span className="flex" title={likeUnavailableReason || (snapshot.isLiked ? t('remote.unlike') : t('remote.like'))}>
                                                                         <button
                                                                             type="button"
                                                                             aria-label={likeUnavailableReason || (snapshot.isLiked ? t('remote.unlike') : t('remote.like'))}
+                                                                            aria-pressed={snapshot.isLiked}
                                                                             disabled={likeDisabled}
                                                                             onClick={() => sendCommand({ type: 'toggle-like' })}
-                                                                            className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${snapshot.isLiked
-                                                                                ? (isDaylight ? 'bg-red-500/20 text-red-600 hover:bg-red-500/30' : 'bg-red-500/25 text-red-400 hover:bg-red-500/35')
-                                                                                : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
-                                                                                }`}
+                                                                            className={`${secondaryButtonBase} ${snapshot.isLiked ? secondaryAlertClass : secondaryIdleClass}`}
                                                                         >
-                                                                            <Heart size={16} fill={snapshot.isLiked ? 'currentColor' : 'none'} strokeWidth={2} />
+                                                                            <Heart size={15} fill={snapshot.isLiked ? 'currentColor' : 'none'} strokeWidth={2} />
                                                                         </button>
                                                                     </span>
                                                                     <button
                                                                         type="button"
-                                                                         title={t('remote.transparentControls')}
+                                                                        title={t('remote.transparentControls')}
                                                                         onClick={() => {
                                                                             setPresetSelectorOpen(false);
                                                                             setActivePanel('transparent-controls');
                                                                         }}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition ${isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
-                                                                            }`}
+                                                                        className={`${secondaryButtonBase} ml-2 ${secondaryIdleClass}`}
                                                                     >
-                                                                        <MirrorRectangular size={16} strokeWidth={2} />
+                                                                        <MirrorRectangular size={15} strokeWidth={2} />
                                                                     </button>
                                                                     <button
                                                                         type="button"
-                                                                         title={t('remote.videoExport')}
+                                                                        title={t('remote.videoExport')}
                                                                         disabled={!snapshot.hasTrack}
                                                                         onClick={() => setActivePanel('export')}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${exportState.status === 'recording'
-                                                                            ? (isDaylight ? 'bg-red-500/20 text-red-600 animate-pulse border border-red-500/25' : 'bg-red-500/25 text-red-400 animate-pulse border border-red-500/30')
-                                                                            : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
-                                                                            }`}
+                                                                        className={`${secondaryButtonBase} ${exportState.status === 'recording' ? `${secondaryAlertClass} animate-pulse` : secondaryIdleClass}`}
                                                                     >
-                                                                        <Video size={16} strokeWidth={2} />
+                                                                        <Video size={15} strokeWidth={2} />
                                                                     </button>
                                                                 </div>
                                                             </div>
