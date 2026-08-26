@@ -4,6 +4,7 @@ import type { VideoExportState } from '../types/videoExport';
 import { getPlaybackSongKey, isLocalPlaybackSong, resolveNavidromePlaybackCarrier } from './appPlaybackGuards';
 import { buildStagePlayerSnapshot } from './stagePlayerSnapshot';
 import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
+import { resolvePlaybackNeighbors } from './playbackNeighbors';
 
 // src/utils/playbackSyncBridge.ts
 // Derives shared playback publisher models before adapting them to Electron-facing protocols.
@@ -22,6 +23,8 @@ export interface PlaybackSyncBridgeModel {
     durationSec: number;
     stageDurationSec: number;
     playerState: PlayerState;
+    loopMode: 'off' | 'all' | 'one';
+    isFmMode: boolean;
     canGoPrevious: boolean;
     canGoNext: boolean;
     controlsDisabled: boolean;
@@ -170,6 +173,8 @@ export const buildPlaybackSyncBridgeModel = ({
         durationSec: safeDurationSec,
         stageDurationSec: Math.max(0, clampFiniteNumber(stageDurationSec ?? safeDurationSec)),
         playerState,
+        loopMode: effectiveLoopMode,
+        isFmMode,
         canGoPrevious,
         canGoNext,
         controlsDisabled: controlsDisabled || !hasTrack,
@@ -192,7 +197,16 @@ export const buildPlaybackSyncBridgeModel = ({
 export const buildRemoteControlSnapshotFromPlaybackSyncBridge = (
     model: PlaybackSyncBridgeModel,
     options: RemoteControlSnapshotOptions,
-): RemoteControlSnapshot => ({
+): RemoteControlSnapshot => {
+    const neighbors = resolvePlaybackNeighbors({
+        playQueue: model.playQueue,
+        currentSong: model.currentSong,
+        loopMode: model.loopMode,
+        isFmMode: model.isFmMode,
+        isStageActive: model.isStageActive,
+    });
+
+    return {
     hasTrack: model.hasTrack,
     title: model.title,
     artist: model.artist,
@@ -200,8 +214,11 @@ export const buildRemoteControlSnapshotFromPlaybackSyncBridge = (
     currentTime: model.currentTimeSec,
     duration: model.durationSec,
     playerState: model.playerState,
+    loopMode: model.loopMode,
     canGoPrevious: model.canGoPrevious,
     canGoNext: model.canGoNext,
+    prevTrackTitle: neighbors.prev.title,
+    nextTrackTitle: neighbors.next.title,
     controlsDisabled: model.controlsDisabled,
     isStageActive: model.isStageActive,
     transparentModeEnabled: model.transparentModeEnabled,
@@ -218,7 +235,8 @@ export const buildRemoteControlSnapshotFromPlaybackSyncBridge = (
     updatedAt: model.sampledAt,
     mainWindowWidth: model.mainWindowWidth,
     mainWindowHeight: model.mainWindowHeight,
-});
+    };
+};
 
 export const buildStagePlayerSnapshotFromPlaybackSyncBridge = (
     model: PlaybackSyncBridgeModel,

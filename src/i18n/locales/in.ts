@@ -2061,7 +2061,10 @@ export default {
     "play": "Putar",
     "pause": "Jeda",
     "transparentControls": "Kontrol transparan",
-    "videoExport": "Ekspor video"
+    "videoExport": "Ekspor video",
+    "loopOff": "Ulangi Mati",
+    "loopAll": "Ulangi Semua",
+    "loopOne": "Ulangi Satu"
   },
   "aiHelp": {
     "openButton": "Butuh bantuan?",

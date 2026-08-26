@@ -60,6 +60,7 @@ type UseElectronPlaybackBridgeOptions = {
     lyricTimelineOffsetMs?: number;
     onRemoteExportCommand?: (command: RemoteControlCommand) => boolean;
     onExternalPlayRequest?: (request: any) => Promise<void>;
+    onRemoteCycleLoopMode?: () => void;
     isLiked: boolean;
     onLike?: () => void;
 };
@@ -109,6 +110,7 @@ export const useElectronPlaybackBridge = ({
     lyricTimelineOffsetMs,
     onRemoteExportCommand,
     onExternalPlayRequest,
+    onRemoteCycleLoopMode,
     isLiked,
     onLike,
 }: UseElectronPlaybackBridgeOptions) => {
@@ -508,6 +510,11 @@ export const useElectronPlaybackBridge = ({
                 return;
             }
 
+            if (command.type === 'cycle-loop-mode') {
+                if (!isNowPlayingControlDisabledRef.current) onRemoteCycleLoopMode?.();
+                return;
+            }
+
             if (isNowPlayingControlDisabledRef.current || !taskbarHasTrackRef.current) {
                 return;
             }
@@ -564,7 +571,7 @@ export const useElectronPlaybackBridge = ({
 
         return window.electron.onRemoteControlCommand(runCommand);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activePlaybackContext, audioRef, canLikeCurrentSong, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteExportCommand, onRemotePlayerChromeVisibilityModeCycle, setShowTransparentWindowBorder, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
+    }, [activePlaybackContext, audioRef, canLikeCurrentSong, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteCycleLoopMode, onRemoteExportCommand, onRemotePlayerChromeVisibilityModeCycle, setShowTransparentWindowBorder, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
 
     useEffect(() => {
         if (!window.electron?.onStagePlayerControlRequest) {

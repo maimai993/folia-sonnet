@@ -2122,6 +2122,9 @@ export default {
     "pause": "Pause",
     "transparentControls": "Transparent controls",
     "videoExport": "Video export",
+    "loopOff": "Loop off",
+    "loopAll": "Loop all",
+    "loopOne": "Loop one",
   },
   "aiHelp": {
     "openButton": "Need help?",
