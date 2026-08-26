@@ -31,7 +31,6 @@ export const resolvePlayerEscapeAction = ({
 };
 
 type UsePlaybackInteractionBridgeParams = {
-    isDev: boolean;
     currentSong: SongResult | null;
     currentView: string;
     audioSrc: string | null;
@@ -51,6 +50,7 @@ type UsePlaybackInteractionBridgeParams = {
         startedAtMs: number | null;
     }>;
     setIsDevDebugOverlayVisible: React.Dispatch<React.SetStateAction<boolean>>;
+    setIsMemoryMonitorVisible: React.Dispatch<React.SetStateAction<boolean>>;
     cyclePlayerChromeVisibilityMode: () => void;
     setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setReplayGainMode: React.Dispatch<React.SetStateAction<ReplayGainMode>>;
@@ -66,7 +66,6 @@ type UsePlaybackInteractionBridgeParams = {
 
 // Bridges playback-related keyboard and click interactions without leaving them inline in App.tsx.
 export function usePlaybackInteractionBridge({
-    isDev,
     currentSong,
     currentView,
     audioSrc,
@@ -81,6 +80,7 @@ export function usePlaybackInteractionBridge({
     audioRef,
     stageLyricsClockRef,
     setIsDevDebugOverlayVisible,
+    setIsMemoryMonitorVisible,
     cyclePlayerChromeVisibilityMode,
     setIsPanelOpen,
     setReplayGainMode,
@@ -191,9 +191,21 @@ export function usePlaybackInteractionBridge({
                 document.querySelector('[data-folia-keyboard-window="true"]')
             );
 
-            if (isDev && event.altKey && event.shiftKey && event.code === 'KeyD') {
+            // Not gated on dev: the packaged desktop build has no DevTools to fall back on - the
+            // window is frameless, so there is no menu to toggle them from and they only open
+            // automatically under ELECTRON_DEV. This chord is the only console it has.
+            if (event.altKey && event.shiftKey && event.code === 'KeyD') {
                 event.preventDefault();
                 setIsDevDebugOverlayVisible(prev => !prev);
+                return;
+            }
+
+            // Its own window rather than a tab of the one above: the two are read together - a heap
+            // that is flat while the working set climbs is the whole diagnosis - and a tab makes
+            // that comparison impossible.
+            if (event.altKey && event.shiftKey && event.code === 'KeyM') {
+                event.preventDefault();
+                setIsMemoryMonitorVisible(prev => !prev);
                 return;
             }
 
@@ -314,7 +326,6 @@ export function usePlaybackInteractionBridge({
         duration,
         handleNextTrack,
         handlePrevTrack,
-        isDev,
         isNowPlayingStageActive,
         isPanelOpen,
         navigateBackFromPlayer,
@@ -322,6 +333,7 @@ export function usePlaybackInteractionBridge({
         playerState,
         resumePlayback,
         setIsDevDebugOverlayVisible,
+        setIsMemoryMonitorVisible,
         setIsPanelOpen,
         cyclePlayerChromeVisibilityMode,
         stageActiveEntryKind,

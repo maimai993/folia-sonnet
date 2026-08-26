@@ -17,6 +17,9 @@ import { migratePreferredLyricSource } from '../utils/lyrics/sourcePriority';
 import { applyAppLanguagePreference, readStoredAppLanguagePreference, type AppLanguagePreference } from '../i18n/config';
 import { normalizeFontFamilyStack, normalizeFontWeight } from '../utils/fontStacks';
 import i18n from '../i18n/config';
+import { clampCrossfadeSeconds, CROSSFADE_DEFAULT_SEC } from '../services/automix/crossfadePlanner';
+import { DEFAULT_TRANSITION_SETTINGS, isTransitionMode, type TransitionMode } from '../services/automix/transitionStrategy';
+import { modelsPresent } from '../services/automix/modelAvailability';
 import type { AudioQualityPreference } from '../types/onlineMusic';
 import {
     normalizePinnedCommandIds,
@@ -40,7 +43,19 @@ import { AUDIO_SOUND_PRESETS } from '../utils/audioPresets';
 
 export type StatusSetter = React.Dispatch<React.SetStateAction<StatusMessage | null>>;
 export const CACHE_SIZE_KEY = 'folia_cache_size';
-const ENABLE_MEDIA_CACHE_KEY = 'folia_enable_media_cache';
+export const ENABLE_MEDIA_CACHE_KEY = 'folia_enable_media_cache';
+/** What the toggle used to write to, before it was corrected to the prefixed key above. */
+export const LEGACY_ENABLE_MEDIA_CACHE_KEY = 'enable_media_cache';
+export const MEDIA_CACHE_LIMIT_GB_KEY = 'folia_media_cache_limit_gb';
+/** Gigabytes of cached audio to keep. Zero is the listener asking for no ceiling at all. */
+export const DEFAULT_MEDIA_CACHE_LIMIT_GB = 5;
+const AUTOMIX_ENABLED_KEY = 'folia_automix_enabled';
+/** Set only by the reminder's own "don't remind me" button. Absent = still worth asking. */
+export const AUTOMIX_MODEL_REMINDER_MUTED_KEY = 'folia_automix_model_reminder_muted';
+const TRANSITION_MODE_KEY = 'folia_transition_mode';
+const CROSSFADE_MAX_SEC_KEY = 'folia_crossfade_max_sec';
+const TRANSITION_PERFORMANCE_KEY = 'folia_transition_performance';
+const TRANSITION_ANIMATION_KEY = 'folia_transition_animation';
 const LAST_SEEN_GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';
 
 export type AudioQuality = AudioQualityPreference;
@@ -92,6 +107,80 @@ const setStoredBoolean = (key: string, value: boolean) => {
     if (typeof window !== 'undefined') {
         localStorage.setItem(key, String(value));
     }
+};
+
+/**
+ * Whether switching transitions on is worth interrupting for.
+ *
+ * Three ways to answer no, and they are three different reasons rather than one condition:
+ *
+ * - Not a desktop build. The browser cannot run either model no matter what it downloads, so a
+ *   prompt there is an errand that does not exist - which is the same distinction the engine badge
+ *   already draws between "a limit" and "something you can go and fix".
+ * - The weights are already here. Asked of `modelsPresent()`, which the automix hook refreshes at
+ *   startup, so a fresh launch with both files installed answers correctly without opening
+ *   Settings first.
+ * - The listener said not to ask again. That one is remembered rather than re-derived, because it
+ *   is a preference and not a fact about the machine.
+ *
+ * Either model missing counts: the beat grid is what the crossfade mode reads for its alignment
+ * too, so "I only use crossfade" is not a reason to be missing beat_this.
+ */
+export const shouldRemindAboutModels = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    if (typeof window.electron?.separateStems !== 'function') return false;
+    if (getStoredBoolean(AUTOMIX_MODEL_REMINDER_MUTED_KEY, false)) return false;
+    const present = modelsPresent();
+    return !present.beat_this || !present.htdemucs;
+};
+
+/**
+ * Reads the media cache toggle, honouring the key its own setter used to write to.
+ *
+ * The setter wrote a bare 'enable_media_cache' while startup read the folia-prefixed key, so the
+ * setting silently reverted to off on every restart. Anyone who switched it on has their real
+ * preference sitting under the legacy key, and simply correcting the setter would throw that
+ * away once more - so read it as a fallback and promote it to the canonical key.
+ */
+export const readStoredEnableMediaCache = (): boolean => {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+
+    const canonical = localStorage.getItem(ENABLE_MEDIA_CACHE_KEY);
+    if (canonical !== null) {
+        return canonical === 'true';
+    }
+
+    const legacy = localStorage.getItem(LEGACY_ENABLE_MEDIA_CACHE_KEY);
+    if (legacy === null) {
+        return false;
+    }
+
+    localStorage.setItem(ENABLE_MEDIA_CACHE_KEY, legacy);
+    return legacy === 'true';
+};
+
+export const readStoredMediaCacheLimitGb = (): number => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_MEDIA_CACHE_LIMIT_GB;
+    }
+
+    const saved = localStorage.getItem(MEDIA_CACHE_LIMIT_GB_KEY);
+    const parsed = saved === null ? NaN : Number(saved);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MEDIA_CACHE_LIMIT_GB;
+};
+
+const readStoredTransitionMode = (): TransitionMode => {
+    if (typeof window === 'undefined') return DEFAULT_TRANSITION_SETTINGS.mode;
+    const saved = localStorage.getItem(TRANSITION_MODE_KEY);
+    return isTransitionMode(saved) ? saved : DEFAULT_TRANSITION_SETTINGS.mode;
+};
+
+const readStoredCrossfadeMaxSec = (): number => {
+    if (typeof window === 'undefined') return CROSSFADE_DEFAULT_SEC;
+    const saved = localStorage.getItem(CROSSFADE_MAX_SEC_KEY);
+    return saved === null ? CROSSFADE_DEFAULT_SEC : clampCrossfadeSeconds(Number(saved));
 };
 
 export const readSystemThemeIsDaylight = (): boolean | null => {
@@ -1346,6 +1435,19 @@ export type SettingsUiState = {
     wallpaperMode: boolean;
     openPlayerOnLaunch: boolean;
     enableMediaCache: boolean;
+    /** Gigabytes of cached audio to keep before the oldest is dropped. Zero means no ceiling. */
+    mediaCacheLimitGb: number;
+    automixEnabled: boolean;
+    /** Whether the "you have no weights yet" prompt is showing. See `handleToggleAutomix`. */
+    isAutomixModelReminderOpen: boolean;
+    /** Which strategy plans a song change once blending is on. */
+    transitionMode: TransitionMode;
+    /** Seconds. The crossfade mode's ceiling; automix computes its own and ignores this. */
+    crossfadeMaxSec: number;
+    /** Let the mix be heard. Only reachable with automix on, and only where stems exist. */
+    transitionPerformance: boolean;
+    /** Draw the mix while it runs. Automix only, and only for blends long enough to watch. */
+    transitionAnimation: boolean;
     backgroundOpacity: number;
     subtitleOverlayOpacity: number;
     subtitleOverlayBackground: boolean;
@@ -1478,6 +1580,14 @@ export type SettingsUiState = {
     handleToggleWallpaperMode: (enable: boolean) => void;
     handleToggleOpenPlayerOnLaunch: (enable: boolean) => void;
     handleToggleMediaCache: (enable: boolean) => void;
+    handleSetMediaCacheLimitGb: (gigabytes: number) => void;
+    handleToggleAutomix: (enable: boolean) => void;
+    /** Closes the model prompt. `mute` is the listener choosing never to see it again. */
+    dismissAutomixModelReminder: (mute: boolean) => void;
+    handleSetTransitionMode: (mode: TransitionMode) => void;
+    handleSetCrossfadeMaxSec: (seconds: number) => void;
+    handleToggleTransitionPerformance: (enable: boolean) => void;
+    handleToggleTransitionAnimation: (enable: boolean) => void;
     handleSetBackgroundOpacity: (opacity: number) => void;
     handleSetSubtitleOverlayOpacity: (opacity: number) => void;
     handleToggleSubtitleOverlayBackground: (enabled: boolean) => void;
@@ -1616,7 +1726,18 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
     wallpaperMode: getStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, false),
     openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
-    enableMediaCache: getStoredBoolean(ENABLE_MEDIA_CACHE_KEY, false),
+    enableMediaCache: readStoredEnableMediaCache(),
+    mediaCacheLimitGb: readStoredMediaCacheLimitGb(),
+    automixEnabled: getStoredBoolean(AUTOMIX_ENABLED_KEY, false),
+    isAutomixModelReminderOpen: false,
+    transitionMode: readStoredTransitionMode(),
+    crossfadeMaxSec: readStoredCrossfadeMaxSec(),
+    transitionPerformance: getStoredBoolean(
+        TRANSITION_PERFORMANCE_KEY, DEFAULT_TRANSITION_SETTINGS.performance,
+    ),
+    // Off by default: it draws over whatever the listener is already looking at, which is a
+    // choice to make rather than one to arrive at after an update.
+    transitionAnimation: getStoredBoolean(TRANSITION_ANIMATION_KEY, false),
     backgroundOpacity: readStoredBackgroundOpacity(),
     subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
     subtitleOverlayBackground: getStoredBoolean(SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY, true),
@@ -2010,8 +2131,48 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         });
     },
     handleToggleMediaCache: (enable) => {
-        setStoredBoolean('enable_media_cache', enable);
+        setStoredBoolean(ENABLE_MEDIA_CACHE_KEY, enable);
         set({ enableMediaCache: enable });
+    },
+    handleSetMediaCacheLimitGb: (gigabytes) => {
+        const next = Number.isFinite(gigabytes) && gigabytes >= 0 ? gigabytes : DEFAULT_MEDIA_CACHE_LIMIT_GB;
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(MEDIA_CACHE_LIMIT_GB_KEY, String(next));
+        }
+        set({ mediaCacheLimitGb: next });
+    },
+    handleToggleAutomix: (enable) => {
+        setStoredBoolean(AUTOMIX_ENABLED_KEY, enable);
+        // Asked here rather than in the settings section because there are two switches - the
+        // options page and the volume row - and a prompt wired to one of them is missing from the
+        // one people actually reach mid-song.
+        set({ automixEnabled: enable, isAutomixModelReminderOpen: enable && shouldRemindAboutModels() });
+    },
+    dismissAutomixModelReminder: (mute) => {
+        if (mute) setStoredBoolean(AUTOMIX_MODEL_REMINDER_MUTED_KEY, true);
+        set({ isAutomixModelReminderOpen: false });
+    },
+    handleSetTransitionMode: (mode) => {
+        if (!isTransitionMode(mode)) return;
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(TRANSITION_MODE_KEY, mode);
+        }
+        set({ transitionMode: mode });
+    },
+    handleSetCrossfadeMaxSec: (seconds) => {
+        const next = clampCrossfadeSeconds(seconds);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(CROSSFADE_MAX_SEC_KEY, String(next));
+        }
+        set({ crossfadeMaxSec: next });
+    },
+    handleToggleTransitionPerformance: (enable) => {
+        setStoredBoolean(TRANSITION_PERFORMANCE_KEY, enable);
+        set({ transitionPerformance: enable });
+    },
+    handleToggleTransitionAnimation: (enable) => {
+        setStoredBoolean(TRANSITION_ANIMATION_KEY, enable);
+        set({ transitionAnimation: enable });
     },
     handleSetBackgroundOpacity: (opacity) => {
         if (typeof window !== 'undefined') {
@@ -3049,6 +3210,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleWallpaperMode: state.handleToggleWallpaperMode,
     openPlayerOnLaunch: state.openPlayerOnLaunch,
     enableMediaCache: state.enableMediaCache,
+    mediaCacheLimitGb: state.mediaCacheLimitGb,
     backgroundOpacity: state.backgroundOpacity,
     subtitleOverlayOpacity: state.subtitleOverlayOpacity,
     subtitleOverlayBackground: state.subtitleOverlayBackground,
@@ -3143,6 +3305,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleHideRemoteControlTaskbarIcon: state.handleToggleHideRemoteControlTaskbarIcon,
     handleToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
     handleToggleMediaCache: state.handleToggleMediaCache,
+    handleSetMediaCacheLimitGb: state.handleSetMediaCacheLimitGb,
     handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
     handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
     handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,

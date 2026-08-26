@@ -53,6 +53,16 @@ commit.md
 .codebuff-ai/reasson/conf.jsonc
 scripts/*
 docs/TODO.md
+
+# Model weights: fetched and hash-verified by build/fetchModels.mjs, shipped in the installer,
+# never committed - 83MB that never changes does not belong in every clone's history.
+models/
 build/windowtolayer
 build/windowtolayer-COPYING
 .windowtolayer-src/
+
+# Python bytecode from the htdemucs runner, written beside it by the downloaded runtime.
+__pycache__/
+
+# Built by build/buildPythonRuntime.mjs - binary artifacts that live on the mirrors, not in git.
+dist-runtime/

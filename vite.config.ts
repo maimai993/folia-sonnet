@@ -214,6 +214,14 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
     server: {
       port: 3000,
       host: '0.0.0.0',
+      watch: {
+        // Build output and model weights are not sources, and watching them breaks packaging: the
+        // watcher opens a handle on every directory it finds, and electron-builder packages by
+        // extracting Electron into release/win-unpacked.tmp and renaming it to release/win-unpacked.
+        // On Windows that rename fails with EPERM while anything holds the directory - so a dev
+        // server left running in another terminal kills every `npm run build:electron`.
+        ignored: ['**/release/**', '**/models/**'],
+      },
     },
     plugins: [
       devLyricProxyPlugin(),

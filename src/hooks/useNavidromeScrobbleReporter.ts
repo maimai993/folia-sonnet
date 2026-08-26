@@ -12,11 +12,14 @@ import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 type UseNavidromeScrobbleReporterParams = {
     audioRef: RefObject<HTMLAudioElement | null>;
     currentSong: SongResult | null;
+    /** Changes when automix hands playback to the other deck, so the listeners follow it. */
+    activeDeck: string;
 };
 
 export const useNavidromeScrobbleReporter = ({
     audioRef,
     currentSong,
+    activeDeck,
 }: UseNavidromeScrobbleReporterParams): void => {
     const currentSongRef = useRef<SongResult | null>(currentSong);
     const trackerRef = useRef<NavidromeScrobbleSessionTracker | null>(null);
@@ -116,5 +119,7 @@ export const useNavidromeScrobbleReporter = ({
             audioElement.removeEventListener('timeupdate', handleProgress);
             audioElement.removeEventListener('ended', handleEnded);
         };
-    }, [audioRef]);
+        // audioRef names a different element after an automix deck swap, and these listeners are
+        // bound to the element itself rather than read through the ref, so they have to rebind.
+    }, [audioRef, activeDeck]);
 };
