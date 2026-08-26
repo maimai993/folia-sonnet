@@ -143,6 +143,8 @@ declare global {
     loopMode: 'off' | 'all' | 'one';
     canGoPrevious: boolean;
     canGoNext: boolean;
+    prevTrackTitle: string | null;
+    nextTrackTitle: string | null;
     controlsDisabled: boolean;
     isStageActive: boolean;
     transparentModeEnabled: boolean;

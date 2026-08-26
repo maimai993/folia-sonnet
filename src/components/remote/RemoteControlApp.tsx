@@ -73,6 +73,8 @@ const emptySnapshot: RemoteControlSnapshot = {
     loopMode: 'off',
     canGoPrevious: false,
     canGoNext: false,
+    prevTrackTitle: null,
+    nextTrackTitle: null,
     controlsDisabled: true,
     isStageActive: false,
     transparentModeEnabled: false,
@@ -115,6 +117,7 @@ const RemoteControlApp: React.FC = () => {
     const [alwaysOnTop, setAlwaysOnTop] = useState(false);
     const [windowControlsRevealed, setWindowControlsRevealed] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
+    const [hoverNavSide, setHoverNavSide] = useState<'prev' | 'next' | null>(null);
     const [showLyricsOverlay, setShowLyricsOverlay] = useState(false);
     const isDraggingRef = useRef(false);
     const lastSeekTimeRef = useRef(0);
@@ -231,6 +234,11 @@ const RemoteControlApp: React.FC = () => {
         : undefined;
     const title = snapshot.title || 'Folia';
     const artist = snapshot.artist || (snapshot.hasTrack ? 'Unknown artist' : 'No active track');
+    const previewTitle = hoverNavSide === 'prev' && snapshot.canGoPrevious
+        ? snapshot.prevTrackTitle
+        : hoverNavSide === 'next' && snapshot.canGoNext
+            ? snapshot.nextTrackTitle
+            : null;
     const exportState = snapshot.exportState ?? idleVideoExportState();
     const isDaylight = Boolean(snapshot.isDaylight);
 
@@ -521,7 +529,18 @@ const RemoteControlApp: React.FC = () => {
                         <div className="flex flex-col justify-between min-h-[112px] min-w-0">
                             {/* Static Title & Artist */}
                             <div className="min-w-0 pr-6">
-                                <div className="truncate text-[15px] font-bold leading-5 tracking-[-0.01em]">{title}</div>
+                                {/* Preview Sound Name */}
+                                <div className="relative h-5 min-w-0">
+                                    <div className={`absolute inset-0 truncate text-[15px] font-bold leading-5 tracking-[-0.01em] transition-opacity duration-200 ${previewTitle ? 'opacity-0' : 'opacity-100'
+                                        }`}>{title}</div>
+                                    <div
+                                        aria-hidden
+                                        className="absolute inset-0 truncate text-[15px] font-bold leading-5 tracking-[-0.01em] transition-opacity duration-200"
+                                        style={{ opacity: previewTitle ? 0.55 : 0 }}
+                                    >
+                                        {previewTitle}
+                                    </div>
+                                </div>
                                 <div className={`truncate text-xs font-medium mt-0.5 transition-colors ${isDaylight ? 'text-black/50' : 'text-white/40'
                                     }`}>{artist}</div>
                             </div>
@@ -615,8 +634,10 @@ const RemoteControlApp: React.FC = () => {
                                                                 <div className="flex items-center gap-1.5">
                                                                     <button
                                                                         type="button"
-                                                                         title={t('remote.previous')}
+                                                                        title={t('remote.previous')}
                                                                         disabled={primaryDisabled || !snapshot.canGoPrevious}
+                                                                        onMouseEnter={() => setHoverNavSide('prev')}
+                                                                        onMouseLeave={() => setHoverNavSide(null)}
                                                                         onClick={() => sendCommand({ type: 'previous' })}
                                                                         className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${isDaylight
                                                                             ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
@@ -639,8 +660,10 @@ const RemoteControlApp: React.FC = () => {
                                                                     </button>
                                                                     <button
                                                                         type="button"
-                                                                         title={t('remote.next')}
+                                                                        title={t('remote.next')}
                                                                         disabled={primaryDisabled || !snapshot.canGoNext}
+                                                                        onMouseEnter={() => setHoverNavSide('next')}
+                                                                        onMouseLeave={() => setHoverNavSide(null)}
                                                                         onClick={() => sendCommand({ type: 'next' })}
                                                                         className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${isDaylight
                                                                             ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'

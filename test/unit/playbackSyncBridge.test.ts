@@ -72,6 +72,8 @@ describe('playbackSyncBridge', () => {
             loopMode: 'off',
             canGoPrevious: true,
             canGoNext: true,
+            prevTrackTitle: 'Previous Song',
+            nextTrackTitle: 'Next Song',
             playerChromeVisibilityMode: 'auto-hide',
             updatedAt: 1234,
         });
@@ -132,6 +134,8 @@ describe('playbackSyncBridge', () => {
             hasTrack: false,
             controlsDisabled: true,
             isStageActive: true,
+            prevTrackTitle: null,
+            nextTrackTitle: null,
             playerChromeVisibilityMode: 'always-hidden',
         });
         expect(buildTaskbarControlsFromPlaybackSyncBridge(model)).toEqual({
