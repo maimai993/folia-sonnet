@@ -313,6 +313,7 @@ const mainLocale = {
     trayOpenRemote: '打开 遥控窗口',
     trayToggleClickThrough: '切换点击穿透',
     trayOverlayPreset: '锁定 + 透明 + 置顶',
+    trayResetWindow: '重置窗口',
     trayHideTaskbar: '隐藏任务栏图标',
     trayQuit: '退出',
     dialogImportTitle: '无法导入此文件夹',
@@ -325,6 +326,7 @@ const mainLocale = {
     trayOpenRemote: 'Open Remote Window',
     trayToggleClickThrough: 'Toggle Click-Through',
     trayOverlayPreset: 'Locked + Transparent + On Top',
+    trayResetWindow: 'Reset Window',
     trayHideTaskbar: 'Hide Taskbar Icon',
     trayQuit: 'Quit',
     dialogImportTitle: 'Cannot import this folder',
@@ -337,6 +339,7 @@ const mainLocale = {
     trayOpenRemote: 'Buka Jendela Remote',
     trayToggleClickThrough: 'Alihkan Click-Through',
     trayOverlayPreset: 'Terkunci + Transparan + Di Atas',
+    trayResetWindow: 'Atur Ulang Jendela',
     trayHideTaskbar: 'Sembunyikan Ikon Taskbar',
     trayQuit: 'Keluar',
     dialogImportTitle: 'Tidak dapat mengimpor folder ini',
@@ -1051,6 +1054,13 @@ async function setMainWindowOverlayPreset(enabled) {
   return nextEnabled;
 }
 
+// Tray escape hatch: drops the window back to opaque, clickable and not on top, whichever of those
+// modes happen to be on. The overlay preset already applies exactly that combination in the order
+// the transparency rebuild requires, and it skips the rebuild when the window is opaque already.
+async function resetMainWindowPresentation() {
+  return setMainWindowOverlayPreset(false);
+}
+
 function refreshTrayMenu() {
   if (!appTray) {
     return;
@@ -1087,6 +1097,13 @@ function refreshTrayMenu() {
         void setMainWindowOverlayPreset(!isMainWindowOverlayPresetActive());
       },
     }] : []),
+    {
+      label: locale.trayResetWindow,
+      enabled: Boolean(mainWindow && !mainWindow.isDestroyed()),
+      click: () => {
+        void resetMainWindowPresentation();
+      },
+    },
     {
       label: locale.trayHideTaskbar,
       type: 'checkbox',
