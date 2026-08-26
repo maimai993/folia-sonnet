@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { colorWithAlpha } from '../colorMix';
 import type { PendoloMotionProfile } from './pendoloMotionProfile';
@@ -8,6 +8,8 @@ import type { PendoloMotionProfile } from './pendoloMotionProfile';
 export interface PendoloClockworkCanvasProps {
     centerX: number;
     centerY: number;
+    viewportWidth: number;
+    viewportHeight: number;
     baseRadius: number;
     lyricRingRadius: number;
     escapementAngleMotionValue: MotionValue<number>;
@@ -179,12 +181,44 @@ function drawHairspring(
     ctx.restore();
 }
 
+/** Resolves the furthest clockwork pixel from the wheel centre in CSS pixels. */
+const resolveClockworkReach = (baseRadius: number, hasCenterGradient: boolean) => (
+    baseRadius * (hasCenterGradient ? 1.65 : 1.4) + 16
+);
+
+/** Bounds the canvas to the clockwork instead of allocating transparent pixels for the viewport. */
+const resolveClockworkBox = (
+    centerX: number,
+    centerY: number,
+    baseRadius: number,
+    lyricRingRadius: number,
+    viewportWidth: number,
+    viewportHeight: number,
+    hasCenterGradient: boolean,
+) => {
+    const reach = resolveClockworkReach(baseRadius, hasCenterGradient);
+    const rightReach = Math.max(reach, lyricRingRadius + 16);
+    const left = Math.max(0, Math.floor(centerX - reach));
+    const top = Math.max(0, Math.floor(centerY - reach));
+    const right = Math.min(viewportWidth, Math.ceil(centerX + rightReach));
+    const bottom = Math.min(viewportHeight, Math.ceil(centerY + reach));
+
+    return {
+        left,
+        top,
+        width: Math.max(0, right - left),
+        height: Math.max(0, bottom - top),
+    };
+};
+
 /**
  * PendoloClockworkCanvas: Renders dynamic wireframe clockwork gear train background.
  */
 const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     centerX,
     centerY,
+    viewportWidth,
+    viewportHeight,
     baseRadius,
     lyricRingRadius,
     escapementAngleMotionValue,
@@ -233,7 +267,21 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
         };
     }, [coverUrl, showCover]);
 
+    const contentBox = useMemo(
+        () => resolveClockworkBox(
+            centerX,
+            centerY,
+            baseRadius,
+            lyricRingRadius,
+            viewportWidth,
+            viewportHeight,
+            showCenterGradient,
+        ),
+        [baseRadius, centerX, centerY, lyricRingRadius, showCenterGradient, viewportHeight, viewportWidth],
+    );
+
     const propsRef = useRef({
+        contentBox,
         centerX,
         centerY,
         baseRadius,
@@ -251,6 +299,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
 
     useEffect(() => {
         propsRef.current = {
+            contentBox,
             centerX,
             centerY,
             baseRadius,
@@ -265,7 +314,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             paused,
             motionProfile,
         };
-    }, [centerX, centerY, baseRadius, lyricRingRadius, audioBass, primaryTextColor, accentTextColor, backgroundColor, showGearDecor, showCenterGradient, showCover, paused, motionProfile]);
+    }, [contentBox, centerX, centerY, baseRadius, lyricRingRadius, audioBass, primaryTextColor, accentTextColor, backgroundColor, showGearDecor, showCenterGradient, showCover, paused, motionProfile]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -319,8 +368,13 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             // Gears remain stationary while a line is being sung, and ratchet ONLY when lyrics switch
             const currentGearAngle = escapementAngleMotionValue.get();
 
-            const width = canvas.offsetWidth;
-            const height = canvas.offsetHeight;
+            const box = p.contentBox;
+            const width = box.width;
+            const height = box.height;
+            if (width <= 0 || height <= 0) {
+                animationFrameId = window.requestAnimationFrame(render);
+                return;
+            }
             const dpr = window.devicePixelRatio || 1;
             const pixelWidth = Math.round(width * dpr);
             const pixelHeight = Math.round(height * dpr);
@@ -333,6 +387,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             ctx.save();
             ctx.scale(dpr, dpr);
             ctx.clearRect(0, 0, width, height);
+            ctx.translate(-box.left, -box.top);
 
             // 0. Optional Central Dark Radial Gradient using theme background color
             if (p.showCenterGradient) {
@@ -781,8 +836,12 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     return (
         <canvas
             ref={canvasRef}
-            className="absolute inset-0 w-full h-full pointer-events-none"
+            className="absolute pointer-events-none"
             style={{
+                left: `${contentBox.left}px`,
+                top: `${contentBox.top}px`,
+                width: `${contentBox.width}px`,
+                height: `${contentBox.height}px`,
                 zIndex: 1,
                 filter: enableLineGlow
                     ? `drop-shadow(0 0 4px ${colorWithAlpha(accentTextColor, 0.65)}) drop-shadow(0 0 12px ${colorWithAlpha(accentTextColor, 0.3)})`
