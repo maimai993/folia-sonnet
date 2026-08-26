@@ -73,6 +73,33 @@ describe('obsBrowserSource utilities', () => {
         });
     });
 
+    // The signature memoises heavy nodes by identity and keeps a one-slot cache for long strings, so
+    // republishing an unchanged inlined asset never re-reads megabytes of base64. These pin the two
+    // ways that can go wrong: a stale cache hit, or a real difference being missed.
+    const buildLargeDataUrl = (fill: string) => `data:image/png;base64,${fill.repeat(5000)}`;
+
+    it('separates configs that differ only inside a large inlined asset', () => {
+        const buildPortrait = (fill: string) => ({ id: 'portrait', name: 'portrait.png', url: buildLargeDataUrl(fill) });
+
+        expect(buildObsBrowserSourceConfigSignature(buildObsConfig({ monetPortraitImage: buildPortrait('A') })))
+            .not.toBe(buildObsBrowserSourceConfigSignature(buildObsConfig({ monetPortraitImage: buildPortrait('B') })));
+    });
+
+    it('signs equal inlined assets identically across distinct objects', () => {
+        const buildPortrait = () => ({ id: 'portrait', name: 'portrait.png', url: buildLargeDataUrl('A') });
+
+        expect(buildObsBrowserSourceConfigSignature(buildObsConfig({ monetPortraitImage: buildPortrait() })))
+            .toBe(buildObsBrowserSourceConfigSignature(buildObsConfig({ monetPortraitImage: buildPortrait() })));
+    });
+
+    it('does not reuse a cached long-string signature when the cover alternates', () => {
+        const first = buildObsBrowserSourceConfigSignature(buildObsConfig({ coverUrl: buildLargeDataUrl('A') }));
+        const second = buildObsBrowserSourceConfigSignature(buildObsConfig({ coverUrl: buildLargeDataUrl('B') }));
+
+        expect(second).not.toBe(first);
+        expect(buildObsBrowserSourceConfigSignature(buildObsConfig({ coverUrl: buildLargeDataUrl('A') }))).toBe(first);
+    });
+
     it('deduplicates pending and published configs and republishes after re-enabling OBS', () => {
         const tracker = new ObsBrowserSourceConfigPublicationTracker();
         const config = buildObsConfig();

@@ -47,9 +47,15 @@ export const getCachedSongAudioBlob = async (song: SongResult): Promise<Blob | n
     return null;
 };
 
-export const hasCachedSongAudio = async (song: SongResult): Promise<boolean> => (
-    Boolean(await getCachedSongAudioBlob(song))
-);
+export const hasCachedSongAudio = async (song: SongResult): Promise<boolean> => {
+    const cacheKey = getSongResourceCacheKey('audio', song);
+    if (await hasCachedAudio(cacheKey)) return true;
+
+    for (const legacyKey of getLegacySongResourceCacheKeys('audio', song)) {
+        if (await hasCachedAudio(legacyKey)) return true;
+    }
+    return false;
+};
 
 export const getCachedSongCoverUrl = async (song: SongResult): Promise<string | null> => {
     const cacheKey = getSongResourceCacheKey('cover', song);

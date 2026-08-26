@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFromCache, saveToCache } from '@/services/db';
-import { getCachedAudioBlob, saveAudioBlob } from '@/services/audioCache';
-import { getCachedSongAudioBlob, getSongCacheWithLegacyMigration } from '@/services/onlineMusic/resourceCache';
+import { getCachedAudioBlob, hasCachedAudio, saveAudioBlob } from '@/services/audioCache';
+import { getCachedSongAudioBlob, getSongCacheWithLegacyMigration, hasCachedSongAudio } from '@/services/onlineMusic/resourceCache';
 import type { SongResult } from '@/types';
 
 // test/unit/onlineMusic/resourceCacheMigration.test.ts
@@ -50,5 +50,23 @@ describe('provider-aware resource cache migration', () => {
 
         await expect(getCachedSongAudioBlob(legacyNeteaseSong)).resolves.toBe(blob);
         expect(saveAudioBlob).toHaveBeenCalledWith('audio_online:netease:42', blob);
+    });
+
+    it('checks current audio cache existence without reading the audio blob', async () => {
+        vi.mocked(hasCachedAudio).mockImplementation(async key => key === 'audio_online:netease:42');
+
+        await expect(hasCachedSongAudio(legacyNeteaseSong)).resolves.toBe(true);
+        expect(hasCachedAudio).toHaveBeenCalledTimes(1);
+        expect(getCachedAudioBlob).not.toHaveBeenCalled();
+    });
+
+    it('checks legacy audio cache existence without reading or migrating the audio blob', async () => {
+        vi.mocked(hasCachedAudio).mockImplementation(async key => key === 'audio_42');
+
+        await expect(hasCachedSongAudio(legacyNeteaseSong)).resolves.toBe(true);
+        expect(hasCachedAudio).toHaveBeenNthCalledWith(1, 'audio_online:netease:42');
+        expect(hasCachedAudio).toHaveBeenNthCalledWith(2, 'audio_42');
+        expect(getCachedAudioBlob).not.toHaveBeenCalled();
+        expect(saveAudioBlob).not.toHaveBeenCalled();
     });
 });
