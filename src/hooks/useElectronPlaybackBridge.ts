@@ -295,7 +295,9 @@ export const useElectronPlaybackBridge = ({
     };
 
     useEffect(() => {
-        if (!isElectronWindow) {
+        // Click-through keeps forwarding mouse-move into the renderer, so the titlebar would keep
+        // revealing itself on a window the cursor cannot actually reach. Stop tracking while it is on.
+        if (!isElectronWindow || mainWindowClickThroughEnabled) {
             setIsTitlebarRevealed(false);
             return;
         }
@@ -314,7 +316,7 @@ export const useElectronPlaybackBridge = ({
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseleave', handleMouseLeave);
         };
-    }, [isElectronWindow, setIsTitlebarRevealed]);
+    }, [isElectronWindow, mainWindowClickThroughEnabled, setIsTitlebarRevealed]);
 
     useEffect(() => {
         if (!window.electron?.onTaskbarControl) {

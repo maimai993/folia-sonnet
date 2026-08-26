@@ -120,3 +120,14 @@ body {
   border-color: color-mix(in srgb, var(--text-primary) 12%, transparent) !important;
   color: var(--text-primary) !important;
 }
+
+/* Click-through: the window ignores real clicks but still receives forwarded mouse-move, so hover
+   styles would keep lighting up components nobody can reach. Only the unlock control stays live. */
+html[data-click-through='active'] body * {
+  pointer-events: none !important;
+}
+
+html[data-click-through='active'] body .click-through-interactive,
+html[data-click-through='active'] body .click-through-interactive * {
+  pointer-events: auto !important;
+}

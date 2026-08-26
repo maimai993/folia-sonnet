@@ -119,7 +119,7 @@ const AppShell: React.FC<AppShellProps> = ({
                                 onClick={onToggleMainWindowClickThrough}
                                 className={`flex h-7 w-7 items-center justify-center rounded-full border shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-md transition-all duration-200 ${
                                     showMainWindowClickThroughToggle
-                                        ? 'pointer-events-auto opacity-100 translate-y-0'
+                                        ? 'click-through-interactive pointer-events-auto opacity-100 translate-y-0'
                                         : 'pointer-events-none opacity-0 -translate-y-1'
                                 } ${
                                     isMainWindowClickThroughEnabled

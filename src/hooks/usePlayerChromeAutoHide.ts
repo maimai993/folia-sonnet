@@ -12,6 +12,7 @@ const isPlayerChromeVisibilityMode = (value: string | null): value is PlayerChro
 type UsePlayerChromeAutoHideOptions = {
     autoHidePlayerChrome: boolean;
     initialPlayerChromeHidden: boolean;
+    suppressPointerReveal?: boolean;
     setIsPlayerChromeHidden: React.Dispatch<React.SetStateAction<boolean>>;
     setAutoHidePlayerChromePreference: (enabled: boolean) => void;
     onModeChange?: (mode: PlayerChromeVisibilityMode) => void;
@@ -36,6 +37,7 @@ const getInitialPlayerChromeVisibilityMode = (autoHidePlayerChrome: boolean, ini
 export const usePlayerChromeAutoHide = ({
     autoHidePlayerChrome,
     initialPlayerChromeHidden,
+    suppressPointerReveal = false,
     setIsPlayerChromeHidden,
     setAutoHidePlayerChromePreference,
     onModeChange,
@@ -134,6 +136,14 @@ export const usePlayerChromeAutoHide = ({
             return clearAutoHideTimer;
         }
 
+        // Click-through still forwards mouse-move into the renderer, so auto-hide would read the
+        // cursor passing over an untouchable window as user presence and pop the chrome back up.
+        if (suppressPointerReveal) {
+            clearAutoHideTimer();
+            setIsPlayerChromeHidden(true);
+            return clearAutoHideTimer;
+        }
+
         showAndResetTimer();
         window.addEventListener('mouseout', handleMouseOut);
         window.addEventListener('mousemove', handleMouseMove);
@@ -147,7 +157,7 @@ export const usePlayerChromeAutoHide = ({
             window.removeEventListener('mouseout', handleMouseOut);
             window.removeEventListener('mousemove', handleMouseMove);
         };
-    }, [playerChromeVisibilityMode, setIsPlayerChromeHidden]);
+    }, [playerChromeVisibilityMode, suppressPointerReveal, setIsPlayerChromeHidden]);
 
     return { playerChromeVisibilityMode, cyclePlayerChromeVisibilityMode };
 };
