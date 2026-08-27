@@ -35,6 +35,17 @@ type UseElectronPlaybackBridgeOptions = {
     mainWindowClickThroughEnabled: boolean;
     isNowPlayingControlDisabledRef: RefObject<boolean>;
     audioRef: RefObject<HTMLAudioElement | null>;
+    /**
+     * The deck whose clock the now-playing picture belongs to, or null when the picture is live.
+     *
+     * During an automix blend `audioRef` already names the INCOMING deck - the track arriving,
+     * seconds before the listener hears it - while everything the panels should show still belongs
+     * to the outgoing track. `currentSong`/`duration`/`coverUrl` are passed as the held picture by
+     * the caller; this is the matching clock, so the remote's progress bar reads the outgoing deck
+     * rather than snapping to zero the moment a blend arms. Mirrors what the media-session bridge
+     * already does with the displayed track.
+     */
+    getDisplayAudioElement?: () => HTMLAudioElement | null;
     audioSrc: string | null;
     currentTime: MotionValue<number>;
     duration: number;
@@ -61,6 +72,15 @@ type UseElectronPlaybackBridgeOptions = {
     onRemoteExportCommand?: (command: RemoteControlCommand) => boolean;
     onExternalPlayRequest?: (request: any) => Promise<void>;
     onRemoteCycleLoopMode?: () => void;
+    /**
+     * Handles a remote seek that lands during an automix blend, returning true when it did.
+     *
+     * The remote's bar, like the window's, shows the OUTGOING track mid-blend while `audioRef`
+     * names the incoming deck, so a plain `currentTime =` would move a track nobody can see. This
+     * routes such a seek through the same cancel-and-resume the window's bar uses. Returns false
+     * (and the ordinary seek runs) when no blend is in flight.
+     */
+    onRemoteTransitionSeek?: (time: number) => boolean;
     isLiked: boolean;
     onLike?: () => void;
 };
@@ -85,6 +105,7 @@ export const useElectronPlaybackBridge = ({
     mainWindowClickThroughEnabled,
     isNowPlayingControlDisabledRef,
     audioRef,
+    getDisplayAudioElement,
     audioSrc,
     currentTime,
     duration,
@@ -111,6 +132,7 @@ export const useElectronPlaybackBridge = ({
     onRemoteExportCommand,
     onExternalPlayRequest,
     onRemoteCycleLoopMode,
+    onRemoteTransitionSeek,
     isLiked,
     onLike,
 }: UseElectronPlaybackBridgeOptions) => {
@@ -164,7 +186,11 @@ export const useElectronPlaybackBridge = ({
     };
 
     const buildPlaybackSyncBridgeModelFromCurrentState = () => {
-        const audioElement = audioRef.current;
+        // The clock the picture belongs to: the outgoing deck during a blend, the active deck the
+        // rest of the time. The metadata below is already the held picture (the caller passes
+        // `currentSong`/`duration`/`coverUrl` as the displayed track), so reading the active deck's
+        // position here would show the outgoing song's title against the incoming song's clock.
+        const audioElement = getDisplayAudioElement?.() ?? audioRef.current;
         const isCurrentAudioSource = isAudioElementUsingCurrentSource();
         const currentTimeSec = audioElement?.currentTime ?? currentTime.get();
         const stagePositionSec = resolveStagePlayerPositionSec({
@@ -550,7 +576,11 @@ export const useElectronPlaybackBridge = ({
                     ? safeDuration
                     : command.time;
                 const nextTime = Math.max(0, Math.min(command.time, upperBound));
-                if (audioElement) {
+                // During a blend the visible track is the outgoing one; route through the same
+                // cancel-and-resume the window's bar uses instead of moving the hidden incoming deck.
+                if (onRemoteTransitionSeek?.(nextTime)) {
+                    // Handled: the re-play seeks the deck itself once it reloads.
+                } else if (audioElement) {
                     audioElement.currentTime = nextTime;
                 } else if (activePlaybackContext === 'stage') {
                     syncStageLyricsClock?.(nextTime, duration, taskbarPlayerStateRef.current);
@@ -571,7 +601,7 @@ export const useElectronPlaybackBridge = ({
 
         return window.electron.onRemoteControlCommand(runCommand);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activePlaybackContext, audioRef, canLikeCurrentSong, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteCycleLoopMode, onRemoteExportCommand, onRemotePlayerChromeVisibilityModeCycle, setShowTransparentWindowBorder, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
+    }, [activePlaybackContext, audioRef, canLikeCurrentSong, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteCycleLoopMode, onRemoteExportCommand, onRemotePlayerChromeVisibilityModeCycle, onRemoteTransitionSeek, setShowTransparentWindowBorder, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef, onLike]);
 
     useEffect(() => {
         if (!window.electron?.onStagePlayerControlRequest) {

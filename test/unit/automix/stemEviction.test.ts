@@ -51,9 +51,10 @@ describe('what survives a song change', () => {
     const store = (cache: readonly string[], key: string, wanted: ReadonlySet<string>) => {
         const next = cache.filter(existing => existing !== key).concat(key);
         while (next.length > MAX_WINDOWS) {
-            const victim = pickStemVictim(next, wanted);
+            const victim = pickStemVictim(next, wanted, key);
             if (victim === undefined) break;
             next.splice(next.indexOf(victim), 1);
+            if (victim === key) break;
         }
         return next;
     };
@@ -72,6 +73,26 @@ describe('what survives a song change', () => {
 
         expect(cache).toContain('a:tail');
         expect(cache).toContain('b:head');
+    });
+
+    it('does not let a window for an excursion take the slot of one next door', () => {
+        // Read off a real session, twice. Playing A with B next, cache full and holding the step
+        // back as designed. The listener skips to D and straight back to A; D's tail - requested in
+        // those few seconds, already past the check that could have cancelled it - lands ten seconds
+        // later. Under oldest-first it evicted B's tail, which the next transition separated again.
+        const cache = ['b:tail', 'c:head', 'a:tail', 'b:head'];
+
+        expect(store(cache, 'd:tail', wantedSet('a:tail', 'b:head'))).toEqual(cache);
+    });
+
+    it('keeps one nobody has named while a slot is going spare', () => {
+        // The half that makes this different from refusing to store such a window at all, which was
+        // tried and was worse. Seeking mid-blend cancels it and leaves the listener on the SAME
+        // track, so `wanted` swings back to the pair already playing while the pair being prepared -
+        // the one arming again in a minute - is briefly unwanted. Thrown away, every cancel cost ten
+        // seconds of htdemucs that the next arm paid for again.
+        expect(store(['a:tail', 'b:head'], 'b:tail', wantedSet('a:tail', 'b:head')))
+            .toEqual(['a:tail', 'b:head', 'b:tail']);
     });
 
     it('lets go after one step back, which is where the line is', () => {

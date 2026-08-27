@@ -373,11 +373,13 @@ export function useAutomixDecks({
                 audioRef.current = elementsRef.current[deck];
                 setActiveDeck(deck);
             },
-            onTailSrcChange: src => {
+            onTailSrcChange: (src, opts) => {
                 // Ahead of the state updates below, which take that deck's source away from it:
                 // this is the last moment the element can still say how long its track was, and the
                 // last moment its element still holds the source of the track that just faded out.
-                if (src === null) {
+                // Skipped when a cancel asks not to harvest: nothing played out, and the deck now in
+                // the tail role is the incoming one, so recording it would file a track that never ran.
+                if (src === null && opts?.harvest !== false) {
                     const active = sessionRef.current!.getActiveDeck();
                     const tailDeck = active === 'A' ? 'B' : 'A';
                     harvestRef.current(tailDeck);
@@ -603,6 +605,17 @@ export function useAutomixDecks({
      */
     const abortTransition = useCallback(() => { session.abort(); }, [session]);
 
+    /**
+     * Cancels a blend back onto the deck still playing the OUTGOING track, without a reload.
+     *
+     * For a seek that lands mid-blend: the listener is dragging the outgoing track's bar, and that
+     * track is already loaded and sounding on its own deck. Ordinary abort settles onto the incoming
+     * deck, which then has to be re-played from scratch to get back to the outgoing song - the whole
+     * song-change path, for a track that never left. This keeps it instead: the outgoing deck becomes
+     * active and keeps playing, the caller need only move it to where the bar was dragged.
+     */
+    const cancelBlendKeepingTail = useCallback(() => { session.abort(true); }, [session]);
+
     // Both decks are measured continuously while playing, not only once a blend is imminent: the
     // tempo estimate needs seconds of history behind it, and by the time a transition is planned
     // there is none left to gather. One timer for both decks, and only while there is sound.
@@ -734,6 +747,9 @@ export function useAutomixDecks({
         activeDeck,
         autoplayHeld,
         transitionDisplay,
+        // The exact src string React last rendered on the outgoing deck, so a cancel can re-point
+        // `audioSrc` at it without changing the string (which would reload that deck).
+        tailSrc,
         suppressAutoplayRef,
         registerDeckA,
         registerDeckB,
@@ -747,5 +763,6 @@ export function useAutomixDecks({
         handleTailEnded,
         isTransitionAudible,
         abortTransition,
+        cancelBlendKeepingTail,
     };
 }

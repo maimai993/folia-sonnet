@@ -301,11 +301,31 @@ export const setWantedStems = (keys: readonly string[]) => {
  *
  * Falls back to the oldest when everything is wanted, so a stale or empty `wanted` degrades to the
  * plain LRU this replaced rather than to nothing being evictable.
+ *
+ * `arriving` is the window being stored right now, and it is here because "not wanted" covers two
+ * things that are worth opposite amounts. A window the listener has merely STEPPED PAST is next
+ * door to where they are and will be asked for again - it is the Previous hit MAX_WINDOWS exists to
+ * hold. A window that finished for an excursion they have already LEFT will not be. Age cannot
+ * separate them, and it picked the wrong one: measured twice in one session, a tail separated for a
+ * track skipped away from six seconds earlier took the last of four slots, evicting a window the
+ * very next transition asked for, which was then separated again to the same numbers.
+ *
+ * The arrival can be told apart, because it is the only one whose own `stillWanted` can still be
+ * asked. So it goes first - but ONLY when the budget is actually full. Free is free, and that half
+ * is not a nicety, it is the whole difference between this and discarding such a result outright
+ * before storing it. That version was written, shipped for a listening test, and was worse: a
+ * listener who cancels a blend by seeking stays on the SAME track, so the pair that was being
+ * prepared is the pair coming back in a minute. Each cancel threw away ten seconds of htdemucs that
+ * the next arm then paid for again - seven model runs across four minutes where this rule needs
+ * four. A result that is already paid for costs only a slot, and a slot is what this decides.
  */
 export const pickStemVictim = (
     keys: readonly string[],
     stillWanted: ReadonlySet<string>,
-): string | undefined => keys.find(key => !stillWanted.has(key)) ?? keys[0];
+    arriving?: string,
+): string | undefined => (arriving !== undefined && !stillWanted.has(arriving)
+    ? arriving
+    : keys.find(key => !stillWanted.has(key)) ?? keys[0]);
 
 /*
  * There was a `dropUnwantedStems()` here, called at the end of every transition, on the reasoning
@@ -328,9 +348,12 @@ const remember = (key: string, value: StemWindow) => {
     cache.set(key, value);
     announced.delete(key);
     while (cache.size > MAX_WINDOWS) {
-        const victim = pickStemVictim([...cache.keys()], wanted);
+        const victim = pickStemVictim([...cache.keys()], wanted, key);
         if (victim === undefined) break;
         cache.delete(victim);
+        // Dropping the arrival IS the eviction - it cannot free a second slot, and without this the
+        // next turn asks to delete a key that has already gone, for the rest of the session.
+        if (victim === key) break;
     }
 };
 

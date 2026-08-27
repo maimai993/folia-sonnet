@@ -344,9 +344,19 @@ export function usePlaybackAudioBridge({
         }
     }, [audioRef, audioSrc, getTargetPlaybackVolume, isAutoplayHeld, isLyricsLoading, setPlayerState, setStatusMsg, setupAudioAnalyzer, shouldAutoPlayRef, suppressAutoplayRef, syncOutputGain, t]);
 
+    // Tells this bridge that the active deck ALREADY holds `src` and is sounding it, so the next time
+    // `audioSrc` settles on that value the reload effect above treats it as a no-op instead of calling
+    // load(). Used when a transition is cancelled back onto the deck still playing the outgoing track:
+    // that deck has the song loaded and playing, and reloading it would run the whole song-change
+    // shape - a fresh load, a visible hitch - for a track that never actually left.
+    const adoptActiveDeckSource = useCallback((src: string) => {
+        previousAudioSrcRef.current = src;
+    }, []);
+
     return {
         setupAudioAnalyzer,
         cacheSongAssets,
         cacheSongAssetsFor,
+        adoptActiveDeckSource,
     };
 }

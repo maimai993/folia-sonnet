@@ -122,8 +122,13 @@ export interface AutomixSessionPorts {
     getChain: (deck: AutomixDeckId) => AutomixDeckChain | null;
     /** Hands the deck role over: repoints the app's audio ref and rebinds the src of both decks. */
     onActiveDeckChange: (deck: AutomixDeckId) => void;
-    /** Pins the outgoing source on the deck that is fading out; null once it is released. */
-    onTailSrcChange: (src: string | null) => void;
+    /**
+     * Pins the outgoing source on the deck that is fading out; null once it is released. `harvest` is
+     * true on every ordinary settle (the outgoing deck played a whole tail and its reading is worth
+     * keeping) and false only when a transition is cancelled back onto the outgoing deck - nothing
+     * played out there, so recording the deck would file away a track that never actually finished.
+     */
+    onTailSrcChange: (src: string | null, opts?: { harvest?: boolean }) => void;
     /**
      * Holds the app's autoplay while the incoming deck loads, until the blend is actually due.
      *
@@ -678,7 +683,7 @@ export const createAutomixSession = (ports: AutomixSessionPorts) => {
      * which it did not. Nothing would ever press play again, and the listener hears the song end and then
      * silence.
      */
-    const settle = (options: { pauseTail: boolean }) => {
+    const settle = (options: { pauseTail: boolean; harvest?: boolean }) => {
         diagMark(`settle (pauseTail=${options.pauseTail})`);
         clearTimers();
         // Before the gains are put back, because the changeover node is one of them: a stem chain
@@ -729,7 +734,7 @@ export const createAutomixSession = (ports: AutomixSessionPorts) => {
         plannedFromKey = null;
         plannedFrom = null;
         plannedTo = null;
-        ports.onTailSrcChange(null);
+        ports.onTailSrcChange(null, { harvest: options.harvest ?? true });
         // Last, and unconditional: this is the only settle, so it is the only place that
         // can tell the screen a blend is over when the blend was cut short rather than
         // finished. A cue with a length is not enough on its own - a skipped track would
@@ -1246,9 +1251,22 @@ export const createAutomixSession = (ports: AutomixSessionPorts) => {
      * early advance is already in flight and cannot be recalled, so without suppressing its
      * autoplay the listener would press pause and hear the next song start anyway.
      */
-    const abort = (): boolean => {
+    const abort = (keepTail = false): boolean => {
         if (phase === 'idle') return false;
         const wasArmed = phase === 'armed';
+        if (keepTail) {
+            // Cancel the blend back onto the OUTGOING deck instead of the incoming one. Making the
+            // deck that is fading out the active deck flips what `settle` treats as the tail, so it
+            // pauses the incoming deck and leaves the outgoing one playing - the track the listener
+            // was hearing, already loaded, keeps sounding with nothing reloaded. `harvest: false`
+            // because nothing here played out; the deck now in the tail role is the INCOMING one,
+            // and recording it would file away a track that never actually played.
+            const outgoing = otherDeck(activeDeck);
+            activeDeck = outgoing;
+            ports.onActiveDeckChange(outgoing);
+            settle({ pauseTail: true, harvest: false });
+            return wasArmed;
+        }
         settle({ pauseTail: true });
         return wasArmed;
     };
