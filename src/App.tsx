@@ -54,6 +54,7 @@ import { useOnlineProviderPlatform } from './hooks/useOnlineProviderPlatform';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useElectronPlaybackBridge } from './hooks/useElectronPlaybackBridge';
 import { useElectronDisplaySleepBlocker } from './hooks/useElectronDisplaySleepBlocker';
+import { useSleepTimer } from './hooks/useSleepTimer';
 import { useElectronNeteaseApiStatus } from './hooks/useElectronNeteaseApiStatus';
 import { useElectronVideoExportController } from './hooks/useElectronVideoExportController';
 import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
@@ -396,6 +397,13 @@ export default function App() {
         handleTogglePreventDisplaySleepDuringPlayback,
         wallpaperMode,
         handleToggleWallpaperMode,
+        sleepTimerEnabled,
+        sleepTimerHours,
+        sleepTimerMinutes,
+        sleepTimerDeadlineMs,
+        handleToggleSleepTimer,
+        handleSetSleepTimerHours,
+        handleSetSleepTimerMinutes,
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
@@ -1962,6 +1970,7 @@ export default function App() {
         await window.electron.setMainWindowAlwaysOnTop(!enabled);
         return true;
     }, []);
+    useSleepTimer({ enabled: sleepTimerEnabled, hours: sleepTimerHours, minutes: sleepTimerMinutes });
     const commandPaletteContext = useMemo(() => buildCommandPaletteContext({
         t: (key: string, fallback?: string) => t(key, fallback ?? ''),
         setStatusMsg,
@@ -2036,6 +2045,14 @@ export default function App() {
         wallpaperMode,
         setWallpaperMode: handleToggleWallpaperMode,
 
+        sleepTimerEnabled,
+        setSleepTimerEnabled: handleToggleSleepTimer,
+        sleepTimerHours,
+        setSleepTimerHours: handleSetSleepTimerHours,
+        sleepTimerMinutes,
+        setSleepTimerMinutes: handleSetSleepTimerMinutes,
+        sleepTimerDeadlineMs,
+
         canGenerateAITheme,
         isGeneratingTheme,
         generateAITheme: generateCurrentSongTheme,
@@ -2073,6 +2090,8 @@ export default function App() {
         handleSetLatentBackgroundTuning,
         handleSetMonetBackgroundTuning,
         handleSetSubtitleContentMode,
+        handleSetSleepTimerHours,
+        handleSetSleepTimerMinutes,
         handleSetVisualizerBackgroundMode,
         handleSetVisualizerMode,
         handleSetVolume,
@@ -2083,6 +2102,7 @@ export default function App() {
         handleToggleHidePlayerTranslationSubtitle,
         handleTogglePreventDisplaySleepDuringPlayback,
         handleToggleRandomVisualizerModePerSong,
+        handleToggleSleepTimer,
         handleToggleSubtitleOverlayBackground,
         handleToggleVoiceInputPause,
         handleToggleWallpaperMode,
@@ -2112,6 +2132,10 @@ export default function App() {
         setIsUserGuideModalOpen,
         setPersonalFmSelection,
         shuffleQueue,
+        sleepTimerDeadlineMs,
+        sleepTimerEnabled,
+        sleepTimerHours,
+        sleepTimerMinutes,
         submitSearch,
         subtitleContentMode,
         subtitleOverlayBackground,

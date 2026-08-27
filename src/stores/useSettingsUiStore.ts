@@ -57,6 +57,9 @@ export type SettingsModalState = {
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 export const VOICE_INPUT_PAUSE_STORAGE_KEY = 'voice_input_pause_enabled';
 export const PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY = 'prevent_display_sleep_during_playback';
+export const SLEEP_TIMER_ENABLED_STORAGE_KEY = 'sleep_timer_enabled';
+export const SLEEP_TIMER_HOURS_STORAGE_KEY = 'sleep_timer_hours';
+export const SLEEP_TIMER_MINUTES_STORAGE_KEY = 'sleep_timer_minutes';
 export const GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY = 'global_lyric_timeline_offset_ms';
 export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_taskbar';
@@ -1316,6 +1319,19 @@ const readStoredVolume = () => {
     return Number.isFinite(parsed) ? parsed : 1;
 };
 
+const readStoredSleepTimerPart = (key: string, max: number): number => {
+    if (typeof window === 'undefined') {
+        return 0;
+    }
+
+    const saved = Number(localStorage.getItem(key));
+    return Number.isInteger(saved) && saved >= 0 && saved <= max ? saved : 0;
+};
+
+const readStoredSleepTimerHours = () => readStoredSleepTimerPart(SLEEP_TIMER_HOURS_STORAGE_KEY, 999);
+
+const readStoredSleepTimerMinutes = () => readStoredSleepTimerPart(SLEEP_TIMER_MINUTES_STORAGE_KEY, 59);
+
 export type SettingsUiState = {
     statusSetter: StatusSetter | null;
     audioQuality: AudioQuality;
@@ -1341,6 +1357,10 @@ export type SettingsUiState = {
     minimizeToTray: boolean;
     voiceInputPauseEnabled: boolean;
     preventDisplaySleepDuringPlayback: boolean;
+    sleepTimerEnabled: boolean;
+    sleepTimerHours: number;
+    sleepTimerMinutes: number;
+    sleepTimerDeadlineMs: number | null;
     hideTaskbarIcon: boolean;
     hideRemoteControlTaskbarIcon: boolean;
     wallpaperMode: boolean;
@@ -1473,6 +1493,9 @@ export type SettingsUiState = {
     handleToggleMinimizeToTray: (enable: boolean) => void;
     handleToggleVoiceInputPause: (enable: boolean) => void;
     handleTogglePreventDisplaySleepDuringPlayback: (enable: boolean) => void;
+    handleToggleSleepTimer: (enable: boolean) => void;
+    handleSetSleepTimerHours: (hours: number) => void;
+    handleSetSleepTimerMinutes: (minutes: number) => void;
     handleToggleHideTaskbarIcon: (enable: boolean) => void;
     handleToggleHideRemoteControlTaskbarIcon: (enable: boolean) => void;
     handleToggleWallpaperMode: (enable: boolean) => void;
@@ -1612,6 +1635,10 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
     voiceInputPauseEnabled: getStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, false),
     preventDisplaySleepDuringPlayback: getStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, false),
+    sleepTimerEnabled: getStoredBoolean(SLEEP_TIMER_ENABLED_STORAGE_KEY, false),
+    sleepTimerHours: readStoredSleepTimerHours(),
+    sleepTimerMinutes: readStoredSleepTimerMinutes(),
+    sleepTimerDeadlineMs: null,
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
     hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
     wallpaperMode: getStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, false),
@@ -1970,6 +1997,28 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'preventDisplaySleepOn' : 'preventDisplaySleepOff')),
         });
+    },
+    handleToggleSleepTimer: (enable) => {
+        setStoredBoolean(SLEEP_TIMER_ENABLED_STORAGE_KEY, enable);
+        set({ sleepTimerEnabled: enable });
+        notify(get, {
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'sleepTimerOn' : 'sleepTimerOff')),
+        });
+    },
+    handleSetSleepTimerHours: (hours) => {
+        const clamped = Math.min(999, Math.max(0, Math.floor(hours) || 0));
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(SLEEP_TIMER_HOURS_STORAGE_KEY, String(clamped));
+        }
+        set({ sleepTimerHours: clamped });
+    },
+    handleSetSleepTimerMinutes: (minutes) => {
+        const clamped = Math.min(59, Math.max(0, Math.floor(minutes) || 0));
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(SLEEP_TIMER_MINUTES_STORAGE_KEY, String(clamped));
+        }
+        set({ sleepTimerMinutes: clamped });
     },
     handleToggleHideTaskbarIcon: (enable) => {
         setStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, enable);
@@ -3043,6 +3092,13 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     minimizeToTray: state.minimizeToTray,
     voiceInputPauseEnabled: state.voiceInputPauseEnabled,
     preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
+    sleepTimerEnabled: state.sleepTimerEnabled,
+    sleepTimerHours: state.sleepTimerHours,
+    sleepTimerMinutes: state.sleepTimerMinutes,
+    sleepTimerDeadlineMs: state.sleepTimerDeadlineMs,
+    handleToggleSleepTimer: state.handleToggleSleepTimer,
+    handleSetSleepTimerHours: state.handleSetSleepTimerHours,
+    handleSetSleepTimerMinutes: state.handleSetSleepTimerMinutes,
     hideTaskbarIcon: state.hideTaskbarIcon,
     hideRemoteControlTaskbarIcon: state.hideRemoteControlTaskbarIcon,
     wallpaperMode: state.wallpaperMode,
