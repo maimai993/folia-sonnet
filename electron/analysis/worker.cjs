@@ -88,6 +88,13 @@ const PROVIDERS = {
 };
 
 /**
+ * Set by the host when a previous worker had a GPU request killed for blowing its deadline. A fresh
+ * worker's `pinnedToCpu` starts empty, so without this the re-fork would choose the same provider that
+ * just hung and hang again; the flag carries that one bit of state across the kill. See host.cjs.
+ */
+const FORCE_CPU = process.env.FOLIA_ANALYSIS_FORCE_CPU === '1';
+
+/**
  * How long one GPU call may take before its provider is abandoned for the rest of this process.
  *
  * Not a performance target - it is the line between "this GPU is slow" and "this GPU is not running the
@@ -249,7 +256,7 @@ const load = async (name) => {
     }
 
     const ort = require('onnxruntime-node');
-    const order = pinnedToCpu.has(name) ? ['cpu'] : [...(PROVIDERS[name] ?? []), 'cpu'];
+    const order = (FORCE_CPU || pinnedToCpu.has(name)) ? ['cpu'] : [...(PROVIDERS[name] ?? []), 'cpu'];
     let last = '';
     for (const provider of order) {
         try {

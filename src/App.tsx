@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useMotionValue, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
@@ -17,7 +17,9 @@ import { createCopySongInfoSuccessHandler } from './components/app/dialogs/creat
 import { buildSettingsDialogModel } from './components/app/dialogs/buildSettingsDialogModel';
 import AppOverlays from './components/app/overlays/AppOverlays';
 import AutomixModelReminder from './components/modal/AutomixModelReminder';
-import AutomixTransitionAnimation from './components/app/overlays/AutomixTransitionAnimation';
+// Lazy so animejs (~38KB gz) stays out of the bootstrap chunk: this overlay only ever draws when the
+// animation switch is on AND the mode is automix, both off by default, so it is mounted only then.
+const AutomixTransitionAnimation = lazy(() => import('./components/app/overlays/AutomixTransitionAnimation'));
 import { UserGuideModal } from './components/modal/UserGuideModal';
 import { USER_GUIDE_AUTO_OPEN_VERSION } from './components/modal/userGuideContent';
 import { buildAppDialogsModel } from './components/app/dialogs/buildAppDialogsModel';
@@ -43,6 +45,8 @@ import {
 import { buildPlayerPanelModel } from './components/app/player-panel/buildPlayerPanelModel';
 import { createQueueMutations } from './components/app/player-panel/createQueueMutations';
 import { Album, Artist, LyricData, Theme, PlayerState, SongResult, ReplayGainMode, StatusMessage, PlaybackContext, StageLoopMode, UnifiedSong } from './types';
+import type { LocalSong } from './types';
+import { getLocalSongArrayBuffer } from './services/localMusicService';
 import type { MediaId, OnlineProviderId, ProviderCollection } from './types/onlineMusic';
 import { resolveSongCatalogRef } from './services/onlineMusic/catalogRefs';
 import { omni } from './services/onlineMusic/omni';
@@ -174,6 +178,10 @@ export default function App() {
     const transitionMode = useSettingsUiStore(state => state.transitionMode);
     const crossfadeMaxSec = useSettingsUiStore(state => state.crossfadeMaxSec);
     const transitionPerformance = useSettingsUiStore(state => state.transitionPerformance);
+    const transitionAnimation = useSettingsUiStore(state => state.transitionAnimation);
+    const handleToggleAutomix = useSettingsUiStore(state => state.handleToggleAutomix);
+    const handleSetTransitionMode = useSettingsUiStore(state => state.handleSetTransitionMode);
+    const handleToggleTransitionPerformance = useSettingsUiStore(state => state.handleToggleTransitionPerformance);
     // Memoised because it is a dependency of the planning callback: a fresh object every render
     // would rebuild that callback on every frame of playback.
     const transitionSettings = useMemo(
@@ -1416,6 +1424,20 @@ export default function App() {
         onClearPendingUnavailableSkip: clearPendingUnavailableSkip,
     });
 
+    // Bridges the automix hook (built here) to the media-cache writer (built a little further down in
+    // usePlaybackAudioBridge). A ref rather than a prop because the writer does not exist yet at this
+    // call - the same ordering the harvest/advance callbacks inside the hook solve the same way.
+    const cachePlayedOutRef = useRef<(song: SongResult, src: string | null) => void>(() => { });
+
+    // Reads a local track's bytes off its own file handle, so automix can separate a next-up local
+    // song whose head has no prefetch URL and never enters the online media cache. Resolved here
+    // because App owns the local library; the real LocalSong (with its handle) is looked up by id.
+    const getLocalStemBytes = useCallback(async (song: SongResult): Promise<ArrayBuffer | null> => {
+        if (!isLocalPlaybackSong(song)) return null;
+        const local = localSongs.find(candidate => candidate.id === song.localRef.songId);
+        return getLocalSongArrayBuffer((local ?? song) as unknown as LocalSong);
+    }, [localSongs]);
+
     const automix = useAutomixDecks({
         audioRef,
         audioContextRef,
@@ -1436,6 +1458,8 @@ export default function App() {
             // deck to still be sounding when the next one starts.
             void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
         },
+        onDeckPlayedOut: (song, src) => cachePlayedOutRef.current(song, src),
+        getLocalStemBytes,
     });
 
     automixRef.current = automix;
@@ -1551,7 +1575,7 @@ export default function App() {
         }
     }, [audioSrc, audioRef, setDuration]);
 
-    const { setupAudioAnalyzer, cacheSongAssets } = usePlaybackAudioBridge({
+    const { setupAudioAnalyzer, cacheSongAssets, cacheSongAssetsFor } = usePlaybackAudioBridge({
         audioRef,
         audioSrc,
         currentSong,
@@ -1577,6 +1601,11 @@ export default function App() {
         updateCacheSize,
         t: key => t(key),
     });
+
+    // Now the writer exists, point the automix settle path at it. A track that blends out never fires
+    // `ended`, so this is the only place its assets get cached; the cover is derived from the exit
+    // song's own metadata inside `cacheSongAssetsFor` rather than from the now-arriving track's view.
+    cachePlayedOutRef.current = (song, src) => { void cacheSongAssetsFor(song, src); };
 
     const { resumePlayback, pausePlayback } = usePlaybackTransportController({
         activePlaybackContext,
@@ -2202,6 +2231,13 @@ export default function App() {
         themeGenerationSource,
         setThemeGenerationSource: handleThemeGenerationSourceChange,
 
+        automixEnabled,
+        transitionMode,
+        transitionPerformance,
+        handleToggleAutomix,
+        handleSetTransitionMode,
+        handleToggleTransitionPerformance,
+
         visualizerMode,
         visualizerBackgroundMode,
         setVisualizerMode: handleSetVisualizerMode,
@@ -2216,6 +2252,7 @@ export default function App() {
         alwaysShowTrackSwitchButtons,
         applyAudioSoundPreset,
         applyQueueBatchOperation,
+        automixEnabled,
         canGenerateAITheme,
         canOpenThemeQuickEditor,
         clearQueue,
@@ -2231,6 +2268,7 @@ export default function App() {
         handleSetLatentBackgroundTuning,
         handleSetMonetBackgroundTuning,
         handleSetSubtitleContentMode,
+        handleSetTransitionMode,
         handleSetVisualizerBackgroundMode,
         handleSetVisualizerMode,
         handleSetVolume,
@@ -2238,10 +2276,12 @@ export default function App() {
         handleToggleAlwaysShowMainWindowTitlebar,
         handleToggleAlwaysShowPlayerBackButton,
         handleToggleAlwaysShowTrackSwitchButtons,
+        handleToggleAutomix,
         handleToggleHidePlayerTranslationSubtitle,
         handleTogglePreventDisplaySleepDuringPlayback,
         handleToggleRandomVisualizerModePerSong,
         handleToggleSubtitleOverlayBackground,
+        handleToggleTransitionPerformance,
         handleToggleVoiceInputPause,
         handleToggleWallpaperMode,
         hidePlayerTranslationSubtitle,
@@ -2282,6 +2322,8 @@ export default function App() {
         togglePlay,
         toggleRemoteControlWindow,
         toggleTransparentModeWithHandoff,
+        transitionMode,
+        transitionPerformance,
         transparentPlayerBackground,
         visualizerBackgroundMode,
         visualizerMode,
@@ -3598,9 +3640,15 @@ export default function App() {
 
             <AppOverlays model={appOverlaysModel} />
 
-            {/* Not in the overlays model: it takes no state from this file and no click
-                from anyone, and it decides for itself whether it has anything to draw. */}
-            <AutomixTransitionAnimation theme={theme} isDaylight={isDaylight} />
+            {/* Not in the overlays model: it takes no state from this file and no click from anyone.
+                Mounted only under the same condition it draws on, so the lazy animejs chunk loads only
+                when the animation is actually wanted; the fallback is empty because it draws nothing
+                until a cue arrives anyway. */}
+            {transitionAnimation && transitionMode === 'automix' && (
+                <Suspense fallback={null}>
+                    <AutomixTransitionAnimation theme={theme} isDaylight={isDaylight} />
+                </Suspense>
+            )}
 
             {/* Same arrangement, same reason. Mounted here rather than beside either of the two
                 switches that can open it, so that both reach the same one. */}

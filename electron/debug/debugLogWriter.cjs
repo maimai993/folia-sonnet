@@ -52,7 +52,8 @@ const createDebugLogWriter = ({ root, folder, extension, mode }) => {
     fs.mkdirSync(dir, { recursive: true });
     try { prune(dir, extension); } catch { /* unreadable directory is not worth failing over */ }
 
-    const file = path.join(dir, `${dayStamp()}${extension}`);
+    let day = dayStamp();
+    let file = path.join(dir, `${day}${extension}`);
     // A descriptor and `writeSync`, not a write stream. Batching already removes the per-line cost,
     // and what a stream adds back is a write that has not landed when the process exits - which for
     // a log whose whole job is to survive a crash is the one failure that matters. `will-quit` gets
@@ -71,10 +72,31 @@ const createDebugLogWriter = ({ root, folder, extension, mode }) => {
         try { fs.writeSync(fd, chunk); } catch { /* disk full, permissions, folder removed under us */ }
     };
 
+    // The day is fixed in the file name and the descriptor at open, so a session that runs past
+    // midnight would write tomorrow into today's file and never prune again - both "one file per day"
+    // and KEEP_DAYS quietly stop holding on a desktop left playing overnight. Checked lazily on the
+    // next write rather than on a timer: a date compare is free, and a rotation with nothing to log is
+    // pointless. Pending lines are flushed to the day they were written on before the descriptor moves.
+    const rollIfNewDay = () => {
+        const today = dayStamp();
+        if (today === day) return;
+        flush();
+        if (fd !== null) { try { fs.closeSync(fd); } catch { /* already closed */ } }
+        day = today;
+        file = path.join(dir, `${day}${extension}`);
+        try { prune(dir, extension); } catch { /* unreadable directory is not worth failing over */ }
+        // 'a', never 'w': overwrite is a per-SESSION reset (see the param doc), and a new day inside
+        // one session is a continuation of it, not a new session.
+        try { fd = fs.openSync(file, 'a'); } catch { fd = null; }
+    };
+
     return {
-        file,
+        // A getter, not a value: the name changes when the day rolls, and callers read this to report
+        // where the log is (see debugHost's getState). A captured string would name yesterday's file.
+        get file() { return file; },
         dir,
         write(line) {
+            rollIfNewDay();
             pending.push(line.endsWith('\n') ? line : `${line}\n`);
             if (pending.length >= MAX_PENDING) { flush(); return; }
             if (timer) return;

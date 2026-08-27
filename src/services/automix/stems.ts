@@ -372,24 +372,35 @@ export const getStemsByKey = (key: string | null, role: StemRole): TrackStems | 
  * The bytes, but only if having them costs nothing.
  *
  * Deliberately narrower than profileService's version, which is allowed to move a download earlier.
- * Separation is not worth a byte of anyone's bandwidth, so this reads the media cache and local
- * files and gives up otherwise.
+ * Separation is not worth a byte of anyone's bandwidth, so this reads the media cache, a local URL
+ * already in hand, or - for a local track with no URL - the file straight off its own handle
+ * (`readBytes`), and gives up otherwise.
  */
-const readLocalBytes = async (
-    song: SongResult,
-    audioUrl: string | null | undefined,
-): Promise<ArrayBuffer | null> => {
+const readLocalBytes = async (request: StemRequest): Promise<ArrayBuffer | null> => {
+    const { song, audioUrl } = request;
     const cached = await getCachedSongAudioBlob(song);
     if (cached) return cached.arrayBuffer();
-    if (!audioUrl) return null;
-    const isLocal = audioUrl.startsWith('blob:') || audioUrl.startsWith('file:')
-        || getPlaybackSourceRef(song).kind !== 'online';
-    if (!isLocal) return null;
-    try {
-        return await (await fetch(audioUrl)).arrayBuffer();
-    } catch {
-        return null;
+
+    // A local URL already in hand: the outgoing track plays from a blob: URL, so its tail reads
+    // straight off that. An online URL is left alone - separation never downloads.
+    if (audioUrl) {
+        const isLocalUrl = audioUrl.startsWith('blob:') || audioUrl.startsWith('file:')
+            || getPlaybackSourceRef(song).kind !== 'online';
+        if (!isLocalUrl) return null;
+        try {
+            return await (await fetch(audioUrl)).arrayBuffer();
+        } catch {
+            return null;
+        }
     }
+
+    // No cached bytes and no URL. The incoming head of a local track has neither - prefetchSong skips
+    // local files, so it never gets a prefetch URL, and no media-cache event will ever wake a parked
+    // request for a file that was always on disk. `readBytes` reads it from its own handle instead;
+    // this is the entry local-to-local transitions were missing, the whole of the "waiting... not in
+    // the media cache yet" loop that never resolved.
+    if (request.readBytes) return request.readBytes();
+    return null;
 };
 
 export interface StemRequest {
@@ -397,6 +408,13 @@ export interface StemRequest {
     role: StemRole;
     /** Used only when it is a local URL; an online one is left alone. */
     audioUrl?: string | null;
+    /**
+     * Reads the track's bytes straight off its own source, for a local track that has no URL and no
+     * cached copy - the incoming head. Injected rather than imported so this file does not pull the
+     * local-library service into the automix core (and its documented init cycle). Null-returning when
+     * the local file is unreachable; absent for online tracks, which are never read this way.
+     */
+    readBytes?: () => Promise<ArrayBuffer | null>;
     /**
      * Whether this window is still the one a transition is coming for, asked just before the model.
      *
@@ -498,8 +516,18 @@ export const ensureStems = async (request: StemRequest): Promise<void> => {
         await profilesSettled();
 
         const started = performance.now();
-        const bytes = await readLocalBytes(request.song, request.audioUrl);
+        const bytes = await readLocalBytes(request);
         if (!bytes) {
+            // A local file the handle could not reach - permission not restored, moved, or deleted.
+            // NOT parked: nothing fires a media-cache event for a local file, so a parked request would
+            // wait for the rest of the session. Distinct from the online reason below on purpose - the
+            // two used to print the same "not in the media cache yet", which for a local track was never
+            // true and never going to resolve.
+            if (getPlaybackSourceRef(request.song).kind === 'local') {
+                explainOnce(key, `[Automix] cannot separate the ${request.role} of "${request.song.name}":`
+                    + ' its local file is not accessible');
+                return;
+            }
             // Parked rather than dropped - see `parked`. Still once per window in the log: what comes
             // next is either `separating` again or nothing, and both say more than repeating this.
             explainOnce(key, `[Automix] waiting to separate the ${request.role} of "${request.song.name}":`

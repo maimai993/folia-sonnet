@@ -33,8 +33,6 @@ const RUNNER_SCRIPT = path.join(__dirname, 'htdemucs_runner.py')
  *  40s window plus a cold model load); this is the line for "not running", not a performance target. */
 const TIMEOUT_MS = 120_000;
 
-let counter = 0;
-
 /**
  * Runs the runner once and resolves with whatever it said, or rejects with why it did not.
  *
@@ -86,9 +84,14 @@ const floatsFrom = (buf) => {
  */
 const separate = async ({ pythonExe, script, modelPath, left, right }) => {
     const total = left.length;
-    const stamp = `${process.pid}-${Date.now()}-${counter += 1}`;
-    const inPath = path.join(os.tmpdir(), `folia-htd-${stamp}.in`);
-    const outPath = path.join(os.tmpdir(), `folia-htd-${stamp}.out`);
+    // A per-call 0700 directory rather than two predictable names in the shared temp root. os.tmpdir()
+    // is multi-user on Linux/macOS, and a name built only from pid+time+counter lets another local user
+    // pre-place a symlink at either path - the .in redirecting our ~10MB of decoded audio, the .out
+    // swapping in stems we did not separate. mkdtemp's name is unguessable and the directory is not
+    // writable by anyone else, so neither file can be pre-created. CWE-377.
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'folia-htd-'));
+    const inPath = path.join(dir, 'mix.in');
+    const outPath = path.join(dir, 'stems.out');
 
     try {
         const inBuf = Buffer.allocUnsafe(2 * total * 4);
@@ -109,8 +112,7 @@ const separate = async ({ pythonExe, script, modelPath, left, right }) => {
         });
         return reply;
     } finally {
-        await fsp.rm(inPath, { force: true }).catch(() => { });
-        await fsp.rm(outPath, { force: true }).catch(() => { });
+        await fsp.rm(dir, { recursive: true, force: true }).catch(() => { });
     }
 };
 

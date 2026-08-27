@@ -106,8 +106,22 @@ const BATCH_MS = 1000;
 /** Send early rather than hold more than this. Keeps a burst out of the renderer's own memory. */
 const BATCH_MAX = 200;
 
-let queue: Array<{ at: number; level: string; tag: string | null; text: string }> = [];
+type RuntimeLine = { at: number; level: string; tag: string | null; text: string };
+let queue: RuntimeLine[] = [];
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Startup lines held until the main process says whether the runtime log is even on.
+ *
+ * The switch's real value arrives over an async IPC (see `installDebugModule`), and until it does
+ * `snapshot.runtimeLogEnabled` is its `false` default - so a naive `enqueue` drops every line logged
+ * before that answer, which is exactly the startup burst this pipe was installed early to catch. These
+ * are buffered instead and either flushed or discarded once the answer is in. Bounded so a bridge that
+ * never answers cannot grow it without end.
+ */
+let startupBuffer: RuntimeLine[] = [];
+let stateKnown = false;
+const STARTUP_MAX = 2000;
 
 const flush = () => {
     if (batchTimer) { clearTimeout(batchTimer); batchTimer = null; }
@@ -117,11 +131,28 @@ const flush = () => {
     try { bridge()?.debugWriteRuntimeLines?.(lines); } catch { /* the window is going away */ }
 };
 
+/** Called once the first main-process answer is in: keep the startup lines if logging is on, else drop. */
+const settleStartupBuffer = () => {
+    stateKnown = true;
+    const held = startupBuffer;
+    startupBuffer = [];
+    if (!held.length) return;
+    if (!snapshot.runtimeLogEnabled) return; // logging off, or browser build - discard, do not write
+    queue = held.concat(queue);
+    flush();
+};
+
 const enqueue = (entry: ConsoleLogEntry) => {
-    // Read live rather than captured: the switch is in a settings page that can be flipped mid-
-    // session, and a pipe that checked once at install would keep writing after it was turned off.
+    const line: RuntimeLine = { at: entry.at, level: entry.level, tag: entry.scope, text: entry.text };
+    // Before the first answer, buffer regardless: dropping on the not-yet-known default is what lost
+    // the startup lines. Once known, read the switch live - it lives in a settings page that can be
+    // flipped mid-session, so a pipe that checked once at install would keep writing after it was off.
+    if (!stateKnown) {
+        if (startupBuffer.length < STARTUP_MAX) startupBuffer.push(line);
+        return;
+    }
     if (!snapshot.runtimeLogEnabled) return;
-    queue.push({ at: entry.at, level: entry.level, tag: entry.scope, text: entry.text });
+    queue.push(line);
     if (queue.length >= BATCH_MAX) { flush(); return; }
     if (batchTimer) return;
     batchTimer = setTimeout(flush, BATCH_MS);
@@ -140,5 +171,7 @@ export const installDebugModule = () => {
     setConsoleLogSink(enqueue);
     // A buffered line is worth less than the crash it was recorded during.
     window.addEventListener('pagehide', flush);
-    void refreshDebugModule();
+    // The first answer decides the fate of everything logged before it arrived. `finally`, not
+    // `then`: a rejected refresh leaves the snapshot UNAVAILABLE, which is the correct "discard" case.
+    void refreshDebugModule().finally(settleStartupBuffer);
 };

@@ -1262,7 +1262,15 @@ export const createAutomixSession = (ports: AutomixSessionPorts) => {
         handleTailEnded,
         handleSongChanged,
         abort,
-        dispose: clearTimers,
+        /**
+         * Tear the session down to a defined state. More than the timers: a transition in flight holds
+         * stem chains, a stem bus, an expansion stopper, an autoplay hold and two attenuated decks, and
+         * none of those is a timer - so a dispose mid-blend used to leave buffers playing to their end
+         * and the decks at the wrong gain. `settle` stops all of it. When idle there is nothing running
+         * and settle would only fire spurious state updates (it drives onTailSrcChange), so the timers
+         * are the whole of the work then.
+         */
+        dispose: () => { if (phase === 'idle') clearTimers(); else settle({ pauseTail: true }); },
     };
 };
 

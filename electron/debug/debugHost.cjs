@@ -19,10 +19,12 @@ const { createMemoryMonitor } = require('./memoryMonitor.cjs');
 // questions anyway.
 
 const DEFAULTS = {
-    // On by default, for the same reason the renderer's console buffer is: a log you have to enable
-    // BEFORE the problem is a log nobody has when it happens. It costs a buffered write of lines
-    // that were being produced regardless.
-    runtimeLogEnabled: true,
+    // Off by default. The Developer section is visible to everyone, and a diagnostic that writes a
+    // file all session without being asked is disk and a trace of activity a normal listener never
+    // opted into. Anyone debugging turns it on first - it persists once flipped - which is a smaller
+    // cost than every install logging to disk unprompted. (It was on by default to catch a problem
+    // before it was reproduced; that trade is not worth making on behalf of users who will never look.)
+    runtimeLogEnabled: false,
     runtimeLogMode: 'append',
     // Off by default: this one costs a timer, a metrics call across every process, and a file that
     // grows all session. It is switched on to answer a question, not left running.

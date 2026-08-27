@@ -23,14 +23,17 @@ import { modeNeedsBeatGrid } from './automix/transitionStrategy';
 
 // Prefetch configuration
 //
-// One ahead and none behind, and the reason is memory rather than bandwidth. Every prefetched track
-// is a resolved URL, a lyric set, and - when blending is on - a full decode and a beat-model pass held
-// in the renderer. Three tracks of that is three times the footprint to have one track's worth of
-// readiness: only the NEXT track is in the transition being planned, and going back is a keypress the
-// listener is already waiting through, so the previous track was paying rent for a case that pays for
-// itself. Raising these is not free - it is linear in everything the automix layer holds.
-const PREFETCH_COUNT_NEXT = 1;  // Prefetch the next song only
-const PREFETCH_COUNT_PREV = 0;  // Nothing behind: going back re-fetches, which is what a keypress buys
+// Two ahead and one behind - the ordinary playback window, restored. This governs only the LIGHT
+// resources: a resolved URL, a lyric set and a cover URL, so a normal next/previous keypress lands on
+// something already fetched rather than a fresh network round-trip.
+//
+// The heavy automix work - the full decode and the beat-model pass - does NOT scale with this window.
+// It is capped separately to the current track plus the immediate next by `setAnalysisScope` below
+// (and gated off entirely when blending is disabled, in `analyseForAutomix`). So widening the playback
+// window back out costs a URL and some lyrics per extra track, not a decode - the memory the old
+// one-ahead value was protecting was already protected a layer down.
+const PREFETCH_COUNT_NEXT = 2;  // The next two songs' light resources (URL + lyrics + cover)
+const PREFETCH_COUNT_PREV = 1;  // One behind, so "previous" is instant rather than a refetch
 const URL_TTL_MS = 1200 * 1000; // 1200 seconds = 20 minutes
 const MAX_PREFETCH_CACHE_SIZE = 200; // Evict least recently used entries beyond this limit
 

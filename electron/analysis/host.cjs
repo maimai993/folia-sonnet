@@ -22,6 +22,22 @@ const path = require('path');
  */
 const IDLE_MS = 120_000;
 
+/**
+ * Hard ceiling on one request, past which the worker is killed rather than waited on.
+ *
+ * Only beat_this has one, and only beat_this needs one: it is the single model that runs a native
+ * onnxruntime `session.run` in this process's worker, and that call is synchronous under the hood
+ * (see the top of worker.cjs) - so a GPU provider that takes the graph and never returns blocks the
+ * worker's whole message loop, and the worker's own GPU_ABANDON_MS check never runs because it sits
+ * AFTER the call that never came back. A deadline the worker cannot self-enforce has to live out here.
+ *
+ * 90s is comfortably above the worker's own 60s graceful-abandon window (a slow-but-returning provider
+ * is demoted in there without a kill) and far above any legitimate beat_this call, which is a second or
+ * two. htdemucs is deliberately absent: it runs in a separate Python process whose exit IS asynchronous,
+ * so it can never wedge the worker, and it already bounds itself with the sidecar's own timeout.
+ */
+const DEADLINE_MS = { 'beat-this': 90_000 };
+
 /** Answer for a request whose worker died under it. Never leaves this file - see `ask`. */
 const CRASHED = Symbol('crashed');
 
@@ -31,7 +47,7 @@ const CRASHED = Symbol('crashed');
  *   running. Computing it once at startup is how a freshly downloaded model stayed invisible until
  *   the next launch.
  */
-const createAnalysisHost = ({ app, ipcMain, getModelsDirs }) => {
+const createAnalysisHost = ({ app, ipcMain, getModelsDirs, deadlines = DEADLINE_MS }) => {
     const modelsDirs = () => (getModelsDirs?.() ?? []).filter(Boolean);
 
     let child = null;
@@ -39,6 +55,13 @@ const createAnalysisHost = ({ app, ipcMain, getModelsDirs }) => {
     let quitting = false;
     let nextId = 0;
     const pending = new Map();
+    /**
+     * Set once a GPU request blew its deadline and had to be killed. It survives the re-fork - a fresh
+     * worker's in-memory `pinnedToCpu` does not - so the retry, and every request after it this session,
+     * loads beat_this on the CPU instead of choosing the provider that just proved it hangs. Carried to
+     * the worker as an env flag at fork time; see `spawn`.
+     */
+    let forceCpu = false;
 
     const stop = () => {
         if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
@@ -73,6 +96,9 @@ const createAnalysisHost = ({ app, ipcMain, getModelsDirs }) => {
             // So the worker is unmistakable in app.getAppMetrics() - it lands as Utility/folia-analysis
             // instead of an anonymous Utility PID. Ignored by Electron if unsupported.
             serviceName: 'folia-analysis',
+            // env defaults to a copy of process.env only when omitted; once we pass it we must carry
+            // the parent's own across. The flag is what makes a GPU demotion outlive the kill.
+            env: forceCpu ? { ...process.env, FOLIA_ANALYSIS_FORCE_CPU: '1' } : { ...process.env },
         });
         child = started;
 
@@ -85,10 +111,9 @@ const createAnalysisHost = ({ app, ipcMain, getModelsDirs }) => {
         forward(started.stderr);
 
         started.on('message', ({ id, result }) => {
-            const resolve = pending.get(id);
-            if (!resolve) return;
-            pending.delete(id);
-            resolve(result ?? null);
+            // `settle` owns the delete and the timer clear, so hand it the reply and let it do both.
+            const settle = pending.get(id);
+            if (settle) settle(result ?? null);
         });
         started.on('exit', (code) => {
             // `stop` clears `child` first, so reaching here with this one still installed means it
@@ -102,7 +127,27 @@ const createAnalysisHost = ({ app, ipcMain, getModelsDirs }) => {
 
     const send = (kind, payload) => new Promise((resolve) => {
         const id = nextId += 1;
-        pending.set(id, resolve);
+        const budget = deadlines[kind];
+        // Wrapped so both exits - a real reply and a deadline kill - clear the timer and resolve once.
+        let timer = null;
+        const settle = (value) => {
+            if (!pending.has(id)) return; // already settled by the other path
+            pending.delete(id);
+            if (timer) clearTimeout(timer);
+            resolve(value);
+        };
+        pending.set(id, settle);
+        if (budget) {
+            timer = setTimeout(() => {
+                if (!pending.has(id)) return;
+                console.warn(`[analysis] ${kind} exceeded ${budget / 1000}s with no reply - killing the worker`);
+                // The GPU provider is the only thing that hangs a beat_this run this way; pin off it so
+                // the re-fork the retry triggers does not choose it and wedge again.
+                forceCpu = true;
+                stop(); // resolves every pending (this one included) with CRASHED, then kills the child
+            }, budget);
+            timer.unref?.();
+        }
         touch();
         spawn().postMessage({ id, kind, payload });
     });

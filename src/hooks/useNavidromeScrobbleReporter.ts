@@ -121,5 +121,13 @@ export const useNavidromeScrobbleReporter = ({
         };
         // audioRef names a different element after an automix deck swap, and these listeners are
         // bound to the element itself rather than read through the ref, so they have to rebind.
+        //
+        // Known limitation: the swap happens at ARM time, up to AUTOMIX_ARM_LEAD_SEC before the
+        // outgoing track actually ends, so this rebinds off it early. Its last few seconds of
+        // `timeupdate` go unheard and its `ended` never fires here - the incoming track's
+        // `startSession` simply supersedes it. This is only harmless because the submission threshold
+        // (min(60s, duration/2)) is reached well before arm on any normal track, so the scrobble is
+        // already committed by then. If that threshold rule ever changes, this becomes a silent
+        // under-report and needs the exit track driven from the settle path instead of the active deck.
     }, [audioRef, activeDeck]);
 };

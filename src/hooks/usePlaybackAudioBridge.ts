@@ -6,6 +6,7 @@ import type { LocalSong } from '../types';
 import { saveAudioBlob } from '../services/audioCache';
 import { hasCachedSongAudio } from '../services/onlineMusic/resourceCache';
 import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
+import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 import { resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
 import { calculateReplayGain } from '../utils/replayGain';
 import { saveToCache } from '../services/db';
@@ -169,29 +170,43 @@ export function usePlaybackAudioBridge({
         }
     }, [analyserRef, applyReplayGain, audioContextRef, audioEqualizerSettings, audioRef, connectDecks, gainNodeRef, getTargetPlaybackVolume, syncOutputGain]);
 
-    const cacheSongAssets = useCallback(async () => {
-        if (!currentSong || !audioSrc || audioSrc.startsWith('blob:')) return;
+    /**
+     * Writes a fully-played track's audio and cover into the media cache.
+     *
+     * Takes the song and its source explicitly rather than reading `currentSong`/`audioSrc`, because
+     * the automix settle path caches the track that just faded OUT - and by then the app's own state
+     * already names the track that arrived. `coverUrl` is passed for the currently-displayed track
+     * (which may carry a user override); left undefined - the automix path - the cover is taken from
+     * the song's own metadata instead.
+     */
+    const cacheSongAssetsFor = useCallback(async (
+        song: SongResult | null,
+        src: string | null,
+        coverUrl?: string | null,
+    ) => {
+        if (!song || !src || src.startsWith('blob:')) return;
 
-        const existing = await hasCachedSongAudio(currentSong);
+        const existing = await hasCachedSongAudio(song);
         if (existing || !enableMediaCache) return;
 
-        console.log('[Cache] Caching fully played song:', currentSong.name);
+        console.log('[Cache] Caching fully played song:', song.name);
 
         try {
-            const response = await fetch(audioSrc);
+            const response = await fetch(src);
             const blob = await response.blob();
-            await saveAudioBlob(getSongResourceCacheKey('audio', currentSong), blob);
+            await saveAudioBlob(getSongResourceCacheKey('audio', song), blob);
             console.log('[Cache] Audio saved');
         } catch (error) {
             console.error('[Cache] Failed to download audio for cache', error);
         }
 
-        const coverUrl = getCoverUrl();
-        if (coverUrl) {
+        const rawCover = coverUrl !== undefined ? coverUrl : getProviderSongMetadata(song).coverUrl;
+        const cover = rawCover && rawCover.startsWith('http:') ? rawCover.replace('http:', 'https:') : rawCover;
+        if (cover) {
             try {
-                const response = await fetch(coverUrl, { mode: 'cors' });
+                const response = await fetch(cover, { mode: 'cors' });
                 const blob = await response.blob();
-                await saveToCache(getSongResourceCacheKey('cover', currentSong), blob);
+                await saveToCache(getSongResourceCacheKey('cover', song), blob);
                 console.log('[Cache] Cover saved');
             } catch (error) {
                 console.error('[Cache] Failed to download cover for cache', error);
@@ -201,7 +216,12 @@ export function usePlaybackAudioBridge({
         if (isPanelOpen && panelTab === 'account') {
             updateCacheSize();
         }
-    }, [audioSrc, currentSong, enableMediaCache, getCoverUrl, isPanelOpen, panelTab, updateCacheSize]);
+    }, [enableMediaCache, isPanelOpen, panelTab, updateCacheSize]);
+
+    const cacheSongAssets = useCallback(
+        () => cacheSongAssetsFor(currentSong, audioSrc, getCoverUrl()),
+        [audioSrc, cacheSongAssetsFor, currentSong, getCoverUrl],
+    );
 
     useEffect(() => {
         if (audioRef.current) {
@@ -327,5 +347,6 @@ export function usePlaybackAudioBridge({
     return {
         setupAudioAnalyzer,
         cacheSongAssets,
+        cacheSongAssetsFor,
     };
 }

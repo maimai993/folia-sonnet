@@ -71,6 +71,12 @@ const unpack = async (archive, home) => {
     for (const [name, body] of Object.entries(unzipSync(await fsp.readFile(archive)))) {
         if (name.endsWith('/')) continue;
         const out = path.join(staging, name);
+        // Defence in depth: both callers unpack only after a sha256 check, but a zip entry named
+        // `../x` would still `path.join` its way out of staging. The file header promises there is no
+        // second, looser trust level - so this must hold without leaning on the hash upstream of it.
+        if (!path.resolve(out).startsWith(path.resolve(staging) + path.sep)) {
+            throw new Error(`refusing zip entry outside staging: ${name}`);
+        }
         await fsp.mkdir(path.dirname(out), { recursive: true });
         await fsp.writeFile(out, body);
     }

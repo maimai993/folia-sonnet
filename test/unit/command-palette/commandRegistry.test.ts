@@ -86,6 +86,12 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             canOpenThemeQuickEditor: true,
             themeGenerationSource: 'ai',
             setThemeGenerationSource: vi.fn(),
+            automixEnabled: false,
+            transitionMode: 'crossfade',
+            transitionPerformance: false,
+            toggleAutomix: vi.fn(),
+            setTransitionMode: vi.fn(),
+            toggleTransitionPerformance: vi.fn(),
         },
         visualizer: {
             visualizerMode: 'classic',

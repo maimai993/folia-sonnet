@@ -8,6 +8,7 @@ import type { PanelTab } from '../UnifiedPanel';
 import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/useSettingsUiStore';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
+import type { TransitionMode } from '../../services/automix/transitionStrategy';
 import type { PersonalFmSelection } from '../../services/onlineMusic/fmModes';
 import type { QueueBatchAction, QueueFacetKind } from './queueQuery';
 import type { CommandPlatform } from './availability';
@@ -153,6 +154,13 @@ export type CommandPaletteSettingsContext = {
     canOpenThemeQuickEditor: boolean;
     themeGenerationSource: ThemeGenerationSource;
     setThemeGenerationSource: (source: ThemeGenerationSource) => void;
+    /** The FOLIA smart-transition switches, stated in each command's title the way the pickers do. */
+    automixEnabled: boolean;
+    transitionMode: TransitionMode;
+    transitionPerformance: boolean;
+    toggleAutomix: () => void;
+    setTransitionMode: (mode: TransitionMode) => void;
+    toggleTransitionPerformance: () => void;
 };
 
 export type CommandPaletteVisualizerContext = {

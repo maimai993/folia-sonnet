@@ -17,7 +17,6 @@ import {
 } from './automixSession';
 import { AUTOMIX_MAX_OVERLAP_SEC } from './transitionPlanner';
 import type { TransitionSettings } from './transitionStrategy';
-import { startDiagHeapSampler } from './diag'; // TEMPORARY memory diagnostic
 
 // src/services/automix/useAutomixDecks.ts
 // The React shell around the automix state machine: two audio elements, which one the app's
@@ -171,6 +170,19 @@ type UseAutomixDecksParams = {
     transition: TransitionSettings;
     /** Runs the queue's normal advance, exactly as the end of a track would. */
     onAdvanceTrack: () => void;
+    /**
+     * A deck finished playing a whole track out - the blended equivalent of an `ended` event, which a
+     * faded track never fires. Given the track pinned to that deck and the deck's own source, so the
+     * media cache is written for the song that just left rather than the one arriving. See the settle
+     * branch in `onTailSrcChange`.
+     */
+    onDeckPlayedOut?: (song: SongResult, audioSrc: string | null) => void;
+    /**
+     * Reads a local track's raw bytes from its own file, for separating a next-up local song whose
+     * head has no prefetch URL and never enters the online media cache. Null for online tracks or an
+     * unreachable local file. Resolved by App, which owns the local library.
+     */
+    getLocalStemBytes?: (song: SongResult) => Promise<ArrayBuffer | null>;
 };
 
 export function useAutomixDecks({
@@ -189,6 +201,8 @@ export function useAutomixDecks({
     isEnabled,
     transition,
     onAdvanceTrack,
+    onDeckPlayedOut,
+    getLocalStemBytes,
 }: UseAutomixDecksParams) {
     const [activeDeck, setActiveDeck] = useState<AutomixDeckId>('A');
     const [tailSrc, setTailSrc] = useState<string | null>(null);
@@ -246,7 +260,6 @@ export function useAutomixDecks({
      * answer changes.
      */
     useEffect(() => {
-        startDiagHeapSampler(); // TEMPORARY memory diagnostic - idempotent, no-ops off Electron
         void refreshModelAvailability().then((present) => {
             console.log(
                 `[Automix] models on disk at startup: beat_this ${present.beat_this ? 'yes' : 'no'},`
@@ -276,6 +289,12 @@ export function useAutomixDecks({
     harvestRef.current = harvestDeck;
     const advanceRef = useRef(onAdvanceTrack);
     advanceRef.current = onAdvanceTrack;
+    // Same reason as the two above: the session's ports close over this once, so it is read through a
+    // ref that stays current instead of a value captured at construction.
+    const playedOutRef = useRef(onDeckPlayedOut);
+    playedOutRef.current = onDeckPlayedOut;
+    const localBytesRef = useRef(getLocalStemBytes);
+    localBytesRef.current = getLocalStemBytes;
     /** Whether the picture is currently held. See `getDisplayElement`. */
     const displayHeldRef = useRef(false);
     /** The pair the picture is made of, kept current so the capture above can be synchronous. */
@@ -295,6 +314,10 @@ export function useAutomixDecks({
      * the music stop. Checked once, well after the bridge has had its own chance, and never
      * against a pause the listener asked for.
      */
+    /** The one stall-check timer that can be pending - `check` reschedules itself, so it is always at
+     *  most one. Held so the unmount cleanup can cancel it rather than leave it to fire into a torn-down
+     *  session. */
+    const stallTimerRef = useRef<number | null>(null);
     const scheduleStallCheck = useCallback(() => {
         let attempts = 0;
         const check = () => {
@@ -323,9 +346,9 @@ export function useAutomixDecks({
             }
             // No source yet: the next track is still resolving. Keep looking rather than
             // concluding there is nothing wrong.
-            if (attempts < STALL_ATTEMPTS) window.setTimeout(check, STALL_RETRY_MS);
+            if (attempts < STALL_ATTEMPTS) stallTimerRef.current = window.setTimeout(check, STALL_RETRY_MS);
         };
-        window.setTimeout(check, STALL_GRACE_MS);
+        stallTimerRef.current = window.setTimeout(check, STALL_GRACE_MS);
     }, []);
 
     /**
@@ -352,10 +375,19 @@ export function useAutomixDecks({
             },
             onTailSrcChange: src => {
                 // Ahead of the state updates below, which take that deck's source away from it:
-                // this is the last moment the element can still say how long its track was.
+                // this is the last moment the element can still say how long its track was, and the
+                // last moment its element still holds the source of the track that just faded out.
                 if (src === null) {
                     const active = sessionRef.current!.getActiveDeck();
-                    harvestRef.current(active === 'A' ? 'B' : 'A');
+                    const tailDeck = active === 'A' ? 'B' : 'A';
+                    harvestRef.current(tailDeck);
+                    // The blended equivalent of an `ended` event: this is the "played a whole track"
+                    // moment for a faded song, which never fires `ended`. Uses the deck-pinned song and
+                    // that deck's own src, because `currentSong`/`audioSrc` already name the arriving one.
+                    const playedSong = deckSongRef.current[tailDeck];
+                    if (playedSong) {
+                        playedOutRef.current?.(playedSong, elementsRef.current[tailDeck]?.currentSrc || null);
+                    }
                 }
                 setTailSrc(src);
                 // Read synchronously, and that is the whole trick: the session calls this from the
@@ -653,6 +685,7 @@ export function useAutomixDecks({
             role: 'tail',
             audioUrl: audioSrc,
             stillWanted: stillPaired(currentSong, 'from'),
+            readBytes: () => localBytesRef.current?.(currentSong) ?? Promise.resolve(null),
         });
         if (next) {
             const prefetched = getPrefetchedData(next, audioQuality);
@@ -663,6 +696,9 @@ export function useAutomixDecks({
                     ? prefetched.audioUrl
                     : null,
                 stillWanted: stillPaired(next, 'to'),
+                // A local next-up song has no prefetch URL and never enters the media cache, so this is
+                // the only way its head is ever separated. See readLocalBytes.
+                readBytes: () => localBytesRef.current?.(next) ?? Promise.resolve(null),
             });
         }
     }, [audioQuality, audioSrc, currentSong, isEnabled, loopMode, playQueue, playerState, tailSrc, transition.mode]);
@@ -689,7 +725,10 @@ export function useAutomixDecks({
         session.handleSongChanged(currentSong ? getPlaybackSongKey(currentSong) : null);
     }, [currentSong, session]);
 
-    useEffect(() => () => session.dispose(), [session]);
+    useEffect(() => () => {
+        if (stallTimerRef.current !== null) window.clearTimeout(stallTimerRef.current);
+        session.dispose();
+    }, [session]);
 
     return {
         activeDeck,
