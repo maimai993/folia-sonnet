@@ -8,6 +8,7 @@ import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/us
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
+import type { TransitionMode } from '../../services/automix/transitionStrategy';
 import type { PersonalFmSelection } from '../../services/onlineMusic/fmModes';
 import type { QueueBatchAction } from '../command-palette/queueQuery';
 
@@ -90,6 +91,14 @@ export type CommandPaletteContextDeps = {
     wallpaperMode: boolean;
     setWallpaperMode: (next: boolean) => void;
 
+    sleepTimerEnabled: boolean;
+    setSleepTimerEnabled: (next: boolean) => void;
+    sleepTimerHours: number;
+    setSleepTimerHours: (next: number) => void;
+    sleepTimerMinutes: number;
+    setSleepTimerMinutes: (next: number) => void;
+    sleepTimerDeadlineMs: number | null;
+
     canGenerateAITheme: boolean;
     isGeneratingTheme: boolean;
     generateAITheme: () => void;
@@ -97,6 +106,14 @@ export type CommandPaletteContextDeps = {
     canOpenThemeQuickEditor: boolean;
     themeGenerationSource: ThemeGenerationSource;
     setThemeGenerationSource: (source: ThemeGenerationSource) => void;
+
+    automixEnabled: boolean;
+    transitionMode: TransitionMode;
+    transitionPerformance: boolean;
+    handleToggleAutomix: (enable: boolean) => void;
+    handleSetTransitionMode: (mode: TransitionMode) => void;
+    handleToggleTransitionPerformance: (enable: boolean) => void;
+    canUseTransitionPerformance: () => boolean;
 
     visualizerMode: VisualizerMode;
     visualizerBackgroundMode: VisualizerBackgroundMode | null;
@@ -179,6 +196,13 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         toggleVoiceInputPause: () => deps.setVoiceInputPauseEnabled(!deps.voiceInputPauseEnabled),
         togglePreventDisplaySleepDuringPlayback: () => deps.setPreventDisplaySleepDuringPlayback(!deps.preventDisplaySleepDuringPlayback),
         toggleWallpaperMode: () => deps.setWallpaperMode(!deps.wallpaperMode),
+        sleepTimerEnabled: deps.sleepTimerEnabled,
+        setSleepTimerEnabled: deps.setSleepTimerEnabled,
+        sleepTimerHours: deps.sleepTimerHours,
+        setSleepTimerHours: deps.setSleepTimerHours,
+        sleepTimerMinutes: deps.sleepTimerMinutes,
+        setSleepTimerMinutes: deps.setSleepTimerMinutes,
+        sleepTimerDeadlineMs: deps.sleepTimerDeadlineMs,
         canGenerateAITheme: deps.canGenerateAITheme,
         isGeneratingTheme: deps.isGeneratingTheme,
         generateAITheme: deps.generateAITheme,
@@ -186,6 +210,13 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         canOpenThemeQuickEditor: deps.canOpenThemeQuickEditor,
         themeGenerationSource: deps.themeGenerationSource,
         setThemeGenerationSource: deps.setThemeGenerationSource,
+        automixEnabled: deps.automixEnabled,
+        transitionMode: deps.transitionMode,
+        transitionPerformance: deps.transitionPerformance,
+        toggleAutomix: () => deps.handleToggleAutomix(!deps.automixEnabled),
+        setTransitionMode: deps.handleSetTransitionMode,
+        toggleTransitionPerformance: () => deps.handleToggleTransitionPerformance(!deps.transitionPerformance),
+        canUseTransitionPerformance: deps.canUseTransitionPerformance,
     },
     visualizer: {
         visualizerMode: deps.visualizerMode,
