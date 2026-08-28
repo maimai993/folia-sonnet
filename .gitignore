@@ -60,6 +60,19 @@ models/
 build/windowtolayer
 build/windowtolayer-COPYING
 .windowtolayer-src/
+# Local reference clone of upstream main used for pollution review; never ship.
+original/
+# Bundled local ffmpeg source tree + binaries for the mod export pipeline; users
+# provide their own ffmpeg (env var FOLIA_FFMPEG_PATH or ffmpeg-8.1.2 next to app).
+ffmpeg-8.1.2/
+# PR preparation notes and local development helpers; never ship.
+pr/
+modlogo.txt
+start-folia.cmd
+start-folia.ps1
+# Local hand-made zip bundles of mods (drag-drop install test files); never ship.
+mods/*.zip
+
 
 # Python bytecode from the htdemucs runner, written beside it by the downloaded runtime.
 __pycache__/

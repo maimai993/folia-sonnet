@@ -16,6 +16,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             t: (_key: string, fallback?: string) => fallback ?? '',
             setStatusMsg: vi.fn(),
             currentSong: null,
+            lyrics: null,
             playerState: PlayerState.PAUSED,
         },
         search: {
@@ -77,6 +78,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleAlwaysShowTrackSwitchButtons: vi.fn(),
             toggleAlwaysShowMainWindowTitlebar: vi.fn(),
             voiceInputPauseSupported: false,
+            modSystemEnabled: false,
             toggleVoiceInputPause: vi.fn(),
             togglePreventDisplaySleepDuringPlayback: vi.fn(),
             toggleWallpaperMode: vi.fn(),

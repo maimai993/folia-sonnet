@@ -200,6 +200,7 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
         input: {
           main: 'index.html',
           stageClient: 'stage-client.html',
+          modExport: 'mod-export.html',
         },
         output: {
           // three.js is a large dependency used only by the diorama 3D visualizer. Split it into its

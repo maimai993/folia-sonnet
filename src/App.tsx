@@ -439,6 +439,7 @@ export default function App() {
         handleToggleVoiceInputPause,
         preventDisplaySleepDuringPlayback,
         handleTogglePreventDisplaySleepDuringPlayback,
+        modSystemEnabled,
         wallpaperMode,
         handleToggleWallpaperMode,
         sleepTimerEnabled,
@@ -2245,6 +2246,10 @@ export default function App() {
         t: (key: string, fallback?: string) => t(key, fallback ?? ''),
         setStatusMsg,
         currentSong,
+        // What is on screen, transitions included - surfaces that publish lyrics
+        // (the mod runtime snapshot) must send the rendered ones, not a guess
+        // rebuilt from the song's stored lyric state.
+        lyrics: displayLyrics,
         // The transport the listener can hear, like the main controls, the remote and the taskbar.
         // The raw state goes IDLE for the length of an arm while the outgoing deck is still playing,
         // and the palette read that as "paused": its Play command called toggle, which during a
@@ -2314,6 +2319,7 @@ export default function App() {
         setAlwaysShowMainWindowTitlebar: handleToggleAlwaysShowMainWindowTitlebar,
         voiceInputPauseEnabled,
         voiceInputPauseSupported: isElectronWindow && typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('win'),
+        modSystemEnabled,
         setVoiceInputPauseEnabled: handleToggleVoiceInputPause,
         preventDisplaySleepDuringPlayback,
         setPreventDisplaySleepDuringPlayback: handleTogglePreventDisplaySleepDuringPlayback,
@@ -2412,6 +2418,7 @@ export default function App() {
         playQueue,
         playSong,
         displayPlayerState,
+        displayLyrics,
         preventDisplaySleepDuringPlayback,
         randomVisualizerModePerSong,
         removeQueueSong,
@@ -2441,6 +2448,7 @@ export default function App() {
         visualizerBackgroundMode,
         visualizerMode,
         voiceInputPauseEnabled,
+        modSystemEnabled,
         volume,
         wallpaperMode,
     ]);
