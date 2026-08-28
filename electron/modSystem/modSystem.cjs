@@ -106,6 +106,25 @@ const IPC = {
 
 const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
+/*
+ * Drops every cached module that lives inside a mod directory, not just its
+ * entry file. Clearing only the entry left a mod's own helper modules cached,
+ * so editing them and hitting "reload" kept running the previous code — the
+ * Node-side twin of the ES module map problem the visualizer URLs solve with a
+ * digest. Windows paths are compared case-insensitively because require.cache
+ * keys and readdir paths can disagree on case.
+ */
+const purgeModuleCache = (dirPath) => {
+    const prefix = path.resolve(dirPath) + path.sep;
+    const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
+    const normalizedPrefix = normalize(prefix);
+    Object.keys(require.cache).forEach((cached) => {
+        if (normalize(cached).startsWith(normalizedPrefix)) {
+            delete require.cache[cached];
+        }
+    });
+};
+
 const serializeError = (error) => {
     if (!error) {
         return 'unknown error';
@@ -168,6 +187,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) =>
         const dataDir = path.join(app.getPath('userData'), 'mods-data', manifest.id);
         let modApi = null;
         const commandRegistry = new Map();
+        const disposers = [];
 
         const context = {
             modId: manifest.id,
@@ -175,6 +195,12 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) =>
             dataDir,
             emitLog: (level, message, details) => emitLog(manifest.id, level, message, details),
             getRuntimeSnapshot: () => (runtimeSnapshot ? cloneJson(runtimeSnapshot) : null),
+            registerDisposer: (disposer) => {
+                if (typeof disposer !== 'function') {
+                    throw new Error('[ModApi] lifecycle.onDeactivate requires a function');
+                }
+                disposers.push(disposer);
+            },
             registerCommand: (command) => {
                 if (commandRegistry.has(command.id)) {
                     throw new Error(`duplicate command id "${command.id}"`);
@@ -199,17 +225,44 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) =>
 
         const load = () => {
             const entryPath = path.join(entries.dirPath, manifest.entry);
-            // Drop the cache entry so reloads re-execute the mod entry with a
-            // fresh command registry instead of returning stale contributions.
-            delete require.cache[require.resolve(entryPath)];
+            // Drop the whole mod subtree from the cache so a reload re-executes
+            // the mod against its current files with a fresh command registry
+            // instead of returning stale contributions.
+            purgeModuleCache(entries.dirPath);
             const moduleFactory = require(entryPath);
             if (typeof moduleFactory !== 'function') {
                 throw new Error(`mod entry must export a function, got ${typeof moduleFactory}`);
             }
-            moduleFactory(modApi);
+            // activate() may return a disposer (or an object carrying one),
+            // which joins anything registered through lifecycle.onDeactivate.
+            const activation = moduleFactory(modApi);
+            if (typeof activation === 'function') {
+                disposers.push(activation);
+            } else if (activation && typeof activation.dispose === 'function') {
+                disposers.push(() => activation.dispose());
+            }
         };
 
-        return { load, getCommands: () => commandRegistry };
+        /*
+         * Runs the mod's cleanup before it stops being active. Without this a
+         * disabled mod kept whatever it started in activate() — timers,
+         * watchers, listeners — running until the app restarted, because
+         * dropping the runtime object never touched those closures. Disposers
+         * run last-registered first, and one throwing never blocks the rest.
+         */
+        const unload = () => {
+            while (disposers.length > 0) {
+                const disposer = disposers.pop();
+                try {
+                    disposer();
+                } catch (error) {
+                    emitLog(manifest.id, 'error', 'deactivate handler failed', error);
+                }
+            }
+            commandRegistry.clear();
+        };
+
+        return { load, unload, getCommands: () => commandRegistry };
     };
 
     /*
@@ -401,12 +454,27 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) =>
     });
 
     /*
-     * Full load cycle: discover, validate, digest, resolve the dependency graph
-     * for the *enabled* mods only, then activate each entry in order inside
-     * per-mod error boundaries. Returns the renderer-facing state list.
-     * Re-entrant: reloads replace previous state.
+     * Deactivates every mod currently active. Every loadAll re-executes each
+     * enabled mod's entry, so the previous activation has to be torn down first
+     * or each reload would leave another generation of the mod's timers and
+     * listeners behind.
+     */
+    const unloadAll = () => {
+        mods.forEach((runtime) => {
+            if (runtime.status === 'loaded' && typeof runtime.unload === 'function') {
+                runtime.unload();
+            }
+        });
+    };
+
+    /*
+     * Full load cycle: deactivate what is running, then discover, validate,
+     * digest, resolve the dependency graph for the *enabled* mods only, and
+     * activate each entry in order inside per-mod error boundaries. Returns the
+     * renderer-facing state list. Re-entrant: reloads replace previous state.
      */
     const loadAll = () => {
+        unloadAll();
         const discovered = readManifestFiles();
         const manifestsById = new Map();
         const prepared = new Map();
@@ -922,6 +990,10 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) =>
 
     const dispose = () => {
         exportService.cancelActiveExport();
+        // Mods get their deactivate pass on the way out too, so anything they
+        // hold (timers, handles, child processes) is released before quit.
+        unloadAll();
+        mods.clear();
     };
 
     return {

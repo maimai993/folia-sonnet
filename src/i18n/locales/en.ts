@@ -382,7 +382,7 @@ export default {
       "panel-local": { "title": "Panel: local", "description": "Open the local panel tab" },
       "panel-navi": { "title": "Panel: Navidrome", "description": "Open the Navidrome panel tab" },
       "panel-onlineLyrics": { "title": "Panel: lyrics", "description": "Open the online lyrics panel tab" },
-      "mods": { "title": "Mods", "description": "Manage mods and export transparent lyric videos" },
+      "mods": { "title": "Mods (Experimental)", "description": "Experimental: manage mods and export transparent lyric videos" },
       "playback-play": { "title": "Play", "description": "Start playback when paused" },
       "playback-pause": { "title": "Pause", "description": "Pause current playback" },
       "playback-next": { "title": "Next track", "description": "Play the next track" },
@@ -570,6 +570,8 @@ export default {
   },
   "mods": {
     "title": "Mod Manager",
+    "experimental": "Experimental",
+    "experimentalHint": "The mod system is still experimental: the API may change in future versions and installed mods may need updating.",
     "securityWarning": "Mods are third-party and not security-audited. Once enabled, a mod runs with the full privileges of the app (including the Node.js runtime and any setting, such as the AI service URL and key). Enabling one asks for confirmation first; only enable mods from trusted sources.",
     "trustRevoked": "This mod's files changed since you last confirmed it, so it was disabled automatically. Check the source, then enable it again.",
     "reload": "Reload",

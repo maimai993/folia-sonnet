@@ -18,7 +18,7 @@ module.exports = function activate(api) {
             'zh-CN': '按当前歌曲的动画模式与参数原样渲染，仅去除背景，导出带 Alpha 通道的透明视频（需要 ffmpeg，仅桌面端，Windows 保留完整 Alpha 通道）。',
             en: 'Renders the current song with its live visualizer mode and tuning, drops the background, and exports a transparent video with alpha (requires ffmpeg; desktop only; full alpha on Windows).',
         },
-        permissions: ['render.export'],
+        permissions: ['render.export', 'runtime.playback'],
         params: [
             {
                 key: 'codec',

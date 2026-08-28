@@ -1,5 +1,8 @@
 # Folia Mods
 
+> **实验性功能。** 模组系统与 `apiVersion 1` 尚未定稿：API 形状、权限集合与加载器行为都可能在后续版本
+> 中变更，届时已安装的模组可能需要跟随更新。请勿在此基础上做对外分发的长期承诺。
+
 Folia 模组（Mod）目录。桌面端启动时，加载器会扫描此目录（以及打包后的用户数据目录），
 将每个含 `mod.json` 的子目录作为一个模组加载。
 
@@ -70,8 +73,9 @@ mods/
 - `permissions`：当前可用权限：
   - `render.export`：启动离屏渲染导出（透明背景视频）。
   - `filesystem.data`：读写模组私有数据目录（`storage.data.*`）。
-  - `runtime.playback`：读取播放快照。
-  未声明的权限调用会被拒绝（fail closed）。
+  - `runtime.playback`：读取播放快照（`api.runtime.getPlaybackSnapshot()`）。
+  未声明的权限调用会在**调用点**被拒绝（fail closed），抛出 `permission-denied:<权限名>`；
+  命令声明的 `permissions` 另需是 manifest `permissions` 的子集，否则执行时即被拒。
 
 ## 入口契约
 
@@ -80,6 +84,13 @@ mods/
 ```js
 module.exports = function activate(api) {
     api.log.info('loaded');
+
+    // 清理钩子：模组被禁用、重载或应用退出前执行。activate 直接 return 一个函数
+    // 等价于注册一个 onDeactivate。定时器、监听器、子进程都应在此释放——加载器
+    // 不会替你回收这些闭包。
+    const timer = setInterval(poll, 1000);
+    api.lifecycle.onDeactivate(() => clearInterval(timer));
+
     api.commands.register({
         id: 'my-command',
         label: { 'zh-CN': '我的命令', en: 'My command' },
@@ -97,9 +108,11 @@ module.exports = function activate(api) {
 ```
 
 - 命令自动显示在「模组」面板 tab 中并渲染为参数表单；执行经 IPC 回主进程，权限在加载器侧校验。
-- `api.runtime.getPlaybackSnapshot()` 返回渲染端推送的当前歌曲/歌词/主题快照。
-- `api.render.exportVideo(spec)` 启动导出会话；`render.export` 权限必需。
-- `api.storage.data.get/set` 为模组私有键值持久化（需要 `filesystem.data` 权限时由模组自行声明）。
+- `api.lifecycle.onDeactivate(fn)` 注册清理回调；禁用/重载/退出前按注册的逆序执行，单个回调抛错不影响其余。
+- `api.runtime.getPlaybackSnapshot()` 返回渲染端推送的当前歌曲/歌词/主题快照；需要 `runtime.playback`。
+- `api.render.exportVideo(spec)` 启动导出会话；需要 `render.export`。
+- `api.storage.data.get/set/has/delete` 为模组私有键值持久化；需要 `filesystem.data`。
+- 重载会清除**整个模组目录**的 `require` 缓存，因此改动 `index.cjs` 之外的辅助模块同样生效。
 
 ## 样例模组
 
@@ -114,6 +127,7 @@ module.exports = function activate(api) {
 ## 稳定性约束
 
 - 单模组加载失败不影响宿主应用与其他模组；依赖图损坏只波及相关子图。
+- 每次加载周期先对当前已激活模组执行 deactivate，再重新激活，避免重载叠加出多代定时器与监听器。
 - 导出会话全局互斥（`export-already-running`）；上限 3840×2160、60fps、15 分钟。
 - 取消/失败时清理 ffmpeg 进程、离屏窗口与半成品文件。
 

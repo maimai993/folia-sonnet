@@ -10,6 +10,13 @@ const path = require('path');
 
 const DATA_FILE_NAME = 'mod-data.json';
 
+// Permission each guarded API family requires. `render.export` is enforced by
+// the loader itself (it owns the export service), everything else is enforced
+// here, at the call site, so a permission a mod did not declare is unreachable
+// rather than merely undocumented.
+const STORAGE_PERMISSION = 'filesystem.data';
+const PLAYBACK_PERMISSION = 'runtime.playback';
+
 const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
 /*
@@ -17,10 +24,24 @@ const cloneJson = (value) => JSON.parse(JSON.stringify(value));
  *   modId, manifest, dataDir,
  *   emitLog(level, message),
  *   getRuntimeSnapshot(),
+ *   registerDisposer(fn),       // run when the mod is disabled, reloaded, or the app quits
  *   requestExport(spec),        // permission render.export enforced by the loader
  * }
  */
 const createModApi = (context) => {
+    const declaredPermissions = Array.isArray(context.manifest?.permissions) ? context.manifest.permissions : [];
+
+    /*
+     * Fail-closed permission gate. Throws the same `permission-denied:<id>`
+     * shape the command invoker returns, so a mod sees one consistent error
+     * whether it was blocked at declaration time or at call time.
+     */
+    const requirePermission = (permission) => {
+        if (!declaredPermissions.includes(permission)) {
+            throw new Error(`permission-denied:${permission}`);
+        }
+    };
+
     const log = {
         info: (message, details) => context.emitLog('info', message, details),
         warn: (message, details) => context.emitLog('warn', message, details),
@@ -51,6 +72,7 @@ const createModApi = (context) => {
         };
         return {
             get: (key) => {
+                requirePermission(STORAGE_PERMISSION);
                 if (typeof key !== 'string' || key.length === 0) {
                     return undefined;
                 }
@@ -58,6 +80,7 @@ const createModApi = (context) => {
                 return key in data ? cloneJson(data[key]) : undefined;
             },
             set: (key, value) => {
+                requirePermission(STORAGE_PERMISSION);
                 if (typeof key !== 'string' || key.length === 0) {
                     throw new Error('[ModApi] storage key must be a non-empty string');
                 }
@@ -65,8 +88,12 @@ const createModApi = (context) => {
                 data[key] = cloneJson(value);
                 saveData(data);
             },
-            has: (key) => typeof key === 'string' && key in loadData(),
+            has: (key) => {
+                requirePermission(STORAGE_PERMISSION);
+                return typeof key === 'string' && key in loadData();
+            },
             delete: (key) => {
+                requirePermission(STORAGE_PERMISSION);
                 if (typeof key !== 'string') {
                     return;
                 }
@@ -84,8 +111,21 @@ const createModApi = (context) => {
         storage: {
             data: createDataStorage(),
         },
+        /*
+         * Cleanup hook. Anything a mod starts in activate() — timers, watchers,
+         * listeners, child processes — should be released here; the loader runs
+         * these before the mod stops being active, so a disabled mod really
+         * stops instead of lingering until the next app start. Returning a
+         * function from activate() registers it the same way.
+         */
+        lifecycle: {
+            onDeactivate: (disposer) => context.registerDisposer(disposer),
+        },
         runtime: {
-            getPlaybackSnapshot: () => context.getRuntimeSnapshot(),
+            getPlaybackSnapshot: () => {
+                requirePermission(PLAYBACK_PERMISSION);
+                return context.getRuntimeSnapshot();
+            },
         },
         /*
          * Command registration is the primary contribution point of apiVersion 1.
@@ -121,4 +161,4 @@ const createModApi = (context) => {
     };
 };
 
-module.exports = { createModApi, DATA_FILE_NAME };
+module.exports = { createModApi, DATA_FILE_NAME, PLAYBACK_PERMISSION, STORAGE_PERMISSION };

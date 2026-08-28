@@ -7,5 +7,5 @@
   "description": "将当前歌曲的歌词动画渲染为带透明背景（Alpha 通道）的 MOV 视频。",
   "entry": "index.cjs",
   "depends": [],
-  "permissions": ["render.export"]
+  "permissions": ["render.export", "runtime.playback"]
 }

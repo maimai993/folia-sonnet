@@ -381,7 +381,7 @@ export default {
       "panel-local": { "title": "Panel: lokal", "description": "Buka tab panel lokal" },
       "panel-navi": { "title": "Panel: Navidrome", "description": "Buka tab panel Navidrome" },
       "panel-onlineLyrics": { "title": "Panel: lirik", "description": "Buka tab panel lirik online" },
-      "mods": { "title": "Mod", "description": "Kelola mod dan ekspor video lirik transparan" },
+      "mods": { "title": "Mod (Eksperimental)", "description": "Eksperimental: kelola mod dan ekspor video lirik transparan" },
       "playback-play": { "title": "Putar", "description": "Mulai pemutaran saat jeda" },
       "playback-pause": { "title": "Jeda", "description": "Jeda pemutaran saat ini" },
       "playback-next": { "title": "Lagu berikutnya", "description": "Putar lagu berikutnya" },
@@ -567,6 +567,8 @@ export default {
   },
   "mods": {
     "title": "Manajer Mod",
+    "experimental": "Eksperimental",
+    "experimentalHint": "Sistem mod masih eksperimental: API dapat berubah pada versi mendatang dan mod yang terpasang mungkin perlu diperbarui.",
     "securityWarning": "Mod berasal dari pihak ketiga dan tidak diaudit keamanannya. Setelah diaktifkan, mod berjalan dengan hak penuh aplikasi (termasuk runtime Node.js dan pengaturan apa pun seperti URL dan kunci layanan AI). Mengaktifkannya akan meminta konfirmasi terlebih dahulu; aktifkan hanya mod dari sumber tepercaya.",
     "trustRevoked": "Berkas mod ini berubah sejak terakhir Anda konfirmasi, jadi mod dinonaktifkan otomatis. Periksa sumbernya, lalu aktifkan kembali.",
     "reload": "Muat ulang",

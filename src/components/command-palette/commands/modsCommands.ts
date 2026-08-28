@@ -12,8 +12,8 @@ export const modsCommands: CommandPaletteCommand[] = [
     defineCommand({
         id: 'mods',
         group: 'panel',
-        title: 'Mods',
-        description: 'Manage mods and export transparent lyric videos',
+        title: 'Mods (Experimental)',
+        description: 'Experimental: manage mods and export transparent lyric videos',
         keywords: ['mods', 'mod', 'mods manager', '模组', '模组管理', 'mokuai', 'mozu', 'mz', '导出透明视频'],
         icon: Boxes,
         requiresInput: true,

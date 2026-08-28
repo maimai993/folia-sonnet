@@ -382,7 +382,7 @@ export default {
       "panel-local": { "title": "面板：本地", "description": "打开本地面板 tab" },
       "panel-navi": { "title": "面板：Navidrome", "description": "打开 Navidrome 面板 tab" },
       "panel-onlineLyrics": { "title": "面板：歌词", "description": "打开在线歌词面板 tab" },
-      "mods": { "title": "模组", "description": "管理模组并导出透明歌词视频" },
+      "mods": { "title": "模组（实验性）", "description": "实验性功能：管理模组并导出透明歌词视频" },
       "playback-play": { "title": "播放", "description": "暂停时开始播放" },
       "playback-pause": { "title": "暂停", "description": "暂停当前播放" },
       "playback-next": { "title": "下一首", "description": "播放下一首" },
@@ -570,6 +570,8 @@ export default {
   },
   "mods": {
     "title": "模组管理",
+    "experimental": "实验性",
+    "experimentalHint": "模组系统仍在实验阶段：API 可能在后续版本中变更，已安装的模组可能需要更新。",
     "securityWarning": "模组由第三方提供，未经官方安全审计。启用后模组将以应用的完整权限运行（含 Node.js 运行时与任意设置，如 AI 服务地址与密钥）。启用前会弹出确认窗口，请仅启用可信来源的模组。",
     "trustRevoked": "该模组的文件在你上次确认之后发生了变化，已自动禁用。请确认来源无误后重新启用。",
     "reload": "重载",

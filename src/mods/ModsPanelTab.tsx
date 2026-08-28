@@ -415,6 +415,16 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
                         >
                             <FileVideo2 size={16} style={{ color: theme?.accentColor }} />
                             {t('mods.title')}
+                            <span
+                                title={t('mods.experimentalHint')}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-normal border ${
+                                    isDaylight
+                                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-800'
+                                        : 'border-amber-400/25 bg-amber-400/10 text-amber-200'
+                                }`}
+                            >
+                                {t('mods.experimental')}
+                            </span>
                         </div>
                         <div className="flex items-center gap-1.5">
                             <button
@@ -467,7 +477,11 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
                         }`}
                     >
                         <TriangleAlert size={14} className="mt-px shrink-0" />
-                        <span className="text-[11px] leading-relaxed">{t('mods.securityWarning')}</span>
+                        <span className="text-[11px] leading-relaxed">
+                            {t('mods.experimentalHint')}
+                            {' '}
+                            {t('mods.securityWarning')}
+                        </span>
                     </div>
 
                     <AnimatePresence initial={false}>
