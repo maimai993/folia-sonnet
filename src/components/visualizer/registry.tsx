@@ -68,3 +68,19 @@ export const getVisualizerPreviewStartOffset = (mode: VisualizerMode, loopDurati
 
 export const getVisualizerScopedSeed = (mode: VisualizerMode, scope: string) =>
     `${scope}-${getVisualizerRegistryEntry(mode).previewSeed}`;
+
+/*
+ * Runtime contribution channel for mod visualizers (src/mods/modVisualizers).
+ * Appends entries to the live registry so every consumer that iterates
+ * VISUALIZER_REGISTRY or queries by mode picks them up without a rebuild.
+ * Mode ids are prefixed (`mod:<modId>:<id>`) by the loader so a mod can never
+ * shadow a builtin mode; duplicates are rejected.
+ */
+export const appendVisualizerEntry = (entry: VisualizerRegistryEntry): boolean => {
+    if (VISUALIZER_REGISTRY_BY_MODE[entry.mode]) {
+        return false;
+    }
+    VISUALIZER_REGISTRY_BY_MODE[entry.mode] = entry;
+    VISUALIZER_REGISTRY.push(entry);
+    return true;
+};

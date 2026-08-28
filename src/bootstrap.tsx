@@ -8,9 +8,14 @@ import ObsBrowserSourceApp from './components/obs/ObsBrowserSourceApp';
 import ObsNowPlayingSourceApp from './components/obs/ObsNowPlayingSourceApp';
 import ObsPlayerCapSourceApp from './components/obs/ObsPlayerCapSourceApp';
 import { initializeLocalCoverRuntime } from './services/localCoverRuntime';
+import { initModVisualizers } from './mods/modVisualizers';
 
 // src/bootstrap.tsx
 // Mounts the React app after index.tsx installs runtime-level browser shims.
+
+// Mod-contributed visualizers register into the live registry before mount so
+// the first render already sees them; failures degrade to builtin modes only.
+void initModVisualizers();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

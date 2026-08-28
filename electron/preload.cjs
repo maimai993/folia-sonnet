@@ -1,6 +1,11 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
+    webUtils: {
+      // File.path was removed in modern Electron; this is the supported way to
+      // resolve the OS path of a dropped file from the renderer.
+      getPathForFile: (file) => webUtils.getPathForFile(file),
+    },
     platform: process.platform,
     isLinuxX11: process.platform === 'linux' && !process.env.WAYLAND_DISPLAY,
     getSettings: () => ipcRenderer.invoke('get-settings'),
@@ -187,4 +192,30 @@ contextBridge.exposeInMainWorld('electron', {
         return () => ipcRenderer.removeListener('stage-player-queue-request', listener);
     },
     debugGetRenderedFonts: (selector) => ipcRenderer.invoke('debug-get-rendered-fonts', selector),
+    mods: {
+        listMods: () => ipcRenderer.invoke('folia-mods:list'),
+        setModEnabled: (modId, enabled) => ipcRenderer.invoke('folia-mods:set-enabled', modId, enabled),
+        reloadMods: () => ipcRenderer.invoke('folia-mods:reload'),
+        invokeModCommand: (modId, commandId, params) => ipcRenderer.invoke('folia-mods:invoke', modId, commandId, params),
+        cancelExport: () => ipcRenderer.invoke('folia-mods:export-cancel'),
+        pushRuntimeSnapshot: (snapshot) => ipcRenderer.invoke('folia-mods:push-runtime-snapshot', snapshot),
+        getFfmpegStatus: () => ipcRenderer.invoke('folia-mods:ffmpeg-status'),
+        openModsDirectory: () => ipcRenderer.invoke('folia-mods:open-directory'),
+        installModFromZip: (zipPath) => ipcRenderer.invoke('folia-mods:install-zip', zipPath),
+        onModsStateChanged: (callback) => {
+            const listener = (_event, mods) => callback(mods);
+            ipcRenderer.on('folia-mods:state-changed', listener);
+            return () => ipcRenderer.removeListener('folia-mods:state-changed', listener);
+        },
+        onExportProgress: (callback) => {
+            const listener = (_event, progress) => callback(progress);
+            ipcRenderer.on('folia-mods:export-progress', listener);
+            return () => ipcRenderer.removeListener('folia-mods:export-progress', listener);
+        },
+        onModLog: (callback) => {
+            const listener = (_event, entry) => callback(entry);
+            ipcRenderer.on('folia-mods:log', listener);
+            return () => ipcRenderer.removeListener('folia-mods:log', listener);
+        },
+    },
 });

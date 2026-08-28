@@ -1,0 +1,136 @@
+# Folia Mods
+
+Folia 模组（Mod）目录。桌面端启动时，加载器会扫描此目录（以及打包后的用户数据目录），
+将每个含 `mod.json` 的子目录作为一个模组加载。
+
+## 依赖 ffmpeg（导出类模组）
+
+- 查找顺序：`FOLIA_FFMPEG_PATH` 环境变量 → 应用目录下 `ffmpeg-8.1.2/ffmpeg(.exe)` → 系统 PATH。
+- 输出目录：`视频/Folia Exports`。
+- 透明通道：Windows 完整支持；Linux/macOS 下捕获帧可能不含 Alpha，导出会在返回值中给出警告。
+
+## 目录结构
+
+```
+mods/
+  your-mod-id/            # 目录名任意，模组身份以 mod.json 的 id 为准
+    mod.json              # 必填：manifest
+    index.cjs             # 默认入口（可在 manifest 中改）
+```
+
+## 从 UI 安装与管理
+
+- **打开模组目录**：模组面板右上角「打开模组目录」按钮，在文件管理器中打开用户模组目录 `userData/mods`。
+- **拖放 zip 安装**：把模组 `.zip` 拖到模组面板即可自动安装；支持 `mod.json` 位于根目录或唯一顶层文件夹两种结构。
+  - 安装包须为 `.zip`；内含安全校验（拒绝路径穿越/绝对路径），写入前校验 manifest。
+  - 已安装同 id 模组时自动覆盖（拖包即升级）；失败会清理半成品目录。
+  - 安装后自动重载并刷新列表。
+- 用户模组目录在打包版为 `%APPDATA%\Folia\mods`（只读的应用安装目录不用于安装模组）。
+
+## manifest（apiVersion 1）
+
+```json
+{
+  "id": "your-mod-id",
+  "name": "显示名称",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "可选",
+  "description": "可选",
+  "entry": "index.cjs",
+  "depends": ["base-mod", "other@^1.2.0"],
+  "permissions": ["render.export"]
+}
+```
+
+- `id`：`^[a-z0-9][a-z0-9-]*$`，全局唯一。
+- `version`：`MAJOR.MINOR.PATCH`。
+- `depends`：模组 id 或 `id@^1.2.3`（仅支持 `^` 与 `*`）。缺失依赖或版本不符时该模组不加载。
+- `permissions`：当前可用权限：
+  - `render.export`：启动离屏渲染导出（透明背景视频）。
+  - `filesystem.data`：读写模组私有数据目录（`storage.data.*`）。
+  - `runtime.playback`：读取播放快照。
+  未声明的权限调用会被拒绝（fail closed）。
+
+## 入口契约
+
+`entry` 文件导出单个函数，加载器在隔离错误边界内调用：
+
+```js
+module.exports = function activate(api) {
+    api.log.info('loaded');
+    api.commands.register({
+        id: 'my-command',
+        label: { 'zh-CN': '我的命令', en: 'My command' },
+        description: { 'zh-CN': '说明', en: 'Description' },
+        permissions: ['render.export'],
+        params: [
+            { key: 'width', label: { en: 'Width' }, type: 'number', min: 320, max: 3840, defaultValue: 1920 },
+            { key: 'mode', label: { en: 'Mode' }, type: 'select', options: [{ value: 'a', label: { en: 'A' } }] },
+            { key: 'enabled', label: { en: 'Enabled' }, type: 'boolean', defaultValue: true },
+            { key: 'name', label: { en: 'Name' }, type: 'text' },
+        ],
+        run: async (params) => ({ outputPath: '...' }),
+    });
+};
+```
+
+- 命令自动显示在「模组」面板 tab 中并渲染为参数表单；执行经 IPC 回主进程，权限在加载器侧校验。
+- `api.runtime.getPlaybackSnapshot()` 返回渲染端推送的当前歌曲/歌词/主题快照。
+- `api.render.exportVideo(spec)` 启动导出会话；`render.export` 权限必需。
+- `api.storage.data.get/set` 为模组私有键值持久化（需要 `filesystem.data` 权限时由模组自行声明）。
+
+## 样例模组
+
+- `sample-aurora-visualizer`：虹光——当前句居中，逐字虹光扫过，纯 DOM 无依赖。
+- `sample-transparent-mov-export`：将当前歌曲的歌词动画按**当前动画模式与参数**原样渲染（仅去背景），导出带 Alpha 通道的透明视频。
+- `k3panel`：商籁（sonnet）深度精调面板，暴露相机/逐字运动/视差/转场等 11 个原版设置未提供的实时倍率参数。
+
+## 渲染端实时调制（modulate 参数）
+
+命令参数可声明 `modulate: { mode: 'sonnet' }`，使其成为**渲染端实时调制旋钮**：拖动滑块直接写入渲染进程的共享调制 store（`src/mods/visualizerModulation.ts`），动画下一帧即生效，不经 IPC、不重建渲染上下文。任何 visualizer 模式都可接入该通道（内置模式已接入：sonnet）。
+
+## 稳定性约束
+
+- 单模组加载失败不影响宿主应用与其他模组。
+- 导出会话全局互斥（`export-already-running`）；上限 3840×2160、60fps、15 分钟。
+- 取消/失败时清理 ffmpeg 进程、离屏窗口与半成品文件。
+
+## 自定义歌词动画（visualizer 贡献）
+
+模组可向播放器贡献**新的全屏歌词动画模式**，与内置模式并排出现在动画选择器中，可用于播放、预览与透明视频导出。需要权限 `visualizer.register`。
+
+manifest 声明：
+
+```json
+{
+  "permissions": ["visualizer.register"],
+  "visualizers": [
+    { "id": "aurora-text", "entry": "visualizer.mjs", "label": { "zh-CN": "虹光", "en": "Aurora" }, "order": 420 }
+  ]
+}
+```
+
+`entry` 是**浏览器 ESM 模块**（经白名单协议 `folia-mod://` 由渲染端动态加载，仅在渲染进程执行，不在 Node 中运行），契约：
+
+```js
+export default {
+  mount(element, props) {
+    // element: 宿主 div，自行构建 DOM
+    // props: { lines, currentLineIndex, currentTime(MotionValue), theme, songTitle, ... }
+    // 连续时间通过 props.currentTime.on('change', cb) 订阅，返回取消函数
+    paint(props.currentTime.get());
+    const off = props.currentTime.on('change', paint);
+    return () => { off(); element.replaceChildren(); }; // 可选 disposer
+  },
+};
+```
+
+规则：
+
+- 模式 id 自动加前缀 `mod:<modId>:<id>`，绝不可能覆盖内置模式（流光/心象/云阶/浮名/莫奈/群唱/倾诉/回环/镜台/时计/商籁）。
+- 协议只读、只放行 `.js/.mjs`、只服务已启用且加载成功的模组目录；路径穿越一律 403。
+- 显示名取 label 映射（`zh-CN` → `en` 兜底），无需触碰应用 i18n 文件。
+- 单个贡献加载失败仅跳过自身，不影响内置模式与其他模组。
+
+样例：`sample-aurora-visualizer`（虹光——当前句居中，逐字虹光扫过，纯 DOM 无依赖）。

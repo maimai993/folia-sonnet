@@ -6,6 +6,8 @@ const { spawn } = require('child_process');
 const Store = require('electron-store').default || require('electron-store');
 const crypto = require('crypto');
 const { createStageApi } = require('./stageApi.cjs');
+const { createModSystem } = require('./modSystem/modSystem.cjs');
+const { registerModProtocolSchemes } = require('./modSystem/modProtocol.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
 const wallpaperWatchdogModule = require('./wallpaperWatchdog.cjs');
 const { createKugouApiBridge } = require('./kugouApiBridge.cjs');
@@ -37,6 +39,9 @@ protocol.registerSchemesAsPrivileged([{
     stream: true,
   },
 }]);
+
+// Must run before app ready, alongside the folia-cover scheme above.
+registerModProtocolSchemes(protocol);
 
 // Trusts only the known KuGou media CDN hostname mismatch while preserving TLS checks elsewhere.
 app.on('certificate-error', (event, _webContents, requestUrl, error, _certificate, callback) => {
@@ -409,6 +414,7 @@ function getMainLocale() {
 
 
 let mainWindow = null;
+let modSystem = null;
 let remoteControlWindow = null;
 let appTray = null;
 let latestRemoteControlSnapshot = null;
@@ -3674,6 +3680,15 @@ app.whenReady().then(async () => {
   scheduleStartupUpdateCheck();
   voiceInputPauseMonitor.syncState();
 
+  try {
+    modSystem = createModSystem({ app, BrowserWindow, getMainWindow: () => mainWindow });
+    modSystem.registerIpc();
+    modSystem.loadAll();
+    void modSystem.probeFfmpeg();
+  } catch (error) {
+    console.error('[Mods] Failed to initialize the mod system', error);
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -3692,6 +3707,13 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   clearPendingWindowPlaybackHandoffRequests();
+  if (modSystem) {
+    try {
+      modSystem.dispose();
+    } catch (error) {
+      console.error('[Mods] Failed to dispose the mod system', error);
+    }
+  }
   voiceInputPauseMonitor.stop();
   displaySleepBlocker.stop();
   void discordPresence.destroy();

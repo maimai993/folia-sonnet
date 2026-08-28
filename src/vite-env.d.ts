@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+import type { ModExportProgress, ModFfmpegStatus, ModLogEntry, ModRuntimeInfo, ModRuntimeSnapshot } from './mods/types';
+
 declare global {
   const __COMMIT_HASH__: string;
   const __GIT_BRANCH__: string;
@@ -474,6 +476,10 @@ declare global {
 
   interface Window {
     electron?: {
+      webUtils?: {
+        /** Resolves the OS path of a dropped File (File.path was removed in modern Electron). */
+        getPathForFile: (file: File) => string;
+      };
       platform: string;
       isLinuxX11: boolean;
       getSettings: () => Promise<any>;
@@ -606,6 +612,20 @@ declare global {
       onStageExternalPlayRequest: (callback: (request: StageExternalPlayRequest) => void) => () => void;
       onStagePlayerControlRequest: (callback: (request: StagePlayerControlRequest) => void) => () => void;
       onStagePlayerQueueRequest: (callback: (request: StagePlayerQueueRequest) => void) => () => void;
+      mods?: {
+        listMods: () => Promise<{ mods: ModRuntimeInfo[]; ffmpeg: ModFfmpegStatus; directories: string[] }>;
+        setModEnabled: (modId: string, enabled: boolean) => Promise<{ mods: ModRuntimeInfo[] }>;
+        reloadMods: () => Promise<{ mods: ModRuntimeInfo[] }>;
+        cancelExport: () => Promise<{ ok: boolean }>;
+        invokeModCommand: (modId: string, commandId: string, params: Record<string, unknown>) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+        pushRuntimeSnapshot: (snapshot: ModRuntimeSnapshot) => Promise<{ ok: boolean }>;
+        getFfmpegStatus: () => Promise<{ ffmpeg: ModFfmpegStatus }>;
+        openModsDirectory: () => Promise<{ ok: boolean; directory?: string; error?: string }>;
+        installModFromZip: (zipPath: string) => Promise<{ ok: boolean; id?: string; error?: string }>;
+        onModsStateChanged: (callback: (mods: ModRuntimeInfo[]) => void) => () => void;
+        onExportProgress: (callback: (progress: ModExportProgress) => void) => () => void;
+        onModLog: (callback: (entry: ModLogEntry) => void) => () => void;
+      };
     };
   }
 }
