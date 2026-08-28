@@ -491,6 +491,10 @@ const MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY = 'MAIN_WINDOW_ALWAYS_ON_TOP';
 const TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY = 'TRANSPARENT_PLAYER_BACKGROUND';
 const VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY = 'VOICE_INPUT_PAUSE_ENABLED';
 const PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_SETTING_KEY = 'PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK';
+// Master switch for the experimental mod system. Off by default: with it off no
+// mod is discovered, activated or reachable over IPC, so an unfinished
+// apiVersion 1 costs nothing to anyone who has not opted in.
+const MOD_SYSTEM_ENABLED_SETTING_KEY = 'MOD_SYSTEM_ENABLED';
 
 const DEFAULT_STAGE_API_PORT = 32107;
 const DEFAULT_OBS_BROWSER_SOURCE_PORT = 32108;
@@ -609,6 +613,7 @@ function getPublicSettings() {
     [LYRIC_API_ENABLED_SETTING_KEY]: readStoredBoolean(LYRIC_API_ENABLED_SETTING_KEY, false),
     [VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY]: readStoredBoolean(VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY, false),
     [PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_SETTING_KEY]: readStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_SETTING_KEY, false),
+    [MOD_SYSTEM_ENABLED_SETTING_KEY]: readStoredBoolean(MOD_SYSTEM_ENABLED_SETTING_KEY, false),
     [UPDATE_CHANNEL_SETTING_KEY]: getCurrentReleaseChannel().id,
     'enable_player_page_native_blur': store.get('enable_player_page_native_blur') === true,
     [WALLPAPER_MODE_SETTING_KEY]: isWallpaperModeEnabled(),
@@ -3770,10 +3775,13 @@ app.whenReady().then(async () => {
       BrowserWindow,
       getMainWindow: () => mainWindow,
       getLocaleKey: getMainLocaleKey,
+      isFeatureEnabled: () => readStoredBoolean(MOD_SYSTEM_ENABLED_SETTING_KEY, false),
     });
     modSystem.registerIpc();
     modSystem.loadAll();
-    void modSystem.probeFfmpeg();
+    if (readStoredBoolean(MOD_SYSTEM_ENABLED_SETTING_KEY, false)) {
+      void modSystem.probeFfmpeg();
+    }
   } catch (error) {
     console.error('[Mods] Failed to initialize the mod system', error);
   }
@@ -3866,11 +3874,23 @@ ipcMain.handle('save-settings', (event, key, value) => {
     key === DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY ||
     key === VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY ||
     key === PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_SETTING_KEY ||
+    key === MOD_SYSTEM_ENABLED_SETTING_KEY ||
     key === WALLPAPER_MODE_SETTING_KEY
   ) {
     nextValue = Boolean(value);
   }
   store.set(key, nextValue);
+
+  if (key === MOD_SYSTEM_ENABLED_SETTING_KEY && modSystem) {
+    // Turning the switch off deactivates every running mod immediately rather
+    // than only hiding the UI; turning it on discovers and activates whatever
+    // the user had already confirmed.
+    try {
+      modSystem.loadAll();
+    } catch (error) {
+      console.error('[Mods] Failed to apply the mod system switch', error);
+    }
+  }
 
   if (key === WALLPAPER_MODE_SETTING_KEY) {
     // Let the renderer receive its save-settings response before the process relaunches, while

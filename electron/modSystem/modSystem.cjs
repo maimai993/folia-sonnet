@@ -132,7 +132,7 @@ const serializeError = (error) => {
     return error && error.message ? error.message : String(error);
 };
 
-const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) => {
+const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFeatureEnabled }) => {
     let store = null;
     try {
         store = new Store({ name: 'mod-system' });
@@ -158,6 +158,20 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) =>
             return typeof getMainWindow === 'function' ? getMainWindow() : null;
         } catch {
             return null;
+        }
+    };
+
+    /*
+     * The experimental master switch (Lab settings). Fail closed: anything the
+     * caller cannot answer counts as off, and off means no mod is discovered,
+     * activated, or reachable through the mutating IPC handlers — hiding the UI
+     * alone would leave previously confirmed mods running with full privileges.
+     */
+    const isModSystemEnabled = () => {
+        try {
+            return typeof isFeatureEnabled === 'function' ? Boolean(isFeatureEnabled()) : false;
+        } catch {
+            return false;
         }
     };
 
@@ -475,6 +489,11 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) =>
      */
     const loadAll = () => {
         unloadAll();
+        if (!isModSystemEnabled()) {
+            mods.clear();
+            notifyStateChanged();
+            return listMods();
+        }
         const discovered = readManifestFiles();
         const manifestsById = new Map();
         const prepared = new Map();
@@ -613,6 +632,9 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) =>
     };
 
     const setModEnabled = async (modId, enabled) => {
+        if (!isModSystemEnabled()) {
+            return { ok: false, error: 'mod-system-disabled', mods: [] };
+        }
         let runtime = mods.get(modId);
         if (!runtime) {
             loadAll();
@@ -813,6 +835,9 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) =>
      * digest, so an upgrade always lands disabled and must be confirmed again.
      */
     const installModFromZip = async (zipPath) => {
+        if (!isModSystemEnabled()) {
+            return { ok: false, error: 'mod-system-disabled' };
+        }
         if (typeof zipPath !== 'string' || !zipPath.toLowerCase().endsWith('.zip')) {
             return { ok: false, error: 'install-not-zip' };
         }

@@ -439,6 +439,7 @@ export default function App() {
         handleToggleVoiceInputPause,
         preventDisplaySleepDuringPlayback,
         handleTogglePreventDisplaySleepDuringPlayback,
+        modSystemEnabled,
         wallpaperMode,
         handleToggleWallpaperMode,
         sleepTimerEnabled,
@@ -2318,6 +2319,7 @@ export default function App() {
         setAlwaysShowMainWindowTitlebar: handleToggleAlwaysShowMainWindowTitlebar,
         voiceInputPauseEnabled,
         voiceInputPauseSupported: isElectronWindow && typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('win'),
+        modSystemEnabled,
         setVoiceInputPauseEnabled: handleToggleVoiceInputPause,
         preventDisplaySleepDuringPlayback,
         setPreventDisplaySleepDuringPlayback: handleTogglePreventDisplaySleepDuringPlayback,
@@ -2446,6 +2448,7 @@ export default function App() {
         visualizerBackgroundMode,
         visualizerMode,
         voiceInputPauseEnabled,
+        modSystemEnabled,
         volume,
         wallpaperMode,
     ]);

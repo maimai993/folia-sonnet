@@ -86,6 +86,7 @@ export type CommandPaletteContextDeps = {
     setAlwaysShowMainWindowTitlebar: (next: boolean) => void;
     voiceInputPauseEnabled: boolean;
     voiceInputPauseSupported: boolean;
+    modSystemEnabled: boolean;
     setVoiceInputPauseEnabled: (next: boolean) => void;
     preventDisplaySleepDuringPlayback: boolean;
     setPreventDisplaySleepDuringPlayback: (next: boolean) => void;
@@ -195,6 +196,7 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         toggleAlwaysShowTrackSwitchButtons: () => deps.setAlwaysShowTrackSwitchButtons(!deps.alwaysShowTrackSwitchButtons),
         toggleAlwaysShowMainWindowTitlebar: () => deps.setAlwaysShowMainWindowTitlebar(!deps.alwaysShowMainWindowTitlebar),
         voiceInputPauseSupported: deps.voiceInputPauseSupported,
+        modSystemEnabled: deps.modSystemEnabled,
         toggleVoiceInputPause: () => deps.setVoiceInputPauseEnabled(!deps.voiceInputPauseEnabled),
         togglePreventDisplaySleepDuringPlayback: () => deps.setPreventDisplaySleepDuringPlayback(!deps.preventDisplaySleepDuringPlayback),
         toggleWallpaperMode: () => deps.setWallpaperMode(!deps.wallpaperMode),

@@ -16,6 +16,9 @@ export const modsCommands: CommandPaletteCommand[] = [
         description: 'Experimental: manage mods and export transparent lyric videos',
         keywords: ['mods', 'mod', 'mods manager', '模组', '模组管理', 'mokuai', 'mozu', 'mz', '导出透明视频'],
         icon: Boxes,
+        // Behind the Lab switch: with the mod system off the main process loads
+        // no mod at all, so the entry would open a manager over nothing.
+        isAvailable: context => context?.settings.modSystemEnabled ?? true,
         requiresInput: true,
         surface: modsSurface,
         execute: () => false,
