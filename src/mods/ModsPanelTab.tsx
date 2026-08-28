@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, Boxes, ChevronDown, FolderOpen, Power, RefreshCw, TriangleAlert, CircleCheck, FileVideo2, CheckSquare, Square, Upload, X } from 'lucide-react';
+import { AlertCircle, Boxes, ChevronDown, CircleOff, FolderOpen, Power, RefreshCw, TriangleAlert, CircleCheck, FileVideo2, CheckSquare, Square, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { SongResult, Theme, VisualizerMode } from '@/types';
@@ -27,7 +27,7 @@ interface ModsPanelTabProps {
 
 const statusIcon = (status: string) => {
     if (status === 'loaded') return <CircleCheck size={13} className="text-emerald-300 shrink-0" />;
-    if (status === 'disabled') return <Power size={13} className="text-white/40 shrink-0" />;
+    if (status === 'disabled') return <CircleOff size={13} className="text-white/40 shrink-0" />;
     return <TriangleAlert size={13} className="text-red-300 shrink-0" />;
 };
 
