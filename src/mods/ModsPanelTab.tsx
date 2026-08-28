@@ -25,10 +25,10 @@ interface ModsPanelTabProps {
     visualizerMode: VisualizerMode | null;
 }
 
-const statusIcon = (status: string) => {
-    if (status === 'loaded') return <CircleCheck size={13} className="text-emerald-300 shrink-0" />;
-    if (status === 'disabled') return <CircleOff size={13} className="text-white/40 shrink-0" />;
-    return <TriangleAlert size={13} className="text-red-300 shrink-0" />;
+const statusIcon = (status: string, isDaylight: boolean) => {
+    if (status === 'loaded') return <CircleCheck size={13} className={`${isDaylight ? 'text-emerald-600' : 'text-emerald-300'} shrink-0`} />;
+    if (status === 'disabled') return <CircleOff size={13} className={`${isDaylight ? 'text-zinc-400' : 'text-white/40'} shrink-0`} />;
+    return <TriangleAlert size={13} className={`${isDaylight ? 'text-red-600' : 'text-red-300'} shrink-0`} />;
 };
 
 interface ModAccordionItemProps {
@@ -36,18 +36,19 @@ interface ModAccordionItemProps {
     expanded: boolean;
     selected: boolean;
     selectionMode: boolean;
+    isDaylight: boolean;
     onToggleExpand: () => void;
     onToggleEnabled: () => void;
     onToggleSelected: () => void;
 }
 
 const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
-    mod, expanded, selected, selectionMode, onToggleExpand, onToggleEnabled, onToggleSelected,
+    mod, expanded, selected, selectionMode, isDaylight, onToggleExpand, onToggleEnabled, onToggleSelected,
 }) => {
     const { t } = useTranslation();
 
     return (
-        <div className={`bg-white/5 rounded-xl overflow-hidden transition-shadow ${selected ? 'ring-1 ring-white/25' : ''}`}>
+        <div className={`${isDaylight ? 'bg-black/[0.04]' : 'bg-white/5'} rounded-xl overflow-hidden transition-shadow ${selected ? (isDaylight ? 'ring-1 ring-black/20' : 'ring-1 ring-white/25') : ''}`}>
             <div
                 role="button"
                 tabIndex={0}
@@ -69,14 +70,14 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                     }
                 }}
                 className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none transition-colors ${
-                    expanded && !selectionMode ? 'bg-white/5' : 'hover:bg-white/5'
+                    expanded && !selectionMode ? (isDaylight ? 'bg-black/[0.04]' : 'bg-white/5') : (isDaylight ? 'hover:bg-black/[0.06]' : 'hover:bg-white/5')
                 }`}
             >
                 {selectionMode ? (
-                    <span className={`shrink-0 ${selected ? 'text-white' : 'text-white/35'}`}>
+                    <span className={`shrink-0 ${selected ? (isDaylight ? 'text-zinc-800' : 'text-white') : (isDaylight ? 'text-zinc-400' : 'text-white/35')}`}>
                         {selected ? <CheckSquare size={14} /> : <Square size={14} />}
                     </span>
-                ) : statusIcon(mod.status)}
+                ) : statusIcon(mod.status, isDaylight)}
                 <span className="text-xs font-medium truncate flex-1 min-w-0">{mod.name}</span>
                 <button
                     type="button"
@@ -87,8 +88,8 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                     }}
                     className={`shrink-0 p-1 rounded-md transition-colors ${
                         mod.enabled
-                            ? 'text-white/70 hover:text-white hover:bg-white/10'
-                            : 'text-white/30 hover:text-white/60 hover:bg-white/10'
+                            ? isDaylight ? 'text-zinc-700 hover:text-zinc-900 hover:bg-black/10' : 'text-white/70 hover:text-white hover:bg-white/10'
+                            : isDaylight ? 'text-zinc-400 hover:text-zinc-600 hover:bg-black/10' : 'text-white/30 hover:text-white/60 hover:bg-white/10'
                     }`}
                 >
                     <Power size={13} />
@@ -96,7 +97,7 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                 <motion.span
                     animate={{ rotate: expanded && !selectionMode ? 180 : 0 }}
                     transition={{ duration: 0.2 }}
-                    className="shrink-0 text-white/40"
+                    className={`shrink-0 ${isDaylight ? 'text-zinc-400' : 'text-white/40'}`}
                 >
                     <ChevronDown size={14} />
                 </motion.span>
@@ -111,7 +112,7 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                         transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                         className="overflow-hidden"
                     >
-                        <div className="px-3 pb-3 pt-2.5 flex flex-col gap-2.5 border-t border-white/5">
+                        <div className={`px-3 pb-3 pt-2.5 flex flex-col gap-2.5 border-t ${isDaylight ? 'border-black/10' : 'border-white/5'}`}>
                             <div className="text-[11px] opacity-50 truncate">
                                 {mod.id} · v{mod.version ?? '-'}
                                 {mod.author ? ` · ${mod.author}` : ''}
@@ -124,7 +125,7 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                                     {mod.permissions.map((permission) => (
                                         <span
                                             key={permission}
-                                            className="px-1.5 py-0.5 rounded bg-white/5 text-[10px] opacity-50"
+                                            className={`px-1.5 py-0.5 rounded ${isDaylight ? 'bg-black/[0.05]' : 'bg-white/5'} text-[10px] opacity-50`}
                                         >
                                             {permission}
                                         </span>
@@ -132,7 +133,7 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                                 </div>
                             ) : null}
                             {mod.error ? (
-                                <div className="flex items-start gap-1.5 text-xs text-red-300 bg-red-500/10 rounded-lg p-2">
+                                <div className={`flex items-start gap-1.5 text-xs ${isDaylight ? 'text-red-600 bg-red-500/10' : 'text-red-300 bg-red-500/10'} rounded-lg p-2`}>
                                     <TriangleAlert size={14} className="mt-px shrink-0" />
                                     <span className="break-all">{mod.error}</span>
                                 </div>
@@ -499,6 +500,7 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
                                 expanded={selectedModId === mod.id && !selectionMode}
                                 selected={selectedIds.has(mod.id)}
                                 selectionMode={selectionMode}
+                                isDaylight={isDaylight}
                                 onToggleExpand={() => selectMod(selectedModId === mod.id ? null : mod.id)}
                                 onToggleEnabled={() => { void toggleMod(mod.id, !mod.enabled); }}
                                 onToggleSelected={() => toggleSelected(mod.id)}
