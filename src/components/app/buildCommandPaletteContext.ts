@@ -90,6 +90,14 @@ export type CommandPaletteContextDeps = {
     wallpaperMode: boolean;
     setWallpaperMode: (next: boolean) => void;
 
+    sleepTimerEnabled: boolean;
+    setSleepTimerEnabled: (next: boolean) => void;
+    sleepTimerHours: number;
+    setSleepTimerHours: (next: number) => void;
+    sleepTimerMinutes: number;
+    setSleepTimerMinutes: (next: number) => void;
+    sleepTimerDeadlineMs: number | null;
+
     canGenerateAITheme: boolean;
     isGeneratingTheme: boolean;
     generateAITheme: () => void;
@@ -179,6 +187,13 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         toggleVoiceInputPause: () => deps.setVoiceInputPauseEnabled(!deps.voiceInputPauseEnabled),
         togglePreventDisplaySleepDuringPlayback: () => deps.setPreventDisplaySleepDuringPlayback(!deps.preventDisplaySleepDuringPlayback),
         toggleWallpaperMode: () => deps.setWallpaperMode(!deps.wallpaperMode),
+        sleepTimerEnabled: deps.sleepTimerEnabled,
+        setSleepTimerEnabled: deps.setSleepTimerEnabled,
+        sleepTimerHours: deps.sleepTimerHours,
+        setSleepTimerHours: deps.setSleepTimerHours,
+        sleepTimerMinutes: deps.sleepTimerMinutes,
+        setSleepTimerMinutes: deps.setSleepTimerMinutes,
+        sleepTimerDeadlineMs: deps.sleepTimerDeadlineMs,
         canGenerateAITheme: deps.canGenerateAITheme,
         isGeneratingTheme: deps.isGeneratingTheme,
         generateAITheme: deps.generateAITheme,

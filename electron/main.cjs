@@ -4081,6 +4081,16 @@ ipcMain.handle('window-close', () => {
   return true;
 });
 
+// Sleep timer and other explicit "exit the whole app" paths. Unlike window-close this
+// quits even when closing-to-tray is enabled, and runs the before-quit cleanup.
+ipcMain.handle('app-quit', (event) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    return false;
+  }
+  app.quit();
+  return true;
+});
+
 ipcMain.handle('window-is-maximized', () => {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return false;
