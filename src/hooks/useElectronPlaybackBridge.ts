@@ -646,7 +646,13 @@ export const useElectronPlaybackBridge = ({
 
                 if (request.action === 'seek') {
                     const nextTime = Math.max(0, (request.positionMs ?? 0) / 1000);
-                    if (audioRef.current) {
+                    // Same order as the remote's own seek above: mid-blend `audioRef` names the
+                    // INCOMING deck, silent and holding a different track, so moving it moves
+                    // nothing the listener can hear. The transition-aware path cancels the blend
+                    // back onto the track on screen and seeks that instead.
+                    if (onRemoteTransitionSeek?.(nextTime)) {
+                        // Handled: that path seeks the deck it kept.
+                    } else if (audioRef.current) {
                         audioRef.current.currentTime = nextTime;
                     } else if (activePlaybackContext === 'stage') {
                         syncStageLyricsClock?.(nextTime, duration, taskbarPlayerStateRef.current);
@@ -664,7 +670,7 @@ export const useElectronPlaybackBridge = ({
             }
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activePlaybackContext, audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef]);
+    }, [activePlaybackContext, audioRef, currentTime, duration, isNowPlayingControlDisabledRef, mediaSessionNextRef, mediaSessionPauseRef, mediaSessionPlayRef, mediaSessionPrevRef, onRemoteTransitionSeek, syncStageLyricsClock, taskbarHasTrackRef, taskbarPlayerStateRef]);
 
     useEffect(() => {
         if (!window.electron?.onStageExternalPlayRequest || !onExternalPlayRequest) {

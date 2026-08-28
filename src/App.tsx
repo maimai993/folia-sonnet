@@ -1658,7 +1658,8 @@ export default function App() {
      */
     const seekDuringTransitionRef = useRef<(time: number) => boolean>(() => false);
     const pauseDuringTransitionRef = useRef<() => boolean>(() => false);
-    const handleRemoteTransitionSeek = useCallback((time: number) => seekDuringTransitionRef.current(time), []);
+    /** Shared by every entry point that can seek while a blend is in flight. */
+    const seekDuringTransition = useCallback((time: number) => seekDuringTransitionRef.current(time), []);
     const handlePauseDuringTransition = useCallback(() => pauseDuringTransitionRef.current(), []);
 
     const { resumePlayback, pausePlayback } = usePlaybackTransportController({
@@ -1727,11 +1728,14 @@ export default function App() {
 
     useMediaSessionBridge({
         audioRef,
-        // Pairs with `audioRef`: both describe the ACTIVE deck, so the readiness guard
-        // compares the right element against the right source. The metadata below stays
-        // on the displayed track - during a blend the system panel shows what the
-        // listener is still looking at, not the one that has already started underneath.
-        audioSrc,
+        // All three describe the DISPLAYED track, and that is the whole of the fix: the metadata,
+        // the clock the position is read off, and the source the readiness guard compares against.
+        // Pairing the displayed song with the ACTIVE deck put the outgoing track's title over the
+        // incoming track's duration and progress for the length of every blend - the system panel
+        // named one song and counted another. `audioSrc` moves with the element or the guard fails
+        // for the whole blend and the panel stops updating instead.
+        getDisplayAudioElement: automix.getDisplayElement,
+        audioSrc: automix.tailSrc ?? audioSrc,
         currentSong: displaySong,
         cachedCoverUrl: displayCoverUrl ?? cachedCoverUrl,
         playerState: displayPlayerState,
@@ -1811,7 +1815,7 @@ export default function App() {
         onRemoteExportCommand: handleExportCommand,
         onExternalPlayRequest: handleStageExternalPlayRequest,
         onRemoteCycleLoopMode: handleToggleLoopMode,
-        onRemoteTransitionSeek: handleRemoteTransitionSeek,
+        onRemoteTransitionSeek: seekDuringTransition,
         // Keyed on the displayed track, so the like state matches the song the remote is showing
         // while a blend is held rather than the one arriving underneath it.
         isLiked: (() => {
@@ -1877,12 +1881,17 @@ export default function App() {
         isPanelOpen,
         isFmMode,
         playerState,
-        duration,
+        // The length of the track on screen. Mid-blend `duration` already holds the ARRIVING track's,
+        // so clamping an arrow-key seek against it would land past the end of the one being heard.
+        duration: displayDuration,
         currentTime,
         audioRef,
         // Play-vs-pause cannot be decided off the active deck mid-blend: that is the arriving track,
         // and it is silent for the whole lead.
         isTransitionAudible: automix.isTransitionAudible,
+        // The arrow keys check for a blend first, the way the bar and the remote do, rather than
+        // writing to the active deck - which mid-blend is not the deck the listener is watching.
+        seekDuringTransition,
         stageLyricsClockRef,
         setIsDevDebugOverlayVisible,
         setIsMemoryMonitorVisible,

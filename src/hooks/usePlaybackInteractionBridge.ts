@@ -53,6 +53,16 @@ type UsePlaybackInteractionBridgeParams = {
      * toggle out of - every pause path cancels one - so an audible blend can only mean pause.
      */
     isTransitionAudible?: () => boolean;
+    /**
+     * Takes a seek that lands during a blend, returning true when it did.
+     *
+     * Mid-blend `audioRef` is the incoming deck: writing to it moves a track the listener cannot
+     * hear yet, while the bar they are watching belongs to the outgoing one. The same port the
+     * progress bar and the remote use, so all three land on the same deck. Returns false outside a
+     * blend, and the ordinary write below runs - deliberately not the bar's whole seek, which
+     * resumes a paused deck; an arrow key on a paused track has always left it paused.
+     */
+    seekDuringTransition?: (time: number) => boolean;
     stageLyricsClockRef: React.MutableRefObject<{
         startTimeSec: number;
         endTimeSec: number;
@@ -89,6 +99,7 @@ export function usePlaybackInteractionBridge({
     currentTime,
     audioRef,
     isTransitionAudible,
+    seekDuringTransition,
     stageLyricsClockRef,
     setIsDevDebugOverlayVisible,
     setIsMemoryMonitorVisible,
@@ -279,9 +290,13 @@ export function usePlaybackInteractionBridge({
                         const nextTime = Math.max(stageLyricsClockRef.current.startTimeSec, currentTime.get() - 5);
                         syncStageLyricsClock(nextTime, duration, playerState, stageLyricsClockRef.current.startTimeSec);
                         currentTime.set(nextTime);
-                    } else if (audioRef.current) {
-                        const nextTime = Math.max(0, audioRef.current.currentTime - 5);
-                        audioRef.current.currentTime = nextTime;
+                    } else {
+                        // Off the motion value, not the element: during a blend that value is driven
+                        // by the deck on screen, which is the track this key is meant to move.
+                        const nextTime = Math.max(0, currentTime.get() - 5);
+                        if (!seekDuringTransition?.(nextTime) && audioRef.current) {
+                            audioRef.current.currentTime = nextTime;
+                        }
                     }
                     break;
                 case 'ArrowRight':
@@ -310,9 +325,14 @@ export function usePlaybackInteractionBridge({
                         const nextTime = Math.min(duration, currentTime.get() + 5);
                         syncStageLyricsClock(nextTime, duration, playerState, stageLyricsClockRef.current.startTimeSec);
                         currentTime.set(nextTime);
-                    } else if (audioRef.current) {
-                        const nextTime = Math.min(audioRef.current.duration || 0, audioRef.current.currentTime + 5);
-                        audioRef.current.currentTime = nextTime;
+                    } else {
+                        // `duration` rather than the element's own, for the same reason: mid-blend
+                        // the element holds the ARRIVING track's length, and clamping this track's
+                        // position against it lands past its end.
+                        const nextTime = Math.min(duration || 0, currentTime.get() + 5);
+                        if (!seekDuringTransition?.(nextTime) && audioRef.current) {
+                            audioRef.current.currentTime = nextTime;
+                        }
                     }
                     break;
                 case 'KeyH':
@@ -352,6 +372,7 @@ export function usePlaybackInteractionBridge({
         setIsMemoryMonitorVisible,
         setIsPanelOpen,
         cyclePlayerChromeVisibilityMode,
+        seekDuringTransition,
         stageActiveEntryKind,
         stageLyricsClockRef,
         syncStageLyricsClock,
