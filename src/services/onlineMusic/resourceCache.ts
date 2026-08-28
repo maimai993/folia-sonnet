@@ -1,7 +1,7 @@
 import type { ReplayGainInfo, SongResult } from '../../types';
 import type { MigrationResult } from '../../utils/lyrics/renderHints';
 import { getCachedAudioBlob, hasCachedAudio, saveAudioBlob } from '../audioCache';
-import { getCachedCoverUrl, saveCoverBlob } from '../coverCache';
+import { getCachedCoverUrl, hasCachedCover, saveCoverBlob } from '../coverCache';
 import { getFromCache, saveToCache } from '../db';
 import { getLegacySongResourceCacheKeys, getSongResourceCacheKey, type SongResourceKind } from './resourceKeys';
 
@@ -53,6 +53,22 @@ export const hasCachedSongAudio = async (song: SongResult): Promise<boolean> => 
 
     for (const legacyKey of getLegacySongResourceCacheKeys('audio', song)) {
         if (await hasCachedAudio(legacyKey)) return true;
+    }
+    return false;
+};
+
+/**
+ * The cover half of `hasCachedSongAudio`, and separate from it on purpose.
+ *
+ * The two caches are pruned independently - `cacheRepository` files them under different categories -
+ * so "audio present, cover gone" is a state a listener reaches by normal use, not an edge case. Asked
+ * on its own so a cover can be refilled without the audio needing to be missing too.
+ */
+export const hasCachedSongCover = async (song: SongResult): Promise<boolean> => {
+    if (await hasCachedCover(getSongResourceCacheKey('cover', song))) return true;
+
+    for (const legacyKey of getLegacySongResourceCacheKeys('cover', song)) {
+        if (await hasCachedCover(legacyKey)) return true;
     }
     return false;
 };

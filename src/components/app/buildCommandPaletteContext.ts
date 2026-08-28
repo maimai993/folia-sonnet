@@ -113,6 +113,7 @@ export type CommandPaletteContextDeps = {
     handleToggleAutomix: (enable: boolean) => void;
     handleSetTransitionMode: (mode: TransitionMode) => void;
     handleToggleTransitionPerformance: (enable: boolean) => void;
+    canUseTransitionPerformance: () => boolean;
 
     visualizerMode: VisualizerMode;
     visualizerBackgroundMode: VisualizerBackgroundMode | null;
@@ -215,6 +216,7 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         toggleAutomix: () => deps.handleToggleAutomix(!deps.automixEnabled),
         setTransitionMode: deps.handleSetTransitionMode,
         toggleTransitionPerformance: () => deps.handleToggleTransitionPerformance(!deps.transitionPerformance),
+        canUseTransitionPerformance: deps.canUseTransitionPerformance,
     },
     visualizer: {
         visualizerMode: deps.visualizerMode,

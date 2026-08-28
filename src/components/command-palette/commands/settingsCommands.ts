@@ -69,6 +69,11 @@ export const settingsCommands: CommandPaletteCommand[] = [
     {
         id: 'transition-performance-toggle',
         platform: ['electron'],
+        // Hidden without a stem model, matching the disabled switch in the transition settings.
+        // Without this the command could persist `transitionPerformance = true` in a state the
+        // settings panel refuses to produce, and the mode would then be silently on the moment a
+        // model finished downloading.
+        isAvailable: context => (context ? context.settings.canUseTransitionPerformance() : true),
         group: 'settings',
         title: 'Transition performance mode',
         description: 'Toggle the more aggressive transition (needs the stem model)',

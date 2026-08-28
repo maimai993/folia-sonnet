@@ -3,16 +3,12 @@ import type { MutableRefObject, RefObject } from 'react';
 import { PlayerState } from '../types';
 import type { ReplayGainInfo, ReplayGainMode, SongResult, StatusMessage } from '../types';
 import type { LocalSong } from '../types';
-import { saveAudioBlob } from '../services/audioCache';
-import { hasCachedSongAudio } from '../services/onlineMusic/resourceCache';
-import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
-import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 import { resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
 import { calculateReplayGain } from '../utils/replayGain';
-import { saveToCache } from '../services/db';
 import { applyAudioEqualizerSettings } from '../services/audioEqualizerGraph';
 import { type AudioEffectChain } from '../services/audioEffects/effectChain';
 import { buildPlaybackGraph } from '../services/playbackGraph';
+import { cachePlayedTrackAssets } from '../services/playedTrackCache';
 import { rampGain, type AutomixDeckChain } from '../services/automix/crossfadeGraph';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 
@@ -178,42 +174,21 @@ export function usePlaybackAudioBridge({
      * already names the track that arrived. `coverUrl` is passed for the currently-displayed track
      * (which may carry a user override); left undefined - the automix path - the cover is taken from
      * the song's own metadata instead.
+     *
+     * The writes themselves live in `cachePlayedTrackAssets`, which is where the audio and cover
+     * conditions are kept apart from each other; this only adds the setting gate and the readout
+     * refresh, neither of which belongs in a service.
      */
     const cacheSongAssetsFor = useCallback(async (
         song: SongResult | null,
         src: string | null,
         coverUrl?: string | null,
     ) => {
-        if (!song || !src || src.startsWith('blob:')) return;
+        if (!enableMediaCache) return;
 
-        const existing = await hasCachedSongAudio(song);
-        if (existing || !enableMediaCache) return;
+        const written = await cachePlayedTrackAssets(song, src, coverUrl);
 
-        console.log('[Cache] Caching fully played song:', song.name);
-
-        try {
-            const response = await fetch(src);
-            const blob = await response.blob();
-            await saveAudioBlob(getSongResourceCacheKey('audio', song), blob);
-            console.log('[Cache] Audio saved');
-        } catch (error) {
-            console.error('[Cache] Failed to download audio for cache', error);
-        }
-
-        const rawCover = coverUrl !== undefined ? coverUrl : getProviderSongMetadata(song).coverUrl;
-        const cover = rawCover && rawCover.startsWith('http:') ? rawCover.replace('http:', 'https:') : rawCover;
-        if (cover) {
-            try {
-                const response = await fetch(cover, { mode: 'cors' });
-                const blob = await response.blob();
-                await saveToCache(getSongResourceCacheKey('cover', song), blob);
-                console.log('[Cache] Cover saved');
-            } catch (error) {
-                console.error('[Cache] Failed to download cover for cache', error);
-            }
-        }
-
-        if (isPanelOpen && panelTab === 'account') {
+        if ((written.audio || written.cover) && isPanelOpen && panelTab === 'account') {
             updateCacheSize();
         }
     }, [enableMediaCache, isPanelOpen, panelTab, updateCacheSize]);

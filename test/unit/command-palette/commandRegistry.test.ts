@@ -100,6 +100,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleAutomix: vi.fn(),
             setTransitionMode: vi.fn(),
             toggleTransitionPerformance: vi.fn(),
+            canUseTransitionPerformance: vi.fn(() => true),
         },
         visualizer: {
             visualizerMode: 'classic',
@@ -812,5 +813,29 @@ describe('theme generation source commands', () => {
         const ids = getCommandPaletteMatches('封面取色', createContext({ settings: { themeGenerationSource: 'ai' } }))
             .map(match => match.command.id);
         expect(ids).toContain('theme-source-cover');
+    });
+});
+
+// The settings panel disables the performance switch when there is no stem model to run it. The
+// command has to ask the same question: otherwise it can persist `transitionPerformance = true` in
+// a state the panel refuses to produce, and the mode is silently on once a model does arrive.
+describe('transition performance command', () => {
+    const availableIds = (canUseTransitionPerformance: boolean) => (
+        getAvailableCommandPaletteCommands(createContext({ settings: { canUseTransitionPerformance: () => canUseTransitionPerformance } }))
+            .map(command => command.id)
+    );
+
+    it('is offered once a stem model can run', () => {
+        expect(availableIds(true)).toContain('transition-performance-toggle');
+    });
+
+    it('is withdrawn while no stem model is installed', () => {
+        expect(availableIds(false)).not.toContain('transition-performance-toggle');
+    });
+
+    it('stays out of the matches for a direct search', () => {
+        const context = createContext({ settings: { canUseTransitionPerformance: () => false } });
+        const ids = getCommandPaletteMatches('performance mode', context).map(match => match.command.id);
+        expect(ids).not.toContain('transition-performance-toggle');
     });
 });

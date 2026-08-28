@@ -102,6 +102,7 @@ import { initializeSyncCoordinator } from './services/sync/syncCoordinator';
 import { applyLocalLibraryEntityDisplay } from './services/playbackAdapters';
 import { clearPrefetchRuntime } from './services/prefetchService';
 import { clearTrackProfileRuntime } from './services/automix/profileService';
+import { transitionCapabilities } from './services/automix/stems';
 import { buildLocalLibraryIndex, followEntityRedirect } from './utils/localLibraryIndex';
 import type { PlayerChromeVisibilityMode } from './types/remoteControl';
 
@@ -183,6 +184,16 @@ export default function App() {
     const handleToggleAutomix = useSettingsUiStore(state => state.handleToggleAutomix);
     const handleSetTransitionMode = useSettingsUiStore(state => state.handleSetTransitionMode);
     const handleToggleTransitionPerformance = useSettingsUiStore(state => state.handleToggleTransitionPerformance);
+    /**
+     * The same test the settings panel disables its performance switch by, for the command palette.
+     *
+     * Asked in one place rather than two: the panel greys the switch out when there is no stem model
+     * to run, and the palette command used to check only that this was the desktop build - so the
+     * command could turn on a mode the panel would not let anyone turn on, and the preference stayed
+     * set for whenever a model did arrive. Left as a getter for the palette to call; see the note on
+     * `canUseTransitionPerformance` in the palette's context type.
+     */
+    const canUseTransitionPerformance = useCallback(() => transitionCapabilities().stems, []);
     // Memoised because it is a dependency of the planning callback: a fresh object every render
     // would rebuild that callback on every frame of playback.
     const transitionSettings = useMemo(
@@ -2317,6 +2328,7 @@ export default function App() {
         handleToggleAutomix,
         handleSetTransitionMode,
         handleToggleTransitionPerformance,
+        canUseTransitionPerformance,
 
         visualizerMode,
         visualizerBackgroundMode,

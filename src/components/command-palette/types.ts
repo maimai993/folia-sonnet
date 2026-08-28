@@ -168,6 +168,16 @@ export type CommandPaletteSettingsContext = {
     toggleAutomix: () => void;
     setTransitionMode: (mode: TransitionMode) => void;
     toggleTransitionPerformance: () => void;
+    /**
+     * Whether performance mode has anything to run on - the same `capabilities.stems` the settings
+     * panel disables its switch by.
+     *
+     * A function rather than a value because the answer changes when a model download finishes, and
+     * nothing re-renders the app to say so. `isAvailable` is asked each time the palette opens, so a
+     * getter is read fresh; a snapshot taken when this context was memoised would keep saying "no
+     * model" for the rest of the session.
+     */
+    canUseTransitionPerformance: () => boolean;
 };
 
 export type CommandPaletteVisualizerContext = {
