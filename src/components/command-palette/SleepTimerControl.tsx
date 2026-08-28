@@ -13,6 +13,7 @@ type SleepTimerControlProps = {
     hours: number;
     minutes: number;
     deadlineMs: number | null;
+    queryFeedback: { isError: boolean; text: string } | null;
     onEnabledChange: (enabled: boolean) => void;
     onHoursChange: (hours: number) => void;
     onMinutesChange: (minutes: number) => void;
@@ -74,28 +75,36 @@ const SleepTimerControl: React.FC<SleepTimerControlProps> = ({
     hours,
     minutes,
     deadlineMs,
+    queryFeedback,
     onEnabledChange,
     onHoursChange,
     onMinutesChange,
 }) => {
     const { t } = useTranslation();
-    const [tick, setTick] = useState(0);
+    const [nowMs, setNowMs] = useState(() => Date.now());
 
     useEffect(() => {
         if (!enabled || deadlineMs === null) {
             return;
         }
-        const timer = window.setInterval(() => setTick((t) => t + 1), 1000);
+        setNowMs(Date.now());
+        const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
         return () => window.clearInterval(timer);
     }, [deadlineMs, enabled]);
 
-    const remainingMs = enabled && deadlineMs !== null ? Math.max(0, deadlineMs - Date.now()) : null;
-    const hint = !enabled
-        ? t('commandPalette.sleepTimerDisabledHint', 'Turn it on to schedule an auto close')
+    const remainingMs = enabled && deadlineMs !== null ? Math.max(0, deadlineMs - nowMs) : null;
+    const timerHint = !enabled
+        ? t('commandPalette.sleepTimerDisabledHint', 'Turn it on to start the timer')
         : hours === 0 && minutes === 0
-            ? t('commandPalette.sleepTimerZeroHint', '0h 0m never closes the app; pick a duration above')
-            : t('commandPalette.sleepTimerCountdownHint', 'Closing in {{time}}')
+            ? t('commandPalette.sleepTimerZeroHint', 'Choose a duration greater than zero')
+            : t(
+                window.electron?.quitApp
+                    ? 'commandPalette.sleepTimerCountdownHint'
+                    : 'commandPalette.sleepTimerPauseCountdownHint',
+                window.electron?.quitApp ? 'Closing in {{time}}' : 'Pausing playback in {{time}}',
+            )
                 .replace('{{time}}', formatRemaining(remainingMs ?? (hours * 3600 + minutes * 60) * 1000));
+    const hint = queryFeedback?.text ?? timerHint;
 
     return (
         <div className="flex h-full items-center justify-center px-4 py-10">
@@ -105,7 +114,12 @@ const SleepTimerControl: React.FC<SleepTimerControlProps> = ({
                         <Timer size={22} style={{ color: theme.accentColor }} />
                         <div>
                             <div className="text-sm font-medium">{t('commandPalette.sleepTimerTitle', 'Sleep timer')}</div>
-                            <div className="mt-0.5 max-w-[240px] truncate text-xs tabular-nums opacity-50">{hint}</div>
+                            <div
+                                className={`mt-0.5 max-w-[300px] truncate text-xs tabular-nums ${queryFeedback?.isError ? 'text-red-400' : 'opacity-50'}`}
+                                aria-live="polite"
+                            >
+                                {hint}
+                            </div>
                         </div>
                     </div>
                     <DioramaSettingsToggle

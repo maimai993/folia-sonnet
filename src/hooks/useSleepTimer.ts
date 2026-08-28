@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
-import { SLEEP_TIMER_ENABLED_STORAGE_KEY, useSettingsUiStore } from '../stores/useSettingsUiStore';
+import { useEffect, useRef } from 'react';
+import { useSettingsUiStore } from '../stores/useSettingsUiStore';
+import { runSleepTimerExpiryAction } from './sleepTimerExpiry';
 
 // src/hooks/useSleepTimer.ts
 
@@ -7,11 +8,19 @@ type UseSleepTimerState = {
     enabled: boolean;
     hours: number;
     minutes: number;
+    onExpireFallback: () => void;
 };
 
 const TICK_MS = 1000;
 
-export const useSleepTimer = ({ enabled, hours, minutes }: UseSleepTimerState) => {
+export const useSleepTimer = ({ enabled, hours, minutes, onExpireFallback }: UseSleepTimerState) => {
+    const onExpireFallbackRef = useRef(onExpireFallback);
+    const activationId = useSettingsUiStore(state => state.sleepTimerActivationId);
+
+    useEffect(() => {
+        onExpireFallbackRef.current = onExpireFallback;
+    }, [onExpireFallback]);
+
     useEffect(() => {
         if (!enabled || (hours === 0 && minutes === 0)) {
             useSettingsUiStore.setState({ sleepTimerDeadlineMs: null });
@@ -24,9 +33,15 @@ export const useSleepTimer = ({ enabled, hours, minutes }: UseSleepTimerState) =
         const timer = window.setInterval(() => {
             if (Date.now() >= deadline) {
                 window.clearInterval(timer);
-                localStorage.setItem(SLEEP_TIMER_ENABLED_STORAGE_KEY, 'false');
-                useSettingsUiStore.setState({ sleepTimerDeadlineMs: null });
-                void window.electron?.quitApp?.();
+                useSettingsUiStore.setState({
+                    sleepTimerEnabled: false,
+                    sleepTimerDeadlineMs: null,
+                });
+
+                void runSleepTimerExpiryAction({
+                    quitApp: window.electron?.quitApp,
+                    onFallback: () => onExpireFallbackRef.current(),
+                });
             }
         }, TICK_MS);
 
@@ -34,5 +49,5 @@ export const useSleepTimer = ({ enabled, hours, minutes }: UseSleepTimerState) =
             window.clearInterval(timer);
             useSettingsUiStore.setState({ sleepTimerDeadlineMs: null });
         };
-    }, [enabled, hours, minutes]);
+    }, [activationId, enabled, hours, minutes]);
 };

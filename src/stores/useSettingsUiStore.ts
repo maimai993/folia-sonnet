@@ -57,7 +57,6 @@ export type SettingsModalState = {
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 export const VOICE_INPUT_PAUSE_STORAGE_KEY = 'voice_input_pause_enabled';
 export const PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY = 'prevent_display_sleep_during_playback';
-export const SLEEP_TIMER_ENABLED_STORAGE_KEY = 'sleep_timer_enabled';
 export const SLEEP_TIMER_HOURS_STORAGE_KEY = 'sleep_timer_hours';
 export const SLEEP_TIMER_MINUTES_STORAGE_KEY = 'sleep_timer_minutes';
 export const GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY = 'global_lyric_timeline_offset_ms';
@@ -1361,6 +1360,7 @@ export type SettingsUiState = {
     sleepTimerHours: number;
     sleepTimerMinutes: number;
     sleepTimerDeadlineMs: number | null;
+    sleepTimerActivationId: number;
     hideTaskbarIcon: boolean;
     hideRemoteControlTaskbarIcon: boolean;
     wallpaperMode: boolean;
@@ -1635,10 +1635,12 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
     voiceInputPauseEnabled: getStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, false),
     preventDisplaySleepDuringPlayback: getStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, false),
-    sleepTimerEnabled: getStoredBoolean(SLEEP_TIMER_ENABLED_STORAGE_KEY, false),
+    // A sleep timer is a one-shot action. Persist its preferred duration, never an armed state.
+    sleepTimerEnabled: false,
     sleepTimerHours: readStoredSleepTimerHours(),
     sleepTimerMinutes: readStoredSleepTimerMinutes(),
     sleepTimerDeadlineMs: null,
+    sleepTimerActivationId: 0,
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
     hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
     wallpaperMode: getStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, false),
@@ -1999,8 +2001,20 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         });
     },
     handleToggleSleepTimer: (enable) => {
-        setStoredBoolean(SLEEP_TIMER_ENABLED_STORAGE_KEY, enable);
-        set({ sleepTimerEnabled: enable });
+        if (enable && get().sleepTimerHours === 0 && get().sleepTimerMinutes === 0) {
+            notify(get, {
+                type: 'error',
+                text: i18n.t('commandPalette.sleepTimerDurationRequired'),
+            });
+            return;
+        }
+        set(state => ({
+            sleepTimerEnabled: enable,
+            // Every explicit activation starts a fresh countdown, even when its duration is unchanged.
+            sleepTimerActivationId: enable
+                ? state.sleepTimerActivationId + 1
+                : state.sleepTimerActivationId,
+        }));
         notify(get, {
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'sleepTimerOn' : 'sleepTimerOff')),
@@ -2011,14 +2025,24 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         if (typeof window !== 'undefined') {
             localStorage.setItem(SLEEP_TIMER_HOURS_STORAGE_KEY, String(clamped));
         }
-        set({ sleepTimerHours: clamped });
+        set(state => ({
+            sleepTimerHours: clamped,
+            sleepTimerEnabled: clamped === 0 && state.sleepTimerMinutes === 0
+                ? false
+                : state.sleepTimerEnabled,
+        }));
     },
     handleSetSleepTimerMinutes: (minutes) => {
         const clamped = Math.min(59, Math.max(0, Math.floor(minutes) || 0));
         if (typeof window !== 'undefined') {
             localStorage.setItem(SLEEP_TIMER_MINUTES_STORAGE_KEY, String(clamped));
         }
-        set({ sleepTimerMinutes: clamped });
+        set(state => ({
+            sleepTimerMinutes: clamped,
+            sleepTimerEnabled: state.sleepTimerHours === 0 && clamped === 0
+                ? false
+                : state.sleepTimerEnabled,
+        }));
     },
     handleToggleHideTaskbarIcon: (enable) => {
         setStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, enable);

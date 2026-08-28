@@ -1970,7 +1970,16 @@ export default function App() {
         await window.electron.setMainWindowAlwaysOnTop(!enabled);
         return true;
     }, []);
-    useSleepTimer({ enabled: sleepTimerEnabled, hours: sleepTimerHours, minutes: sleepTimerMinutes });
+    const handleSleepTimerExpireFallback = useCallback(() => {
+        pausePlayback();
+        setStatusMsg({ type: 'info', text: t('notifications.sleepTimerPlaybackPaused') });
+    }, [pausePlayback, setStatusMsg, t]);
+    useSleepTimer({
+        enabled: sleepTimerEnabled,
+        hours: sleepTimerHours,
+        minutes: sleepTimerMinutes,
+        onExpireFallback: handleSleepTimerExpireFallback,
+    });
     const commandPaletteContext = useMemo(() => buildCommandPaletteContext({
         t: (key: string, fallback?: string) => t(key, fallback ?? ''),
         setStatusMsg,
