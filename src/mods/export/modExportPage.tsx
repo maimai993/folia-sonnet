@@ -6,6 +6,7 @@ import './modExportPage.css';
 import { DEFAULT_THEME } from '@/services/baseThemes';
 import { getVisualizerRegistryEntry, hasVisualizerMode } from '@/components/visualizer/registry';
 import { applyVisualizerTuning, type VisualizerTuningBundle } from '@/components/visualizer/tuningRegistry';
+import { initModVisualizers } from '../modVisualizers';
 import type { AudioBands, Line, Theme, VisualizerMode } from '@/types';
 
 // src/mods/export/modExportPage.tsx
@@ -167,5 +168,10 @@ const ModExportPage: React.FC = () => {
 
 const rootElement = document.getElementById('mod-export-root');
 if (rootElement) {
-    createRoot(rootElement).render(<ModExportPage />);
+    // Register mod-contributed visualizer modes before the first render so a
+    // `mod:` mode in the export snapshot resolves instead of falling back to
+    // classic. Failures are swallowed by initModVisualizers itself.
+    void initModVisualizers().finally(() => {
+        createRoot(rootElement).render(<ModExportPage />);
+    });
 }

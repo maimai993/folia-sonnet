@@ -84,3 +84,22 @@ export const appendVisualizerEntry = (entry: VisualizerRegistryEntry): boolean =
     VISUALIZER_REGISTRY.push(entry);
     return true;
 };
+
+/*
+ * Removes a runtime-contributed mode (appended via appendVisualizerEntry).
+ * Used when a mod is disabled/uninstalled or reloaded without the contribution:
+ * the mode must disappear from both the ordered list and the by-mode lookup so
+ * consumers no longer see it. Builtin modes have no removal path (and never
+ * need one) because they only ever live in the initial registry.
+ */
+export const removeVisualizerEntry = (mode: VisualizerMode): boolean => {
+    if (!VISUALIZER_REGISTRY_BY_MODE[mode]) {
+        return false;
+    }
+    delete VISUALIZER_REGISTRY_BY_MODE[mode];
+    const index = VISUALIZER_REGISTRY.findIndex((entry) => entry.mode === mode);
+    if (index >= 0) {
+        VISUALIZER_REGISTRY.splice(index, 1);
+    }
+    return true;
+};

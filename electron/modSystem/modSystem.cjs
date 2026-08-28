@@ -256,7 +256,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
                     permissions: [],
                     status: 'error',
                     error: (discovery.validationErrors ?? ['invalid manifest']).join('; '),
-                    enabled: true,
+                    enabled: false,
                     commands: [],
                 });
                 return;
@@ -328,12 +328,15 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
         return listMods();
     };
 
+    // Mods are opt-in by default: nothing is enabled until the user explicitly
+    // enables it after acknowledging the risk. See the renderer mod panel, which
+    // surfaces the same warning before any mod can be activated.
     const isModEnabled = (modId) => {
         try {
             const stored = store.get(enabledKey(modId));
-            return stored === undefined ? true : Boolean(stored);
+            return stored === undefined ? false : Boolean(stored);
         } catch {
-            return true;
+            return false;
         }
     };
 
@@ -471,10 +474,13 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
             fs.rmSync(target, { recursive: true, force: true });
             fs.mkdirSync(target, { recursive: true });
             for (const entry of entries) {
-                if (entry.segments[rootDepth + 1] === undefined) {
-                    continue; // the manifest root itself is covered by mkdir
-                }
+                // Directory markers were already filtered out, so every entry here
+                // is a real file that must be written. `relative` is only empty for
+                // a stray wrapper directory path, which has no file content to write.
                 const relative = entry.segments.slice(rootDepth).join(path.sep);
+                if (!relative) {
+                    continue;
+                }
                 const destination = path.resolve(target, relative);
                 if (destination !== target && !destination.startsWith(target + path.sep)) {
                     throw new Error('unsafe destination');

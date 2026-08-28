@@ -415,6 +415,15 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
                         </div>
                     </div>
 
+                    <div
+                        className={`flex items-start gap-2 rounded-xl px-3 py-2.5 border ${
+                            isDaylight ? 'border-amber-500/30 bg-amber-500/10 text-amber-800' : 'border-amber-400/20 bg-amber-400/10 text-amber-200'
+                        }`}
+                    >
+                        <TriangleAlert size={14} className="mt-px shrink-0" />
+                        <span className="text-[11px] leading-relaxed">{t('mods.securityWarning')}</span>
+                    </div>
+
                     <AnimatePresence initial={false}>
                         {selectionMode ? (
                             <motion.div

@@ -570,6 +570,7 @@ export default {
   },
   "mods": {
     "title": "Mod Manager",
+    "securityWarning": "Mods are third-party and not security-audited. Once enabled, a mod can access the full app environment (including the Node.js runtime and arbitrary settings such as the AI service URL). Only enable mods from trusted sources.",
     "reload": "Reload",
     "ffmpegMissing": "ffmpeg not found",
     "ffmpegMissingHint": "Transparent video export needs ffmpeg. Set FOLIA_FFMPEG_PATH or place ffmpeg in the ffmpeg-8.1.2 folder next to the app.",

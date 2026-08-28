@@ -567,6 +567,7 @@ export default {
   },
   "mods": {
     "title": "Manajer Mod",
+    "securityWarning": "Mod berasal dari pihak ketiga dan tidak diaudit keamanannya. Setelah diaktifkan, mod dapat mengakses seluruh lingkungan aplikasi (termasuk runtime Node.js dan pengaturan arbitrer seperti URL layanan AI). Aktifkan hanya mod dari sumber tepercaya.",
     "reload": "Muat ulang",
     "ffmpegMissing": "ffmpeg tidak ditemukan",
     "ffmpegMissingHint": "Ekspor video transparan membutuhkan ffmpeg. Atur FOLIA_FFMPEG_PATH atau letakkan ffmpeg di folder ffmpeg-8.1.2 di samping aplikasi.",

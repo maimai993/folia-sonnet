@@ -66,19 +66,18 @@ const createExportService = ({ app, BrowserWindow, resolveFfmpeg }) => {
         }
 
         const lyricEndSec = lines.length > 0 ? Math.max(...lines.map((line) => line.endTime)) : 0;
-        const defaultEndSec = Math.min(lyricEndSec + 2, EXPORT_LIMITS.maxDurationSec);
         const startSec = Math.max(0, Number.isFinite(Number(spec.startSec)) ? Number(spec.startSec) : 0);
-        const endSec = Math.min(
-            EXPORT_LIMITS.maxDurationSec,
-            (Number.isFinite(Number(spec.endSec)) && Number(spec.endSec) > startSec)
-                ? Number(spec.endSec)
-                : defaultEndSec
-        );
+        // Default end is the lyrics end plus a 2s buffer, floored at start + 1 so
+        // a clip always has non-zero length; an explicit end later than start wins.
+        const fallbackEndSec = Math.max(startSec + 1, lyricEndSec + 2);
+        const requestedEndSec = (Number.isFinite(Number(spec.endSec)) && Number(spec.endSec) > startSec)
+            ? Number(spec.endSec)
+            : fallbackEndSec;
+        // Clamp the render *duration* (not the absolute end timestamp) to the
+        // limit, so late segments of long tracks (mixes/podcasts) stay exportable.
+        const endSec = Math.min(requestedEndSec, startSec + EXPORT_LIMITS.maxDurationSec);
         if (endSec <= startSec) {
             errors.push('export-invalid-duration');
-        }
-        if ((endSec - startSec) > EXPORT_LIMITS.maxDurationSec) {
-            errors.push('export-duration-too-long');
         }
         if (!['win32', 'linux', 'darwin'].includes(process.platform)) {
             errors.push('export-unsupported-platform');

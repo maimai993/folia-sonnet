@@ -570,6 +570,7 @@ export default {
   },
   "mods": {
     "title": "模组管理",
+    "securityWarning": "模组由第三方提供，未经官方安全审计。启用后模组可访问完整应用能力（含 Node.js 运行时与任意设置，如 AI 服务地址）。请仅启用可信来源的模组。",
     "reload": "重载",
     "ffmpegMissing": "未找到 ffmpeg",
     "ffmpegMissingHint": "透明视频导出需要 ffmpeg。请设置 FOLIA_FFMPEG_PATH 环境变量，或将 ffmpeg 放入应用旁的 ffmpeg-8.1.2 文件夹。",

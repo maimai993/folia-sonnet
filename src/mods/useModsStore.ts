@@ -14,6 +14,7 @@ import {
     subscribeModsState,
 } from './ipc';
 import type { ModCommandParam, ModExportProgress, ModFfmpegStatus, ModLabelMap, ModLogEntry, ModRuntimeInfo } from './types';
+import { initModVisualizers, reloadModVisualizers } from './modVisualizers';
 
 // src/mods/useModsStore.ts
 // Renderer-side state for the mod system panel. All mutations flow through the
@@ -204,3 +205,16 @@ export const buildDefaultCommandParams = (params: ModCommandParam[]): Record<str
     });
     return values;
 };
+
+/*
+ * Keep the visualizer registry in lockstep with the mod list: any change to the
+ * list (refresh / reload / enable / disable / install / main-process state push)
+ * re-runs the contributor reconciliation, so contributed modes appear the moment
+ * their mod is enabled and disappear when it is disabled or removed.
+ */
+useModsStore.subscribe((state, previous) => {
+    if (state.mods !== previous.mods) {
+        reloadModVisualizers();
+        void initModVisualizers();
+    }
+});

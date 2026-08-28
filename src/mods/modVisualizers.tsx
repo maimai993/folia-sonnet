@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { appendVisualizerEntry } from '@/components/visualizer/registry';
+import { appendVisualizerEntry, removeVisualizerEntry } from '@/components/visualizer/registry';
 import type { VisualizerRegistryEntry, VisualizerSharedProps } from '@/components/visualizer/definition';
+import type { VisualizerMode } from '@/types';
 import type { Line, Theme } from '@/types';
 import type { ModRuntimeInfo, ModVisualizerContribution } from './types';
 import { listMods } from './ipc';
@@ -108,10 +109,17 @@ const collectDescriptors = (mods: ModRuntimeInfo[]): ModVisualizerDescriptor[] =
 
 let initPromise: Promise<void> | null = null;
 
+// Modes currently registered from mod contributions. Kept in sync with the live
+// registry so a reload can both add newly-declared modes and remove modes whose
+// mod was disabled or uninstalled (a plain cached promise would never recover).
+const registeredModModes = new Set<string>();
+
 /*
- * Loads every declared contribution once and appends it to the registry.
- * Failures are per-mod: a broken module logs and skips without affecting
- * builtin modes or other mods.
+ * Reconciles mod visualizer contributions against the latest mod state. On each
+ * call it re-fetches the mod list, removes registry entries whose mod stopped
+ * contributing, and appends any newly-declared modes. Idempotent via the
+ * registeredModModes set, so repeated calls (bootstrap, reload, enable/disable)
+ * converge rather than duplicate. Per-mod import failures only skip that mod.
  */
 export const initModVisualizers = async (): Promise<void> => {
     if (initPromise) {
@@ -123,17 +131,42 @@ export const initModVisualizers = async (): Promise<void> => {
         }
         const { mods } = await listMods();
         const descriptors = collectDescriptors(mods);
+        const desired = new Set(descriptors.map((descriptor) => descriptor.mode));
+
+        // Drop entries for mods that no longer contribute the mode.
+        for (const mode of Array.from(registeredModModes)) {
+            if (!desired.has(mode)) {
+                removeVisualizerEntry(mode as VisualizerMode);
+                registeredModModes.delete(mode);
+            }
+        }
+
+        // Append any new contribution.
         await Promise.all(descriptors.map(async (descriptor) => {
+            if (registeredModModes.has(descriptor.mode)) {
+                return;
+            }
             try {
                 const module = await import(/* @vite-ignore */ descriptor.url) as ModVisualizerModule;
                 if (typeof module?.default?.mount !== 'function') {
                     throw new Error('missing default.mount');
                 }
-                appendVisualizerEntry(buildRegistryEntry(descriptor, module.default.mount));
+                if (appendVisualizerEntry(buildRegistryEntry(descriptor, module.default.mount))) {
+                    registeredModModes.add(descriptor.mode);
+                }
             } catch (error) {
                 console.warn(`[Mods] Failed to load visualizer "${descriptor.mode}":`, error);
             }
         }));
     })();
     return initPromise;
+};
+
+/*
+ * Clears the cached init promise so the next call re-runs the reconciliation.
+ * Called after the main-process mod state changes (install/enable/disable/
+ * reload) so contributed visualizer modes track the current mod set.
+ */
+export const reloadModVisualizers = (): void => {
+    initPromise = null;
 };
