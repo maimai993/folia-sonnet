@@ -540,6 +540,37 @@ describe('automix session', () => {
         expect(harness.session.getActiveDeck()).toBe('B');
     });
 
+    it('keeps the outgoing deck when the cancel comes from a control aimed at the displayed track', () => {
+        const harness = createHarness();
+        harness.arm();
+
+        // What a mid-blend seek or pause asks for: the listener is acting on the track they can
+        // hear, which is deck A. Ordinary abort settles onto B and would need the whole song-change
+        // path run again to get back to A.
+        expect(harness.session.abort(true)).toBe(true);
+
+        expect(harness.session.getPhase()).toBe('idle');
+        expect(harness.session.getActiveDeck()).toBe('A');
+        // The roles swapped, so settle's tail is now the INCOMING deck. A is left sounding for the
+        // caller to move or to stop; B is the one that gets stopped here.
+        expect(harness.elements.B.pause).toHaveBeenCalled();
+        expect(harness.elements.A.pause).not.toHaveBeenCalled();
+        // Both back to unity: a deck left attenuated is silent playback the listener cannot fix.
+        expect(finalTarget(harness.chains.A.fadeNode)).toBe(1);
+        expect(finalTarget(harness.chains.B.fadeNode)).toBe(1);
+    });
+
+    it('reports nothing to suppress when the keep-tail cancel lands mid-blend', () => {
+        const harness = createHarness();
+        harness.arm();
+        harness.session.handleActiveDeckPlaying('local:next-song');
+
+        // Same asymmetry as the plain abort: past the arm the advance's autoplay has been spent, so
+        // a pause here has nothing left to suppress and must not leave the flag set for a later track.
+        expect(harness.session.abort(true)).toBe(false);
+        expect(harness.session.getActiveDeck()).toBe('A');
+    });
+
     it('stops the tail when the listener picks a third song in the middle of the blend', () => {
         const harness = createHarness();
         harness.arm();

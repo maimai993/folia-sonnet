@@ -612,9 +612,14 @@ export function useAutomixDecks({
      * track is already loaded and sounding on its own deck. Ordinary abort settles onto the incoming
      * deck, which then has to be re-played from scratch to get back to the outgoing song - the whole
      * song-change path, for a track that never left. This keeps it instead: the outgoing deck becomes
-     * active and keeps playing, the caller need only move it to where the bar was dragged.
+     * active and keeps playing, the caller need only move it to where the bar was dragged - or stop
+     * it, for a pause that lands mid-blend.
+     *
+     * Returns true when the blend it cancelled was still ARMED, which a caller that is stopping has
+     * to act on: the advance is already in flight with an autoplay intent behind it, and that intent
+     * now points at the deck being kept. See `suppressAutoplayRef`.
      */
-    const cancelBlendKeepingTail = useCallback(() => { session.abort(true); }, [session]);
+    const cancelBlendKeepingTail = useCallback(() => session.abort(true), [session]);
 
     // Both decks are measured continuously while playing, not only once a blend is imminent: the
     // tempo estimate needs seconds of history behind it, and by the time a transition is planned

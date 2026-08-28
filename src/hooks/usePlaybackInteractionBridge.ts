@@ -43,6 +43,16 @@ type UsePlaybackInteractionBridgeParams = {
     duration: number;
     currentTime: MotionValue<number>;
     audioRef: React.RefObject<HTMLAudioElement | null>;
+    /**
+     * Whether an automix blend is sounding, which settles play-vs-pause on its own.
+     *
+     * `audioRef` is the ACTIVE deck, and mid-blend that is the track ARRIVING - silent for the whole
+     * lead while it loads, and `ended` on the outgoing deck by the tail end of the fade. Either way
+     * the element reads "not playing", so pressing pause was taken for "start it": the blend was
+     * dropped and the next song jumped straight in. There is no such thing as a paused blend to
+     * toggle out of - every pause path cancels one - so an audible blend can only mean pause.
+     */
+    isTransitionAudible?: () => boolean;
     stageLyricsClockRef: React.MutableRefObject<{
         startTimeSec: number;
         endTimeSec: number;
@@ -78,6 +88,7 @@ export function usePlaybackInteractionBridge({
     duration,
     currentTime,
     audioRef,
+    isTransitionAudible,
     stageLyricsClockRef,
     setIsDevDebugOverlayVisible,
     setIsMemoryMonitorVisible,
@@ -133,6 +144,11 @@ export function usePlaybackInteractionBridge({
             return;
         }
 
+        if (isTransitionAudible?.()) {
+            pausePlayback();
+            return;
+        }
+
         if (audioRef.current) {
             if (!audioRef.current.paused && !audioRef.current.ended) {
                 pausePlayback();
@@ -140,7 +156,7 @@ export function usePlaybackInteractionBridge({
                 startPlaybackFromInteraction();
             }
         }
-    }, [activePlaybackContext, audioRef, audioSrc, isNowPlayingStageActive, pausePlayback, playerState, startPlaybackFromInteraction, stageActiveEntryKind]);
+    }, [activePlaybackContext, audioRef, audioSrc, isNowPlayingStageActive, isTransitionAudible, pausePlayback, playerState, startPlaybackFromInteraction, stageActiveEntryKind]);
 
     const toggleLoop = useCallback((event?: React.MouseEvent) => {
         event?.stopPropagation();

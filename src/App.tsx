@@ -1637,6 +1637,19 @@ export default function App() {
     // song's own metadata inside `cacheSongAssetsFor` rather than from the now-arriving track's view.
     cachePlayedOutRef.current = (song, src) => { void cacheSongAssetsFor(song, src); };
 
+    /**
+     * The two controls that mean something different while a blend is in flight, held as refs.
+     *
+     * Both are implemented far below, once automix and playSong exist, and both are needed above
+     * that point - the transport controller here, the remote bridge a little further down. A ref
+     * plus a stable wrapper is what lets those be wired now and written later without either one
+     * re-subscribing every render.
+     */
+    const seekDuringTransitionRef = useRef<(time: number) => boolean>(() => false);
+    const pauseDuringTransitionRef = useRef<() => boolean>(() => false);
+    const handleRemoteTransitionSeek = useCallback((time: number) => seekDuringTransitionRef.current(time), []);
+    const handlePauseDuringTransition = useCallback(() => pauseDuringTransitionRef.current(), []);
+
     const { resumePlayback, pausePlayback } = usePlaybackTransportController({
         activePlaybackContext,
         stageActiveEntryKind,
@@ -1656,6 +1669,7 @@ export default function App() {
         recoverOnlinePlaybackSource,
         getSyntheticStageLyricsTime,
         syncStageLyricsClock,
+        pauseDuringTransition: handlePauseDuringTransition,
         t: key => t(key),
     });
     useNavidromeScrobbleReporter({
@@ -1669,7 +1683,12 @@ export default function App() {
     const mediaSessionPrevRef = useRef(handlePrevTrack);
     const mediaSessionNextRef = useRef(handleNextTrack);
     const taskbarHasTrackRef = useRef(Boolean(currentSong));
-    const taskbarPlayerStateRef = useRef(playerState);
+    // The transport the picture belongs to, not the raw one: every consumer of this ref asks "is
+    // the listener hearing music right now" - the taskbar buttons, the remote's play/pause toggle,
+    // the voice-input auto-pause. During a blend's lead the raw state is IDLE while the outgoing
+    // deck plays on, and all three then offered play on a track that was already playing: pressing
+    // it started the arriving deck early and took the blend with it.
+    const taskbarPlayerStateRef = useRef(displayPlayerState);
 
     useEffect(() => {
         mediaSessionPlayRef.current = resumePlayback;
@@ -1692,8 +1711,8 @@ export default function App() {
     }, [currentSong]);
 
     useEffect(() => {
-        taskbarPlayerStateRef.current = playerState;
-    }, [playerState]);
+        taskbarPlayerStateRef.current = displayPlayerState;
+    }, [displayPlayerState]);
 
     useMediaSessionBridge({
         audioRef,
@@ -1731,12 +1750,6 @@ export default function App() {
         resumePlayback,
     });
 
-    // Declared here so the remote's own seek can reuse it (the bridge is set up above the seek
-    // logic); the implementation is assigned far below, once automix and playSong exist. A stable
-    // wrapper keeps the bridge effect from re-subscribing every render.
-    const seekDuringTransitionRef = useRef<(time: number) => boolean>(() => false);
-    const handleRemoteTransitionSeek = useCallback((time: number) => seekDuringTransitionRef.current(time), []);
-
     const {
         publishStagePlayerPlaybackUpdate,
     } = useElectronPlaybackBridge({
@@ -1763,7 +1776,11 @@ export default function App() {
         currentSong: displaySong,
         coverUrl: displayCoverUrl,
         cachedCoverUrl,
-        playerState,
+        // The held picture's transport, matching the song/duration/cover above it and what
+        // useMediaSessionBridge already publishes. The raw state reads IDLE for the length of a
+        // blend's lead, which drew a stopped player on the remote over a track the listener could
+        // still hear - and the button it offered there was play.
+        playerState: displayPlayerState,
         playQueue,
         effectiveLoopMode,
         isFmMode,
@@ -1852,6 +1869,9 @@ export default function App() {
         duration,
         currentTime,
         audioRef,
+        // Play-vs-pause cannot be decided off the active deck mid-blend: that is the arriving track,
+        // and it is silent for the whole lead.
+        isTransitionAudible: automix.isTransitionAudible,
         stageLyricsClockRef,
         setIsDevDebugOverlayVisible,
         setIsMemoryMonitorVisible,
@@ -2497,29 +2517,30 @@ export default function App() {
         generateAITheme,
     });
     /**
-     * A seek that lands during an automix blend, or false when there is no blend to cancel.
+     * Cancels a blend back onto the track the listener is hearing, or null when there is none.
      *
-     * The song on screen mid-blend is the one FINISHING - the outgoing deck's - while `audioRef`
-     * already names the incoming deck. Seeking that hidden element moves nothing the listener can
-     * see, so the progress bar snaps straight back: the "the bar is stuck during a transition"
-     * report. The listener is dragging the outgoing track's bar, so that is the track to keep.
+     * Mid-blend the app runs two of everything: the song on screen is the one FINISHING - the
+     * outgoing deck's - while `audioRef`, `currentSong` and the transport already name the track
+     * arriving underneath it. So any control the listener presses about "this song" lands on a deck
+     * that is not the one they mean, and the two reports this answers are the same mistake twice: a
+     * drag moved the hidden deck and the bar snapped back, a pause stopped the hidden deck and the
+     * blend ran on into the next song regardless.
      *
-     * That track is already loaded and sounding on its own deck, so the seek reloads nothing: cancel
-     * the blend back onto that deck (`cancelBlendKeepingTail`) and move it. The old fix re-played the
-     * song from scratch, which ran the whole song-change path - a fresh blob URL, lyrics refetched,
-     * the read-head reset - for a track that never left. The visualizers read that as a song change
-     * and answered with a switch animation, and the reload cost a visible hitch; keeping the deck
-     * avoids both, and `adoptActiveDeckSource` is what stops the audio bridge reloading it out from
-     * under us. (Seeking that deck at all depends on its blob URL still being live - see
-     * `retireBlobUrl`, which is why the source outlives the advance now.)
+     * The track they mean is already loaded and sounding on its own deck, so nothing needs
+     * reloading: cancel onto that deck (`cancelBlendKeepingTail`) and hand it back the whole frozen
+     * picture. An older fix re-played the song from scratch, which ran the entire song-change path -
+     * a fresh blob URL, lyrics refetched, the read-head reset - for a track that never left; the
+     * visualizers read that as a song change and answered with a switch animation, and the reload
+     * cost a visible hitch. `adoptActiveDeckSource` is what stops the audio bridge reloading the
+     * deck out from under us. (Touching that deck at all depends on its blob URL still being live -
+     * see `retireBlobUrl`, which is why the source outlives the advance now.)
      *
-     * Held in a ref (declared up by the Electron bridge, which reuses it for the remote's own
-     * seek), refreshed every render, so `seekMainAudio` itself can stay a stable callback - it is
-     * threaded through the memoised overlay model - while this closure always sees the live song,
-     * queue-mode and blend state.
+     * Returns the deck now carrying that track, for the caller to move or to stop. `resume` says
+     * which way the transport is going afterwards, and it is the only difference between the two
+     * callers.
      */
-    seekDuringTransitionRef.current = (time: number) => {
-        if (!automix.isTransitionAudible()) return false;
+    const cancelBlendToDisplayedTrack = (resume: boolean): HTMLAudioElement | null => {
+        if (!automix.isTransitionAudible()) return null;
         // The whole frozen picture, not just the song. A blend deliberately runs two sets of these:
         // the visible ones (this snapshot, the OUTGOING track) and the live state, which `playSong`
         // moved to the incoming track at the arm. Cancelling clears the snapshot, so every value in
@@ -2531,23 +2552,33 @@ export default function App() {
         // song fired `onLoadedMetadata` again; keeping the deck means nothing refires it.
         const frozen = automix.transitionDisplay;
         const exitingSong = frozen?.song ?? currentSong;
-        if (!exitingSong) return false;
+        if (!exitingSong) return null;
         // The deck still playing the outgoing track - the one the frozen picture reads from.
         const tailElement = automix.getDisplayElement();
-        if (!tailElement) return false;
+        if (!tailElement) return null;
         // The exact string that deck is rendering, so re-pointing `audioSrc` at it below changes no
         // src attribute and reloads nothing. Falls back to the element's own URL, then to `audioSrc`.
         const keepSrc = automix.tailSrc ?? tailElement.currentSrc ?? audioSrc;
         // Tell the bridge the active deck already holds this source, THEN cancel onto it: the cancel
         // repoints the audio ref at that deck, and the setAudioSrc below must not trigger a reload.
         if (keepSrc) adoptActiveDeckSource(keepSrc);
-        automix.cancelBlendKeepingTail();
+        const wasArmed = automix.cancelBlendKeepingTail();
         if (keepSrc) setAudioSrc(keepSrc);
-        // Put the display and the queue pointer back on the outgoing song (both key off currentSong),
-        // and force PLAYING: the advance dropped the transport to IDLE and only the incoming deck
-        // starting would have cleared it - but that deck is the one being discarded.
+        // Put the display and the queue pointer back on the outgoing song (both key off currentSong).
         setCurrentSong(exitingSong);
-        setPlayerState(PlayerState.PLAYING);
+        if (resume) {
+            // Force PLAYING: the advance dropped the transport to IDLE and only the incoming deck
+            // starting would have cleared it - but that deck is the one being discarded.
+            setPlayerState(PlayerState.PLAYING);
+        } else if (wasArmed) {
+            // Stopping, and the advance is already in flight: the incoming deck is loading with an
+            // autoplay intent standing behind it, and cancelling cannot recall that. The intent now
+            // points at the deck we just kept, so left alone the audio bridge presses play on the
+            // very track this pause meant to stop. Same knob the ordinary mid-blend pause uses (the
+            // playerState effect in useAutomixDecks), set here because by the time that effect runs
+            // the session is already idle and it can no longer tell an armed blend was interrupted.
+            automix.suppressAutoplayRef.current = true;
+        }
         // The rest of the frozen picture - every field of it, which is the point: `TransitionDisplay`
         // is exactly the set of values a blend holds back, so handing all four to the live state is
         // what makes cancelling a no-op rather than a half-move. Without the length the deck reads
@@ -2563,16 +2594,49 @@ export default function App() {
         // does not run playSong. Left stale, every callback gated on "is this still the current song"
         // (recovery, scrobble, the deck-playing handler) would answer for a track that isn't playing.
         currentSongRef.current = getPlaybackSongKey(exitingSong);
+        // One line per cancel, because everything this path does is invisible by design - it is the
+        // absence of a song change. Without it a report of "I pressed something and it went wrong"
+        // has nothing in the log to sit next to, which is exactly how the wrong-duration bug above
+        // stayed hidden.
+        console.log(
+            `[Automix] blend cancelled by a ${resume ? 'seek' : 'pause'} while ${wasArmed ? 'armed' : 'fading'},`
+            + ` staying on "${exitingSong.name}" (${(frozen?.duration ?? 0).toFixed(1)}s long)`,
+        );
+        return tailElement;
+    };
+    /**
+     * A seek that lands during an automix blend, or false when there is no blend to cancel.
+     *
+     * Held in a ref - declared up by the transport controller, and reused by the Electron bridge for
+     * the remote's own seek - refreshed every render, so `seekMainAudio` itself can stay a stable
+     * callback (it is threaded through the memoised overlay model) while this closure always sees
+     * the live song, queue-mode and blend state.
+     */
+    seekDuringTransitionRef.current = (time: number) => {
+        const tailElement = cancelBlendToDisplayedTrack(true);
+        if (!tailElement) return false;
         const seekTarget = Math.max(0, time);
         tailElement.currentTime = seekTarget;
         currentTime.set(seekTarget);
-        // One line per cancel, because everything this path does is invisible by design - it is the
-        // absence of a song change. Without it a report of "I dragged and it went wrong" has nothing
-        // in the log to sit next to, which is exactly how the wrong-duration bug above stayed hidden.
-        console.log(
-            `[Automix] blend cancelled by a seek, staying on "${exitingSong.name}"`
-            + ` at ${seekTarget.toFixed(1)}s of ${(frozen?.duration ?? 0).toFixed(1)}s`,
-        );
+        return true;
+    };
+    /**
+     * A pause that lands during an automix blend, or false when there is no blend to cancel.
+     *
+     * Pressing pause is a statement about the track on screen, and mid-blend that track is on the
+     * deck no control points at. Pausing the active deck instead stopped the ARRIVING track - silent
+     * anyway for the whole lead - and left the outgoing one playing with its blend still scheduled,
+     * so the listener pressed pause and then watched it hand over to the next song. Cancel onto the
+     * track they meant and stop that deck; both end up silent, because the cancel's own settle
+     * pauses the deck being discarded.
+     *
+     * Held in a ref for the same reason as the seek above: the transport controller that calls it is
+     * wired far above the point where automix exists to write it.
+     */
+    pauseDuringTransitionRef.current = () => {
+        const tailElement = cancelBlendToDisplayedTrack(false);
+        if (!tailElement) return false;
+        tailElement.pause();
         return true;
     };
     const seekMainAudio = useCallback((time: number) => {
@@ -3488,7 +3552,14 @@ export default function App() {
                 // state describes what the app is playing, and the transition check has to read
                 // the position of the deck the NEXT blend will be planned from.
                 if (!isActive) return;
-                if (!audioElement.paused && !audioElement.ended) setPlayerState(PlayerState.PLAYING);
+                // A track that is not moving is not approaching anything. `pause()` fires one last
+                // timeupdate of its own, and a mid-blend pause cancels onto THIS deck before pausing
+                // it - so that stray tick arrives with the deck already active and the track sitting
+                // past its handover point, and arms the blend the listener just stopped, advancing
+                // the queue behind it. Visible in the log as a cancel and a `playSong` in the same
+                // second, or as a lone `plain cut` line when the track was too near its end to fade.
+                if (audioElement.paused) return;
+                if (!audioElement.ended) setPlayerState(PlayerState.PLAYING);
                 automix.checkTransitionPoint(audioElement.currentTime);
             }}
             onSeeked={(e) => {
