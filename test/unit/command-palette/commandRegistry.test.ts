@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PlayerState, type SongResult } from '../../../src/types';
 import { COMMAND_PALETTE_COMMANDS, getAvailableCommandPaletteCommands, getCommandPaletteMatches, getQueueSongMatches } from '../../../src/components/command-palette/commandRegistry';
+import { sleepTimerSurface } from '../../../src/components/command-palette/surfaces/sleepTimerSurface';
 import type { CommandPaletteContext } from '../../../src/components/command-palette/types';
 
 type CommandPaletteContextOverrides = {
@@ -79,6 +80,13 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleVoiceInputPause: vi.fn(),
             togglePreventDisplaySleepDuringPlayback: vi.fn(),
             toggleWallpaperMode: vi.fn(),
+            sleepTimerEnabled: false,
+            setSleepTimerEnabled: vi.fn(),
+            sleepTimerHours: 0,
+            setSleepTimerHours: vi.fn(),
+            sleepTimerMinutes: 0,
+            setSleepTimerMinutes: vi.fn(),
+            sleepTimerDeadlineMs: null,
             canGenerateAITheme: true,
             isGeneratingTheme: false,
             generateAITheme: vi.fn(),
@@ -208,6 +216,60 @@ describe('command palette registry', () => {
         expect(match.command.execute('101', context)).toBe(false);
         expect(match.command.execute('loud', context)).toBe(false);
         expect(context.playback.setVolume).toHaveBeenCalledTimes(1);
+    });
+
+    it('sets, enables, and disables the sleep timer from minute input and flags', () => {
+        const context = createContext();
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === 'sleep-timer');
+        const [directMatch] = getCommandPaletteMatches('sleep timer --on 90', context);
+
+        expect(command).toBeDefined();
+        expect(command!.syntax).toBeDefined();
+        expect(directMatch.command.id).toBe('sleep-timer');
+        expect(directMatch.input).toBe('--on 90');
+        expect(directMatch.command.execute(directMatch.input, context)).toBe(true);
+        expect(context.settings.setSleepTimerHours).toHaveBeenCalledWith(1);
+        expect(context.settings.setSleepTimerMinutes).toHaveBeenCalledWith(30);
+        expect(context.settings.setSleepTimerEnabled).toHaveBeenCalledWith(true);
+
+        expect(command!.execute('--off', context)).toBe(true);
+        expect(context.settings.setSleepTimerEnabled).toHaveBeenLastCalledWith(false);
+    });
+
+    it('keeps the sleep timer unchanged when command input is invalid', () => {
+        const context = createContext();
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === 'sleep-timer')!;
+
+        expect(command.execute('--on nope', context)).toBe(false);
+        expect(context.settings.setSleepTimerHours).not.toHaveBeenCalled();
+        expect(context.settings.setSleepTimerMinutes).not.toHaveBeenCalled();
+        expect(context.settings.setSleepTimerEnabled).not.toHaveBeenCalled();
+        expect(context.shared.setStatusMsg).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    });
+
+    it('previews command input in the sleep timer surface without changing its settings', () => {
+        const context = createContext({
+            settings: { sleepTimerHours: 0, sleepTimerMinutes: 15 },
+        });
+
+        const props = sleepTimerSurface.mapProps({
+            context,
+            query: '--on 90',
+            setQuery: vi.fn(),
+            matches: [],
+            activeIndex: 0,
+            setActiveIndex: vi.fn(),
+            isExecuting: false,
+            executeMatch: vi.fn(),
+            executeCommand: vi.fn(),
+            close: vi.fn(),
+            isDaylight: false,
+            theme: {} as never,
+        });
+
+        expect(props).toMatchObject({ hours: 1, minutes: 30 });
+        expect(context.settings.setSleepTimerHours).not.toHaveBeenCalled();
+        expect(context.settings.setSleepTimerMinutes).not.toHaveBeenCalled();
     });
 
     it('applies a full sound preset from the command palette', () => {

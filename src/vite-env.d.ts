@@ -701,6 +701,7 @@ declare global {
       toggleMaximizeWindow: () => Promise<boolean>;
       toggleFullscreenWindow: () => Promise<boolean>;
       closeWindow: () => Promise<boolean>;
+      quitApp: () => Promise<boolean>;
       isWindowMaximized: () => Promise<boolean>;
       getWindowTransparentMode: () => Promise<boolean>;
       setWindowTransparentMode: (

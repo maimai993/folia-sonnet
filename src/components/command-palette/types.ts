@@ -147,6 +147,13 @@ export type CommandPaletteSettingsContext = {
     toggleVoiceInputPause: () => void;
     togglePreventDisplaySleepDuringPlayback: () => void;
     toggleWallpaperMode: () => void;
+    sleepTimerEnabled: boolean;
+    setSleepTimerEnabled: (enabled: boolean) => void;
+    sleepTimerHours: number;
+    setSleepTimerHours: (hours: number) => void;
+    sleepTimerMinutes: number;
+    setSleepTimerMinutes: (minutes: number) => void;
+    sleepTimerDeadlineMs: number | null;
     canGenerateAITheme: boolean;
     isGeneratingTheme: boolean;
     generateAITheme: () => void;

@@ -4,12 +4,14 @@ import { buildObsCustomCss } from '../../../utils/obsCustomCss';
 import { hasUploadedObsAsset } from '../../../utils/visualSettingsConfig';
 import type { CommandPaletteCommand } from '../types';
 import { createToggleCommand, createAppLanguageCommand, createSettingsCommand } from '../commandFactories';
+import { sleepTimerCommand } from './sleepTimerCommand';
 
 // src/components/command-palette/commands/settingsCommands.ts
 // Commands in the `settings` group: settings subviews, app toggles, theme, sync, and desktop-only switches.
 
 export const settingsCommands: CommandPaletteCommand[] = [
     createSettingsCommand('settings-help', 'Open Help', 'Open help and shortcuts', ['help', '帮助', 'bangzhu', 'bz'], 'help', null, { executeShortcut: 'h' }),
+    sleepTimerCommand,
     {
         id: 'show-user-guide',
         group: 'settings',
