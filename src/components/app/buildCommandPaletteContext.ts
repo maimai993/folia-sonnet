@@ -8,6 +8,7 @@ import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/us
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
+import type { TransitionMode } from '../../services/automix/transitionStrategy';
 import type { PersonalFmSelection } from '../../services/onlineMusic/fmModes';
 import type { QueueBatchAction } from '../command-palette/queueQuery';
 
@@ -106,6 +107,14 @@ export type CommandPaletteContextDeps = {
     themeGenerationSource: ThemeGenerationSource;
     setThemeGenerationSource: (source: ThemeGenerationSource) => void;
 
+    automixEnabled: boolean;
+    transitionMode: TransitionMode;
+    transitionPerformance: boolean;
+    handleToggleAutomix: (enable: boolean) => void;
+    handleSetTransitionMode: (mode: TransitionMode) => void;
+    handleToggleTransitionPerformance: (enable: boolean) => void;
+    canUseTransitionPerformance: () => boolean;
+
     visualizerMode: VisualizerMode;
     visualizerBackgroundMode: VisualizerBackgroundMode | null;
     setVisualizerMode: (mode: VisualizerMode) => void;
@@ -201,6 +210,13 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         canOpenThemeQuickEditor: deps.canOpenThemeQuickEditor,
         themeGenerationSource: deps.themeGenerationSource,
         setThemeGenerationSource: deps.setThemeGenerationSource,
+        automixEnabled: deps.automixEnabled,
+        transitionMode: deps.transitionMode,
+        transitionPerformance: deps.transitionPerformance,
+        toggleAutomix: () => deps.handleToggleAutomix(!deps.automixEnabled),
+        setTransitionMode: deps.handleSetTransitionMode,
+        toggleTransitionPerformance: () => deps.handleToggleTransitionPerformance(!deps.transitionPerformance),
+        canUseTransitionPerformance: deps.canUseTransitionPerformance,
     },
     visualizer: {
         visualizerMode: deps.visualizerMode,
