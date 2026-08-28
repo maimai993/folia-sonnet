@@ -13,7 +13,7 @@ import {
     subscribeModLogs,
     subscribeModsState,
 } from './ipc';
-import type { ModCommandParam, ModExportProgress, ModFfmpegStatus, ModLabelMap, ModLogEntry, ModRuntimeInfo } from './types';
+import type { ModCommandParam, ModExportProgress, ModFfmpegStatus, ModLabelMap, ModLogEntry, ModRuntimeInfo, ModSetEnabledResult } from './types';
 import { initModVisualizers, reloadModVisualizers } from './modVisualizers';
 
 // src/mods/useModsStore.ts
@@ -42,7 +42,7 @@ interface ModsStoreState {
     refresh: () => Promise<void>;
     refreshFfmpeg: () => Promise<void>;
     reloadAll: () => Promise<void>;
-    toggleMod: (modId: string, enabled: boolean) => Promise<void>;
+    toggleMod: (modId: string, enabled: boolean) => Promise<ModSetEnabledResult>;
     selectMod: (modId: string | null) => void;
     runCommand: (modId: string, commandId: string, params: Record<string, unknown>) => Promise<
         { ok: boolean; result?: unknown; error?: string } | undefined
@@ -92,9 +92,15 @@ export const useModsStore = create<ModsStoreState>((set, get) => ({
         await get().refreshFfmpeg();
     },
 
+    // Enabling is confirmed in a main-process dialog, so the result carries an
+    // outcome the panel surfaces; the mod list is only replaced when the call
+    // actually returned one (a declined confirmation returns the current list).
     toggleMod: async (modId, enabled) => {
-        const mods = await setModEnabled(modId, enabled);
-        set({ mods });
+        const result = await setModEnabled(modId, enabled);
+        if (result.mods.length > 0 || result.ok) {
+            set({ mods: result.mods });
+        }
+        return result;
     },
 
     selectMod: (modId) => set({ selectedModId: modId }),

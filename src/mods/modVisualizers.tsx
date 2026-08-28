@@ -32,8 +32,15 @@ export interface ModVisualizerModule {
     };
 }
 
-interface ModVisualizerDescriptor {
+export interface ModVisualizerDescriptor {
     mode: string;
+    /**
+     * folia-mod:// URL of the contribution's ESM entry, versioned by the mod's
+     * content digest. The version matters: a bare URL would be served from the
+     * browser's ES module map on every re-import, so an updated mod would keep
+     * running the code imported the first time (Cache-Control cannot reach the
+     * module map). A changed digest is a different specifier, so it re-imports.
+     */
     url: string;
     label: Record<string, string | undefined>;
     order: number;
@@ -109,17 +116,52 @@ const collectDescriptors = (mods: ModRuntimeInfo[]): ModVisualizerDescriptor[] =
 
 let initPromise: Promise<void> | null = null;
 
-// Modes currently registered from mod contributions. Kept in sync with the live
-// registry so a reload can both add newly-declared modes and remove modes whose
-// mod was disabled or uninstalled (a plain cached promise would never recover).
-const registeredModModes = new Set<string>();
+// Modes currently registered from mod contributions, mapped to the exact URL
+// each one was imported from. Kept in sync with the live registry so a reload
+// can add newly-declared modes, drop modes whose mod was disabled or
+// uninstalled, and re-import a mode whose code changed under it.
+const registeredModModes = new Map<string, string>();
 
 /*
- * Reconciles mod visualizer contributions against the latest mod state. On each
- * call it re-fetches the mod list, removes registry entries whose mod stopped
- * contributing, and appends any newly-declared modes. Idempotent via the
- * registeredModModes set, so repeated calls (bootstrap, reload, enable/disable)
- * converge rather than duplicate. Per-mod import failures only skip that mod.
+ * Reconciles a descriptor list against the live visualizer registry. A mode
+ * whose URL is unchanged keeps its existing registration; a mode that vanished
+ * or whose URL moved is removed first and re-imported, so "reload" genuinely
+ * picks up edited mod code instead of replaying the module already in memory.
+ * Idempotent, and a per-mod import failure only skips that mod.
+ */
+export const registerModVisualizers = async (descriptors: ModVisualizerDescriptor[]): Promise<void> => {
+    const desired = new Map(descriptors.map((descriptor) => [descriptor.mode, descriptor.url]));
+
+    for (const [mode, url] of Array.from(registeredModModes)) {
+        if (desired.get(mode) !== url) {
+            removeVisualizerEntry(mode as VisualizerMode);
+            registeredModModes.delete(mode);
+        }
+    }
+
+    await Promise.all(descriptors.map(async (descriptor) => {
+        if (registeredModModes.has(descriptor.mode)) {
+            return;
+        }
+        try {
+            const module = await import(/* @vite-ignore */ descriptor.url) as ModVisualizerModule;
+            if (typeof module?.default?.mount !== 'function') {
+                throw new Error('missing default.mount');
+            }
+            if (appendVisualizerEntry(buildRegistryEntry(descriptor, module.default.mount))) {
+                registeredModModes.set(descriptor.mode, descriptor.url);
+            }
+        } catch (error) {
+            console.warn(`[Mods] Failed to load visualizer "${descriptor.mode}":`, error);
+        }
+    }));
+};
+
+/*
+ * Reconciles mod visualizer contributions against the latest mod state, read
+ * over the IPC bridge. Only usable where that bridge exists (the main window);
+ * the export window has no preload and registers from injected descriptors via
+ * registerModVisualizers instead.
  */
 export const initModVisualizers = async (): Promise<void> => {
     if (initPromise) {
@@ -130,34 +172,7 @@ export const initModVisualizers = async (): Promise<void> => {
             return;
         }
         const { mods } = await listMods();
-        const descriptors = collectDescriptors(mods);
-        const desired = new Set(descriptors.map((descriptor) => descriptor.mode));
-
-        // Drop entries for mods that no longer contribute the mode.
-        for (const mode of Array.from(registeredModModes)) {
-            if (!desired.has(mode)) {
-                removeVisualizerEntry(mode as VisualizerMode);
-                registeredModModes.delete(mode);
-            }
-        }
-
-        // Append any new contribution.
-        await Promise.all(descriptors.map(async (descriptor) => {
-            if (registeredModModes.has(descriptor.mode)) {
-                return;
-            }
-            try {
-                const module = await import(/* @vite-ignore */ descriptor.url) as ModVisualizerModule;
-                if (typeof module?.default?.mount !== 'function') {
-                    throw new Error('missing default.mount');
-                }
-                if (appendVisualizerEntry(buildRegistryEntry(descriptor, module.default.mount))) {
-                    registeredModModes.add(descriptor.mode);
-                }
-            } catch (error) {
-                console.warn(`[Mods] Failed to load visualizer "${descriptor.mode}":`, error);
-            }
-        }));
+        await registerModVisualizers(collectDescriptors(mods));
     })();
     return initPromise;
 };

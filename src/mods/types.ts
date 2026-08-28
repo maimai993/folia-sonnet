@@ -75,8 +75,26 @@ export interface ModRuntimeInfo {
     status: ModStatus;
     error: string | null;
     enabled: boolean;
+    /**
+     * The mod had been enabled, but its files changed since that confirmation,
+     * so the loader revoked the approval. The user has to confirm the new code
+     * before it runs again.
+     */
+    trustStale: boolean;
     commands: ModCommandInfo[];
     visualizers: ModVisualizerContribution[];
+}
+
+/*
+ * Result of a toggle. Enabling goes through a main-process confirmation dialog,
+ * so it can fail for reasons the panel has to report ('enable-declined' when
+ * the user cancelled, 'mod-content-unverifiable' when the tree cannot be
+ * hashed) rather than silently doing nothing.
+ */
+export interface ModSetEnabledResult {
+    ok: boolean;
+    error?: string;
+    mods: ModRuntimeInfo[];
 }
 
 export type ModExportPhase = 'rendering' | 'done' | 'error' | 'cancelled';

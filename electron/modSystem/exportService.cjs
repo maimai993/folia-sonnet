@@ -34,9 +34,10 @@ const isElectronDevRuntime = () => process.env.ELECTRON_DEV === 'true' || proces
  * createExportService({
  *   app, BrowserWindow,
  *   resolveFfmpeg()      -> cached resolver from ffmpeg.cjs,
+ *   getModVisualizers()  -> mod visualizer descriptors for the export page,
  * })
  */
-const createExportService = ({ app, BrowserWindow, resolveFfmpeg }) => {
+const createExportService = ({ app, BrowserWindow, resolveFfmpeg, getModVisualizers }) => {
     let activeSession = null;
 
     const getExportDirectory = () => path.join(app.getPath('videos'), 'Folia Exports');
@@ -143,6 +144,19 @@ const createExportService = ({ app, BrowserWindow, resolveFfmpeg }) => {
             return new URL('http://localhost:3000/mod-export.html').toString();
         }
         return path.join(__dirname, '../../dist/mod-export.html');
+    };
+
+    /*
+     * Mod visualizer descriptors for the export page, never allowed to break an
+     * export: a failure here just means the page falls back to a builtin mode.
+     */
+    const safeModVisualizers = () => {
+        try {
+            const descriptors = typeof getModVisualizers === 'function' ? getModVisualizers() : [];
+            return Array.isArray(descriptors) ? descriptors : [];
+        } catch {
+            return [];
+        }
     };
 
     const renderFrame = (win, tSec) => win.webContents.executeJavaScript(
@@ -274,6 +288,11 @@ const createExportService = ({ app, BrowserWindow, resolveFfmpeg }) => {
                 throw new Error(cancelled ? 'cancelled' : 'export-page-not-ready');
             }
 
+            // The export window deliberately has no preload, so it cannot
+            // query the mod bridge for contributed visualizers. Their
+            // descriptors ride along in the render config instead, which is
+            // what makes a `mod:` visualizerMode resolve here at all; without
+            // them the page would silently fall back to a builtin mode.
             const injected = JSON.stringify({
                 lyricData: renderSpec.lyricData,
                 visualizerMode: renderSpec.visualizerMode,
@@ -283,9 +302,13 @@ const createExportService = ({ app, BrowserWindow, resolveFfmpeg }) => {
                 startSec: renderSpec.startSec,
                 backgroundMode: renderSpec.backgroundMode,
                 transparent: renderSpec.transparent,
+                modVisualizers: safeModVisualizers(),
             });
+            // configure() returns a promise (it imports the mod visualizer
+            // modules); executeJavaScript resolves it, so the first frame is
+            // only rendered once the requested mode is actually registered.
             await exportWindow.webContents.executeJavaScript(
-                `window.__foliaModExport.configure(${injected}); true`,
+                `window.__foliaModExport.configure(${injected})`,
                 true
             );
 

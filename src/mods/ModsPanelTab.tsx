@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, Boxes, ChevronDown, CircleOff, FolderOpen, Power, RefreshCw, TriangleAlert, CircleCheck, FileVideo2, CheckSquare, Square, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { SongResult, Theme, VisualizerMode } from '@/types';
+import type { LyricData, SongResult, Theme, VisualizerMode } from '@/types';
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { readLyricOffset } from '@/utils/lyrics/lyricOffsetMemory';
 import type { ModRuntimeInfo } from './types';
@@ -23,7 +23,29 @@ interface ModsPanelTabProps {
     currentSong: SongResult | null;
     theme: Theme | null;
     visualizerMode: VisualizerMode | null;
+    /**
+     * The lyrics the player is actually rendering right now. Rebuilding them
+     * from `currentSong.onlineLyricsState` alone is not equivalent: an ordinary
+     * online match lives in neither `importedLyrics` nor `onlineOverrideLyrics`,
+     * so a snapshot built that way is empty and export mods reject the song
+     * with export-no-lyrics even though lyrics are on screen.
+     */
+    lyricData: LyricData | null;
 }
+
+/*
+ * Maps a loader error code onto its localized message. Codes that have no entry
+ * (a raw JS message from a mod's own failure) fall through to themselves, and
+ * `value` is supplied for the messages that quote the underlying detail.
+ */
+const translateModError = (
+    t: (key: string, options: Record<string, unknown>) => string,
+    error: string | null | undefined,
+    fallbackCode: string,
+): string => {
+    const code = error ?? fallbackCode;
+    return t(`mods.errors.${code}`, { value: code, defaultValue: code });
+};
 
 const statusIcon = (status: string, isDaylight: boolean) => {
     if (status === 'loaded') return <CircleCheck size={13} className={`${isDaylight ? 'text-emerald-600' : 'text-emerald-300'} shrink-0`} />;
@@ -132,10 +154,16 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                                     ))}
                                 </div>
                             ) : null}
+                            {mod.trustStale ? (
+                                <div className={`flex items-start gap-1.5 text-xs rounded-lg p-2 ${isDaylight ? 'text-amber-800 bg-amber-500/10' : 'text-amber-200 bg-amber-400/10'}`}>
+                                    <TriangleAlert size={14} className="mt-px shrink-0" />
+                                    <span>{t('mods.trustRevoked')}</span>
+                                </div>
+                            ) : null}
                             {mod.error ? (
                                 <div className={`flex items-start gap-1.5 text-xs ${isDaylight ? 'text-red-600 bg-red-500/10' : 'text-red-300 bg-red-500/10'} rounded-lg p-2`}>
                                     <TriangleAlert size={14} className="mt-px shrink-0" />
-                                    <span className="break-all">{mod.error}</span>
+                                    <span className="break-all">{translateModError(t, mod.error, 'unknown')}</span>
                                 </div>
                             ) : null}
 
@@ -158,6 +186,7 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
     currentSong,
     theme,
     visualizerMode,
+    lyricData,
 }) => {
     const { t } = useTranslation();
     const bridgeAvailable = useModsStore((state) => state.bridgeAvailable);
@@ -224,7 +253,7 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
         const result = await useModsStore.getState().openModsDirectory();
         setNotice(result.ok
             ? { kind: 'ok', text: t('mods.directoryOpened') }
-            : { kind: 'error', text: t(`mods.errors.${result.error ?? 'open-directory-failed'}`, result.error ?? '') });
+            : { kind: 'error', text: translateModError(t, result.error, 'open-directory-failed') });
     };
 
     // Drag-and-drop zip install: resolves the OS path of the dropped File via
@@ -248,10 +277,24 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
             const result = await useModsStore.getState().installModFromZip(filePath);
             setNotice(result.ok
                 ? { kind: 'ok', text: t('mods.installSuccess', { id: result.id ?? '' }) }
-                : { kind: 'error', text: t(`mods.errors.${result.error ?? 'install-failed'}`, result.error ?? '') });
+                : { kind: 'error', text: translateModError(t, result.error, 'install-failed') });
         } finally {
             setInstalling(false);
         }
+    };
+
+    /*
+     * Enabling a mod opens a confirmation dialog in the main process (the
+     * renderer cannot be trusted to gate code that runs with full privileges),
+     * so a toggle can come back declined. A decline is a normal user choice and
+     * stays silent; anything else is reported.
+     */
+    const handleToggleEnabled = async (modId: string, enabled: boolean) => {
+        const result = await toggleMod(modId, enabled);
+        if (result.ok || result.error === 'enable-declined') {
+            return;
+        }
+        setNotice({ kind: 'error', text: translateModError(t, result.error, 'enable-failed') });
     };
 
     const toggleSelected = (modId: string) => {
@@ -275,7 +318,7 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
         setBatchPending(true);
         try {
             for (const modId of selectedIds) {
-                await toggleMod(modId, enabled);
+                await handleToggleEnabled(modId, enabled);
             }
         } finally {
             setBatchPending(false);
@@ -292,9 +335,11 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
         void refresh();
     }, [bindEvents, refresh]);
 
+    // The listener's own imported/override choice still wins; what is on screen
+    // is the fallback, which is what an ordinary online match resolves to.
     const activeLyrics = useMemo(
-        () => resolveOnlineLyrics(currentSong?.onlineLyricsState ?? null, null),
-        [currentSong?.onlineLyricsState],
+        () => resolveOnlineLyrics(currentSong?.onlineLyricsState ?? null, lyricData ?? null),
+        [currentSong?.onlineLyricsState, lyricData],
     );
     const lyricTimelineOffsetMs = globalLyricTimelineOffsetMs + (currentSong ? readLyricOffset(currentSong.id) : 0);
 
@@ -502,7 +547,7 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
                                 selectionMode={selectionMode}
                                 isDaylight={isDaylight}
                                 onToggleExpand={() => selectMod(selectedModId === mod.id ? null : mod.id)}
-                                onToggleEnabled={() => { void toggleMod(mod.id, !mod.enabled); }}
+                                onToggleEnabled={() => { void handleToggleEnabled(mod.id, !mod.enabled); }}
                                 onToggleSelected={() => toggleSelected(mod.id)}
                             />
                         ))}

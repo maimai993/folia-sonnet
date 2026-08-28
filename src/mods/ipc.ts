@@ -3,6 +3,7 @@ import type {
     ModLogEntry,
     ModRuntimeInfo,
     ModRuntimeSnapshot,
+    ModSetEnabledResult,
     ModsListPayload,
     ModExportProgress,
 } from './types';
@@ -39,13 +40,17 @@ export const listMods = async (): Promise<ModsListPayload> => {
     }
 };
 
-export const setModEnabled = async (modId: string, enabled: boolean): Promise<ModRuntimeInfo[]> => {
+export const setModEnabled = async (modId: string, enabled: boolean): Promise<ModSetEnabledResult> => {
     const api = bridge();
     if (!api) {
-        return [];
+        return { ok: false, error: 'no-electron-bridge', mods: [] };
     }
     const response = await api.setModEnabled(modId, enabled);
-    return Array.isArray(response?.mods) ? response.mods : [];
+    return {
+        ok: Boolean(response?.ok),
+        error: response?.error,
+        mods: Array.isArray(response?.mods) ? response.mods : [],
+    };
 };
 
 export const reloadMods = async (): Promise<ModRuntimeInfo[]> => {

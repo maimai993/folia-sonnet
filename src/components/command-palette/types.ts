@@ -2,7 +2,7 @@ import type React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import type { SearchReturnView, SearchSource } from '../../stores/useSearchNavigationStore';
 import type { LocalLibraryDisplayCatalog } from '../../services/playbackAdapters';
-import type { HomeViewTab, LatentBackgroundTuning, LocalSong, PlayerState, ReplayGainMode, SongResult, StatusMessage, SubtitleContentMode, VisualizerMode, VisualizerBackgroundMode, MonetBackgroundTuning } from '../../types';
+import type { HomeViewTab, LatentBackgroundTuning, LocalSong, LyricData, PlayerState, ReplayGainMode, SongResult, StatusMessage, SubtitleContentMode, VisualizerMode, VisualizerBackgroundMode, MonetBackgroundTuning } from '../../types';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/useSettingsUiStore';
@@ -67,6 +67,12 @@ export type CommandPaletteSharedContext = {
     t: (key: string, fallback?: string) => string;
     setStatusMsg: React.Dispatch<React.SetStateAction<StatusMessage | null>>;
     currentSong: SongResult | null;
+    /**
+     * The lyrics currently on screen (the automix transition display included),
+     * so a surface that needs them gets what the player renders rather than
+     * having to rebuild them from the song's stored lyric state.
+     */
+    lyrics: LyricData | null;
     /**
      * The transport as the listener hears it, not the raw one.
      *

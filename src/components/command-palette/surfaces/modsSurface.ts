@@ -10,6 +10,7 @@ const buildViewProps = ({ context, theme }: CommandSurfaceRenderArgs) => ({
     currentSong: context.shared.currentSong,
     theme,
     visualizerMode: context.visualizer.visualizerMode,
+    lyricData: context.shared.lyrics,
 });
 
 export const modsSurface: CommandPaletteSurface = {

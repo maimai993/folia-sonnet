@@ -6,7 +6,7 @@ import './modExportPage.css';
 import { DEFAULT_THEME } from '@/services/baseThemes';
 import { getVisualizerRegistryEntry, hasVisualizerMode } from '@/components/visualizer/registry';
 import { applyVisualizerTuning, type VisualizerTuningBundle } from '@/components/visualizer/tuningRegistry';
-import { initModVisualizers } from '../modVisualizers';
+import { registerModVisualizers, type ModVisualizerDescriptor } from '../modVisualizers';
 import type { AudioBands, Line, Theme, VisualizerMode } from '@/types';
 
 // src/mods/export/modExportPage.tsx
@@ -24,6 +24,13 @@ interface ExportPageConfig {
     startSec?: number;
     backgroundMode?: 'none' | 'theme';
     transparent?: boolean;
+    /**
+     * Mod-contributed visualizer modes, injected by the export service. This
+     * window runs without a preload, so there is no mod bridge to ask - the
+     * descriptors have to arrive with the config or a `mod:` visualizerMode
+     * would silently fall back to a builtin one.
+     */
+    modVisualizers?: ModVisualizerDescriptor[];
 }
 
 const STATIC_AUDIO_BANDS: AudioBands = {
@@ -90,7 +97,13 @@ const ModExportPage: React.FC = () => {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }, [applyLineIndex]);
 
-    const configure = useCallback((nextConfig: ExportPageConfig) => {
+    // Async on purpose: the injected mod visualizer modules are imported here,
+    // and the export service awaits this call, so the mode requested by the
+    // snapshot is registered before the first frame is rendered.
+    const configure = useCallback(async (nextConfig: ExportPageConfig) => {
+        if (nextConfig.modVisualizers?.length) {
+            await registerModVisualizers(nextConfig.modVisualizers);
+        }
         linesRef.current = nextConfig.lyricData?.lines ?? [];
         setConfig(nextConfig);
         applyLineIndex(Number(nextConfig.startSec ?? 0));
@@ -168,10 +181,5 @@ const ModExportPage: React.FC = () => {
 
 const rootElement = document.getElementById('mod-export-root');
 if (rootElement) {
-    // Register mod-contributed visualizer modes before the first render so a
-    // `mod:` mode in the export snapshot resolves instead of falling back to
-    // classic. Failures are swallowed by initModVisualizers itself.
-    void initModVisualizers().finally(() => {
-        createRoot(rootElement).render(<ModExportPage />);
-    });
+    createRoot(rootElement).render(<ModExportPage />);
 }

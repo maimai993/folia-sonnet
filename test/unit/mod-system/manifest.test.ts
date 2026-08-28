@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const {
     validateManifest,
     resolveLoadOrder,
+    resolveLoadPlan,
     satisfiesRange,
     parseDependency,
 } = require('../../../electron/modSystem/manifest.cjs');
@@ -210,5 +211,77 @@ describe('resolveLoadOrder', () => {
         if (result.ok) {
             expect(result.order).toEqual([]);
         }
+    });
+});
+
+describe('resolveLoadPlan', () => {
+    const manifestFor = (id: string, depends: string[] = []) => ({
+        id,
+        name: id,
+        version: '1.0.0',
+        apiVersion: 1,
+        entry: 'index.cjs',
+        depends,
+        permissions: [],
+    });
+
+    it('confines a missing dependency to the mod that declared it', () => {
+        const manifests = new Map([
+            ['healthy', manifestFor('healthy')],
+            ['broken', manifestFor('broken', ['ghost'])],
+        ]);
+        const plan = resolveLoadPlan(manifests, { roots: ['healthy', 'broken'] });
+        expect(plan.order).toEqual(['healthy']);
+        expect(plan.failures.has('healthy')).toBe(false);
+        expect(plan.failures.get('broken')?.join()).toContain('ghost');
+    });
+
+    it('confines a dependency cycle to the mods inside it', () => {
+        const manifests = new Map([
+            ['a', manifestFor('a', ['b'])],
+            ['b', manifestFor('b', ['a'])],
+            ['healthy', manifestFor('healthy')],
+        ]);
+        const plan = resolveLoadPlan(manifests, { roots: ['a', 'b', 'healthy'] });
+        expect(plan.order).toEqual(['healthy']);
+        expect(plan.failures.has('a')).toBe(true);
+        expect(plan.failures.has('b')).toBe(true);
+        expect(plan.failures.has('healthy')).toBe(false);
+    });
+
+    it('never resolves a mod that is not a root', () => {
+        const manifests = new Map([
+            ['enabled', manifestFor('enabled')],
+            ['disabled-and-broken', manifestFor('disabled-and-broken', ['ghost'])],
+        ]);
+        const plan = resolveLoadPlan(manifests, { roots: ['enabled'] });
+        expect(plan.order).toEqual(['enabled']);
+        expect(plan.failures.size).toBe(0);
+    });
+
+    it('fails a mod whose dependency is not enabled instead of loading it unconfirmed', () => {
+        const manifests = new Map([
+            ['app', manifestFor('app', ['base'])],
+            ['base', manifestFor('base')],
+        ]);
+        const plan = resolveLoadPlan(manifests, {
+            roots: ['app'],
+            isEnabled: (modId: string) => modId === 'app',
+        });
+        expect(plan.order).toEqual([]);
+        expect(plan.failures.get('app')?.join()).toContain('not enabled');
+    });
+
+    it('propagates a failed dependency to its dependents only', () => {
+        const manifests = new Map([
+            ['leaf', manifestFor('leaf', ['ghost'])],
+            ['middle', manifestFor('middle', ['leaf'])],
+            ['unrelated', manifestFor('unrelated')],
+        ]);
+        const plan = resolveLoadPlan(manifests, { roots: ['middle', 'unrelated'] });
+        expect(plan.order).toEqual(['unrelated']);
+        expect(plan.failures.has('leaf')).toBe(true);
+        expect(plan.failures.has('middle')).toBe(true);
+        expect(plan.failures.has('unrelated')).toBe(false);
     });
 });

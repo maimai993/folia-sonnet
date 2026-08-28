@@ -408,12 +408,19 @@ function detectSystemLocaleKey() {
   return 'en';
 }
 
-function getMainLocale() {
+// The locale key the main process should speak in, honouring the app setting
+// and falling back to the system locale. Split out from getMainLocale so
+// modules with their own dialog copy (the mod loader) can ask for the key.
+function getMainLocaleKey() {
   const stored = store.get(APP_LOCALE_KEY);
   if (stored === 'zh-CN' || stored === 'en' || stored === 'in') {
-    return mainLocale[stored];
+    return stored;
   }
-  return mainLocale[detectSystemLocaleKey()];
+  return detectSystemLocaleKey();
+}
+
+function getMainLocale() {
+  return mainLocale[getMainLocaleKey()];
 }
 
 
@@ -3758,7 +3765,12 @@ app.whenReady().then(async () => {
   voiceInputPauseMonitor.syncState();
 
   try {
-    modSystem = createModSystem({ app, BrowserWindow, getMainWindow: () => mainWindow });
+    modSystem = createModSystem({
+      app,
+      BrowserWindow,
+      getMainWindow: () => mainWindow,
+      getLocaleKey: getMainLocaleKey,
+    });
     modSystem.registerIpc();
     modSystem.loadAll();
     void modSystem.probeFfmpeg();

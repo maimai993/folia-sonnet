@@ -3,16 +3,25 @@
 // manifests, resolves dependencies, activates each mod in a sandboxed error
 // boundary, and bridges declared commands/rendering into the renderer over IPC.
 // Designed to fail per-mod instead of crashing the host application.
+//
+// Trust model: a mod runs only after the user confirms it in a main-process
+// dialog, and that confirmation is bound to the mod's content digest. Mods run
+// with full Node privileges once enabled, so the confirmation is the security
+// boundary — it lives here rather than in the renderer precisely because a
+// loaded mod shares the renderer with the app UI and could otherwise drive its
+// own approval.
 
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { ipcMain, protocol, shell } = require('electron');
+const { dialog, ipcMain, protocol, shell } = require('electron');
 const Store = require('electron-store').default || require('electron-store');
 const { unzipSync } = require('fflate');
 
-const { validateManifest, resolveLoadOrder } = require('./manifest.cjs');
+const { validateManifest, resolveLoadPlan } = require('./manifest.cjs');
+const { computeModDigest, shortDigest } = require('./modDigest.cjs');
 const { createModApi } = require('./modApi.cjs');
 const { resolveFfmpeg } = require('./ffmpeg.cjs');
 const { createExportService } = require('./exportService.cjs');
@@ -20,6 +29,65 @@ const { attachModProtocolHandler } = require('./modProtocol.cjs');
 
 const SETTINGS_NAMESPACE = 'mods';
 const EXPORT_PERMISSION = 'render.export';
+
+// Staged installs and their rollback copies live under this directory inside
+// the user mods folder; discovery skips it (and every other dot-directory).
+const STAGING_DIRECTORY = '.staging';
+
+/*
+ * Install guards. A .zip is untrusted input: it is size-checked before it is
+ * read, entry-checked against its declared uncompressed sizes before anything
+ * is inflated, and checked again against the real inflated bytes. The caps
+ * match modDigest's, so anything installable is also verifiable.
+ */
+const INSTALL_LIMITS = {
+    maxArchiveBytes: 64 * 1024 * 1024,
+    maxEntries: 2000,
+    maxTotalBytes: 64 * 1024 * 1024,
+    maxFileBytes: 32 * 1024 * 1024,
+};
+
+// Native confirmation dialog copy. The main process cannot reach the renderer's
+// i18n bundle, so the three shipped locales are mirrored here like main.cjs's
+// own dialog strings.
+const TRUST_DIALOG_LOCALE = {
+    'zh-CN': {
+        title: '启用模组',
+        message: (name, id) => `确定要启用模组“${name}”（${id}）吗？`,
+        risk: '模组是第三方代码，未经官方安全审计。一旦启用，它将以应用的完整权限运行：可读写本地文件、访问网络、读取或修改任意应用设置（包括 AI 服务地址与密钥），并可在界面中执行代码。请仅启用你信任来源的模组。',
+        permissions: '声明的权限：',
+        noPermissions: '声明的权限：无',
+        location: '安装位置：',
+        fingerprint: '内容指纹：',
+        rebind: '本次确认仅对当前文件内容生效；模组文件发生变化后需要重新确认。',
+        enable: '仍要启用',
+        cancel: '取消',
+    },
+    en: {
+        title: 'Enable mod',
+        message: (name, id) => `Enable the mod "${name}" (${id})?`,
+        risk: 'Mods are third-party code and are not security-audited. Once enabled, a mod runs with the full privileges of the app: it can read and write local files, access the network, read or change any app setting (including the AI service URL and key), and run code inside the UI. Only enable mods from sources you trust.',
+        permissions: 'Declared permissions: ',
+        noPermissions: 'Declared permissions: none',
+        location: 'Installed at: ',
+        fingerprint: 'Content fingerprint: ',
+        rebind: 'This confirmation applies to the current files only; the mod must be confirmed again after its code changes.',
+        enable: 'Enable anyway',
+        cancel: 'Cancel',
+    },
+    in: {
+        title: 'Aktifkan mod',
+        message: (name, id) => `Aktifkan mod "${name}" (${id})?`,
+        risk: 'Mod adalah kode pihak ketiga dan tidak diaudit keamanannya. Setelah diaktifkan, mod berjalan dengan hak penuh aplikasi: dapat membaca dan menulis berkas lokal, mengakses jaringan, membaca atau mengubah pengaturan apa pun (termasuk URL dan kunci layanan AI), serta menjalankan kode di dalam antarmuka. Aktifkan hanya mod dari sumber yang Anda percayai.',
+        permissions: 'Izin yang dideklarasikan: ',
+        noPermissions: 'Izin yang dideklarasikan: tidak ada',
+        location: 'Terpasang di: ',
+        fingerprint: 'Sidik konten: ',
+        rebind: 'Konfirmasi ini hanya berlaku untuk berkas saat ini; mod harus dikonfirmasi ulang setelah kodenya berubah.',
+        enable: 'Tetap aktifkan',
+        cancel: 'Batal',
+    },
+};
 
 const IPC = {
     list: 'folia-mods:list',
@@ -45,7 +113,7 @@ const serializeError = (error) => {
     return error && error.message ? error.message : String(error);
 };
 
-const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
+const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey }) => {
     let store = null;
     try {
         store = new Store({ name: 'mod-system' });
@@ -71,6 +139,15 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
             return typeof getMainWindow === 'function' ? getMainWindow() : null;
         } catch {
             return null;
+        }
+    };
+
+    const resolveDialogLocale = () => {
+        try {
+            const key = typeof getLocaleKey === 'function' ? getLocaleKey() : null;
+            return TRUST_DIALOG_LOCALE[key] ?? TRUST_DIALOG_LOCALE.en;
+        } catch {
+            return TRUST_DIALOG_LOCALE.en;
         }
     };
 
@@ -135,6 +212,63 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
         return { load, getCommands: () => commandRegistry };
     };
 
+    /*
+     * Persisted trust record: `{ enabled, digest }`. Anything else in the store
+     * (nothing yet, or a bare boolean written by an earlier build) counts as an
+     * approval that is not bound to any content and is therefore not honoured.
+     */
+    const readTrust = (modId) => {
+        try {
+            const stored = store.get(enabledKey(modId));
+            if (stored && typeof stored === 'object') {
+                return {
+                    enabled: Boolean(stored.enabled),
+                    digest: typeof stored.digest === 'string' ? stored.digest : null,
+                };
+            }
+            return stored ? { enabled: true, digest: null } : null;
+        } catch {
+            return null;
+        }
+    };
+
+    const writeTrust = (modId, enabled, digest) => {
+        try {
+            store.set(enabledKey(modId), {
+                enabled: Boolean(enabled),
+                digest: enabled ? digest : null,
+                confirmedAt: enabled ? new Date().toISOString() : null,
+            });
+        } catch {
+            // Persistence is best-effort; in-memory state still applies.
+        }
+    };
+
+    /*
+     * Decides whether a discovered mod may run. Trust is granted to bytes, not
+     * to a mod id: when the digest moved (an upgrade dropped in over the old
+     * copy, an edited file, or a legacy record with no digest at all) the
+     * approval is revoked on the spot and the mod stays off until the user
+     * confirms the new code.
+     */
+    const resolveTrust = (modId, digest) => {
+        const stored = readTrust(modId);
+        if (!stored || !stored.enabled) {
+            return { enabled: false, trustStale: false };
+        }
+        if (!digest || stored.digest !== digest) {
+            writeTrust(modId, false, null);
+            return { enabled: false, trustStale: true };
+        }
+        return { enabled: true, trustStale: false };
+    };
+
+    // folia-mod:// URL for a visualizer contribution. The digest is carried as a
+    // version query so the renderer's ES module map treats a changed mod as a
+    // different module instead of replaying the code it already imported.
+    const visualizerUrl = (runtime, visualizer) =>
+        `folia-mod://${runtime.manifest.id}/${visualizer.entry}?v=${shortDigest(runtime.digest)}`;
+
     const publicModState = (runtime) => {
         const entry = mods.get(runtime.manifest.id);
         if (!entry) {
@@ -154,7 +288,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
                 id: visualizer.id,
                 mode: `mod:${entry.manifest.id}:${visualizer.id}`,
                 entry: visualizer.entry,
-                url: `folia-mod://${entry.manifest.id}/${visualizer.entry}`,
+                url: visualizerUrl(entry, visualizer),
                 label: cloneJson(visualizer.label ?? {}),
                 order: visualizer.order,
             }))
@@ -169,10 +303,27 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
             status: entry.status,
             error: entry.error,
             enabled: entry.enabled,
+            trustStale: Boolean(entry.trustStale),
             commands,
             visualizers,
         };
     };
+
+    /*
+     * Visualizer contributions of every loaded mod, flattened for consumers
+     * that cannot reach the IPC bridge — notably the export window, which runs
+     * without a preload and is handed these descriptors inside its render
+     * config instead of asking for them.
+     */
+    const listVisualizerDescriptors = () => Array.from(mods.values())
+        .filter((runtime) => runtime.status === 'loaded' && Array.isArray(runtime.manifest.visualizers))
+        .flatMap((runtime) => runtime.manifest.visualizers.map((visualizer) => ({
+            mode: `mod:${runtime.manifest.id}:${visualizer.id}`,
+            url: visualizerUrl(runtime, visualizer),
+            label: cloneJson(visualizer.label ?? {}),
+            order: visualizer.order,
+            modName: runtime.manifest.name,
+        })));
 
     const getModsDirectories = () => {
         const directories = [];
@@ -200,7 +351,9 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
             } catch {
                 return; // Directory missing — nothing to discover here.
             }
-            dirEntries.filter((entry) => entry.isDirectory()).forEach((entry) => {
+            // Dot-directories are the loader's own bookkeeping (staged installs
+            // and rollback copies), never mods.
+            dirEntries.filter((entry) => entry.isDirectory() && !entry.name.startsWith('.')).forEach((entry) => {
                 const modDirectory = path.join(dirPath, entry.name);
                 const manifestPath = path.join(modDirectory, 'mod.json');
                 let raw = null;
@@ -235,83 +388,81 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
         return discovered;
     };
 
+    // Placeholder manifest for a discovery that never produced a usable one, so
+    // broken mods still show up in the panel with their validation errors.
+    const brokenManifest = (id, discovery) => ({
+        id,
+        name: discovery.manifest?.name ?? id,
+        version: discovery.manifest?.version ?? null,
+        author: discovery.manifest?.author ?? null,
+        description: discovery.manifest?.description ?? null,
+        permissions: [],
+        visualizers: [],
+    });
+
     /*
-     * Full load cycle: discover, validate, resolve dependency order, then
-     * activate each entry in order inside per-mod error boundaries. Returns the
-     * renderer-facing state list. Re-entrant: reloads replace previous state.
+     * Full load cycle: discover, validate, digest, resolve the dependency graph
+     * for the *enabled* mods only, then activate each entry in order inside
+     * per-mod error boundaries. Returns the renderer-facing state list.
+     * Re-entrant: reloads replace previous state.
      */
     const loadAll = () => {
         const discovered = readManifestFiles();
         const manifestsById = new Map();
-        const failures = [];
+        const prepared = new Map();
+        const broken = [];
 
         discovered.forEach((discovery, key) => {
-            if (!discovery.manifest) {
-                failures.push({
-                    id: key,
-                    name: key,
-                    version: null,
-                    author: null,
-                    description: null,
-                    permissions: [],
-                    status: 'error',
-                    error: (discovery.validationErrors ?? ['invalid manifest']).join('; '),
-                    enabled: false,
-                    commands: [],
-                });
+            // A duplicate id carries a manifest *and* validation errors; both
+            // copies stay visible under the discovery key so neither silently
+            // replaces the other.
+            if (!discovery.manifest || discovery.validationErrors) {
+                broken.push({ key, discovery });
                 return;
             }
-            manifestsById.set(discovery.manifest.id, discovery.manifest);
+            const modId = discovery.manifest.id;
+            const digest = computeModDigest(discovery.dirPath);
+            const trust = resolveTrust(modId, digest);
+            manifestsById.set(modId, discovery.manifest);
+            prepared.set(modId, {
+                manifest: discovery.manifest,
+                dirPath: discovery.dirPath,
+                digest,
+                enabled: trust.enabled,
+                trustStale: trust.trustStale,
+            });
         });
 
-        const orderResult = resolveLoadOrder(manifestsById);
-        if (!orderResult.ok) {
-            // Dependency graph broken: every mod that made it into the graph is
-            // surfaced with the failure so users see exactly what is missing.
-            manifestsById.forEach((manifest) => {
-                failures.push({
-                    id: manifest.id,
-                    name: manifest.name,
-                    version: manifest.version,
-                    author: manifest.author,
-                    description: manifest.description,
-                    permissions: manifest.permissions,
-                    status: 'dependency-failed',
-                    error: orderResult.errors.join('; '),
-                    enabled: isModEnabled(manifest.id),
-                    commands: [],
-                });
-            });
-            mods.clear();
-            failures.forEach((entry) => {
-                mods.set(entry.id, {
-                    manifest: { id: entry.id, name: entry.name, version: entry.version ?? '0.0.0', permissions: entry.permissions },
-                    status: entry.status,
-                    error: entry.error,
-                    enabled: entry.enabled,
-                    getCommands: () => new Map(),
-                });
-            });
-            notifyStateChanged();
-            return listMods();
-        }
+        // Only enabled mods are roots of the resolution, and a broken subgraph
+        // fails only the mods inside it. A mod nobody enabled — including one
+        // dropped in specifically to declare a missing dependency or a cycle —
+        // can no longer take the whole loader down with it.
+        const enabledIds = [];
+        prepared.forEach((entry, modId) => {
+            if (entry.enabled) {
+                enabledIds.push(modId);
+            }
+        });
+        const plan = resolveLoadPlan(manifestsById, {
+            roots: enabledIds,
+            source: 'mods',
+            isEnabled: (modId) => Boolean(prepared.get(modId)?.enabled),
+        });
+
+        const buildEntry = (entry, status, error) => ({
+            manifest: entry.manifest,
+            dirPath: entry.dirPath,
+            digest: entry.digest,
+            status,
+            error,
+            enabled: entry.enabled,
+            trustStale: entry.trustStale,
+            ...buildModRuntime(entry.manifest, entry),
+        });
 
         const nextMods = new Map();
-        orderResult.order.forEach((modId) => {
-            const discovery = discovered.get(modId);
-            const manifest = discovery.manifest;
-            const runtime = {
-                manifest,
-                dirPath: discovery.dirPath,
-                status: 'disabled',
-                error: null,
-                enabled: isModEnabled(modId),
-                ...buildModRuntime(manifest, discovery),
-            };
-            if (!runtime.enabled) {
-                nextMods.set(modId, runtime);
-                return;
-            }
+        plan.order.forEach((modId) => {
+            const runtime = buildEntry(prepared.get(modId), 'disabled', null);
             try {
                 runtime.load();
                 runtime.status = 'loaded';
@@ -322,38 +473,102 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
             nextMods.set(modId, runtime);
         });
 
+        prepared.forEach((entry, modId) => {
+            if (nextMods.has(modId)) {
+                return;
+            }
+            const failure = plan.failures.get(modId);
+            if (failure) {
+                nextMods.set(modId, buildEntry(entry, 'dependency-failed', failure.join('; ')));
+                return;
+            }
+            // No digest means the tree could not be hashed, so it can never be
+            // trusted; say so instead of showing an innocuous "disabled".
+            nextMods.set(modId, entry.digest
+                ? buildEntry(entry, 'disabled', null)
+                : buildEntry(entry, 'error', 'mod-content-unverifiable'));
+        });
+
+        broken.forEach(({ key, discovery }) => {
+            nextMods.set(key, {
+                manifest: brokenManifest(key, discovery),
+                dirPath: discovery.dirPath,
+                digest: null,
+                status: 'error',
+                error: (discovery.validationErrors ?? ['invalid manifest']).join('; '),
+                enabled: false,
+                trustStale: false,
+                getCommands: () => new Map(),
+            });
+        });
+
         mods.clear();
         nextMods.forEach((runtime, modId) => mods.set(modId, runtime));
         notifyStateChanged();
         return listMods();
     };
 
-    // Mods are opt-in by default: nothing is enabled until the user explicitly
-    // enables it after acknowledging the risk. See the renderer mod panel, which
-    // surfaces the same warning before any mod can be activated.
-    const isModEnabled = (modId) => {
-        try {
-            const stored = store.get(enabledKey(modId));
-            return stored === undefined ? false : Boolean(stored);
-        } catch {
-            return false;
-        }
+    /*
+     * The enable confirmation. Native and main-process owned on purpose: a
+     * loaded mod's visualizer shares the renderer with the app UI, so a dialog
+     * drawn there could be spoofed or dismissed by mod code. This one cannot,
+     * and it is the only path that writes an "enabled" trust record.
+     */
+    const confirmEnableMod = async (runtime, digest) => {
+        const locale = resolveDialogLocale();
+        const permissions = Array.isArray(runtime.manifest.permissions) ? runtime.manifest.permissions : [];
+        const detail = [
+            locale.risk,
+            '',
+            permissions.length > 0 ? `${locale.permissions}${permissions.join(', ')}` : locale.noPermissions,
+            `${locale.location}${runtime.dirPath ?? '-'}`,
+            `${locale.fingerprint}${shortDigest(digest)}`,
+            '',
+            locale.rebind,
+        ].join('\n');
+        const options = {
+            type: 'warning',
+            title: locale.title,
+            message: locale.message(runtime.manifest.name, runtime.manifest.id),
+            detail,
+            buttons: [locale.cancel, locale.enable],
+            // Cancel is the default so an accidental Enter never enables a mod.
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true,
+        };
+        const win = getMainWindowSafe();
+        const result = win && !win.isDestroyed()
+            ? await dialog.showMessageBox(win, options)
+            : await dialog.showMessageBox(options);
+        return result.response === 1;
     };
 
-    const setModEnabled = (modId, enabled) => {
-        try {
-            store.set(enabledKey(modId), Boolean(enabled));
-        } catch {
-            // Persistence is best-effort; in-memory state still applies.
-        }
-        const runtime = mods.get(modId);
+    const setModEnabled = async (modId, enabled) => {
+        let runtime = mods.get(modId);
         if (!runtime) {
             loadAll();
-            return listMods();
+            runtime = mods.get(modId);
         }
-        runtime.enabled = Boolean(enabled);
-        loadAll();
-        return listMods();
+        if (!runtime) {
+            return { ok: false, error: 'mod-not-found', mods: listMods() };
+        }
+        if (!enabled) {
+            writeTrust(modId, false, null);
+            return { ok: true, mods: loadAll() };
+        }
+        // Re-hash right before asking: the confirmation must describe, and bind
+        // to, exactly the bytes on disk at this moment.
+        const digest = computeModDigest(runtime.dirPath);
+        if (!digest) {
+            return { ok: false, error: 'mod-content-unverifiable', mods: listMods() };
+        }
+        const confirmed = await confirmEnableMod(runtime, digest);
+        if (!confirmed) {
+            return { ok: false, error: 'enable-declined', mods: listMods() };
+        }
+        writeTrust(modId, true, digest);
+        return { ok: true, mods: loadAll() };
     };
 
     const invokeModCommand = async (modId, commandId, params) => {
@@ -391,6 +606,19 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
     // The per-user writable mod directory (the packaged app's own tree is read-only).
     const getUserModsDirectory = () => path.join(app.getPath('userData'), 'mods');
 
+    /*
+     * Clears leftovers from an install that was interrupted (a crash or a kill
+     * between extraction and the swap). Called once at startup, when no install
+     * can be in flight, so it never races a live staging directory.
+     */
+    const pruneStagingDirectory = () => {
+        try {
+            fs.rmSync(path.join(getUserModsDirectory(), STAGING_DIRECTORY), { recursive: true, force: true });
+        } catch {
+            // Leftovers are inert (discovery skips dot-directories); ignore.
+        }
+    };
+
     const openModsDirectory = async () => {
         try {
             const target = getUserModsDirectory();
@@ -405,27 +633,63 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
         }
     };
 
-    /**
-     * Installs a mod from a .zip into the per-user mod directory. The zip may
-     * carry mod.json at its root or under exactly one top-level folder; the mod
-     * lands at <userData>/mods/<manifest.id>, replacing any existing copy, then
-     * the loader reloads. Zip-slip is blocked and the manifest is validated
-     * before anything is written to the destination.
+    /*
+     * Reads a .zip into memory under the install limits. The archive size is
+     * checked before the file is read, and each entry is checked against its
+     * declared uncompressed size (and the running total) inside fflate's filter
+     * — before that entry is inflated — so a zip bomb is refused rather than
+     * expanded. The inflated bytes are then re-checked, because the declared
+     * sizes come from the archive itself and are not trustworthy.
      */
-    const installModFromZip = async (zipPath) => {
-        if (typeof zipPath !== 'string' || !zipPath.toLowerCase().endsWith('.zip')) {
-            return { ok: false, error: 'install-not-zip' };
-        }
-
-        let archive;
+    const readZipEntries = (zipPath) => {
+        let archiveBytes = null;
         try {
-            archive = unzipSync(fs.readFileSync(zipPath));
+            const stat = fs.statSync(zipPath);
+            if (stat.size > INSTALL_LIMITS.maxArchiveBytes) {
+                return { ok: false, error: 'install-too-large' };
+            }
+            archiveBytes = fs.readFileSync(zipPath);
         } catch {
             return { ok: false, error: 'install-corrupt-zip' };
         }
 
+        let limitError = null;
+        let declaredTotal = 0;
+        let entryCount = 0;
+        let archive;
+        try {
+            archive = unzipSync(archiveBytes, {
+                filter: (file) => {
+                    if (limitError) {
+                        return false;
+                    }
+                    entryCount += 1;
+                    if (entryCount > INSTALL_LIMITS.maxEntries) {
+                        limitError = 'install-too-many-files';
+                        return false;
+                    }
+                    if (file.originalSize > INSTALL_LIMITS.maxFileBytes) {
+                        limitError = 'install-too-large';
+                        return false;
+                    }
+                    declaredTotal += file.originalSize;
+                    if (declaredTotal > INSTALL_LIMITS.maxTotalBytes) {
+                        limitError = 'install-too-large';
+                        return false;
+                    }
+                    return true;
+                },
+            });
+        } catch {
+            return { ok: false, error: limitError ?? 'install-corrupt-zip' };
+        }
+        if (limitError) {
+            return { ok: false, error: limitError };
+        }
+
         // Normalize + sanitize entry paths (reject traversal and absolute paths).
         const entries = [];
+        let inflatedTotal = 0;
         for (const [rawPath, bytes] of Object.entries(archive)) {
             if (rawPath.endsWith('/')) continue; // directory marker
             const segments = rawPath.split('/').filter((segment) => segment !== '' && segment !== '.');
@@ -435,13 +699,23 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
             if (path.isAbsolute(segments.join(path.sep))) {
                 return { ok: false, error: 'install-unsafe-path' };
             }
+            inflatedTotal += bytes.length;
+            if (bytes.length > INSTALL_LIMITS.maxFileBytes || inflatedTotal > INSTALL_LIMITS.maxTotalBytes) {
+                return { ok: false, error: 'install-too-large' };
+            }
             entries.push({ segments, bytes });
         }
         if (entries.length === 0) {
             return { ok: false, error: 'install-empty-zip' };
         }
+        return { ok: true, entries };
+    };
 
-        // Locate the manifest root: mod.json at root, or under a single top-level folder.
+    /*
+     * Locates the manifest root: mod.json at the archive root, or under exactly
+     * one top-level folder. Returns the depth to strip from every entry path.
+     */
+    const resolveArchiveRoot = (entries) => {
         const manifestEntries = entries.filter((entry) => entry.segments[entry.segments.length - 1] === 'mod.json');
         let rootDepth = 0;
         if (!manifestEntries.some((entry) => entry.segments.length === 1)) {
@@ -455,6 +729,37 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
         if (!manifestEntry) {
             return { ok: false, error: 'install-no-manifest' };
         }
+        return { ok: true, rootDepth, manifestEntry };
+    };
+
+    /*
+     * Installs a mod from a .zip into the per-user mod directory. The zip may
+     * carry mod.json at its root or under exactly one top-level folder. The
+     * install is staged: everything is written to a temporary directory next to
+     * the target and verified there (manifest, entry file, declared visualizer
+     * files), and only then swapped into place — an existing install is kept
+     * until the replacement is known-good, and restored if the swap fails.
+     * Zip-slip is blocked and the archive is size-capped before extraction.
+     *
+     * A replaced mod's stored approval no longer matches the new content
+     * digest, so an upgrade always lands disabled and must be confirmed again.
+     */
+    const installModFromZip = async (zipPath) => {
+        if (typeof zipPath !== 'string' || !zipPath.toLowerCase().endsWith('.zip')) {
+            return { ok: false, error: 'install-not-zip' };
+        }
+
+        const read = readZipEntries(zipPath);
+        if (!read.ok) {
+            return { ok: false, error: read.error };
+        }
+        const { entries } = read;
+
+        const root = resolveArchiveRoot(entries);
+        if (!root.ok) {
+            return { ok: false, error: root.error };
+        }
+        const { rootDepth, manifestEntry } = root;
 
         let manifest;
         try {
@@ -469,10 +774,22 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
 
         const modId = validation.value.id;
         const target = path.join(getUserModsDirectory(), modId);
+        const stagingRoot = path.join(getUserModsDirectory(), STAGING_DIRECTORY);
+        const suffix = `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
+        const stagingDir = path.join(stagingRoot, `${modId}-${suffix}`);
+        const backupDir = path.join(stagingRoot, `${modId}-backup-${suffix}`);
+        let backupTaken = false;
+
+        const removeQuietly = (directory) => {
+            try {
+                fs.rmSync(directory, { recursive: true, force: true });
+            } catch {
+                // Clean-up is best-effort.
+            }
+        };
+
         try {
-            // Replace an existing copy so dragging an updated zip performs an upgrade.
-            fs.rmSync(target, { recursive: true, force: true });
-            fs.mkdirSync(target, { recursive: true });
+            fs.mkdirSync(stagingDir, { recursive: true });
             for (const entry of entries) {
                 // Directory markers were already filtered out, so every entry here
                 // is a real file that must be written. `relative` is only empty for
@@ -481,23 +798,57 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
                 if (!relative) {
                     continue;
                 }
-                const destination = path.resolve(target, relative);
-                if (destination !== target && !destination.startsWith(target + path.sep)) {
-                    throw new Error('unsafe destination');
+                const destination = path.resolve(stagingDir, relative);
+                if (destination !== stagingDir && !destination.startsWith(stagingDir + path.sep)) {
+                    throw new Error('install-unsafe-path');
                 }
                 fs.mkdirSync(path.dirname(destination), { recursive: true });
                 fs.writeFileSync(destination, Buffer.from(entry.bytes));
             }
-            loadAll();
-            emitLog(modId, 'info', `installed mod ${modId} from zip`);
-            return { ok: true, id: modId, mods: listMods() };
-        } catch (error) {
-            // Best-effort clean-up so a failed install never leaves a half-written mod dir.
-            try {
-                fs.rmSync(target, { recursive: true, force: true });
-            } catch {
-                // Nothing else to do.
+
+            // Verify the staged tree before anything replaces a working install.
+            if (!fs.existsSync(path.join(stagingDir, validation.value.entry))) {
+                throw new Error('install-entry-missing');
             }
+            for (const visualizer of validation.value.visualizers ?? []) {
+                if (!fs.existsSync(path.join(stagingDir, visualizer.entry))) {
+                    throw new Error('install-visualizer-missing');
+                }
+            }
+
+            // Atomic-ish swap: move the old copy aside, move the new one in, and
+            // put the old one back if the second rename fails.
+            if (fs.existsSync(target)) {
+                fs.renameSync(target, backupDir);
+                backupTaken = true;
+            }
+            try {
+                fs.renameSync(stagingDir, target);
+            } catch (error) {
+                if (backupTaken) {
+                    fs.renameSync(backupDir, target);
+                    backupTaken = false;
+                }
+                throw error;
+            }
+            removeQuietly(backupDir);
+            backupTaken = false;
+
+            const modsAfterInstall = loadAll();
+            emitLog(modId, 'info', `installed mod ${modId} from zip`);
+            return { ok: true, id: modId, mods: modsAfterInstall };
+        } catch (error) {
+            removeQuietly(stagingDir);
+            if (backupTaken) {
+                try {
+                    fs.rmSync(target, { recursive: true, force: true });
+                    fs.renameSync(backupDir, target);
+                } catch {
+                    // The previous copy is still in the staging directory; the
+                    // message below tells the user the install did not apply.
+                }
+            }
+            removeQuietly(backupDir);
             return { ok: false, error: serializeError(error) };
         }
     };
@@ -522,6 +873,9 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
         app,
         BrowserWindow,
         resolveFfmpeg: probeFfmpeg,
+        // The export window runs without a preload, so it cannot ask for the
+        // mod visualizer list itself; it is injected with the render config.
+        getModVisualizers: () => listVisualizerDescriptors(),
     });
 
     // folia-mod:// resolves only enabled, successfully loaded mods. Disabled
@@ -531,6 +885,8 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
         return runtime && runtime.status === 'loaded' && runtime.dirPath ? runtime.dirPath : null;
     };
     attachModProtocolHandler(protocol, resolveModDirectory);
+
+    pruneStagingDirectory();
 
     const registerIpc = () => {
         const handle = (channel, handler) => {
@@ -549,7 +905,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
         };
 
         handle(IPC.list, () => ({ mods: listMods(), ffmpeg: ffmpegStatus, directories: getModsDirectories() }));
-        handle(IPC.setEnabled, (_event, modId, enabled) => ({ mods: setModEnabled(modId, enabled) }));
+        handle(IPC.setEnabled, (_event, modId, enabled) => setModEnabled(modId, enabled));
         handle(IPC.reload, () => ({ mods: loadAll() }));
         handle(IPC.exportCancel, () => ({ ok: exportService.cancelActiveExport() }));
         handle(IPC.invoke, (_event, modId, commandId, params) => invokeModCommand(modId, commandId, params));
@@ -571,6 +927,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
     return {
         loadAll,
         listMods,
+        listVisualizerDescriptors,
         setModEnabled,
         probeFfmpeg,
         registerIpc,
@@ -579,4 +936,4 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow }) => {
     };
 };
 
-module.exports = { createModSystem, IPC };
+module.exports = { createModSystem, INSTALL_LIMITS, IPC };

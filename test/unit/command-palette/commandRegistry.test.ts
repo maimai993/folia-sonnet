@@ -16,6 +16,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             t: (_key: string, fallback?: string) => fallback ?? '',
             setStatusMsg: vi.fn(),
             currentSong: null,
+            lyrics: null,
             playerState: PlayerState.PAUSED,
         },
         search: {

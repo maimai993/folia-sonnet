@@ -201,60 +201,119 @@ const validateManifest = (raw) => {
 };
 
 /*
- * Resolves the load order for a set of validated manifests.
- * Input: Map<modId, manifest>. Output: `{ ok: true, order: [modId...] }`
- * or `{ ok: false, errors }` on missing dependencies or dependency cycles.
+ * Scoped dependency resolution.
+ * Input: Map<modId, manifest> plus the ids to resolve for (`roots`, defaults to
+ * every manifest). Output: `{ order, failures }` where `order` lists the mods
+ * that can be loaded, dependencies first, and `failures` maps a mod id to the
+ * reasons it (or something it depends on) cannot load.
+ *
+ * Failures are confined to the subgraph that actually broke: one mod declaring
+ * a missing dependency or forming a cycle can never invalidate unrelated mods.
+ * `isEnabled`, when given, additionally refuses to resolve through a mod the
+ * user has not enabled, so an enabled mod never runs against a dependency whose
+ * code was never confirmed.
  */
-const resolveLoadOrder = (manifests, { source = 'unknown' } = {}) => {
-    const errors = [];
+const resolveLoadPlan = (manifests, { roots = null, source = 'unknown', isEnabled = null } = {}) => {
     const order = [];
-    const visited = new Set();
-    const visiting = new Set();
+    const failures = new Map();
+    // modId -> 'visiting' | 'ok' | 'failed'
+    const state = new Map();
+
+    const addFailure = (modId, message) => {
+        const existing = failures.get(modId);
+        if (!existing) {
+            failures.set(modId, [message]);
+            return;
+        }
+        if (!existing.includes(message)) {
+            existing.push(message);
+        }
+    };
 
     const visit = (manifest) => {
-        if (visited.has(manifest.id)) {
-            return;
+        const current = state.get(manifest.id);
+        if (current === 'ok') {
+            return true;
         }
-        if (visiting.has(manifest.id)) {
-            errors.push(`dependency cycle detected involving "${manifest.id}" in ${source}`);
-            return;
+        if (current === 'failed') {
+            return false;
         }
-        visiting.add(manifest.id);
+        if (current === 'visiting') {
+            addFailure(manifest.id, `dependency cycle detected involving "${manifest.id}" in ${source}`);
+            state.set(manifest.id, 'failed');
+            return false;
+        }
+        state.set(manifest.id, 'visiting');
+        let resolved = true;
         manifest.depends.forEach((dependency) => {
             const parsed = parseDependency(dependency);
             if (!parsed.ok) {
-                errors.push(parsed.error);
+                addFailure(manifest.id, parsed.error);
+                resolved = false;
                 return;
             }
             const target = manifests.get(parsed.id);
             if (!target) {
-                errors.push(`missing dependency "${parsed.id}" required by "${manifest.id}" in ${source}`);
+                addFailure(manifest.id, `missing dependency "${parsed.id}" required by "${manifest.id}" in ${source}`);
+                resolved = false;
                 return;
             }
             if (!satisfiesRange(target.version, parsed.range)) {
-                errors.push(
+                addFailure(
+                    manifest.id,
                     `dependency "${manifest.id}" requires "${parsed.id}@${parsed.range ?? '*'}" ` +
                     `but version ${target.version} is installed in ${source}`
                 );
+                resolved = false;
                 return;
             }
-            visit(target);
+            if (isEnabled && !isEnabled(parsed.id)) {
+                addFailure(manifest.id, `dependency "${parsed.id}" required by "${manifest.id}" is not enabled in ${source}`);
+                resolved = false;
+                return;
+            }
+            if (!visit(target)) {
+                addFailure(manifest.id, `dependency "${parsed.id}" required by "${manifest.id}" failed to resolve in ${source}`);
+                resolved = false;
+            }
         });
-        visiting.delete(manifest.id);
-        visited.add(manifest.id);
+        if (!resolved) {
+            state.set(manifest.id, 'failed');
+            return false;
+        }
+        state.set(manifest.id, 'ok');
         order.push(manifest.id);
+        return true;
     };
 
-    manifests.forEach((manifest) => visit(manifest));
+    const rootManifests = roots === null
+        ? Array.from(manifests.values())
+        : Array.from(roots).map((modId) => manifests.get(modId)).filter(Boolean);
+    rootManifests.forEach((manifest) => { visit(manifest); });
 
-    const failed = errors.length > 0;
-    if (failed) {
-        // A cycle, missing dependency, or version mismatch keeps the graph
-        // unusable: report instead of returning a partial order that would
-        // load mods against a broken contract.
-        return fail(errors);
+    return { order, failures };
+};
+
+/*
+ * Whole-graph variant kept for callers that need an all-or-nothing answer
+ * (and for the unit tests): resolves every manifest and fails the batch when
+ * any mod in it fails. The loader itself uses resolveLoadPlan so a broken mod
+ * only takes down its own dependency subgraph.
+ */
+const resolveLoadOrder = (manifests, { source = 'unknown' } = {}) => {
+    const plan = resolveLoadPlan(manifests, { source });
+    if (plan.failures.size === 0) {
+        return { ok: true, order: plan.order };
     }
-    return { ok: true, order };
+    const errors = [];
+    plan.failures.forEach((messages) => {
+        messages.forEach((message) => {
+            if (!errors.includes(message)) {
+                errors.push(message);
+            }
+        });
+    });
+    return fail(errors);
 };
 
 module.exports = {
@@ -264,4 +323,5 @@ module.exports = {
     satisfiesRange,
     validateManifest,
     resolveLoadOrder,
+    resolveLoadPlan,
 };
