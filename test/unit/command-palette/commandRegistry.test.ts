@@ -839,3 +839,26 @@ describe('transition performance command', () => {
         expect(ids).not.toContain('transition-performance-toggle');
     });
 });
+
+// Both commands read one state and act on it, so what matters here is that each acts only on the
+// state that calls for it. Which state they are handed is App's side of the contract: a blend must
+// pass the DISPLAY transport, since the raw one goes IDLE for the length of an arm while the
+// outgoing deck is still sounding - given the raw state, Play called toggle (which during a blend
+// pauses) and Pause found no PLAYING to toggle, so both named the opposite of what they did.
+describe('play and pause commands', () => {
+    const execute = (id: string, playerState: PlayerState) => {
+        const context = createContext({ shared: { playerState } });
+        COMMAND_PALETTE_COMMANDS.find(entry => entry.id === id)!.execute('', context);
+        return context.playback.togglePlay;
+    };
+
+    it('pauses audible playback and leaves Play alone', () => {
+        expect(execute('playback-pause', PlayerState.PLAYING)).toHaveBeenCalled();
+        expect(execute('playback-play', PlayerState.PLAYING)).not.toHaveBeenCalled();
+    });
+
+    it('starts paused playback and leaves Pause alone', () => {
+        expect(execute('playback-play', PlayerState.PAUSED)).toHaveBeenCalled();
+        expect(execute('playback-pause', PlayerState.PAUSED)).not.toHaveBeenCalled();
+    });
+});

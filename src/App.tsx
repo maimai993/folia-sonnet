@@ -2236,7 +2236,12 @@ export default function App() {
         t: (key: string, fallback?: string) => t(key, fallback ?? ''),
         setStatusMsg,
         currentSong,
-        playerState,
+        // The transport the listener can hear, like the main controls, the remote and the taskbar.
+        // The raw state goes IDLE for the length of an arm while the outgoing deck is still playing,
+        // and the palette read that as "paused": its Play command called toggle, which during a
+        // blend pauses - so Play paused - while Pause saw no PLAYING to toggle and did nothing at
+        // all. Both commands named the opposite of what they did, for up to half a minute per track.
+        playerState: displayPlayerState,
 
         currentSearchSourceTab: currentSearchSourceTabInPalette,
         localSongs,
@@ -2397,7 +2402,7 @@ export default function App() {
         personalFmSelection,
         playQueue,
         playSong,
-        playerState,
+        displayPlayerState,
         preventDisplaySleepDuringPlayback,
         randomVisualizerModePerSong,
         removeQueueSong,

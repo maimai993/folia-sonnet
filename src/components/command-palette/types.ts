@@ -67,6 +67,13 @@ export type CommandPaletteSharedContext = {
     t: (key: string, fallback?: string) => string;
     setStatusMsg: React.Dispatch<React.SetStateAction<StatusMessage | null>>;
     currentSong: SongResult | null;
+    /**
+     * The transport as the listener hears it, not the raw one.
+     *
+     * An armed transition drops the raw state to IDLE while the outgoing deck keeps playing, so the
+     * commands below have to be given the same corrected state the main controls, the remote and the
+     * taskbar are given. Reading the raw one made Play pause and Pause do nothing for the whole arm.
+     */
     playerState: PlayerState;
 };
 
