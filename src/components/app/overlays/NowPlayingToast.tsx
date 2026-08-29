@@ -126,7 +126,9 @@ const NowPlayingToast: React.FC<NowPlayingToastProps> = ({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -16 }}
                     transition={{ duration: 0.35, ease: 'easeOut' }}
-                    className="pointer-events-none fixed bottom-6 left-6 z-40"
+                    // bottom-8 跟右下角面板开关按钮（UnifiedPanel 的 fixed bottom-8）对齐，
+                    // 两边底边落在同一条线上。
+                    className="pointer-events-none fixed bottom-8 left-6 z-40"
                 >
                     {/* 描边排在卡片前面：卡片自己是 relative，绘制顺序上压在描边上头，所以
                         描边内侧那一半被卡片背景盖住，露在外面的是外侧 + 辉光。
