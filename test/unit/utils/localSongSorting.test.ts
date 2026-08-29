@@ -17,6 +17,12 @@ const createSong = (fileName: string, patch: Partial<LocalSong> = {}): LocalSong
     ...patch,
 });
 
+// 专辑号排序按导入元数据里的专辑名分组，所以这些用例需要显式带上专辑名。
+const createAlbumSong = (fileName: string, albumName: string, patch: Partial<LocalSong> = {}): LocalSong => {
+    const song = createSong(fileName, patch);
+    return { ...song, importedMetadata: { ...song.importedMetadata, albumName } };
+};
+
 describe('localSongSorting', () => {
     it('sorts folder songs by file name using natural numeric order', () => {
         const songs = [
@@ -86,6 +92,74 @@ describe('localSongSorting', () => {
             'one.mp3',
             'no-number-b.mp3',
             'no-number-a.mp3',
+        ]);
+    });
+
+    // 文件夹里混装多张专辑，或者在「全部歌曲」里选专辑号时，先按专辑分组再按音轨号，
+    // 否则每张专辑的第 1 轨会全挤在最前面。
+    it('groups by album before track number', () => {
+        const songs = [
+            createAlbumSong('b1.mp3', 'Beta', { trackNumber: 1 }),
+            createAlbumSong('a2.mp3', 'Alpha', { trackNumber: 2 }),
+            createAlbumSong('b2.mp3', 'Beta', { trackNumber: 2 }),
+            createAlbumSong('a1.mp3', 'Alpha', { trackNumber: 1 }),
+        ];
+
+        expect(sortLocalFolderSongs(songs, 'albumTrack').map(song => song.fileName)).toEqual([
+            'a1.mp3',
+            'a2.mp3',
+            'b1.mp3',
+            'b2.mp3',
+        ]);
+        expect(sortLocalFolderSongs(songs, 'albumTrack', 'desc').map(song => song.fileName)).toEqual([
+            'b2.mp3',
+            'b1.mp3',
+            'a2.mp3',
+            'a1.mp3',
+        ]);
+    });
+
+    // 专辑归属以实体为准：调用方给出 entityId 时，同名的两张专辑不会被并成一组。
+    it('keeps same-named albums apart when the caller resolves album entities', () => {
+        const songs = [
+            createAlbumSong('b1.mp3', 'Greatest Hits', { id: 'b1', trackNumber: 1 }),
+            createAlbumSong('a2.mp3', 'Greatest Hits', { id: 'a2', trackNumber: 2 }),
+            createAlbumSong('a1.mp3', 'Greatest Hits', { id: 'a1', trackNumber: 1 }),
+            createAlbumSong('b2.mp3', 'Greatest Hits', { id: 'b2', trackNumber: 2 }),
+        ];
+        const entityIdBySongId: Record<string, string> = {
+            a1: 'album-a', a2: 'album-a', b1: 'album-b', b2: 'album-b',
+        };
+        const resolveAlbumGroup = (song: LocalSong) => ({
+            entityId: entityIdBySongId[song.id],
+            name: 'Greatest Hits',
+        });
+
+        expect(sortLocalFolderSongs(songs, 'albumTrack', 'asc', resolveAlbumGroup).map(song => song.fileName)).toEqual([
+            'a1.mp3',
+            'a2.mp3',
+            'b1.mp3',
+            'b2.mp3',
+        ]);
+    });
+
+    // 有音轨号但没有专辑名的曲目同样在这个序里没有位置，和缺号码的一样沉底。
+    it('keeps numbered tracks without an album name after the named albums', () => {
+        const songs = [
+            createSong('loose.mp3', { trackNumber: 1 }),
+            createSong('untagged.mp3'),
+            createAlbumSong('album.mp3', 'Alpha', { trackNumber: 9 }),
+        ];
+
+        expect(sortLocalFolderSongs(songs, 'albumTrack').map(song => song.fileName)).toEqual([
+            'album.mp3',
+            'loose.mp3',
+            'untagged.mp3',
+        ]);
+        expect(sortLocalFolderSongs(songs, 'albumTrack', 'desc').map(song => song.fileName)).toEqual([
+            'album.mp3',
+            'loose.mp3',
+            'untagged.mp3',
         ]);
     });
 
