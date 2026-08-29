@@ -35,7 +35,7 @@ import {
 } from './folia-grid/progressiveGrid';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
 import { useLocalCoverPreloader } from '../hooks/useLocalCoverPreloader';
-import { compareLocalFolderSongs, type LocalSongFolderSortDirection, type LocalSongFolderSortField } from '../utils/localSongSorting';
+import { compareLocalFolderSongs, formatLocalAlbumTrackLabel, type LocalAlbumGroupKey, type LocalSongFolderSortDirection, type LocalSongFolderSortField } from '../utils/localSongSorting';
 import { resolveGridViewContextTracks } from './folia-grid/gridViewContextActions';
 import {
     resolveGridTrackAlbumTargetId,
@@ -124,7 +124,7 @@ const LOCAL_TRACK_SORT_DIRECTION_STORAGE_KEY = 'local_track_sort_direction';
 
 const getStoredLocalTrackSortField = (): LocalSongFolderSortField => {
     const stored = localStorage.getItem(LOCAL_TRACK_SORT_FIELD_STORAGE_KEY);
-    return stored === 'fileLastModified' ? stored : 'fileName';
+    return stored === 'fileLastModified' || stored === 'albumTrack' ? stored : 'fileName';
 };
 
 const getStoredLocalTrackSortDirection = (): LocalSongFolderSortDirection => {
@@ -782,6 +782,32 @@ export const GridView: React.FC<GridViewProps> = ({
         && collection?.type !== 'playlist'
         && Boolean(sourceActions?.navidrome?.onAddToPlaylist || sourceActions?.navidrome?.onCreatePlaylist);
     const localSongsById = useMemo(() => new Map(localSongs?.map(song => [song.id, song])), [localSongs]);
+    // 专辑归属以本地曲库的专辑实体为准，不用文件里的专辑标签字面值：
+    // 用户重命名或合并实体后，显示轨道已经带上了实体的 entityId 和 displayName。
+    const localAlbumGroupBySongId = useMemo(() => {
+        const groups = new Map<string, LocalAlbumGroupKey>();
+        if (!supportsLocalTrackSorting) return groups;
+        baseDisplayTracks.forEach(track => {
+            const localRef = (track as UnifiedSong).localRef;
+            if (!localRef) return;
+            groups.set(localRef.songId, {
+                entityId: track.album?.entityId,
+                name: track.album?.name || '',
+            });
+        });
+        return groups;
+    }, [baseDisplayTracks, supportsLocalTrackSorting]);
+    const resolveLocalAlbumGroup = useCallback((song: LocalSong) => (
+        localAlbumGroupBySongId.get(song.id)
+    ), [localAlbumGroupBySongId]);
+    // 只有能选专辑号排序的本地列表才挂轨道号；本地歌单等自定义顺序的列表不属于这个语境。
+    const getAlbumTrackLabel = useCallback((track: SongResult): string | null => {
+        if (!supportsLocalTrackSorting) return null;
+        const localRef = (track as UnifiedSong).localRef;
+        if (!localRef) return null;
+        const localSong = localSongsById.get(localRef.songId);
+        return localSong ? formatLocalAlbumTrackLabel(localSong) : null;
+    }, [localSongsById, supportsLocalTrackSorting]);
     const displayTracks = useMemo(() => {
         const filteredTracks = baseDisplayTracks.filter((track, index) => (
             !removedExternalTrackKeys.has(`${getPlaybackSongKey(track)}-${index}`)
@@ -797,7 +823,13 @@ export const GridView: React.FC<GridViewProps> = ({
             const leftLocalSong = leftLocalRef ? localSongsById.get(leftLocalRef.songId) : undefined;
             const rightLocalSong = rightLocalRef ? localSongsById.get(rightLocalRef.songId) : undefined;
             if (!leftLocalSong || !rightLocalSong) return 0;
-            return compareLocalFolderSongs(leftLocalSong, rightLocalSong, localTrackSortField, localTrackSortDirection);
+            return compareLocalFolderSongs(
+                leftLocalSong,
+                rightLocalSong,
+                localTrackSortField,
+                localTrackSortDirection,
+                resolveLocalAlbumGroup,
+            );
         });
     }, [
         baseDisplayTracks,
@@ -806,6 +838,7 @@ export const GridView: React.FC<GridViewProps> = ({
         localTrackSortDirection,
         localTrackSortField,
         removedExternalTrackKeys,
+        resolveLocalAlbumGroup,
     ]);
 
     useEffect(() => {
@@ -2647,6 +2680,7 @@ export const GridView: React.FC<GridViewProps> = ({
                             style={style}
                             isUnavailable={isSongUnavailable(track)}
                             isActive={index === focusedIndex}
+                            albumTrackLabel={getAlbumTrackLabel(track)}
                             onPlay={() => {
                                 onSelectTrack?.(track, playableTracks);
                             }}

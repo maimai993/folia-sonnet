@@ -1904,6 +1904,7 @@ export default {
     "sortDirection": "排序方向",
     "sortByFileName": "文件名",
     "sortByModifiedDate": "修改日期",
+    "sortByAlbumTrack": "专辑号",
     "sortAscending": "升序",
     "sortDescending": "降序",
     "importFolder": "导入文件夹",
