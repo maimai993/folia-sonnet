@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { useMotionValue, motion } from 'framer-motion';
+import { useMotionValue, motion, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { loadCachedOrFetchCover } from './services/coverCache';
@@ -38,6 +38,7 @@ import { createLyricsSetter } from './components/app/playback/createLyricsSetter
 import { createOnlineRecoveryController } from './components/app/playback/createOnlineRecoveryController';
 import { persistPlaybackCache } from './components/app/playback/persistPlaybackCache';
 import { buildAppOverlaysModel } from './components/app/overlays/buildAppOverlaysModel';
+import { resolveNextUpTrack } from './components/app/overlays/now-playing-toast/resolveNextUpTrack';
 import {
     createSearchAlbumCollection,
     createSearchArtistCollection,
@@ -114,6 +115,8 @@ const ONLINE_AUDIO_URL_REFRESH_BUFFER_MS = 60 * 1000;
 const HOME_PROVIDER_REFRESH_COOLDOWN_MS = 5_000;
 const PLAYER_CHROME_HIDDEN_STORAGE_KEY = 'player_chrome_hidden';
 const LOCAL_TAIL_DECODE_ERROR_TOLERANCE_SEC = 3;
+/** How many seconds before a track ends the now playing card previews the queue's next track. */
+const NEXT_UP_LEAD_SEC = 5;
 
 export default function App() {
     const { t } = useTranslation();
@@ -420,6 +423,9 @@ export default function App() {
         queueAddBehavior,
         audioOutputDeviceId,
         loopMode,
+        stageTrackPillMode,
+        stageTrackPillTimeoutSec,
+        stageTrackPillOnHome,
         handleToggleCoverColorBg,
         handleToggleStaticMode,
         handleToggleDisableHomeDynamicBackground,
@@ -1584,6 +1590,86 @@ export default function App() {
         // the user tunes in Lab settings, and re-running this effect on it would fight the panel value.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [displaySong?.id, lyricCurrentTime]);
+
+    /**
+     * The now playing card is allowed on screen right now.
+     *
+     * One definition for two readers - the overlay model, which mounts the card, and the track-end
+     * countdown below, which is only worth running while something can show its result. The lyrics
+     * page always allows it; the home page is opt-in, and that opt-in is the whole rule: how the app
+     * arrived at the home page does not enter into it, so a cold start that lands there and a walk
+     * back from the lyrics page behave the same.
+     */
+    const stageTrackPillOnScreen = stageTrackPillMode !== 'never'
+        && (currentView === 'player' || (currentView === 'home' && stageTrackPillOnHome));
+
+    /**
+     * Open the right-hand panel on its song card - what clicking the now playing card does once you
+     * are already on the lyrics page. Same two calls the command palette's "Panel: cover" makes, so
+     * the card and the command land in the same place.
+     */
+    const openSongCardPanel = useCallback(() => {
+        setPanelTab('cover');
+        setIsPanelOpen(true);
+    }, []);
+
+    /**
+     * The queue track a plain track-end would advance to, or null when nothing resolvable.
+     * Mirrors handleNextTrack's index rules so the preview is always the track that will actually play.
+     */
+    const nextUpTrack = useMemo(() => resolveNextUpTrack({
+        playQueue,
+        song: currentSong,
+        loopMode: effectiveLoopMode,
+        isFmMode,
+        isStageActive: isNowPlayingStageActive,
+        fallbackToQueueHead: true,
+    }), [playQueue, currentSong, effectiveLoopMode, isFmMode, isNowPlayingStageActive]);
+
+    /**
+     * The track a running blend is bringing in: the queue successor of the DISPLAYED song.
+     * The displayed picture is frozen on the outgoing track for the whole blend, while currentSong
+     * advances asynchronously at the arm — reading the successor of the displayed song is correct
+     * from the first frame and stays correct until settle. No queue-head fallback here: mid-blend a
+     * song missing from the queue means the queue moved under the blend, and guessing would announce
+     * a track that is not arriving.
+     */
+    const blendNextUpTrack = useMemo(() => (isShowingTail ? resolveNextUpTrack({
+        playQueue,
+        song: displaySong,
+        loopMode: effectiveLoopMode,
+        isFmMode,
+        isStageActive: isNowPlayingStageActive,
+    }) : null), [isShowingTail, displaySong, playQueue, effectiveLoopMode, isFmMode, isNowPlayingStageActive]);
+
+    /** True while the card previews the next track (plain track-end countdown, not the blend). */
+    const [countdownActive, setCountdownActive] = useState(false);
+    useMotionValueEvent(currentTime, 'change', (time) => {
+        const shouldPreview = stageTrackPillOnScreen
+            && nextUpTrack !== null
+            && Number.isFinite(displayDuration)
+            && displayDuration > 0
+            && displayDuration - time > 0
+            && displayDuration - time <= NEXT_UP_LEAD_SEC;
+        setCountdownActive(prev => (prev === shouldPreview ? prev : shouldPreview));
+    });
+
+    /**
+     * The track the card shows while announcing a switch.
+     * During a blend the arriving track comes from the queue successor of the displayed
+     * (outgoing) song — never from currentSong, which lags the arm by a few async frames and
+     * briefly made the card announce the OUTGOING song as "next".
+     */
+    const stageNextUpTrack = isShowingTail ? blendNextUpTrack : nextUpTrack;
+    const stageNextUp = useMemo(() => {
+        if (stageTrackPillMode === 'never' || !stageNextUpTrack) return null;
+        return {
+            title: stageNextUpTrack.name || '',
+            artist: getSongArtistLabel(stageNextUpTrack) || null,
+            coverUrl: getSongCoverUrl(stageNextUpTrack) ?? null,
+        };
+    }, [stageTrackPillMode, stageNextUpTrack]);
+    const stageIsNextUp = stageNextUp !== null && (isShowingTail || countdownActive);
 
     const displaySongArtist = useMemo(
         () => (displaySong ? getSongArtistLabel(displaySong) || null : null),
@@ -3334,6 +3420,17 @@ export default function App() {
         handleNextTrack,
         prevTrackLabel: t('ui.previousTrack'),
         nextTrackLabel: t('ui.nextTrack'),
+        coverUrl,
+        cachedCoverUrl,
+        stageTrackPillMode,
+        stageTrackPillTimeoutSec,
+        stageNextUp,
+        stageIsNextUp,
+        stageTrackPillOnScreen,
+        openSongCardPanel,
+        stageTrackPillOpenPlayerLabel: t('ui.stageTrackPillOpenPlayer'),
+        stageTrackPillOpenSongCardLabel: t('ui.stageTrackPillOpenSongCard'),
+        automixTransitionAnimation: transitionAnimation && transitionMode === 'automix',
     }), [
         activePlaybackContext,
         audioSrc,
@@ -3350,6 +3447,16 @@ export default function App() {
         isFmMode,
         isNowPlayingStageActive,
         playQueue,
+        coverUrl,
+        cachedCoverUrl,
+        stageTrackPillMode,
+        stageTrackPillTimeoutSec,
+        stageNextUp,
+        stageIsNextUp,
+        stageTrackPillOnScreen,
+        openSongCardPanel,
+        transitionAnimation,
+        transitionMode,
         handleSearchResultAddToQueue,
         handleSearchResultAlbumOpen,
         handleSearchResultArtistOpen,
@@ -3895,12 +4002,25 @@ export default function App() {
             <AppOverlays model={appOverlaysModel} />
 
             {/* Not in the overlays model: it takes no state from this file and no click from anyone.
-                Mounted only under the same condition it draws on, so the lazy animejs chunk loads only
-                when the animation is actually wanted; the fallback is empty because it draws nothing
-                until a cue arrives anyway. */}
+                Mounted whenever the animation is switched on, so the lazy animejs chunk loads only
+                when it is wanted; the fallback is empty because it draws nothing until a cue arrives
+                anyway.
+
+                Stands down while the now playing card is on screen - there the blend is drawn on the
+                card's own border instead, and two pictures of the same transition is one too many -
+                but stands down by hiding, not by unmounting. A cue is announced and not replayed, and
+                which of the two renderers is up can change mid-blend (navigating between home and the
+                lyrics page, or the card's own setting), so unmounting this one meant the other side of
+                that handoff had nothing to draw for the rest of the transition. Staying subscribed
+                covers the card-goes-away direction; the card seeds itself from
+                `getActiveTransitionCue` for the other one. */}
             {transitionAnimation && transitionMode === 'automix' && (
                 <Suspense fallback={null}>
-                    <AutomixTransitionAnimation theme={theme} isDaylight={isDaylight} />
+                    <AutomixTransitionAnimation
+                        theme={theme}
+                        isDaylight={isDaylight}
+                        suppressed={Boolean(appOverlaysModel.nowPlayingToast?.transitionBorder)}
+                    />
                 </Suspense>
             )}
 
