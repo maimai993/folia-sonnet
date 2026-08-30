@@ -564,9 +564,9 @@ const mainLocale = {
   'zh-CN': {
     trayShowHide: '显示/隐藏主窗口',
     trayOpenRemote: '打开 遥控窗口',
-    trayToggleClickThrough: '切换点击穿透',
+    trayToggleClickThrough: '点击穿透',
     trayOverlayPreset: '锁定 + 透明 + 置顶',
-    trayToggleWallpaperMode: '切换壁纸模式',
+    trayToggleWallpaperMode: '壁纸模式',
     trayResetWindow: '重置窗口',
     trayHideTaskbar: '隐藏任务栏图标',
     trayQuit: '退出',
@@ -578,9 +578,9 @@ const mainLocale = {
   en: {
     trayShowHide: 'Show/Hide Main Window',
     trayOpenRemote: 'Open Remote Window',
-    trayToggleClickThrough: 'Toggle Click-Through',
+    trayToggleClickThrough: 'Click-Through',
     trayOverlayPreset: 'Locked + Transparent + On Top',
-    trayToggleWallpaperMode: 'Toggle Wallpaper Mode',
+    trayToggleWallpaperMode: 'Wallpaper Mode',
     trayResetWindow: 'Reset Window',
     trayHideTaskbar: 'Hide Taskbar Icon',
     trayQuit: 'Quit',
@@ -592,9 +592,9 @@ const mainLocale = {
   in: {
     trayShowHide: 'Tampilkan/Sembunyikan Jendela Utama',
     trayOpenRemote: 'Buka Jendela Remote',
-    trayToggleClickThrough: 'Alihkan Click-Through',
+    trayToggleClickThrough: 'Click-Through',
     trayOverlayPreset: 'Terkunci + Transparan + Di Atas',
-    trayToggleWallpaperMode: 'Alihkan Mode Wallpaper',
+    trayToggleWallpaperMode: 'Mode Wallpaper',
     trayResetWindow: 'Atur Ulang Jendela',
     trayHideTaskbar: 'Sembunyikan Ikon Taskbar',
     trayQuit: 'Keluar',
@@ -684,9 +684,7 @@ const obsBrowserSourceClients = new Set();
 let remoteControlAlwaysOnTop = false;
 let remoteControlSkipTaskbarEnabled = false;
 let mainWindowAlwaysOnTop = false;
-// Click-through follows wallpaper mode on Wayland only; X11 wallpaper mode must keep it off (see
-// isX11WallpaperMode).
-let mainWindowClickThroughEnabled = isWallpaperModeEnabled() && Boolean(process.env.WAYLAND_DISPLAY);
+let mainWindowClickThroughEnabled = false;
 let mainWindowClickThroughUnlockHover = false;
 let mainWindowClickThroughUnlockHoverTimer = null;
 let mainWindowSkipTaskbarEnabled = false;
@@ -3970,10 +3968,15 @@ function recreateMainWindowWithTransparencyMode(enabled, handoff = null) {
   // window must be gone before the replacement is built — otherwise the rebuilt main window
   // comes back as an ordinary window and the wallpaper disappears with the old one.
   if (isWallpaperWrapped()) {
-    previousWindow.destroy();
-    const createdWindow = createWindow();
-    focusMainWindow();
-    return createdWindow;
+    isSwappingMainWindow = true;
+    try {
+      previousWindow.destroy();
+      const createdWindow = createWindow();
+      focusMainWindow();
+      return createdWindow;
+    } finally {
+      isSwappingMainWindow = false;
+    }
   }
 
   const nextWindow = createWindow({ showImmediately: false });
@@ -4026,9 +4029,6 @@ app.whenReady().then(async () => {
   }
   if (startupResult === 'spawned') {
     return;
-  }
-  if (startupResult === 'fallback') {
-    mainWindowClickThroughEnabled = false;
   }
 
   if (process.platform === 'win32') {
@@ -4181,7 +4181,12 @@ app.whenReady().then(async () => {
 // window being destroyed externally (see the Windows wallpaper branch below).
 let isAppQuitting = false;
 
+let isSwappingMainWindow = false;
+
 app.on('window-all-closed', () => {
+  if (isSwappingMainWindow) {
+    return;
+  }
   clearPendingWindowPlaybackHandoffRequests();
   // Windows wallpaper mode: the main window is a child of a WorkerW, so an explorer restart
   // destroys it together with the desktop hierarchy. Quitting here would turn a recoverable
