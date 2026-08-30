@@ -71,6 +71,12 @@ const NowPlayingToast: React.FC<NowPlayingToastProps> = ({
     const shown = isNextUp && nextUp ? nextUp : song;
     const label = isNextUp ? t('ui.stageTrackPillNext') : t('ui.stageTrackPillNow');
 
+    // The last cover URL that failed to load, so a dead one falls back to the placeholder instead
+    // of a blank square. Only the latest is remembered: a URL that comes back later gets a fresh
+    // attempt, which is what a transient network failure deserves.
+    const [brokenCoverUrl, setBrokenCoverUrl] = useState<string | null>(null);
+    const coverSrc = shown.coverUrl && shown.coverUrl !== brokenCoverUrl ? shown.coverUrl : null;
+
     // 正在进行的混音。开关是在 cue 到达的那一刻从 settings store 里读的（见 hook 里的注释），
     // 所以拿到非空 cue 就意味着「过渡动画开着 + 模式是 automix」，不用再问一遍 prop。
     // 它同时参与下面的 holdOpen：混音期间卡片必须留在屏幕上，否则描边跟着卡片一起卸载，
@@ -198,12 +204,36 @@ const NowPlayingToast: React.FC<NowPlayingToastProps> = ({
                             反解掉，封面不变形、歌名不横向压扁。 */}
                         <motion.div
                             layout
-                            className={`relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-cover bg-center ${
+                            // Which of the two the frame settled on, so a test can tell "showed the
+                            // cover" from "fell back" - the difference used to be invisible from
+                            // the outside, which is how the blank square went unnoticed.
+                            data-toast-cover={coverSrc ? 'image' : 'placeholder'}
+                            className={`relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg ${
                                 isDaylight ? 'bg-zinc-200' : 'bg-zinc-800'
                             }`}
-                            style={shown.coverUrl ? { backgroundImage: `url(${shown.coverUrl})` } : undefined}
                         >
-                            {!shown.coverUrl && <Music size={18} className={isDaylight ? 'text-black/35' : 'text-white/35'} />}
+                            {/* An <img> rather than a background-image, for the two things a
+                                background cannot do: it reports failure, and the browser parses the
+                                URL instead of the CSS tokenizer (an unquoted url() is voided
+                                outright by a space, a bracket or the comma in a multi-value cover
+                                field, and voided silently). Failure matters because a cover URL
+                                here can be a revoked blob - the media cache mints object URLs and
+                                takes them back on the next track - and a dead URL used to leave a
+                                bare grey square, since the placeholder below only stood in when
+                                there was no URL at all. */}
+                            {coverSrc && (
+                                <img
+                                    key={coverSrc}
+                                    src={coverSrc}
+                                    alt=""
+                                    aria-hidden
+                                    decoding="async"
+                                    draggable={false}
+                                    onError={() => setBrokenCoverUrl(coverSrc)}
+                                    className="absolute inset-0 h-full w-full object-cover"
+                                />
+                            )}
+                            {!coverSrc && <Music size={18} className={isDaylight ? 'text-black/35' : 'text-white/35'} />}
                         </motion.div>
                         <motion.div layout className="min-w-0 max-w-[200px] flex-1">
                             {/* 正在播放 / 接下来播放：歌名上方。切歌那一刻整张卡片不重挂，所以这

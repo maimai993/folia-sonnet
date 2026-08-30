@@ -165,3 +165,22 @@ test('混音期间收掉顶部的扫光条', async ({ page }) => {
     await page.waitForTimeout(900);
     expect(Number(await sheen.evaluate(el => getComputedStyle(el).opacity))).toBeLessThan(0.05);
 });
+
+// 封面 URL 非空但加载不出来（探针里的 track-b 指向一个失效 blob，形状和媒体缓存 revoke 掉的
+// object URL 一样）。修之前「没有封面才画占位图标」那条判断只看 URL 空不空，所以这种情况留下
+// 的是一个纯灰方块——background-image 失败是没有声音的。
+test('封面加载失败时退回占位图标', async ({ page }) => {
+    await page.goto(PROBE_URL);
+    const cover = page.locator('[data-toast-cover]');
+
+    // 第一首有一张真的（data: URI）封面
+    await expect(cover).toHaveAttribute('data-toast-cover', 'image');
+
+    // 换到封面指向失效 blob 的那首
+    await page.locator('[data-probe-action="skip"]').click();
+    await expect(cover).toHaveAttribute('data-toast-cover', 'placeholder');
+
+    // 再换到真的没有封面的那首，结果应该一样
+    await page.locator('[data-probe-action="skip"]').click();
+    await expect(cover).toHaveAttribute('data-toast-cover', 'placeholder');
+});

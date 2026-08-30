@@ -94,7 +94,7 @@ import { useCollectionNavigationStore } from './stores/useCollectionNavigationSt
 import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useOnlineProviderAccountStore } from './stores/useOnlineProviderAccountStore';
 import { useShallow } from 'zustand/react/shallow';
-import { clampMediaVolume } from './utils/appPlaybackHelpers';
+import { clampMediaVolume, toSafeRemoteUrl } from './utils/appPlaybackHelpers';
 import { getOnlineProviderIdForSong, getPlaybackSongKey, isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './utils/appPlaybackGuards';
 import { readLyricOffset, writeLyricOffset } from './utils/lyrics/lyricOffsetMemory';
 import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
@@ -1666,7 +1666,10 @@ export default function App() {
         return {
             title: stageNextUpTrack.name || '',
             artist: getSongArtistLabel(stageNextUpTrack) || null,
-            coverUrl: getSongCoverUrl(stageNextUpTrack) ?? null,
+            // Same sanitising every other cover in the app goes through (see createCoverUrlResolver):
+            // upgrades the http: covers netease/kugou still hand out - blocked as mixed content in the
+            // packaged window - and keeps only the first of a comma-joined multi-value.
+            coverUrl: toSafeRemoteUrl(getSongCoverUrl(stageNextUpTrack)) ?? null,
         };
     }, [stageTrackPillMode, stageNextUpTrack]);
     const stageIsNextUp = stageNextUp !== null && (isShowingTail || countdownActive);
@@ -3425,8 +3428,14 @@ export default function App() {
         handleNextTrack,
         prevTrackLabel: t('ui.previousTrack'),
         nextTrackLabel: t('ui.nextTrack'),
-        coverUrl,
-        cachedCoverUrl,
+        // The HELD cover, to match `currentSong: displaySong` above it. The live one was the odd
+        // consumer out - every other surface fed from the frozen picture (media session, the
+        // electron bridge, the panel) already takes `displayCoverUrl` - and pairing it with the
+        // held song put the arriving track's cover under the outgoing track's title for the length
+        // of a blend. Worse at the start of one: the advance nulls `cachedCoverUrl` and the
+        // replacement is two async hops away, so a queue entry without its own `album.coverUrl`
+        // left the card on its placeholder icon while every other cover on screen was fine.
+        coverUrl: displayCoverUrl,
         stageTrackPillMode,
         stageTrackPillTimeoutSec,
         stageNextUp,
@@ -3452,8 +3461,7 @@ export default function App() {
         isFmMode,
         isNowPlayingStageActive,
         playQueue,
-        coverUrl,
-        cachedCoverUrl,
+        displayCoverUrl,
         stageTrackPillMode,
         stageTrackPillTimeoutSec,
         stageNextUp,

@@ -32,13 +32,19 @@ const DEMO_COVER = `data:image/svg+xml,${encodeURIComponent(`
   <circle cx="100" cy="86" r="34" fill="#fff3d6" opacity="0.85"/>
 </svg>`)}`;
 
+/** 形状是一个媒体缓存已经 revoke 掉的 blob URL：非空，但永远解不出图。 */
+const DEAD_COVER = 'blob:http://localhost/00000000-0000-4000-8000-000000000000';
+
 /**
- * 三首，最后一首标题很短——用来看最小宽度（240px）有没有把卡片撑住，以及标题长短变化时
+ * 四首，最后一首标题很短——用来看最小宽度（240px）有没有把卡片撑住，以及标题长短变化时
  * 卡片宽度是补间过去的还是硬切。
+ *
+ * track-b 的封面指向一个失效 blob：URL 非空，所以「没有封面就画占位图标」那条判断不成立，
+ * 修之前这里是一个纯灰方块。切到它应该退回和 track-c（真的没有封面）一样的占位图标。
  */
 const TRACKS = [
     { key: 'track-a', title: '秘密のメリーゴーランド (ft. Sohbana)', artist: 'ミカヅキ BIGWAVE', coverUrl: DEMO_COVER },
-    { key: 'track-b', title: 'Neon Aquarium', artist: 'Sunset Rollercoaster', coverUrl: null },
+    { key: 'track-b', title: 'Neon Aquarium', artist: 'Sunset Rollercoaster', coverUrl: DEAD_COVER },
     { key: 'track-c', title: '雨', artist: 'ヨルシカ', coverUrl: null },
 ];
 

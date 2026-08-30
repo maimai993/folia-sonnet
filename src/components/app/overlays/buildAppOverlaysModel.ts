@@ -75,9 +75,14 @@ type BuildAppOverlaysModelParams = {
     handleNextTrack: () => void;
     prevTrackLabel: string;
     nextTrackLabel: string;
-    /** now playing 卡片（playing-toast 样式） */
+    /**
+     * now playing 卡片（playing-toast 样式）的封面。
+     *
+     * 混音期间必须和上面的 `currentSong` 描述同一首歌，所以调用方传的是冻结画面里的那张，不是实时的。
+     * 也不要在这儿补 `cachedCoverUrl` 兜底：混音中冻结封面为 null 是「这首歌本来就没有封面」的合法
+     * 取值，退回实时缓存等于把下一首的封面贴到上一首的标题下面。
+     */
     coverUrl: string | null;
-    cachedCoverUrl: string | null;
     stageTrackPillMode: 'auto' | 'always' | 'never';
     stageTrackPillTimeoutSec: number;
     /** 自动切歌预览（下一首）；isNextUp 时整卡展示它 */
@@ -145,7 +150,6 @@ export const buildAppOverlaysModel = ({
     prevTrackLabel,
     nextTrackLabel,
     coverUrl,
-    cachedCoverUrl,
     stageTrackPillMode,
     stageTrackPillTimeoutSec,
     stageNextUp,
@@ -164,7 +168,7 @@ export const buildAppOverlaysModel = ({
             song: {
                 title: currentSong.name || '',
                 artist: getSongArtistLabel(currentSong) || null,
-                coverUrl: coverUrl || cachedCoverUrl || null,
+                coverUrl: coverUrl || null,
             },
             trackKey: getPlaybackSongKey(currentSong),
             isDaylight,
