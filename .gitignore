@@ -62,6 +62,8 @@ build/windowtolayer-COPYING
 .windowtolayer-src/
 # Local reference clone of upstream main used for pollution review; never ship.
 original/
+# Local upstream implementation references used during investigation; never ship.
+reference/
 # Bundled local ffmpeg source tree + binaries for the mod export pipeline; users
 # provide their own ffmpeg (env var FOLIA_FFMPEG_PATH or ffmpeg-8.1.2 next to app).
 ffmpeg-8.1.2/
@@ -73,6 +75,10 @@ start-folia.ps1
 # Local hand-made zip bundles of mods (drag-drop install test files); never ship.
 mods/*.zip
 
+
+# Built by packaging/windows/build-wallpaper-helper.mjs (Windows wallpaper mode helper).
+build/folia-wallpaper-helper.exe
+packaging/windows/wallpaper-helper/target/
 
 # Python bytecode from the htdemucs runner, written beside it by the downloaded runtime.
 __pycache__/
