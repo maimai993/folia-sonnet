@@ -49,8 +49,38 @@ export interface TemperaSongMetadata {
     album?: string | null;
 }
 
+/**
+ * Everything about the runtime that belongs to one track. Swapped in place rather than rebuilt -
+ * see `swapSong`.
+ */
+export interface TemperaSongContext {
+    /**
+     * Track identity. Only a change here is a real song change; the rest of this object also
+     * moves when the cover palette resolves, the theme is edited, or lyrics are hidden, and
+     * those must swap silently rather than play a cut.
+     */
+    seed: string | number | undefined;
+    program: TemperaProgram;
+    theme: Theme;
+    coverColors: string[];
+}
+
+/**
+ * How long the block takes to sweep across and back off again. `drawWipe` runs `travel` 0..2,
+ * so the frame is fully covered - and the scene underneath swapped - at the halfway point.
+ */
+export const TEMPERA_SONG_SWAP_MS = 720;
+
+/**
+ * How far into the sweep the incoming scene is built. Late enough that the block already hides
+ * most of the frame, early enough to leave headroom before the swap at travel 1.
+ */
+const TEMPERA_SWAP_STAGE_TRAVEL = 0.65;
+
 export interface TemperaRuntimeOptions {
     host: HTMLDivElement;
+    /** Track identity of `program`; see TemperaSongContext.seed. */
+    songSeed?: string | number;
     program: TemperaProgram;
     theme: Theme;
     tuning: TemperaTuning;
@@ -162,6 +192,23 @@ export class TemperaPixiRuntime {
     private readonly imageTextures = new Map<string, import('pixi.js').Texture>();
     private overlayContainer!: import('pixi.js').Container;
     private wipeGraphics: import('pixi.js').Graphics | null = null;
+    /**
+     * An in-flight song handover. Driven by the wall clock, unlike every other transition here:
+     * those derive their progress from absolute playback time so a seek stays stable, but that
+     * clock belongs to the outgoing track and says nothing about when this swap started.
+     */
+    private songSwap: {
+        /** Cleared once committed; the rest of the sweep is the uncover. */
+        pending: TemperaSongContext | null;
+        /** The incoming scene, built under the block before the commit needs it. */
+        staged: { scene: TemperaSceneView; index: number } | null;
+        startedAt: number;
+        angle: number;
+        color: string;
+        settle: () => void;
+        /** Drops the abort listener, so a long skip session cannot pile them up on one signal. */
+        detachAbort: () => void;
+    } | null = null;
 
     private constructor(
         private readonly pixi: PixiModule,
@@ -231,6 +278,11 @@ export class TemperaPixiRuntime {
         this.lastWidth = width;
         this.lastHeight = height;
         this.app.renderer.resize(width, height);
+        // Staged against the old viewport, so its layout no longer fits.
+        if (this.songSwap?.staged) {
+            this.destroyScene(this.songSwap.staged.scene);
+            this.songSwap.staged = null;
+        }
         this.clearScenes();
         this.drawCredits(width, height);
         this.drawOverlay(width, height);
@@ -352,20 +404,39 @@ export class TemperaPixiRuntime {
         scene.container.destroy({ children: true });
     }
 
+    /**
+     * Builds one paragraph scene. This is the expensive call in the whole runtime: it runs the
+     * layout fit loop over every grapheme and then creates a `pixi.Text` per glyph, plus its
+     * shadow and echo copies. Nothing here should ever run more than once per frame.
+     */
+    private buildScene(song: TemperaSongContext, index: number) {
+        return buildTemperaScene(this.pixi, {
+            programSeed: song.program.seed,
+            host: this.options.host,
+            theme: song.theme,
+            tuning: this.options.tuning,
+            lyricsFontScale: this.options.lyricsFontScale,
+            staticMode: this.options.staticMode,
+            coverColors: song.coverColors,
+            imageTextures: this.imageTextures,
+        }, song.program.paragraphs[index]);
+    }
+
+    /** The live song as a context, for building scenes against what is currently on screen. */
+    private get liveSong(): TemperaSongContext {
+        return {
+            seed: this.options.songSeed,
+            program: this.options.program,
+            theme: this.options.theme,
+            coverColors: this.options.coverColors ?? [],
+        };
+    }
+
     private ensureScene(index: number) {
         if (index < 0 || index >= this.options.program.paragraphs.length) return null;
         const cached = this.sceneCache.get(index);
         if (cached) return cached;
-        const scene = buildTemperaScene(this.pixi, {
-            programSeed: this.options.program.seed,
-            host: this.options.host,
-            theme: this.options.theme,
-            tuning: this.options.tuning,
-            lyricsFontScale: this.options.lyricsFontScale,
-            staticMode: this.options.staticMode,
-            coverColors: this.options.coverColors ?? [],
-            imageTextures: this.imageTextures,
-        }, this.options.program.paragraphs[index]);
+        const scene = this.buildScene(this.liveSong, index);
         this.sceneCache.set(index, scene);
         this.sceneContainer.addChild(scene.container);
         return scene;
@@ -510,15 +581,42 @@ export class TemperaPixiRuntime {
     }
 
     private renderFrame = () => {
-        if (this.destroyed || this.options.program.paragraphs.length === 0) return;
+        if (this.destroyed) return;
         const time = this.options.currentTime.get();
+        // Advanced before the paragraph lookup so a commit lands on this frame's scene selection
+        // instead of leaving one frame of the outgoing program on the incoming one.
+        const swapFrame = this.advanceSongSwap();
+        if (this.options.program.paragraphs.length === 0) {
+            // No scene to draw, but a handover still owns the frame - a song with lyrics can hand
+            // over to one with none, and the block has to finish sweeping either way.
+            if (swapFrame) {
+                this.drawWipe(
+                    swapFrame.travel,
+                    swapFrame.angle,
+                    this.lastWidth,
+                    this.lastHeight,
+                    swapFrame.color,
+                );
+            }
+            return;
+        }
         const paragraphIndex = findTemperaParagraphIndexAtTime(this.options.program, time);
         if (paragraphIndex !== this.activeParagraphIndex) {
             this.activeParagraphIndex = paragraphIndex;
-            this.ensureScene(paragraphIndex - 1);
             this.ensureScene(paragraphIndex);
-            this.ensureScene(paragraphIndex + 1);
             this.pruneScenes(paragraphIndex);
+        } else if (!this.songSwap) {
+            // Neighbours are pre-rolls for a boundary that is still ahead, so at most one is built
+            // per frame rather than piling three onto the frame that just changed paragraph.
+            // Three scenes at once was the visible hitch at a paragraph cut - and at a song
+            // handover, where the commit had just emptied the cache.
+            const next = paragraphIndex + 1;
+            const previous = paragraphIndex - 1;
+            if (next < this.options.program.paragraphs.length && !this.sceneCache.has(next)) {
+                this.ensureScene(next);
+            } else if (previous >= 0 && !this.sceneCache.has(previous)) {
+                this.ensureScene(previous);
+            }
         }
         const width = Math.max(this.options.host.clientWidth, 320);
         const height = Math.max(this.options.host.clientHeight, 240);
@@ -650,7 +748,13 @@ export class TemperaPixiRuntime {
             }
         });
 
-        if (!wipeDrawn) this.drawWipe(0, 0, width, height, '#000000');
+        // A song handover owns the block outright: the paragraph wipe it would otherwise draw
+        // belongs to whichever program is momentarily underneath, and must not interrupt the cut.
+        if (swapFrame) {
+            this.drawWipe(swapFrame.travel, swapFrame.angle, width, height, swapFrame.color);
+        } else if (!wipeDrawn) {
+            this.drawWipe(0, 0, width, height, '#000000');
+        }
         this.creditsContainer.visible = creditsFrame.active && hasCredits;
         this.creditsContainer.alpha = creditsFrame.posterAlpha;
         // The card is never a still frame: shapes keep drifting under the fixed title, so the
@@ -673,6 +777,130 @@ export class TemperaPixiRuntime {
     }
 
     /**
+     * Hands the renderer a new track without rebuilding it. The argument is exactly the one that
+     * `setTuning` makes for tuning changes: a rebuild re-initialises WebGL, re-decodes every
+     * placed image and re-measures every line, and it does it with the canvas out of the DOM, so
+     * the frame goes empty for the whole async build. Here only the scene layer changes, under
+     * the block wipe that already exists for paragraph cuts.
+     *
+     * Resolves when the block has swept back off.
+     */
+    swapSong(next: TemperaSongContext, signal?: AbortSignal): Promise<void> {
+        if (this.destroyed) return Promise.resolve();
+        // Nothing is on screen to protect: no scene has been sized yet, or the outgoing program
+        // had no paragraphs at all. Covering an empty frame would only add a flash. And a swap
+        // that is not a track change gets no cut at all - see TemperaSongContext.seed.
+        const isSongChange = next.seed !== this.options.songSeed;
+        if (
+            !isSongChange
+            || this.songSwap
+            || this.lastWidth === 0
+            || this.options.program.paragraphs.length === 0
+            || signal?.aborted
+        ) {
+            this.commitSongContext(next);
+            return Promise.resolve();
+        }
+
+        const scene = this.sceneCache.get(this.activeParagraphIndex);
+        return new Promise<void>(resolve => {
+            const onAbort = () => this.settleSongSwap();
+            this.songSwap = {
+                pending: next,
+                staged: null,
+                startedAt: performance.now(),
+                // Travel along the composition's own flow, so the cut continues the direction the
+                // outgoing shot was already moving in.
+                angle: scene?.paragraph.shots[0]?.flowAngle ?? 0,
+                color: scene?.palette.tone3 ?? this.options.theme.primaryColor,
+                settle: resolve,
+                detachAbort: () => signal?.removeEventListener('abort', onAbort),
+            };
+            signal?.addEventListener('abort', onAbort, { once: true });
+            // The ticker is stopped while paused, so the block would freeze mid-cover. Run it for
+            // the length of the sweep and hand the pause back at the end.
+            if (this.options.paused) this.app.start();
+        });
+    }
+
+    /** The swap itself, at the instant the block covers the frame. Mirrors `setTuning`'s rebuild branch. */
+    private commitSongContext(next: TemperaSongContext, staged?: { scene: TemperaSceneView; index: number } | null) {
+        this.options.songSeed = next.seed;
+        this.options.program = next.program;
+        this.options.theme = next.theme;
+        this.options.coverColors = next.coverColors;
+        // clearScenes only walks the cache, and a staged scene is deliberately not in it yet, so
+        // it survives the teardown of the song it is replacing.
+        this.clearScenes();
+        if (staged) {
+            staged.scene.container.visible = true;
+            this.sceneCache.set(staged.index, staged.scene);
+            // Adopted as the active paragraph so the frame that commits builds nothing at all.
+            this.activeParagraphIndex = staged.index;
+        }
+        // Before the first resize pass there is nothing sized to redraw; the install pass
+        // will draw both against real dimensions.
+        if (this.lastWidth > 0 && this.lastHeight > 0) {
+            this.drawOverlay(this.lastWidth, this.lastHeight);
+            this.drawCredits(this.lastWidth, this.lastHeight);
+        }
+    }
+
+    /** Finishes an in-flight handover immediately, committing whatever it was still holding. */
+    private settleSongSwap() {
+        const swap = this.songSwap;
+        if (!swap) return;
+        this.songSwap = null;
+        swap.detachAbort();
+        if (this.destroyed) {
+            // Never adopted, so nothing else will ever free it.
+            if (swap.staged) this.destroyScene(swap.staged.scene);
+        } else {
+            if (swap.pending) this.commitSongContext(swap.pending, swap.staged);
+            else if (swap.staged) this.destroyScene(swap.staged.scene);
+            if (this.options.paused) this.app.stop();
+        }
+        swap.settle();
+    }
+
+    /**
+     * Advances the wall-clock sweep by one frame and returns what the block should look like,
+     * or null when no handover is running.
+     */
+    private advanceSongSwap(): { travel: number; angle: number; color: string } | null {
+        const swap = this.songSwap;
+        if (!swap) return null;
+        const travel = ((performance.now() - swap.startedAt) / TEMPERA_SONG_SWAP_MS) * 2;
+        if (swap.pending && !swap.staged && travel >= TEMPERA_SWAP_STAGE_TRAVEL) {
+            // Built here, not at the commit: this is one scene's worth of layout and glyph
+            // rasterisation, and the frame it costs is spent with the block most of the way
+            // across rather than on the frame the listener is looking at the new song on.
+            const index = findTemperaParagraphIndexAtTime(
+                swap.pending.program,
+                this.options.currentTime.get(),
+            );
+            if (index >= 0 && index < swap.pending.program.paragraphs.length) {
+                const scene = this.buildScene(swap.pending, index);
+                scene.container.visible = false;
+                this.sceneContainer.addChild(scene.container);
+                swap.staged = { scene, index };
+            }
+        }
+        if (swap.pending && travel >= 1) {
+            // `drawWipe` covers the frame exactly at travel 1, which is the only moment the scene
+            // underneath may change without the change being visible.
+            this.commitSongContext(swap.pending, swap.staged);
+            swap.pending = null;
+            swap.staged = null;
+        }
+        if (travel >= 2) {
+            this.settleSongSwap();
+            return null;
+        }
+        return { travel, angle: swap.angle, color: swap.color };
+    }
+
+    /**
      * Applies a tuning change in place. Rebuilding the renderer for one is ruinous: sliders
      * fire continuously while dragged, and a rebuild re-initialises WebGL, re-decodes every
      * placed image and re-measures every line. Only settings that change what a scene *is*
@@ -690,6 +918,11 @@ export class TemperaPixiRuntime {
             this.app.renderer.resolution = tuning.textureResolution;
         }
         if (requiresSceneRebuild(previous, tuning)) {
+            // Staged against the old tuning, so it can no longer be adopted.
+            if (this.songSwap?.staged) {
+                this.destroyScene(this.songSwap.staged.scene);
+                this.songSwap.staged = null;
+            }
             this.clearScenes();
             // Before the first resize pass there is nothing sized to redraw; the install pass
             // will draw both against real dimensions.
@@ -719,6 +952,9 @@ export class TemperaPixiRuntime {
     destroy() {
         if (this.destroyed) return;
         this.destroyed = true;
+        // Release whoever is awaiting the handover before tearing the app down, otherwise that
+        // promise never settles and the caller's drain loop stays parked on it.
+        this.settleSongSwap();
         this.resizeObserver?.disconnect();
         this.resizeObserver = null;
         this.app.stop();

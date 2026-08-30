@@ -6,11 +6,17 @@ import type { Line } from '../../../types';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import type { VisualizerSharedProps } from '../definition';
+import { useVisualizerPixiHost } from '../pixiRuntimeHost';
 import { useVisualizerRuntime } from '../runtime';
+import { useVisualizerSongCommit } from '../songHandover';
 import { useModVisualizerModulation } from '@/mods/visualizerModulation';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
-import type { SonnetPixiRuntime, SonnetSongMetadata } from './createSonnetPixiRuntime';
+import type {
+    SonnetPixiRuntime,
+    SonnetSongContext,
+    SonnetSongMetadata,
+} from './createSonnetPixiRuntime';
 import { compileSonnetProgram } from './sonnetProgram';
 
 // src/components/visualizer/sonnet/VisualizerSonnet.tsx
@@ -50,7 +56,6 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
     // runtime hot-swaps them via setModulation so the Pixi context is never rebuilt.
     const modulation = useModVisualizerModulation('sonnet');
     const hostRef = useRef<HTMLDivElement>(null);
-    const runtimeRef = useRef<SonnetPixiRuntime | null>(null);
     const pausedRef = useRef(paused);
     pausedRef.current = paused;
     const latestSongMetadataRef = useRef<SonnetSongMetadata>({
@@ -64,37 +69,18 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
         album: songAlbum,
     };
     const [runtimeFailed, setRuntimeFailed] = useState(false);
-    const [isInstrumental, setIsInstrumental] = useState(false);
-    const lyricsSig = lines.length === 0 ? '' : `${lines.length}|${lines[0]?.fullText ?? ''}`;
-    const seedRef = useRef(seed);
 
-    useEffect(() => {
-        if (lyricsSig !== '') {
-            setIsInstrumental(false);
-            seedRef.current = seed;
-            return undefined;
-        }
-        if (seed !== seedRef.current) {
-            setIsInstrumental(false);
-            seedRef.current = seed;
-        }
-
-        let raf = 0;
-        let sawReset = false;
-        const startWall = performance.now();
-        const watch = () => {
-            const t = currentTime.get();
-            const capped = performance.now() - startWall >= 3000;
-            if (!sawReset && t < 1) sawReset = true;
-            if ((sawReset && t >= 2) || capped) {
-                setIsInstrumental(true);
-                return;
-            }
-            raf = requestAnimationFrame(watch);
-        };
-        raf = requestAnimationFrame(watch);
-        return () => cancelAnimationFrame(raf);
-    }, [seed, lyricsSig, currentTime]);
+    // The song actually on screen. It lags the props across a switch so the scene is never
+    // rebuilt against lyrics that have not arrived yet - see songHandover.ts.
+    const committedSong = useVisualizerSongCommit({
+        seed,
+        lines,
+        currentTime,
+        readyGraceMs: 3000,
+    });
+    const committedSeed = committedSong.seed;
+    const committedLines = committedSong.lines;
+    const isInstrumental = committedSong.isInstrumental;
 
     const virtualLines = useMemo(() => {
         if (!isInstrumental) return EMPTY_SONNET_LINES;
@@ -112,10 +98,12 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
         return generated;
     }, [isInstrumental]);
 
-    const programLines = showText ? (lines.length > 0 ? lines : virtualLines) : EMPTY_SONNET_LINES;
+    const programLines = showText
+        ? (committedLines.length > 0 ? committedLines : virtualLines)
+        : EMPTY_SONNET_LINES;
     const program = useMemo(
-        () => compileSonnetProgram(programLines, seed),
-        [programLines, seed],
+        () => compileSonnetProgram(programLines, committedSeed),
+        [programLines, committedSeed],
     );
     const { activeLine, recentCompletedLine, nextLines } = useVisualizerRuntime({
         currentTime,
@@ -124,72 +112,50 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
         getLineEndTime: getLineRenderEndTime,
     });
 
-    useEffect(() => {
-        const host = hostRef.current;
-        if (!host) return undefined;
-        let disposed = false;
-        let createdRuntime: SonnetPixiRuntime | null = null;
-        const abortController = new AbortController();
-        setRuntimeFailed(false);
-        void import('./createSonnetPixiRuntime')
-            .then(({ SonnetPixiRuntime }) => {
-                const metadata = latestSongMetadataRef.current;
-                return SonnetPixiRuntime.create({
-                    host,
-                    program,
-                    theme,
-                    tuning: sonnetTuning,
-                    currentTime,
-                    audioPower,
-                    audioBands,
-                    lyricsFontScale,
-                    staticMode,
-                    transparentBackground,
-                    paused: pausedRef.current,
-                    songTitle: metadata.title,
-                    songArtist: metadata.artist,
-                    songAlbum: metadata.album,
-                    signal: abortController.signal,
-                    modulation,
-                });
-            })
-            .then(runtime => {
-                if (disposed) {
-                    runtime.destroy();
-                    return;
-                }
-                createdRuntime = runtime;
-                runtimeRef.current = runtime;
-                runtime.setSongMetadata(latestSongMetadataRef.current);
-                // The pause state may have changed while Pixi was importing or initializing.
-                runtime.setPaused(pausedRef.current);
-            })
-            .catch(error => {
-                if (error instanceof DOMException && error.name === 'AbortError') return;
-                console.error('[Sonnet] Pixi runtime initialization failed', error);
-                if (!disposed) setRuntimeFailed(true);
+    // Song-scoped inputs, kept as one object so a track change is a single identity change.
+    const songContext = useMemo<SonnetSongContext>(
+        () => ({ seed: committedSeed, program, theme }),
+        [committedSeed, program, theme],
+    );
+
+    const runtimeRef = useVisualizerPixiHost<SonnetPixiRuntime, SonnetSongContext>({
+        hostRef,
+        label: 'Sonnet',
+        // Only inputs that genuinely need a new WebGL context. The song is handed to the live
+        // runtime instead - see SonnetPixiRuntime.swapSong.
+        rebuildKey: [currentTime, lyricsFontScale, sonnetTuning, staticMode, transparentBackground],
+        song: songContext,
+        create: async (host, song, signal) => {
+            const { SonnetPixiRuntime } = await import('./createSonnetPixiRuntime');
+            const metadata = latestSongMetadataRef.current;
+            const runtime = await SonnetPixiRuntime.create({
+                host,
+                songSeed: song.seed,
+                program: song.program,
+                theme: song.theme,
+                tuning: sonnetTuning,
+                currentTime,
+                audioPower,
+                audioBands,
+                lyricsFontScale,
+                staticMode,
+                transparentBackground,
+                paused: pausedRef.current,
+                songTitle: metadata.title,
+                songArtist: metadata.artist,
+                songAlbum: metadata.album,
+                signal,
+                modulation,
             });
-        return () => {
-            disposed = true;
-            abortController.abort();
-            if (createdRuntime) {
-                createdRuntime.destroy();
-                if (runtimeRef.current === createdRuntime) runtimeRef.current = null;
-            } else if (runtimeRef.current) {
-                runtimeRef.current.destroy();
-                runtimeRef.current = null;
-            }
-            host.replaceChildren();
-        };
-    }, [
-        currentTime,
-        lyricsFontScale,
-        program,
-        sonnetTuning,
-        staticMode,
-        theme,
-        transparentBackground,
-    ]);
+            runtime.setSongMetadata(latestSongMetadataRef.current);
+            // The pause state may have changed while Pixi was importing or initializing.
+            runtime.setPaused(pausedRef.current);
+            return runtime;
+        },
+        swap: (runtime, song, signal) => runtime.swapSong(song, signal),
+        destroy: runtime => runtime.destroy(),
+        onFailedChange: setRuntimeFailed,
+    });
 
     useEffect(() => {
         runtimeRef.current?.setSongMetadata(latestSongMetadataRef.current);

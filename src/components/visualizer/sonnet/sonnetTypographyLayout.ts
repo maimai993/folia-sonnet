@@ -83,13 +83,34 @@ const verticalText = (segment: SonnetSemanticSegment) => (
         .join('\n')
 );
 
+/**
+ * Measurement is memoised across every caller. `fontSpec` names the weight, size and family, so
+ * a key is fully self-describing and two entries with the same key can never disagree. Without
+ * it every scene re-measured the same graphemes from scratch through pretext - per character,
+ * per shot, per paragraph - which is the bulk of what a scene build costs.
+ */
+const MEASURE_CACHE_LIMIT = 20000;
+const measureCache = new Map<string, number>();
+
 export const measureText = (text: string, fontSpec: string, fontSize: number) => {
+    const key = `${fontSpec}|${fontSize}|${text}`;
+    const cached = measureCache.get(key);
+    if (cached !== undefined) return cached;
+    let width: number;
     try {
         const layout = layoutWithLines(prepareWithSegments(text || ' ', fontSpec), 99999, fontSize * 1.2);
-        return layout.lines[0]?.width ?? text.length * fontSize * 0.6;
+        width = layout.lines[0]?.width ?? text.length * fontSize * 0.6;
     } catch {
-        return text.length * fontSize * 0.6;
+        width = text.length * fontSize * 0.6;
     }
+    // Plain FIFO eviction: entries are equally cheap to recompute, so the policy only has to
+    // bound memory, not predict reuse.
+    if (measureCache.size >= MEASURE_CACHE_LIMIT) {
+        const oldest = measureCache.keys().next();
+        if (!oldest.done) measureCache.delete(oldest.value);
+    }
+    measureCache.set(key, width);
+    return width;
 };
 
 export const resolveSonnetTypographyLayout = ({
