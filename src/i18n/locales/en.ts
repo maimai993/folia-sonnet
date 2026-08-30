@@ -1877,6 +1877,33 @@ export default {
         "title": "Smoother Desktop Overlays and Exports",
         "description": "A tray preset enables locked, transparent, always-on-top mode in one step, while video export handles high-DPI displays, multiple monitors, and resolution cropping more reliably."
       }
+    },
+    "v0_7_1": {
+      "intro": "Welcome to 0.7.1, the Pleiades Update—a major release spanning playback, extensions, desktop integration, and visuals.",
+      "pleiadesAutomix": {
+        "title": "Folia Automix Smart Transitions",
+        "description": "Folia analyzes beats, tempo, key, loudness, and song sections to choose beat cuts, bass swaps, tail rides, or blends. Desktop users can download optional models for precise beat grids, stem handoffs, and Performance mode."
+      },
+      "modsPlatform": {
+        "title": "Forge-style Mods (Experimental)",
+        "description": "Desktop users can drop zip packages into the Mods panel and manage mod commands, visualizers, and exports with dependency, permission, and content-change checks. Mods are disabled by default and run with full app privileges, so only enable trusted sources."
+      },
+      "windowsWallpaper": {
+        "title": "Windows Desktop Wallpaper Mode",
+        "description": "Folia can now sit beneath desktop icons on Windows as a persistent lyrics wallpaper, with tray and command-palette controls, mouse forwarding, and automatic failure recovery. Keyboard input is unavailable in this mode."
+      },
+      "sleepTimer": {
+        "title": "Restart-safe Sleep Timer",
+        "description": "Set hours and minutes from the command palette, enter a minute count directly, or use --on and --off. The countdown survives restarts; expiry quits the desktop app and pauses playback on the Web."
+      },
+      "nowPlayingCard": {
+        "title": "Now Playing Card and Next-up Preview",
+        "description": "A clickable card on the lyrics page can be timed, persistent, hidden, or shown on Home. It previews the next track before automatic changes and moves Automix progress onto the card border."
+      },
+      "seamlessHandover": {
+        "title": "More Cohesive Track Handoffs",
+        "description": "Remote Control now follows the audible Automix/Crossfade handoff, adds loop-mode switching and hover previews for neighboring tracks, while Sonnet and Tempera gain smooth song-change transitions."
+      }
     }
   },
   "export": {

@@ -1,4 +1,4 @@
-import { Command, FileText, Monitor, Sparkles } from 'lucide-react';
+import { Blend, Boxes, Disc3, Radio, Timer, Wallpaper } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // src/components/modal/newFeaturesRelease.ts
@@ -17,11 +17,13 @@ type NewFeaturesRelease = {
 
 // Defines the current release's cards; their localized text lives under i18nKey in every locale.
 export const NEW_FEATURES_RELEASE: NewFeaturesRelease = {
-    i18nKey: 'releaseNotes.v0_7_0',
+    i18nKey: 'releaseNotes.v0_7_1',
     features: [
-        { id: 'temperaVisualExpansion', icon: Sparkles, daylightIconClassName: 'text-rose-600', darkIconClassName: 'text-rose-400' },
-        { id: 'commandPaletteWorkflows', icon: Command, daylightIconClassName: 'text-violet-600', darkIconClassName: 'text-violet-400' },
-        { id: 'awlrcLyrics', icon: FileText, daylightIconClassName: 'text-amber-600', darkIconClassName: 'text-amber-400' },
-        { id: 'desktopWindowTools', icon: Monitor, daylightIconClassName: 'text-emerald-600', darkIconClassName: 'text-emerald-400' },
+        { id: 'pleiadesAutomix', icon: Blend, daylightIconClassName: 'text-violet-600', darkIconClassName: 'text-violet-400' },
+        { id: 'modsPlatform', icon: Boxes, daylightIconClassName: 'text-cyan-600', darkIconClassName: 'text-cyan-400' },
+        { id: 'windowsWallpaper', icon: Wallpaper, daylightIconClassName: 'text-emerald-600', darkIconClassName: 'text-emerald-400' },
+        { id: 'sleepTimer', icon: Timer, daylightIconClassName: 'text-amber-600', darkIconClassName: 'text-amber-400' },
+        { id: 'nowPlayingCard', icon: Disc3, daylightIconClassName: 'text-rose-600', darkIconClassName: 'text-rose-400' },
+        { id: 'seamlessHandover', icon: Radio, daylightIconClassName: 'text-blue-600', darkIconClassName: 'text-blue-400' },
     ],
 };

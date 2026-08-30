@@ -1877,6 +1877,33 @@ export default {
         "title": "更顺手的桌面叠加与导出",
         "description": "托盘新增“锁定 + 透明 + 置顶”一键预设；视频导出改善高 DPI、多显示器和分辨率裁剪，减少黑边与窗口跳动。"
       }
+    },
+    "v0_7_1": {
+      "intro": "欢迎来到 0.7.1「Pleiades Update」：这是一次覆盖播放、扩展、桌面与视觉体验的大型更新。",
+      "pleiadesAutomix": {
+        "title": "Folia Automix 智能过渡",
+        "description": "根据节拍、速度、调性、响度和歌曲段落自动选择切拍、低频交接、尾奏承接或淡化；桌面端可按需下载模型，获得更精准的节拍对齐、音轨分离和表现模式。"
+      },
+      "modsPlatform": {
+        "title": "Forge 式模组系统（实验性）",
+        "description": "桌面端可从模组面板拖入 zip，管理模组命令、视觉器与导出能力，并校验依赖、权限和内容变更。模组默认关闭且拥有应用完整权限，请只启用可信来源。"
+      },
+      "windowsWallpaper": {
+        "title": "Windows 桌面壁纸模式",
+        "description": "Windows 现可将 Folia 沉入桌面图标下方，作为常驻歌词壁纸，并提供托盘与命令面板切换、鼠标转发和异常自动恢复；该模式下键盘不可用。"
+      },
+      "sleepTimer": {
+        "title": "可恢复的睡眠定时",
+        "description": "通过命令面板设置小时、分钟或直接输入分钟数，并用 --on / --off 快速开关。倒计时可跨重启恢复，到时桌面端退出应用，Web 端暂停播放。"
+      },
+      "nowPlayingCard": {
+        "title": "歌曲信息卡片与下一首预告",
+        "description": "歌词页左下角新增可点击的歌曲卡片，可设为限时、常驻或隐藏，也可在首页显示；自动切歌前会预告下一首，Automix 进度则沿卡片边框呈现。"
+      },
+      "seamlessHandover": {
+        "title": "更连贯的切歌体验",
+        "description": "Remote Control 现在同步 Automix/Crossfade 的实际交接时刻，支持循环模式切换和悬停预览前后歌曲；商籁与凝彩视觉器也加入平滑切歌过渡。"
+      }
     }
   },
   "export": {

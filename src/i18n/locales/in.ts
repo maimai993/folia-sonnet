@@ -1816,6 +1816,33 @@ export default {
         "title": "Overlay dan Ekspor Desktop yang Lebih Mulus",
         "description": "Preset tray mengaktifkan mode terkunci, transparan, dan selalu di atas sekaligus; ekspor video juga lebih andal pada layar DPI tinggi, banyak monitor, dan pemotongan resolusi."
       }
+    },
+    "v0_7_1": {
+      "intro": "Selamat datang di 0.7.1, Pleiades Update—rilis besar untuk pemutaran, ekstensi, integrasi desktop, dan visual.",
+      "pleiadesAutomix": {
+        "title": "Transisi Cerdas Folia Automix",
+        "description": "Folia menganalisis ketukan, tempo, nada dasar, kelantangan, dan bagian lagu untuk memilih beat cut, pertukaran bass, tail ride, atau blend. Pengguna desktop dapat mengunduh model opsional untuk beat grid yang presisi, perpindahan stem, dan mode Performance."
+      },
+      "modsPlatform": {
+        "title": "Sistem Mod Bergaya Forge (Eksperimental)",
+        "description": "Pengguna desktop dapat menjatuhkan paket zip ke panel Mod dan mengelola perintah, visualizer, serta ekspor mod dengan pemeriksaan dependensi, izin, dan perubahan konten. Mod dinonaktifkan secara default dan berjalan dengan hak penuh aplikasi, jadi aktifkan hanya sumber tepercaya."
+      },
+      "windowsWallpaper": {
+        "title": "Mode Wallpaper Desktop Windows",
+        "description": "Folia kini dapat berada di bawah ikon desktop Windows sebagai wallpaper lirik permanen, dengan kontrol tray dan palet perintah, penerusan tetikus, serta pemulihan kegagalan otomatis. Input papan ketik tidak tersedia dalam mode ini."
+      },
+      "sleepTimer": {
+        "title": "Timer Tidur yang Tahan Restart",
+        "description": "Atur jam dan menit dari palet perintah, masukkan jumlah menit secara langsung, atau gunakan --on dan --off. Hitung mundur tetap berjalan setelah restart; saat selesai aplikasi desktop keluar dan pemutaran Web dijeda."
+      },
+      "nowPlayingCard": {
+        "title": "Kartu Now Playing dan Pratinjau Berikutnya",
+        "description": "Kartu yang dapat diklik di halaman lirik bisa ditampilkan sementara, permanen, disembunyikan, atau ditampilkan di Beranda. Kartu ini menampilkan lagu berikutnya sebelum pergantian otomatis dan memindahkan progres Automix ke bingkai kartu."
+      },
+      "seamlessHandover": {
+        "title": "Perpindahan Lagu yang Lebih Menyatu",
+        "description": "Remote Control kini mengikuti waktu perpindahan Automix/Crossfade yang benar-benar terdengar, menambahkan penggantian mode pengulangan dan pratinjau hover lagu sekitar, sementara Sonnet dan Tempera mendapat transisi pergantian lagu yang mulus."
+      }
     }
   },
   "export": {
