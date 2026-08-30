@@ -9,6 +9,9 @@ import type { Line } from '../../types';
 // pops its words in afterwards. Everything below runs on a COMMITTED song that lags the real
 // one until the new one is ready.
 
+/** Stable identity, so committing "no words" never looks like a content change. */
+const EMPTY_COMMITTED_LINES: Line[] = [];
+
 /** 2 seconds of confirmed playback with still no lyrics reads as lyric-less, not still-loading. */
 export const DEFAULT_INSTRUMENTAL_COMMIT_SECONDS = 2;
 /** Wall-clock cap (ms) so the gate can never hang when playback time never advances. */
@@ -60,20 +63,28 @@ export const decideSongCommit = ({
     isCommittedInstrumental,
 }: SongCommitInput): SongCommitDecision => {
     if (seed === committedSeed) {
+        if (lyricsSignature === '') {
+            // Words going away is never news about this song: it is the parent standing between
+            // two tracks, and `seed` reaches the visualizer a render before the new lyrics do.
+            // Committing the empty set here is what used to flash the "waiting for music"
+            // placeholder over a song whose lyrics were already cached.
+            if (isCommittedInstrumental || committedSignature !== '') {
+                return { action: 'idle' };
+            }
+            return { action: 'watch' };
+        }
         // Same song, different words: a late load or a reprocess. Take it in place - holding
         // here would leave the mode rendering lyrics the player has already moved past.
         if (lyricsSignature !== committedSignature) {
             return { action: 'commit', isInstrumental: false };
         }
-        // Already settled, or it has words and never needed settling.
-        if (isCommittedInstrumental || lyricsSignature !== '') {
-            return { action: 'idle' };
-        }
-        return { action: 'watch' };
+        return { action: 'idle' };
     }
 
-    // A new song takes the stage the instant its lyrics land; until then the previous one stays.
-    if (lyricsSignature !== '') {
+    // A new song takes the stage once its words land, and they have to be *different* words:
+    // `seed` flips a render before `lines` does, so an identical signature is the outgoing
+    // song's lyrics still sitting in the prop, not the incoming song's.
+    if (lyricsSignature !== '' && lyricsSignature !== committedSignature) {
         return { action: 'commit', isInstrumental: false };
     }
     return { action: 'watch' };
@@ -165,7 +176,10 @@ export const useVisualizerSongCommit = ({
                 { instrumentalCommitSeconds, readyGraceMs },
             );
             if (settled) {
-                setCommitted({ seed, lines: linesRef.current, isInstrumental: true });
+                // Committed with no words by definition: whatever is in the prop at this instant
+                // can only be the outgoing song's, since a set of words for THIS one would have
+                // committed through the decision above long before the watch settled.
+                setCommitted({ seed, lines: EMPTY_COMMITTED_LINES, isInstrumental: true });
                 return;
             }
             raf = requestAnimationFrame(watch);

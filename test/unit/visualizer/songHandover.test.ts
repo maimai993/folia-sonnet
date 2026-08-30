@@ -78,6 +78,42 @@ describe('decideSongCommit', () => {
         })).toEqual({ action: 'idle' });
     });
 
+    it('ignores lyrics being cleared for the song already on screen', () => {
+        // `seed` reaches the visualizer a render before the new lyrics do, so the parent hands
+        // down an empty set in between. Committing it blanked the scene and flashed the
+        // "waiting for music" placeholder over a song whose lyrics were already cached.
+        expect(decideSongCommit({
+            seed: 'current',
+            committedSeed: 'current',
+            lyricsSignature: '',
+            committedSignature: '2|hello',
+            isCommittedInstrumental: false,
+        })).toEqual({ action: 'idle' });
+    });
+
+    it('keeps holding when a new song still carries the outgoing lyrics', () => {
+        // Same render sequence from the other side: the seed already names the incoming track
+        // while `lines` is still the outgoing one's.
+        expect(decideSongCommit({
+            seed: 'next',
+            committedSeed: 'current',
+            lyricsSignature: '2|hello',
+            committedSignature: '2|hello',
+            isCommittedInstrumental: false,
+        })).toEqual({ action: 'watch' });
+    });
+
+    it('walks a manual skip through hold, hold, commit', () => {
+        const held = { committedSeed: 'a', committedSignature: '2|hello', isCommittedInstrumental: false };
+        // 1. seed flipped, lines still the outgoing song's.
+        expect(decideSongCommit({ ...held, seed: 'b', lyricsSignature: '2|hello' })).toEqual({ action: 'watch' });
+        // 2. lines cleared.
+        expect(decideSongCommit({ ...held, seed: 'b', lyricsSignature: '' })).toEqual({ action: 'watch' });
+        // 3. the incoming song's own lyrics land.
+        expect(decideSongCommit({ ...held, seed: 'b', lyricsSignature: '4|world' }))
+            .toEqual({ action: 'commit', isInstrumental: false });
+    });
+
     it('takes a late lyric load for the song already on screen', () => {
         expect(decideSongCommit({
             seed: 'current',
