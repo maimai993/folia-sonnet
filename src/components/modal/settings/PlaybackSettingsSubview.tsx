@@ -9,6 +9,8 @@ import { CustomSelect } from '../../shared/CustomSelect';
 import { LYRIC_MATCH_SOURCES } from '../../../utils/lyrics/lyricMatchSources';
 import { getLyricProviderPreferenceLabel } from '../../../utils/lyrics/lyricSourceLabels';
 import TransitionSettingsSection from './TransitionSettingsSection';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 
 // src/components/modal/settings/PlaybackSettingsSubview.tsx
 // Playback behavior and output-device settings extracted from the global settings modal.
@@ -154,11 +156,8 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
 
     return (
         <div className="space-y-5">
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <PlayCircle size={14} />                    {t('options.queueSettings')}
-
-                </h3>
+            <SettingsAnchor anchorId="queueSettings" label={t('options.queueSettings')}>
+                <SettingsSectionHeading icon={PlayCircle} label={t('options.queueSettings')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -193,7 +192,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                         })}
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
             <TransitionSettingsSection
                 isDaylight={isDaylight}
@@ -201,10 +200,8 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                 theme={theme}
             />
 
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <AudioLines size={14} /> {t('options.replayGainSettings')}
-                </h3>
+            <SettingsAnchor anchorId="replayGainSettings" label={t('options.replayGainSettings')}>
+                <SettingsSectionHeading icon={AudioLines} label={t('options.replayGainSettings')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -232,12 +229,10 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                         ))}
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Settings2 size={14} /> {t('options.lyrics')}
-                </h3>
+            <SettingsAnchor anchorId="lyrics" label={t('options.lyrics')}>
+                <SettingsSectionHeading icon={Settings2} label={t('options.lyrics')} />
                 <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
                     <div className="p-4 flex items-center justify-between gap-4">
                         <div className="space-y-1">
@@ -358,12 +353,10 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                         </div>
                     </button>
                 </div>
-            </section>
+            </SettingsAnchor>
 
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Monitor size={14} /> {t('options.audioOutputSettings')}
-                </h3>
+            <SettingsAnchor anchorId="audioOutputSettings" label={t('options.audioOutputSettings')}>
+                <SettingsSectionHeading icon={Monitor} label={t('options.audioOutputSettings')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
@@ -426,7 +419,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                         </div>
                     )}
                 </div>
-            </section>
+            </SettingsAnchor>
         </div>
     );
 };

@@ -7,6 +7,8 @@ import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { COMMAND_PALETTE_COMMANDS } from '../../command-palette/commandRegistry';
 import { getCommandTitle } from '../../command-palette/commandText';
 import { CustomSelect } from '../../shared/CustomSelect';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 
 // src/components/modal/settings/PinnedCommandSettings.tsx
 // Configures the three registry-backed shortcuts shown below the command palette.
@@ -29,13 +31,8 @@ const PinnedCommandSettings: React.FC<PinnedCommandSettingsProps> = ({
     })));
 
     return (
-        <section>
-            <h3
-                className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider opacity-50"
-                style={{ color: 'var(--text-secondary)' }}
-            >
-                <Pin size={14} /> {t('options.pinnedCommands')}
-            </h3>
+        <SettingsAnchor anchorId="pinnedCommands" label={t('options.pinnedCommands')}>
+            <SettingsSectionHeading icon={Pin} label={t('options.pinnedCommands')} />
             <div className={`space-y-4 rounded-xl border p-4 ${settingsCardClass}`}>
                 <div className="space-y-1">
                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -79,7 +76,7 @@ const PinnedCommandSettings: React.FC<PinnedCommandSettingsProps> = ({
                     })}
                 </div>
             </div>
-        </section>
+        </SettingsAnchor>
     );
 };
 

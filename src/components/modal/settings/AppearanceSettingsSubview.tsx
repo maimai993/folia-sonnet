@@ -22,6 +22,8 @@ import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
 import { resolveWebObsTarget, selectWebObsSource } from '../../../utils/webObsTarget';
 import { buildVisualSettingsConfig, resolveObsCopyHintKey } from '../../../utils/visualSettingsConfig';
 import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../services/themePreferences';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -564,10 +566,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     return (
         <div className="space-y-6">
             {/* Section 1: Theme presets and edit options */}
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Palette size={14} /> {t('options.themePresets')}
-                </h3>
+            <SettingsAnchor anchorId="themePresets" label={t('options.themePresets')}>
+                <SettingsSectionHeading icon={Palette} label={t('options.themePresets')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -721,13 +721,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         </div>
                     )}
                 </div>
-            </section>
+            </SettingsAnchor>
 
             {/* Section 2: Lyrics Animation & Player View */}
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Monitor size={14} /> {t('options.lyricsRenderer')}
-                </h3>
+            <SettingsAnchor anchorId="lyricsRenderer" label={t('options.lyricsRenderer')}>
+                <SettingsSectionHeading icon={Monitor} label={t('options.lyricsRenderer')} />
                 <div className="space-y-3">
                     {store.enablePlayerPageNativeBlur && (
                         <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-500 dark:text-amber-400">
@@ -868,13 +866,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         </div>
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
             {/* Section 3: Grid card style */}
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <LayoutGrid size={14} /> {t('options.grid3dCardStyle')}
-                </h3>
+            <SettingsAnchor anchorId="grid3dCardStyle" label={t('options.grid3dCardStyle')}>
+                <SettingsSectionHeading icon={LayoutGrid} label={t('options.grid3dCardStyle')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -905,13 +901,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         </button>
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
             {/* Section 4: Configurations Import/Export (New feature) */}
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Settings2 size={14} /> {t('options.importExportTitle')}
-                </h3>
+            <SettingsAnchor anchorId="importExportTitle" label={t('options.importExportTitle')}>
+                <SettingsSectionHeading icon={Settings2} label={t('options.importExportTitle')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -1009,7 +1003,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         </button>
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
             <ImportConfirmDialog
                 isOpen={pendingImport !== null}

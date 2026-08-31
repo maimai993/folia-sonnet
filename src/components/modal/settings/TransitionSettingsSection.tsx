@@ -10,6 +10,8 @@ import { transitionCapabilities } from '../../../services/automix/stems';
 import { modelsPresent, subscribeModelAvailability } from '../../../services/automix/modelAvailability';
 import { announceTransition } from '../../../services/automix/transitionCue';
 import AutomixModelsSection from './AutomixModelsSection';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 
 // src/components/modal/settings/TransitionSettingsSection.tsx
 // The Folia transition block on the playback options page: the master switch, the choice between
@@ -137,10 +139,8 @@ const TransitionSettingsSection: React.FC<TransitionSettingsSectionProps> = ({
             : null;
 
     return (
-        <section>
-            <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                <Blend size={14} /> {t('options.transitionSettings')}
-            </h3>
+        <SettingsAnchor anchorId="transitionSettings" label={t('options.transitionSettings')}>
+            <SettingsSectionHeading icon={Blend} label={t('options.transitionSettings')} />
             <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
                 <div className="p-4 flex items-start justify-between gap-4">
                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -364,7 +364,7 @@ const TransitionSettingsSection: React.FC<TransitionSettingsSectionProps> = ({
                     {capabilities.desktop && <AutomixModelsSection isDaylight={isDaylight} />}
                 </div>
             </div>
-        </section>
+        </SettingsAnchor>
     );
 };
 

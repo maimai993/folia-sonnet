@@ -7,6 +7,8 @@ import type { Theme, VisualizerFrameRate } from '../../../types';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../utils/frameRateLimiter';
 import ThemedDialog from '../../shared/ThemedDialog';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 
 // src/components/modal/settings/LabSettingsModal.tsx
 // Experimental settings subview kept outside SettingsModal to avoid another giant inline panel.
@@ -175,14 +177,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         <>
             <div className={embedded ? "space-y-4" : "flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6 relative z-10"}>
             <div className={embedded ? "space-y-4" : "space-y-4"}>
-                <div className="pt-1">
-                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        {t('options.labPerformanceSection')}
-                    </div>
-                    <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                        {t('options.labPerformanceSectionDesc')}
-                    </div>
-                </div>
+                <SettingsAnchor anchorId="labPerformance" label={t('options.labPerformanceSection')} className="space-y-4">
+                    <SettingsSectionHeading icon={Cpu} label={t('options.labPerformanceSection')} />
                 <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
                                     <div className="space-y-1">
                                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -259,14 +255,10 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     </div>
                                 </div>
 
-                                <div className="border-t border-white/10 pt-5">
-                                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.labPlayerUiSection')}
-                                    </div>
-                                    <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.labPlayerUiSectionDesc')}
-                                    </div>
-                                </div>
+                </SettingsAnchor>
+
+                <SettingsAnchor anchorId="labPlayerUi" label={t('options.labPlayerUiSection')} className="space-y-4">
+                    <SettingsSectionHeading icon={Settings2} label={t('options.labPlayerUiSection')} divider />
 
                                 <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                                     <div className="space-y-1">
@@ -354,14 +346,10 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     {renderToggle(alwaysShowTrackSwitchButtons, () => onToggleAlwaysShowTrackSwitchButtons(!alwaysShowTrackSwitchButtons))}
                                 </div>
 
-                                <div className="border-t border-white/10 pt-5">
-                                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.labWindowAndToolsSection')}
-                                    </div>
-                                    <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.labWindowAndToolsSectionDesc')}
-                                    </div>
-                                </div>
+                </SettingsAnchor>
+
+                <SettingsAnchor anchorId="labWindowAndTools" label={t('options.labWindowAndToolsSection')} className="space-y-4">
+                    <SettingsSectionHeading icon={Boxes} label={t('options.labWindowAndToolsSection')} divider />
 
                                 <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
                                     <div className="space-y-1">
@@ -446,6 +434,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                         {renderToggle(voiceInputPause.enabled, voiceInputPause.onToggle)}
                                     </div>
                                 )}
+                </SettingsAnchor>
             </div>
             </div>
             <ThemedDialog
