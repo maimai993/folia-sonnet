@@ -3470,7 +3470,6 @@ export default function App() {
         openSongCardPanel,
         stageTrackPillOpenPlayerLabel: t('ui.stageTrackPillOpenPlayer'),
         stageTrackPillOpenSongCardLabel: t('ui.stageTrackPillOpenSongCard'),
-        automixTransitionAnimation: transitionAnimation && transitionMode === 'automix',
     }), [
         activePlaybackContext,
         audioSrc,
@@ -3494,8 +3493,6 @@ export default function App() {
         stageIsNextUp,
         stageTrackPillOnScreen,
         openSongCardPanel,
-        transitionAnimation,
-        transitionMode,
         handleSearchResultAddToQueue,
         handleSearchResultAlbumOpen,
         handleSearchResultArtistOpen,
@@ -4038,25 +4035,16 @@ export default function App() {
             <AppOverlays model={appOverlaysModel} />
 
             {/* Not in the overlays model: it takes no state from this file and no click from anyone.
-                Mounted whenever the animation is switched on, so the lazy animejs chunk loads only
-                when it is wanted; the fallback is empty because it draws nothing until a cue arrives
-                anyway.
+                Mounted whenever its own switch is on, so the lazy animejs chunk loads only when it is
+                wanted; the fallback is empty because it draws nothing until a cue arrives anyway.
 
-                Stands down while the now playing card is on screen - there the blend is drawn on the
-                card's own border instead, and two pictures of the same transition is one too many -
-                but stands down by hiding, not by unmounting. A cue is announced and not replayed, and
-                which of the two renderers is up can change mid-blend (navigating between home and the
-                lyrics page, or the card's own setting), so unmounting this one meant the other side of
-                that handoff had nothing to draw for the rest of the transition. Staying subscribed
-                covers the card-goes-away direction; the card seeds itself from
-                `getActiveTransitionCue` for the other one. */}
+                Its own switch, not shared with the card's border. It used to hide itself wherever the
+                card was up, which on the lyrics page - the one people watch - meant the ring was never
+                seen again after the card shipped. Two pictures of one blend is now something the
+                listener asks for rather than something this file rules out. */}
             {transitionAnimation && transitionMode === 'automix' && (
                 <Suspense fallback={null}>
-                    <AutomixTransitionAnimation
-                        theme={theme}
-                        isDaylight={isDaylight}
-                        suppressed={Boolean(appOverlaysModel.nowPlayingToast?.transitionBorder)}
-                    />
+                    <AutomixTransitionAnimation theme={theme} isDaylight={isDaylight} />
                 </Suspense>
             )}
 
