@@ -1,6 +1,7 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
 import { ChevronLeft, Disc, Download, Play, Plus, Loader2, Heart, ListPlus, Pencil, Search, X, RefreshCw, Trash2, Star, Tags } from 'lucide-react';
+import GridPanelToggleIndicator from './folia-grid/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
 import { SongResult, type LocalSong, type StatusMessage, Theme, type UnifiedSong } from '../types';
 import { getSongUnavailableLabel, isSongUnavailable } from '../services/onlineMusic/songAvailability';
@@ -2090,6 +2091,8 @@ export const GridView: React.FC<GridViewProps> = ({
     const infoCollection = collectionDetail ? { ...collection, ...collectionDetail } : collection;
     const coverUrl = infoCollection?.coverUrl || '';
     const infoPanelCoverUrl = infoCollection?.coverUrl || '';
+    // 只有 tracks 模式下的合集才有切入面板，没有面板时标题不做成可点控件
+    const hasCutInPanel = mode === 'tracks' && Boolean(collection);
     const albumArtists = Array.isArray(infoCollection?.artists) ? infoCollection.artists : [];
     const albumAlias = infoCollection?.aliases?.[0];
     const albumPublishedAt = infoCollection?.publishedAt;
@@ -2157,11 +2160,10 @@ export const GridView: React.FC<GridViewProps> = ({
             {/* Center Clickable Area */}
             <div
                 onClick={() => {
-                    if (mode === 'tracks' && collection) {
-                        setShowCutInPanel(!showCutInPanel);
-                    }
+                    if (!hasCutInPanel) return;
+                    setShowCutInPanel(!showCutInPanel);
                 }}
-                className="absolute left-1/2 top-5 -translate-x-1/2 z-[70] text-center flex flex-col items-center select-none cursor-pointer hover:scale-[1.01] active:scale-98 transition-all px-5 py-2 rounded-2xl backdrop-blur-md"
+                className={`group/grid-title absolute left-1/2 top-5 -translate-x-1/2 z-[70] text-center flex flex-col items-center select-none transition-all px-5 py-2 rounded-2xl backdrop-blur-md ${hasCutInPanel ? 'cursor-pointer hover:scale-[1.01] active:scale-98' : ''}`}
                 style={{
                     backgroundColor: 'color-mix(in srgb, var(--bg-color) 20%, transparent)',
                     color: 'var(--text-primary)',
@@ -2169,11 +2171,7 @@ export const GridView: React.FC<GridViewProps> = ({
             >
                 <h2 className="text-lg font-bold tracking-tight flex items-center gap-1.5 justify-center">
                     {infoCollection?.name || collection?.name || title}
-                    {mode === 'tracks' && collection && (
-                        <span className="text-[9px] bg-zinc-500/20 text-current px-1.5 py-0.5 rounded-full font-normal opacity-60">
-                            {t(showCutInPanel ? 'ui.close' : 'ui.info')}
-                        </span>
-                    )}
+                    {hasCutInPanel && <GridPanelToggleIndicator isOpen={showCutInPanel} />}
                 </h2>
                 {(infoCollection?.description || subtitle) && (
                     <p className="mt-0.5 max-w-[min(40rem,calc(100vw-8rem))] text-xs leading-relaxed opacity-50 line-clamp-2 whitespace-normal break-words">

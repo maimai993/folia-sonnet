@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
 import { Check, ChevronLeft, Disc, Eye, EyeOff, ListFilter, X } from 'lucide-react';
+import GridPanelToggleIndicator from './folia-grid/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
 import { Theme } from '../types';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
@@ -886,19 +887,15 @@ export const GridMap: React.FC<GridMapProps> = ({
                             setShowCutInPanel(true);
                         }
                     }}
-                    className="text-center flex flex-col items-center select-none pointer-events-auto cursor-pointer hover:scale-[1.01] active:scale-98 transition-all px-5 py-2 rounded-2xl backdrop-blur-md disabled:cursor-default disabled:hover:scale-100"
+                    className="group/grid-title text-center flex flex-col items-center select-none pointer-events-auto cursor-pointer hover:scale-[1.01] active:scale-98 transition-all px-5 py-2 rounded-2xl backdrop-blur-md disabled:cursor-default disabled:hover:scale-100"
                     style={{
                         backgroundColor: 'color-mix(in srgb, var(--bg-color) 20%, transparent)',
                         color: 'var(--text-primary)',
                     }}
                 >
-                    <h2 className="text-lg font-bold tracking-tight">
+                    <h2 className="flex items-center justify-center gap-1.5 text-lg font-bold tracking-tight">
                         {title}
-                        {hasCutInPanel && (
-                            <span className="ml-1.5 rounded-full bg-zinc-500/20 px-1.5 py-0.5 text-[9px] font-normal opacity-60">
-                                {t(showCutInPanel ? 'ui.close' : 'ui.info')}
-                            </span>
-                        )}
+                        {hasCutInPanel && <GridPanelToggleIndicator isOpen={showCutInPanel} />}
                     </h2>
                     {subtitle && <p className="text-xs opacity-50 mt-0.5">{subtitle}</p>}
                 </button>

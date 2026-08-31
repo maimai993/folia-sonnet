@@ -161,3 +161,56 @@ html[data-click-through='active'] body .click-through-interactive * {
     box-shadow: 0 0 6px 0 var(--transition-glow-color);
   }
 }
+
+/* Grid 顶部标题的面板开关：用户第一次进入 grid 视图时，让开关自己呼吸几下并把
+   "展开"文案短暂推出来，把"标题可以点开左侧面板"这件事主动说一次。
+   两段动画都有固定的结束时间，跑完自动还原成 hover 控制的静止态，不需要计时器。 */
+@keyframes grid-panel-toggle-hint {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+
+.grid-panel-toggle-hint {
+  animation: grid-panel-toggle-hint 1.4s ease-in-out 3;
+}
+
+@keyframes grid-panel-toggle-hint-label {
+
+  0%,
+  100% {
+    max-width: 0;
+    opacity: 0;
+  }
+
+  12%,
+  76% {
+    max-width: 5rem;
+    opacity: 1;
+  }
+}
+
+.grid-panel-toggle-hint-label {
+  animation: grid-panel-toggle-hint-label 4.2s ease-in-out 1;
+}
+
+/* 关掉动画的用户改为静态展示文案，仍然拿得到这条提示。 */
+@media (prefers-reduced-motion: reduce) {
+  .grid-panel-toggle-hint {
+    animation: none;
+  }
+
+  .grid-panel-toggle-hint-label {
+    animation: none;
+    max-width: 5rem;
+    opacity: 1;
+  }
+}
