@@ -7,7 +7,7 @@ const Store = require('electron-store').default || require('electron-store');
 const crypto = require('crypto');
 const { createStageApi } = require('./stageApi.cjs');
 const { createModSystem } = require('./modSystem/modSystem.cjs');
-const { registerModProtocolSchemes } = require('./modSystem/modProtocol.cjs');
+const { MOD_PROTOCOL_PRIVILEGED_SCHEME } = require('./modSystem/modProtocol.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
 const wallpaperWatchdogModule = require('./wallpaperWatchdog.cjs');
 const windowsWallpaperModule = require('./windowsWallpaperController.cjs');
@@ -34,19 +34,23 @@ const linuxGraphicsMode =
     ? 'system'
     : (process.env.FOLIA_LINUX_GRAPHICS_MODE || (isAppImageRuntime ? 'swiftshader' : 'system'));
 
-protocol.registerSchemesAsPrivileged([{
-  scheme: 'folia-cover',
-  privileges: {
-    standard: true,
-    secure: true,
-    supportFetchAPI: true,
-    corsEnabled: true,
-    stream: true,
+// Every custom scheme must be registered in this one call: each
+// registerSchemesAsPrivileged call overwrites the fetch/secure/cors scheme
+// command-line switches, so a second call silently strips those privileges
+// from the schemes registered earlier.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'folia-cover',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
   },
-}]);
-
-// Must run before app ready, alongside the folia-cover scheme above.
-registerModProtocolSchemes(protocol);
+  MOD_PROTOCOL_PRIVILEGED_SCHEME,
+]);
 
 // Trusts only the known KuGou media CDN hostname mismatch while preserving TLS checks elsewhere.
 app.on('certificate-error', (event, _webContents, requestUrl, error, _certificate, callback) => {

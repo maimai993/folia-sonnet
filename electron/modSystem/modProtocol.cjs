@@ -18,20 +18,21 @@ const CONTENT_TYPES = {
 };
 
 /*
- * Must run before app ready. Kept in its own module so main.cjs only adds a
- * single line next to its existing registerSchemesAsPrivileged call.
+ * Scheme privileges for folia-mod, exported as data instead of a registration
+ * call. registerSchemesAsPrivileged overwrites the fetch/secure/cors scheme
+ * switches on every call, so main.cjs must register every custom scheme in one
+ * single call; a second call would silently strip the first scheme's
+ * privileges.
  */
-const registerModProtocolSchemes = (protocol) => {
-    protocol.registerSchemesAsPrivileged([{
-        scheme: SCHEME,
-        privileges: {
-            standard: true,
-            secure: true,
-            supportFetchAPI: true,
-            corsEnabled: true,
-            stream: true,
-        },
-    }]);
+const MOD_PROTOCOL_PRIVILEGED_SCHEME = {
+    scheme: SCHEME,
+    privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+        stream: true,
+    },
 };
 
 const decodePathSegment = (segment) => {
@@ -91,4 +92,4 @@ const attachModProtocolHandler = (protocol, resolveModDirectory) => {
     });
 };
 
-module.exports = { SCHEME, registerModProtocolSchemes, attachModProtocolHandler };
+module.exports = { SCHEME, MOD_PROTOCOL_PRIVILEGED_SCHEME, attachModProtocolHandler };
