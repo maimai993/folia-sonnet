@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Boxes, Check, ChevronLeft, ChevronRight, ChevronsLeftRight, Cpu, GamepadDirectional, Mic, Monitor, Moon, PlayCircle, RotateCcw, Settings2 } from 'lucide-react';
+import { Boxes, Check, ChevronLeft, ChevronsLeftRight, Cpu, GamepadDirectional, Mic, Monitor, Moon, PlayCircle, RotateCcw, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme, VisualizerFrameRate } from '../../../types';
@@ -14,7 +14,6 @@ import ThemedDialog from '../../shared/ThemedDialog';
 type LabSettingsModalProps = {
     isOpen: boolean;
     onClose: () => void;
-    onOpenLyricFilterSettings: () => void;
     theme?: Theme;
     voiceInputPause?: {
         enabled: boolean;
@@ -36,7 +35,6 @@ const getFrameRateLabel = (frameRate: VisualizerFrameRate) => `${frameRate} FPS`
 const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     isOpen,
     onClose,
-    onOpenLyricFilterSettings,
     theme,
     voiceInputPause,
     embedded,
@@ -433,24 +431,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                         {renderToggle(enablePlayerPageNativeBlur, handleNativeBlurToggle)}
                                     </div>
                                 )}
-
-                                <button
-                                    type="button"
-                                    onClick={onOpenLyricFilterSettings}
-                                    className={`w-full p-4 rounded-xl border transition-colors hover:bg-white/8 text-left ${settingsCardInteractiveClass}`}
-                                >
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div className="space-y-1">
-                                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                {t('options.lyricFilterRegex')}
-                                            </div>
-                                            <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                                {t('options.lyricFilterRegexDesc')}
-                                            </div>
-                                        </div>
-                                        <ChevronRight size={18} className="shrink-0 opacity-60" style={{ color: 'var(--text-primary)' }} />
-                                    </div>
-                                </button>
 
                                 {voiceInputPause?.supported && (
                                     <div className={`flex items-center justify-between p-4 rounded-xl border transition-colors hover:bg-white/8 ${settingsCardInteractiveClass}`} onClick={voiceInputPause.onToggle}>

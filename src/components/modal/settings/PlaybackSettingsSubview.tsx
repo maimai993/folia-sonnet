@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AudioLines, ChevronRight, Monitor, PlayCircle, RefreshCw, Settings2, Timer } from 'lucide-react';
+import { AudioLines, ChevronRight, ListFilter, Monitor, PlayCircle, RefreshCw, Settings2, Timer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { LocalLyricsPriority, QueueAddBehavior, ReplayGainMode, Theme } from '../../../types';
@@ -21,6 +21,7 @@ type PlaybackSettingsSubviewProps = {
     isDaylight: boolean;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
     onOpenGlobalLyricOffsetSettings: () => void;
+    onOpenLyricFilterSettings: () => void;
     replayGainMode: ReplayGainMode;
     onReplayGainModeChange: (mode: ReplayGainMode) => void;
     settingsCardClass: string;
@@ -32,6 +33,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
     isDaylight,
     onAudioOutputDeviceChange,
     onOpenGlobalLyricOffsetSettings,
+    onOpenLyricFilterSettings,
     replayGainMode,
     onReplayGainModeChange,
     settingsCardClass,
@@ -334,6 +336,25 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                                 </span>
                                 <ChevronRight size={18} className="opacity-60" style={{ color: 'var(--text-primary)' }} />
                             </div>
+                        </div>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onOpenLyricFilterSettings}
+                        className="w-full p-4 border-t text-left transition-colors hover:bg-white/8"
+                        style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.06))' }}
+                    >
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                    <ListFilter size={14} />
+                                    {t('options.lyricFilterRegex')}
+                                </div>
+                                <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.lyricFilterRegexDesc')}
+                                </div>
+                            </div>
+                            <ChevronRight size={18} className="shrink-0 opacity-60" style={{ color: 'var(--text-primary)' }} />
                         </div>
                     </button>
                 </div>

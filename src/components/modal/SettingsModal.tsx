@@ -390,9 +390,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             initialSubview === 'storage' ||
             initialSubview === 'desktop' ||
             initialSubview === 'lab' ||
-            initialSubview === 'globalLyricOffset'
+            initialSubview === 'globalLyricOffset' ||
+            initialSubview === 'lyricFilter'
         ) {
-            setActiveSettingsSection(initialSubview === 'globalLyricOffset' ? 'playback' : initialSubview);
+            // 这两个是播放页歌词区里的二级面板，关掉后应该落回它们的入口所在分区。
+            const isPlaybackSubview = initialSubview === 'globalLyricOffset' || initialSubview === 'lyricFilter';
+            setActiveSettingsSection(isPlaybackSubview ? 'playback' : initialSubview);
         } else {
             setActiveSettingsSection(prev => prev || 'appearance');
         }
@@ -1626,6 +1629,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 isDaylight={isDaylight}
                                                 onAudioOutputDeviceChange={onAudioOutputDeviceChange}
                                                 onOpenGlobalLyricOffsetSettings={() => setShowGlobalLyricOffset(true)}
+                                                onOpenLyricFilterSettings={() => setShowLyricFilterSettings(true)}
                                                 replayGainMode={replayGainMode}
                                                 onReplayGainModeChange={onReplayGainModeChange}
                                                 settingsCardClass={settingsCardClass}
@@ -1764,7 +1768,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                             <LabSettingsModal
                                                 isOpen={true}
                                                 onClose={() => { }}
-                                                onOpenLyricFilterSettings={() => setShowLyricFilterSettings(true)}
                                                 theme={theme}
                                                 embedded={true}
                                                 voiceInputPause={{

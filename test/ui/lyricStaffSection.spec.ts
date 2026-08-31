@@ -92,3 +92,15 @@ test.describe('lyric staff policy picker', () => {
         }
     });
 });
+
+test.describe('playback lyrics settings', () => {
+    test('lists the lyric filtering entry next to the global timing offset', async ({ page }) => {
+        await openProbe(page, 'playbackLyricsSettings');
+
+        const lyricsCard = page.locator('section', { hasText: 'Global Timing Offset' }).last();
+        const entries = lyricsCard.locator('button', { hasText: /Global Timing Offset|Lyric Filtering/ });
+
+        await expect(entries).toHaveCount(2);
+        await expect(entries.nth(1)).toContainText('Lyric Filtering');
+    });
+});
