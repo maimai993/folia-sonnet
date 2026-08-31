@@ -28,6 +28,7 @@ import { migrateMatchedLyricsCarrierRenderHints } from '../utils/lyrics/storageM
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { resolveExplicitFileTimedLyricFormat } from '../utils/lyrics/formatDetection';
+import { applyUploadedLocalLyrics } from '../utils/lyrics/localLyricsUpload';
 import { omni } from '../services/onlineMusic/omni';
 import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
@@ -150,6 +151,20 @@ export function useLibraryPlaybackController({
         const songId = (song as SongResult & { localRef?: { songId: string } } | null | undefined)?.localRef?.songId;
         return songId ? localSongs.find(localSong => localSong.id === songId) : undefined;
     }, [localSongs]);
+
+    // `localSongs` only refreshes on explicit reloads, so a panel action can otherwise spread a
+    // record that predates the last write and persist it back over the newer fields.
+    const resolveLatestLocalSongRecord = useCallback(async (song: SongResult | null | undefined): Promise<LocalSong | undefined> => {
+        const songId = (song as SongResult & { localRef?: { songId: string } } | null | undefined)?.localRef?.songId;
+        if (!songId) return undefined;
+        try {
+            const songs = await getLocalSongs();
+            return songs.find(localSong => localSong.id === songId) ?? resolveLocalSongRecord(song);
+        } catch (error) {
+            console.error('Failed to reload local song record:', error);
+            return resolveLocalSongRecord(song);
+        }
+    }, [resolveLocalSongRecord]);
 
     const revokeManagedCachedCoverObjectUrl = useCallback(() => {
         if (managedCachedCoverObjectUrlRef.current) {
@@ -912,34 +927,27 @@ export function useLibraryPlaybackController({
     const handleUpdateLocalLyrics = useCallback(async (content: string, isTranslation: boolean, fileName?: string) => {
         if (!isLocalPlaybackSong(currentSong)) return;
 
-        const localData = resolveLocalSongRecord(currentSong);
+        const localData = await resolveLatestLocalSongRecord(currentSong);
         if (!localData) return;
 
-        const updatedLocalSong = { ...localData };
-        if (isTranslation) {
-            updatedLocalSong.hasLocalTranslationLyrics = true;
-            updatedLocalSong.localTranslationLyricsContent = content;
-        } else {
-            updatedLocalSong.hasLocalLyrics = true;
-            updatedLocalSong.localLyricsContent = content;
-            updatedLocalSong.localLyricsFormat = resolveExplicitFileTimedLyricFormat(fileName);
-        }
+        const updatedLocalSong = applyUploadedLocalLyrics(localData, { content, isTranslation, fileName });
 
         try {
             const { saveLocalSong } = await import('../services/db');
             await saveLocalSong(updatedLocalSong);
+            await loadLocalSongs();
             void onPlayLocalSong(updatedLocalSong, localSongs, { unifiedQueue: playQueue });
             setStatusMsg({ type: 'success', text: isTranslation ? 'Translation lyrics updated' : 'Lyrics updated' });
         } catch (error) {
             console.error('Failed to save local lyrics', error);
             setStatusMsg({ type: 'error', text: 'Failed to save lyrics' });
         }
-    }, [currentSong, localSongs, onPlayLocalSong, playQueue, resolveLocalSongRecord, setStatusMsg]);
+    }, [currentSong, loadLocalSongs, localSongs, onPlayLocalSong, playQueue, resolveLatestLocalSongRecord, setStatusMsg]);
 
     const handleChangeLyricsSource = useCallback(async (source: 'local' | 'embedded' | 'online') => {
         if (!isLocalPlaybackSong(currentSong)) return;
 
-        const localData = resolveLocalSongRecord(currentSong);
+        const localData = await resolveLatestLocalSongRecord(currentSong);
         if (!localData) return;
 
         const updatedLocalSong = { ...localData, lyricsSource: source };
@@ -968,7 +976,7 @@ export function useLibraryPlaybackController({
             console.error('Failed to save lyrics source', error);
             setStatusMsg({ type: 'error', text: 'Failed to save lyrics source' });
         }
-    }, [currentSong, loadLocalSongs, resolveLocalSongRecord, setCurrentLineIndex, setCurrentSong, setLyrics, setStatusMsg]);
+    }, [currentSong, loadLocalSongs, resolveLatestLocalSongRecord, setCurrentLineIndex, setCurrentSong, setLyrics, setStatusMsg]);
 
     const handleManualMatchOnline = useCallback(() => {
         setIsPanelOpen(false);
