@@ -1939,6 +1939,25 @@ export default {
         "title": "更连贯的切歌体验",
         "description": "Remote Control 现在同步 Automix/Crossfade 的实际交接时刻，支持循环模式切换和悬停预览前后歌曲；商籁与凝彩视觉器也加入平滑切歌过渡。"
       }
+    },
+    "v0_7_2": {
+      "intro": "0.7.2 改进了歌词处理、设置导航、凝彩分镜和 Automix 动画，并修复多项桌面端与本地音乐问题。",
+      "smartStaffCredits": {
+        "title": "智能处理歌词制作人员信息",
+        "description": "歌词过滤现在可识别开头的制作人员信息，按前奏长度决定保留、重新排时或隐藏；也可选择始终显示、始终隐藏，并通过自定义规则实时预览。"
+      },
+      "sectionedSettings": {
+        "title": "更清晰的分区设置导航",
+        "description": "设置页新增分组侧栏、分区目录和移动端快捷标签，可快速定位当前区域；歌词过滤也已移到播放设置下。"
+      },
+      "temperaWholeLines": {
+        "title": "凝彩支持整句歌词分镜",
+        "description": "凝彩/Tempera 可让整句歌词留在同一个分镜中，长句会自动缩小字号；关闭后仍使用按短语拆分的大字构图。"
+      },
+      "independentAutomixVisuals": {
+        "title": "独立控制 Automix 动画",
+        "description": "屏幕圆环与歌曲卡片描边现在拥有独立开关和预览，并改进切页、切换设置和过渡中途挂载时的同步表现；短于 5 秒的过渡不会显示动画。"
+      }
     }
   },
   "export": {

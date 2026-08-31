@@ -1939,6 +1939,25 @@ export default {
         "title": "More Cohesive Track Handoffs",
         "description": "Remote Control now follows the audible Automix/Crossfade handoff, adds loop-mode switching and hover previews for neighboring tracks, while Sonnet and Tempera gain smooth song-change transitions."
       }
+    },
+    "v0_7_2": {
+      "intro": "Version 0.7.2 improves lyric handling, settings navigation, Tempera shots, and Automix visuals, with additional desktop and local-library fixes.",
+      "smartStaffCredits": {
+        "title": "Smarter Opening Credits in Lyrics",
+        "description": "Lyric filtering can now recognize opening staff credits and keep, retime, or hide them according to the intro length. You can also always show or hide them and preview custom matching rules live."
+      },
+      "sectionedSettings": {
+        "title": "Clearer Sectioned Settings",
+        "description": "Settings now has grouped navigation, an in-section table of contents, and quick chips on smaller screens. Lyric filtering has also moved under Playback settings."
+      },
+      "temperaWholeLines": {
+        "title": "Whole-line Shots for Tempera",
+        "description": "Tempera can keep a complete lyric line in one shot, automatically reducing the type size for long lines. Turn it off to retain the larger phrase-by-phrase compositions."
+      },
+      "independentAutomixVisuals": {
+        "title": "Independent Automix Visuals",
+        "description": "The center ring and Now Playing card border now have separate switches and previews, with better synchronization across navigation and mid-transition mounts. Transitions shorter than five seconds remain intentionally unanimated."
+      }
     }
   },
   "export": {

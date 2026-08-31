@@ -1875,6 +1875,25 @@ export default {
         "title": "Perpindahan Lagu yang Lebih Menyatu",
         "description": "Remote Control kini mengikuti waktu perpindahan Automix/Crossfade yang benar-benar terdengar, menambahkan penggantian mode pengulangan dan pratinjau hover lagu sekitar, sementara Sonnet dan Tempera mendapat transisi pergantian lagu yang mulus."
       }
+    },
+    "v0_7_2": {
+      "intro": "Versi 0.7.2 meningkatkan penanganan lirik, navigasi pengaturan, shot Tempera, dan visual Automix, disertai perbaikan desktop serta pustaka lokal.",
+      "smartStaffCredits": {
+        "title": "Kredit Pembuka Lirik yang Lebih Cerdas",
+        "description": "Filter lirik kini dapat mengenali kredit staf di bagian awal, lalu mempertahankan, mengatur ulang waktunya, atau menyembunyikannya sesuai durasi intro. Anda juga dapat selalu menampilkan atau menyembunyikannya serta melihat pratinjau aturan kustom."
+      },
+      "sectionedSettings": {
+        "title": "Pengaturan Berbagian yang Lebih Jelas",
+        "description": "Halaman Pengaturan kini memiliki navigasi berkelompok, daftar isi per bagian, dan chip cepat pada layar kecil. Filter lirik juga dipindahkan ke pengaturan Pemutaran."
+      },
+      "temperaWholeLines": {
+        "title": "Shot Satu Baris Penuh untuk Tempera",
+        "description": "Tempera dapat mempertahankan satu baris lirik lengkap dalam satu shot dan otomatis mengecilkan teks untuk baris panjang. Nonaktifkan opsi ini untuk tetap memakai komposisi frasa demi frasa dengan teks lebih besar."
+      },
+      "independentAutomixVisuals": {
+        "title": "Visual Automix yang Terpisah",
+        "description": "Cincin tengah dan bingkai kartu Now Playing kini memiliki sakelar serta pratinjau masing-masing, dengan sinkronisasi lebih baik saat berpindah halaman atau bergabung di tengah transisi. Transisi di bawah lima detik tetap tidak dianimasikan."
+      }
     }
   },
   "export": {
