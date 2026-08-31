@@ -616,6 +616,8 @@ export interface TemperaTuning {
   cameraIntensity: number;
   /** Per-glyph entrance motion strength, 0..2. */
   glyphMotion: number;
+  /** Keep each source lyric line in one shot instead of slicing it into half-phrases. */
+  wholeLineLyrics: boolean;
   /**
    * 逐字入场时序, 0..1. How much of the way to the shot's lyric end each glyph's entrance
    * stretches, past its 0.34s floor. 0 gives every glyph the same short window - percussive,
@@ -664,6 +666,7 @@ export interface TemperaTuning {
 export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
   cameraIntensity: 1,
   glyphMotion: 1,
+  wholeLineLyrics: false,
   glyphSettleStretch: 0.5,
   colorMode: 'duo',
   showBlocks: true,

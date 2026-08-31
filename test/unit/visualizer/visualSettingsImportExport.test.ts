@@ -366,6 +366,7 @@ describe('Visual Settings Import and Export', () => {
             ...DEFAULT_TEMPERA_TUNING,
             cameraIntensity: 1.4,
             glyphMotion: 0.6,
+            wholeLineLyrics: true,
             glyphSettleStretch: 0.85,
             colorMode: 'gradient' as const,
             showBlocks: false,

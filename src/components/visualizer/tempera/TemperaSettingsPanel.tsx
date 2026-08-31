@@ -217,6 +217,21 @@ const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 )}
             </TemperaSettingsSection>
 
+            <TemperaSettingsSection title={t('options.temperaLyricSection') || '歌词分镜'}>
+                <VisualizerPresetGroup
+                    label={t('options.temperaWholeLineLyrics') || '整句显示歌词'}
+                    value={temperaTuning.wholeLineLyrics}
+                    options={booleanOptions}
+                    onChange={wholeLineLyrics => onTemperaTuningChange?.({ wholeLineLyrics })}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
+                <p className="text-xs leading-relaxed opacity-55" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.temperaWholeLineLyricsHint')
+                        || '关闭时一句歌词按 2~4 词切成多个分镜，字号可以放得很大；开启后整句留在同一个分镜里，长句会自动缩小字号。'}
+                </p>
+            </TemperaSettingsSection>
+
             <TemperaSettingsSection title={t('options.temperaDisplaySection')}>
                 <div className="grid gap-4 sm:grid-cols-2">
                     {visibilityControls.map(control => (

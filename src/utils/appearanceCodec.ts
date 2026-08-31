@@ -403,6 +403,7 @@ const decompressSonnet = (o: any): any => ({
 const compressTempera = (t: any): any => ({
     ci: t.cameraIntensity,
     gm: t.glyphMotion,
+    wll: t.wholeLineLyrics,
     gss: t.glyphSettleStretch,
     cm: t.colorMode,
     sb: t.showBlocks,
@@ -424,6 +425,7 @@ const compressTempera = (t: any): any => ({
 const decompressTempera = (o: any): any => ({
     cameraIntensity: o.ci !== undefined ? o.ci : DEFAULT_TEMPERA_TUNING.cameraIntensity,
     glyphMotion: o.gm !== undefined ? o.gm : DEFAULT_TEMPERA_TUNING.glyphMotion,
+    wholeLineLyrics: o.wll !== undefined ? o.wll : DEFAULT_TEMPERA_TUNING.wholeLineLyrics,
     glyphSettleStretch: o.gss !== undefined ? o.gss : DEFAULT_TEMPERA_TUNING.glyphSettleStretch,
     colorMode: o.cm !== undefined ? o.cm : DEFAULT_TEMPERA_TUNING.colorMode,
     showBlocks: o.sb !== undefined ? o.sb : DEFAULT_TEMPERA_TUNING.showBlocks,

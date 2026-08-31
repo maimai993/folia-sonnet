@@ -701,43 +701,47 @@ const sanitizeTemperaLayerImages = (value: unknown): TemperaLayerImage[] => {
     }).slice(0, TEMPERA_MAX_LAYER_IMAGES);
 };
 
+export const resolveStoredTemperaTuning = (parsed: Partial<TemperaTuning>): TemperaTuning => ({
+    cameraIntensity: resolvePendoloNumber(parsed.cameraIntensity, DEFAULT_TEMPERA_TUNING.cameraIntensity, 0, 2),
+    glyphMotion: resolvePendoloNumber(parsed.glyphMotion, DEFAULT_TEMPERA_TUNING.glyphMotion, 0, 2),
+    wholeLineLyrics: typeof parsed.wholeLineLyrics === 'boolean'
+        ? parsed.wholeLineLyrics
+        : DEFAULT_TEMPERA_TUNING.wholeLineLyrics,
+    glyphSettleStretch: resolvePendoloNumber(parsed.glyphSettleStretch, DEFAULT_TEMPERA_TUNING.glyphSettleStretch, 0, 1),
+    colorMode: parsed.colorMode === 'mono' || parsed.colorMode === 'gradient' ? parsed.colorMode : DEFAULT_TEMPERA_TUNING.colorMode,
+    textInversion: typeof parsed.textInversion === 'boolean' ? parsed.textInversion : DEFAULT_TEMPERA_TUNING.textInversion,
+    layerImages: sanitizeTemperaLayerImages(parsed.layerImages),
+    layerImageDepth: parsed.layerImageDepth === 'front' ? 'front' : 'back',
+    layerImageFrequency: clampUnit(parsed.layerImageFrequency, DEFAULT_TEMPERA_TUNING.layerImageFrequency),
+    showBlocks: typeof parsed.showBlocks === 'boolean'
+        ? parsed.showBlocks
+        : DEFAULT_TEMPERA_TUNING.showBlocks,
+    showDecor: typeof parsed.showDecor === 'boolean'
+        ? parsed.showDecor
+        : DEFAULT_TEMPERA_TUNING.showDecor,
+    enableTransitions: typeof parsed.enableTransitions === 'boolean'
+        ? parsed.enableTransitions
+        : DEFAULT_TEMPERA_TUNING.enableTransitions,
+    textureResolution: resolvePendoloNumber(parsed.textureResolution, DEFAULT_TEMPERA_TUNING.textureResolution, 0.5, 4),
+    postProcessEnabled: typeof parsed.postProcessEnabled === 'boolean'
+        ? parsed.postProcessEnabled
+        : DEFAULT_TEMPERA_TUNING.postProcessEnabled,
+    postProcessTextureCompression: typeof parsed.postProcessTextureCompression === 'boolean'
+        ? parsed.postProcessTextureCompression
+        : DEFAULT_TEMPERA_TUNING.postProcessTextureCompression,
+    postProcessGrain: resolvePendoloNumber(parsed.postProcessGrain, DEFAULT_TEMPERA_TUNING.postProcessGrain, 0, 1),
+    postProcessContrast: resolvePendoloNumber(parsed.postProcessContrast, DEFAULT_TEMPERA_TUNING.postProcessContrast, 0, 1),
+    postProcessRgbShift: resolvePendoloNumber(parsed.postProcessRgbShift, DEFAULT_TEMPERA_TUNING.postProcessRgbShift, 0, 1),
+    postProcessVignette: resolvePendoloNumber(parsed.postProcessVignette, DEFAULT_TEMPERA_TUNING.postProcessVignette, 0, 2),
+    postProcessLensDistortion: resolvePendoloNumber(parsed.postProcessLensDistortion, DEFAULT_TEMPERA_TUNING.postProcessLensDistortion, 0, 2),
+});
+
 const readStoredTemperaTuning = (): TemperaTuning => {
     if (typeof window === 'undefined') return DEFAULT_TEMPERA_TUNING;
     const saved = localStorage.getItem('tempera_tuning');
     if (!saved) return DEFAULT_TEMPERA_TUNING;
     try {
-        const parsed = JSON.parse(saved) as Partial<TemperaTuning>;
-        return {
-            cameraIntensity: resolvePendoloNumber(parsed.cameraIntensity, DEFAULT_TEMPERA_TUNING.cameraIntensity, 0, 2),
-            glyphMotion: resolvePendoloNumber(parsed.glyphMotion, DEFAULT_TEMPERA_TUNING.glyphMotion, 0, 2),
-            glyphSettleStretch: resolvePendoloNumber(parsed.glyphSettleStretch, DEFAULT_TEMPERA_TUNING.glyphSettleStretch, 0, 1),
-            colorMode: parsed.colorMode === 'mono' || parsed.colorMode === 'gradient' ? parsed.colorMode : DEFAULT_TEMPERA_TUNING.colorMode,
-            textInversion: typeof parsed.textInversion === 'boolean' ? parsed.textInversion : DEFAULT_TEMPERA_TUNING.textInversion,
-            layerImages: sanitizeTemperaLayerImages(parsed.layerImages),
-            layerImageDepth: parsed.layerImageDepth === 'front' ? 'front' : 'back',
-            layerImageFrequency: clampUnit(parsed.layerImageFrequency, DEFAULT_TEMPERA_TUNING.layerImageFrequency),
-            showBlocks: typeof parsed.showBlocks === 'boolean'
-                ? parsed.showBlocks
-                : DEFAULT_TEMPERA_TUNING.showBlocks,
-            showDecor: typeof parsed.showDecor === 'boolean'
-                ? parsed.showDecor
-                : DEFAULT_TEMPERA_TUNING.showDecor,
-            enableTransitions: typeof parsed.enableTransitions === 'boolean'
-                ? parsed.enableTransitions
-                : DEFAULT_TEMPERA_TUNING.enableTransitions,
-            textureResolution: resolvePendoloNumber(parsed.textureResolution, DEFAULT_TEMPERA_TUNING.textureResolution, 0.5, 4),
-            postProcessEnabled: typeof parsed.postProcessEnabled === 'boolean'
-                ? parsed.postProcessEnabled
-                : DEFAULT_TEMPERA_TUNING.postProcessEnabled,
-            postProcessTextureCompression: typeof parsed.postProcessTextureCompression === 'boolean'
-                ? parsed.postProcessTextureCompression
-                : DEFAULT_TEMPERA_TUNING.postProcessTextureCompression,
-            postProcessGrain: resolvePendoloNumber(parsed.postProcessGrain, DEFAULT_TEMPERA_TUNING.postProcessGrain, 0, 1),
-            postProcessContrast: resolvePendoloNumber(parsed.postProcessContrast, DEFAULT_TEMPERA_TUNING.postProcessContrast, 0, 1),
-            postProcessRgbShift: resolvePendoloNumber(parsed.postProcessRgbShift, DEFAULT_TEMPERA_TUNING.postProcessRgbShift, 0, 1),
-            postProcessVignette: resolvePendoloNumber(parsed.postProcessVignette, DEFAULT_TEMPERA_TUNING.postProcessVignette, 0, 2),
-            postProcessLensDistortion: resolvePendoloNumber(parsed.postProcessLensDistortion, DEFAULT_TEMPERA_TUNING.postProcessLensDistortion, 0, 2),
-        };
+        return resolveStoredTemperaTuning(JSON.parse(saved) as Partial<TemperaTuning>);
     } catch {
         return DEFAULT_TEMPERA_TUNING;
     }
@@ -2763,6 +2767,9 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         const next: TemperaTuning = {
             cameraIntensity: resolvePendoloNumber(patch.cameraIntensity, prev.cameraIntensity, 0, 2),
             glyphMotion: resolvePendoloNumber(patch.glyphMotion, prev.glyphMotion, 0, 2),
+            wholeLineLyrics: typeof patch.wholeLineLyrics === 'boolean'
+                ? patch.wholeLineLyrics
+                : prev.wholeLineLyrics,
             glyphSettleStretch: resolvePendoloNumber(patch.glyphSettleStretch, prev.glyphSettleStretch, 0, 1),
             colorMode: patch.colorMode === 'duo' || patch.colorMode === 'mono' || patch.colorMode === 'gradient' ? patch.colorMode : prev.colorMode,
             textInversion: typeof patch.textInversion === 'boolean' ? patch.textInversion : prev.textInversion,

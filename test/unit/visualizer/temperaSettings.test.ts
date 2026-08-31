@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TEMPERA_LAYER_IMAGE, DEFAULT_TEMPERA_TUNING, TEMPERA_MAX_LAYER_IMAGES } from '@/types';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { resolveStoredTemperaTuning, useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { TemperaPixiRuntime } from '@/components/visualizer/tempera/createTemperaPixiRuntime';
 
 // test/unit/visualizer/temperaSettings.test.ts
@@ -110,5 +110,29 @@ describe('Tempera live texture resolution', () => {
         runtime.setTuning({ ...DEFAULT_TEMPERA_TUNING, textureResolution: 2.25 });
 
         expect(renderer.resolution).toBe(2.25);
+    });
+});
+
+describe('Tempera lyric splitting setting', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('defaults missing stored values to the existing split behavior', () => {
+        expect(resolveStoredTemperaTuning({}).wholeLineLyrics).toBe(false);
+    });
+
+    it('persists changes and returns to split behavior on reset', () => {
+        const storage = createLocalStorageMock();
+        vi.stubGlobal('localStorage', storage);
+        vi.stubGlobal('window', { localStorage: storage });
+        useSettingsUiStore.setState({ temperaTuning: { ...DEFAULT_TEMPERA_TUNING } });
+
+        useSettingsUiStore.getState().handleSetTemperaTuning({ wholeLineLyrics: true });
+        expect(useSettingsUiStore.getState().temperaTuning.wholeLineLyrics).toBe(true);
+        expect(JSON.parse(storage.getItem('tempera_tuning') ?? '{}').wholeLineLyrics).toBe(true);
+
+        useSettingsUiStore.getState().handleResetTemperaTuning();
+        expect(useSettingsUiStore.getState().temperaTuning.wholeLineLyrics).toBe(false);
     });
 });
