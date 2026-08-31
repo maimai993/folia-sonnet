@@ -28,7 +28,7 @@ type BuildSettingsDialogModelParams = {
     onToggleNavidrome?: (enabled: boolean) => void;
     currentSongTitle?: string | null;
     loadLyricFilterPreview: () => Promise<LyricData | null>;
-    onSaveLyricFilterPattern: (pattern: string) => Promise<void> | void;
+    onSaveLyricFilterPattern: SettingsDialogProps['onSaveLyricFilterPattern'];
     currentLyrics: LyricData | null;
     lyricCurrentTime: MotionValue<number>;
     stageStatus?: StageStatus | null;

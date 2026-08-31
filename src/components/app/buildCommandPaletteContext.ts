@@ -9,6 +9,7 @@ import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
 import type { TransitionMode } from '../../services/automix/transitionStrategy';
+import type { LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import type { PersonalFmSelection } from '../../services/onlineMusic/fmModes';
 import type { QueueBatchAction } from '../command-palette/queueQuery';
 
@@ -109,6 +110,9 @@ export type CommandPaletteContextDeps = {
     canOpenThemeQuickEditor: boolean;
     themeGenerationSource: ThemeGenerationSource;
     setThemeGenerationSource: (source: ThemeGenerationSource) => void;
+
+    lyricStaffPolicy: LyricStaffPolicy;
+    cycleLyricStaffPolicy: () => void;
 
     automixEnabled: boolean;
     transitionMode: TransitionMode;
@@ -216,6 +220,8 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         canOpenThemeQuickEditor: deps.canOpenThemeQuickEditor,
         themeGenerationSource: deps.themeGenerationSource,
         setThemeGenerationSource: deps.setThemeGenerationSource,
+        lyricStaffPolicy: deps.lyricStaffPolicy,
+        cycleLyricStaffPolicy: deps.cycleLyricStaffPolicy,
         automixEnabled: deps.automixEnabled,
         transitionMode: deps.transitionMode,
         transitionPerformance: deps.transitionPerformance,

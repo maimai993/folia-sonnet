@@ -1,6 +1,8 @@
 import type { Dispatch, SetStateAction, MutableRefObject } from 'react';
 import type { LyricData, SongResult } from '../../../types';
 import { applyLyricDisplayFilter } from '../../../utils/lyrics/filtering';
+import { applyLyricStaffPolicy } from '../../../utils/lyrics/staffCreditsPolicy';
+import type { LyricStaffPolicyOptions } from '../../../utils/lyrics/staffCreditsPolicy';
 import { ensureLyricDataRenderHints } from '../../../utils/lyrics/renderHints';
 import { applyDetectedChorusEffects, applyNeteaseChorusByTime } from '../../../utils/lyrics/chorusEffects';
 import type { NeteaseChorusRange } from '../../../utils/lyrics/chorusEffects';
@@ -30,10 +32,13 @@ const getStoredNeteaseLyrics = (song: SongResult | null): LyricData | null => {
 };
 
 // Creates the App-level lyric setter that applies filtering and render-hint normalization.
+// The staff-credit policy stays here rather than in the parser: it is a display decision that
+// depends on the finished timeline, and the parse/cache layer must not bake it in.
 export const createLyricsSetter = (
     setLyricsState: Dispatch<SetStateAction<LyricData | null>>,
     lyricFilterPattern: string,
     currentSongFullRef?: MutableRefObject<SongResult | null>,
+    staffOptions?: LyricStaffPolicyOptions,
 ) => {
     let lastSongId: number | string | null = null;
     let cachedNeteaseChorusRanges: NeteaseChorusRange[] | null = null;
@@ -47,7 +52,8 @@ export const createLyricsSetter = (
             cachedNeteaseChorusRanges = null;
         }
 
-        let processed = applyLyricDisplayFilter(nextLyrics, lyricFilterPattern);
+        // 通用过滤是用户的显式指令，先跑；staff 策略只处理它没删掉的开头块。
+        let processed = applyLyricStaffPolicy(applyLyricDisplayFilter(nextLyrics, lyricFilterPattern), staffOptions);
         if (processed) {
             const hasChorus = processed.lines.some(line => line.isChorus);
             if (hasChorus) {

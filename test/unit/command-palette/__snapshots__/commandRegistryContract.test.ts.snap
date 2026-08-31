@@ -61,6 +61,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-theme-park",
   "settings-global-lyric-offset",
   "settings-lyric-filter",
+  "lyric-staff-policy-cycle",
   "theme-generate-current",
   "theme-source-ai",
   "theme-source-cover",

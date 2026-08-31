@@ -209,6 +209,17 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createSettingsCommand('settings-global-lyric-offset', 'Global timing offset', 'Calibrate lyric timing against Bluetooth or device audio latency', ['global timing offset', 'lyric delay', 'audio latency', 'bluetooth delay', 'sync lyrics', '全局时间偏移', '歌词延迟', '音画同步', '蓝牙延迟', 'quanjushijianpianyi', 'geciyanchi', 'yinhuatongbu', 'lanyayanchi', 'qjsjpy', 'gcyc', 'yhtb', 'lyyc'], 'options', 'globalLyricOffset'),
     createSettingsCommand('settings-lyric-filter', 'Lyric filter', 'Open lyric filter settings', ['lyric filter', 'lyrics filter', '歌词过滤', '过滤', 'geciguolv', 'guolv', 'gcgl', 'gl'], 'options', 'lyricFilter'),
     {
+        id: 'lyric-staff-policy-cycle',
+        group: 'settings',
+        title: 'Opening credits handling',
+        description: 'Cycle how the credit block at the start of the lyrics is handled',
+        keywords: ['opening credits', 'staff credits', 'lyric credits', 'credits', '制作人员', '署名', '开头署名', '前奏署名', 'zhizuorenyuan', 'shuming', 'kaitoushuming', 'zzry', 'sm', 'ktsm'],
+        execute: (_input, context) => {
+            context.settings.cycleLyricStaffPolicy();
+            return true;
+        },
+    },
+    {
         id: 'theme-generate-current',
         isAvailable: context => (context ? context.settings.canGenerateAITheme && !context.settings.isGeneratingTheme : true),
         group: 'settings',

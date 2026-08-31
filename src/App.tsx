@@ -25,6 +25,7 @@ import { USER_GUIDE_AUTO_OPEN_VERSION } from './components/modal/userGuideConten
 import { buildAppDialogsModel } from './components/app/dialogs/buildAppDialogsModel';
 import { buildHomeModel } from './components/app/home/buildHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
+import { nextLyricStaffPolicy } from './utils/lyrics/staffCreditsPolicy';
 import { createLocalLibraryNavigation } from './components/app/navigation/createLocalLibraryNavigation';
 import { createPanelNavigation } from './components/app/navigation/createPanelNavigation';
 import { createOnlineGridViewCollection } from './components/app/home/gridViewCollectionAdapters';
@@ -410,6 +411,9 @@ export default function App() {
         subtitleFontFamily,
         subtitleFontFallbackFamilies,
         lyricFilterPattern,
+        lyricStaffPolicy,
+        lyricStaffMinDwellSeconds,
+        lyricStaffPattern,
         showOpenPanelCloseButton,
         alwaysShowPlayerBackButton,
         alwaysShowTrackSwitchButtons,
@@ -483,6 +487,9 @@ export default function App() {
         handleUploadLyricsCustomFont,
         handleSetAppLanguagePreference,
         handleSetLyricFilterPattern,
+        handleSetLyricStaffPolicy,
+        handleSetLyricStaffMinDwellSeconds,
+        handleSetLyricStaffPattern,
         handleToggleOpenPanelCloseButton,
         handleToggleAlwaysShowPlayerBackButton,
         handleToggleAlwaysShowTrackSwitchButtons,
@@ -545,9 +552,16 @@ export default function App() {
     });
 
     const setLyrics = useMemo(
-        () => createLyricsSetter(setLyricsState, lyricFilterPattern, currentSongFullRef),
-        [lyricFilterPattern],
+        () => createLyricsSetter(setLyricsState, lyricFilterPattern, currentSongFullRef, {
+            policy: lyricStaffPolicy,
+            minDwellSeconds: lyricStaffMinDwellSeconds,
+            pattern: lyricStaffPattern,
+        }),
+        [lyricFilterPattern, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffPattern],
     );
+    // 保存过滤设置后要用新设置重新铺一遍当前歌词，而此时闭包里的 setLyrics 还是旧的。
+    const setLyricsRef = useRef(setLyrics);
+    setLyricsRef.current = setLyrics;
     const lyricCurrentTime = useMotionValue(0);
 
     const handleLyricTimelineOffsetChange = useCallback((offsetMs: number) => {
@@ -1310,9 +1324,13 @@ export default function App() {
         t,
     });
     const handleSaveLyricFilterPattern = createLyricFilterPatternSaver({
+        currentPattern: lyricFilterPattern,
         handleSetLyricFilterPattern,
+        handleSetLyricStaffPolicy,
+        handleSetLyricStaffMinDwellSeconds,
+        handleSetLyricStaffPattern,
         loadCurrentSongLyricPreview,
-        setLyrics,
+        setLyrics: (nextLyrics) => setLyricsRef.current(nextLyrics),
         setCurrentLineIndex,
         setStatusMsg,
     });
@@ -2435,6 +2453,14 @@ export default function App() {
         canOpenThemeQuickEditor,
         themeGenerationSource,
         setThemeGenerationSource: handleThemeGenerationSourceChange,
+
+        lyricStaffPolicy,
+        cycleLyricStaffPolicy: () => handleSaveLyricFilterPattern({
+            pattern: lyricFilterPattern,
+            staffPolicy: nextLyricStaffPolicy(lyricStaffPolicy),
+            staffMinDwellSeconds: lyricStaffMinDwellSeconds,
+            staffPattern: lyricStaffPattern,
+        }),
 
         automixEnabled,
         transitionMode,

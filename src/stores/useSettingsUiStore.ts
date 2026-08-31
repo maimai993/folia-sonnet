@@ -5,6 +5,8 @@ import { DEFAULT_VISUALIZER_MODE, getVisualizerModeLabel, getVisualizerRegistryE
 import { DEFAULT_VISUALIZER_BACKGROUND_MODE, hasVisualizerBackgroundMode } from '../components/visualizer/backgrounds/registry';
 import { resolveDioramaMoteCircumference, resolveDioramaMoteRadial } from '../components/visualizer/diorama/dioramaMoteField';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
+import { getLyricStaffPatternError } from '../utils/lyrics/staffCredits';
+import { DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS, DEFAULT_LYRIC_STAFF_POLICY, LYRIC_STAFF_MIN_DWELL_RANGE, type LyricStaffPolicy } from '../utils/lyrics/staffCreditsPolicy';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
 import { buildStoredCappellaAvatar, clearCustomCappellaAvatar, isSupportedCappellaAvatarFile, saveCustomCappellaAvatar } from '../services/cappellaAvatarPack';
 import { clearUploadedLyricsFont, uploadAndRegisterLyricsFont } from '../services/customLyricsFont';
@@ -1328,6 +1330,28 @@ const readStoredLyricFilterPattern = (): string => {
     return localStorage.getItem('lyrics_filter_pattern')?.trim() || '';
 };
 
+const readStoredLyricStaffPolicy = (): LyricStaffPolicy => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_LYRIC_STAFF_POLICY;
+    }
+
+    const saved = localStorage.getItem('lyrics_staff_policy');
+    return saved === 'keep' || saved === 'hide' || saved === 'smart' ? saved : DEFAULT_LYRIC_STAFF_POLICY;
+};
+
+const readStoredLyricStaffMinDwellSeconds = (): number => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS;
+    }
+
+    const parsed = Number.parseFloat(localStorage.getItem('lyrics_staff_min_dwell') || '');
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS;
+    }
+
+    return Math.min(LYRIC_STAFF_MIN_DWELL_RANGE.max, Math.max(LYRIC_STAFF_MIN_DWELL_RANGE.min, parsed));
+};
+
 const readStoredLoopMode = (): 'off' | 'all' | 'one' => {
     if (typeof window === 'undefined') {
         return 'off';
@@ -1550,6 +1574,10 @@ export type SettingsUiState = {
     subtitleFontFamily: string | null;
     subtitleFontFallbackFamilies: string[];
     lyricFilterPattern: string;
+    // 开头制作人员信息的处理策略，与上面的通用逐行过滤是两套独立机制。
+    lyricStaffPolicy: LyricStaffPolicy;
+    lyricStaffMinDwellSeconds: number;
+    lyricStaffPattern: string;
     showOpenPanelCloseButton: boolean;
     enableNowPlayingStage: boolean;
     // PlayerCap lyrics source (third stage source) config. enablePlayerCapStage is Web-only (Electron uses stageStatus.source).
@@ -1717,6 +1745,9 @@ export type SettingsUiState = {
     handleSetSubtitleFontFallbackFamilies: (families: string[]) => void;
     handleSetAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void>;
     handleSetLyricFilterPattern: (pattern: string) => void;
+    handleSetLyricStaffPolicy: (policy: LyricStaffPolicy) => void;
+    handleSetLyricStaffMinDwellSeconds: (seconds: number) => void;
+    handleSetLyricStaffPattern: (pattern: string) => void;
     handleToggleOpenPanelCloseButton: (enable: boolean) => void;
     handleToggleNowPlayingStage: (enable: boolean) => void;
     // Web stage-source tri-state mutually-exclusive selection: null disables, else one of 'now-playing' or 'playercap'. Electron uses stageStatus.source.
@@ -1860,6 +1891,9 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     subtitleFontFamily: readStoredSubtitleFontFamily(),
     subtitleFontFallbackFamilies: readStoredFontFamilyStack(SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY),
     lyricFilterPattern: readStoredLyricFilterPattern(),
+    lyricStaffPolicy: readStoredLyricStaffPolicy(),
+    lyricStaffMinDwellSeconds: readStoredLyricStaffMinDwellSeconds(),
+    lyricStaffPattern: getStoredString('lyrics_staff_pattern', ''),
     showOpenPanelCloseButton: getStoredBoolean('show_open_panel_close_button', true),
     enableNowPlayingStage: getStoredBoolean('enable_now_playing_stage', false),
     enablePlayerCapStage: getStoredBoolean('enable_playercap_stage', false),
@@ -3145,6 +3179,42 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.removeItem('lyrics_filter_pattern');
         }
     },
+    handleSetLyricStaffPolicy: (policy) => {
+        set({ lyricStaffPolicy: policy });
+
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        localStorage.setItem('lyrics_staff_policy', policy);
+    },
+    handleSetLyricStaffMinDwellSeconds: (seconds) => {
+        const next = Number.isFinite(seconds)
+            ? Math.min(LYRIC_STAFF_MIN_DWELL_RANGE.max, Math.max(LYRIC_STAFF_MIN_DWELL_RANGE.min, seconds))
+            : DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS;
+
+        set({ lyricStaffMinDwellSeconds: next });
+
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        localStorage.setItem('lyrics_staff_min_dwell', String(next));
+    },
+    handleSetLyricStaffPattern: (pattern) => {
+        const next = pattern.trim();
+        set({ lyricStaffPattern: next });
+
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        if (next) {
+            localStorage.setItem('lyrics_staff_pattern', next);
+        } else {
+            localStorage.removeItem('lyrics_staff_pattern');
+        }
+    },
     handleToggleOpenPanelCloseButton: (enable) => {
         setStoredBoolean('show_open_panel_close_button', enable);
         set({ showOpenPanelCloseButton: enable });
@@ -3432,6 +3502,10 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
     lyricFilterPattern: state.lyricFilterPattern,
     lyricFilterPatternError: getLyricFilterError(state.lyricFilterPattern),
+    lyricStaffPolicy: state.lyricStaffPolicy,
+    lyricStaffMinDwellSeconds: state.lyricStaffMinDwellSeconds,
+    lyricStaffPattern: state.lyricStaffPattern,
+    lyricStaffPatternError: getLyricStaffPatternError(state.lyricStaffPattern),
     showOpenPanelCloseButton: state.showOpenPanelCloseButton,
     enableNowPlayingStage: state.enableNowPlayingStage,
     enablePlayerCapStage: state.enablePlayerCapStage,
@@ -3549,6 +3623,9 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetSubtitleFontFallbackFamilies: state.handleSetSubtitleFontFallbackFamilies,
     handleSetAppLanguagePreference: state.handleSetAppLanguagePreference,
     handleSetLyricFilterPattern: state.handleSetLyricFilterPattern,
+    handleSetLyricStaffPolicy: state.handleSetLyricStaffPolicy,
+    handleSetLyricStaffMinDwellSeconds: state.handleSetLyricStaffMinDwellSeconds,
+    handleSetLyricStaffPattern: state.handleSetLyricStaffPattern,
     handleToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,
     handleToggleNowPlayingStage: state.handleToggleNowPlayingStage,
     handleSetQueueAddBehavior: state.handleSetQueueAddBehavior,

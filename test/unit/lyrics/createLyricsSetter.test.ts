@@ -6,6 +6,28 @@ import type { MutableRefObject } from 'react';
 // test/unit/lyrics/createLyricsSetter.test.ts
 
 describe('createLyricsSetter', () => {
+    it('runs the user filter first and the staff policy on what survives', () => {
+        const setLyricsStateMock = vi.fn();
+        const setter = createLyricsSetter(setLyricsStateMock, '^赞助', undefined, {
+            policy: 'smart',
+            minDwellSeconds: 1.5,
+        });
+
+        const lyrics: LyricData = {
+            lines: [
+                { fullText: '赞助商：某某', startTime: 0, endTime: 0.2, words: [] },
+                { fullText: '作词 : A', startTime: 0.2, endTime: 0.4, words: [] },
+                { fullText: '作曲 : B', startTime: 0.4, endTime: 0.6, words: [] },
+                { fullText: '第一句歌词', startTime: 2, endTime: 4, words: [] },
+            ],
+        };
+
+        setter(lyrics);
+
+        const result = setLyricsStateMock.mock.calls[0][0] as LyricData;
+        expect(result.lines.map(line => line.fullText).filter(text => text !== '......')).toEqual(['第一句歌词']);
+    });
+
     it('applies text-based chorus detection if no chorus lines exist', () => {
         const setLyricsStateMock = vi.fn();
         const lyricFilterPattern = '';

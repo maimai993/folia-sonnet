@@ -11,6 +11,7 @@ import VisPlayground from '../visualizer/VisPlayground';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel } from '../visualizer/registry';
 import ThemePark from './ThemePark';
 import LyricFilterSettingsModal from './LyricFilterSettingsModal';
+import type { LyricFilterDraft } from './LyricFilterSettingsModal';
 import GlobalLyricOffsetModal from './settings/GlobalLyricOffsetModal';
 import AppearanceSettingsSubview from './settings/AppearanceSettingsSubview';
 import DesktopSettingsSubview from './settings/DesktopSettingsSubview';
@@ -65,7 +66,7 @@ interface SettingsModalProps {
     currentLyrics: LyricData | null;
     lyricCurrentTime: MotionValue<number>;
     currentSongTitle?: string | null;
-    onSaveLyricFilterPattern: (pattern: string) => Promise<void> | void;
+    onSaveLyricFilterPattern: (draft: LyricFilterDraft) => Promise<void> | void;
     stageStatus?: StageStatus | null;
     stageSource?: StageSource | null;
     onToggleStageMode?: (enabled: boolean) => Promise<void> | void;
@@ -224,6 +225,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         subtitleFontFamily,
         subtitleFontFallbackFamilies,
         lyricFilterPattern,
+        lyricStaffPolicy,
+        lyricStaffMinDwellSeconds,
+        lyricStaffPattern,
         showOpenPanelCloseButton,
         handleToggleCoverColorBg: onToggleCoverColorBg,
         handleToggleStaticMode: onToggleStaticMode,
@@ -2022,6 +2026,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 isDaylight={isDaylight}
                 currentSongTitle={currentSongTitle}
                 initialPattern={lyricFilterPattern}
+                initialStaffPolicy={lyricStaffPolicy}
+                initialStaffMinDwellSeconds={lyricStaffMinDwellSeconds}
+                initialStaffPattern={lyricStaffPattern}
                 loadPreviewLyrics={loadLyricFilterPreview}
                 onClose={() => closeSubviewOrModal(() => setShowLyricFilterSettings(false))}
                 onSave={onSaveLyricFilterPattern}
