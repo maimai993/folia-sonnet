@@ -5,10 +5,9 @@ import { omni } from '../services/onlineMusic/omni';
 import { PlayerState } from '../types';
 import type { ReplayGainMode, SongResult, StageLoopMode, StatusMessage } from '../types';
 import { getReplayGainModeLabel } from '../utils/appPlaybackHelpers';
+import { isMacPlatform as isMac } from '../utils/platform';
 
 // src/hooks/usePlaybackInteractionBridge.ts
-
-const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac');
 
 type PlayerEscapeAction = 'ignore' | 'allow-fullscreen-exit' | 'close-panel' | 'navigate-back';
 

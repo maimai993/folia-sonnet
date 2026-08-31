@@ -41,6 +41,7 @@ import type { LyricApiStatus } from '../../types/lyricApi';
 import type { SongResult } from '../../types';
 import type { ThemeCacheSongKey } from '../../services/themeCache';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
+import { isMacPlatform as isMac } from '../../utils/platform';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -612,7 +613,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         }
     };
 
-    const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac');
     const isWin = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('win');
 
 

@@ -4,6 +4,7 @@ import { isRecordableRecentCommand, readRecentCommandIds, recordRecentCommandId,
 import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch } from './types';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { resolvePinnedCommandSlots } from './pinnedCommandPreferences';
+import { isPrimaryModifierPressed, isSecondaryModifierPressed } from '../../utils/platform';
 
 // src/components/command-palette/useCommandPalette.ts
 // Manages palette state, keyboard opening, and selected autocomplete item.
@@ -301,14 +302,16 @@ export const useCommandPalette = ({
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             // Commands declare their own entry shortcut; the palette just dispatches them.
-            // Availability is honoured here too, or a hotkey would still reach a command the
-            // current state has withdrawn — the queue's ctrl+p during Personal FM, say.
+            // `ctrl` in a declaration means the platform's primary modifier, so the same entry is
+            // Ctrl+P on Windows/Linux and Cmd+P on macOS. Availability is honoured here too, or a
+            // hotkey would still reach a command the current state has withdrawn — the queue's
+            // ctrl+p during Personal FM, say.
             const hotkeyCommand = COMMAND_PALETTE_COMMANDS.find(command => (
                 command.openHotkey
                 && command.openHotkey.key.toLowerCase() === event.key.toLowerCase()
-                && Boolean(command.openHotkey.ctrl) === event.ctrlKey
+                && Boolean(command.openHotkey.ctrl) === isPrimaryModifierPressed(event)
                 && !event.altKey
-                && !event.metaKey
+                && !isSecondaryModifierPressed(event)
                 && isCommandPaletteCommandEnabled(command, context)
             ));
             if (hotkeyCommand) {

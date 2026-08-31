@@ -39,7 +39,8 @@ export type CommandPaletteCommand = {
     isAvailable?: (context?: CommandPaletteContext) => boolean;
     /** Kept out of match results, the all-commands list, and the pinned-command picker. */
     hidden?: boolean;
-    /** Global shortcut that opens the palette straight into this command. */
+    /** Global shortcut that opens the palette straight into this command. `ctrl` means the
+     *  platform's primary modifier — Ctrl on Windows/Linux, Cmd on macOS. */
     openHotkey?: { key: string; ctrl?: boolean };
     /** Vim-style key sequence that runs this command from execute mode. Omit for anything
      *  dangerous, irreversible, or needing confirmation. Must stay prefix-free registry-wide. */
