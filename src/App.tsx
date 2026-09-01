@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { useMotionValue, motion, useMotionValueEvent } from 'framer-motion';
+import { motion, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { loadCachedOrFetchCover } from './services/coverCache';
@@ -120,6 +120,7 @@ import { selectSleepTimerSnapshot, useSleepTimerStore } from './stores/useSleepT
 import { selectStageSettingsSnapshot, useStageSettingsStore } from './stores/useStageSettingsStore';
 import { selectAudioSettingsSnapshot, useAudioSettingsStore } from './stores/useAudioSettingsStore';
 import { selectSettingsModalSnapshot, useSettingsModalStore } from './stores/useSettingsModalStore';
+import { audioBands, audioPower, bass, currentTime, lowMid, lyricCurrentTime, mid, spectrum, treble, vocal } from './stores/motionSignals';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -273,10 +274,9 @@ export default function App() {
 
     // Player State
     const [playerState, setPlayerState] = useState<PlayerState>(PlayerState.IDLE);
-    const currentTime = useMotionValue(0);
     useEffect(() => {
         (window as any).__folia_current_time = currentTime;
-    }, [currentTime]);
+    }, []);
     const [duration, setDuration] = useState(0);
     const [currentLineIndex, setCurrentLineIndex] = useState(-1);
     const [isFmMode, setIsFmMode] = useState(false);
@@ -285,21 +285,6 @@ export default function App() {
     // Removed isDragging and sliderValue as they are handled by ProgressBar component
 
     // Audio Analysis State
-    const audioPower = useMotionValue(0);
-    const bass = useMotionValue(0);
-    const lowMid = useMotionValue(0);
-    const mid = useMotionValue(0);
-    const vocal = useMotionValue(0);
-    const treble = useMotionValue(0);
-    const spectrum = useMotionValue(new Uint8Array(0));
-    const audioBands = useMemo(() => ({
-        bass,
-        lowMid,
-        mid,
-        vocal,
-        treble,
-        spectrum,
-    }), [bass, lowMid, mid, spectrum, treble, vocal]);
 
     // Refs
     // Points at whichever automix deck is currently the one being listened to. Everything
@@ -601,7 +586,6 @@ export default function App() {
     // 保存过滤设置后要用新设置重新铺一遍当前歌词，而此时闭包里的 setLyrics 还是旧的。
     const setLyricsRef = useRef(setLyrics);
     setLyricsRef.current = setLyrics;
-    const lyricCurrentTime = useMotionValue(0);
 
     const handleLyricTimelineOffsetChange = useCallback((offsetMs: number) => {
         setLyricTimelineOffsetMs(offsetMs);
