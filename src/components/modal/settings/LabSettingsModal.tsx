@@ -4,7 +4,6 @@ import { Boxes, Check, ChevronLeft, ChevronsLeftRight, Cpu, GamepadDirectional, 
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme, VisualizerFrameRate } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../utils/frameRateLimiter';
 import ThemedDialog from '../../shared/ThemedDialog';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
@@ -49,11 +48,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     const { t } = useTranslation();
     const isMouseDownOnOverlayRef = useRef(false);
     const [isNativeBlurNoticeOpen, setIsNativeBlurNoticeOpen] = useState(false);
-    const {
-
-    } = useSettingsUiStore(useShallow(state => ({
-
-    })));
     const {
         onToggleHideTaskbarIcon,
         onToggleMinimizeToTray,

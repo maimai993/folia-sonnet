@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SONNET_TUNING } from '@/types';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
 
 // test/unit/visualizer/sonnetSettings.test.ts

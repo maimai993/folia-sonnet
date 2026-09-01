@@ -9,7 +9,6 @@ import {
     type UrlBackgroundItem,
 } from '../../../types';
 import { applyVisualizerTuningsToSettings } from '../../visualizer/tuningRegistry';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { ObsCopyCssButton } from '../../shared/ObsCopyCssButton';
 import { mergeUrlBackgroundList } from '../../../utils/urlBackground';
 import { compressConfig, decompressConfig, readSavedCustomTheme } from '../../../utils/appearanceCodec';
@@ -153,10 +152,6 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         });
     }, [aiTheme, customTheme]);
 
-    // Access ZUSTAND settings store directly for setters & configurations
-    const store = useSettingsUiStore(useShallow(state => ({
-
-    })));
     const storeThemeSettings = useThemeSettingsStore(useShallow(state => ({
         handleToggleFollowSystemTheme: state.setFollowSystemTheme,
         handleToggleCoverColorBg: state.handleToggleCoverColorBg,
@@ -340,7 +335,6 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         try {
             // Import accepts a bare shortcode/JSON or a full OBS URL (extracting its cfg param), so a look can be re-tuned from someone's link.
             const config = decompressConfig(extractCfgFromInput(importText));
-            const uiStore = useSettingsUiStore.getState();
   const uiStoreTypographySettings = useTypographySettingsStore.getState();
             const customFont = uiStoreTypographySettings.lyricsCustomFont;
             const plan = buildImportPlan({
@@ -489,7 +483,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             // Tunings. The bundle wins over the individual ones, which is why the plan never offers
             // both -- picking the bundle is picking every renderer at once.
             if (has('visualizerTunings') && config.visualizerTunings) {
-                applyVisualizerTuningsToSettings(store as unknown as Record<string, unknown>, config.visualizerTunings);
+                applyVisualizerTuningsToSettings(useVisualizerSettingsStore.getState() as unknown as Record<string, unknown>, config.visualizerTunings);
             }
             if (!config.visualizerTunings) {
                 if (has('classicTuning') && config.classicTuning) storeVisualizer.handleSetClassicTuning(config.classicTuning);

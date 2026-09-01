@@ -4,7 +4,7 @@ import type { HomeViewTab, LatentBackgroundTuning, LocalSong, LyricData, MonetBa
 import type { LocalLibraryDisplayCatalog } from '../../services/playbackAdapters';
 import type { SearchSource } from '../../stores/useSearchNavigationStore';
 import type { PanelTab } from '../UnifiedPanel';
-import type { SettingsModalInitialTab, SettingsSubviewId } from '../../stores/useSettingsUiStore';
+import { type SettingsModalInitialTab, type SettingsSubviewId } from '../../stores/useSettingsModalStore';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { ThemeGenerationSource } from '../../services/themePreferences';

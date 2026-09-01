@@ -10,8 +10,20 @@ import i18n from '../i18n/config';
 
 import { normalizePinnedCommandIds, readPinnedCommandIds, writePinnedCommandIds, type PinnedCommandIds } from '../components/command-palette/pinnedCommandPreferences';
 import { applyAppLanguagePreference, readStoredAppLanguagePreference, type AppLanguagePreference } from '../i18n/config';
-import { SettingsModalInitialTab, SettingsModalState, SettingsSubviewId, VisualizerSettingsSection } from './useSettingsUiStore';
 import { setStatusMessage } from './useStatusMessageStore';
+
+export type SettingsModalInitialTab = 'help' | 'options';
+
+export type SettingsSubviewId = 'appearance' | 'general' | 'playback' | 'integration' | 'storage' | 'desktop' | 'lab' | 'visualizer' | 'themePark' | 'lyricFilter' | 'globalLyricOffset';
+
+export type VisualizerSettingsSection = 'common' | 'background' | 'visualizer' | 'subtitle';
+
+export type SettingsModalState = {
+    isOpen: boolean;
+    initialTab: SettingsModalInitialTab;
+    initialSubview?: SettingsSubviewId | null;
+    initialVisualizerSection?: VisualizerSettingsSection | null;
+};
 
 const LAST_SEEN_GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';
 

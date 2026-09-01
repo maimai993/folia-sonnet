@@ -7,10 +7,6 @@ import { getMonetBackgroundImage } from '../services/monetBackgroundImage';
 import { getMonetPortraitImage } from '../services/monetPortraitImage';
 import { restoreUploadedLyricsFont } from '../services/customLyricsFont';
 import {
-    selectSettingsUiSnapshot,
-    useSettingsUiStore,
-} from '../stores/useSettingsUiStore';
-import {
     resolveStoredCappellaTuning,
     resolveStoredMonetBackgroundTuning,
     resolveStoredMonetTuning,
@@ -30,7 +26,6 @@ import { useDesktopSettingsStore } from '../stores/useDesktopSettingsStore';
 export { resolveStoredCappellaTuning, resolveStoredCustomLyricsFont, resolveStoredMonetBackgroundTuning, resolveVisualizerBackgroundMode };
 
 export function useAppPreferences() {
-    const preferences = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
     const followSystemTheme = useThemeSettingsStore(state => state.followSystemTheme);
     const setTransparentPlayerBackgroundFromSystem = usePlayerChromeSettingsStore(state => state.setTransparentPlayerBackgroundFromSystem);
     const setDesktopPreferenceSnapshot = useDesktopSettingsStore(state => state.setDesktopPreferenceSnapshot);
@@ -392,5 +387,4 @@ export function useAppPreferences() {
         }));
     }, [handleSetMonetTuning, isLoadingMonetPortraitImage, monetTuning, storedMonetPortraitImage]);
 
-    return preferences;
 }

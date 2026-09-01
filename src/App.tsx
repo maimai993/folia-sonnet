@@ -92,7 +92,6 @@ import { useOnlineSongMetadataHydration } from './hooks/useOnlineSongMetadataHyd
 import { useThemeQuickEditorStore } from './stores/useThemeQuickEditorStore';
 import { resolveCommandPaletteSearchSource, resolveSearchSource, useSearchNavigationStore } from './stores/useSearchNavigationStore';
 import { useCollectionNavigationStore } from './stores/useCollectionNavigationStore';
-import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useOnlineProviderAccountStore } from './stores/useOnlineProviderAccountStore';
 import { useShallow } from 'zustand/react/shallow';
 import { clampMediaVolume, toSafeRemoteUrl } from './utils/appPlaybackHelpers';
@@ -171,11 +170,6 @@ export default function App() {
     const [isMemoryMonitorVisible, setIsMemoryMonitorVisible] = useState(false);
     const [navidromeEnabled, setNavidromeEnabledState] = useState(() => isNavidromeEnabled());
     const [starredNavidromeSongIds, setStarredNavidromeSongIds] = useState<Set<string>>(new Set());
-    const {
-
-    } = useSettingsUiStore(useShallow(state => ({
-
-    })));
     const {
         closeSettings,
         isSettingsSubviewOpen,
@@ -368,9 +362,7 @@ export default function App() {
     // Manages user preferences for audio quality, theme settings, 
     // and related actions like toggling cover color backgrounds and static mode,
     // as well as setting daylight mode preference
-    const appPreferences = useAppPreferences();
-    const {
-    } = appPreferences;
+    useAppPreferences();
     const {
         audioQuality,
         setAudioQuality,

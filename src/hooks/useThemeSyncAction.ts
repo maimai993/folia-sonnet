@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { syncNow } from '../services/sync/syncCoordinator';
 import { isSyncConfigured } from '../services/sync/syncConfig';
 import { setStatusMessage } from '../stores/useStatusMessageStore';

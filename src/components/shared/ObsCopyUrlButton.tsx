@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Copy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { useStageSettingsStore } from '../../stores/useStageSettingsStore';
 

@@ -3,7 +3,6 @@ import { Pin } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { COMMAND_PALETTE_COMMANDS } from '../../command-palette/commandRegistry';
 import { getCommandTitle } from '../../command-palette/commandText';
 import { CustomSelect } from '../../shared/CustomSelect';

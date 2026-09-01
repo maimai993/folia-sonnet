@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme } from '../../../types';
 import type { AppLanguagePreference } from '../../../i18n/config';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { CustomSelect } from '../../shared/CustomSelect';
 import PinnedCommandSettings from './PinnedCommandSettings';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
@@ -27,11 +26,6 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
     theme,
 }) => {
     const { t, i18n } = useTranslation();
-    const {
-
-    } = useSettingsUiStore(useShallow(state => ({
-
-    })));
     const {
         appLanguagePreference,
         onAppLanguagePreferenceChange,

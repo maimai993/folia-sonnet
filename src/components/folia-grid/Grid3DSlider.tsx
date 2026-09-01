@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Disc } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { formatGridMapFolderTitle } from '../../utils/gridMapFolderPath';
 import { getSizedCoverUrl } from '../../utils/coverUrl';
+import { useHomeLayoutSettingsStore } from '../../stores/useHomeLayoutSettingsStore';
 
 // src/components/folia-grid/Grid3DSlider.tsx
 // Controlled desktop Grid3D slider shared by Netease, local music, and Navidrome overview surfaces.
@@ -147,7 +147,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     hasFloatingPlayer = false,
 }) => {
     const { t } = useTranslation();
-    const grid3dCardStyle = useSettingsUiStore(state => state.grid3dCardStyle);
+    const grid3dCardStyle = useHomeLayoutSettingsStore(state => state.grid3dCardStyle);
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);

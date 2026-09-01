@@ -19,7 +19,7 @@ vi.mock('@/services/automix/modelAvailability', () => ({
 // own and takes over five seconds inside the full suite - this store pulls in the visualizer
 // registries and half of services/ - so the first version of this file passed alone and timed out
 // in CI. `vi.mock` is hoisted above the imports either way, so the mock still lands.
-import { AUTOMIX_MODEL_REMINDER_MUTED_KEY, shouldRemindAboutModels, useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { AUTOMIX_MODEL_REMINDER_MUTED_KEY, shouldRemindAboutModels } from '@/stores/useAutomixSettingsStore';
 import { useAutomixSettingsStore } from '@/stores/useAutomixSettingsStore';
 
 

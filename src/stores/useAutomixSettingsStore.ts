@@ -5,11 +5,39 @@
 // Split out of useSettingsUiStore.
 
 import { create } from 'zustand';
+import { modelsPresent } from '../services/automix/modelAvailability';
 
 import { clampCrossfadeSeconds, CROSSFADE_DEFAULT_SEC } from '../services/automix/crossfadePlanner';
 import { DEFAULT_TRANSITION_SETTINGS, isTransitionMode, type TransitionMode } from '../services/automix/transitionStrategy';
 import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
-import { AUTOMIX_MODEL_REMINDER_MUTED_KEY, shouldRemindAboutModels } from './useSettingsUiStore';
+
+/** Set only by the reminder's own "don't remind me" button. Absent = still worth asking. */
+export const AUTOMIX_MODEL_REMINDER_MUTED_KEY = 'folia_automix_model_reminder_muted';
+
+/**
+ * Whether switching transitions on is worth interrupting for.
+ *
+ * Three ways to answer no, and they are three different reasons rather than one condition:
+ *
+ * - Not a desktop build. The browser cannot run either model no matter what it downloads, so a
+ *   prompt there is an errand that does not exist - which is the same distinction the engine badge
+ *   already draws between "a limit" and "something you can go and fix".
+ * - The weights are already here. Asked of `modelsPresent()`, which the automix hook refreshes at
+ *   startup, so a fresh launch with both files installed answers correctly without opening
+ *   Settings first.
+ * - The listener said not to ask again. That one is remembered rather than re-derived, because it
+ *   is a preference and not a fact about the machine.
+ *
+ * Either model missing counts: the beat grid is what the crossfade mode reads for its alignment
+ * too, so "I only use crossfade" is not a reason to be missing beat_this.
+ */
+export const shouldRemindAboutModels = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    if (typeof window.electron?.separateStems !== 'function') return false;
+    if (getStoredBoolean(AUTOMIX_MODEL_REMINDER_MUTED_KEY, false)) return false;
+    const present = modelsPresent();
+    return !present.beat_this || !present.htdemucs;
+};
 
 const AUTOMIX_ENABLED_KEY = 'folia_automix_enabled';
 

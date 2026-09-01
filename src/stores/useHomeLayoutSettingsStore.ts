@@ -20,7 +20,18 @@ const readStoredHomeLayoutStyle = (): 'carousel' | 'grid' => {
     return 'grid';
 };
 
+const readStoredGrid3dCardStyle = (): 'image' | 'card' => {
+    if (typeof window === 'undefined') {
+        return 'card';
+    }
+
+    const saved = localStorage.getItem('grid3d_card_style');
+    return saved === 'image' ? 'image' : 'card';
+};
+
 export type HomeLayoutSettingsState = {
+    grid3dCardStyle: 'image' | 'card';
+    handleSetGrid3dCardStyle: (style: 'image' | 'card') => void;
     homeLayoutStyle: 'carousel' | 'grid';
     showHomeTabPlaylist: boolean;
     showHomeTabRadio: boolean;
@@ -34,6 +45,15 @@ export type HomeLayoutSettingsState = {
 };
 
 export const useHomeLayoutSettingsStore = create<HomeLayoutSettingsState>((set, get) => ({
+    grid3dCardStyle: readStoredGrid3dCardStyle(),
+    handleSetGrid3dCardStyle: (style) => {
+        set({ grid3dCardStyle: style });
+        if (typeof window !== 'undefined') localStorage.setItem('grid3d_card_style', style);
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (style === 'image' ? 'cardStyleImage' : 'cardStyleCard')),
+        });
+    },
     homeLayoutStyle: readStoredHomeLayoutStyle(),
     showHomeTabPlaylist: getStoredBoolean('show_home_tab_playlist', true),
     showHomeTabRadio: getStoredBoolean('show_home_tab_radio', true),
@@ -72,6 +92,8 @@ export const useHomeLayoutSettingsStore = create<HomeLayoutSettingsState>((set, 
  * legitimately edit this whole domain at once. Ordinary consumers select one field instead.
  */
 export const selectHomeLayoutSettingsSnapshot = (state: HomeLayoutSettingsState) => ({
+    grid3dCardStyle: state.grid3dCardStyle,
+    handleSetGrid3dCardStyle: state.handleSetGrid3dCardStyle,
     homeLayoutStyle: state.homeLayoutStyle,
     showHomeTabPlaylist: state.showHomeTabPlaylist,
     showHomeTabRadio: state.showHomeTabRadio,

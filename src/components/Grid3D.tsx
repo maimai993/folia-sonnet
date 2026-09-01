@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { Search, Loader2, Settings } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { resolveSearchSource, useSearchNavigationStore } from '../stores/useSearchNavigationStore';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import type { LocalLibraryCatalogSnapshot } from '../hooks/useLocalLibraryCatalog';
 import { useShallow } from 'zustand/react/shallow';
 import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState, type StatusMessage } from '../types';
@@ -150,10 +149,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     } = props;
 
     const { t } = useTranslation();
-    const {
-    } = useSettingsUiStore(useShallow(state => ({
-
-    })));
     const {
         isDaylight,
     } = useThemeSettingsStore(useShallow(state => ({

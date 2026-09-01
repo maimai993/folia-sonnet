@@ -6,9 +6,24 @@
 
 import { create } from 'zustand';
 import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
-import { HIDE_TASKBAR_ICON_STORAGE_KEY, MINIMIZE_TO_TRAY_STORAGE_KEY, MOD_SYSTEM_ENABLED_STORAGE_KEY, OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, SettingsUiState, VOICE_INPUT_PAUSE_STORAGE_KEY, WALLPAPER_MODE_STORAGE_KEY } from './useSettingsUiStore';
 import { setStatusMessage } from './useStatusMessageStore';
 import i18n from '../i18n/config';
+
+export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
+
+export const VOICE_INPUT_PAUSE_STORAGE_KEY = 'voice_input_pause_enabled';
+
+export const PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY = 'prevent_display_sleep_during_playback';
+
+export const MOD_SYSTEM_ENABLED_STORAGE_KEY = 'mod_system_enabled';
+
+export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
+
+export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_taskbar';
+
+export const WALLPAPER_MODE_STORAGE_KEY = 'wallpaper_mode';
+
+export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
 
 export type DesktopSettingsState = {
     minimizeToTray: boolean;

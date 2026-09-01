@@ -1,4 +1,3 @@
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { getSyncConfig, isSyncConfigured, setSyncStatus } from './syncConfig';
 import { getRemoteState, testSyncConnection } from './syncClient';
 import type { SyncProviderConfig } from './syncTypes';

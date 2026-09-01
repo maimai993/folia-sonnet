@@ -2,7 +2,6 @@ import type { DualTheme } from '../types';
 import { compressConfig, readSavedCustomTheme } from './appearanceCodec';
 import { buildVisualSettingsConfig } from './visualSettingsConfig';
 import { buildObsSourceUrl } from './obsUrl';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { applyStoredAnimationIntensityToDualTheme, readStoredLastAppliedThemePointer } from '../services/themePreferences';
 import { getLastDualTheme } from '../services/themeCache';
 import { BASE_DUAL_THEME } from '../services/baseThemes';

@@ -1,4 +1,3 @@
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import type { CappellaAvatarImage, CappellaEmojiImage } from '../types';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
@@ -218,7 +217,6 @@ export interface BuildObsCustomCssResult {
 // uploaded asset is actually in use, so callers can hide the affordance. Includes OBS's own
 // transparent-body reset so the snippet is a complete drop-in replacement, not an addition.
 export const buildObsCustomCss = async (): Promise<BuildObsCustomCssResult | null> => {
-  const store = useSettingsUiStore.getState();
   const storeVisualizer = useVisualizerSettingsStore.getState();
   const storeAssets = useVisualizerAssetStore.getState();
   const usesUploadedBackground = storeVisualizer.monetBackgroundTuning.backgroundSource === 'uploaded-global'

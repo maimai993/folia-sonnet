@@ -3,7 +3,6 @@ import { AudioLines, ChevronRight, ListFilter, Monitor, PlayCircle, RefreshCw, S
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { LocalLyricsPriority, QueueAddBehavior, ReplayGainMode, Theme } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { useAudioOutputDevices } from '../../../hooks/useAudioOutputDevices';
 import { CustomSelect } from '../../shared/CustomSelect';
 import { LYRIC_MATCH_SOURCES } from '../../../utils/lyrics/lyricMatchSources';
@@ -45,11 +44,6 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
     utilityGhostButtonClass,
 }) => {
     const { t } = useTranslation();
-    const {
-
-    } = useSettingsUiStore(useShallow(state => ({
-
-    })));
     const {
         audioOutputDeviceId,
         queueAddBehavior,

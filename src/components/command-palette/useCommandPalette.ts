@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getAvailableCommandPaletteCommands, getCommandPaletteMatches, isCommandPaletteCommandEnabled, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
 import { isRecordableRecentCommand, readRecentCommandIds, recordRecentCommandId, resolveRecentCommandToRecord } from './recentCommands';
 import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch } from './types';
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { resolvePinnedCommandSlots } from './pinnedCommandPreferences';
 import { isPrimaryModifierPressed, isSecondaryModifierPressed } from '../../utils/platform';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';

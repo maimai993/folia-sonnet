@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { animate, createTimeline, svg, type JSAnimation, type Timeline } from 'animejs';
 import type { Theme } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import {
     getActiveTransitionCue,
     shouldDrawCue,
@@ -66,7 +65,6 @@ type DrawnRun = {
 const readRunningCue = (): DrawnRun | null => {
     const running = getActiveTransitionCue();
     if (!running) return null;
-    const settings = useSettingsUiStore.getState();
   const settingsAutomixSettings = useAutomixSettingsStore.getState();
     return shouldDrawCue(running.cue, settingsAutomixSettings.transitionAnimation && settingsAutomixSettings.transitionMode === 'automix', 'ring')
         ? { cue: running.cue, startAtMs: running.elapsedMs }
@@ -138,7 +136,6 @@ const AutomixTransitionAnimation: React.FC<AutomixTransitionAnimationProps> = ({
             if (performance.now() < endsAtRef.current - NORMAL_END_SLACK_MS) dismiss();
             return;
         }
-        const settings = useSettingsUiStore.getState();
   const settingsAutomixSettings = useAutomixSettingsStore.getState();
         // Nothing is touched when the answer is no - not even a dismissal. The card's own settings
         // preview comes down this same channel, and it is not this ring's business either to draw

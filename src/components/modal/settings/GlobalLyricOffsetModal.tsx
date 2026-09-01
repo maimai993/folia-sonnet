@@ -4,9 +4,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { ChevronLeft, RotateCcw } from 'lucide-react';
 import type { LyricData } from '../../../types';
-import {
-    useSettingsUiStore,
-} from '../../../stores/useSettingsUiStore';
 import GlobalLyricOffsetPreview from './GlobalLyricOffsetPreview';
 import GlobalLyricOffsetRuler from './GlobalLyricOffsetRuler';
 import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';

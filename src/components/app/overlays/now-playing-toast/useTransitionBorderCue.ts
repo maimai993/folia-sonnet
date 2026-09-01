@@ -5,7 +5,6 @@ import {
     subscribeToTransitionCue,
     type TransitionCue,
 } from '../../../../services/automix/transitionCue';
-import { useSettingsUiStore } from '../../../../stores/useSettingsUiStore';
 import { useAutomixSettingsStore } from '../../../../stores/useAutomixSettingsStore';
 
 // src/components/app/overlays/now-playing-toast/useTransitionBorderCue.ts

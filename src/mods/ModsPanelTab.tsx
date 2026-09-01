@@ -4,7 +4,6 @@ import { AlertCircle, Boxes, ChevronDown, CircleOff, FolderOpen, Power, RefreshC
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { LyricData, SongResult, Theme, VisualizerMode } from '@/types';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { readLyricOffset } from '@/utils/lyrics/lyricOffsetMemory';
 import type { ModRuntimeInfo } from './types';
 import { resolveOnlineLyrics } from '@/utils/onlineLyricsState';

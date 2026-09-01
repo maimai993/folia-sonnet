@@ -10,7 +10,6 @@ import { type AudioEffectChain } from '../services/audioEffects/effectChain';
 import { buildPlaybackGraph } from '../services/playbackGraph';
 import { cachePlayedTrackAssets } from '../services/playedTrackCache';
 import { rampGain, type AutomixDeckChain } from '../services/automix/crossfadeGraph';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 

@@ -6,9 +6,10 @@
 
 import { create } from 'zustand';
 import { getStoredBoolean, getStoredString, setStoredBoolean } from './storagePrimitives';
-import { StageTrackPillMode } from './useSettingsUiStore';
 import { setStatusMessage } from './useStatusMessageStore';
 import i18n from '../i18n/config';
+
+export type StageTrackPillMode = 'auto' | 'always' | 'never';
 
 // OBS overlay theme mode for the copied web OBS URL (default 'builtin' — per-song follow):
 //   'static'  – bake the current theme into cfg (the original behavior; frozen in OBS).

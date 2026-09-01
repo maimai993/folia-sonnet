@@ -24,7 +24,6 @@ import { buildCurrentObsUrl } from '@/utils/currentObsUrl';
 import { compressConfig, readSavedCustomTheme } from '@/utils/appearanceCodec';
 import { readStoredLastAppliedThemePointer } from '@/services/themePreferences';
 import { getLastDualTheme } from '@/services/themeCache';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { usePlayerChromeSettingsStore } from '@/stores/usePlayerChromeSettingsStore';
 import { useThemeSettingsStore } from '@/stores/useThemeSettingsStore';
 import { useStageSettingsStore } from '@/stores/useStageSettingsStore';

@@ -1,7 +1,6 @@
 import React from 'react';
 import NowPlayingToast from '../../src/components/app/overlays/NowPlayingToast';
 import { announceTransition } from '../../src/services/automix/transitionCue';
-import { useSettingsUiStore } from '../../src/stores/useSettingsUiStore';
 import type { ProbeDefinition } from './definition';
 import { useAutomixSettingsStore } from '../../src/stores/useAutomixSettingsStore';
 // dev/probes/nowPlayingToastTransitionBorder.probe.tsx

@@ -16,7 +16,6 @@ import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled, r
 import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
 import { extractCfgFromInput } from '@/utils/obsUrl';
 import { DEFAULT_SONNET_TUNING } from '@/types';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
 import { useTypographySettingsStore } from '@/stores/useTypographySettingsStore';
 import { useThemeSettingsStore } from '@/stores/useThemeSettingsStore';

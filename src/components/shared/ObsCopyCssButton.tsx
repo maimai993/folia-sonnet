@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Check, FileCode2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { computeHasUploadedObsAsset } from '../../utils/visualSettingsConfig';
 import { buildObsCustomCss } from '../../utils/obsCustomCss';
 import { setStatusMessage } from '../../stores/useStatusMessageStore';

@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import GridView, { GridViewSourceActions } from '../../GridView';
 import ArtistGridView from '../../ArtistGridView';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { getActiveGridViewCollection, useCollectionNavigationStore } from '../../../stores/useCollectionNavigationStore';
 import { LocalSong, SongResult, UnifiedSong } from '../../../types';
 import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';

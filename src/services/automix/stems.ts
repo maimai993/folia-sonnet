@@ -673,10 +673,15 @@ export const ensureStems = async (request: StemRequest): Promise<void> => {
  * nothing throws; the same code takes a different branch because it was handed less.
  *
  * Lives here rather than in transitionStrategy, its natural home, because that module is imported by
- * the settings STORE and this one reaches the media cache: the edge transitionStrategy -> stems ->
- * resourceCache -> audioCache -> useSettingsUiStore closes a real cycle, whose symptom is not a warning
+ * a settings STORE and this one reaches the media cache: the edge transitionStrategy -> stems ->
+ * resourceCache -> audioCache -> a settings store closes a real cycle, whose symptom is not a warning
  * but `DEFAULT_TRANSITION_SETTINGS` being undefined while the store initialises. Kept out of that graph
  * on purpose.
+ *
+ * After the store split the two ends are useAutomixSettingsStore (imports transitionStrategy) and
+ * useAudioSettingsStore (reached via audioCache). They are different stores now, so the cycle is not
+ * currently closed — but moving this back into transitionStrategy would still put a store on both
+ * ends of that path, so the reason to keep it here stands.
  */
 export interface TransitionCapabilities {
     /** Bar lines from the model rather than from the built-in estimator. */

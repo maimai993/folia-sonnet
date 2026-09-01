@@ -1,6 +1,5 @@
 import React from 'react';
 import AutomixModelReminder from '../../src/components/modal/AutomixModelReminder';
-import { useSettingsUiStore } from '../../src/stores/useSettingsUiStore';
 import type { ProbeDefinition } from './definition';
 import { useAutomixSettingsStore } from '../../src/stores/useAutomixSettingsStore';
 // dev/probes/automixModelReminder.probe.tsx

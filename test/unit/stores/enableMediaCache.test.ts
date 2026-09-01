@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-    ENABLE_MEDIA_CACHE_KEY,
-    LEGACY_ENABLE_MEDIA_CACHE_KEY,
-    readStoredEnableMediaCache,
-} from '@/stores/useSettingsUiStore';
+import { ENABLE_MEDIA_CACHE_KEY, LEGACY_ENABLE_MEDIA_CACHE_KEY, readStoredEnableMediaCache } from '@/stores/useAudioSettingsStore';
 
 // test/unit/stores/enableMediaCache.test.ts
 // The toggle used to write a bare key while startup read the prefixed one, so it never survived a

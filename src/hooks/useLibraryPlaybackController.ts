@@ -25,7 +25,6 @@ import {
 import { hydrateNavidromeLyricPayload, resolvePreferredNavidromeLyrics } from '../utils/appNavidromeLyrics';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 import { migrateMatchedLyricsCarrierRenderHints } from '../utils/lyrics/storageMigration';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { resolveExplicitFileTimedLyricFormat } from '../utils/lyrics/formatDetection';
 import { applyUploadedLocalLyrics } from '../utils/lyrics/localLyricsUpload';
@@ -746,7 +745,6 @@ export function useLibraryPlaybackController({
                     const navidromeMetadata = getProviderSongMetadata(navidromeSong);
                     const artistName = navidromeMetadata.artists.map(artist => artist.name).filter(Boolean).join(', ');
                     const albumName = navidromeMetadata.album?.name || '';
-                    const settings = useSettingsUiStore.getState();
   const settingsLyricSettings = useLyricSettingsStore.getState();
 
                     if (settingsLyricSettings.autoUseBestLyric) {
@@ -1192,7 +1190,6 @@ export function useLibraryPlaybackController({
             return false;
         }
 
-        const settings = useSettingsUiStore.getState();
   const settingsLyricSettings = useLyricSettingsStore.getState();
         setStatusMsg({ type: 'info', text: t('status.matchingBestLyrics') || '' });
 

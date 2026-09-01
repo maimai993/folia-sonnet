@@ -10,7 +10,7 @@ import type {
     StageStatus,
 } from '../../../types';
 import type { useThemeController } from '../../../hooks/useThemeController';
-import { type SettingsModalState, useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import { type SettingsModalState } from '../../../stores/useSettingsModalStore';
 import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
 import type { PlayerCapConnectionStatus } from '../../../types/playerCap';
 import type { LyricApiStatus } from '../../../types/lyricApi';

@@ -26,7 +26,7 @@ import { AiHelpPromptModal } from './AiHelpPromptModal';
 import { discordIconUrl, openDiscordInvite } from '../shared/discordCommunity';
 import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
-import { selectSettingsUiSnapshot, type SettingsSubviewId, type VisualizerSettingsSection, useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
 import { SettingsAnchorProvider, useSettingsAnchorList, useSettingsAnchorStore } from './settings/navigation/SettingsAnchorContext';
 import SettingsSidebarChips from './settings/navigation/SettingsSidebarChips';
 import SettingsSidebarWide from './settings/navigation/SettingsSidebarWide';
@@ -52,6 +52,7 @@ import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../st
 import { selectStageSettingsSnapshot, useStageSettingsStore } from '../../stores/useStageSettingsStore';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 import { selectAudioSettingsSnapshot, useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
+import { selectHomeLayoutSettingsSnapshot, useHomeLayoutSettingsStore } from '../../stores/useHomeLayoutSettingsStore';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -173,7 +174,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const {
         grid3dCardStyle,
         handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
-    } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    } = useHomeLayoutSettingsStore(useShallow(selectHomeLayoutSettingsSnapshot));
     const {
         enableMediaCache,
         mediaCacheLimitGb,

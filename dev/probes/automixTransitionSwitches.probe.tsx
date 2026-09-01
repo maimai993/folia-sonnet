@@ -2,7 +2,6 @@ import React from 'react';
 import AutomixTransitionAnimation from '../../src/components/app/overlays/AutomixTransitionAnimation';
 import NowPlayingToast from '../../src/components/app/overlays/NowPlayingToast';
 import { announceTransition, type TransitionRenderer } from '../../src/services/automix/transitionCue';
-import { useSettingsUiStore } from '../../src/stores/useSettingsUiStore';
 import type { ProbeDefinition } from './definition';
 import { useAutomixSettingsStore } from '../../src/stores/useAutomixSettingsStore';
 // dev/probes/automixTransitionSwitches.probe.tsx

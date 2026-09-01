@@ -3,7 +3,6 @@ import { AlertTriangle, Blend, ChevronDown, Disc3, Orbit, Sparkles, Waves } from
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { CROSSFADE_MAX_SEC, CROSSFADE_MIN_SEC } from '../../../services/automix/crossfadePlanner';
 import { canAnalyseTracks, type TransitionMode } from '../../../services/automix/transitionStrategy';
 import { transitionCapabilities } from '../../../services/automix/stems';
@@ -49,11 +48,6 @@ const TransitionSettingsSection: React.FC<TransitionSettingsSectionProps> = ({
     theme,
 }) => {
     const { t } = useTranslation();
-    const {
-
-    } = useSettingsUiStore(useShallow(state => ({
-
-    })));
     const {
         enableMediaCache,
         onToggleMediaCache,

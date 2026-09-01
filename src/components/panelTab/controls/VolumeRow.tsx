@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Blend, SlidersHorizontal, Volume1, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 

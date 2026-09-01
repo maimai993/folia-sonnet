@@ -4,7 +4,6 @@ import { PrefetchedSongData, isUrlValid, updatePrefetchedAudioUrl } from './pref
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
 import { loadOnlineLyricsState, markOnlineLyricsPureMusic, resolveOnlineLyrics, saveOnlineLyricsState } from '../utils/onlineLyricsState';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { createSafeObjectUrl } from '../utils/blobGuards';
 import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
@@ -86,7 +85,6 @@ export async function loadOnlineSongLyrics(
     const { isCurrent, onLyrics, onPureMusicChange, onStateChange, onAutoMatchStart, onDone } = callbacks;
     const lyricCacheKey = getSongResourceCacheKey('lyric', song);
     const onlineLyricsState = await loadOnlineLyricsState(song);
-    const initialSettings = useSettingsUiStore.getState();
   const initialSettingsLyricSettings = useLyricSettingsStore.getState();
 
     if (!isCurrent()) return;
@@ -121,7 +119,6 @@ export async function loadOnlineSongLyrics(
         const preferredPrefetchedLyrics = resolveOnlineLyrics(onlineLyricsState, prefetched.lyrics);
         const effectiveLyrics = preferredPrefetchedLyrics ?? prefetched.lyrics;
 
-        const settings = useSettingsUiStore.getState();
   const settingsLyricSettings = useLyricSettingsStore.getState();
         const shouldAutoMatch = settingsLyricSettings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride;
 
@@ -166,7 +163,6 @@ export async function loadOnlineSongLyrics(
     let resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
     let finalState = onlineLyricsState;
 
-    const settings = useSettingsUiStore.getState();
   const settingsLyricSettings = useLyricSettingsStore.getState();
     const shouldAutoMatch = settingsLyricSettings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride;
 

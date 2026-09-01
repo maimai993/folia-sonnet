@@ -1,5 +1,4 @@
 import { collectVisualizerTunings } from '../components/visualizer/tuningRegistry';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled, readStoredThemeGenerationSource } from '../services/themePreferences';
 import type { CappellaAvatarImage, CappellaEmojiImage, CappellaTuning, MonetBackgroundImage, MonetBackgroundTuning, MonetPortraitImage, MonetTuning, NomandBackgroundTuning } from '../types';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
@@ -13,7 +12,6 @@ import { useStageSettingsStore } from '../stores/useStageSettingsStore';
 // the import/export "copy config" and the OBS URL builder stay in sync from a single field list.
 
 export function buildVisualSettingsConfig(): Record<string, unknown> {
-  const store = useSettingsUiStore.getState();
   const storeStageSettings = useStageSettingsStore.getState();
   const storeThemeSettings = useThemeSettingsStore.getState();
   const storeTypographySettings = useTypographySettingsStore.getState();
@@ -69,7 +67,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // Only a system font's family name is portable; an uploaded font is a browser-local FontFace
     // (its generated family resolves nowhere else), so it is not carried.
     lyricsCustomFontFamily: storeTypographySettings.lyricsCustomFont?.source === 'system' ? storeTypographySettings.lyricsCustomFont.family : null,
-    visualizerTunings: collectVisualizerTunings(store as unknown as Record<string, unknown>),
+    visualizerTunings: collectVisualizerTunings(storeVisualizer as unknown as Record<string, unknown>),
     classicTuning: storeVisualizer.classicTuning,
     cadenzaTuning: storeVisualizer.cadenzaTuning,
     partitaTuning: storeVisualizer.partitaTuning,
@@ -100,7 +98,6 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
 // custom fallback family) rather than only a builtin sans/serif/mono style — used to warn on copy
 // that the font may be unavailable on the OBS machine (and that an uploaded font never transfers).
 export function hasCustomObsFont(): boolean {
-  const store = useSettingsUiStore.getState();
   const storeStageSettings = useStageSettingsStore.getState();
   const storeThemeSettings = useThemeSettingsStore.getState();
   const storeTypographySettings = useTypographySettingsStore.getState();

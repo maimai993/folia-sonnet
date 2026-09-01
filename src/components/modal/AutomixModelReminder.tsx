@@ -3,7 +3,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { Download } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import ThemedDialog from '../shared/ThemedDialog';
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { useAutomixSettingsStore } from '../../stores/useAutomixSettingsStore';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 

@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { runSleepTimerExpiryAction } from './sleepTimerExpiry';
 import { useSleepTimerStore } from '../stores/useSleepTimerStore';
 

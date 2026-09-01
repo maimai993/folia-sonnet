@@ -1,4 +1,3 @@
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { useStageSettingsStore } from '../stores/useStageSettingsStore';
 
 // src/utils/webObsTarget.ts
@@ -25,7 +24,6 @@ export interface WebObsTarget {
 // The active source plus, for PlayerCap, its non-default connection params. Returns null when no
 // web stage source is selected (buttons are disabled in that case).
 export function resolveWebObsTarget(): WebObsTarget | null {
-  const s = useSettingsUiStore.getState();
   const sStageSettings = useStageSettingsStore.getState();
   const source = selectWebObsSource(sStageSettings);
   if (!source) return null;

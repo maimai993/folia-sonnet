@@ -1,4 +1,3 @@
-import { useSettingsUiStore, type SettingsUiState } from '../../stores/useSettingsUiStore';
 import { useVisualizerSettingsStore, type VisualizerSettingsState } from '../../stores/useVisualizerSettingsStore';
 import { useTypographySettingsStore, type TypographySettingsState } from '../../stores/useTypographySettingsStore';
 import { useLyricSettingsStore, type LyricSettingsState } from '../../stores/useLyricSettingsStore';
@@ -17,12 +16,11 @@ import { applyVisualizerTuningsToSettings, collectVisualizerTunings } from '../.
 // stores at once. The document's shape is unchanged by that split.
 
 /** The two stores the synced visual document spans, read as one snapshot. */
-export type SyncableSettingsState = SettingsUiState & VisualizerSettingsState
+export type SyncableSettingsState = VisualizerSettingsState
     & TypographySettingsState & LyricSettingsState
     & HomeLayoutSettingsState & PlayerChromeSettingsState & ThemeSettingsState;
 
 export const readSyncableSettingsState = (): SyncableSettingsState => ({
-    ...useSettingsUiStore.getState(),
     ...useVisualizerSettingsStore.getState(),
     ...useTypographySettingsStore.getState(),
     ...useLyricSettingsStore.getState(),

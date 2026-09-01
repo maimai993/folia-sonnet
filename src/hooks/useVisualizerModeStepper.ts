@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { getVisualizerModeLabel } from '../components/visualizer/registry';
 import type { VisualizerMode } from '../types';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
@@ -46,7 +45,6 @@ export const useVisualizerModeStepper = (modes: VisualizerMode[]) => {
         notifyTimerRef.current = window.setTimeout(() => {
             notifyTimerRef.current = null;
 
-            const state = useSettingsUiStore.getState();
   const stateVisualizer = useVisualizerSettingsStore.getState();
             setStatusMessage({
                 type: 'info',

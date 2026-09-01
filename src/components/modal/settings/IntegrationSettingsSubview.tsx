@@ -12,7 +12,6 @@ import { resolveWebObsTarget } from '../../../utils/webObsTarget';
 import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
 import { ObsCopyCssButton } from '../../shared/ObsCopyCssButton';
 import { resolveObsCopyHintKey } from '../../../utils/visualSettingsConfig';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import type { LyricApiStatus } from '../../../types/lyricApi';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
@@ -165,10 +164,6 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
     const [lyricApiAddressCopied, setLyricApiAddressCopied] = useState(false);
     const [obsUrlCopied, setObsUrlCopied] = useState(false);
     // PlayerCap config: the subview reads the store directly (fewer layers); connection state/players are passed in by the stage model.
-    const {
-    } = useSettingsUiStore(useShallow(state => ({
-
-    })));
     const {
         playerCapHost,
         playerCapPlayer,

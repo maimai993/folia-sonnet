@@ -10,7 +10,6 @@ import ObsPlayerCapSourceApp from './components/obs/ObsPlayerCapSourceApp';
 import { initializeLocalCoverRuntime } from './services/localCoverRuntime';
 import { initModVisualizers } from './mods/modVisualizers';
 import { hasVisualizerMode } from './components/visualizer/registry';
-import { useSettingsUiStore } from './stores/useSettingsUiStore';
 import { useVisualizerSettingsStore } from './stores/useVisualizerSettingsStore';
 
 // src/bootstrap.tsx
@@ -30,7 +29,6 @@ const restoreStoredModVisualizer = () => {
         if (!hasVisualizerMode(saved)) {
             return;
         }
-        const store = useSettingsUiStore.getState();
   const storeVisualizer = useVisualizerSettingsStore.getState();
         if (storeVisualizer.visualizerMode !== saved) {
             storeVisualizer.handleSetVisualizerMode(saved, { notify: false });

@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { Power, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../types';
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { colorWithAlpha } from '../visualizer/colorMix';
 import {
     AUDIO_EQUALIZER_CUSTOM_SLOT_IDS,

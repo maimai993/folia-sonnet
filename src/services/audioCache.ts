@@ -1,6 +1,5 @@
 import { getFromCache, removeFromCache, saveToCache } from './db';
 import { isBlob } from '../utils/blobGuards';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 
 /**

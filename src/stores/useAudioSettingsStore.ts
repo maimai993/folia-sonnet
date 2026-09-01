@@ -7,14 +7,68 @@
 // exists — at which point they may move once more.
 
 import { create } from 'zustand';
-import { resolveStoredAudioQuality } from './useSettingsUiStore';
+import type { AudioQualityPreference } from '../types/onlineMusic';
 import { type QueueAddBehavior } from '../types';
 import { getAudioEqualizerCustomSlotIndex, isAudioEqualizerCustomSlotId, readStoredAudioEqualizerSettings, resolveAudioEqualizerSettings, writeStoredAudioEqualizerSettings, type AudioEqualizerModeId, type AudioEqualizerSettings } from '../utils/audioEqualizer';
 import { AUDIO_SOUND_PRESETS } from '../utils/audioPresets';
 import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
-import { AudioQuality, DEFAULT_MEDIA_CACHE_LIMIT_GB, ENABLE_MEDIA_CACHE_KEY, MEDIA_CACHE_LIMIT_GB_KEY, readStoredEnableMediaCache, readStoredMediaCacheLimitGb } from './useSettingsUiStore';
 import { setStatusMessage } from './useStatusMessageStore';
 import i18n from '../i18n/config';
+
+export const CACHE_SIZE_KEY = 'folia_cache_size';
+
+export const ENABLE_MEDIA_CACHE_KEY = 'folia_enable_media_cache';
+
+/** What the toggle used to write to, before it was corrected to the prefixed key above. */
+export const LEGACY_ENABLE_MEDIA_CACHE_KEY = 'enable_media_cache';
+
+export const MEDIA_CACHE_LIMIT_GB_KEY = 'folia_media_cache_limit_gb';
+
+/** Gigabytes of cached audio to keep. Zero is the listener asking for no ceiling at all. */
+export const DEFAULT_MEDIA_CACHE_LIMIT_GB = 5;
+
+export type AudioQuality = AudioQualityPreference;
+
+export const resolveStoredAudioQuality = (saved: string | null): AudioQuality => (
+    saved === 'standard' || saved === 'lossless' || saved === 'hires' ? saved : 'high'
+);
+
+/**
+ * Reads the media cache toggle, honouring the key its own setter used to write to.
+ *
+ * The setter wrote a bare 'enable_media_cache' while startup read the folia-prefixed key, so the
+ * setting silently reverted to off on every restart. Anyone who switched it on has their real
+ * preference sitting under the legacy key, and simply correcting the setter would throw that
+ * away once more - so read it as a fallback and promote it to the canonical key.
+ */
+export const readStoredEnableMediaCache = (): boolean => {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+
+    const canonical = localStorage.getItem(ENABLE_MEDIA_CACHE_KEY);
+    if (canonical !== null) {
+        return canonical === 'true';
+    }
+
+    const legacy = localStorage.getItem(LEGACY_ENABLE_MEDIA_CACHE_KEY);
+    if (legacy === null) {
+        return false;
+    }
+
+    localStorage.setItem(ENABLE_MEDIA_CACHE_KEY, legacy);
+    return legacy === 'true';
+};
+
+export const readStoredMediaCacheLimitGb = (): number => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_MEDIA_CACHE_LIMIT_GB;
+    }
+
+    const saved = localStorage.getItem(MEDIA_CACHE_LIMIT_GB_KEY);
+    const parsed = saved === null ? NaN : Number(saved);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MEDIA_CACHE_LIMIT_GB;
+};
 
 const readStoredAudioQuality = (): AudioQuality => {
     if (typeof window === 'undefined') {
