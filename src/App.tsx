@@ -65,7 +65,6 @@ import { useElectronVideoExportController } from './hooks/useElectronVideoExport
 import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
-import { useClickThroughPointerLock } from './hooks/useClickThroughPointerLock';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { useAutomixDecks, type AutomixDeckId } from './services/automix/useAutomixDecks';
 import { usePlaybackInteractionBridge } from './hooks/usePlaybackInteractionBridge';
@@ -126,6 +125,8 @@ import StageSessionEmptyState from './components/app/stage/StageSessionEmptyStat
 import { useVisualizerRendererModel } from './components/visualizer/useVisualizerRendererModel';
 import { useVisualizerTunings } from './components/visualizer/useVisualizerTunings';
 import { usePlaybackRuntimeRefs } from './hooks/usePlaybackRuntimeRefs';
+import { useElectronWindowChrome } from './hooks/useElectronWindowChrome';
+import { useTransportCommandRefs } from './hooks/useTransportCommandRefs';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -196,7 +197,7 @@ export default function App() {
     const {
         isTitlebarRevealed,
         showTransparentWindowBorder,
-        isMainWindowClickThroughEnabled, setIsMainWindowClickThroughEnabled,
+        isMainWindowClickThroughEnabled,
         isClickThroughToggleHotspotActive, setIsClickThroughToggleHotspotActive,
         setIsPlayerPanelGuideHotspotActive,
         isPlayerChromeHidden, setIsPlayerChromeHidden,
@@ -205,7 +206,6 @@ export default function App() {
         isTitlebarRevealed: state.isTitlebarRevealed,
         showTransparentWindowBorder: state.showTransparentWindowBorder,
         isMainWindowClickThroughEnabled: state.isMainWindowClickThroughEnabled,
-        setIsMainWindowClickThroughEnabled: state.setIsMainWindowClickThroughEnabled,
         isClickThroughToggleHotspotActive: state.isClickThroughToggleHotspotActive,
         setIsClickThroughToggleHotspotActive: state.setIsClickThroughToggleHotspotActive,
         setIsPlayerPanelGuideHotspotActive: state.setIsPlayerPanelGuideHotspotActive,
@@ -1558,41 +1558,14 @@ export default function App() {
         activeDeck: automix.activeDeck,
     });
 
-    const mediaSessionPlayRef = useRef(resumePlayback);
-    const mediaSessionPauseRef = useRef(pausePlayback);
-    const mediaSessionPrevRef = useRef(handlePrevTrack);
-    const mediaSessionNextRef = useRef(handleNextTrack);
-    const taskbarHasTrackRef = useRef(Boolean(currentSong));
-    // The transport the picture belongs to, not the raw one: every consumer of this ref asks "is
-    // the listener hearing music right now" - the taskbar buttons, the remote's play/pause toggle,
-    // the voice-input auto-pause. During a blend's lead the raw state is IDLE while the outgoing
-    // deck plays on, and all three then offered play on a track that was already playing: pressing
-    // it started the arriving deck early and took the blend with it.
-    const taskbarPlayerStateRef = useRef(displayPlayerState);
-
-    useEffect(() => {
-        mediaSessionPlayRef.current = resumePlayback;
-    }, [resumePlayback]);
-
-    useEffect(() => {
-        mediaSessionPauseRef.current = pausePlayback;
-    }, [pausePlayback]);
-
-    useEffect(() => {
-        mediaSessionPrevRef.current = handlePrevTrack;
-    }, [handlePrevTrack]);
-
-    useEffect(() => {
-        mediaSessionNextRef.current = handleNextTrack;
-    }, [handleNextTrack]);
-
-    useEffect(() => {
-        taskbarHasTrackRef.current = Boolean(currentSong);
-    }, [currentSong]);
-
-    useEffect(() => {
-        taskbarPlayerStateRef.current = displayPlayerState;
-    }, [displayPlayerState]);
+    const {
+        mediaSessionPlayRef,
+        mediaSessionPauseRef,
+        mediaSessionPrevRef,
+        mediaSessionNextRef,
+        taskbarHasTrackRef,
+        taskbarPlayerStateRef,
+    } = useTransportCommandRefs({ resumePlayback, pausePlayback, handlePrevTrack, handleNextTrack });
 
     useMediaSessionBridge({
         audioRef,
@@ -1769,108 +1742,7 @@ export default function App() {
     ]);
     const isNowPlayingControlDisabled = isNowPlayingStageActive;
 
-    useEffect(() => {
-        const body = document.body;
-        const html = document.documentElement;
-        const previousBodyBackgroundColor = body.style.backgroundColor;
-        const previousHtmlBackgroundColor = html.style.backgroundColor;
-        const shouldUseTransparentDocumentBackground = isElectronWindow && isPlayerPageTransparent;
-
-        if (shouldUseTransparentDocumentBackground) {
-            body.style.backgroundColor = 'transparent';
-            html.style.backgroundColor = 'transparent';
-        } else {
-            body.style.backgroundColor = '';
-            html.style.backgroundColor = '';
-        }
-
-        return () => {
-            body.style.backgroundColor = previousBodyBackgroundColor;
-            html.style.backgroundColor = previousHtmlBackgroundColor;
-        };
-    }, [isElectronWindow, isPlayerPageTransparent]);
-
-    useEffect(() => {
-        if (!isElectronWindow || !window.electron?.getMainWindowClickThroughEnabled || !window.electron?.onMainWindowClickThroughChanged) {
-            setIsMainWindowClickThroughEnabled(false);
-            return;
-        }
-
-        let mounted = true;
-
-        void window.electron.getMainWindowClickThroughEnabled().then((enabled) => {
-            if (mounted) {
-                setIsMainWindowClickThroughEnabled(Boolean(enabled));
-            }
-        }).catch(() => {
-            if (mounted) {
-                setIsMainWindowClickThroughEnabled(false);
-            }
-        });
-
-        const unsubscribe = window.electron.onMainWindowClickThroughChanged((state) => {
-            const enabled = Boolean(state?.enabled);
-            setIsMainWindowClickThroughEnabled(enabled);
-            setIsClickThroughToggleHotspotActive(enabled && Boolean(state?.unlockHoverActive));
-        });
-
-        return () => {
-            mounted = false;
-            unsubscribe?.();
-        };
-    }, [isElectronWindow]);
-
-    useEffect(() => {
-        if (!isElectronWindow || !isMainWindowClickThroughEnabled || !window.electron?.setMainWindowClickThroughUnlockHover) {
-            setIsClickThroughToggleHotspotActive(false);
-            void window.electron?.setMainWindowClickThroughUnlockHover?.(false);
-            return;
-        }
-
-        const toggleHotspotWidth = 48;
-        const toggleHotspotHeight = 40;
-        const toggleHotspotRightInset = 176;
-        const toggleHotspotTopInset = 4;
-
-        const syncToggleHotspot = (active: boolean) => {
-            setIsClickThroughToggleHotspotActive(prev => (prev === active ? prev : active));
-            void window.electron!.setMainWindowClickThroughUnlockHover(active);
-        };
-
-        const handleMouseMove = (event: MouseEvent) => {
-            const withinHorizontalBounds =
-                event.clientX >= window.innerWidth - toggleHotspotRightInset - toggleHotspotWidth
-                && event.clientX <= window.innerWidth - toggleHotspotRightInset;
-            const withinVerticalBounds =
-                event.clientY >= toggleHotspotTopInset
-                && event.clientY <= toggleHotspotTopInset + toggleHotspotHeight;
-            const withinHotspot = withinHorizontalBounds && withinVerticalBounds;
-
-            setIsClickThroughToggleHotspotActive(prev => {
-                if (prev === withinHotspot) {
-                    return prev;
-                }
-
-                void window.electron!.setMainWindowClickThroughUnlockHover(withinHotspot);
-                return withinHotspot;
-            });
-        };
-
-        const handleMouseLeave = () => {
-            syncToggleHotspot(false);
-        };
-
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseleave', handleMouseLeave);
-
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseleave', handleMouseLeave);
-            syncToggleHotspot(false);
-        };
-    }, [isElectronWindow, isMainWindowClickThroughEnabled]);
-
-    useClickThroughPointerLock(isMainWindowClickThroughEnabled);
+    useElectronWindowChrome();
     const {
         isPlayerView,
         shouldPauseVisualizerBackground,
