@@ -29,6 +29,7 @@ import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSetting
 import { useVisualizerAssetStore } from '../../../stores/useVisualizerAssetStore';
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -153,8 +154,10 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
 
     // Access ZUSTAND settings store directly for setters & configurations
     const store = useSettingsUiStore(useShallow(state => ({
-        handleToggleFollowSystemTheme: state.setFollowSystemTheme,
 
+    })));
+    const storeThemeSettings = useThemeSettingsStore(useShallow(state => ({
+        handleToggleFollowSystemTheme: state.setFollowSystemTheme,
         handleToggleCoverColorBg: state.handleToggleCoverColorBg,
         handleToggleStaticMode: state.handleToggleStaticMode,
     })));
@@ -433,7 +436,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             // message below, which writes the same single status slot last, so the user still ends
             // on "imported" rather than on whichever toggle happened to be applied last.
             if (has('useCoverColorBg')) {
-                store.handleToggleCoverColorBg(Boolean(config.useCoverColorBg));
+                storeThemeSettings.handleToggleCoverColorBg(Boolean(config.useCoverColorBg));
             }
             if (has('disableVisualizerGeometricBackground')) {
                 storeVisualizer.handleToggleDisableVisualizerGeometricBackground(Boolean(config.disableVisualizerGeometricBackground));
@@ -442,7 +445,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 storeVisualizer.handleToggleDisableVisualizerVignette(Boolean(config.disableVisualizerVignette));
             }
             if (has('staticMode')) {
-                store.handleToggleStaticMode(Boolean(config.staticMode));
+                storeThemeSettings.handleToggleStaticMode(Boolean(config.staticMode));
             }
 
             if (has('lyricsFontStyle') && config.lyricsFontStyle) {
@@ -540,7 +543,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 onChangeThemeGenerationSource(config.themeGenerationSource);
             }
             if (has('followSystemTheme')) {
-                store.handleToggleFollowSystemTheme(Boolean(config.followSystemTheme));
+                storeThemeSettings.handleToggleFollowSystemTheme(Boolean(config.followSystemTheme));
             }
 
             // The now playing card. Applied through the panel's own props, the same setters the three

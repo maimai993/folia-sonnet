@@ -131,7 +131,6 @@ export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_taskbar';
 export const WALLPAPER_MODE_STORAGE_KEY = 'wallpaper_mode';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
-export const FOLLOW_SYSTEM_THEME_STORAGE_KEY = 'follow_system_theme';
 
 /**
  * The card border's switch, seeded once from the switch the two renderers used to share.
@@ -233,13 +232,6 @@ const readStoredCrossfadeMaxSec = (): number => {
     return saved === null ? CROSSFADE_DEFAULT_SEC : clampCrossfadeSeconds(Number(saved));
 };
 
-export const readSystemThemeIsDaylight = (): boolean | null => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-        return null;
-    }
-
-    return window.matchMedia('(prefers-color-scheme: light)').matches;
-};
 
 
 // OBS overlay theme mode for the copied web OBS URL (default 'builtin' — per-song follow):
@@ -252,23 +244,6 @@ const readStoredWebObsThemeMode = (): 'static' | 'builtin' | 'ai' => {
     return value === 'static' || value === 'ai' ? value : 'builtin';
 };
 
-const readStoredDisableHomeDynamicBackground = (): boolean => {
-    if (typeof window === 'undefined') {
-        return false;
-    }
-
-    const saved = localStorage.getItem('disable_home_dynamic_background');
-    if (saved !== null) {
-        return saved === 'true';
-    }
-
-    const legacySaved = localStorage.getItem('enable_home_dynamic_background');
-    if (legacySaved !== null) {
-        return legacySaved !== 'true';
-    }
-
-    return false;
-};
 
 export const resolveStoredAudioQuality = (saved: string | null): AudioQuality => (
     saved === 'standard' || saved === 'lossless' || saved === 'hires' ? saved : 'high'
@@ -391,9 +366,6 @@ const readStoredSleepTimerMinutes = () => readStoredSleepTimerPart(SLEEP_TIMER_M
 
 export type SettingsUiState = {
     audioQuality: AudioQuality;
-    useCoverColorBg: boolean;
-    staticMode: boolean;
-    disableHomeDynamicBackground: boolean;
     minimizeToTray: boolean;
     voiceInputPauseEnabled: boolean;
     preventDisplaySleepDuringPlayback: boolean;
@@ -438,8 +410,6 @@ export type SettingsUiState = {
      * animation on and never seeing the ring again on the page most people watch.
      */
     transitionAnimationCard: boolean;
-    isDaylight: boolean;
-    followSystemTheme: boolean;
     appLanguagePreference: AppLanguagePreference;
     enableNowPlayingStage: boolean;
     // PlayerCap lyrics source (third stage source) config. enablePlayerCapStage is Web-only (Electron uses stageStatus.source).
@@ -475,9 +445,6 @@ export type SettingsUiState = {
     setIsSubSettingsViewOpen: (open: boolean) => void;
     openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null, initialVisualizerSection?: VisualizerSettingsSection | null) => void;
     closeSettings: () => void;
-    handleToggleCoverColorBg: (enable: boolean) => void;
-    handleToggleStaticMode: (enable: boolean) => void;
-    handleToggleDisableHomeDynamicBackground: (disable: boolean) => void;
     handleToggleMinimizeToTray: (enable: boolean) => void;
     handleToggleVoiceInputPause: (enable: boolean) => void;
     handleToggleModSystem: (enable: boolean) => void;
@@ -499,9 +466,6 @@ export type SettingsUiState = {
     handleToggleTransitionPerformance: (enable: boolean) => void;
     handleToggleTransitionAnimation: (enable: boolean) => void;
     handleToggleTransitionAnimationCard: (enable: boolean) => void;
-    setDaylightPreference: (isDaylight: boolean) => void;
-    setDaylightPreferenceFromSystem: (isDaylight: boolean) => void;
-    setFollowSystemTheme: (enabled: boolean) => void;
     handleSetAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void>;
     handleToggleNowPlayingStage: (enable: boolean) => void;
     // Web stage-source tri-state mutually-exclusive selection: null disables, else one of 'now-playing' or 'playercap'. Electron uses stageStatus.source.
@@ -527,17 +491,9 @@ export type SettingsUiState = {
     setPinnedCommandId: (slotIndex: number, commandId: string | null) => void;
 };
 
-const initialFollowSystemTheme = getStoredBoolean(FOLLOW_SYSTEM_THEME_STORAGE_KEY, false);
-const initialStoredDaylight = getStoredBoolean('default_theme_daylight', false);
-const initialDaylight = initialFollowSystemTheme
-    ? (readSystemThemeIsDaylight() ?? initialStoredDaylight)
-    : initialStoredDaylight;
 
 export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     audioQuality: readStoredAudioQuality(),
-    useCoverColorBg: getStoredBoolean('use_cover_color_bg', false),
-    staticMode: getStoredBoolean('static_mode', false),
-    disableHomeDynamicBackground: readStoredDisableHomeDynamicBackground(),
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
     voiceInputPauseEnabled: getStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, false),
     preventDisplaySleepDuringPlayback: getStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, false),
@@ -565,8 +521,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     // choice to make rather than one to arrive at after an update.
     transitionAnimation: getStoredBoolean(TRANSITION_ANIMATION_KEY, false),
     transitionAnimationCard: readTransitionAnimationCard(),
-    followSystemTheme: initialFollowSystemTheme,
-    isDaylight: initialDaylight,
     appLanguagePreference: readStoredAppLanguagePreference(),
     enableNowPlayingStage: getStoredBoolean('enable_now_playing_stage', false),
     enablePlayerCapStage: getStoredBoolean('enable_playercap_stage', false),
@@ -656,30 +610,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             isOpen: false,
         },
     })),
-    handleToggleCoverColorBg: (enable) => {
-        setStoredBoolean('use_cover_color_bg', enable);
-        set({ useCoverColorBg: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'coverColorAdded' : 'coverColorDefault')),
-        });
-    },
-    handleToggleStaticMode: (enable) => {
-        setStoredBoolean('static_mode', enable);
-        set({ staticMode: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'staticModeOn' : 'staticModeOff')),
-        });
-    },
-    handleToggleDisableHomeDynamicBackground: (disable) => {
-        setStoredBoolean('disable_home_dynamic_background', disable);
-        set({ disableHomeDynamicBackground: disable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (disable ? 'homeBgDisabled' : 'homeBgEnabled')),
-        });
-    },
     handleToggleMinimizeToTray: (enable) => {
         setStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, enable);
         set({ minimizeToTray: enable });
@@ -851,44 +781,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleTransitionAnimationCard: (enable) => {
         setStoredBoolean(TRANSITION_ANIMATION_CARD_KEY, enable);
         set({ transitionAnimationCard: enable });
-    },
-    // System updates are kept separate from the manual setter so a user click can disable auto-follow.
-    setDaylightPreferenceFromSystem: (enabled) => {
-        if (!get().followSystemTheme) {
-            return;
-        }
-
-        setStoredBoolean('default_theme_daylight', enabled);
-        set({ isDaylight: enabled });
-        if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
-            void window.electron.setNativeTheme('system');
-        }
-    },
-    setFollowSystemTheme: (enabled) => {
-        setStoredBoolean(FOLLOW_SYSTEM_THEME_STORAGE_KEY, enabled);
-        set({ followSystemTheme: enabled });
-
-        if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
-            void window.electron.setNativeTheme(enabled ? 'system' : (get().isDaylight ? 'light' : 'dark'));
-        }
-
-        if (enabled) {
-            const systemThemeIsDaylight = readSystemThemeIsDaylight();
-            if (systemThemeIsDaylight !== null) {
-                get().setDaylightPreferenceFromSystem(systemThemeIsDaylight);
-            }
-        }
-    },
-    setDaylightPreference: (enabled) => {
-        const wasFollowingSystem = get().followSystemTheme;
-        if (wasFollowingSystem) {
-            setStoredBoolean(FOLLOW_SYSTEM_THEME_STORAGE_KEY, false);
-        }
-        setStoredBoolean('default_theme_daylight', enabled);
-        set({ isDaylight: enabled, ...(wasFollowingSystem ? { followSystemTheme: false } : {}) });
-        if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
-            void window.electron.setNativeTheme(enabled ? 'light' : 'dark');
-        }
     },
     handleSetAppLanguagePreference: async (preference) => {
         await applyAppLanguagePreference(preference);
@@ -1070,9 +962,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
 export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     audioQuality: state.audioQuality,
     setAudioQuality: state.setAudioQuality,
-    useCoverColorBg: state.useCoverColorBg,
-    staticMode: state.staticMode,
-    disableHomeDynamicBackground: state.disableHomeDynamicBackground,
     minimizeToTray: state.minimizeToTray,
     voiceInputPauseEnabled: state.voiceInputPauseEnabled,
     preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
@@ -1091,8 +980,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     openPlayerOnLaunch: state.openPlayerOnLaunch,
     enableMediaCache: state.enableMediaCache,
     mediaCacheLimitGb: state.mediaCacheLimitGb,
-    isDaylight: state.isDaylight,
-    followSystemTheme: state.followSystemTheme,
     lastSeenGuideVersion: state.lastSeenGuideVersion,
     isUserGuideModalOpen: state.isUserGuideModalOpen,
     grid3dCardStyle: state.grid3dCardStyle,
@@ -1114,9 +1001,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetStageTrackPillMode: state.handleSetStageTrackPillMode,
     handleSetStageTrackPillTimeoutSec: state.handleSetStageTrackPillTimeoutSec,
     handleToggleStageTrackPillOnHome: state.handleToggleStageTrackPillOnHome,
-    handleToggleCoverColorBg: state.handleToggleCoverColorBg,
-    handleToggleStaticMode: state.handleToggleStaticMode,
-    handleToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
     handleToggleMinimizeToTray: state.handleToggleMinimizeToTray,
     handleToggleVoiceInputPause: state.handleToggleVoiceInputPause,
     handleToggleModSystem: state.handleToggleModSystem,
@@ -1126,9 +1010,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
     handleToggleMediaCache: state.handleToggleMediaCache,
     handleSetMediaCacheLimitGb: state.handleSetMediaCacheLimitGb,
-    setDaylightPreference: state.setDaylightPreference,
-    setDaylightPreferenceFromSystem: state.setDaylightPreferenceFromSystem,
-    setFollowSystemTheme: state.setFollowSystemTheme,
     setLastSeenGuideVersion: state.setLastSeenGuideVersion,
     setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     handleSetAppLanguagePreference: state.handleSetAppLanguagePreference,
@@ -1141,10 +1022,3 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleMute: state.handleToggleMute,
     handleToggleLoopMode: state.handleToggleLoopMode,
 });
-
-if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
-    const initialSettings = useSettingsUiStore.getState();
-    void window.electron.setNativeTheme(
-        initialSettings.followSystemTheme ? 'system' : (initialSettings.isDaylight ? 'light' : 'dark'),
-    );
-}

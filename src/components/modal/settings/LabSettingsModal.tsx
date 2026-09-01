@@ -12,6 +12,7 @@ import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 
 // src/components/modal/settings/LabSettingsModal.tsx
 // Experimental settings subview kept outside SettingsModal to avoid another giant inline panel.
@@ -48,31 +49,34 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     const isMouseDownOnOverlayRef = useRef(false);
     const [isNativeBlurNoticeOpen, setIsNativeBlurNoticeOpen] = useState(false);
     const {
-        disableHomeDynamicBackground,
-        isDaylight,
-        staticMode,
-        onToggleDisableHomeDynamicBackground,
         onToggleHideTaskbarIcon,
         onToggleMinimizeToTray,
         onToggleOpenPlayerOnLaunch,
-        onToggleStaticMode,
         preventDisplaySleepDuringPlayback,
         onTogglePreventDisplaySleepDuringPlayback,
         modSystemEnabled,
         onToggleModSystem,
     } = useSettingsUiStore(useShallow(state => ({
-        disableHomeDynamicBackground: state.disableHomeDynamicBackground,
-        isDaylight: state.isDaylight,
-        staticMode: state.staticMode,
-        onToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
         onToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
         onToggleMinimizeToTray: state.handleToggleMinimizeToTray,
         onToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
-        onToggleStaticMode: state.handleToggleStaticMode,
         preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
         onTogglePreventDisplaySleepDuringPlayback: state.handleTogglePreventDisplaySleepDuringPlayback,
         modSystemEnabled: state.modSystemEnabled,
         onToggleModSystem: state.handleToggleModSystem,
+    })));
+    const {
+        disableHomeDynamicBackground,
+        isDaylight,
+        staticMode,
+        onToggleDisableHomeDynamicBackground,
+        onToggleStaticMode,
+    } = useThemeSettingsStore(useShallow(state => ({
+        disableHomeDynamicBackground: state.disableHomeDynamicBackground,
+        isDaylight: state.isDaylight,
+        staticMode: state.staticMode,
+        onToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
+        onToggleStaticMode: state.handleToggleStaticMode,
     })));
     const {
         hidePlayerProgressBar,

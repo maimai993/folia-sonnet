@@ -47,6 +47,7 @@ import { selectVisualizerAssetSnapshot, useVisualizerAssetStore } from '../../st
 import { selectLyricSettingsSnapshot, useLyricSettingsStore } from '../../stores/useLyricSettingsStore';
 import { selectTypographySettingsSnapshot, useTypographySettingsStore } from '../../stores/useTypographySettingsStore';
 import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
+import { selectThemeSettingsSnapshot, useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -166,9 +167,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // Track the press origin per overlay so nested subview backdrops do not overwrite each other.
     const overlayMouseDownTargetsRef = useRef(new WeakSet<HTMLDivElement>());
     const {
-        useCoverColorBg,
-        staticMode,
-        disableHomeDynamicBackground,
         minimizeToTray,
         voiceInputPauseEnabled,
         hideTaskbarIcon,
@@ -178,14 +176,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         openPlayerOnLaunch,
         enableMediaCache,
         mediaCacheLimitGb,
-        isDaylight,
-        followSystemTheme,
-        setDaylightPreference: onSetDaylightPreference,
-        setFollowSystemTheme: onSetFollowSystemTheme,
         grid3dCardStyle,
-        handleToggleCoverColorBg: onToggleCoverColorBg,
-        handleToggleStaticMode: onToggleStaticMode,
-        handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
         handleToggleVoiceInputPause: onToggleVoiceInputPause,
         handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
@@ -201,6 +192,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetStageTrackPillTimeoutSec: onChangeStageTrackPillTimeoutSec,
         handleToggleStageTrackPillOnHome: onToggleStageTrackPillOnHome,
     } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    const {
+        useCoverColorBg,
+        staticMode,
+        disableHomeDynamicBackground,
+        isDaylight,
+        followSystemTheme,
+        setDaylightPreference: onSetDaylightPreference,
+        setFollowSystemTheme: onSetFollowSystemTheme,
+        handleToggleCoverColorBg: onToggleCoverColorBg,
+        handleToggleStaticMode: onToggleStaticMode,
+        handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
+    } = useThemeSettingsStore(useShallow(selectThemeSettingsSnapshot));
     const {
         hidePlayerProgressBar,
         hidePlayerRightPanelButton,

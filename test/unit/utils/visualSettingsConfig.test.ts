@@ -19,6 +19,7 @@ import { DEFAULT_SONNET_TUNING } from '@/types';
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
 import { useTypographySettingsStore } from '@/stores/useTypographySettingsStore';
+import { useThemeSettingsStore } from '@/stores/useThemeSettingsStore';
 
 const switchMock = vi.mocked(readStoredThemeAutoSwitchEnabled);
 const generateMock = vi.mocked(readStoredThemeAutoGenerateEnabled);
@@ -33,18 +34,18 @@ describe('buildVisualSettingsConfig', () => {
         switchMock.mockReset().mockReturnValue(true);
         generationSourceMock.mockReset().mockReturnValue('ai');
         generateMock.mockReset().mockReturnValue(false);
-        useSettingsUiStore.setState({ followSystemTheme: false, isDaylight: false });
+        useThemeSettingsStore.setState({ followSystemTheme: false, isDaylight: false });
     });
 
     it('carries the system theme preference and keeps manual daylight changes authoritative', () => {
-        useSettingsUiStore.setState({ followSystemTheme: true, isDaylight: false });
+        useThemeSettingsStore.setState({ followSystemTheme: true, isDaylight: false });
         expect(buildVisualSettingsConfig().followSystemTheme).toBe(true);
 
         const restored = decompressConfig(compressConfig(buildVisualSettingsConfig()));
         expect(restored.followSystemTheme).toBe(true);
 
-        useSettingsUiStore.getState().setDaylightPreference(true);
-        expect(useSettingsUiStore.getState()).toMatchObject({
+        useThemeSettingsStore.getState().setDaylightPreference(true);
+        expect(useThemeSettingsStore.getState()).toMatchObject({
             followSystemTheme: false,
             isDaylight: true,
         });
@@ -129,10 +130,7 @@ describe('buildVisualSettingsConfig', () => {
             disableVisualizerGeometricBackground: true,
             disableVisualizerVignette: true,
         });
-        useSettingsUiStore.setState({
-            useCoverColorBg: true,
-            staticMode: true,
-        });
+        useThemeSettingsStore.setState({ useCoverColorBg: true, staticMode: true });
         useTypographySettingsStore.setState({ subtitleOverlayOpacity: 0.45 });
 
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));

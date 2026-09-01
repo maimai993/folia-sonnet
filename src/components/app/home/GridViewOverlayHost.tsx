@@ -30,6 +30,7 @@ import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/loc
 import { applyLocalSongCoverDisplay } from '../../../services/playbackAdapters';
 import { resolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 
 // src/components/app/home/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
@@ -121,7 +122,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
 }) => {
     const { t } = useTranslation();
     const collectionSnapshot = useCollectionNavigationStore(state => state.snapshot);
-    const isDaylight = useSettingsUiStore(state => state.isDaylight);
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const localLibraryCatalog = surfaceProps.localLibraryCatalog;
     const selectedCollection = getActiveGridViewCollection(collectionSnapshot);
     const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);

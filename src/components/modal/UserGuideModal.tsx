@@ -7,12 +7,13 @@ import type { Theme } from '../../types';
 import { UserGuidePageContent } from './UserGuidePageContent';
 import { UserGuideFooter } from './UserGuideFooter';
 import { USER_GUIDE_PAGE_COUNT, type GuidePage } from './userGuideContent';
+import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 
 export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) => {
     const { t } = useTranslation();
     const isUserGuideModalOpen = useSettingsUiStore(state => state.isUserGuideModalOpen);
     const setIsUserGuideModalOpen = useSettingsUiStore(state => state.setIsUserGuideModalOpen);
-    const isDaylight = useSettingsUiStore(state => state.isDaylight);
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const [page, setPage] = useState<GuidePage>(1);
 
     // Reset to page 1 whenever the modal is reopened

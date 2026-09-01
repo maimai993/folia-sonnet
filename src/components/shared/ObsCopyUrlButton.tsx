@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Copy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 
 type ObsThemeMode = 'static' | 'builtin' | 'ai';
 
@@ -29,7 +30,7 @@ export const ObsCopyUrlButton: React.FC<ObsCopyUrlButtonProps> = ({ onCopy, copi
     const { t } = useTranslation();
     const mode = useSettingsUiStore((s) => s.webObsThemeMode);
     const setMode = useSettingsUiStore((s) => s.setWebObsThemeMode);
-    const isDaylight = useSettingsUiStore((s) => s.isDaylight);
+    const isDaylight = useThemeSettingsStore((s) => s.isDaylight);
     const [open, setOpen] = useState(false);
     const [openUp, setOpenUp] = useState(false);
     const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);

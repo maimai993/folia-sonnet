@@ -7,7 +7,6 @@ import { getMonetBackgroundImage } from '../services/monetBackgroundImage';
 import { getMonetPortraitImage } from '../services/monetPortraitImage';
 import { restoreUploadedLyricsFont } from '../services/customLyricsFont';
 import {
-    readSystemThemeIsDaylight,
     selectSettingsUiSnapshot,
     useSettingsUiStore,
 } from '../stores/useSettingsUiStore';
@@ -24,11 +23,14 @@ import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
 import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
 import { resolveStoredCustomLyricsFont } from '../stores/useTypographySettingsStore';
 import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
+import { readSystemThemeIsDaylight } from '../stores/useThemeSettingsStore';
+import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 
 export { resolveStoredCappellaTuning, resolveStoredCustomLyricsFont, resolveStoredMonetBackgroundTuning, resolveVisualizerBackgroundMode };
 
 export function useAppPreferences() {
     const preferences = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    const followSystemTheme = useThemeSettingsStore(state => state.followSystemTheme);
     const setTransparentPlayerBackgroundFromSystem = usePlayerChromeSettingsStore(state => state.setTransparentPlayerBackgroundFromSystem);
     const setDesktopPreferenceSnapshot = useSettingsUiStore(state => state.setDesktopPreferenceSnapshot);
     const setStoredCappellaEmojiPack = useVisualizerAssetStore(state => state.setStoredCappellaEmojiPack);
@@ -55,8 +57,8 @@ export function useAppPreferences() {
     const isLoadingMonetPortraitImage = useVisualizerAssetStore(state => state.isLoadingMonetPortraitImage);
     const monetBackgroundTuning = useVisualizerSettingsStore(state => state.monetBackgroundTuning);
     const monetTuning = useVisualizerSettingsStore(state => state.monetTuning);
-    const isDaylight = useSettingsUiStore(state => state.isDaylight);
-    const setDaylightPreferenceFromSystem = useSettingsUiStore(state => state.setDaylightPreferenceFromSystem);
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
+    const setDaylightPreferenceFromSystem = useThemeSettingsStore(state => state.setDaylightPreferenceFromSystem);
 
     useEffect(() => {
         const root = document.documentElement;
@@ -73,7 +75,7 @@ export function useAppPreferences() {
 
     // Keep the persisted daylight value in sync with OS changes only while auto-follow is enabled.
     useEffect(() => {
-        if (!preferences.followSystemTheme || typeof window.matchMedia !== 'function') {
+        if (!followSystemTheme || typeof window.matchMedia !== 'function') {
             return;
         }
 
@@ -98,7 +100,7 @@ export function useAppPreferences() {
 
         mediaQuery.addListener(handleSystemThemeChange);
         return () => mediaQuery.removeListener(handleSystemThemeChange);
-    }, [preferences.followSystemTheme, setDaylightPreferenceFromSystem]);
+    }, [followSystemTheme, setDaylightPreferenceFromSystem]);
 
     useEffect(() => {
         if (!window.electron?.getWindowTransparentMode) {

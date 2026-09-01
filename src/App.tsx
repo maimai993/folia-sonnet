@@ -114,6 +114,7 @@ import { selectLyricSettingsSnapshot, useLyricSettingsStore } from './stores/use
 import { selectTypographySettingsSnapshot, useTypographySettingsStore } from './stores/useTypographySettingsStore';
 import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from './stores/usePlayerChromeSettingsStore';
 import { useHomeLayoutSettingsStore } from './stores/useHomeLayoutSettingsStore';
+import { selectThemeSettingsSnapshot, useThemeSettingsStore } from './stores/useThemeSettingsStore';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -357,14 +358,10 @@ export default function App() {
     const {
         audioQuality,
         setAudioQuality,
-        useCoverColorBg,
-        staticMode,
-        disableHomeDynamicBackground,
         minimizeToTray,
         hideTaskbarIcon,
         openPlayerOnLaunch,
         enableMediaCache,
-        isDaylight,
         enableNowPlayingStage,
         enablePlayerCapStage,
         playerCapHost,
@@ -377,9 +374,6 @@ export default function App() {
         stageTrackPillMode,
         stageTrackPillTimeoutSec,
         stageTrackPillOnHome,
-        handleToggleCoverColorBg,
-        handleToggleStaticMode,
-        handleToggleDisableHomeDynamicBackground,
         handleToggleMinimizeToTray,
         handleToggleHideTaskbarIcon,
         handleToggleOpenPlayerOnLaunch,
@@ -398,7 +392,6 @@ export default function App() {
         handleSetSleepTimerHours,
         handleSetSleepTimerMinutes,
         handleToggleMediaCache,
-        setDaylightPreference,
         handleSetAppLanguagePreference,
         handleToggleNowPlayingStage,
         handleSetQueueAddBehavior,
@@ -409,6 +402,16 @@ export default function App() {
         handleToggleMute,
         handleToggleLoopMode,
     } = appPreferences;
+    const {
+        useCoverColorBg,
+        staticMode,
+        disableHomeDynamicBackground,
+        isDaylight,
+        handleToggleCoverColorBg,
+        handleToggleStaticMode,
+        handleToggleDisableHomeDynamicBackground,
+        setDaylightPreference,
+    } = useThemeSettingsStore(useShallow(selectThemeSettingsSnapshot));
     const {
         hidePlayerProgressBar,
         hidePlayerRightPanelButton,

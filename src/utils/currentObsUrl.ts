@@ -7,6 +7,7 @@ import { applyStoredAnimationIntensityToDualTheme, readStoredLastAppliedThemePoi
 import { getLastDualTheme } from '../services/themeCache';
 import { BASE_DUAL_THEME } from '../services/baseThemes';
 import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
+import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 
 // src/utils/currentObsUrl.ts
 // Build the OBS static URL for a given web source from the current visual settings, producing the
@@ -33,7 +34,8 @@ export async function readEffectiveExportTheme(): Promise<DualTheme | null> {
 // transparent=1, off → transparent=0 (background shown); the overlay reads an absent param the same
 // as transparent=0, so the default matches the toggle 100%.
 export async function buildCurrentObsUrl(obsSource: string, host = '', extra?: Record<string, string>): Promise<string> {
-  const { isDaylight, webObsThemeMode } = useSettingsUiStore.getState();
+  const { webObsThemeMode } = useSettingsUiStore.getState();
+  const { isDaylight } = useThemeSettingsStore.getState();
   const { transparentPlayerBackground } = usePlayerChromeSettingsStore.getState();
   // Dynamic modes ('builtin'/'ai') bake no theme, so the overlay resolves one per song (cover-derived
   // builtin, plus a regenerated AI theme under 'ai'). 'static' must always bake something: a

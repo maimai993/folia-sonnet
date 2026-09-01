@@ -13,6 +13,7 @@ import { pushRuntimeSnapshot } from './ipc';
 import { useModsStore } from './useModsStore';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
+import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 
 // src/mods/ModsPanelTab.tsx
 // The mod manager surface rendered as a single-column accordion: each mod
@@ -221,7 +222,7 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
         tempera: state.temperaTuning,
     })));
     const globalLyricTimelineOffsetMs = useLyricSettingsStore((state) => state.globalLyricTimelineOffsetMs);
-    const isDaylight = useSettingsUiStore((state) => state.isDaylight);
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
 
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

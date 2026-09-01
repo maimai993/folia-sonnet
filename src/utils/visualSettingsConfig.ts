@@ -5,6 +5,7 @@ import type { CappellaAvatarImage, CappellaEmojiImage, CappellaTuning, MonetBack
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
 import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
+import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 
 // src/utils/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
@@ -12,6 +13,7 @@ import { useTypographySettingsStore } from '../stores/useTypographySettingsStore
 
 export function buildVisualSettingsConfig(): Record<string, unknown> {
   const store = useSettingsUiStore.getState();
+  const storeThemeSettings = useThemeSettingsStore.getState();
   const storeTypographySettings = useTypographySettingsStore.getState();
   const storeVisualizer = useVisualizerSettingsStore.getState();
   // The song-theme automation flags live in theme preferences, not the settings store. The overlay
@@ -25,7 +27,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     songThemeAutoSwitchEnabled,
     songThemeAutoGenerateEnabled,
     themeGenerationSource: readStoredThemeGenerationSource(),
-    followSystemTheme: store.followSystemTheme,
+    followSystemTheme: storeThemeSettings.followSystemTheme,
     visualizerMode: storeVisualizer.visualizerMode,
     randomVisualizerModePerSong: storeVisualizer.randomVisualizerModePerSong,
     visualizerBackgroundMode: storeVisualizer.visualizerBackgroundMode,
@@ -34,12 +36,12 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // source has always carried them (it publishes the whole VisualizerBackgroundConfig), so leaving
     // them out here made the two OBS paths disagree — and a copied config silently lost the cover-color,
     // geometric-background and vignette toggles on re-import.
-    useCoverColorBg: store.useCoverColorBg,
+    useCoverColorBg: storeThemeSettings.useCoverColorBg,
     disableVisualizerGeometricBackground: storeVisualizer.disableVisualizerGeometricBackground,
     disableVisualizerVignette: storeVisualizer.disableVisualizerVignette,
     // Static mode is not merely an audio-reactivity switch: it selects the low-motion branch inside
     // several renderers, so a web overlay without it animates where the main window does not.
-    staticMode: store.staticMode,
+    staticMode: storeThemeSettings.staticMode,
     visualizerOpacity: storeVisualizer.visualizerOpacity,
     hidePlayerTranslationSubtitle: storeTypographySettings.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: storeTypographySettings.showSubtitleTranslation,
@@ -97,6 +99,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
 // that the font may be unavailable on the OBS machine (and that an uploaded font never transfers).
 export function hasCustomObsFont(): boolean {
   const store = useSettingsUiStore.getState();
+  const storeThemeSettings = useThemeSettingsStore.getState();
   const storeTypographySettings = useTypographySettingsStore.getState();
   return Boolean(storeTypographySettings.lyricsCustomFont)
     || (storeTypographySettings.lyricsFontFallbackFamilies?.length ?? 0) > 0
