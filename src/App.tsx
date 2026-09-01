@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { loadCachedOrFetchCover } from './services/coverCache';
 import VisualizerRenderer from './components/visualizer/VisualizerRenderer';
-import type { VisualizerBackgroundConfig } from './components/visualizer/backgrounds/definition';
 import CommandPalette from './components/command-palette/CommandPalette';
 import { useCommandPalette } from './components/command-palette/useCommandPalette';
 import { useCommandPaletteContext } from './hooks/useCommandPaletteContext';
@@ -50,7 +49,7 @@ import { getLocalSongArrayBuffer } from './services/localMusicService';
 import type { MediaId, OnlineProviderId, ProviderCollection } from './types/onlineMusic';
 import { resolveSongCatalogRef } from './services/onlineMusic/catalogRefs';
 import { omni } from './services/onlineMusic/omni';
-import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from './services/onlineMusic/songMetadata';
+import { getSongArtistLabel, getSongCoverUrl } from './services/onlineMusic/songMetadata';
 import { isNavidromeEnabled } from './services/navidromeService';
 import { useAppNavigation } from './hooks/useAppNavigation';
 import { useNeteaseLibrary } from './hooks/useNeteaseLibrary';
@@ -106,7 +105,6 @@ import { buildLocalLibraryIndex } from './utils/localLibraryIndex';
 import type { PlayerChromeVisibilityMode } from './types/remoteControl';
 import { setStatusMessage as setStatusMsg, useStatusMessage } from './stores/useStatusMessageStore';
 import { selectVisualizerSettingsSnapshot, useVisualizerSettingsStore } from './stores/useVisualizerSettingsStore';
-import { selectVisualizerAssetSnapshot, useVisualizerAssetStore } from './stores/useVisualizerAssetStore';
 import { selectLyricSettingsSnapshot, useLyricSettingsStore } from './stores/useLyricSettingsStore';
 import { selectTypographySettingsSnapshot, useTypographySettingsStore } from './stores/useTypographySettingsStore';
 import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from './stores/usePlayerChromeSettingsStore';
@@ -125,6 +123,8 @@ import { useLibraryStore } from './stores/useLibraryStore';
 import { countRender } from './dev/renderCount';
 import { resolveSongLiked } from './utils/resolveSongLiked';
 import StageSessionEmptyState from './components/app/stage/StageSessionEmptyState';
+import { useVisualizerRendererModel } from './components/visualizer/useVisualizerRendererModel';
+import { useVisualizerTunings } from './components/visualizer/useVisualizerTunings';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -227,13 +227,11 @@ export default function App() {
     // Auto-close the player panel when leaving the player view
     // (Effect moved to after useAppNavigation where currentView is defined)
     const {
-        isSettingsSubviewOpen,
         settingsModalState,
         lastSeenGuideVersion,
         setLastSeenGuideVersion,
         setIsUserGuideModalOpen,
     } = useSettingsModalStore(useShallow(state => ({
-        isSettingsSubviewOpen: state.isSubSettingsViewOpen,
         settingsModalState: state.settingsModalState,
         lastSeenGuideVersion: state.lastSeenGuideVersion,
         setLastSeenGuideVersion: state.setLastSeenGuideVersion,
@@ -403,8 +401,6 @@ export default function App() {
         sleepTimerMinutes,
     } = useSleepTimerStore(useShallow(selectSleepTimerSnapshot));
     const {
-        useCoverColorBg,
-        staticMode,
         disableHomeDynamicBackground,
         isDaylight,
         setDaylightPreference,
@@ -416,21 +412,12 @@ export default function App() {
         enablePlayerPageNativeBlur,
         autoHidePlayerChrome,
         handleToggleAutoHidePlayerChrome,
-        alwaysShowPlayerBackButton,
         alwaysShowMainWindowTitlebar,
         handleToggleTransparentPlayerBackground,
     } = usePlayerChromeSettingsStore(useShallow(selectPlayerChromeSettingsSnapshot));
     const {
         hidePlayerTranslationSubtitle,
-        showSubtitleTranslation,
-        subtitleContentMode,
-        subtitleOverlayOpacity,
-        subtitleOverlayBackground,
-        showHarmonySubtitle,
-        harmonySubtitleBackground,
         lyricsFontStyle,
-        lyricsFontScale,
-        subtitleFontScale,
         lyricsFontWeight,
         lyricsFontFallbackFamilies,
         subtitleFontInheritsLyrics,
@@ -452,59 +439,17 @@ export default function App() {
         handleSetLyricStaffPattern,
     } = useLyricSettingsStore(useShallow(selectLyricSettingsSnapshot));
     const {
-        disableVisualizerVignette,
-        disableVisualizerGeometricBackground,
-        backgroundOpacity,
-        visualizerOpacity,
-        visualizerBackgroundMode,
         visualizerMode,
         randomVisualizerModePerSong,
-        classicTuning,
-        cadenzaTuning,
-        partitaTuning,
-        fumeTuning,
-        claddaghTuning,
-        cappellaTuning,
-        tiltTuning,
-        dioramaTuning,
-        monetBackgroundTuning,
-        nomandBackgroundTuning,
-        latentBackgroundTuning,
-        monetTuning,
-        pendoloTuning,
-        sonnetTuning,
-        temperaTuning,
-        urlBackgroundList,
-        urlBackgroundSelectedId,
         handleSetVisualizerMode,
-        handleSetMonetTuning,
     } = useVisualizerSettingsStore(useShallow(selectVisualizerSettingsSnapshot));
-    const {
-        cappellaCustomEmojiImages,
-        cappellaCustomAvatarImages,
-        monetBackgroundImage,
-        monetPortraitImage,
-    } = useVisualizerAssetStore(useShallow(selectVisualizerAssetSnapshot));
 
     useElectronDisplaySleepBlocker(
         preventDisplaySleepDuringPlayback,
         playerState === PlayerState.PLAYING,
     );
 
-    const visualizerTunings = useMemo(() => ({
-        classic: classicTuning,
-        cadenza: cadenzaTuning,
-        partita: partitaTuning,
-        fume: fumeTuning,
-        claddagh: claddaghTuning,
-        cappella: cappellaTuning,
-        tilt: tiltTuning,
-        diorama: dioramaTuning,
-        monet: monetTuning,
-        pendolo: pendoloTuning,
-        sonnet: sonnetTuning,
-        tempera: temperaTuning,
-    }), [cadenzaTuning, cappellaTuning, classicTuning, claddaghTuning, dioramaTuning, fumeTuning, monetTuning, partitaTuning, pendoloTuning, sonnetTuning, temperaTuning, tiltTuning]);
+    const visualizerTunings = useVisualizerTunings();
 
     const showPlayerChromeVisibilityModeStatus = useCallback((mode: PlayerChromeVisibilityMode) => {
         setStatusMsg({
@@ -1542,14 +1487,6 @@ export default function App() {
     }, [stageTrackPillMode, stageNextUpTrack]);
     const stageIsNextUp = stageNextUp !== null && (isShowingTail || countdownActive);
 
-    const displaySongArtist = useMemo(
-        () => (displaySong ? getSongArtistLabel(displaySong) || null : null),
-        [displaySong],
-    );
-    const displaySongAlbum = useMemo(
-        () => (displaySong ? getSongAlbumLabel(displaySong) || null : null),
-        [displaySong],
-    );
 
     // The duration normally arrives on `loadedmetadata`, which fires when an element is given a
     // source. A warmed deck breaks that: it is handed the next track seconds early, fires the event
@@ -1983,39 +1920,6 @@ export default function App() {
         isNowPlayingControlDisabled,
         stageActiveEntryKind,
     ]);
-    const visualizerBackgroundConfig = useMemo<VisualizerBackgroundConfig>(() => ({
-        mode: visualizerBackgroundMode,
-        common: {
-            useCoverColorBg,
-            opacity: backgroundOpacity,
-            disableGeometricBackground: disableVisualizerGeometricBackground,
-            disableVignette: disableVisualizerVignette,
-        },
-        customImage: monetBackgroundImage,
-        monet: { tuning: monetBackgroundTuning },
-        nomand: { tuning: nomandBackgroundTuning },
-        latent: { tuning: latentBackgroundTuning },
-        url: {
-            items: urlBackgroundList,
-            selectedId: urlBackgroundSelectedId,
-        },
-    }), [
-        backgroundOpacity,
-        disableVisualizerGeometricBackground,
-        disableVisualizerVignette,
-        monetBackgroundImage,
-        monetBackgroundTuning,
-        nomandBackgroundTuning,
-        latentBackgroundTuning,
-        urlBackgroundList,
-        urlBackgroundSelectedId,
-        useCoverColorBg,
-        visualizerBackgroundMode,
-    ]);
-    const obsBrowserSourceBackground = useMemo<VisualizerBackgroundConfig>(() => ({
-        ...visualizerBackgroundConfig,
-        transparent: isPlayerPageTransparent,
-    }), [isPlayerPageTransparent, visualizerBackgroundConfig]);
     const isSettingsModalOpen = settingsModalState.isOpen;
     const {
         obsBrowserSourceStatus,
@@ -2028,8 +1932,6 @@ export default function App() {
         offsetMs: effectiveLyricTimelineOffsetMs,
         theme: visualizerTheme,
         subtitleTheme: visualizerSubtitleTheme,
-        visualizerTunings,
-        background: obsBrowserSourceBackground,
         hideTranslationSubtitle: shouldHidePlayerTranslationSubtitle,
         seed: visualizerGeometrySeed,
     });
@@ -2417,6 +2319,17 @@ export default function App() {
         stageLyricsClockRef,
         syncStageLyricsClock,
     ]);
+    const visualizerRendererModel = useVisualizerRendererModel({
+        theme: visualizerTheme,
+        subtitleTheme: visualizerSubtitleTheme,
+        seed: visualizerGeometrySeed,
+        isObsBrowserSourceRendering,
+        shouldPauseVisualizerBackground,
+        hideTranslationSubtitle: shouldHidePlayerTranslationSubtitle,
+        isPlayerPageTransparent,
+        onLyricLineSeek: handleMonetLyricLineSeek,
+        onBack: navigateBackFromPlayer,
+    });
 
     const handlePlayerPanelAlbumSelect = useCallback(async (song: SongResult, album: Album) => {
         try {
@@ -2971,62 +2884,7 @@ export default function App() {
                 className="absolute inset-0 z-0"
                 onClick={handleContainerClick}
             >
-                <VisualizerRenderer
-                    mode={isObsBrowserSourceRendering ? 'still' : visualizerMode}
-                    currentTime={lyricCurrentTime}
-                    currentLineIndex={currentLineIndex}
-                    lines={displayLyrics?.lines || []}
-                    theme={visualizerTheme}
-                    subtitleTheme={visualizerSubtitleTheme}
-                    isDaylight={isDaylight}
-                    audioPower={audioPower}
-                    audioBands={audioBands}
-                    songTitle={displaySong?.name}
-                    songArtist={displaySongArtist}
-                    songAlbum={displaySongAlbum}
-                    coverUrl={displayCoverUrl}
-                    showText={currentView === 'player' && !isSettingsModalOpen}
-                    seed={visualizerGeometrySeed}
-                    staticMode={staticMode}
-                    backgroundStaticMode={
-                        shouldPauseVisualizerBackground
-                        || (
-                            visualizerBackgroundConfig.mode === 'latent'
-                            && latentBackgroundTuning.dynamicOnlyInPlayer
-                            && currentView !== 'player'
-                        )
-                    }
-                    paused={displayPlayerState !== PlayerState.PLAYING}
-                    visualizerOpacity={visualizerOpacity}
-                    background={{
-                        ...visualizerBackgroundConfig,
-                        transparent: currentView === 'player' && isPlayerPageTransparent && !isSettingsModalOpen,
-                        common: {
-                            ...visualizerBackgroundConfig.common,
-                            disableGeometricBackground: disableVisualizerGeometricBackground || isSettingsSubviewOpen,
-                        },
-                    }}
-                    lyricsFontScale={lyricsFontScale}
-                    subtitleFontScale={subtitleFontScale}
-                    subtitleOverlayOpacity={subtitleOverlayOpacity}
-                    subtitleOverlayBackground={subtitleOverlayBackground}
-                    showHarmonySubtitle={showHarmonySubtitle}
-                    harmonySubtitleBackground={harmonySubtitleBackground}
-                    isPlayerChromeHidden={isPlayerChromeHidden}
-                    hideTranslationSubtitle={shouldHidePlayerTranslationSubtitle}
-                    showSubtitleTranslation={showSubtitleTranslation}
-                    subtitleContentMode={subtitleContentMode}
-                    visualizerTunings={visualizerTunings}
-                    onMonetTuningChange={handleSetMonetTuning}
-                    cappellaCustomEmojiImages={cappellaCustomEmojiImages}
-                    cappellaCustomAvatarImages={cappellaCustomAvatarImages}
-                    monetPortraitImage={monetPortraitImage}
-                    onLyricLineSeek={['monet', 'pendolo'].includes(visualizerMode) ? handleMonetLyricLineSeek : undefined}
-                    onBack={navigateBackFromPlayer}
-                    isPanelOpen={isPanelOpen}
-                    alwaysShowBackButton={alwaysShowPlayerBackButton || isPanelOpen}
-                    onPlayerPanelGuideHotspotChange={setIsPlayerPanelGuideHotspotActive}
-                />
+                <VisualizerRenderer {...visualizerRendererModel} />
             </div>
 
             <StageSessionEmptyState

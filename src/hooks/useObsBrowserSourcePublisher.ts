@@ -51,6 +51,9 @@ import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore
 import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
 import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
 import { audioBands, audioPower, currentTime } from '../stores/motionSignals';
+import { useVisualizerTunings } from '../components/visualizer/useVisualizerTunings';
+import { useVisualizerBackgroundConfig } from '../components/visualizer/useVisualizerBackgroundConfig';
+import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
 
 // src/hooks/useObsBrowserSourcePublisher.ts
 // Publishes the single playback surface to the local OBS browser source.
@@ -61,14 +64,13 @@ const OBS_CLOCK_JUMP_THRESHOLD_SEC = 0.35;
 const OBS_CLOCK_JUMP_MIN_INTERVAL_MS = 80;
 type UseObsBrowserSourcePublisherOptions = {
 
+
     isElectronWindow: boolean;
     stageSource: StageSource | null;
     coverUrl: string | null;
     offsetMs: number;
     theme: Theme;
     subtitleTheme?: Theme;
-    visualizerTunings?: VisualizerTuningBundle;
-    background?: VisualizerBackgroundConfig;
     hideTranslationSubtitle: boolean;
     seed: string | number;
 };
@@ -115,11 +117,20 @@ export const useObsBrowserSourcePublisher = ({
     offsetMs,
     theme,
     subtitleTheme,
-    visualizerTunings,
-    background,
     hideTranslationSubtitle,
     seed,
 }: UseObsBrowserSourcePublisherOptions) => {
+    const visualizerTunings = useVisualizerTunings();
+    const backgroundConfig = useVisualizerBackgroundConfig();
+    const transparentPlayerBackground = usePlayerChromeSettingsStore(state => state.transparentPlayerBackground);
+    const enablePlayerPageNativeBlur = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
+    // The overlay is composited by OBS, so it always publishes the transparent variant when the
+    // player page itself is transparent - there is no window chrome behind it to show through.
+    const background = useMemo(() => ({
+        ...backgroundConfig,
+        transparent: transparentPlayerBackground || enablePlayerPageNativeBlur,
+    }), [backgroundConfig, transparentPlayerBackground, enablePlayerPageNativeBlur]);
+
     // Read here rather than passed in. Every one of these is a store field or a module-level motion
     // signal, and App.tsx was naming 22 of them purely to forward them to this hook.
     const activePlaybackContext = usePlaybackStore(state => state.activePlaybackContext);
