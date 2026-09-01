@@ -16,6 +16,7 @@ import ModeStepperRow from './ModeStepperRow';
 import ThemeSourceRow from './ThemeSourceRow';
 import { BackgroundModeGlyph, VisualizerModeGlyph } from '../../visualizer/modeGlyphs';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 
 // src/components/panelTab/controls/AppearanceSection.tsx
 // 外观区：歌词样式、背景、主题来源三件事放在一起。
@@ -56,7 +57,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
     onClosePanel,
 }) => {
     const { t } = useTranslation();
-    const openSettings = useSettingsUiStore(state => state.openSettings);
+    const openSettings = useSettingsModalStore(state => state.openSettings);
     const visualizerBackgroundMode = useVisualizerSettingsStore(state => state.visualizerBackgroundMode);
     const setVisualizerBackgroundMode = useVisualizerSettingsStore(state => state.handleSetVisualizerBackgroundMode);
     const monetBackgroundTuning = useVisualizerSettingsStore(state => state.monetBackgroundTuning);

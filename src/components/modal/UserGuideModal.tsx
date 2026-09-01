@@ -8,11 +8,12 @@ import { UserGuidePageContent } from './UserGuidePageContent';
 import { UserGuideFooter } from './UserGuideFooter';
 import { USER_GUIDE_PAGE_COUNT, type GuidePage } from './userGuideContent';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
+import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 
 export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) => {
     const { t } = useTranslation();
-    const isUserGuideModalOpen = useSettingsUiStore(state => state.isUserGuideModalOpen);
-    const setIsUserGuideModalOpen = useSettingsUiStore(state => state.setIsUserGuideModalOpen);
+    const isUserGuideModalOpen = useSettingsModalStore(state => state.isUserGuideModalOpen);
+    const setIsUserGuideModalOpen = useSettingsModalStore(state => state.setIsUserGuideModalOpen);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const [page, setPage] = useState<GuidePage>(1);
 

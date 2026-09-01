@@ -119,6 +119,8 @@ import { useAutomixSettingsStore } from './stores/useAutomixSettingsStore';
 import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from './stores/useDesktopSettingsStore';
 import { selectSleepTimerSnapshot, useSleepTimerStore } from './stores/useSleepTimerStore';
 import { selectStageSettingsSnapshot, useStageSettingsStore } from './stores/useStageSettingsStore';
+import { selectAudioSettingsSnapshot, useAudioSettingsStore } from './stores/useAudioSettingsStore';
+import { selectSettingsModalSnapshot, useSettingsModalStore } from './stores/useSettingsModalStore';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -170,6 +172,11 @@ export default function App() {
     const [navidromeEnabled, setNavidromeEnabledState] = useState(() => isNavidromeEnabled());
     const [starredNavidromeSongIds, setStarredNavidromeSongIds] = useState<Set<string>>(new Set());
     const {
+
+    } = useSettingsUiStore(useShallow(state => ({
+
+    })));
+    const {
         closeSettings,
         isSettingsSubviewOpen,
         openSettings,
@@ -177,9 +184,7 @@ export default function App() {
         lastSeenGuideVersion,
         setLastSeenGuideVersion,
         setIsUserGuideModalOpen,
-        openAudioEqualizer,
-        applyAudioSoundPreset,
-    } = useSettingsUiStore(useShallow(state => ({
+    } = useSettingsModalStore(useShallow(state => ({
         closeSettings: state.closeSettings,
         isSettingsSubviewOpen: state.isSubSettingsViewOpen,
         openSettings: state.openSettings,
@@ -187,6 +192,11 @@ export default function App() {
         lastSeenGuideVersion: state.lastSeenGuideVersion,
         setLastSeenGuideVersion: state.setLastSeenGuideVersion,
         setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
+    })));
+    const {
+        openAudioEqualizer,
+        applyAudioSoundPreset,
+    } = useAudioSettingsStore(useShallow(state => ({
         openAudioEqualizer: state.openAudioEqualizer,
         applyAudioSoundPreset: state.handleApplyAudioSoundPreset,
     })));
@@ -360,6 +370,8 @@ export default function App() {
     // as well as setting daylight mode preference
     const appPreferences = useAppPreferences();
     const {
+    } = appPreferences;
+    const {
         audioQuality,
         setAudioQuality,
         enableMediaCache,
@@ -367,7 +379,6 @@ export default function App() {
         audioOutputDeviceId,
         loopMode,
         handleToggleMediaCache,
-        handleSetAppLanguagePreference,
         handleSetQueueAddBehavior,
         handleSetAudioOutputDeviceId: persistAudioOutputDeviceId,
         volume,
@@ -375,7 +386,10 @@ export default function App() {
         handleSetVolume,
         handleToggleMute,
         handleToggleLoopMode,
-    } = appPreferences;
+    } = useAudioSettingsStore(useShallow(selectAudioSettingsSnapshot));
+    const {
+        handleSetAppLanguagePreference,
+    } = useSettingsModalStore(useShallow(selectSettingsModalSnapshot));
     const {
         minimizeToTray,
         hideTaskbarIcon,

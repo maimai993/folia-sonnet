@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { APP_VERSION } from './helpers/appState';
+import { useSettingsModalStore } from '@/stores/useSettingsModalStore';
 
 // test/ui/nomandSettings.spec.ts
 // Verifies Nomand swaps its effect-specific tuning controls while keeping the shared settings shell.
@@ -19,7 +20,7 @@ test('switches Nomand Paper effects and exposes matching tuning controls', async
     await page.evaluate(async () => {
         const storeModulePath = '/src/stores/useSettingsUiStore.ts';
         const { useSettingsUiStore } = await import(storeModulePath);
-        useSettingsUiStore.getState().openSettings('options', 'visualizer', 'visualizer');
+        useSettingsModalStore.getState().openSettings('options', 'visualizer', 'visualizer');
     });
 
     await page.getByRole('button', { name: 'Background Settings', exact: true }).click();

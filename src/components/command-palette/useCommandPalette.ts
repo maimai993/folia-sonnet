@@ -5,6 +5,7 @@ import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch 
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { resolvePinnedCommandSlots } from './pinnedCommandPreferences';
 import { isPrimaryModifierPressed, isSecondaryModifierPressed } from '../../utils/platform';
+import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 
 // src/components/command-palette/useCommandPalette.ts
 // Manages palette state, keyboard opening, and selected autocomplete item.
@@ -49,7 +50,7 @@ export const useCommandPalette = ({
         setActiveCommand(null);
         setIsExecuting(false);
     }, []);
-    const pinnedCommandIds = useSettingsUiStore(state => state.pinnedCommandIds);
+    const pinnedCommandIds = useSettingsModalStore(state => state.pinnedCommandIds);
     const availableCommands = useMemo(() => getAvailableCommandPaletteCommands(context), [context]);
     const pinnedCommands = useMemo(
         () => resolvePinnedCommandSlots(pinnedCommandIds, availableCommands),

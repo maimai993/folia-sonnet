@@ -50,6 +50,8 @@ import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from
 import { selectThemeSettingsSnapshot, useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../stores/useDesktopSettingsStore';
 import { selectStageSettingsSnapshot, useStageSettingsStore } from '../../stores/useStageSettingsStore';
+import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
+import { selectAudioSettingsSnapshot, useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -169,13 +171,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // Track the press origin per overlay so nested subview backdrops do not overwrite each other.
     const overlayMouseDownTargetsRef = useRef(new WeakSet<HTMLDivElement>());
     const {
-        enableMediaCache,
-        mediaCacheLimitGb,
         grid3dCardStyle,
-        handleToggleMediaCache: onToggleMediaCache,
-        handleSetMediaCacheLimitGb: onSetMediaCacheLimitGb,
         handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
     } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    const {
+        enableMediaCache,
+        mediaCacheLimitGb,
+        handleToggleMediaCache: onToggleMediaCache,
+        handleSetMediaCacheLimitGb: onSetMediaCacheLimitGb,
+    } = useAudioSettingsStore(useShallow(selectAudioSettingsSnapshot));
     const {
         minimizeToTray,
         voiceInputPauseEnabled,
@@ -354,8 +358,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         isLoadingMonetPortraitImage,
     } = useVisualizerAssetStore(useShallow(selectVisualizerAssetSnapshot));
     const resolvedToggleTransparentPlayerBackground = onToggleTransparentPlayerBackground ?? onToggleTransparentPlayerBackgroundFromStore;
-    const setIsSubSettingsViewOpen = useSettingsUiStore(state => state.setIsSubSettingsViewOpen);
-    const setIsUserGuideModalOpen = useSettingsUiStore(state => state.setIsUserGuideModalOpen);
+    const setIsSubSettingsViewOpen = useSettingsModalStore(state => state.setIsSubSettingsViewOpen);
+    const setIsUserGuideModalOpen = useSettingsModalStore(state => state.setIsUserGuideModalOpen);
     const [activeTab, setActiveTab] = useState<'help' | 'options'>(initialTab);
     const [tabDirection, setTabDirection] = useState<'left' | 'right'>('right');
     const handleTabChange = (tab: 'help' | 'options') => {

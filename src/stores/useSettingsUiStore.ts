@@ -102,7 +102,6 @@ export const MEDIA_CACHE_LIMIT_GB_KEY = 'folia_media_cache_limit_gb';
 export const DEFAULT_MEDIA_CACHE_LIMIT_GB = 5;
 /** Set only by the reminder's own "don't remind me" button. Absent = still worth asking. */
 export const AUTOMIX_MODEL_REMINDER_MUTED_KEY = 'folia_automix_model_reminder_muted';
-const LAST_SEEN_GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';
 
 export type AudioQuality = AudioQualityPreference;
 export type SettingsModalInitialTab = 'help' | 'options';
@@ -197,18 +196,6 @@ export const resolveStoredAudioQuality = (saved: string | null): AudioQuality =>
     saved === 'standard' || saved === 'lossless' || saved === 'hires' ? saved : 'high'
 );
 
-const readStoredAudioQuality = (): AudioQuality => {
-    if (typeof window === 'undefined') {
-        return 'high';
-    }
-
-    const saved = localStorage.getItem('default_audio_quality');
-    const quality = resolveStoredAudioQuality(saved);
-    if (saved === 'exhigh') {
-        localStorage.setItem('default_audio_quality', 'high');
-    }
-    return quality;
-};
 
 
 
@@ -226,35 +213,12 @@ const readStoredAudioQuality = (): AudioQuality => {
 
 
 
-const readStoredLoopMode = (): 'off' | 'all' | 'one' => {
-    if (typeof window === 'undefined') {
-        return 'off';
-    }
-
-    const saved = localStorage.getItem('player_loop_mode');
-    return saved === 'all' || saved === 'one' ? saved : 'off';
-};
 
 export type StageTrackPillMode = 'auto' | 'always' | 'never';
 
 
 
-const readStoredQueueAddBehavior = (): QueueAddBehavior => {
-    if (typeof window === 'undefined') {
-        return 'append';
-    }
 
-    const saved = localStorage.getItem('queue_add_behavior');
-    return saved === 'next' ? 'next' : 'append';
-};
-
-const readStoredAudioOutputDeviceId = (): string => {
-    if (typeof window === 'undefined') {
-        return '';
-    }
-
-    return localStorage.getItem('audio_output_device_id') ?? '';
-};
 
 
 
@@ -273,214 +237,18 @@ const readStoredGrid3dCardStyle = (): 'image' | 'card' => {
     return saved === 'image' ? 'image' : 'card';
 };
 
-const readStoredVolume = () => {
-    if (typeof window === 'undefined') {
-        return 1;
-    }
-
-    const saved = localStorage.getItem('player_volume');
-    const parsed = saved !== null ? parseFloat(saved) : 1;
-    return Number.isFinite(parsed) ? parsed : 1;
-};
 
 
 
 
 export type SettingsUiState = {
-    audioQuality: AudioQuality;
-    enableMediaCache: boolean;
-    /** Gigabytes of cached audio to keep before the oldest is dropped. Zero means no ceiling. */
-    mediaCacheLimitGb: number;
-    appLanguagePreference: AppLanguagePreference;
-    queueAddBehavior: QueueAddBehavior;
-    audioOutputDeviceId: string;
-    audioEqualizerSettings: AudioEqualizerSettings;
-    isAudioEqualizerOpen: boolean;
-    volume: number;
-    isMuted: boolean;
-    loopMode: 'off' | 'all' | 'one';
     grid3dCardStyle: 'image' | 'card';
-    pinnedCommandIds: PinnedCommandIds;
-    isSubSettingsViewOpen: boolean;
-    settingsModalState: SettingsModalState;
-    lastSeenGuideVersion: string | null;
-    isUserGuideModalOpen: boolean;
-    setLastSeenGuideVersion: (version: string) => void;
-    setIsUserGuideModalOpen: (isOpen: boolean) => void;
-    setAudioQuality: (quality: AudioQuality) => void;
-    setIsSubSettingsViewOpen: (open: boolean) => void;
-    openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null, initialVisualizerSection?: VisualizerSettingsSection | null) => void;
-    closeSettings: () => void;
-    handleToggleMediaCache: (enable: boolean) => void;
-    handleSetMediaCacheLimitGb: (gigabytes: number) => void;
-    handleSetAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void>;
-    handleSetQueueAddBehavior: (behavior: QueueAddBehavior) => void;
-    handleSetAudioOutputDeviceId: (deviceId: string) => void;
-    handleSetAudioEqualizerSettings: (settings: AudioEqualizerSettings) => void;
-    handleApplyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;
-    openAudioEqualizer: () => void;
-    closeAudioEqualizer: () => void;
-    handleSetVolume: (val: number) => void;
-    handleToggleMute: () => void;
-    handleToggleLoopMode: () => void;
     handleSetGrid3dCardStyle: (style: 'image' | 'card') => void;
-    setPinnedCommandId: (slotIndex: number, commandId: string | null) => void;
 };
 
 
 export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
-    audioQuality: readStoredAudioQuality(),
-    enableMediaCache: readStoredEnableMediaCache(),
-    mediaCacheLimitGb: readStoredMediaCacheLimitGb(),
-    appLanguagePreference: readStoredAppLanguagePreference(),
-    queueAddBehavior: readStoredQueueAddBehavior(),
-    audioOutputDeviceId: readStoredAudioOutputDeviceId(),
-    audioEqualizerSettings: readStoredAudioEqualizerSettings(),
-    isAudioEqualizerOpen: false,
-    volume: readStoredVolume(),
-    isMuted: getStoredBoolean('player_is_muted', false),
-    loopMode: readStoredLoopMode(),
     grid3dCardStyle: readStoredGrid3dCardStyle(),
-    pinnedCommandIds: readPinnedCommandIds(),
-    isSubSettingsViewOpen: false,
-    settingsModalState: {
-        isOpen: false,
-        initialTab: 'help',
-        initialSubview: null,
-        initialVisualizerSection: null,
-    },
-    lastSeenGuideVersion: typeof window !== 'undefined' ? localStorage.getItem(LAST_SEEN_GUIDE_VERSION_STORAGE_KEY) : null,
-    isUserGuideModalOpen: false,
-    setLastSeenGuideVersion: (version) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LAST_SEEN_GUIDE_VERSION_STORAGE_KEY, version);
-        }
-        set({ lastSeenGuideVersion: version });
-    },
-    setIsUserGuideModalOpen: (isOpen) => set({ isUserGuideModalOpen: isOpen }),
-    setAudioQuality: (quality) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('default_audio_quality', quality);
-        }
-        set({ audioQuality: quality });
-    },
-    setIsSubSettingsViewOpen: (open) => set({ isSubSettingsViewOpen: open }),
-    openSettings: (initialTab = 'help', initialSubview = null, initialVisualizerSection = null) => set({
-        settingsModalState: {
-            isOpen: true,
-            initialTab,
-            initialSubview,
-            initialVisualizerSection,
-        },
-    }),
-    closeSettings: () => set(state => ({
-        settingsModalState: {
-            ...state.settingsModalState,
-            isOpen: false,
-        },
-    })),
-    handleToggleMediaCache: (enable) => {
-        setStoredBoolean(ENABLE_MEDIA_CACHE_KEY, enable);
-        set({ enableMediaCache: enable });
-    },
-    handleSetMediaCacheLimitGb: (gigabytes) => {
-        const next = Number.isFinite(gigabytes) && gigabytes >= 0 ? gigabytes : DEFAULT_MEDIA_CACHE_LIMIT_GB;
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(MEDIA_CACHE_LIMIT_GB_KEY, String(next));
-        }
-        set({ mediaCacheLimitGb: next });
-    },
-    handleSetAppLanguagePreference: async (preference) => {
-        await applyAppLanguagePreference(preference);
-        set({ appLanguagePreference: preference });
-        const getLanguageLabel = (pref: AppLanguagePreference): string => {
-            switch (pref) {
-                case 'zh-CN': return i18n.t('options.appLanguageZhCN', { lng: 'zh-CN' });
-                case 'in': return i18n.t('options.appLanguageInID', { lng: 'in' });
-                case 'en': return i18n.t('options.appLanguageEnUS', { lng: 'en' });
-                default: return '';
-            }
-        };
-
-        setStatusMessage({
-            type: 'info',
-            text: preference === 'system'
-                ? i18n.t('notifications.langFollowSystem')
-                : i18n.t('notifications.langManual', { language: getLanguageLabel(preference) }),
-        });
-    },
-    handleSetQueueAddBehavior: (behavior) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('queue_add_behavior', behavior);
-        }
-        set({ queueAddBehavior: behavior });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (behavior === 'next' ? 'queueInsertNext' : 'queueAppend')),
-        });
-    },
-    handleSetAudioOutputDeviceId: (deviceId) => {
-        set({ audioOutputDeviceId: deviceId });
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        if (deviceId) {
-            localStorage.setItem('audio_output_device_id', deviceId);
-        } else {
-            localStorage.removeItem('audio_output_device_id');
-        }
-    },
-    handleSetAudioEqualizerSettings: (settings) => {
-        const resolved = resolveAudioEqualizerSettings(settings);
-        writeStoredAudioEqualizerSettings(resolved);
-        set({ audioEqualizerSettings: resolved });
-    },
-    // Applies a built-in sound preset or a saved custom slot, and turns processing on.
-    handleApplyAudioSoundPreset: (modeId) => {
-        const current = get().audioEqualizerSettings;
-        const source = isAudioEqualizerCustomSlotId(modeId)
-            ? current.customSlots[getAudioEqualizerCustomSlotIndex(modeId)]
-            : AUDIO_SOUND_PRESETS[modeId];
-        if (!source) {
-            return;
-        }
-
-        const resolved = resolveAudioEqualizerSettings({
-            ...current,
-            enabled: true,
-            preset: modeId,
-            gains: [...source.gains],
-            effects: { ...source.effects },
-        });
-        writeStoredAudioEqualizerSettings(resolved);
-        set({ audioEqualizerSettings: resolved });
-    },
-    openAudioEqualizer: () => set({ isAudioEqualizerOpen: true }),
-    closeAudioEqualizer: () => set({ isAudioEqualizerOpen: false }),
-    handleSetVolume: (val) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('player_volume', String(val));
-        }
-        set({ volume: val });
-    },
-    handleToggleMute: () => {
-        const next = !get().isMuted;
-        setStoredBoolean('player_is_muted', next);
-        set({ isMuted: next });
-    },
-    handleToggleLoopMode: () => {
-        const prev = get().loopMode;
-        const next = prev === 'off'
-            ? 'all'
-            : prev === 'all'
-                ? 'one'
-                : 'off';
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('player_loop_mode', next);
-        }
-        set({ loopMode: next });
-    },
     handleSetGrid3dCardStyle: (style) => {
         set({ grid3dCardStyle: style });
         if (typeof window !== 'undefined') localStorage.setItem('grid3d_card_style', style);
@@ -489,44 +257,9 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             text: i18n.t('notifications.' + (style === 'image' ? 'cardStyleImage' : 'cardStyleCard')),
         });
     },
-    setPinnedCommandId: (slotIndex, commandId) => {
-        if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= 3) {
-            return;
-        }
-        const current = get().pinnedCommandIds;
-        const next = normalizePinnedCommandIds(
-            current.map((currentCommandId, index) => (
-                index === slotIndex ? commandId : currentCommandId
-            )),
-        );
-        writePinnedCommandIds(next);
-        set({ pinnedCommandIds: next });
-    },
 }));
 
 export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
-    audioQuality: state.audioQuality,
-    setAudioQuality: state.setAudioQuality,
-    enableMediaCache: state.enableMediaCache,
-    mediaCacheLimitGb: state.mediaCacheLimitGb,
-    lastSeenGuideVersion: state.lastSeenGuideVersion,
-    isUserGuideModalOpen: state.isUserGuideModalOpen,
     grid3dCardStyle: state.grid3dCardStyle,
     handleSetGrid3dCardStyle: state.handleSetGrid3dCardStyle,
-    appLanguagePreference: state.appLanguagePreference,
-    queueAddBehavior: state.queueAddBehavior,
-    audioOutputDeviceId: state.audioOutputDeviceId,
-    loopMode: state.loopMode,
-    handleToggleMediaCache: state.handleToggleMediaCache,
-    handleSetMediaCacheLimitGb: state.handleSetMediaCacheLimitGb,
-    setLastSeenGuideVersion: state.setLastSeenGuideVersion,
-    setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
-    handleSetAppLanguagePreference: state.handleSetAppLanguagePreference,
-    handleSetQueueAddBehavior: state.handleSetQueueAddBehavior,
-    handleSetAudioOutputDeviceId: state.handleSetAudioOutputDeviceId,
-    volume: state.volume,
-    isMuted: state.isMuted,
-    handleSetVolume: state.handleSetVolume,
-    handleToggleMute: state.handleToggleMute,
-    handleToggleLoopMode: state.handleToggleLoopMode,
 });

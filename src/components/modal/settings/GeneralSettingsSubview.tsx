@@ -10,6 +10,7 @@ import PinnedCommandSettings from './PinnedCommandSettings';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
+import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 
 // src/components/modal/settings/GeneralSettingsSubview.tsx
 // Global app preferences that should stay independent from playback and desktop-only settings.
@@ -27,9 +28,14 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
 }) => {
     const { t, i18n } = useTranslation();
     const {
+
+    } = useSettingsUiStore(useShallow(state => ({
+
+    })));
+    const {
         appLanguagePreference,
         onAppLanguagePreferenceChange,
-    } = useSettingsUiStore(useShallow(state => ({
+    } = useSettingsModalStore(useShallow(state => ({
         appLanguagePreference: state.appLanguagePreference,
         onAppLanguagePreferenceChange: state.handleSetAppLanguagePreference,
     })));

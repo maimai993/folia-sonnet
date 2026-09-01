@@ -22,6 +22,7 @@ import { ensureTrackProfile, setAnalysisScope } from './automix/profileService';
 import { modeNeedsBeatGrid } from './automix/transitionStrategy';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 import { useAutomixSettingsStore } from '../stores/useAutomixSettingsStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 
 // Prefetch configuration
 //
@@ -48,6 +49,7 @@ const MAX_PREFETCH_CACHE_SIZE = 200; // Evict least recently used entries beyond
  */
 const analyseForAutomix = (song: SongResult, audioUrl: string | null | undefined) => {
     const settings = useSettingsUiStore.getState();
+  const settingsAudioSettings = useAudioSettingsStore.getState();
   const settingsAutomixSettings = useAutomixSettingsStore.getState();
   const settingsLyricSettings = useLyricSettingsStore.getState();
     // Nothing reads a profile while blending is switched off, and this is not a cheap thing to
@@ -70,7 +72,7 @@ const analyseForAutomix = (song: SongResult, audioUrl: string | null | undefined
     void ensureTrackProfile({
         song,
         audioUrl: audioUrl === 'CACHED_IN_DB' ? null : audioUrl ?? null,
-        enableMediaCache: settings.enableMediaCache,
+        enableMediaCache: settingsAudioSettings.enableMediaCache,
         wantGrid: modeNeedsBeatGrid(settingsAutomixSettings.transitionMode),
     });
 };
@@ -276,6 +278,7 @@ const prefetchSong = async (
                 const resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
 
                 const settings = useSettingsUiStore.getState();
+  const settingsAudioSettings = useAudioSettingsStore.getState();
   const settingsAutomixSettings = useAutomixSettingsStore.getState();
   const settingsLyricSettings = useLyricSettingsStore.getState();
                 const autoUseBest = settingsLyricSettings.autoUseBestLyric;

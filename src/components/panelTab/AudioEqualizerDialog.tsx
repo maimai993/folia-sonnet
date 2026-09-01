@@ -19,6 +19,7 @@ import ThemedDialog from '../shared/ThemedDialog';
 import AudioEffectGrid from './equalizer/AudioEffectGrid';
 import EqualizerBandGrid from './equalizer/EqualizerBandGrid';
 import { buildEqualizerStyles } from './equalizer/equalizerStyles';
+import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 
 // src/components/panelTab/AudioEqualizerDialog.tsx
 // Provides the compact audio processing editor (ten EQ bands plus the effect chain) opened from the controls tab.
@@ -32,10 +33,10 @@ const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_
 
 const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight, theme }) => {
     const { t } = useTranslation();
-    const settings = useSettingsUiStore(state => state.audioEqualizerSettings);
-    const isOpen = useSettingsUiStore(state => state.isAudioEqualizerOpen);
-    const close = useSettingsUiStore(state => state.closeAudioEqualizer);
-    const commitSettings = useSettingsUiStore(state => state.handleSetAudioEqualizerSettings);
+    const settings = useAudioSettingsStore(state => state.audioEqualizerSettings);
+    const isOpen = useAudioSettingsStore(state => state.isAudioEqualizerOpen);
+    const close = useAudioSettingsStore(state => state.closeAudioEqualizer);
+    const commitSettings = useAudioSettingsStore(state => state.handleSetAudioEqualizerSettings);
     const [draft, setDraft] = useState<AudioEqualizerSettings>(settings);
     const draftRef = useRef(draft);
 

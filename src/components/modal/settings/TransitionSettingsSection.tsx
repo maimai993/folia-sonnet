@@ -13,6 +13,7 @@ import AutomixModelsSection from './AutomixModelsSection';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
+import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 
 // src/components/modal/settings/TransitionSettingsSection.tsx
 // The Folia transition block on the playback options page: the master switch, the choice between
@@ -49,9 +50,14 @@ const TransitionSettingsSection: React.FC<TransitionSettingsSectionProps> = ({
 }) => {
     const { t } = useTranslation();
     const {
+
+    } = useSettingsUiStore(useShallow(state => ({
+
+    })));
+    const {
         enableMediaCache,
         onToggleMediaCache,
-    } = useSettingsUiStore(useShallow(state => ({
+    } = useAudioSettingsStore(useShallow(state => ({
         enableMediaCache: state.enableMediaCache,
         onToggleMediaCache: state.handleToggleMediaCache,
     })));

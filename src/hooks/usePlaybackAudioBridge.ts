@@ -12,6 +12,7 @@ import { cachePlayedTrackAssets } from '../services/playedTrackCache';
 import { rampGain, type AutomixDeckChain } from '../services/automix/crossfadeGraph';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 
 // src/hooks/usePlaybackAudioBridge.ts
 
@@ -75,7 +76,7 @@ export function usePlaybackAudioBridge({
     const replayGainLogSignatureRef = useRef<string | null>(null);
     const equalizerNodesRef = useRef<BiquadFilterNode[]>([]);
     const effectChainRef = useRef<AudioEffectChain | null>(null);
-    const audioEqualizerSettings = useSettingsUiStore(state => state.audioEqualizerSettings);
+    const audioEqualizerSettings = useAudioSettingsStore(state => state.audioEqualizerSettings);
 
     // Recalculates source-specific gain after the audio graph or playback settings become ready.
     const applyReplayGain = useCallback(() => {

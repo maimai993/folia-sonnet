@@ -12,6 +12,7 @@ import TransitionSettingsSection from './TransitionSettingsSection';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
+import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 
 // src/components/modal/settings/PlaybackSettingsSubview.tsx
 // Playback behavior and output-device settings extracted from the global settings modal.
@@ -45,10 +46,15 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
 }) => {
     const { t } = useTranslation();
     const {
+
+    } = useSettingsUiStore(useShallow(state => ({
+
+    })));
+    const {
         audioOutputDeviceId,
         queueAddBehavior,
         onQueueAddBehaviorChange,
-    } = useSettingsUiStore(useShallow(state => ({
+    } = useAudioSettingsStore(useShallow(state => ({
         audioOutputDeviceId: state.audioOutputDeviceId,
         queueAddBehavior: state.queueAddBehavior,
         onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
