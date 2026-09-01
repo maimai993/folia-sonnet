@@ -2,7 +2,7 @@ import i18n from '../../../i18n/config';
 import { clearCacheByCategory } from '../../../services/db';
 import { invalidatePrefetchedLyrics } from '../../../services/prefetchService';
 import type { LyricData, StatusMessage } from '../../../types';
-import type { LyricStaffPolicy } from '../../../utils/lyrics/staffCreditsPolicy';
+import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../../utils/lyrics/staffCreditsPolicy';
 
 // src/components/app/home/createLyricFilterPatternSaver.ts
 
@@ -10,6 +10,7 @@ export interface LyricFilterSaveDraft {
     pattern: string;
     staffPolicy: LyricStaffPolicy;
     staffMinDwellSeconds: number;
+    staffAbsorbMode: LyricStaffAbsorbMode;
     staffPattern: string;
 }
 
@@ -19,6 +20,7 @@ type CreateLyricFilterPatternSaverParams = {
     handleSetLyricFilterPattern: (pattern: string) => void;
     handleSetLyricStaffPolicy: (policy: LyricStaffPolicy) => void;
     handleSetLyricStaffMinDwellSeconds: (seconds: number) => void;
+    handleSetLyricStaffAbsorbMode: (mode: LyricStaffAbsorbMode) => void;
     handleSetLyricStaffPattern: (pattern: string) => void;
     loadCurrentSongLyricPreview: () => Promise<LyricData | null>;
     setLyrics: (lyrics: LyricData | null) => void;
@@ -32,6 +34,7 @@ export const createLyricFilterPatternSaver = ({
     handleSetLyricFilterPattern,
     handleSetLyricStaffPolicy,
     handleSetLyricStaffMinDwellSeconds,
+    handleSetLyricStaffAbsorbMode,
     handleSetLyricStaffPattern,
     loadCurrentSongLyricPreview,
     setLyrics,
@@ -42,6 +45,7 @@ export const createLyricFilterPatternSaver = ({
         handleSetLyricFilterPattern(draft.pattern);
         handleSetLyricStaffPolicy(draft.staffPolicy);
         handleSetLyricStaffMinDwellSeconds(draft.staffMinDwellSeconds);
+        handleSetLyricStaffAbsorbMode(draft.staffAbsorbMode);
         handleSetLyricStaffPattern(draft.staffPattern);
 
         // 逐行过滤会在解析阶段生效并写进缓存，改了就必须重新取。

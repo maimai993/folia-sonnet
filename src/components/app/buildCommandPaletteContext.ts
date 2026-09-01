@@ -9,7 +9,7 @@ import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
 import type { TransitionMode } from '../../services/automix/transitionStrategy';
-import type { LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
+import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import type { PersonalFmSelection } from '../../services/onlineMusic/fmModes';
 import type { QueueBatchAction } from '../command-palette/queueQuery';
 
@@ -113,6 +113,8 @@ export type CommandPaletteContextDeps = {
 
     lyricStaffPolicy: LyricStaffPolicy;
     cycleLyricStaffPolicy: () => void;
+    lyricStaffAbsorbMode: LyricStaffAbsorbMode;
+    cycleLyricStaffAbsorbMode: () => void;
 
     automixEnabled: boolean;
     transitionMode: TransitionMode;
@@ -222,6 +224,8 @@ export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): Com
         setThemeGenerationSource: deps.setThemeGenerationSource,
         lyricStaffPolicy: deps.lyricStaffPolicy,
         cycleLyricStaffPolicy: deps.cycleLyricStaffPolicy,
+        lyricStaffAbsorbMode: deps.lyricStaffAbsorbMode,
+        cycleLyricStaffAbsorbMode: deps.cycleLyricStaffAbsorbMode,
         automixEnabled: deps.automixEnabled,
         transitionMode: deps.transitionMode,
         transitionPerformance: deps.transitionPerformance,

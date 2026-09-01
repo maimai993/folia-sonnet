@@ -229,3 +229,146 @@ describe('lyric staff credit policy', () => {
         expect(buildLyricStaffPreview(lyrics, { minDwellSeconds: 4 }).decision.verdict).toBe('hide');
     });
 });
+
+describe('lyric staff credit absorption', () => {
+    // 块首前面是一条 0.5 秒的标题行，后面是一条词表没认出来的署名行（同样 0.5 秒）。
+    const WITH_NEIGHBOURS = [
+        '[00:00.00]某首歌 - 某歌手',
+        '[00:01.00]作词 : A',
+        '[00:01.20]作曲 : B',
+        '[00:01.40]编曲 : C',
+        '[00:03.00]第一句歌词',
+    ].join('\n');
+
+    it('leaves the block alone while absorption is off', () => {
+        const lyrics = parse(WITH_NEIGHBOURS);
+        const preview = buildLyricStaffPreview(lyrics, { absorbMode: 'off' });
+
+        expect(preview.decision.absorbedLineCount).toBe(0);
+        expect(texts(applyLyricStaffPolicy(lyrics, { absorbMode: 'off' }))).toEqual([
+            '某首歌 - 某歌手', '第一句歌词',
+        ]);
+    });
+
+    it('folds the short line before the block into it', () => {
+        const lyrics = parse(WITH_NEIGHBOURS);
+        const preview = buildLyricStaffPreview(lyrics, { absorbMode: 'before' });
+
+        expect(preview.decision.absorbedLineCount).toBe(1);
+        expect(preview.decision.absorbedIndexes).toEqual([0]);
+        // 吸收行进了 memberIndexes，隐藏判定下和署名行一起消失。
+        expect(texts(applyLyricStaffPolicy(lyrics, { absorbMode: 'before' }))).toEqual(['第一句歌词']);
+    });
+
+    it('folds short lines on both sides of the block into it', () => {
+        // 块后这条没有冒号，进不了词表也进不了结构续接，只能靠吸收带走。
+        const lyrics = parse([
+            '[00:00.00]某首歌 - 某歌手',
+            '[00:01.00]作词 : A',
+            '[00:01.20]作曲 : B',
+            '[00:01.40]Genshin Folk Ensemble',
+            '[00:02.50]第一句歌词',
+        ].join('\n'));
+
+        const preview = buildLyricStaffPreview(lyrics, { absorbMode: 'both' });
+
+        expect(preview.decision.absorbedLineCount).toBe(2);
+        expect(preview.decision.absorbedIndexes).toEqual([0, 3]);
+        expect(texts(applyLyricStaffPolicy(lyrics, { absorbMode: 'both' }))).toEqual(['第一句歌词']);
+    });
+
+    it('folds a run of short lines however long it is', () => {
+        // 边界只由「耗时过短」决定，不设行数上限：块后连续 6 条 0.2 秒的碎片要整段带走，
+        // 末尾那条 Ah~ 唱足 5 秒，是耗时达标后停下来的地方。
+        const lyrics = parse([
+            '[00:00.00]作词 : A',
+            '[00:00.20]作曲 : B',
+            '[00:00.40]短行一',
+            '[00:00.60]短行二',
+            '[00:00.80]短行三',
+            '[00:01.00]短行四',
+            '[00:01.20]短行五',
+            '[00:01.40]短行六',
+            '[00:01.60]Ah~~~~~~',
+            '[00:08.00]第一句歌词',
+        ].join('\n'));
+
+        const preview = buildLyricStaffPreview(lyrics, { absorbMode: 'both' });
+
+        expect(preview.decision.blockLineCount).toBe(2);
+        expect(preview.decision.absorbedLineCount).toBe(6);
+        expect(preview.decision.absorbedIndexes).toEqual([2, 3, 4, 5, 6, 7]);
+        expect(texts(applyLyricStaffPolicy(lyrics, { absorbMode: 'both' }))).toEqual(['Ah~~~~~~', '第一句歌词']);
+    });
+
+    it('judges absorption by duration, not by text length', () => {
+        // 唱足 3 秒的 "Ah~" 字数很短，但耗时达标，不能被吸走。
+        const lyrics = parse([
+            '[00:00.00]作词 : A',
+            '[00:00.20]作曲 : B',
+            '[00:01.00]Ah~~~~~~',
+            '[00:04.00]第一句歌词',
+        ].join('\n'));
+
+        const preview = buildLyricStaffPreview(lyrics, { absorbMode: 'both' });
+
+        expect(preview.decision.absorbedLineCount).toBe(0);
+        expect(texts(applyLyricStaffPolicy(lyrics, { absorbMode: 'both' }))).toEqual([
+            'Ah~~~~~~', '第一句歌词',
+        ]);
+    });
+
+    it('spreads absorbed lines together with the credits when the intro is long enough', () => {
+        const lyrics = parse([
+            '[00:00.00]某首歌 - 某歌手',
+            '[00:01.00]作词 : A',
+            '[00:01.20]作曲 : B',
+            '[00:40.00]第一句歌词',
+        ].join('\n'));
+
+        const preview = buildLyricStaffPreview(lyrics, { absorbMode: 'before' });
+        expect(preview.decision.verdict).toBe('retime');
+
+        const result = applyLyricStaffPolicy(lyrics, { absorbMode: 'before' })!;
+        expect(texts(result)).toEqual(['某首歌 - 某歌手', '作词 : A', '作曲 : B', '第一句歌词']);
+
+        const spread = result.lines.slice(0, 3);
+        const gaps = spread.slice(1).map((line, index) => line.startTime - spread[index].startTime);
+        gaps.forEach(gap => expect(gap).toBeGreaterThanOrEqual(1.5));
+    });
+
+    it('counts absorbed lines in the required intro budget', () => {
+        const lyrics = parse([
+            '[00:00.00]某首歌 - 某歌手',
+            '[00:01.00]作词 : A',
+            '[00:01.20]作曲 : B',
+            '[00:08.00]第一句歌词',
+        ].join('\n'));
+
+        const without = buildLyricStaffPreview(lyrics, { absorbMode: 'off' }).decision;
+        const withAbsorb = buildLyricStaffPreview(lyrics, { absorbMode: 'before' }).decision;
+
+        // 吸收进来的一行也要占一份停留时间，需要的秒数比不吸收时多一个 minDwell。
+        expect(withAbsorb.requiredSeconds - without.requiredSeconds).toBeCloseTo(1.5, 5);
+    });
+
+    it('never swallows the last line while absorbing backwards', () => {
+        const lyrics = parse([
+            '[00:00.00]作词 : A',
+            '[00:00.20]作曲 : B',
+            '[00:00.40]第一句歌词',
+            '[00:00.60]第二句歌词',
+        ].join('\n'));
+
+        const preview = buildLyricStaffPreview(lyrics, { absorbMode: 'both' });
+
+        expect(preview.decision.absorbedLineCount).toBe(1);
+        expect(texts(applyLyricStaffPolicy(lyrics, { absorbMode: 'both' }))).toEqual(['第二句歌词']);
+    });
+
+    it('reports no absorption when there is no block', () => {
+        const lyrics = parse('[00:01.00]第一句歌词\n[00:04.00]第二句歌词');
+
+        expect(buildLyricStaffPreview(lyrics, { absorbMode: 'both' }).decision.absorbedLineCount).toBe(0);
+    });
+});

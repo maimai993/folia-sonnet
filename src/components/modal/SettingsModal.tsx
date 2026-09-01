@@ -235,6 +235,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         lyricFilterPattern,
         lyricStaffPolicy,
         lyricStaffMinDwellSeconds,
+        lyricStaffAbsorbMode,
         lyricStaffPattern,
         showOpenPanelCloseButton,
         handleToggleCoverColorBg: onToggleCoverColorBg,
@@ -1977,6 +1978,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 initialPattern={lyricFilterPattern}
                 initialStaffPolicy={lyricStaffPolicy}
                 initialStaffMinDwellSeconds={lyricStaffMinDwellSeconds}
+                initialStaffAbsorbMode={lyricStaffAbsorbMode}
                 initialStaffPattern={lyricStaffPattern}
                 loadPreviewLyrics={loadLyricFilterPreview}
                 onClose={() => closeSubviewOrModal(() => setShowLyricFilterSettings(false))}

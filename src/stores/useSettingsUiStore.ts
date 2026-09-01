@@ -6,7 +6,7 @@ import { DEFAULT_VISUALIZER_BACKGROUND_MODE, hasVisualizerBackgroundMode } from 
 import { resolveDioramaMoteCircumference, resolveDioramaMoteRadial } from '../components/visualizer/diorama/dioramaMoteField';
 import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { getLyricStaffPatternError } from '../utils/lyrics/staffCredits';
-import { DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS, DEFAULT_LYRIC_STAFF_POLICY, LYRIC_STAFF_MIN_DWELL_RANGE, type LyricStaffPolicy } from '../utils/lyrics/staffCreditsPolicy';
+import { DEFAULT_LYRIC_STAFF_ABSORB_MODE, DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS, DEFAULT_LYRIC_STAFF_POLICY, LYRIC_STAFF_MIN_DWELL_RANGE, type LyricStaffAbsorbMode, type LyricStaffPolicy } from '../utils/lyrics/staffCreditsPolicy';
 import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupportedCappellaEmojiFile, saveCustomCappellaEmojiPack } from '../services/cappellaEmojiPack';
 import { buildStoredCappellaAvatar, clearCustomCappellaAvatar, isSupportedCappellaAvatarFile, saveCustomCappellaAvatar } from '../services/cappellaAvatarPack';
 import { clearUploadedLyricsFont, uploadAndRegisterLyricsFont } from '../services/customLyricsFont';
@@ -1383,6 +1383,15 @@ const readStoredLyricStaffMinDwellSeconds = (): number => {
     return Math.min(LYRIC_STAFF_MIN_DWELL_RANGE.max, Math.max(LYRIC_STAFF_MIN_DWELL_RANGE.min, parsed));
 };
 
+const readStoredLyricStaffAbsorbMode = (): LyricStaffAbsorbMode => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_LYRIC_STAFF_ABSORB_MODE;
+    }
+
+    const saved = localStorage.getItem('lyrics_staff_absorb_mode');
+    return saved === 'before' || saved === 'both' || saved === 'off' ? saved : DEFAULT_LYRIC_STAFF_ABSORB_MODE;
+};
+
 const readStoredLoopMode = (): 'off' | 'all' | 'one' => {
     if (typeof window === 'undefined') {
         return 'off';
@@ -1620,6 +1629,7 @@ export type SettingsUiState = {
     // 开头制作人员信息的处理策略，与上面的通用逐行过滤是两套独立机制。
     lyricStaffPolicy: LyricStaffPolicy;
     lyricStaffMinDwellSeconds: number;
+    lyricStaffAbsorbMode: LyricStaffAbsorbMode;
     lyricStaffPattern: string;
     showOpenPanelCloseButton: boolean;
     enableNowPlayingStage: boolean;
@@ -1791,6 +1801,7 @@ export type SettingsUiState = {
     handleSetLyricFilterPattern: (pattern: string) => void;
     handleSetLyricStaffPolicy: (policy: LyricStaffPolicy) => void;
     handleSetLyricStaffMinDwellSeconds: (seconds: number) => void;
+    handleSetLyricStaffAbsorbMode: (mode: LyricStaffAbsorbMode) => void;
     handleSetLyricStaffPattern: (pattern: string) => void;
     handleToggleOpenPanelCloseButton: (enable: boolean) => void;
     handleToggleNowPlayingStage: (enable: boolean) => void;
@@ -1938,6 +1949,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     lyricFilterPattern: readStoredLyricFilterPattern(),
     lyricStaffPolicy: readStoredLyricStaffPolicy(),
     lyricStaffMinDwellSeconds: readStoredLyricStaffMinDwellSeconds(),
+    lyricStaffAbsorbMode: readStoredLyricStaffAbsorbMode(),
     lyricStaffPattern: getStoredString('lyrics_staff_pattern', ''),
     showOpenPanelCloseButton: getStoredBoolean('show_open_panel_close_button', true),
     enableNowPlayingStage: getStoredBoolean('enable_now_playing_stage', false),
@@ -3253,6 +3265,15 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
 
         localStorage.setItem('lyrics_staff_min_dwell', String(next));
     },
+    handleSetLyricStaffAbsorbMode: (mode) => {
+        set({ lyricStaffAbsorbMode: mode });
+
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        localStorage.setItem('lyrics_staff_absorb_mode', mode);
+    },
     handleSetLyricStaffPattern: (pattern) => {
         const next = pattern.trim();
         set({ lyricStaffPattern: next });
@@ -3556,6 +3577,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     lyricFilterPatternError: getLyricFilterError(state.lyricFilterPattern),
     lyricStaffPolicy: state.lyricStaffPolicy,
     lyricStaffMinDwellSeconds: state.lyricStaffMinDwellSeconds,
+    lyricStaffAbsorbMode: state.lyricStaffAbsorbMode,
     lyricStaffPattern: state.lyricStaffPattern,
     lyricStaffPatternError: getLyricStaffPatternError(state.lyricStaffPattern),
     showOpenPanelCloseButton: state.showOpenPanelCloseButton,
@@ -3677,6 +3699,7 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleSetLyricFilterPattern: state.handleSetLyricFilterPattern,
     handleSetLyricStaffPolicy: state.handleSetLyricStaffPolicy,
     handleSetLyricStaffMinDwellSeconds: state.handleSetLyricStaffMinDwellSeconds,
+    handleSetLyricStaffAbsorbMode: state.handleSetLyricStaffAbsorbMode,
     handleSetLyricStaffPattern: state.handleSetLyricStaffPattern,
     handleToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,
     handleToggleNowPlayingStage: state.handleToggleNowPlayingStage,
