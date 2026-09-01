@@ -4,6 +4,7 @@ import type { GridViewCollectionDescriptor } from './gridViewCollectionAdapters'
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
 import { resolveSearchSource, type SearchSource } from '../../../stores/useSearchNavigationStore';
 import type { OnlineProviderPlatformState } from '../../../hooks/useOnlineProviderPlatform';
+import { openSettings } from '../../../stores/useSettingsModalStore';
 
 // src/components/app/home/buildHomeModel.ts
 
@@ -26,7 +27,6 @@ type BuildHomeModelParams = {
     currentSong: HomeSurfaceProps['currentTrack'];
     focusedPlaylistIndex?: HomeSurfaceProps['focusedPlaylistIndex'];
     setFocusedPlaylistIndex?: HomeSurfaceProps['setFocusedPlaylistIndex'];
-    openSettings: NonNullable<HomeSurfaceProps['onOpenSettings']>;
     navigateToSearch: (args: { query: string; sourceTab: SearchSource; replace?: boolean }) => void;
     localSongs: HomeSurfaceProps['localSongs'];
     localLibraryCatalog: HomeSurfaceProps['localLibraryCatalog'];
@@ -66,7 +66,6 @@ export const buildHomeModel = ({
     currentSong,
     focusedPlaylistIndex,
     setFocusedPlaylistIndex,
-    openSettings,
     navigateToSearch,
     localSongs,
     localLibraryCatalog,

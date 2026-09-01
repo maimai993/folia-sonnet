@@ -1,6 +1,11 @@
 import type React from 'react';
 import type { RefObject } from 'react';
 import type UnifiedPanel from '../../UnifiedPanel';
+import { setIsPanelOpen, setPanelTab } from '../../../stores/useAppViewStore';
+import { handleSetVisualizerMode } from '../../../stores/useVisualizerSettingsStore';
+import { handleSetVolume, handleToggleMute, setAudioQuality } from '../../../stores/useAudioSettingsStore';
+import { openSettings } from '../../../stores/useSettingsModalStore';
+import { handleToggleCoverColorBg } from '../../../stores/useThemeSettingsStore';
 
 // src/components/app/player-panel/buildPlayerPanelModel.ts
 
@@ -12,9 +17,7 @@ export type PlayerPanelViewModel = {
 
 type BuildPlayerPanelModelParams = {
     isPanelOpen: boolean;
-    setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
     panelTab: UnifiedPanelProps['playback']['currentTab'];
-    setPanelTab: React.Dispatch<React.SetStateAction<UnifiedPanelProps['playback']['currentTab']>>;
     navigateToHome: UnifiedPanelProps['playback']['onNavigateHome'];
     handleDirectHomeFromPanel: UnifiedPanelProps['playback']['onNavigateHomeDirect'];
     coverUrl: string | null;
@@ -39,7 +42,6 @@ type BuildPlayerPanelModelParams = {
     defaultTheme: UnifiedPanelProps['playback']['defaultTheme'];
     daylightTheme: UnifiedPanelProps['playback']['daylightTheme'];
     visualizerMode: UnifiedPanelProps['playback']['visualizerMode'];
-    handleSetVisualizerMode: UnifiedPanelProps['playback']['onVisualizerModeChange'];
     transparentPlayerBackground: UnifiedPanelProps['playback']['transparentPlayerBackground'];
     toggleTransparentModeWithHandoff: UnifiedPanelProps['playback']['onToggleTransparentPlayerBackground'];
     handleManualMatchOnline: UnifiedPanelProps['playback']['onMatchOnline'];
@@ -65,14 +67,11 @@ type BuildPlayerPanelModelParams = {
     volume: UnifiedPanelProps['playback']['volume'];
     isMuted: UnifiedPanelProps['playback']['isMuted'];
     handlePreviewVolume: UnifiedPanelProps['playback']['onVolumePreview'];
-    handleSetVolume: UnifiedPanelProps['playback']['onVolumeChange'];
-    handleToggleMute: UnifiedPanelProps['playback']['onToggleMute'];
     showOpenPanelCloseButton: UnifiedPanelProps['playback']['showOpenPanelCloseButton'];
     isPanelGuideHotspotActive: boolean;
     hideToggleButton: boolean;
     activePlaybackContext: 'main' | 'stage';
     isNowPlayingControlDisabled: boolean;
-    openSettings: (initialTab: 'help' | 'options') => void;
     openCommandPalette?: UnifiedPanelProps['playback']['onOpenCommandPalette'];
     isCommandPaletteOpen?: boolean;
     playQueue: UnifiedPanelProps['queue']['playQueue'];
@@ -98,13 +97,11 @@ type BuildPlayerPanelModelParams = {
     user: UnifiedPanelProps['account']['user'];
     handleLogout: UnifiedPanelProps['account']['onLogout'];
     audioQuality: UnifiedPanelProps['account']['audioQuality'];
-    setAudioQuality: UnifiedPanelProps['account']['onAudioQualityChange'];
     cacheSize: UnifiedPanelProps['account']['cacheSize'];
     handleClearCache: UnifiedPanelProps['account']['onClearCache'];
     handleSyncData: UnifiedPanelProps['account']['onSyncData'];
     isSyncing: UnifiedPanelProps['account']['isSyncing'];
     useCoverColorBg: UnifiedPanelProps['account']['useCoverColorBg'];
-    handleToggleCoverColorBg: UnifiedPanelProps['account']['onToggleCoverColorBg'];
     isDaylight: UnifiedPanelProps['account']['isDaylight'];
     handleToggleDaylight: () => void;
 };
@@ -112,9 +109,7 @@ type BuildPlayerPanelModelParams = {
 // Builds the player panel model from raw app state and actions so App.tsx no longer assembles nested props inline.
 export const buildPlayerPanelModel = ({
     isPanelOpen,
-    setIsPanelOpen,
     panelTab,
-    setPanelTab,
     navigateToHome,
     handleDirectHomeFromPanel,
     coverUrl,
@@ -139,7 +134,6 @@ export const buildPlayerPanelModel = ({
     defaultTheme,
     daylightTheme,
     visualizerMode,
-    handleSetVisualizerMode,
     transparentPlayerBackground,
     toggleTransparentModeWithHandoff,
     handleManualMatchOnline,
@@ -165,14 +159,11 @@ export const buildPlayerPanelModel = ({
     volume,
     isMuted,
     handlePreviewVolume,
-    handleSetVolume,
-    handleToggleMute,
     showOpenPanelCloseButton,
     isPanelGuideHotspotActive,
     hideToggleButton,
     activePlaybackContext,
     isNowPlayingControlDisabled,
-    openSettings,
     openCommandPalette,
     isCommandPaletteOpen,
     playQueue,
@@ -198,13 +189,11 @@ export const buildPlayerPanelModel = ({
     user,
     handleLogout,
     audioQuality,
-    setAudioQuality,
     cacheSize,
     handleClearCache,
     handleSyncData,
     isSyncing,
     useCoverColorBg,
-    handleToggleCoverColorBg,
     isDaylight,
     handleToggleDaylight,
 }: BuildPlayerPanelModelParams): PlayerPanelViewModel => ({

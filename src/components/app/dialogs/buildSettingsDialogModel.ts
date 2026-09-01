@@ -15,6 +15,7 @@ import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
 import type { PlayerCapConnectionStatus } from '../../../types/playerCap';
 import type { LyricApiStatus } from '../../../types/lyricApi';
 import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
+import { closeSettings } from '../../../stores/useSettingsModalStore';
 
 // src/components/app/dialogs/buildSettingsDialogModel.ts
 
@@ -23,7 +24,6 @@ type ThemeController = ReturnType<typeof useThemeController>;
 
 type BuildSettingsDialogModelParams = {
     state: SettingsModalState;
-    onClose: () => void;
     themeController: ThemeController;
     themeParkInitialTheme: DualTheme;
     onToggleNavidrome?: (enabled: boolean) => void;
@@ -56,7 +56,6 @@ type BuildSettingsDialogModelParams = {
 // Builds the global settings dialog props without tying the modal to Home.
 export const buildSettingsDialogModel = ({
     state,
-    onClose,
     themeController,
     themeParkInitialTheme,
     onToggleNavidrome,
@@ -143,7 +142,7 @@ export const buildSettingsDialogModel = ({
         initialTab: state.initialTab,
         initialSubview: state.initialSubview ?? null,
         initialVisualizerSection: state.initialVisualizerSection ?? null,
-        onClose,
+        onClose: closeSettings,
         onToggleStageMode: async (enabled) => {
             try {
                 const nextStatus = await window.electron?.setStageEnabled(enabled);

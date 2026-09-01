@@ -275,3 +275,9 @@ export const selectAudioSettingsSnapshot = (state: AudioSettingsState) => ({
     handleToggleMute: state.handleToggleMute,
     handleToggleLoopMode: state.handleToggleLoopMode,
 });
+
+// Module-level handles for the assembly layer; actions need no subscription, so importing them
+// where they are used keeps App.tsx out of the chain (see setStatusMessage).
+export const handleSetVolume = (val: number) => useAudioSettingsStore.getState().handleSetVolume(val);
+export const handleToggleMute = () => useAudioSettingsStore.getState().handleToggleMute();
+export const setAudioQuality = (quality: AudioQuality) => useAudioSettingsStore.getState().setAudioQuality(quality);

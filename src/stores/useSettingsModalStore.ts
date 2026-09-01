@@ -130,3 +130,11 @@ export const selectSettingsModalSnapshot = (state: SettingsModalUiState) => ({
     handleSetAppLanguagePreference: state.handleSetAppLanguagePreference,
     setPinnedCommandId: state.setPinnedCommandId,
 });
+
+// Module-level handles for the assembly layer; actions need no subscription.
+export const openSettings = (
+    initialTab?: SettingsModalInitialTab,
+    initialSubview?: SettingsSubviewId | null,
+    initialVisualizerSection?: VisualizerSettingsSection | null,
+) => useSettingsModalStore.getState().openSettings(initialTab, initialSubview, initialVisualizerSection);
+export const closeSettings = () => useSettingsModalStore.getState().closeSettings();

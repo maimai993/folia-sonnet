@@ -11,6 +11,7 @@ import { resolvePlaybackNeighbors } from '../../../utils/playbackNeighbors';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { setPlayerState } from '../../../stores/usePlaybackStore';
+import { setIsDevDebugOverlayVisible, setIsMemoryMonitorVisible } from '../../../stores/useAppChromeStore';
 
 // src/components/app/overlays/buildAppOverlaysModel.ts
 
@@ -41,9 +42,7 @@ type BuildAppOverlaysModelParams = {
     handleSearchResultArtistOpen: SearchOverlayProps['onOpenArtist'];
     handleSearchResultAlbumOpen: SearchOverlayProps['onOpenAlbum'];
     isDevDebugOverlayVisible: boolean;
-    setIsDevDebugOverlayVisible: (visible: boolean) => void;
     isMemoryMonitorVisible: boolean;
-    setIsMemoryMonitorVisible: (visible: boolean) => void;
     memoryMonitorShortcutLabel: string;
     devDebugSnapshot: any;
     currentTime: MotionValue<number>;
@@ -112,9 +111,7 @@ export const buildAppOverlaysModel = ({
     handleSearchResultArtistOpen,
     handleSearchResultAlbumOpen,
     isDevDebugOverlayVisible,
-    setIsDevDebugOverlayVisible,
     isMemoryMonitorVisible,
-    setIsMemoryMonitorVisible,
     memoryMonitorShortcutLabel,
     devDebugSnapshot,
     currentTime,

@@ -44,3 +44,8 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
     setPanelTab: (next) => set({ panelTab: resolve(next, get().panelTab) }),
     setIsHomeFullyHidden: (next) => set({ isHomeFullyHidden: resolve(next, get().isHomeFullyHidden) }),
 }));
+
+// Module-level handles for the assembly layer: these are actions, so they need no subscription.
+// Importing them where they are used keeps App.tsx out of the chain (see setStatusMessage).
+export const setIsPanelOpen: AppViewState['setIsPanelOpen'] = (next) => useAppViewStore.getState().setIsPanelOpen(next);
+export const setPanelTab: AppViewState['setPanelTab'] = (next) => useAppViewStore.getState().setPanelTab(next);

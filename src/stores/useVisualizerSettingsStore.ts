@@ -858,3 +858,8 @@ export const selectVisualizerSettingsSnapshot = (state: VisualizerSettingsState)
     visualizerMode: state.visualizerMode,
     visualizerOpacity: state.visualizerOpacity,
 });
+
+// Module-level handle for the assembly layer; an action needs no subscription.
+export const handleSetVisualizerMode = (mode: VisualizerMode, options?: { notify?: boolean }) => (
+    useVisualizerSettingsStore.getState().handleSetVisualizerMode(mode, options)
+);

@@ -65,3 +65,7 @@ export const useAppChromeStore = create<AppChromeState>((set, get) => ({
     setIsDevDebugOverlayVisible: (next) => set({ isDevDebugOverlayVisible: resolve(next, get().isDevDebugOverlayVisible) }),
     setIsMemoryMonitorVisible: (next) => set({ isMemoryMonitorVisible: resolve(next, get().isMemoryMonitorVisible) }),
 }));
+
+// Module-level handles for the assembly layer; actions need no subscription.
+export const setIsDevDebugOverlayVisible: AppChromeState['setIsDevDebugOverlayVisible'] = (next) => useAppChromeStore.getState().setIsDevDebugOverlayVisible(next);
+export const setIsMemoryMonitorVisible: AppChromeState['setIsMemoryMonitorVisible'] = (next) => useAppChromeStore.getState().setIsMemoryMonitorVisible(next);

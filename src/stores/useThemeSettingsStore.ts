@@ -157,3 +157,6 @@ if (typeof window !== 'undefined' && window.electron?.setNativeTheme) {
         initialTheme.followSystemTheme ? 'system' : (initialTheme.isDaylight ? 'light' : 'dark'),
     );
 }
+
+// Module-level handle for the assembly layer; an action needs no subscription.
+export const handleToggleCoverColorBg = (enable: boolean) => useThemeSettingsStore.getState().handleToggleCoverColorBg(enable);
