@@ -27,6 +27,7 @@ import { getLastDualTheme } from '@/services/themeCache';
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { usePlayerChromeSettingsStore } from '@/stores/usePlayerChromeSettingsStore';
 import { useThemeSettingsStore } from '@/stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '@/stores/useStageSettingsStore';
 
 const compressMock = vi.mocked(compressConfig);
 const pointerMock = vi.mocked(readStoredLastAppliedThemePointer);
@@ -44,7 +45,7 @@ describe('buildCurrentObsUrl', () => {
         pointerMock.mockReset().mockReturnValue('default');
         customMock.mockReset().mockReturnValue(undefined);
         aiMock.mockReset().mockResolvedValue(null);
-        useSettingsUiStore.setState({ webObsThemeMode: 'static' });
+        useStageSettingsStore.setState({ webObsThemeMode: 'static' });
         useThemeSettingsStore.setState({ isDaylight: false });
         usePlayerChromeSettingsStore.setState({ transparentPlayerBackground: false });
     });
@@ -75,14 +76,14 @@ describe('buildCurrentObsUrl', () => {
         pointerMock.mockReturnValue('custom');
         customMock.mockReturnValue(CUSTOM);
         for (const mode of ['builtin', 'ai'] as const) {
-            useSettingsUiStore.setState({ webObsThemeMode: mode });
+            useStageSettingsStore.setState({ webObsThemeMode: mode });
             await buildCurrentObsUrl('now-playing');
             expect(bakedTheme()).toBeNull();
         }
     });
 
     it('writes the theme mode marker and keeps cfg the terminal segment', async () => {
-        useSettingsUiStore.setState({ webObsThemeMode: 'static' });
+        useStageSettingsStore.setState({ webObsThemeMode: 'static' });
         useThemeSettingsStore.setState({ isDaylight: true });
         usePlayerChromeSettingsStore.setState({ transparentPlayerBackground: true });
         const url = await buildCurrentObsUrl('now-playing');
@@ -94,7 +95,7 @@ describe('buildCurrentObsUrl', () => {
     });
 
     it('marks the dynamic mode it was copied in', async () => {
-        useSettingsUiStore.setState({ webObsThemeMode: 'ai' });
+        useStageSettingsStore.setState({ webObsThemeMode: 'ai' });
         expect(await buildCurrentObsUrl('now-playing')).toContain('obsTheme=ai');
     });
 

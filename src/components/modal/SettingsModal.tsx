@@ -48,6 +48,8 @@ import { selectLyricSettingsSnapshot, useLyricSettingsStore } from '../../stores
 import { selectTypographySettingsSnapshot, useTypographySettingsStore } from '../../stores/useTypographySettingsStore';
 import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
 import { selectThemeSettingsSnapshot, useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
+import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../stores/useDesktopSettingsStore';
+import { selectStageSettingsSnapshot, useStageSettingsStore } from '../../stores/useStageSettingsStore';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -167,6 +169,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // Track the press origin per overlay so nested subview backdrops do not overwrite each other.
     const overlayMouseDownTargetsRef = useRef(new WeakSet<HTMLDivElement>());
     const {
+        enableMediaCache,
+        mediaCacheLimitGb,
+        grid3dCardStyle,
+        handleToggleMediaCache: onToggleMediaCache,
+        handleSetMediaCacheLimitGb: onSetMediaCacheLimitGb,
+        handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
+    } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    const {
         minimizeToTray,
         voiceInputPauseEnabled,
         hideTaskbarIcon,
@@ -174,24 +184,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         wallpaperMode,
         handleToggleWallpaperMode: onToggleWallpaperMode,
         openPlayerOnLaunch,
-        enableMediaCache,
-        mediaCacheLimitGb,
-        grid3dCardStyle,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
         handleToggleVoiceInputPause: onToggleVoiceInputPause,
         handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
         handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
         handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
-        handleToggleMediaCache: onToggleMediaCache,
-        handleSetMediaCacheLimitGb: onSetMediaCacheLimitGb,
-        handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
+    } = useDesktopSettingsStore(useShallow(selectDesktopSettingsSnapshot));
+    const {
         stageTrackPillMode,
         stageTrackPillTimeoutSec,
         stageTrackPillOnHome,
         handleSetStageTrackPillMode: onChangeStageTrackPillMode,
         handleSetStageTrackPillTimeoutSec: onChangeStageTrackPillTimeoutSec,
         handleToggleStageTrackPillOnHome: onToggleStageTrackPillOnHome,
-    } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    } = useStageSettingsStore(useShallow(selectStageSettingsSnapshot));
     const {
         useCoverColorBg,
         staticMode,

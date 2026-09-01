@@ -1,4 +1,5 @@
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
+import { useStageSettingsStore } from '../stores/useStageSettingsStore';
 
 // src/utils/webObsTarget.ts
 // Resolve which browser-direct OBS source the web stage selection targets, plus its connection
@@ -25,15 +26,16 @@ export interface WebObsTarget {
 // web stage source is selected (buttons are disabled in that case).
 export function resolveWebObsTarget(): WebObsTarget | null {
   const s = useSettingsUiStore.getState();
-  const source = selectWebObsSource(s);
+  const sStageSettings = useStageSettingsStore.getState();
+  const source = selectWebObsSource(sStageSettings);
   if (!source) return null;
   if (source === 'now-playing') return { source, host: '', extra: {} };
   // PlayerCap: omit params equal to the OBS page defaults (host localhost:8765, player '',
   // basis play_time, sticky on) so default setups produce a clean URL.
-  const host = s.playerCapHost && s.playerCapHost !== 'localhost:8765' ? s.playerCapHost : '';
+  const host = sStageSettings.playerCapHost && sStageSettings.playerCapHost !== 'localhost:8765' ? sStageSettings.playerCapHost : '';
   const extra: Record<string, string> = {};
-  if (s.playerCapPlayer) extra.nxpcPlayer = s.playerCapPlayer;
-  if (s.playerCapTimeBasis === 'timestamp') extra.nxpcBasis = 'timestamp';
-  if (s.playerCapSticky === false) extra.nxpcSticky = '0';
+  if (sStageSettings.playerCapPlayer) extra.nxpcPlayer = sStageSettings.playerCapPlayer;
+  if (sStageSettings.playerCapTimeBasis === 'timestamp') extra.nxpcBasis = 'timestamp';
+  if (sStageSettings.playerCapSticky === false) extra.nxpcSticky = '0';
   return { source, host, extra };
 }

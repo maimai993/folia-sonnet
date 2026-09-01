@@ -6,6 +6,7 @@ import {
     type TransitionCue,
 } from '../../../../services/automix/transitionCue';
 import { useSettingsUiStore } from '../../../../stores/useSettingsUiStore';
+import { useAutomixSettingsStore } from '../../../../stores/useAutomixSettingsStore';
 
 // src/components/app/overlays/now-playing-toast/useTransitionBorderCue.ts
 
@@ -47,7 +48,7 @@ export const useTransitionBorderCue = (): TransitionBorderCue | null => {
     // 开关是活的，不是 cue 到达那一刻拍下的快照。拍快照的写法下，混音跑到一半把开关关掉，
     // 描边会自顾自画完剩下的十几秒，卡片也被 holdOpen 一起按住不退场——而屏幕圆环那边关开关
     // 是直接卸载、立刻停。两个开关该是一样的手感。
-    const switchedOn = useSettingsUiStore(
+    const switchedOn = useAutomixSettingsStore(
         state => state.transitionAnimationCard && state.transitionMode === 'automix',
     );
 

@@ -3,6 +3,7 @@ import { Blend, SlidersHorizontal, Volume1, Volume2, VolumeX } from 'lucide-reac
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../../types';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
 
 // src/components/panelTab/controls/VolumeRow.tsx
 // 单行音量：静音、滑杆、百分比、均衡器入口挤在同一行，省掉原来单独占一行的标题。
@@ -29,8 +30,8 @@ const VolumeRow: React.FC<VolumeRowProps> = ({
     const { t } = useTranslation();
     const audioEqualizerSettings = useSettingsUiStore(state => state.audioEqualizerSettings);
     const openAudioEqualizer = useSettingsUiStore(state => state.openAudioEqualizer);
-    const automixEnabled = useSettingsUiStore(state => state.automixEnabled);
-    const toggleAutomix = useSettingsUiStore(state => state.handleToggleAutomix);
+    const automixEnabled = useAutomixSettingsStore(state => state.automixEnabled);
+    const toggleAutomix = useAutomixSettingsStore(state => state.handleToggleAutomix);
     const [sliderVolume, setSliderVolume] = useState(isMuted ? 0 : volume);
     const isDraggingRef = useRef(false);
     const pendingVolumeRef = useRef(sliderVolume);

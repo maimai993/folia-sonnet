@@ -4,6 +4,7 @@ import NowPlayingToast from '../../src/components/app/overlays/NowPlayingToast';
 import { announceTransition, type TransitionRenderer } from '../../src/services/automix/transitionCue';
 import { useSettingsUiStore } from '../../src/stores/useSettingsUiStore';
 import type { ProbeDefinition } from './definition';
+import { useAutomixSettingsStore } from '../../src/stores/useAutomixSettingsStore';
 // dev/probes/automixTransitionSwitches.probe.tsx
 
 /**
@@ -31,14 +32,14 @@ const previewCue = (renderer: TransitionRenderer) => (
 const THEME = { accentColor: '#e8763c' } as never;
 
 const AutomixTransitionSwitchesProbe: React.FC = () => {
-    const ringOn = useSettingsUiStore(state => state.transitionAnimation);
-    const cardOn = useSettingsUiStore(state => state.transitionAnimationCard);
-    const toggleRing = useSettingsUiStore(state => state.handleToggleTransitionAnimation);
-    const toggleCard = useSettingsUiStore(state => state.handleToggleTransitionAnimationCard);
+    const ringOn = useAutomixSettingsStore(state => state.transitionAnimation);
+    const cardOn = useAutomixSettingsStore(state => state.transitionAnimationCard);
+    const toggleRing = useAutomixSettingsStore(state => state.handleToggleTransitionAnimation);
+    const toggleCard = useAutomixSettingsStore(state => state.handleToggleTransitionAnimationCard);
 
     // 两个开关都只在 automix 下有意义，探针里固定住。
     React.useEffect(() => {
-        useSettingsUiStore.setState({ transitionMode: 'automix' });
+        useAutomixSettingsStore.setState({ transitionMode: 'automix' });
     }, []);
 
     const buttonClass = 'rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/10';

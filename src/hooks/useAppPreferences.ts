@@ -25,6 +25,7 @@ import { resolveStoredCustomLyricsFont } from '../stores/useTypographySettingsSt
 import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
 import { readSystemThemeIsDaylight } from '../stores/useThemeSettingsStore';
 import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
+import { useDesktopSettingsStore } from '../stores/useDesktopSettingsStore';
 
 export { resolveStoredCappellaTuning, resolveStoredCustomLyricsFont, resolveStoredMonetBackgroundTuning, resolveVisualizerBackgroundMode };
 
@@ -32,7 +33,7 @@ export function useAppPreferences() {
     const preferences = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
     const followSystemTheme = useThemeSettingsStore(state => state.followSystemTheme);
     const setTransparentPlayerBackgroundFromSystem = usePlayerChromeSettingsStore(state => state.setTransparentPlayerBackgroundFromSystem);
-    const setDesktopPreferenceSnapshot = useSettingsUiStore(state => state.setDesktopPreferenceSnapshot);
+    const setDesktopPreferenceSnapshot = useDesktopSettingsStore(state => state.setDesktopPreferenceSnapshot);
     const setStoredCappellaEmojiPack = useVisualizerAssetStore(state => state.setStoredCappellaEmojiPack);
     const setCappellaCustomEmojiImages = useVisualizerAssetStore(state => state.setCappellaCustomEmojiImages);
     const setIsLoadingCappellaCustomEmojiPack = useVisualizerAssetStore(state => state.setIsLoadingCappellaCustomEmojiPack);

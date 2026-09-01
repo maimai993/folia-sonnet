@@ -13,6 +13,7 @@ import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSetting
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
 
 // src/components/modal/settings/LabSettingsModal.tsx
 // Experimental settings subview kept outside SettingsModal to avoid another giant inline panel.
@@ -49,6 +50,11 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     const isMouseDownOnOverlayRef = useRef(false);
     const [isNativeBlurNoticeOpen, setIsNativeBlurNoticeOpen] = useState(false);
     const {
+
+    } = useSettingsUiStore(useShallow(state => ({
+
+    })));
+    const {
         onToggleHideTaskbarIcon,
         onToggleMinimizeToTray,
         onToggleOpenPlayerOnLaunch,
@@ -56,7 +62,7 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onTogglePreventDisplaySleepDuringPlayback,
         modSystemEnabled,
         onToggleModSystem,
-    } = useSettingsUiStore(useShallow(state => ({
+    } = useDesktopSettingsStore(useShallow(state => ({
         onToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
         onToggleMinimizeToTray: state.handleToggleMinimizeToTray,
         onToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,

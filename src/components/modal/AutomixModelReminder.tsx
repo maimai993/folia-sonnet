@@ -4,6 +4,7 @@ import { Download } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import ThemedDialog from '../shared/ThemedDialog';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { useAutomixSettingsStore } from '../../stores/useAutomixSettingsStore';
 
 // src/components/modal/AutomixModelReminder.tsx
 // The one interruption in the transition feature: switching blending on with no weights on disk.
@@ -24,10 +25,10 @@ const MODELS_BLOCK_ID = 'automix-models';
 
 const AutomixModelReminder: React.FC<{ isDaylight: boolean }> = ({ isDaylight }) => {
     const { t } = useTranslation();
-    const { isOpen, dismiss, openSettings } = useSettingsUiStore(useShallow(state => ({
+    const openSettings = useSettingsUiStore(state => state.openSettings);
+    const { isOpen, dismiss } = useAutomixSettingsStore(useShallow(state => ({
         isOpen: state.isAutomixModelReminderOpen,
         dismiss: state.dismissAutomixModelReminder,
-        openSettings: state.openSettings,
     })));
 
     if (!isOpen) return null;

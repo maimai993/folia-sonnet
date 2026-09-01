@@ -8,6 +8,7 @@ import {
     subscribeToTransitionCue,
     type TransitionCue,
 } from '../../../services/automix/transitionCue';
+import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
 
 // src/components/app/overlays/AutomixTransitionAnimation.tsx
 // What a mix looks like while it is happening: one ring, shared by two tracks.
@@ -66,7 +67,8 @@ const readRunningCue = (): DrawnRun | null => {
     const running = getActiveTransitionCue();
     if (!running) return null;
     const settings = useSettingsUiStore.getState();
-    return shouldDrawCue(running.cue, settings.transitionAnimation && settings.transitionMode === 'automix', 'ring')
+  const settingsAutomixSettings = useAutomixSettingsStore.getState();
+    return shouldDrawCue(running.cue, settingsAutomixSettings.transitionAnimation && settingsAutomixSettings.transitionMode === 'automix', 'ring')
         ? { cue: running.cue, startAtMs: running.elapsedMs }
         : null;
 };
@@ -137,10 +139,11 @@ const AutomixTransitionAnimation: React.FC<AutomixTransitionAnimationProps> = ({
             return;
         }
         const settings = useSettingsUiStore.getState();
+  const settingsAutomixSettings = useAutomixSettingsStore.getState();
         // Nothing is touched when the answer is no - not even a dismissal. The card's own settings
         // preview comes down this same channel, and it is not this ring's business either to draw
         // it or to cut short whatever this ring is already drawing.
-        if (!shouldDrawCue(next, settings.transitionAnimation && settings.transitionMode === 'automix', 'ring')) return;
+        if (!shouldDrawCue(next, settingsAutomixSettings.transitionAnimation && settingsAutomixSettings.transitionMode === 'automix', 'ring')) return;
         dismissAnimationRef.current?.cancel();
         dismissAnimationRef.current = null;
         leavingRef.current = false;

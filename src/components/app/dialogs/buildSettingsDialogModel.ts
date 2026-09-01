@@ -14,6 +14,7 @@ import { type SettingsModalState, useSettingsUiStore } from '../../../stores/use
 import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
 import type { PlayerCapConnectionStatus } from '../../../types/playerCap';
 import type { LyricApiStatus } from '../../../types/lyricApi';
+import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
 
 // src/components/app/dialogs/buildSettingsDialogModel.ts
 
@@ -182,7 +183,7 @@ export const buildSettingsDialogModel = ({
             }
         },
         onToggleNowPlayingStage: async (enabled) => {
-            useSettingsUiStore.getState().handleToggleNowPlayingStage(enabled);
+            useStageSettingsStore.getState().handleToggleNowPlayingStage(enabled);
             if (!enabled && activePlaybackContext === 'stage') {
                 leaveStagePlayback();
             }

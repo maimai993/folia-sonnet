@@ -1,0 +1,183 @@
+// src/stores/useDesktopSettingsStore.ts
+// Desktop-shell behaviour: tray and taskbar, wallpaper mode, display-sleep and voice-input
+// interlocks, launch target, and the experimental mod system switch.
+//
+// Split out of useSettingsUiStore.
+
+import { create } from 'zustand';
+import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
+import { HIDE_TASKBAR_ICON_STORAGE_KEY, MINIMIZE_TO_TRAY_STORAGE_KEY, MOD_SYSTEM_ENABLED_STORAGE_KEY, OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, SettingsUiState, VOICE_INPUT_PAUSE_STORAGE_KEY, WALLPAPER_MODE_STORAGE_KEY } from './useSettingsUiStore';
+import { setStatusMessage } from './useStatusMessageStore';
+import i18n from '../i18n/config';
+
+export type DesktopSettingsState = {
+    minimizeToTray: boolean;
+    voiceInputPauseEnabled: boolean;
+    preventDisplaySleepDuringPlayback: boolean;
+    /**
+     * Master switch for the experimental mod system. Off by default: while it is
+     * off the main process loads no mod at all and the mod commands stay out of
+     * the palette, so an unfinished apiVersion 1 is opt-in rather than ambient.
+     */
+    modSystemEnabled: boolean;
+    hideTaskbarIcon: boolean;
+    hideRemoteControlTaskbarIcon: boolean;
+    wallpaperMode: boolean;
+    openPlayerOnLaunch: boolean;
+    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; wallpaper_mode?: unknown; }) => void;
+    handleToggleMinimizeToTray: (enable: boolean) => void;
+    handleToggleVoiceInputPause: (enable: boolean) => void;
+    handleToggleModSystem: (enable: boolean) => void;
+    handleTogglePreventDisplaySleepDuringPlayback: (enable: boolean) => void;
+    handleToggleHideTaskbarIcon: (enable: boolean) => void;
+    handleToggleHideRemoteControlTaskbarIcon: (enable: boolean) => void;
+    handleToggleWallpaperMode: (enable: boolean) => void;
+    handleToggleOpenPlayerOnLaunch: (enable: boolean) => void;
+};
+
+export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) => ({
+    minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
+    voiceInputPauseEnabled: getStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, false),
+    preventDisplaySleepDuringPlayback: getStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, false),
+    modSystemEnabled: getStoredBoolean(MOD_SYSTEM_ENABLED_STORAGE_KEY, false),
+    hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
+    hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
+    wallpaperMode: getStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, false),
+    openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
+    setDesktopPreferenceSnapshot: (settings) => {
+        const patch: Partial<DesktopSettingsState> = {};
+        if (typeof settings.MINIMIZE_TO_TRAY === 'boolean') {
+            patch.minimizeToTray = settings.MINIMIZE_TO_TRAY;
+            setStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, settings.MINIMIZE_TO_TRAY);
+        }
+        if (typeof settings.VOICE_INPUT_PAUSE_ENABLED === 'boolean') {
+            patch.voiceInputPauseEnabled = settings.VOICE_INPUT_PAUSE_ENABLED;
+            setStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, settings.VOICE_INPUT_PAUSE_ENABLED);
+        }
+        if (typeof settings.PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK === 'boolean') {
+            patch.preventDisplaySleepDuringPlayback = settings.PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK;
+            setStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, settings.PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK);
+        }
+        if (typeof settings.MOD_SYSTEM_ENABLED === 'boolean') {
+            patch.modSystemEnabled = settings.MOD_SYSTEM_ENABLED;
+            setStoredBoolean(MOD_SYSTEM_ENABLED_STORAGE_KEY, settings.MOD_SYSTEM_ENABLED);
+        }
+        if (typeof settings.HIDE_TASKBAR_ICON === 'boolean') {
+            patch.hideTaskbarIcon = settings.HIDE_TASKBAR_ICON;
+            setStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, settings.HIDE_TASKBAR_ICON);
+        }
+        if (typeof settings.REMOTE_CONTROL_SKIP_TASKBAR === 'boolean') {
+            patch.hideRemoteControlTaskbarIcon = settings.REMOTE_CONTROL_SKIP_TASKBAR;
+            setStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, settings.REMOTE_CONTROL_SKIP_TASKBAR);
+        }
+        if (typeof settings.wallpaper_mode === 'boolean') {
+            patch.wallpaperMode = settings.wallpaper_mode;
+            setStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, settings.wallpaper_mode);
+        }
+        set(patch);
+    },
+    handleToggleMinimizeToTray: (enable) => {
+        setStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, enable);
+        set({ minimizeToTray: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('MINIMIZE_TO_TRAY', enable);
+        }
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'minimizeToTray' : 'minimizeToTaskbar')),
+        });
+    },
+    handleToggleVoiceInputPause: (enable) => {
+        setStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, enable);
+        set({ voiceInputPauseEnabled: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('VOICE_INPUT_PAUSE_ENABLED', enable);
+        }
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'voiceInputPauseOn' : 'voiceInputPauseOff')),
+        });
+    },
+    // The main process owns the authoritative value: it decides whether any mod
+    // is loaded at all, so the switch is persisted there and only mirrored here.
+    handleToggleModSystem: (enable) => {
+        setStoredBoolean(MOD_SYSTEM_ENABLED_STORAGE_KEY, enable);
+        set({ modSystemEnabled: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('MOD_SYSTEM_ENABLED', enable);
+        }
+    },
+    handleTogglePreventDisplaySleepDuringPlayback: (enable) => {
+        setStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, enable);
+        set({ preventDisplaySleepDuringPlayback: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK', enable);
+        }
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'preventDisplaySleepOn' : 'preventDisplaySleepOff')),
+        });
+    },
+    handleToggleHideTaskbarIcon: (enable) => {
+        setStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, enable);
+        set({ hideTaskbarIcon: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('HIDE_TASKBAR_ICON', enable);
+        }
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'taskbarHidden' : 'taskbarRestored')),
+        });
+    },
+    handleToggleHideRemoteControlTaskbarIcon: (enable) => {
+        setStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, enable);
+        set({ hideRemoteControlTaskbarIcon: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('REMOTE_CONTROL_SKIP_TASKBAR', enable);
+        }
+    },
+    handleToggleWallpaperMode: (enable) => {
+        setStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, enable);
+        set({ wallpaperMode: enable });
+        if (window.electron?.saveSettings) {
+            // The main process schedules a full relaunch after this IPC returns.
+            void window.electron.saveSettings('wallpaper_mode', enable);
+        }
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'wallpaperModeOn' : 'wallpaperModeOff')),
+        });
+    },
+    handleToggleOpenPlayerOnLaunch: (enable) => {
+        setStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, enable);
+        set({ openPlayerOnLaunch: enable });
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'openPlayerOnLaunch' : 'openHomeOnLaunch')),
+        });
+    },
+}));
+
+/**
+ * The DesktopSettings half of the former settings snapshot, for the surfaces that
+ * legitimately edit this whole domain at once. Ordinary consumers select one field instead.
+ */
+export const selectDesktopSettingsSnapshot = (state: DesktopSettingsState) => ({
+    minimizeToTray: state.minimizeToTray,
+    voiceInputPauseEnabled: state.voiceInputPauseEnabled,
+    preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
+    modSystemEnabled: state.modSystemEnabled,
+    hideTaskbarIcon: state.hideTaskbarIcon,
+    hideRemoteControlTaskbarIcon: state.hideRemoteControlTaskbarIcon,
+    wallpaperMode: state.wallpaperMode,
+    openPlayerOnLaunch: state.openPlayerOnLaunch,
+    handleToggleMinimizeToTray: state.handleToggleMinimizeToTray,
+    handleToggleVoiceInputPause: state.handleToggleVoiceInputPause,
+    handleToggleModSystem: state.handleToggleModSystem,
+    handleTogglePreventDisplaySleepDuringPlayback: state.handleTogglePreventDisplaySleepDuringPlayback,
+    handleToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
+    handleToggleHideRemoteControlTaskbarIcon: state.handleToggleHideRemoteControlTaskbarIcon,
+    handleToggleWallpaperMode: state.handleToggleWallpaperMode,
+    handleToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
+    setDesktopPreferenceSnapshot: state.setDesktopPreferenceSnapshot,
+});

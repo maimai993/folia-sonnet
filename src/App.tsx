@@ -115,6 +115,10 @@ import { selectTypographySettingsSnapshot, useTypographySettingsStore } from './
 import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from './stores/usePlayerChromeSettingsStore';
 import { useHomeLayoutSettingsStore } from './stores/useHomeLayoutSettingsStore';
 import { selectThemeSettingsSnapshot, useThemeSettingsStore } from './stores/useThemeSettingsStore';
+import { useAutomixSettingsStore } from './stores/useAutomixSettingsStore';
+import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from './stores/useDesktopSettingsStore';
+import { selectSleepTimerSnapshot, useSleepTimerStore } from './stores/useSleepTimerStore';
+import { selectStageSettingsSnapshot, useStageSettingsStore } from './stores/useStageSettingsStore';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -191,14 +195,14 @@ export default function App() {
     } = useHomeLayoutSettingsStore(useShallow(state => ({
         homeLayoutStyle: state.homeLayoutStyle,
     })));
-    const automixEnabled = useSettingsUiStore(state => state.automixEnabled);
-    const transitionMode = useSettingsUiStore(state => state.transitionMode);
-    const crossfadeMaxSec = useSettingsUiStore(state => state.crossfadeMaxSec);
-    const transitionPerformance = useSettingsUiStore(state => state.transitionPerformance);
-    const transitionAnimation = useSettingsUiStore(state => state.transitionAnimation);
-    const handleToggleAutomix = useSettingsUiStore(state => state.handleToggleAutomix);
-    const handleSetTransitionMode = useSettingsUiStore(state => state.handleSetTransitionMode);
-    const handleToggleTransitionPerformance = useSettingsUiStore(state => state.handleToggleTransitionPerformance);
+    const automixEnabled = useAutomixSettingsStore(state => state.automixEnabled);
+    const transitionMode = useAutomixSettingsStore(state => state.transitionMode);
+    const crossfadeMaxSec = useAutomixSettingsStore(state => state.crossfadeMaxSec);
+    const transitionPerformance = useAutomixSettingsStore(state => state.transitionPerformance);
+    const transitionAnimation = useAutomixSettingsStore(state => state.transitionAnimation);
+    const handleToggleAutomix = useAutomixSettingsStore(state => state.handleToggleAutomix);
+    const handleSetTransitionMode = useAutomixSettingsStore(state => state.handleSetTransitionMode);
+    const handleToggleTransitionPerformance = useAutomixSettingsStore(state => state.handleToggleTransitionPerformance);
     /**
      * The same test the settings panel disables its performance switch by, for the command palette.
      *
@@ -358,22 +362,24 @@ export default function App() {
     const {
         audioQuality,
         setAudioQuality,
-        minimizeToTray,
-        hideTaskbarIcon,
-        openPlayerOnLaunch,
         enableMediaCache,
-        enableNowPlayingStage,
-        enablePlayerCapStage,
-        playerCapHost,
-        playerCapPlayer,
-        playerCapTimeBasis,
-        playerCapSticky,
         queueAddBehavior,
         audioOutputDeviceId,
         loopMode,
-        stageTrackPillMode,
-        stageTrackPillTimeoutSec,
-        stageTrackPillOnHome,
+        handleToggleMediaCache,
+        handleSetAppLanguagePreference,
+        handleSetQueueAddBehavior,
+        handleSetAudioOutputDeviceId: persistAudioOutputDeviceId,
+        volume,
+        isMuted,
+        handleSetVolume,
+        handleToggleMute,
+        handleToggleLoopMode,
+    } = appPreferences;
+    const {
+        minimizeToTray,
+        hideTaskbarIcon,
+        openPlayerOnLaunch,
         handleToggleMinimizeToTray,
         handleToggleHideTaskbarIcon,
         handleToggleOpenPlayerOnLaunch,
@@ -384,6 +390,20 @@ export default function App() {
         modSystemEnabled,
         wallpaperMode,
         handleToggleWallpaperMode,
+    } = useDesktopSettingsStore(useShallow(selectDesktopSettingsSnapshot));
+    const {
+        enableNowPlayingStage,
+        enablePlayerCapStage,
+        playerCapHost,
+        playerCapPlayer,
+        playerCapTimeBasis,
+        playerCapSticky,
+        stageTrackPillMode,
+        stageTrackPillTimeoutSec,
+        stageTrackPillOnHome,
+        handleToggleNowPlayingStage,
+    } = useStageSettingsStore(useShallow(selectStageSettingsSnapshot));
+    const {
         sleepTimerEnabled,
         sleepTimerHours,
         sleepTimerMinutes,
@@ -391,17 +411,7 @@ export default function App() {
         handleToggleSleepTimer,
         handleSetSleepTimerHours,
         handleSetSleepTimerMinutes,
-        handleToggleMediaCache,
-        handleSetAppLanguagePreference,
-        handleToggleNowPlayingStage,
-        handleSetQueueAddBehavior,
-        handleSetAudioOutputDeviceId: persistAudioOutputDeviceId,
-        volume,
-        isMuted,
-        handleSetVolume,
-        handleToggleMute,
-        handleToggleLoopMode,
-    } = appPreferences;
+    } = useSleepTimerStore(useShallow(selectSleepTimerSnapshot));
     const {
         useCoverColorBg,
         staticMode,

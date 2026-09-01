@@ -6,6 +6,7 @@ import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore
 import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
 import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
 import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '../stores/useStageSettingsStore';
 
 // src/utils/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
@@ -13,6 +14,7 @@ import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 
 export function buildVisualSettingsConfig(): Record<string, unknown> {
   const store = useSettingsUiStore.getState();
+  const storeStageSettings = useStageSettingsStore.getState();
   const storeThemeSettings = useThemeSettingsStore.getState();
   const storeTypographySettings = useTypographySettingsStore.getState();
   const storeVisualizer = useVisualizerSettingsStore.getState();
@@ -88,9 +90,9 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // The now playing card. Not a visualizer setting, but it is chrome the listener sees over the
     // same picture, and all three legs are needed together: the mode alone restores a card that
     // hides after someone else's timeout, and on a page the importer never asked for.
-    stageTrackPillMode: store.stageTrackPillMode,
-    stageTrackPillTimeoutSec: store.stageTrackPillTimeoutSec,
-    stageTrackPillOnHome: store.stageTrackPillOnHome,
+    stageTrackPillMode: storeStageSettings.stageTrackPillMode,
+    stageTrackPillTimeoutSec: storeStageSettings.stageTrackPillTimeoutSec,
+    stageTrackPillOnHome: storeStageSettings.stageTrackPillOnHome,
   };
 }
 
@@ -99,6 +101,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
 // that the font may be unavailable on the OBS machine (and that an uploaded font never transfers).
 export function hasCustomObsFont(): boolean {
   const store = useSettingsUiStore.getState();
+  const storeStageSettings = useStageSettingsStore.getState();
   const storeThemeSettings = useThemeSettingsStore.getState();
   const storeTypographySettings = useTypographySettingsStore.getState();
   return Boolean(storeTypographySettings.lyricsCustomFont)

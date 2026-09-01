@@ -21,6 +21,7 @@ import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 import { ensureTrackProfile, setAnalysisScope } from './automix/profileService';
 import { modeNeedsBeatGrid } from './automix/transitionStrategy';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
+import { useAutomixSettingsStore } from '../stores/useAutomixSettingsStore';
 
 // Prefetch configuration
 //
@@ -47,6 +48,7 @@ const MAX_PREFETCH_CACHE_SIZE = 200; // Evict least recently used entries beyond
  */
 const analyseForAutomix = (song: SongResult, audioUrl: string | null | undefined) => {
     const settings = useSettingsUiStore.getState();
+  const settingsAutomixSettings = useAutomixSettingsStore.getState();
   const settingsLyricSettings = useLyricSettingsStore.getState();
     // Nothing reads a profile while blending is switched off, and this is not a cheap thing to
     // produce for nobody: the whole file is read, decoded, and put through the beat model in the
@@ -64,12 +66,12 @@ const analyseForAutomix = (song: SongResult, audioUrl: string | null | undefined
     // than restated here. It was restated here once: crossfade ran the model on every prefetched
     // track and threw the answer away, because a comment in this file said crossfade did "beat
     // alignment" and nothing next to the planner could contradict it.
-    if (!settings.automixEnabled) return;
+    if (!settingsAutomixSettings.automixEnabled) return;
     void ensureTrackProfile({
         song,
         audioUrl: audioUrl === 'CACHED_IN_DB' ? null : audioUrl ?? null,
         enableMediaCache: settings.enableMediaCache,
-        wantGrid: modeNeedsBeatGrid(settings.transitionMode),
+        wantGrid: modeNeedsBeatGrid(settingsAutomixSettings.transitionMode),
     });
 };
 
@@ -274,6 +276,7 @@ const prefetchSong = async (
                 const resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
 
                 const settings = useSettingsUiStore.getState();
+  const settingsAutomixSettings = useAutomixSettingsStore.getState();
   const settingsLyricSettings = useLyricSettingsStore.getState();
                 const autoUseBest = settingsLyricSettings.autoUseBestLyric;
                 const preferredSource = settingsLyricSettings.preferredAlternativeLyricSource;
