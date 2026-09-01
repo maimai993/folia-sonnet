@@ -39,6 +39,7 @@ import type {
 } from '../types/appPlayback';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setActivePlaybackContext, setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
+import { useStableActionSurface } from './useStableCallbacks';
 
 // src/hooks/useStagePlaybackController.ts
 
@@ -1385,7 +1386,10 @@ export function useStagePlaybackController({
         clearMainPlaybackContext();
     }, [activePlaybackContext, clearMainPlaybackContext, setActivePlaybackContext, stageSource]);
 
-    return {
+    // Wrapped so the callbacks this hook hands back keep one identity for the app's lifetime. They
+    // are all invoked from events or effects, and their churn was what kept every build*Model memo
+    // in App.tsx from ever holding - see useStableCallbacks.ts.
+    return useStableActionSurface({
         stageStatus,
         setStageStatus,
         stageSource,
@@ -1418,5 +1422,5 @@ export function useStagePlaybackController({
         leaveStagePlayback,
         interruptStagePlaybackForMainTransition,
         clearStagePlaybackSession,
-    };
+    });
 }

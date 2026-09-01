@@ -26,6 +26,7 @@
     "test:unit:watch": "vitest -c vitest.config.ts",
     "test:ui": "playwright test",
     "test:ui:update": "playwright test --update-snapshots",
+    "test:render": "playwright test -c playwright.probe.config.ts",
     "benchmark:lyrics": "npx tsx test/manual/lyrics_benchmark.ts",
     "manual:lyrics": "npx tsx test/manual/netease_lyrics_cli.ts",
     "audit:lyrics-sources": "npx tsx test/manual/lyric-audit/index.ts",

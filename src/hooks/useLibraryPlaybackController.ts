@@ -50,6 +50,7 @@ import { getLocalLibraryCatalogSnapshot } from '../services/localLibraryEntityRe
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 import { setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
+import { useStableActionSurface } from './useStableCallbacks';
 
 // src/hooks/useLibraryPlaybackController.ts
 
@@ -1444,7 +1445,10 @@ export function useLibraryPlaybackController({
         t,
     ]);
 
-    return {
+    // Wrapped so the callbacks this hook hands back keep one identity for the app's lifetime. They
+    // are all invoked from events or effects, and their churn was what kept every build*Model memo
+    // in App.tsx from ever holding - see useStableCallbacks.ts.
+    return useStableActionSurface({
         localSongs,
         localPlaylists,
         showLyricMatchModal,
@@ -1483,5 +1487,5 @@ export function useLibraryPlaybackController({
         handleHomeMatchSong,
         handleAutoMatchBestLyricForCurrentSong,
         handleLike,
-    };
+    });
 }

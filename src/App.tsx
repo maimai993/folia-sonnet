@@ -124,6 +124,7 @@ import { useAppChromeStore } from './stores/useAppChromeStore';
 import { useAppViewStore } from './stores/useAppViewStore';
 import { selectDisplayCoverUrl, selectDisplayDuration, selectDisplayLyrics, selectDisplayPlayerState, selectDisplaySong, selectIsShowingTail, usePlaybackStore } from './stores/usePlaybackStore';
 import { useLibraryStore } from './stores/useLibraryStore';
+import { countRender } from './dev/renderCount';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -136,6 +137,7 @@ const LOCAL_TAIL_DECODE_ERROR_TOLERANCE_SEC = 3;
 const NEXT_UP_LEAD_SEC = 5;
 
 export default function App() {
+    countRender('App');
     const { t } = useTranslation();
     const {
         navidromeEnabled, setNavidromeEnabledState,
@@ -2427,10 +2429,14 @@ export default function App() {
         context: commandPaletteContext,
     });
     // The FM tab reuses the palette's picker instead of carrying its own copy of the mode list.
-    const openCommandById = commandPalette.openCommandById;
+    // Read through a ref rather than depended on: openCommandById tracks the palette's isExecuting
+    // flag, so depending on it would rebuild the player panel model on unrelated renders. The
+    // picker only ever runs from a click, so the latest one is the right one.
+    const openCommandByIdRef = useRef(commandPalette.openCommandById);
+    openCommandByIdRef.current = commandPalette.openCommandById;
     const handleOpenFmModePicker = useMemo(() => (
-        isPersonalFmModeSupported ? () => openCommandById(PERSONAL_FM_MODE_COMMAND_ID) : undefined
-    ), [isPersonalFmModeSupported, openCommandById]);
+        isPersonalFmModeSupported ? () => openCommandByIdRef.current(PERSONAL_FM_MODE_COMMAND_ID) : undefined
+    ), [isPersonalFmModeSupported]);
     const nowPlayingDebugSnapshot = useMemo(() => (
         stageSource === 'now-playing'
             ? {

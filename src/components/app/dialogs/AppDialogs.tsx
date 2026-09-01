@@ -8,6 +8,7 @@ import UnavailableReplacementDialog from '../../modal/UnavailableReplacementDial
 import SettingsModal from '../../modal/SettingsModal';
 import ConfirmDialog from '../../shared/ConfirmDialog';
 import type { AppDialogsModel } from './buildAppDialogsModel';
+import { countRender } from '../../../dev/renderCount';
 
 // Centralized app-level dialog and toast renderer for the player shell.
 type AppDialogsProps = {
@@ -15,6 +16,7 @@ type AppDialogsProps = {
 };
 
 const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
+    countRender('AppDialogs');
     const { statusToast, lyricMatchDialog, naviLyricMatchDialog, onlineLyricMatchDialog, unavailableReplacementDialog, settingsDialog, providerSwitchConfirmDialog } = model;
 
     return (
@@ -68,4 +70,4 @@ const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
     );
 };
 
-export default AppDialogs;
+export default React.memo(AppDialogs);

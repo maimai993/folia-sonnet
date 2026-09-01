@@ -14,6 +14,7 @@ import type {
 } from '../types/appPlayback';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setActivePlaybackContext, setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
+import { useStableActionSurface } from './useStableCallbacks';
 
 // src/hooks/useElectronWindowPlaybackHandoff.ts
 // Captures and restores renderer playback state across Electron BrowserWindow rebuilds.
@@ -419,9 +420,10 @@ export function useElectronWindowPlaybackHandoff({
         void consumeHandoff();
     }, [isElectronWindow]);
 
-    return {
+    // Stable identity: both are invoked from events, and their churn reached buildPlayerPanelModel.
+    return useStableActionSurface({
         captureWindowPlaybackHandoff,
         restoreStatus,
         toggleTransparentModeWithHandoff,
-    };
+    });
 }

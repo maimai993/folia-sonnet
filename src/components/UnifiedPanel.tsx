@@ -21,6 +21,7 @@ import { getPlaybackSourceRef, getPlaybackSongSource, hasMixedPlaybackSources } 
 import { getSizedCoverUrl } from '../utils/coverUrl';
 import { omni } from '../services/onlineMusic/omni';
 import { usePlayerPanelTabShortcut } from '../hooks/usePlayerPanelTabShortcut';
+import { countRender } from '../dev/renderCount';
 
 const TOUCH_GUIDE_DISPLAY_MS = 1400;
 
@@ -147,6 +148,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     library,
     account,
 }) => {
+    countRender('UnifiedPanel');
     const { t } = useTranslation();
     const {
         isOpen,

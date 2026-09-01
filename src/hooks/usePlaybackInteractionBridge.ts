@@ -8,6 +8,7 @@ import { getReplayGainModeLabel } from '../utils/appPlaybackHelpers';
 import { isMacPlatform as isMac } from '../utils/platform';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setReplayGainMode } from '../stores/usePlaybackStore';
+import { useStableActionSurface } from './useStableCallbacks';
 
 // src/hooks/usePlaybackInteractionBridge.ts
 
@@ -381,11 +382,14 @@ export function usePlaybackInteractionBridge({
         togglePlay,
     ]);
 
-    return {
+    // Wrapped so the callbacks this hook hands back keep one identity for the app's lifetime. They
+    // are all invoked from events or effects, and their churn was what kept every build*Model memo
+    // in App.tsx from ever holding - see useStableCallbacks.ts.
+    return useStableActionSurface({
         togglePlay,
         toggleLoop,
         handleChangeReplayGainMode,
         handleContainerClick,
         handleFmTrash,
-    };
+    });
 }

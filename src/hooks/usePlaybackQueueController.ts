@@ -31,6 +31,7 @@ import { dispatchSearchTrackAction } from '../components/app/search/searchTrackA
 import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
+import { useStableActionSurface } from './useStableCallbacks';
 
 // src/hooks/usePlaybackQueueController.ts
 
@@ -1274,7 +1275,10 @@ export function usePlaybackQueueController({
         setStatusMsg({ type: 'success', text: t('status.queueCleared') || 'Queue cleared', nonce: Date.now(), durationMs: 1200 });
     }, [currentSong, isNowPlayingStageActive, persistLastPlaybackCache, playQueue, setPlayQueue, setStatusMsg, t]);
 
-    return {
+    // Wrapped so the callbacks this hook hands back keep one identity for the app's lifetime. They
+    // are all invoked from events or effects, and their churn was what kept every build*Model memo
+    // in App.tsx from ever holding - see useStableCallbacks.ts.
+    return useStableActionSurface({
         pendingUnavailableReplacement,
         setPendingUnavailableReplacement,
         clearPendingUnavailableSkip,
@@ -1294,5 +1298,5 @@ export function usePlaybackQueueController({
         handleStageExternalPlayRequest,
         shuffleQueue,
         clearQueue,
-    };
+    });
 }

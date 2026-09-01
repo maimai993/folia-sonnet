@@ -22,6 +22,7 @@ import { resolveStagePlayerPositionSec } from '../utils/stagePlayerSnapshot';
 import { getPlaybackSourceRef } from '../utils/appPlaybackGuards';
 import { omni } from '../services/onlineMusic/omni';
 import { subscribeToTransitionCue } from '../services/automix/transitionCue';
+import { useStableActionSurface } from './useStableCallbacks';
 
 // Bridges Electron-specific shell features without coupling to UI components.
 const DISCORD_PRESENCE_SNAPSHOT_INTERVAL_MS = 1000;
@@ -730,7 +731,10 @@ export const useElectronPlaybackBridge = ({
         });
     }, [onExternalPlayRequest]);
 
-    return {
+    // Wrapped so the callbacks this hook hands back keep one identity for the app's lifetime. They
+    // are all invoked from events or effects, and their churn was what kept every build*Model memo
+    // in App.tsx from ever holding - see useStableCallbacks.ts.
+    return useStableActionSurface({
         publishStagePlayerPlaybackUpdate,
-    };
+    });
 };

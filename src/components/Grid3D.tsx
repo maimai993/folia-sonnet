@@ -32,6 +32,7 @@ import qqIcon from '../assets/providers/qq.svg';
 import wechatIcon from '../assets/providers/wechat.svg';
 import { useHomeLayoutSettingsStore } from '../stores/useHomeLayoutSettingsStore';
 import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
+import { countRender } from '../dev/renderCount';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -102,6 +103,7 @@ interface Grid3DProps {
 }
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
+    countRender('Grid3D');
     const {
         onPlaySong,
         onBackToPlayer,

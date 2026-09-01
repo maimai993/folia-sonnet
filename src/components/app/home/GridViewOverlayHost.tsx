@@ -30,6 +30,7 @@ import { applyLocalSongCoverDisplay } from '../../../services/playbackAdapters';
 import { resolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { countRender } from '../../../dev/renderCount';
 
 // src/components/app/home/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
@@ -119,6 +120,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     isInteractive = true,
     children,
 }) => {
+    countRender('GridViewOverlayHost');
     const { t } = useTranslation();
     const collectionSnapshot = useCollectionNavigationStore(state => state.snapshot);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
