@@ -121,6 +121,7 @@ import { selectStageSettingsSnapshot, useStageSettingsStore } from './stores/use
 import { selectAudioSettingsSnapshot, useAudioSettingsStore } from './stores/useAudioSettingsStore';
 import { selectSettingsModalSnapshot, useSettingsModalStore } from './stores/useSettingsModalStore';
 import { audioBands, audioPower, bass, currentTime, lowMid, lyricCurrentTime, mid, spectrum, treble, vocal } from './stores/motionSignals';
+import { useAppChromeStore } from './stores/useAppChromeStore';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -128,19 +129,41 @@ const MEMORY_MONITOR_SHORTCUT_LABEL = 'Alt+Shift+M';
 const ONLINE_AUDIO_URL_TTL_MS = 1200 * 1000;
 const ONLINE_AUDIO_URL_REFRESH_BUFFER_MS = 60 * 1000;
 const HOME_PROVIDER_REFRESH_COOLDOWN_MS = 5_000;
-const PLAYER_CHROME_HIDDEN_STORAGE_KEY = 'player_chrome_hidden';
 const LOCAL_TAIL_DECODE_ERROR_TOLERANCE_SEC = 3;
 /** How many seconds before a track ends the now playing card previews the queue's next track. */
 const NEXT_UP_LEAD_SEC = 5;
 
 export default function App() {
     const { t } = useTranslation();
+    const {
+        isTitlebarRevealed, setIsTitlebarRevealed,
+        showTransparentWindowBorder, setShowTransparentWindowBorder,
+        isMainWindowClickThroughEnabled, setIsMainWindowClickThroughEnabled,
+        isClickThroughToggleHotspotActive, setIsClickThroughToggleHotspotActive,
+        isPlayerPanelGuideHotspotActive, setIsPlayerPanelGuideHotspotActive,
+        isPlayerChromeHidden, setIsPlayerChromeHidden,
+        isDevDebugOverlayVisible, setIsDevDebugOverlayVisible,
+        isMemoryMonitorVisible, setIsMemoryMonitorVisible,
+    } = useAppChromeStore(useShallow(state => ({
+        isTitlebarRevealed: state.isTitlebarRevealed,
+        setIsTitlebarRevealed: state.setIsTitlebarRevealed,
+        showTransparentWindowBorder: state.showTransparentWindowBorder,
+        setShowTransparentWindowBorder: state.setShowTransparentWindowBorder,
+        isMainWindowClickThroughEnabled: state.isMainWindowClickThroughEnabled,
+        setIsMainWindowClickThroughEnabled: state.setIsMainWindowClickThroughEnabled,
+        isClickThroughToggleHotspotActive: state.isClickThroughToggleHotspotActive,
+        setIsClickThroughToggleHotspotActive: state.setIsClickThroughToggleHotspotActive,
+        isPlayerPanelGuideHotspotActive: state.isPlayerPanelGuideHotspotActive,
+        setIsPlayerPanelGuideHotspotActive: state.setIsPlayerPanelGuideHotspotActive,
+        isPlayerChromeHidden: state.isPlayerChromeHidden,
+        setIsPlayerChromeHidden: state.setIsPlayerChromeHidden,
+        isDevDebugOverlayVisible: state.isDevDebugOverlayVisible,
+        setIsDevDebugOverlayVisible: state.setIsDevDebugOverlayVisible,
+        isMemoryMonitorVisible: state.isMemoryMonitorVisible,
+        setIsMemoryMonitorVisible: state.setIsMemoryMonitorVisible,
+    })));
     const isDev = import.meta.env.DEV;
     const isElectronWindow = Boolean((window as typeof window & { electron?: unknown; }).electron);
-    const [isTitlebarRevealed, setIsTitlebarRevealed] = useState(false);
-    const [showTransparentWindowBorder, setShowTransparentWindowBorder] = useState(false);
-    const [isMainWindowClickThroughEnabled, setIsMainWindowClickThroughEnabled] = useState(false);
-    const [isClickThroughToggleHotspotActive, setIsClickThroughToggleHotspotActive] = useState(false);
 
     // Player Data
     const [audioSrc, setAudioSrc] = useState<string | null>(null);
@@ -157,18 +180,11 @@ export default function App() {
     // UI State
     const statusMsg = useStatusMessage();
     const [isPanelOpen, setIsPanelOpen] = useState(false);
-    const [isPlayerPanelGuideHotspotActive, setIsPlayerPanelGuideHotspotActive] = useState(false);
     useElectronNeteaseApiStatus(t);
 
     // Auto-close the player panel when leaving the player view
     // (Effect moved to after useAppNavigation where currentView is defined)
     const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>('cover');
-    const [isPlayerChromeHidden, setIsPlayerChromeHidden] = useState(() => {
-        const saved = localStorage.getItem(PLAYER_CHROME_HIDDEN_STORAGE_KEY);
-        return saved === 'true';
-    });
-    const [isDevDebugOverlayVisible, setIsDevDebugOverlayVisible] = useState(false);
-    const [isMemoryMonitorVisible, setIsMemoryMonitorVisible] = useState(false);
     const [navidromeEnabled, setNavidromeEnabledState] = useState(() => isNavidromeEnabled());
     const [starredNavidromeSongIds, setStarredNavidromeSongIds] = useState<Set<string>>(new Set());
     const {
@@ -2084,10 +2100,6 @@ export default function App() {
         visualizerMode,
     ]);
     const isNowPlayingControlDisabled = isNowPlayingStageActive;
-
-    useEffect(() => {
-        localStorage.setItem(PLAYER_CHROME_HIDDEN_STORAGE_KEY, String(isPlayerChromeHidden));
-    }, [isPlayerChromeHidden]);
 
     useEffect(() => {
         const body = document.body;
