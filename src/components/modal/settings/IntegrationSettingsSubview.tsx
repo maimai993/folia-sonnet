@@ -16,6 +16,7 @@ import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import type { LyricApiStatus } from '../../../types/lyricApi';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { setStatusMessage } from '../../../stores/useStatusMessageStore';
 
 // src/components/modal/settings/IntegrationSettingsSubview.tsx
 // Integration settings for Discord, Stage, Now Playing, OBS, and Navidrome.
@@ -244,7 +245,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         // state, so a plain "copied" success would be redundant.
         const hint = resolveObsCopyHintKey();
         if (hint.type === 'info') {
-            useSettingsUiStore.getState().statusSetter?.({ type: 'info', text: t(hint.key) });
+            setStatusMessage({ type: 'info', text: t(hint.key) });
         }
     };
 

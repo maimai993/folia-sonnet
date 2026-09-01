@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { getVisualizerModeLabel } from '../components/visualizer/registry';
 import type { VisualizerMode } from '../types';
+import { setStatusMessage } from '../stores/useStatusMessageStore';
 
 // src/hooks/useVisualizerModeStepper.ts
 // 面板里用箭头逐个切换歌词动画。每步都弹一次切换提示会刷屏，
@@ -45,7 +46,7 @@ export const useVisualizerModeStepper = (modes: VisualizerMode[]) => {
             notifyTimerRef.current = null;
 
             const state = useSettingsUiStore.getState();
-            state.statusSetter?.({
+            setStatusMessage({
                 type: 'info',
                 text: t('notifications.visualizerSwitched', {
                     mode: getVisualizerModeLabel(state.visualizerMode, key => t(key)),

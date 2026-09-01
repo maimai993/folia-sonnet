@@ -25,7 +25,6 @@ type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 
 export function useAppPreferences(setStatusMsg: StatusSetter) {
     const preferences = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
-    const setStatusSetter = useSettingsUiStore(state => state.setStatusSetter);
     const setTransparentPlayerBackgroundFromSystem = useSettingsUiStore(state => state.setTransparentPlayerBackgroundFromSystem);
     const setDesktopPreferenceSnapshot = useSettingsUiStore(state => state.setDesktopPreferenceSnapshot);
     const setStoredCappellaEmojiPack = useSettingsUiStore(state => state.setStoredCappellaEmojiPack);
@@ -54,13 +53,6 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
     const monetTuning = useSettingsUiStore(state => state.monetTuning);
     const isDaylight = useSettingsUiStore(state => state.isDaylight);
     const setDaylightPreferenceFromSystem = useSettingsUiStore(state => state.setDaylightPreferenceFromSystem);
-
-    useEffect(() => {
-        setStatusSetter(setStatusMsg);
-        return () => {
-            setStatusSetter(null);
-        };
-    }, [setStatusMsg, setStatusSetter]);
 
     useEffect(() => {
         const root = document.documentElement;

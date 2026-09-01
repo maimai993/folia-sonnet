@@ -24,6 +24,7 @@ import { buildVisualSettingsConfig, resolveObsCopyHintKey } from '../../../utils
 import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../services/themePreferences';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { setStatusMessage } from '../../../stores/useStatusMessageStore';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -148,7 +149,6 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
 
     // Access ZUSTAND settings store directly for setters & configurations
     const store = useSettingsUiStore(useShallow(state => ({
-        statusSetter: state.statusSetter,
         enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
         visualizerMode: state.visualizerMode,
         randomVisualizerModePerSong: state.randomVisualizerModePerSong,
@@ -274,7 +274,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             await navigator.clipboard.writeText(code);
             setCopiedType('shortcode');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.({ type: 'success', text: t('status.copied') });
+            setStatusMessage({ type: 'success', text: t('status.copied') });
         } catch (err) {
             console.error('Failed to copy shortcode:', err);
         }
@@ -287,7 +287,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             await navigator.clipboard.writeText(code);
             setCopiedType('json');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.({ type: 'success', text: t('status.copied') });
+            setStatusMessage({ type: 'success', text: t('status.copied') });
         } catch (err) {
             console.error('Failed to copy JSON:', err);
         }
@@ -310,12 +310,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             setCopiedType('obsurl');
             setTimeout(() => setCopiedType('none'), 2000);
             const hint = resolveObsCopyHintKey();
-            store.statusSetter?.({ type: hint.type, text: t(hint.key) });
+            setStatusMessage({ type: hint.type, text: t(hint.key) });
         } catch (err) {
             // The URL is built asynchronously, so a browser that requires the write to stay inside the
             // click's own task can reject here. Say so instead of leaving the button looking inert.
             console.error('Failed to copy OBS URL:', err);
-            store.statusSetter?.({ type: 'error', text: t('status.copyFailed') });
+            setStatusMessage({ type: 'error', text: t('status.copyFailed') });
         }
     };
 
@@ -351,7 +351,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             setPendingImport({ config, plan });
         } catch (err) {
             console.error('Import settings failed:', err);
-            store.statusSetter?.({ type: 'error', text: t('options.importFailed') });
+            setStatusMessage({ type: 'error', text: t('options.importFailed') });
         }
     };
 
@@ -553,12 +553,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 onToggleStageTrackPillOnHome(Boolean(config.stageTrackPillOnHome));
             }
 
-            store.statusSetter?.({ type: 'success', text: t('options.importSuccess') });
+            setStatusMessage({ type: 'success', text: t('options.importSuccess') });
             setImportText('');
             setPendingImport(null);
         } catch (err) {
             console.error('Import settings failed:', err);
-            store.statusSetter?.({ type: 'error', text: t('options.importFailed') });
+            setStatusMessage({ type: 'error', text: t('options.importFailed') });
             setPendingImport(null);
         }
     };

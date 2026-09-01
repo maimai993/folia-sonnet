@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { useStatusMessageStore } from '@/stores/useStatusMessageStore';
 
 // test/unit/stores/sleepTimerState.test.ts
 
@@ -20,8 +21,8 @@ describe('sleep timer settings state', () => {
             sleepTimerMinutes: 0,
             sleepTimerDeadlineMs: null,
             sleepTimerActivationId: 0,
-            statusSetter: vi.fn(),
         });
+        useStatusMessageStore.setState({ message: null });
     });
 
     afterEach(() => {
@@ -31,8 +32,8 @@ describe('sleep timer settings state', () => {
             sleepTimerMinutes: 0,
             sleepTimerDeadlineMs: null,
             sleepTimerActivationId: 0,
-            statusSetter: null,
         });
+        useStatusMessageStore.setState({ message: null });
         vi.unstubAllGlobals();
     });
 
@@ -40,7 +41,7 @@ describe('sleep timer settings state', () => {
         useSettingsUiStore.getState().handleToggleSleepTimer(true);
 
         expect(useSettingsUiStore.getState().sleepTimerEnabled).toBe(false);
-        expect(useSettingsUiStore.getState().statusSetter).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+        expect(useStatusMessageStore.getState().message).toMatchObject({ type: 'error' });
         expect(values.has('sleep_timer_enabled')).toBe(false);
     });
 

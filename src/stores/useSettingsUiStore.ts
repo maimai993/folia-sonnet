@@ -39,11 +39,12 @@ import {
     type AudioEqualizerSettings,
 } from '../utils/audioEqualizer';
 import { AUDIO_SOUND_PRESETS } from '../utils/audioPresets';
+import { setStatusMessage, type StatusSetter } from './useStatusMessageStore';
 
 // src/stores/useSettingsUiStore.ts
 // Shared settings state and actions used by App, Home, and SettingsModal.
 
-export type StatusSetter = React.Dispatch<React.SetStateAction<StatusMessage | null>>;
+export type { StatusSetter };
 export const CACHE_SIZE_KEY = 'folia_cache_size';
 export const ENABLE_MEDIA_CACHE_KEY = 'folia_enable_media_cache';
 /** What the toggle used to write to, before it was corrected to the prefixed key above. */
@@ -1497,7 +1498,6 @@ const readStoredSleepTimerHours = () => readStoredSleepTimerPart(SLEEP_TIMER_HOU
 const readStoredSleepTimerMinutes = () => readStoredSleepTimerPart(SLEEP_TIMER_MINUTES_STORAGE_KEY, 59);
 
 export type SettingsUiState = {
-    statusSetter: StatusSetter | null;
     audioQuality: AudioQuality;
     useCoverColorBg: boolean;
     staticMode: boolean;
@@ -1656,7 +1656,6 @@ export type SettingsUiState = {
     isUserGuideModalOpen: boolean;
     setLastSeenGuideVersion: (version: string) => void;
     setIsUserGuideModalOpen: (isOpen: boolean) => void;
-    setStatusSetter: (setter: StatusSetter | null) => void;
     setAudioQuality: (quality: AudioQuality) => void;
     setTransparentPlayerBackgroundFromSystem: (enabled: boolean) => void;
     handleTogglePlayerPageNativeBlur: (enable: boolean) => void;
@@ -1822,10 +1821,6 @@ export type SettingsUiState = {
     setPinnedCommandId: (slotIndex: number, commandId: string | null) => void;
 };
 
-const notify = (get: () => SettingsUiState, message: StatusMessage) => {
-    get().statusSetter?.(message);
-};
-
 const initialFollowSystemTheme = getStoredBoolean(FOLLOW_SYSTEM_THEME_STORAGE_KEY, false);
 const initialStoredDaylight = getStoredBoolean('default_theme_daylight', false);
 const initialDaylight = initialFollowSystemTheme
@@ -1833,7 +1828,6 @@ const initialDaylight = initialFollowSystemTheme
     : initialStoredDaylight;
 
 export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
-    statusSetter: null,
     audioQuality: readStoredAudioQuality(),
     useCoverColorBg: getStoredBoolean('use_cover_color_bg', false),
     staticMode: getStoredBoolean('static_mode', false),
@@ -1980,7 +1974,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         set({ lastSeenGuideVersion: version });
     },
     setIsUserGuideModalOpen: (isOpen) => set({ isUserGuideModalOpen: isOpen }),
-    setStatusSetter: (setter) => set({ statusSetter: setter }),
     setAudioQuality: (quality) => {
         if (typeof window !== 'undefined') {
             localStorage.setItem('default_audio_quality', quality);
@@ -2051,7 +2044,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.removeItem('lyrics_custom_font');
         }
         set({ lyricsCustomFont: null });
-        notify(get, message);
+        setStatusMessage(message);
     },
     setIsSubSettingsViewOpen: (open) => set({ isSubSettingsViewOpen: open }),
     openSettings: (initialTab = 'help', initialSubview = null, initialVisualizerSection = null) => set({
@@ -2071,7 +2064,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleCoverColorBg: (enable) => {
         setStoredBoolean('use_cover_color_bg', enable);
         set({ useCoverColorBg: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'coverColorAdded' : 'coverColorDefault')),
         });
@@ -2079,7 +2072,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleStaticMode: (enable) => {
         setStoredBoolean('static_mode', enable);
         set({ staticMode: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'staticModeOn' : 'staticModeOff')),
         });
@@ -2087,7 +2080,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleDisableHomeDynamicBackground: (disable) => {
         setStoredBoolean('disable_home_dynamic_background', disable);
         set({ disableHomeDynamicBackground: disable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (disable ? 'homeBgDisabled' : 'homeBgEnabled')),
         });
@@ -2095,7 +2088,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleAutoUseBestLyric: (enable) => {
         setStoredBoolean('auto_use_best_lyric', enable);
         set({ autoUseBestLyric: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'autoBestLyricOn' : 'autoBestLyricOff')),
         });
@@ -2105,7 +2098,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem(PREFERRED_LYRIC_SOURCE_STORAGE_KEY_V2, source);
         }
         set({ preferredAlternativeLyricSource: source });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.lyricSourceChanged', { source: getLyricProviderPreferenceLabel(source) }),
         });
@@ -2119,7 +2112,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleHidePlayerProgressBar: (enable) => {
         setStoredBoolean('hide_player_progress_bar', enable);
         set({ hidePlayerProgressBar: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'progressBarHidden' : 'progressBarShown')),
         });
@@ -2127,7 +2120,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleAlwaysShowPlayerBackButton: (enable) => {
         setStoredBoolean('always_show_player_back_button', enable);
         set({ alwaysShowPlayerBackButton: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'playerBackButtonAlwaysShown' : 'playerBackButtonAutoHidden')),
         });
@@ -2135,7 +2128,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleAlwaysShowTrackSwitchButtons: (enable) => {
         setStoredBoolean('always_show_track_switch_buttons', enable);
         set({ alwaysShowTrackSwitchButtons: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'trackSwitchButtonsAlwaysShown' : 'trackSwitchButtonsAutoHidden')),
         });
@@ -2143,7 +2136,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleAlwaysShowMainWindowTitlebar: (enable) => {
         setStoredBoolean('always_show_main_window_titlebar', enable);
         set({ alwaysShowMainWindowTitlebar: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'mainWindowTitlebarAlwaysShown' : 'mainWindowTitlebarAutoHidden')),
         });
@@ -2151,7 +2144,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleHidePlayerTranslationSubtitle: (enable) => {
         setStoredBoolean('hide_player_translation_subtitle', enable);
         set({ hidePlayerTranslationSubtitle: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'subtitleHidden' : 'subtitleShown')),
         });
@@ -2163,7 +2156,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem(SUBTITLE_CONTENT_MODE_STORAGE_KEY, subtitleContentMode);
         }
         set({ showSubtitleTranslation: enable, subtitleContentMode });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'translationShown' : 'translationHidden')),
         });
@@ -2175,7 +2168,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         const showSubtitleTranslation = subtitleContentMode !== 'none';
         setStoredBoolean(SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY, showSubtitleTranslation);
         set({ subtitleContentMode, showSubtitleTranslation });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t(`notifications.subtitleMode.${subtitleContentMode}`),
         });
@@ -2183,7 +2176,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleHidePlayerRightPanelButton: (enable) => {
         setStoredBoolean('hide_player_right_panel_button', enable);
         set({ hidePlayerRightPanelButton: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'rightBtnHidden' : 'rightBtnShown')),
         });
@@ -2191,7 +2184,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleTransparentPlayerBackground: (enable) => {
         setStoredBoolean('transparent_player_background', enable);
         set({ transparentPlayerBackground: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'transparentBgOn' : 'transparentBgOff')),
         });
@@ -2199,7 +2192,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     // Main-process guard fired the refusal (classic Windows wallpaper mode cannot present a
     // transparent wallpaper window): surface why the toggle did not take effect.
     handleWallpaperTransparentRefused: () => {
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.transparentBgWallpaperUnsupported'),
         });
@@ -2207,7 +2200,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleDisableVisualizerVignette: (disable) => {
         setStoredBoolean('disable_visualizer_vignette', disable);
         set({ disableVisualizerVignette: disable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (disable ? 'vignetteOff' : 'vignetteOn')),
         });
@@ -2215,7 +2208,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleDisableVisualizerGeometricBackground: (disable) => {
         setStoredBoolean('disable_visualizer_geometric_background', disable);
         set({ disableVisualizerGeometricBackground: disable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (disable ? 'geometricBgHidden' : 'geometricBgShown')),
         });
@@ -2226,7 +2219,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         if (window.electron?.saveSettings) {
             void window.electron.saveSettings('MINIMIZE_TO_TRAY', enable);
         }
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'minimizeToTray' : 'minimizeToTaskbar')),
         });
@@ -2237,7 +2230,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         if (window.electron?.saveSettings) {
             void window.electron.saveSettings('VOICE_INPUT_PAUSE_ENABLED', enable);
         }
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'voiceInputPauseOn' : 'voiceInputPauseOff')),
         });
@@ -2257,14 +2250,14 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         if (window.electron?.saveSettings) {
             void window.electron.saveSettings('PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK', enable);
         }
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'preventDisplaySleepOn' : 'preventDisplaySleepOff')),
         });
     },
     handleToggleSleepTimer: (enable) => {
         if (enable && get().sleepTimerHours === 0 && get().sleepTimerMinutes === 0) {
-            notify(get, {
+            setStatusMessage({
                 type: 'error',
                 text: i18n.t('commandPalette.sleepTimerDurationRequired'),
             });
@@ -2277,7 +2270,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
                 ? state.sleepTimerActivationId + 1
                 : state.sleepTimerActivationId,
         }));
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'sleepTimerOn' : 'sleepTimerOff')),
         });
@@ -2312,7 +2305,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         if (window.electron?.saveSettings) {
             void window.electron.saveSettings('HIDE_TASKBAR_ICON', enable);
         }
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'taskbarHidden' : 'taskbarRestored')),
         });
@@ -2331,7 +2324,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             // The main process schedules a full relaunch after this IPC returns.
             void window.electron.saveSettings('wallpaper_mode', enable);
         }
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'wallpaperModeOn' : 'wallpaperModeOff')),
         });
@@ -2339,7 +2332,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleOpenPlayerOnLaunch: (enable) => {
         setStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, enable);
         set({ openPlayerOnLaunch: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'openPlayerOnLaunch' : 'openHomeOnLaunch')),
         });
@@ -2556,7 +2549,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ visualizerMode: mode });
         if (options?.notify !== false) {
-            notify(get, {
+            setStatusMessage({
                 type: 'info',
                 text: i18n.t('notifications.visualizerSwitched', {
                     mode: getVisualizerModeLabel(mode, key => i18n.t(key)),
@@ -2567,7 +2560,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleRandomVisualizerModePerSong: (enable) => {
         setStoredBoolean('random_visualizer_mode_per_song', enable);
         set({ randomVisualizerModePerSong: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t(`status.randomVisualizerModePerSong${enable ? 'On' : 'Off'}`),
         });
@@ -2596,7 +2589,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('classic_tuning', JSON.stringify(DEFAULT_CLASSIC_TUNING));
         }
         set({ classicTuning: DEFAULT_CLASSIC_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.classicReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.classicReset') });
     },
     handleSetCadenzaTuning: (patch) => {
         const next = { ...get().cadenzaTuning, ...patch, beamIntensity: 0 };
@@ -2610,7 +2603,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('cadenza_tuning', JSON.stringify(DEFAULT_CADENZA_TUNING));
         }
         set({ cadenzaTuning: DEFAULT_CADENZA_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.cadenzaReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.cadenzaReset') });
     },
     handleSetPartitaTuning: (patch) => {
         const prev = get().partitaTuning;
@@ -2632,7 +2625,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('partita_tuning', JSON.stringify(DEFAULT_PARTITA_TUNING));
         }
         set({ partitaTuning: DEFAULT_PARTITA_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.partitaReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.partitaReset') });
     },
     handleSetFumeTuning: (patch) => {
         const prev = get().fumeTuning;
@@ -2659,7 +2652,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('fume_tuning', JSON.stringify(DEFAULT_FUME_TUNING));
         }
         set({ fumeTuning: DEFAULT_FUME_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.fumeReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.fumeReset') });
     },
     handleSetCladdaghTuning: (patch) => {
         const prev = get().claddaghTuning;
@@ -2680,7 +2673,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('claddagh_tuning', JSON.stringify(DEFAULT_CLADDAGH_TUNING));
         }
         set({ claddaghTuning: DEFAULT_CLADDAGH_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.claddaghReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.claddaghReset') });
     },
     handleSetPendoloTuning: (patch: Partial<PendoloTuning>) => {
         const prev = get().pendoloTuning;
@@ -2714,7 +2707,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('pendolo_tuning', JSON.stringify(DEFAULT_PENDOLO_TUNING));
         }
         set({ pendoloTuning: DEFAULT_PENDOLO_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.pendoloReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.pendoloReset') });
     },
     handleSetSonnetTuning: (patch: Partial<SonnetTuning>) => {
         const prev = get().sonnetTuning;
@@ -2760,7 +2753,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('sonnet_tuning', JSON.stringify(DEFAULT_SONNET_TUNING));
         }
         set({ sonnetTuning: DEFAULT_SONNET_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.sonnetReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.sonnetReset') });
     },
     handleSetTemperaTuning: (patch: Partial<TemperaTuning>) => {
         const prev = get().temperaTuning;
@@ -2802,12 +2795,12 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('tempera_tuning', JSON.stringify(DEFAULT_TEMPERA_TUNING));
         }
         set({ temperaTuning: DEFAULT_TEMPERA_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.temperaReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.temperaReset') });
     },
     handleSetCappellaTuning: (patch) => {
         const requestedCustomWithoutPack = patch.emojiPackSource === 'custom' && get().storedCappellaEmojiPack.length === 0;
         if (requestedCustomWithoutPack) {
-            notify(get, { type: 'info', text: i18n.t('notifications.uploadEmojiFirst') });
+            setStatusMessage({ type: 'info', text: i18n.t('notifications.uploadEmojiFirst') });
         }
 
         const prev = get().cappellaTuning;
@@ -2828,7 +2821,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('cappella_tuning', JSON.stringify(DEFAULT_CAPPELLA_TUNING));
         }
         set({ cappellaTuning: DEFAULT_CAPPELLA_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.cappellaReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.cappellaReset') });
     },
     handleSetTiltTuning: (patch) => {
         const prev = get().tiltTuning;
@@ -2847,7 +2840,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('tilt_tuning', JSON.stringify(DEFAULT_TILT_TUNING));
         }
         set({ tiltTuning: DEFAULT_TILT_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.tiltReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.tiltReset') });
     },
     handleSetDioramaTuning: (patch) => {
         const prev = get().dioramaTuning;
@@ -2868,7 +2861,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('diorama_tuning', JSON.stringify(DEFAULT_DIORAMA_TUNING));
         }
         set({ dioramaTuning: DEFAULT_DIORAMA_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.dioramaReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.dioramaReset') });
     },
     handleSetMonetBackgroundTuning: (patch) => {
         const prev = get().monetBackgroundTuning;
@@ -2886,7 +2879,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('monet_background_tuning', JSON.stringify(DEFAULT_MONET_BACKGROUND_TUNING));
         }
         set({ monetBackgroundTuning: DEFAULT_MONET_BACKGROUND_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.monetBgReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.monetBgReset') });
     },
     handleSetNomandBackgroundTuning: (patch) => {
         const next = resolveStoredNomandBackgroundTuning({
@@ -2903,7 +2896,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('nomand_background_tuning', JSON.stringify(DEFAULT_NOMAND_BACKGROUND_TUNING));
         }
         set({ nomandBackgroundTuning: DEFAULT_NOMAND_BACKGROUND_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.nomandBgReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.nomandBgReset') });
     },
     handleSetLatentBackgroundTuning: (patch) => {
         const next = resolveStoredLatentBackgroundTuning({
@@ -2920,7 +2913,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('latent_background_tuning', JSON.stringify(DEFAULT_LATENT_BACKGROUND_TUNING));
         }
         set({ latentBackgroundTuning: DEFAULT_LATENT_BACKGROUND_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.latentBgReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.latentBgReset') });
     },
     handleSetMonetTuning: (patch) => {
         const prev = get().monetTuning;
@@ -2938,7 +2931,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('monet_tuning', JSON.stringify(DEFAULT_MONET_TUNING));
         }
         set({ monetTuning: DEFAULT_MONET_TUNING });
-        notify(get, { type: 'info', text: i18n.t('notifications.monetReset') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.monetReset') });
     },
     handleUploadMonetBackgroundImage: async (files) => {
         const file = files[0];
@@ -2953,7 +2946,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         const image = buildStoredMonetBackgroundImage(file);
         await saveMonetBackgroundImage(image);
         set({ storedMonetBackgroundImage: image });
-        notify(get, { type: 'success', text: i18n.t('notifications.monetBgUpdated') });
+        setStatusMessage({ type: 'success', text: i18n.t('notifications.monetBgUpdated') });
         return { ok: true };
     },
     handleClearMonetBackgroundImage: async () => {
@@ -2970,7 +2963,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             monetBackgroundImage: null,
             monetBackgroundTuning: nextTuning,
         });
-        notify(get, { type: 'info', text: i18n.t('notifications.monetBgCleared') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.monetBgCleared') });
     },
     handleUploadMonetPortraitImage: async (files) => {
         const file = files[0];
@@ -2985,7 +2978,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         const image = buildStoredMonetPortraitImage(file);
         await saveMonetPortraitImage(image);
         set({ storedMonetPortraitImage: image });
-        notify(get, { type: 'success', text: i18n.t('notifications.monetPortraitUpdated') });
+        setStatusMessage({ type: 'success', text: i18n.t('notifications.monetPortraitUpdated') });
         return { ok: true };
     },
     handleClearMonetPortraitImage: async () => {
@@ -3002,7 +2995,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             monetPortraitImage: null,
             monetTuning: nextTuning,
         });
-        notify(get, { type: 'info', text: i18n.t('notifications.monetPortraitCleared') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.monetPortraitCleared') });
     },
     handleImportCustomCappellaEmojiPack: async (files) => {
         if (files.length === 0) {
@@ -3019,7 +3012,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         const storedPack = [...storedCappellaEmojiPack, ...appendedPack];
         await saveCustomCappellaEmojiPack(storedPack);
         set({ storedCappellaEmojiPack: storedPack });
-        notify(get, {
+        setStatusMessage({
             type: 'success',
             text: i18n.t('notifications.emojiPackAdded', { added: appendedPack.length, total: storedPack.length }),
         });
@@ -3039,7 +3032,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             storedCappellaEmojiPack: [],
             cappellaTuning: nextTuning,
         });
-        notify(get, { type: 'info', text: i18n.t('notifications.emojiPackCleared') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.emojiPackCleared') });
     },
     handleImportCustomCappellaAvatar: async (files) => {
         if (files.length === 0) {
@@ -3056,7 +3049,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         const storedPack = [...storedCappellaAvatarPack, ...builtPack];
         await saveCustomCappellaAvatar(storedPack);
         set({ storedCappellaAvatarPack: storedPack });
-        notify(get, {
+        setStatusMessage({
             type: 'success',
             text: i18n.t('notifications.avatarAdded', { added: builtPack.length, total: storedPack.length }),
         });
@@ -3076,7 +3069,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             storedCappellaAvatarPack: [],
             cappellaTuning: nextTuning,
         });
-        notify(get, { type: 'info', text: i18n.t('notifications.avatarCleared') });
+        setStatusMessage({ type: 'info', text: i18n.t('notifications.avatarCleared') });
     },
     handleSetLyricsFontStyle: (fontStyle) => {
         if (typeof window !== 'undefined') {
@@ -3137,7 +3130,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             if (typeof window !== 'undefined') {
                 localStorage.setItem('lyrics_custom_font', JSON.stringify(meta));
             }
-            notify(get, {
+            setStatusMessage({
                 type: 'success',
                 text: i18n.t('notifications.fontEnabled', { fontName: meta.label || meta.family }),
             });
@@ -3147,7 +3140,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             const message = error instanceof Error && error.message
                 ? error.message
                 : i18n.t('notifications.fontUploadFailed');
-            notify(get, { type: 'error', text: message });
+            setStatusMessage({ type: 'error', text: message });
 
             return { ok: false, error: message };
         }
@@ -3210,7 +3203,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             }
         };
 
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: preference === 'system'
                 ? i18n.t('notifications.langFollowSystem')
@@ -3270,7 +3263,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleOpenPanelCloseButton: (enable) => {
         setStoredBoolean('show_open_panel_close_button', enable);
         set({ showOpenPanelCloseButton: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'panelCloseBtnShown' : 'panelCloseBtnHidden')),
         });
@@ -3285,7 +3278,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         const nowEnabled = enableNowPlaying || enablePlayerCap;
         // Only notify on the enable/disable transition; switching between the two sources is silent. On disable, the controller's stageSource→null reactive effect handles teardown automatically.
         if (wasEnabled !== nowEnabled) {
-            notify(get, {
+            setStatusMessage({
                 type: 'info',
                 text: i18n.t('notifications.' + (nowEnabled ? 'stageModeOn' : 'stageModeOff')),
             });
@@ -3310,7 +3303,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleToggleNowPlayingStage: (enable) => {
         setStoredBoolean('enable_now_playing_stage', enable);
         set({ enableNowPlayingStage: enable });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'stageModeOn' : 'stageModeOff')),
         });
@@ -3324,7 +3317,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('queue_add_behavior', behavior);
         }
         set({ queueAddBehavior: behavior });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (behavior === 'next' ? 'queueInsertNext' : 'queueAppend')),
         });
@@ -3415,7 +3408,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('home_layout_style', 'grid');
         }
         set({ homeLayoutStyle: 'grid' });
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.homeLayoutGrid'),
         });
@@ -3423,7 +3416,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     handleSetGrid3dCardStyle: (style) => {
         set({ grid3dCardStyle: style });
         if (typeof window !== 'undefined') localStorage.setItem('grid3d_card_style', style);
-        notify(get, {
+        setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (style === 'image' ? 'cardStyleImage' : 'cardStyleCard')),
         });

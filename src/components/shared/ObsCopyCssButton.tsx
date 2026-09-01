@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { computeHasUploadedObsAsset } from '../../utils/visualSettingsConfig';
 import { buildObsCustomCss } from '../../utils/obsCustomCss';
+import { setStatusMessage } from '../../stores/useStatusMessageStore';
 
 interface ObsCopyCssButtonProps {
     disabled?: boolean;
@@ -26,11 +27,10 @@ export const ObsCopyCssButton: React.FC<ObsCopyCssButtonProps> = ({ disabled, bu
     }
 
     const handleCopy = async () => {
-        const setStatus = useSettingsUiStore.getState().statusSetter;
         try {
             const result = await buildObsCustomCss();
             if (!result) {
-                setStatus?.({ type: 'error', text: t('status.copyFailed') });
+                setStatusMessage({ type: 'error', text: t('status.copyFailed') });
                 return;
             }
             await navigator.clipboard.writeText(result.css);
@@ -39,10 +39,10 @@ export const ObsCopyCssButton: React.FC<ObsCopyCssButtonProps> = ({ disabled, bu
             const hintText = result.degradedGifCount > 0
                 ? t('options.obsCssCopiedHintDegraded', { count: result.degradedGifCount })
                 : t('options.obsCssCopiedHint');
-            setStatus?.({ type: 'info', text: hintText });
+            setStatusMessage({ type: 'info', text: hintText });
         } catch (err) {
             console.error('Failed to copy OBS CSS:', err);
-            setStatus?.({ type: 'error', text: t('status.copyFailed') });
+            setStatusMessage({ type: 'error', text: t('status.copyFailed') });
         }
     };
 
