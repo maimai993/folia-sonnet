@@ -127,12 +127,13 @@ import { useVisualizerTunings } from './components/visualizer/useVisualizerTunin
 import { usePlaybackRuntimeRefs } from './hooks/usePlaybackRuntimeRefs';
 import { useElectronWindowChrome } from './hooks/useElectronWindowChrome';
 import { useTransportCommandRefs } from './hooks/useTransportCommandRefs';
+import { useHomeProviderRefresh } from './hooks/useHomeProviderRefresh';
+import { useAudioOutputDevice } from './hooks/useAudioOutputDevice';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
 const ONLINE_AUDIO_URL_TTL_MS = 1200 * 1000;
 const ONLINE_AUDIO_URL_REFRESH_BUFFER_MS = 60 * 1000;
-const HOME_PROVIDER_REFRESH_COOLDOWN_MS = 5_000;
 const LOCAL_TAIL_DECODE_ERROR_TOLERANCE_SEC = 3;
 /** How many seconds before a track ends the now playing card previews the queue's next track. */
 const NEXT_UP_LEAD_SEC = 5;
@@ -243,9 +244,6 @@ export default function App() {
     const crossfadeMaxSec = useAutomixSettingsStore(state => state.crossfadeMaxSec);
     const transitionPerformance = useAutomixSettingsStore(state => state.transitionPerformance);
     const transitionAnimation = useAutomixSettingsStore(state => state.transitionAnimation);
-    const handleToggleAutomix = useAutomixSettingsStore(state => state.handleToggleAutomix);
-    const handleSetTransitionMode = useAutomixSettingsStore(state => state.handleSetTransitionMode);
-    const handleToggleTransitionPerformance = useAutomixSettingsStore(state => state.handleToggleTransitionPerformance);
     /**
      * The same test the settings panel disables its performance switch by, for the command palette.
      *
@@ -263,8 +261,6 @@ export default function App() {
         [transitionMode, crossfadeMaxSec, transitionPerformance],
     );
     const setThemeQuickEditorContext = useThemeQuickEditorStore(state => state.setContext);
-    const openThemeQuickEditor = useThemeQuickEditorStore(state => state.openEditor);
-    const canOpenThemeQuickEditor = useThemeQuickEditorStore(state => state.canOpenEditor);
 
     useEffect(() => {
         if (
@@ -375,9 +371,7 @@ export default function App() {
     const {
         audioQuality,
         queueAddBehavior,
-        audioOutputDeviceId,
         loopMode,
-        handleSetAudioOutputDeviceId: persistAudioOutputDeviceId,
         volume,
         isMuted,
         handleToggleLoopMode,
@@ -534,131 +528,11 @@ export default function App() {
         }
     }, [isMuted]);
 
-    const applyAudioOutputDevice = useCallback(async (
-        targetDeviceId: string,
-        reportError = true,
-    ) => {
-        const audioElement = audioRef.current as (HTMLAudioElement & {
-            setSinkId?: (sinkId: string) => Promise<void>;
-            sinkId?: string;
-        }) | null;
-        const audioContext = audioContextRef.current as (AudioContext & {
-            setSinkId?: (sinkId: string) => Promise<void>;
-            sinkId?: string;
-        }) | null;
-        const audioSinkTarget = gainNodeRef.current && audioContext?.setSinkId
-            ? audioContext
-            : audioElement;
-
-        if (!audioSinkTarget?.setSinkId) {
-            persistAudioOutputDeviceId(targetDeviceId);
-            return true;
-        }
-
-        const normalizedTargetDeviceId = targetDeviceId || '';
-        if (audioSinkTarget.sinkId === normalizedTargetDeviceId) {
-            persistAudioOutputDeviceId(targetDeviceId);
-            return true;
-        }
-
-        let attempt = 0;
-        const maxRetryCount = 4;
-        let shouldPauseBeforeSwitch = normalizedTargetDeviceId === 'default' || normalizedTargetDeviceId === 'communications';
-
-        while (attempt <= maxRetryCount) {
-            const wasPlaying = Boolean(audioElement && !audioElement.paused && !audioElement.ended);
-            try {
-                if (audioElement && shouldPauseBeforeSwitch && wasPlaying) {
-                    audioElement.pause();
-                }
-
-                await audioSinkTarget.setSinkId(normalizedTargetDeviceId);
-                persistAudioOutputDeviceId(targetDeviceId);
-
-                if (audioElement && shouldPauseBeforeSwitch && wasPlaying) {
-                    try {
-                        await audioElement.play();
-                    } catch (resumeError) {
-                        console.warn('[App] Audio output switched but playback did not resume automatically', {
-                            resumeError,
-                            targetDeviceId: normalizedTargetDeviceId,
-                            audioSrc,
-                        });
-                    }
-                }
-
-                return true;
-            } catch (error) {
-                const isAbortError = error instanceof DOMException && error.name === 'AbortError';
-                if (isAbortError && attempt < maxRetryCount) {
-                    if (audioElement && wasPlaying && audioElement.paused) {
-                        try {
-                            await audioElement.play();
-                        } catch {
-                            // Ignore resume failures during retry path; a later successful switch will attempt again.
-                        }
-                    }
-                    attempt += 1;
-                    shouldPauseBeforeSwitch = true;
-                    await new Promise(resolve => window.setTimeout(resolve, 180));
-                    continue;
-                }
-
-                console.warn('[App] Failed to apply audio output device', {
-                    error,
-                    targetDeviceId: normalizedTargetDeviceId,
-                    sinkTarget: audioSinkTarget === audioContext ? 'audio-context' : 'audio-element',
-                });
-
-                if (audioElement && wasPlaying && audioElement.paused) {
-                    try {
-                        await audioElement.play();
-                    } catch {
-                        // Ignore resume failures on final error; user will see the status message.
-                    }
-                }
-
-                if (reportError) {
-                    setStatusMsg({
-                        type: 'error',
-                        text: t('options.audioOutputSelectFailed'),
-                    });
-                }
-                return false;
-            }
-        }
-
-        return false;
-    }, [persistAudioOutputDeviceId]);
-
-    useEffect(() => {
-        const audioElement = audioRef.current as HTMLAudioElement | null;
-
-        if (!audioElement) {
-            return;
-        }
-
-        let isDisposed = false;
-        const handleAudioDeviceRetry = () => {
-            if (isDisposed) {
-                return;
-            }
-            void applyAudioOutputDevice(audioOutputDeviceId, false);
-        };
-
-        audioElement.addEventListener('loadedmetadata', handleAudioDeviceRetry);
-        audioElement.addEventListener('canplay', handleAudioDeviceRetry);
-        void applyAudioOutputDevice(audioOutputDeviceId, false);
-        return () => {
-            isDisposed = true;
-            audioElement.removeEventListener('loadedmetadata', handleAudioDeviceRetry);
-            audioElement.removeEventListener('canplay', handleAudioDeviceRetry);
-        };
-    }, [applyAudioOutputDevice, audioOutputDeviceId, audioSrc]);
-
-    const handleAudioOutputDeviceChange = useCallback(async (deviceId: string) => (
-        await applyAudioOutputDevice(deviceId, true)
-    ), [applyAudioOutputDevice]);
+    const { handleAudioOutputDeviceChange } = useAudioOutputDevice({
+        audioRef,
+        audioContextRef,
+        gainNodeRef,
+    });
 
     const handlePreviewVolume = useCallback((val: number) => {
         pendingVolumePreviewRef.current = val;
@@ -797,7 +671,6 @@ export default function App() {
         pushCollection,
         backCollection,
     } = useAppNavigation();
-    const hasCollection = useCollectionNavigationStore(state => Boolean(state.snapshot?.stack.length));
 
     // Auto-close the player panel when leaving the player view
     useEffect(() => {
@@ -954,40 +827,11 @@ export default function App() {
         () => omni.refreshProviderPlaylists(onlineProviderPlatform.activeProviderId),
         [onlineProviderPlatform.activeProviderId],
     );
-    const lastHomeProviderRefreshRef = useRef<{ providerId: OnlineProviderId; at: number } | null>(null);
-    useEffect(() => {
-        if (currentView !== 'home' || hasCollection) return;
-
-        const providerId = onlineProviderPlatform.activeProviderId;
-        const startedAt = Date.now();
-        const previous = lastHomeProviderRefreshRef.current;
-        if (previous?.providerId === providerId && startedAt - previous.at <= HOME_PROVIDER_REFRESH_COOLDOWN_MS) return;
-        if (onlineProviderPlatform.activeProvider?.freshness === 'refreshing') {
-            lastHomeProviderRefreshRef.current = { providerId, at: startedAt };
-            return;
-        }
-
-        lastHomeProviderRefreshRef.current = { providerId, at: startedAt };
-        void refreshActiveProviderPlaylists().catch(async error => {
-            if (lastHomeProviderRefreshRef.current?.providerId === providerId
-                && lastHomeProviderRefreshRef.current.at === startedAt) {
-                lastHomeProviderRefreshRef.current = null;
-            }
-            console.warn('[Omni] Failed to refresh active provider playlists on home entry', {
-                providerId,
-                name: error instanceof Error ? error.name : 'Error',
-            });
-            const account = useOnlineProviderAccountStore.getState().accounts[providerId];
-            if (providerId !== 'kugou' || !account?.user) return;
-
-            const user = await checkKugouLoginStatus();
-            const refreshedAccount = useOnlineProviderAccountStore.getState().accounts.kugou;
-            if (!user && refreshedAccount?.error === 'auth-required') {
-                setStatusMsg({ type: 'error', text: t('status.loginExpired') });
-            }
-        });
-    }, [checkKugouLoginStatus, currentView, hasCollection, onlineProviderPlatform.activeProvider?.freshness, onlineProviderPlatform.activeProviderId, refreshActiveProviderPlaylists, setStatusMsg, t]);
-
+    useHomeProviderRefresh({
+        onlineProviderPlatform,
+        refreshActiveProviderPlaylists,
+        checkKugouLoginStatus,
+    });
     const {
         stageStatus,
         setStageStatus,
@@ -1333,7 +1177,6 @@ export default function App() {
     // being handed it. The ternaries (rather than `??`) live there for the same reason they lived
     // here: null is a real value for lyrics, cover and duration.
     const displaySong = usePlaybackStore(selectDisplaySong);
-    const displayLyrics = usePlaybackStore(selectDisplayLyrics);
     const displayCoverUrl = usePlaybackStore(selectDisplayCoverUrl);
     const displayDuration = usePlaybackStore(selectDisplayDuration);
     /** While true the progress bar is driven by the deck that is finishing, not the active one. */
