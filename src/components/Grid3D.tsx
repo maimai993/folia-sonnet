@@ -59,18 +59,10 @@ interface Grid3DProps {
     playlists: ProviderCollection[];
     cloudPlaylist?: ProviderCollection | null;
     currentTrack?: SongResult | null;
-    isPlaying: boolean;
-    onSelectPlaylist: (playlist: ProviderCollection) => void;
-    onSelectAlbum: (albumId: MediaId) => void;
-    onSelectArtist: (artistId: MediaId) => void;
-    onSelectLocalAlbum?: (albumName: string) => void;
-    onSelectLocalArtist?: (artistName: string) => void;
     localSongs: LocalSong[];
     localLibraryCatalog: LocalLibraryCatalogSnapshot;
     localPlaylists: LocalPlaylist[];
     onRefreshLocalSongs: () => Promise<void> | void;
-    onPlayLocalSong: (song: LocalSong, queue?: LocalSong[]) => void;
-    onAddLocalSongToQueue?: (song: LocalSong) => void;
     localMusicState: {
         activeRow: 0 | 1 | 2 | 3;
         selectedGroup: LocalLibraryGroup | null;
@@ -91,10 +83,6 @@ interface Grid3DProps {
         focusedArtistIndex: number;
         focusedPlaylistIndex: number;
     }>>;
-    onMatchSong?: (song: LocalSong) => void;
-    onPlayNavidromeSong?: (song: any, queue?: any[]) => void;
-    onAddNavidromeSongsToQueue?: (songs: any[]) => void;
-    onMatchNavidromeSong?: (song: any) => void;
     navidromeFocusedAlbumIndex?: number;
     setNavidromeFocusedAlbumIndex?: (index: number) => void;
     pendingNavidromeSelection?: any;
@@ -105,7 +93,6 @@ interface Grid3DProps {
     navidromeEnabled?: boolean;
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
-    onAddSongToQueue?: (song: SongResult) => void;
     onStatusMessage?: (message: StatusMessage) => void;
     onOpenGridView?: (collection: any) => void;
     stageEnabled?: boolean;

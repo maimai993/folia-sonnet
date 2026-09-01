@@ -92,8 +92,6 @@ export function useAppNavigation() {
     const currentView = useAppViewStore(state => state.view);
     const setCurrentView = useAppViewStore(state => state.setView);
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
-    const [focusedFavoriteAlbumIndex, setFocusedFavoriteAlbumIndex] = useState(0);
-    const [focusedRadioIndex, setFocusedRadioIndex] = useState(0);
     const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
     const [pendingNavidromeSelection, setPendingNavidromeSelection] = useState<NavidromeViewSelection | null>(null);
     const [localMusicState, setLocalMusicState] = useState<LocalMusicNavigationState>(() => {
@@ -339,10 +337,6 @@ export function useAppNavigation() {
         currentView,
         focusedPlaylistIndex,
         setFocusedPlaylistIndex,
-        focusedFavoriteAlbumIndex,
-        setFocusedFavoriteAlbumIndex,
-        focusedRadioIndex,
-        setFocusedRadioIndex,
         navidromeFocusedAlbumIndex,
         setNavidromeFocusedAlbumIndex,
         pendingNavidromeSelection,
