@@ -9,6 +9,7 @@ import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../utils/frameRateLimiter';
 import ThemedDialog from '../../shared/ThemedDialog';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 
 // src/components/modal/settings/LabSettingsModal.tsx
 // Experimental settings subview kept outside SettingsModal to avoid another giant inline panel.
@@ -55,7 +56,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         isDaylight,
         showOpenPanelCloseButton,
         staticMode,
-        visualizerFrameRate,
         onToggleDisableHomeDynamicBackground,
         onToggleHidePlayerProgressBar,
         onToggleHidePlayerRightPanelButton,
@@ -68,7 +68,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onToggleOpenPanelCloseButton,
         onToggleOpenPlayerOnLaunch,
         onToggleStaticMode,
-        onVisualizerFrameRateChange,
         enablePlayerPageNativeBlur,
         onTogglePlayerPageNativeBlur,
         preventDisplaySleepDuringPlayback,
@@ -86,7 +85,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         isDaylight: state.isDaylight,
         showOpenPanelCloseButton: state.showOpenPanelCloseButton,
         staticMode: state.staticMode,
-        visualizerFrameRate: state.visualizerFrameRate,
         enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
         onToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
         onToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
@@ -100,13 +98,14 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,
         onToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
         onToggleStaticMode: state.handleToggleStaticMode,
-        onVisualizerFrameRateChange: state.handleSetVisualizerFrameRate,
         onTogglePlayerPageNativeBlur: state.handleTogglePlayerPageNativeBlur,
         preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
         onTogglePreventDisplaySleepDuringPlayback: state.handleTogglePreventDisplaySleepDuringPlayback,
         modSystemEnabled: state.modSystemEnabled,
         onToggleModSystem: state.handleToggleModSystem,
     })));
+    const visualizerFrameRate = useVisualizerSettingsStore(state => state.visualizerFrameRate);
+    const onVisualizerFrameRateChange = useVisualizerSettingsStore(state => state.handleSetVisualizerFrameRate);
     const borderColor = isDaylight ? 'border-zinc-300/70' : 'border-white/10';
     const overlayBackground = isDaylight ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.5)';
     const subviewPanelBg = isDaylight ? 'bg-zinc-200' : 'bg-zinc-900';

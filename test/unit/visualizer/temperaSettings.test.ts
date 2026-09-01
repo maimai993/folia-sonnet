@@ -3,6 +3,7 @@ import { DEFAULT_TEMPERA_LAYER_IMAGE, DEFAULT_TEMPERA_TUNING, TEMPERA_MAX_LAYER_
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { resolveStoredTemperaTuning } from '@/stores/visualizerSettingsPersistence';
 import { TemperaPixiRuntime } from '@/components/visualizer/tempera/createTemperaPixiRuntime';
+import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
 
 // test/unit/visualizer/temperaSettings.test.ts
 // Verifies the Tempera canvas-image pool at the store boundary. Those records arrive from
@@ -24,8 +25,8 @@ const createLocalStorageMock = (): Storage => {
 };
 
 const setImages = (images: unknown) => {
-    useSettingsUiStore.getState().handleSetTemperaTuning({ layerImages: images as never });
-    return useSettingsUiStore.getState().temperaTuning.layerImages;
+    useVisualizerSettingsStore.getState().handleSetTemperaTuning({ layerImages: images as never });
+    return useVisualizerSettingsStore.getState().temperaTuning.layerImages;
 };
 
 describe('Tempera canvas images', () => {
@@ -35,7 +36,7 @@ describe('Tempera canvas images', () => {
         storage = createLocalStorageMock();
         vi.stubGlobal('localStorage', storage);
         vi.stubGlobal('window', { localStorage: storage });
-        useSettingsUiStore.setState({ temperaTuning: { ...DEFAULT_TEMPERA_TUNING, layerImages: [] } });
+        useVisualizerSettingsStore.setState({ temperaTuning: { ...DEFAULT_TEMPERA_TUNING, layerImages: [] } });
     });
 
     afterEach(() => {
@@ -127,13 +128,13 @@ describe('Tempera lyric splitting setting', () => {
         const storage = createLocalStorageMock();
         vi.stubGlobal('localStorage', storage);
         vi.stubGlobal('window', { localStorage: storage });
-        useSettingsUiStore.setState({ temperaTuning: { ...DEFAULT_TEMPERA_TUNING } });
+        useVisualizerSettingsStore.setState({ temperaTuning: { ...DEFAULT_TEMPERA_TUNING } });
 
-        useSettingsUiStore.getState().handleSetTemperaTuning({ wholeLineLyrics: true });
-        expect(useSettingsUiStore.getState().temperaTuning.wholeLineLyrics).toBe(true);
+        useVisualizerSettingsStore.getState().handleSetTemperaTuning({ wholeLineLyrics: true });
+        expect(useVisualizerSettingsStore.getState().temperaTuning.wholeLineLyrics).toBe(true);
         expect(JSON.parse(storage.getItem('tempera_tuning') ?? '{}').wholeLineLyrics).toBe(true);
 
-        useSettingsUiStore.getState().handleResetTemperaTuning();
-        expect(useSettingsUiStore.getState().temperaTuning.wholeLineLyrics).toBe(false);
+        useVisualizerSettingsStore.getState().handleResetTemperaTuning();
+        expect(useVisualizerSettingsStore.getState().temperaTuning.wholeLineLyrics).toBe(false);
     });
 });

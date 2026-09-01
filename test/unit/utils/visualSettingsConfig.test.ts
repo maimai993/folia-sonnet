@@ -17,6 +17,7 @@ import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
 import { extractCfgFromInput } from '@/utils/obsUrl';
 import { DEFAULT_SONNET_TUNING } from '@/types';
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
 
 const switchMock = vi.mocked(readStoredThemeAutoSwitchEnabled);
 const generateMock = vi.mocked(readStoredThemeAutoGenerateEnabled);
@@ -123,10 +124,12 @@ describe('buildVisualSettingsConfig', () => {
     // The five fields that were missing. Booleans and a number, so a regression here reads as a real
     // absence rather than as an empty value the codec is allowed to drop.
     it('carries the background toggles, static mode and the subtitle overlay opacity', () => {
-        useSettingsUiStore.setState({
-            useCoverColorBg: true,
+        useVisualizerSettingsStore.setState({
             disableVisualizerGeometricBackground: true,
             disableVisualizerVignette: true,
+        });
+        useSettingsUiStore.setState({
+            useCoverColorBg: true,
             staticMode: true,
             subtitleOverlayOpacity: 0.45,
         });
@@ -152,7 +155,7 @@ describe('buildVisualSettingsConfig', () => {
             postProcessLensDistortion: 0.65,
             postProcessLensDispersion: 0.45,
         };
-        useSettingsUiStore.setState({ sonnetTuning });
+        useVisualizerSettingsStore.setState({ sonnetTuning });
 
         expect(buildVisualSettingsConfig()).toMatchObject({ sonnetTuning });
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));

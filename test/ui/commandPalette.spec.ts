@@ -12,10 +12,22 @@ const QUEUE_FIXTURE = [
     { id: 4, name: 'Other', artists: [{ id: 12, name: 'Gamma' }], album: { id: 22, name: 'Third Album' }, durationMs: 180_000 },
 ];
 
+// Settings live in several domain stores now, so look the key up across them rather than
+// naming one store here — otherwise every further store split silently breaks these reads.
 const readStore = (page: import('@playwright/test').Page, key: string) => page.evaluate(async (stateKey) => {
-    const storeModulePath = '/src/stores/useSettingsUiStore.ts';
-    const { useSettingsUiStore } = await import(storeModulePath);
-    return (useSettingsUiStore.getState() as Record<string, unknown>)[stateKey];
+    const modulePaths = [
+        '/src/stores/useVisualizerSettingsStore.ts',
+        '/src/stores/useSettingsUiStore.ts',
+    ];
+    for (const modulePath of modulePaths) {
+        const module = await import(modulePath) as Record<string, { getState: () => Record<string, unknown> }>;
+        const store = Object.values(module).find(value => typeof value?.getState === 'function');
+        const state = store?.getState();
+        if (state && stateKey in state) {
+            return state[stateKey];
+        }
+    }
+    return undefined;
 }, key);
 
 const openPlayerPage = async (page: import('@playwright/test').Page) => {

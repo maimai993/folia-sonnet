@@ -2,6 +2,8 @@ import { collectVisualizerTunings } from '../components/visualizer/tuningRegistr
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled, readStoredThemeGenerationSource } from '../services/themePreferences';
 import type { CappellaAvatarImage, CappellaEmojiImage, CappellaTuning, MonetBackgroundImage, MonetBackgroundTuning, MonetPortraitImage, MonetTuning, NomandBackgroundTuning } from '../types';
+import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
+import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
 
 // src/utils/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
@@ -9,6 +11,7 @@ import type { CappellaAvatarImage, CappellaEmojiImage, CappellaTuning, MonetBack
 
 export function buildVisualSettingsConfig(): Record<string, unknown> {
   const store = useSettingsUiStore.getState();
+  const storeVisualizer = useVisualizerSettingsStore.getState();
   // The song-theme automation flags live in theme preferences, not the settings store. The overlay
   // ignores them, but a copied OBS URL is also a restore payload (the import box accepts one), so
   // dropping them here would silently lose both toggles on re-import. Auto-generate is ANDed with
@@ -21,21 +24,21 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     songThemeAutoGenerateEnabled,
     themeGenerationSource: readStoredThemeGenerationSource(),
     followSystemTheme: store.followSystemTheme,
-    visualizerMode: store.visualizerMode,
-    randomVisualizerModePerSong: store.randomVisualizerModePerSong,
-    visualizerBackgroundMode: store.visualizerBackgroundMode,
-    backgroundOpacity: store.backgroundOpacity,
+    visualizerMode: storeVisualizer.visualizerMode,
+    randomVisualizerModePerSong: storeVisualizer.randomVisualizerModePerSong,
+    visualizerBackgroundMode: storeVisualizer.visualizerBackgroundMode,
+    backgroundOpacity: storeVisualizer.backgroundOpacity,
     // The other three legs of background.common, alongside the opacity above. The local OBS browser
     // source has always carried them (it publishes the whole VisualizerBackgroundConfig), so leaving
     // them out here made the two OBS paths disagree — and a copied config silently lost the cover-color,
     // geometric-background and vignette toggles on re-import.
     useCoverColorBg: store.useCoverColorBg,
-    disableVisualizerGeometricBackground: store.disableVisualizerGeometricBackground,
-    disableVisualizerVignette: store.disableVisualizerVignette,
+    disableVisualizerGeometricBackground: storeVisualizer.disableVisualizerGeometricBackground,
+    disableVisualizerVignette: storeVisualizer.disableVisualizerVignette,
     // Static mode is not merely an audio-reactivity switch: it selects the low-motion branch inside
     // several renderers, so a web overlay without it animates where the main window does not.
     staticMode: store.staticMode,
-    visualizerOpacity: store.visualizerOpacity,
+    visualizerOpacity: storeVisualizer.visualizerOpacity,
     hidePlayerTranslationSubtitle: store.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: store.showSubtitleTranslation,
     subtitleContentMode: store.subtitleContentMode,
@@ -61,23 +64,23 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // (its generated family resolves nowhere else), so it is not carried.
     lyricsCustomFontFamily: store.lyricsCustomFont?.source === 'system' ? store.lyricsCustomFont.family : null,
     visualizerTunings: collectVisualizerTunings(store as unknown as Record<string, unknown>),
-    classicTuning: store.classicTuning,
-    cadenzaTuning: store.cadenzaTuning,
-    partitaTuning: store.partitaTuning,
-    fumeTuning: store.fumeTuning,
-    claddaghTuning: store.claddaghTuning,
-    cappellaTuning: store.cappellaTuning,
-    tiltTuning: store.tiltTuning,
-    dioramaTuning: store.dioramaTuning,
-    monetBackgroundTuning: store.monetBackgroundTuning,
-    nomandBackgroundTuning: store.nomandBackgroundTuning,
-    latentBackgroundTuning: store.latentBackgroundTuning,
-    monetTuning: store.monetTuning,
-    pendoloTuning: store.pendoloTuning,
-    sonnetTuning: store.sonnetTuning,
-    temperaTuning: store.temperaTuning,
-    urlBackgroundList: store.urlBackgroundList,
-    urlBackgroundSelectedId: store.urlBackgroundSelectedId,
+    classicTuning: storeVisualizer.classicTuning,
+    cadenzaTuning: storeVisualizer.cadenzaTuning,
+    partitaTuning: storeVisualizer.partitaTuning,
+    fumeTuning: storeVisualizer.fumeTuning,
+    claddaghTuning: storeVisualizer.claddaghTuning,
+    cappellaTuning: storeVisualizer.cappellaTuning,
+    tiltTuning: storeVisualizer.tiltTuning,
+    dioramaTuning: storeVisualizer.dioramaTuning,
+    monetBackgroundTuning: storeVisualizer.monetBackgroundTuning,
+    nomandBackgroundTuning: storeVisualizer.nomandBackgroundTuning,
+    latentBackgroundTuning: storeVisualizer.latentBackgroundTuning,
+    monetTuning: storeVisualizer.monetTuning,
+    pendoloTuning: storeVisualizer.pendoloTuning,
+    sonnetTuning: storeVisualizer.sonnetTuning,
+    temperaTuning: storeVisualizer.temperaTuning,
+    urlBackgroundList: storeVisualizer.urlBackgroundList,
+    urlBackgroundSelectedId: storeVisualizer.urlBackgroundSelectedId,
     // The now playing card. Not a visualizer setting, but it is chrome the listener sees over the
     // same picture, and all three legs are needed together: the mode alone restores a card that
     // hides after someone else's timeout, and on a page the importer never asked for.
@@ -131,7 +134,10 @@ export function computeHasUploadedObsAsset(inputs: UploadedObsAssetInputs): bool
 }
 
 export function hasUploadedObsAsset(): boolean {
-  return computeHasUploadedObsAsset(useSettingsUiStore.getState());
+  return computeHasUploadedObsAsset({
+    ...useVisualizerSettingsStore.getState(),
+    ...useVisualizerAssetStore.getState(),
+  });
 }
 
 // Single source of truth for the OBS copy toast: an uploaded image is the more surprising loss

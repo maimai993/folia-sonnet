@@ -11,6 +11,7 @@ import { resolveOnlineLyrics } from '@/utils/onlineLyricsState';
 import { ModSurfaceRenderer } from './ModSurfaceRenderer';
 import { pushRuntimeSnapshot } from './ipc';
 import { useModsStore } from './useModsStore';
+import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 
 // src/mods/ModsPanelTab.tsx
 // The mod manager surface rendered as a single-column accordion: each mod
@@ -204,7 +205,7 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
 
     // Lift the current visualizer tunings from the settings store so exports can
     // reproduce the song's animation verbatim (rather than the default settings).
-    const visualizerTunings = useSettingsUiStore(useShallow((state) => ({
+    const visualizerTunings = useVisualizerSettingsStore(useShallow((state) => ({
         classic: state.classicTuning,
         cadenza: state.cadenzaTuning,
         partita: state.partitaTuning,

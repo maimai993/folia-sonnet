@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { Check, FileCode2 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { computeHasUploadedObsAsset } from '../../utils/visualSettingsConfig';
 import { buildObsCustomCss } from '../../utils/obsCustomCss';
 import { setStatusMessage } from '../../stores/useStatusMessageStore';
+import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
+import { useVisualizerAssetStore } from '../../stores/useVisualizerAssetStore';
 
 interface ObsCopyCssButtonProps {
     disabled?: boolean;
@@ -19,7 +22,20 @@ interface ObsCopyCssButtonProps {
 // is actually in use, so it never clutters the common case.
 export const ObsCopyCssButton: React.FC<ObsCopyCssButtonProps> = ({ disabled, buttonClassName, containerClassName }) => {
     const { t } = useTranslation();
-    const hasAsset = useSettingsUiStore(computeHasUploadedObsAsset);
+    // The inputs live in two stores now, so the test is composed from both narrow reads.
+    const visualizerInputs = useVisualizerSettingsStore(useShallow(state => ({
+        monetBackgroundTuning: state.monetBackgroundTuning,
+        nomandBackgroundTuning: state.nomandBackgroundTuning,
+        monetTuning: state.monetTuning,
+        cappellaTuning: state.cappellaTuning,
+    })));
+    const assetInputs = useVisualizerAssetStore(useShallow(state => ({
+        monetBackgroundImage: state.monetBackgroundImage,
+        monetPortraitImage: state.monetPortraitImage,
+        cappellaCustomEmojiImages: state.cappellaCustomEmojiImages,
+        cappellaCustomAvatarImages: state.cappellaCustomAvatarImages,
+    })));
+    const hasAsset = computeHasUploadedObsAsset({ ...visualizerInputs, ...assetInputs });
     const [copied, setCopied] = useState(false);
 
     if (!hasAsset) {

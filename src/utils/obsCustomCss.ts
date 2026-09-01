@@ -1,5 +1,7 @@
 import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import type { CappellaAvatarImage, CappellaEmojiImage } from '../types';
+import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
+import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
 
 // src/utils/obsCustomCss.ts
 // Carries the uploaded OBS assets the cfg URL cannot (an IndexedDB blob has no shareable URL) through
@@ -217,26 +219,28 @@ export interface BuildObsCustomCssResult {
 // transparent-body reset so the snippet is a complete drop-in replacement, not an addition.
 export const buildObsCustomCss = async (): Promise<BuildObsCustomCssResult | null> => {
   const store = useSettingsUiStore.getState();
-  const usesUploadedBackground = store.monetBackgroundTuning.backgroundSource === 'uploaded-global'
-    || store.nomandBackgroundTuning.imageSource === 'uploaded-global';
-  const usesCustomPortrait = store.monetTuning.portraitSource === 'custom';
-  const usesCustomEmojis = store.cappellaTuning.emojiPackSource === 'custom'
-    && store.cappellaCustomEmojiImages.length > 0;
-  const usesCustomAvatars = store.cappellaTuning.avatarSource === 'custom'
-    && store.cappellaCustomAvatarImages.length > 0;
+  const storeVisualizer = useVisualizerSettingsStore.getState();
+  const storeAssets = useVisualizerAssetStore.getState();
+  const usesUploadedBackground = storeVisualizer.monetBackgroundTuning.backgroundSource === 'uploaded-global'
+    || storeVisualizer.nomandBackgroundTuning.imageSource === 'uploaded-global';
+  const usesCustomPortrait = storeVisualizer.monetTuning.portraitSource === 'custom';
+  const usesCustomEmojis = storeVisualizer.cappellaTuning.emojiPackSource === 'custom'
+    && storeAssets.cappellaCustomEmojiImages.length > 0;
+  const usesCustomAvatars = storeVisualizer.cappellaTuning.avatarSource === 'custom'
+    && storeAssets.cappellaCustomAvatarImages.length > 0;
 
   const [background, portrait, emojiEntries, avatarEntries] = await Promise.all([
-    usesUploadedBackground && store.monetBackgroundImage
-      ? safeEncodeAssetDataUrl(store.monetBackgroundImage.url, BACKGROUND_MAX_SIZE, 'image/jpeg', 0, BACKGROUND_QUALITY)
+    usesUploadedBackground && storeAssets.monetBackgroundImage
+      ? safeEncodeAssetDataUrl(storeAssets.monetBackgroundImage.url, BACKGROUND_MAX_SIZE, 'image/jpeg', 0, BACKGROUND_QUALITY)
       : null,
-    usesCustomPortrait && store.monetPortraitImage
-      ? safeEncodeAssetDataUrl(store.monetPortraitImage.url, PORTRAIT_MAX_SIZE, 'image/png', RAW_PORTRAIT_MAX_BYTES)
+    usesCustomPortrait && storeAssets.monetPortraitImage
+      ? safeEncodeAssetDataUrl(storeAssets.monetPortraitImage.url, PORTRAIT_MAX_SIZE, 'image/png', RAW_PORTRAIT_MAX_BYTES)
       : null,
     usesCustomEmojis
-      ? encodeImagePack(store.cappellaCustomEmojiImages, CAPPELLA_EMOJI_MAX_SIZE, RAW_CAPPELLA_ITEM_MAX_BYTES)
+      ? encodeImagePack(storeAssets.cappellaCustomEmojiImages, CAPPELLA_EMOJI_MAX_SIZE, RAW_CAPPELLA_ITEM_MAX_BYTES)
       : [] as EncodedPackEntry[],
     usesCustomAvatars
-      ? encodeImagePack(store.cappellaCustomAvatarImages, CAPPELLA_AVATAR_MAX_SIZE, RAW_CAPPELLA_ITEM_MAX_BYTES)
+      ? encodeImagePack(storeAssets.cappellaCustomAvatarImages, CAPPELLA_AVATAR_MAX_SIZE, RAW_CAPPELLA_ITEM_MAX_BYTES)
       : [] as EncodedPackEntry[],
   ]);
 
