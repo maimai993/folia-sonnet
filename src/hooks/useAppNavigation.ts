@@ -12,6 +12,7 @@ import {
     useCollectionNavigationStore,
 } from '../stores/useCollectionNavigationStore';
 import type { GridViewCollectionDescriptor } from '../components/app/home/gridViewCollectionAdapters';
+import { useAppViewStore } from '../stores/useAppViewStore';
 
 // src/hooks/useAppNavigation.ts
 
@@ -82,7 +83,10 @@ const getCollectionHash = (collection: GridViewCollectionDescriptor) => (
 const LOCAL_MUSIC_LAST_ROW_KEY = 'folia_local_music_last_row';
 
 export function useAppNavigation() {
-    const [currentView, setCurrentView] = useState<ViewState>('home');
+    // The view itself lives in useAppViewStore so that consumers far from here can read it
+    // without being handed it; this hook stays the only writer.
+    const currentView = useAppViewStore(state => state.view);
+    const setCurrentView = useAppViewStore(state => state.setView);
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [focusedFavoriteAlbumIndex, setFocusedFavoriteAlbumIndex] = useState(0);
     const [focusedRadioIndex, setFocusedRadioIndex] = useState(0);

@@ -122,6 +122,7 @@ import { selectAudioSettingsSnapshot, useAudioSettingsStore } from './stores/use
 import { selectSettingsModalSnapshot, useSettingsModalStore } from './stores/useSettingsModalStore';
 import { audioBands, audioPower, bass, currentTime, lowMid, lyricCurrentTime, mid, spectrum, treble, vocal } from './stores/motionSignals';
 import { useAppChromeStore } from './stores/useAppChromeStore';
+import { useAppViewStore } from './stores/useAppViewStore';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -135,6 +136,18 @@ const NEXT_UP_LEAD_SEC = 5;
 
 export default function App() {
     const { t } = useTranslation();
+    const {
+        isPanelOpen, setIsPanelOpen,
+        panelTab, setPanelTab,
+        isHomeFullyHidden, setIsHomeFullyHidden,
+    } = useAppViewStore(useShallow(state => ({
+        isPanelOpen: state.isPanelOpen,
+        setIsPanelOpen: state.setIsPanelOpen,
+        panelTab: state.panelTab,
+        setPanelTab: state.setPanelTab,
+        isHomeFullyHidden: state.isHomeFullyHidden,
+        setIsHomeFullyHidden: state.setIsHomeFullyHidden,
+    })));
     const {
         isTitlebarRevealed, setIsTitlebarRevealed,
         showTransparentWindowBorder, setShowTransparentWindowBorder,
@@ -179,12 +192,10 @@ export default function App() {
 
     // UI State
     const statusMsg = useStatusMessage();
-    const [isPanelOpen, setIsPanelOpen] = useState(false);
     useElectronNeteaseApiStatus(t);
 
     // Auto-close the player panel when leaving the player view
     // (Effect moved to after useAppNavigation where currentView is defined)
-    const [panelTab, setPanelTab] = useState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>('cover');
     const [navidromeEnabled, setNavidromeEnabledState] = useState(() => isNavidromeEnabled());
     const [starredNavidromeSongIds, setStarredNavidromeSongIds] = useState<Set<string>>(new Set());
     const {
@@ -3502,7 +3513,6 @@ export default function App() {
 
     // Optimize background layout cost: completely hide home surface when player is active.
     // Keep the mount state separate from opacity so transparent player mode never reveals Home during delayed unmount.
-    const [isHomeFullyHidden, setIsHomeFullyHidden] = useState(false);
     const { shouldKeepHomeMounted, shouldShowHomeSurface } = buildHomeSurfacePresentation({
         currentView,
         isSettingsModalOpen,
