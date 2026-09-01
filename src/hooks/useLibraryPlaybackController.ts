@@ -51,6 +51,12 @@ import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStor
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 import { setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
 import { useStableActionSurface } from './useStableCallbacks';
+import { useTranslation } from 'react-i18next';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
+import { useLibraryStore } from '../stores/useLibraryStore';
+import { setIsPanelOpen } from '../stores/useAppViewStore';
+import { currentTime } from '../stores/motionSignals';
 
 // src/hooks/useLibraryPlaybackController.ts
 
@@ -74,21 +80,11 @@ const isBlobObjectUrl = (url: string | null | undefined): url is string => (
 );
 
 type UseLibraryPlaybackControllerParams = {
-    t: (key: string, fallback?: string) => string;
-    audioQuality: AudioQualityPreference;
-    queueAddBehavior: QueueAddBehavior;
-    currentSong: SongResult | null;
-    lyrics: LyricData | null;
-    playQueue: SongResult[];
     likedSongIds: Set<MediaId>;
-    starredNavidromeSongIds: Set<string>;
     userId?: MediaId;
-    currentTime: MotionValue<number>;
     setLyrics: (nextLyrics: LyricData | null) => void;
     setIsLyricsLoading: SetState<boolean>;
-    setIsPanelOpen: SetState<boolean>;
     setLikedSongIds: Dispatch<SetStateAction<Set<MediaId>>>;
-    setStarredNavidromeSongIds: Dispatch<SetStateAction<Set<string>>>;
     navigateToPlayer: () => void;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
     restoreCachedThemeForSong: (songOrId: ThemeCacheSongKey | SongResult, options?: {
@@ -104,21 +100,11 @@ type UseLibraryPlaybackControllerParams = {
 
 // Owns local and Navidrome playback helpers so App.tsx can stay focused on assembly.
 export function useLibraryPlaybackController({
-    t,
-    audioQuality,
-    queueAddBehavior,
-    currentSong,
-    lyrics,
-    playQueue,
     likedSongIds,
-    starredNavidromeSongIds,
     userId,
-    currentTime,
     setLyrics,
     setIsLyricsLoading,
-    setIsPanelOpen,
     setLikedSongIds,
-    setStarredNavidromeSongIds,
     navigateToPlayer,
     persistLastPlaybackCache,
     restoreCachedThemeForSong,
@@ -128,6 +114,16 @@ export function useLibraryPlaybackController({
     currentSongRef,
     currentOnlineAudioUrlFetchedAtRef,
 }: UseLibraryPlaybackControllerParams) {
+    // Read here rather than passed in: all store fields, a module-level signal, or i18n.
+    const { t } = useTranslation();
+    const audioQuality = useAudioSettingsStore(state => state.audioQuality);
+    const queueAddBehavior = useAudioSettingsStore(state => state.queueAddBehavior);
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const lyrics = usePlaybackStore(state => state.lyrics);
+    const playQueue = usePlaybackStore(state => state.playQueue);
+    const starredNavidromeSongIds = useLibraryStore(state => state.starredNavidromeSongIds);
+    const setStarredNavidromeSongIds = useLibraryStore(state => state.setStarredNavidromeSongIds);
+
     const [localSongs, setLocalSongs] = useState<LocalSong[]>([]);
     const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylist[]>([]);
     const [showLyricMatchModal, setShowLyricMatchModal] = useState(false);
