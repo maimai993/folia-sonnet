@@ -124,6 +124,7 @@ import { selectDisplayCoverUrl, selectDisplayDuration, selectDisplayLyrics, sele
 import { useLibraryStore } from './stores/useLibraryStore';
 import { countRender } from './dev/renderCount';
 import { resolveSongLiked } from './utils/resolveSongLiked';
+import StageSessionEmptyState from './components/app/stage/StageSessionEmptyState';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -3028,33 +3029,12 @@ export default function App() {
                 />
             </div>
 
-            {currentView === 'player' && activePlaybackContext === 'stage' && (!stageActiveEntryKind || stageSource === 'now-playing') && !currentSong && (
-                <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center px-6">
-                    <div className={`max-w-lg rounded-3xl border px-6 py-5 text-center backdrop-blur-md ${isDaylight ? 'border-black/10 bg-white/50 text-zinc-800' : 'border-white/10 bg-black/30 text-white'}`}>
-                        <div className="text-xs uppercase tracking-[0.22em] opacity-50">
-                            {stageSource === 'now-playing'
-                                ? 'Stage · Now Playing'
-                                : stageSource === 'playercap'
-                                    ? 'Stage · Nexus PlayerCap'
-                                    : 'Stage · Stage API'}
-                        </div>
-                        <div className="mt-3 text-2xl font-semibold">
-                            {stageSource === 'now-playing'
-                                ? t('options.stageSessionEmpty')
-                                : t('options.stageSessionEmpty')}
-                        </div>
-                        <div className="mt-2 text-sm opacity-70">
-                            {stageSource === 'playercap'
-                                ? (playerCapConnectionStatus === 'connected' ? t('options.playerCapWaitingLyrics') : t('options.playerCapConnecting'))
-                                : stageSource === 'now-playing'
-                                    ? (nowPlayingConnectionStatus === 'error'
-                                        ? t('options.stageConnectionError')
-                                        : t('options.stageNotRunning'))
-                                    : t('options.enableStageModeDesc')}
-                        </div>
-                    </div>
-                </div>
-            )}
+            <StageSessionEmptyState
+                stageSource={stageSource}
+                stageActiveEntryKind={stageActiveEntryKind}
+                nowPlayingConnectionStatus={nowPlayingConnectionStatus}
+                playerCapConnectionStatus={playerCapConnectionStatus}
+            />
 
             <AppOverlays model={appOverlaysModel} />
 
